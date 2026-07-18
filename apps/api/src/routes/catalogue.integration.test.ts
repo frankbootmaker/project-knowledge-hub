@@ -138,9 +138,13 @@ describe.skipIf(!hasIntegrationEnv)('Project and system catalogue', () => {
   it('exposes API root discovery document', async () => {
     const response = await app.inject({ method: 'GET', url: '/' });
     expect(response.statusCode).toBe(200);
-    const body = response.json() as { service: string; endpoints: { projects: string } };
+    const body = response.json() as {
+      service: string;
+      endpoints: { projects: string; knowledgeRecords: string };
+    };
     expect(body.service).toBe('project-knowledge-hub-api');
     expect(body.endpoints.projects).toBe('/api/v1/projects');
+    expect(body.endpoints.knowledgeRecords).toBe('/api/v1/knowledge-records');
   });
 
   it('allows admin to create project and independent system', async () => {

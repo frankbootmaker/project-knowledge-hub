@@ -29,6 +29,17 @@ type System = {
   tags: Array<{ name: string }>;
 };
 
+type KnowledgeRecord = {
+  id: string;
+  name?: string;
+  title: string;
+  slug: string;
+  recordType: string;
+  lifecycleStatus: string;
+  summary: string | null;
+  systemId: string | null;
+};
+
 export default async function WorkspaceDetailPage({
   params,
 }: {
@@ -56,9 +67,10 @@ export default async function WorkspaceDetailPage({
   const detailPayload = (await detailResponse.json()) as { workspace: Workspace };
   const workspace = detailPayload.workspace;
 
-  const [projectsResponse, systemsResponse] = await Promise.all([
+  const [projectsResponse, systemsResponse, recordsResponse] = await Promise.all([
     apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
     apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
+    apiFetch(`/api/v1/knowledge-records?workspaceId=${workspace.id}`),
   ]);
 
   const projects = projectsResponse.ok
@@ -66,6 +78,10 @@ export default async function WorkspaceDetailPage({
     : [];
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
+    : [];
+  const records = recordsResponse.ok
+    ? ((await recordsResponse.json()) as { knowledgeRecords: KnowledgeRecord[] })
+        .knowledgeRecords
     : [];
 
   const canMutate =
@@ -159,6 +175,37 @@ export default async function WorkspaceDetailPage({
             </li>
           ))}
           {systems.length === 0 ? <li>No systems yet.</li> : null}
+        </ul>
+      </section>
+
+      <section style={{ marginTop: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>Knowledge records</h2>
+          {canMutate ? (
+            <Link href={`/workspaces/${workspace.slug}/records/new`}>New record</Link>
+          ) : null}
+        </div>
+        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
+          {records.map((record) => (
+            <li
+              key={record.id}
+              style={{
+                padding: '0.9rem 1rem',
+                background: 'rgba(255,255,255,0.72)',
+                border: '1px solid rgba(21,32,43,0.08)',
+              }}
+            >
+              <Link href={`/workspaces/${workspace.slug}/records/${record.slug}`}>
+                <strong>{record.title}</strong>
+              </Link>
+              <div style={{ opacity: 0.7 }}>
+                {record.recordType} · {record.lifecycleStatus}
+                {record.systemId ? ' · linked to a system' : ''}
+                {record.summary ? ` — ${record.summary}` : ''}
+              </div>
+            </li>
+          ))}
+          {records.length === 0 ? <li>No knowledge records yet.</li> : null}
         </ul>
       </section>
     </main>

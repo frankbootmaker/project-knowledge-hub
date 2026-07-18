@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '../..'),
   poweredByHeader: false,
+  transpilePackages: ['@project-knowledge-hub/markdown'],
   async rewrites() {
     return [
       {

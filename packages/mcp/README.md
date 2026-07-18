@@ -1,9 +1,12 @@
 # @project-knowledge-hub/mcp
 
-Read-only MCP server tools and transport integration.
+Read-only MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 
-## Milestone status
+## Tools
 
-This package is a **placeholder** for Milestone 0.
+* `list_projects` / `get_project`
+* `list_systems` / `get_system`
+* `list_knowledge_records` / `search_knowledge` / `get_knowledge_record`
+* `get_record_provenance`
 
-No runtime API is exported yet. Implementation begins in the milestone that first requires this capability. Do not add fake placeholder modules that appear operational.
+Mounted by the API at `POST|GET|DELETE /mcp` with bearer API client tokens.

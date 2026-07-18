@@ -1,9 +1,21 @@
 # @project-knowledge-hub/markdown
 
-Safe Markdown parsing, sanitization, rendering helpers, and Mermaid support.
+Safe Markdown parsing, sanitization, rendering helpers, and Mermaid-ready HTML.
+
+## API
+
+```ts
+import { renderMarkdown } from '@project-knowledge-hub/markdown';
+
+const { html, toc } = await renderMarkdown(source);
+```
+
+* GFM (tables, task lists, strikethrough)
+* Heading slugs and table of contents
+* Syntax highlighting via `rehype-highlight`
+* HTML sanitized with an allowlist (no scripts / event handlers)
+* Mermaid fenced blocks become `<pre class="mermaid">` for client-side Mermaid
 
 ## Milestone status
 
-This package is a **placeholder** for Milestone 0.
-
-No runtime API is exported yet. Implementation begins in the milestone that first requires this capability. Do not add fake placeholder modules that appear operational.
+Implemented for Milestone 3 (knowledge records).

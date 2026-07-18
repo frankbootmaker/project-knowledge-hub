@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { slugify } from '@project-knowledge-hub/auth';
 import {
+  knowledgeRecordTags,
   projectTags,
   systemTags,
   tags,
@@ -162,6 +163,55 @@ export async function getSystemTags(
     const list = result.get(row.systemId) ?? [];
     list.push({ id: row.id, name: row.name, slug: row.slug });
     result.set(row.systemId, list);
+  }
+  return result;
+}
+
+export async function setKnowledgeRecordTags(
+  database: Database,
+  knowledgeRecordId: string,
+  organizationId: string,
+  tagNames: string[],
+): Promise<Array<{ id: string; name: string; slug: string }>> {
+  const resolved = await resolveTagsForOrganization(database, organizationId, tagNames);
+  await database.db
+    .delete(knowledgeRecordTags)
+    .where(eq(knowledgeRecordTags.knowledgeRecordId, knowledgeRecordId));
+  if (resolved.length > 0) {
+    await database.db.insert(knowledgeRecordTags).values(
+      resolved.map((tag) => ({
+        knowledgeRecordId,
+        tagId: tag.id,
+      })),
+    );
+  }
+  return resolved;
+}
+
+export async function getKnowledgeRecordTags(
+  database: Database,
+  recordIds: string[],
+): Promise<Map<string, Array<{ id: string; name: string; slug: string }>>> {
+  const result = new Map<string, Array<{ id: string; name: string; slug: string }>>();
+  if (recordIds.length === 0) {
+    return result;
+  }
+
+  const rows = await database.db
+    .select({
+      knowledgeRecordId: knowledgeRecordTags.knowledgeRecordId,
+      id: tags.id,
+      name: tags.name,
+      slug: tags.slug,
+    })
+    .from(knowledgeRecordTags)
+    .innerJoin(tags, eq(knowledgeRecordTags.tagId, tags.id))
+    .where(inArray(knowledgeRecordTags.knowledgeRecordId, recordIds));
+
+  for (const row of rows) {
+    const list = result.get(row.knowledgeRecordId) ?? [];
+    list.push({ id: row.id, name: row.name, slug: row.slug });
+    result.set(row.knowledgeRecordId, list);
   }
   return result;
 }

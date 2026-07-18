@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Milestone 6 read-only MCP: API clients, Streamable HTTP `/mcp`, scopes, rate/size limits, Cursor setup.
+* Milestone 5 search: PostgreSQL FTS index, filtered search API, snippets, `/search` UI.
+* Milestone 4 versioning and lifecycle: immutable versions, history/restore, verify, mark-current with supersede.
+* Milestone 3 knowledge records: CRUD, provenance, safe Markdown (sanitize/TOC/highlight/Mermaid), document UI.
 * Milestone 2 project and system catalogue (CRUD, tags, archive, UI, permission tests).
 * API `GET /` discovery document (replaces bare 404 on API root).
 * Milestone 1 identity and workspace foundation.

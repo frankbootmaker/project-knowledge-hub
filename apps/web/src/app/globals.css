@@ -1,0 +1,17 @@
+@import 'highlight.js/styles/github.css';
+
+.knowledge-markdown pre {
+  overflow-x: auto;
+  padding: 0.85rem 1rem;
+  background: rgba(21, 32, 43, 0.04);
+}
+
+.knowledge-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.knowledge-markdown pre.mermaid {
+  background: transparent;
+  text-align: center;
+}

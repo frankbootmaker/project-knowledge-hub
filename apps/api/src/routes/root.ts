@@ -17,6 +17,13 @@ export async function registerRootRoutes(app: FastifyInstance): Promise<void> {
         workspaces: '/api/v1/workspaces',
         projects: '/api/v1/projects',
         systems: '/api/v1/systems',
+        knowledgeRecords: '/api/v1/knowledge-records',
+        knowledgeRecordVersions: '/api/v1/knowledge-records/:recordId/versions',
+        knowledgeRecordVerify: 'POST /api/v1/knowledge-records/:recordId/verify',
+        knowledgeRecordMarkCurrent: 'POST /api/v1/knowledge-records/:recordId/mark-current',
+        search: '/api/v1/search',
+        apiClients: '/api/v1/api-clients',
+        mcp: '/mcp',
       },
     };
   });

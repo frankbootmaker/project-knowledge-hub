@@ -22,6 +22,34 @@
       "when": 1784415688609,
       "tag": "0002_aspiring_talisman",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784417190588,
+      "tag": "0003_familiar_ricochet",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784417521530,
+      "tag": "0004_lame_sister_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784417700000,
+      "tag": "0005_search_fts",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784417900000,
+      "tag": "0006_api_clients",
+      "breakpoints": true
     }
   ]
 }

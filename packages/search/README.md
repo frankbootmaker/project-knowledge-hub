@@ -1,9 +1,11 @@
 # @project-knowledge-hub/search
 
-Full-text and later hybrid/semantic search adapters.
+Full-text search ranking helpers and snippet extraction for Milestone 5.
 
-## Milestone status
+PostgreSQL provides `tsvector` / `ts_rank`; this package applies lifecycle and title boosts and builds result excerpts.
 
-This package is a **placeholder** for Milestone 0.
+## API
 
-No runtime API is exported yet. Implementation begins in the milestone that first requires this capability. Do not add fake placeholder modules that appear operational.
+```ts
+import { combineSearchScore, buildSnippet } from '@project-knowledge-hub/search';
+```

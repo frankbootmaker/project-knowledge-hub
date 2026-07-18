@@ -48,6 +48,7 @@ export default async function AppShellLayout({ children }: { children: ReactNode
           <nav style={{ display: 'flex', gap: '0.85rem' }}>
             <Link href="/dashboard">Dashboard</Link>
             <Link href="/workspaces">Workspaces</Link>
+            <Link href="/search">Search</Link>
             <Link href="/status">Status</Link>
           </nav>
         </div>

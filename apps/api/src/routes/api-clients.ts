@@ -1,0 +1,261 @@
+import type { FastifyInstance } from 'fastify';
+import { and, eq, isNull } from 'drizzle-orm';
+import { z } from 'zod';
+import { apiClients, organizations } from '@project-knowledge-hub/database';
+import { AppError } from '@project-knowledge-hub/domain';
+import { DEFAULT_MCP_SCOPES, MCP_SCOPES } from '@project-knowledge-hub/mcp';
+import {
+  assertMutatingOrigin,
+  requireAuthenticated,
+} from '../plugins/auth.js';
+import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
+import { writeAuditEvent } from '../lib/identity.js';
+import {
+  issueApiClientToken,
+  toPublicApiClient,
+} from '../lib/api-clients.js';
+
+const scopeSchema = z.enum(
+  MCP_SCOPES as unknown as [typeof MCP_SCOPES[number], ...Array<typeof MCP_SCOPES[number]>],
+);
+
+const createSchema = z.object({
+  organizationId: z.string().uuid(),
+  name: z.string().min(1).max(160),
+  description: z.string().max(1000).optional(),
+  scopes: z.array(scopeSchema).min(1).max(20).optional(),
+  allowedWorkspaceIds: z.array(z.string().uuid()).max(100).optional(),
+  allowedProjectIds: z.array(z.string().uuid()).max(200).optional(),
+  expiresAt: z.string().datetime().nullable().optional(),
+});
+
+const updateSchema = z.object({
+  name: z.string().min(1).max(160).optional(),
+  description: z.string().max(1000).nullable().optional(),
+  scopes: z.array(scopeSchema).min(1).max(20).optional(),
+  allowedWorkspaceIds: z.array(z.string().uuid()).max(100).optional(),
+  allowedProjectIds: z.array(z.string().uuid()).max(200).optional(),
+  expiresAt: z.string().datetime().nullable().optional(),
+});
+
+export async function registerApiClientRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/v1/api-clients', async (request) => {
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const query = z
+      .object({ organizationId: z.string().uuid().optional() })
+      .parse(request.query);
+
+    const rows = query.organizationId
+      ? await app.database.db
+          .select()
+          .from(apiClients)
+          .where(
+            and(
+              eq(apiClients.organizationId, query.organizationId),
+              isNull(apiClients.revokedAt),
+            ),
+          )
+      : await app.database.db
+          .select()
+          .from(apiClients)
+          .where(isNull(apiClients.revokedAt));
+
+    return { apiClients: rows.map(toPublicApiClient) };
+  });
+
+  app.post('/api/v1/api-clients', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const body = createSchema.parse(request.body);
+
+    const [organization] = await app.database.db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, body.organizationId))
+      .limit(1);
+    if (!organization) {
+      throw new AppError({
+        code: 'ORGANIZATION_NOT_FOUND',
+        message: 'Organization not found',
+        statusCode: 404,
+      });
+    }
+
+    const issued = issueApiClientToken();
+    const [created] = await app.database.db
+      .insert(apiClients)
+      .values({
+        organizationId: body.organizationId,
+        name: body.name,
+        description: body.description ?? null,
+        tokenHash: issued.tokenHash,
+        tokenPrefix: issued.tokenPrefix,
+        scopes: body.scopes ?? [...DEFAULT_MCP_SCOPES],
+        allowedWorkspaceIds: body.allowedWorkspaceIds ?? [],
+        allowedProjectIds: body.allowedProjectIds ?? [],
+        expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      })
+      .returning();
+
+    if (!created) {
+      throw new AppError({
+        code: 'API_CLIENT_CREATE_FAILED',
+        message: 'Failed to create API client',
+        statusCode: 500,
+      });
+    }
+
+    await writeAuditEvent(app.database, {
+      organizationId: body.organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'api_client.create',
+      entityType: 'api_client',
+      entityId: created.id,
+      metadata: { name: created.name, tokenPrefix: created.tokenPrefix },
+      ipAddress: request.ip,
+    });
+
+    return {
+      apiClient: toPublicApiClient(created),
+      token: issued.token,
+    };
+  });
+
+  app.patch('/api/v1/api-clients/:clientId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ clientId: z.string().uuid() }).parse(request.params);
+    const body = updateSchema.parse(request.body);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(apiClients)
+      .where(eq(apiClients.id, params.clientId))
+      .limit(1);
+    if (!existing || existing.revokedAt) {
+      throw new AppError({
+        code: 'API_CLIENT_NOT_FOUND',
+        message: 'API client not found',
+        statusCode: 404,
+      });
+    }
+
+    const [updated] = await app.database.db
+      .update(apiClients)
+      .set({
+        name: body.name ?? existing.name,
+        description: body.description === undefined ? existing.description : body.description,
+        scopes: body.scopes ?? existing.scopes,
+        allowedWorkspaceIds: body.allowedWorkspaceIds ?? existing.allowedWorkspaceIds,
+        allowedProjectIds: body.allowedProjectIds ?? existing.allowedProjectIds,
+        expiresAt:
+          body.expiresAt === undefined
+            ? existing.expiresAt
+            : body.expiresAt
+              ? new Date(body.expiresAt)
+              : null,
+      })
+      .where(eq(apiClients.id, params.clientId))
+      .returning();
+
+    await writeAuditEvent(app.database, {
+      organizationId: existing.organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'api_client.update',
+      entityType: 'api_client',
+      entityId: existing.id,
+      metadata: body,
+      ipAddress: request.ip,
+    });
+
+    return { apiClient: updated ? toPublicApiClient(updated) : null };
+  });
+
+  app.post('/api/v1/api-clients/:clientId/rotate', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ clientId: z.string().uuid() }).parse(request.params);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(apiClients)
+      .where(eq(apiClients.id, params.clientId))
+      .limit(1);
+    if (!existing || existing.revokedAt) {
+      throw new AppError({
+        code: 'API_CLIENT_NOT_FOUND',
+        message: 'API client not found',
+        statusCode: 404,
+      });
+    }
+
+    const issued = issueApiClientToken();
+    const [updated] = await app.database.db
+      .update(apiClients)
+      .set({
+        tokenHash: issued.tokenHash,
+        tokenPrefix: issued.tokenPrefix,
+      })
+      .where(eq(apiClients.id, params.clientId))
+      .returning();
+
+    await writeAuditEvent(app.database, {
+      organizationId: existing.organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'api_client.rotate',
+      entityType: 'api_client',
+      entityId: existing.id,
+      ipAddress: request.ip,
+    });
+
+    return {
+      apiClient: updated ? toPublicApiClient(updated) : null,
+      token: issued.token,
+    };
+  });
+
+  app.delete('/api/v1/api-clients/:clientId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ clientId: z.string().uuid() }).parse(request.params);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(apiClients)
+      .where(eq(apiClients.id, params.clientId))
+      .limit(1);
+    if (!existing || existing.revokedAt) {
+      throw new AppError({
+        code: 'API_CLIENT_NOT_FOUND',
+        message: 'API client not found',
+        statusCode: 404,
+      });
+    }
+
+    const [revoked] = await app.database.db
+      .update(apiClients)
+      .set({ revokedAt: new Date() })
+      .where(eq(apiClients.id, params.clientId))
+      .returning();
+
+    await writeAuditEvent(app.database, {
+      organizationId: existing.organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'api_client.revoke',
+      entityType: 'api_client',
+      entityId: existing.id,
+      ipAddress: request.ip,
+    });
+
+    return { apiClient: revoked ? toPublicApiClient(revoked) : null };
+  });
+}

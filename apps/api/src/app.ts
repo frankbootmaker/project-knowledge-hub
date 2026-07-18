@@ -12,9 +12,13 @@ import { AppError } from '@project-knowledge-hub/domain';
 import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerApiClientRoutes } from './routes/api-clients.js';
+import { registerKnowledgeRecordRoutes } from './routes/knowledge-records.js';
+import { registerMcpRoutes } from './routes/mcp.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerReadyRoutes } from './routes/ready.js';
 import { registerRootRoutes } from './routes/root.js';
+import { registerSearchRoutes } from './routes/search.js';
 import { registerSystemRoutes } from './routes/systems.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 
@@ -55,7 +59,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
     if (origin && origin === new URL(deps.env.WEB_URL).origin) {
       reply.header('Access-Control-Allow-Origin', origin);
       reply.header('Access-Control-Allow-Credentials', 'true');
-      reply.header('Access-Control-Allow-Headers', 'Content-Type');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, MCP-Protocol-Version, MCP-Session-Id');
       reply.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
       reply.header('Vary', 'Origin');
     }
@@ -108,6 +112,10 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerWorkspaceRoutes(app);
   await registerProjectRoutes(app);
   await registerSystemRoutes(app);
+  await registerKnowledgeRecordRoutes(app);
+  await registerSearchRoutes(app);
+  await registerApiClientRoutes(app);
+  await registerMcpRoutes(app);
 
   return app;
 }

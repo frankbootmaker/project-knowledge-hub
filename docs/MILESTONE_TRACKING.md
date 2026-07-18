@@ -27,14 +27,64 @@ This document tracks milestone progress against the PRD. Update status as work c
 | M0 | Repository and platform foundation | `complete` | Validated 2026-07-19 |
 | M1 | Identity and workspace foundation | `complete` | Validated 2026-07-19 |
 | M2 | Project and system catalogue | `complete` | Validated 2026-07-19 |
-| M3 | Knowledge records | `not_started` | Next recommended milestone |
-| M4 | Versioning and lifecycle | `not_started` | |
-| M5 | Search | `not_started` | |
-| M6 | Read-only MCP | `not_started` | |
+| M3 | Knowledge records | `complete` | Validated 2026-07-19 |
+| M4 | Versioning and lifecycle | `complete` | Validated 2026-07-19 |
+| M5 | Search | `complete` | Validated 2026-07-19 |
+| M6 | Read-only MCP | `complete` | Validated 2026-07-19 |
 | M7 | Production packaging and Dokploy | `not_started` | |
 | M8 | GitHub synchronization | `not_started` | |
 | M9 | Conversation import | `not_started` | |
 | M10 | Semantic and hybrid search | `not_started` | |
+
+---
+
+## Milestone 6 checklist
+
+- [x] API clients + hashed bearer tokens
+- [x] MCP Streamable HTTP endpoint (`/mcp`)
+- [x] Read-only discovery/search/retrieval/provenance tools
+- [x] Scopes, rate limit, response size limits
+- [x] MCP audit logging + Cursor config example
+- [x] Integration tests
+- [x] `pnpm lint` / `typecheck` / `test` / `build`
+
+---
+
+## Milestone 5 checklist
+
+- [x] PostgreSQL full-text index (`search_vector` + GIN)
+- [x] Search API with filters and authz
+- [x] Search UI with snippets
+- [x] Default exclusion of deprecated/superseded/archived
+- [x] Ranking: title + current/verified above drafts
+- [x] Relevance + permission tests
+- [x] `pnpm lint` / `typecheck` / `test` / `build`
+
+---
+
+## Milestone 4 checklist
+
+- [x] Immutable version records on content update
+- [x] Version history API + UI
+- [x] Change message + restore (new version)
+- [x] Verify + mark-current operations
+- [x] Automatic superseding of previous current in series
+- [x] Historical / superseded status warnings
+- [x] Permission + versioning tests
+- [x] `pnpm lint` / `typecheck` / `test` / `build`
+
+---
+
+## Milestone 3 checklist
+
+- [x] Knowledge-record CRUD API + UI
+- [x] Record types, lifecycle statuses, source-of-truth modes
+- [x] Project/system association + provenance fields
+- [x] Safe Markdown preview (sanitize, no script execution)
+- [x] Document page with TOC, code highlighting, Mermaid
+- [x] Audit events
+- [x] Permission + sanitization tests
+- [x] `pnpm lint` / `typecheck` / `test` / `build`
 
 ---
 
