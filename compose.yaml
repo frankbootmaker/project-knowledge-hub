@@ -1,0 +1,151 @@
+name: knowledge-hub-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: knowledge-hub-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: knowledge_hub
+      POSTGRES_USER: knowledge_hub
+      POSTGRES_PASSWORD: knowledge_hub
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - knowledge_hub_dev_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U knowledge_hub -d knowledge_hub']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - knowledge_hub_dev_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: knowledge-hub-dev-redis
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - knowledge_hub_dev_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - knowledge_hub_dev_net
+
+  api:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    container_name: knowledge-hub-dev-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      APP_ENV: development
+      API_PORT: 3101
+      DATABASE_URL: postgres://knowledge_hub:knowledge_hub@postgres:5432/knowledge_hub
+      REDIS_URL: redis://redis:6379
+      WEB_URL: http://localhost:3100
+      API_URL: http://localhost:3101
+      LOG_LEVEL: info
+    ports:
+      - '127.0.0.1:3101:3101'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3101/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - knowledge_hub_dev_net
+
+  worker:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    container_name: knowledge-hub-dev-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      APP_ENV: development
+      DATABASE_URL: postgres://knowledge_hub:knowledge_hub@postgres:5432/knowledge_hub
+      REDIS_URL: redis://redis:6379
+      WEB_URL: http://localhost:3100
+      API_URL: http://localhost:3101
+      WEB_PORT: 3100
+      API_PORT: 3101
+      LOG_LEVEL: info
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - knowledge_hub_dev_net
+
+  web:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: infrastructure/docker/web.Dockerfile
+    container_name: knowledge-hub-dev-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      APP_ENV: development
+      WEB_PORT: 3100
+      API_URL: http://api:3101
+      WEB_URL: http://localhost:3100
+      DATABASE_URL: postgres://knowledge_hub:knowledge_hub@postgres:5432/knowledge_hub
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: info
+    ports:
+      - '127.0.0.1:3100:3100'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3100').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - knowledge_hub_dev_net
+
+volumes:
+  knowledge_hub_dev_postgres_data:
+    name: knowledge_hub_dev_postgres_data
+  knowledge_hub_dev_redis_data:
+    name: knowledge_hub_dev_redis_data
+
+networks:
+  knowledge_hub_dev_net:
+    name: knowledge_hub_dev_net

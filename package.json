@@ -1,0 +1,32 @@
+{
+  "name": "project-knowledge-hub",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.12.4",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @project-knowledge-hub/database generate",
+    "db:migrate": "pnpm --filter @project-knowledge-hub/database migrate",
+    "db:seed": "pnpm --filter @project-knowledge-hub/database seed",
+    "db:studio": "pnpm --filter @project-knowledge-hub/database studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.1",
+    "@types/node": "^24.0.10",
+    "eslint": "^9.30.1",
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.35.1",
+    "vitest": "^3.2.4"
+  }
+}

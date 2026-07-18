@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: knowledge_hub
+          POSTGRES_USER: knowledge_hub
+          POSTGRES_PASSWORD: knowledge_hub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U knowledge_hub -d knowledge_hub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      APP_ENV: test
+      WEB_PORT: 3100
+      API_PORT: 3101
+      WEB_URL: http://localhost:3100
+      API_URL: http://localhost:3101
+      DATABASE_URL: postgres://knowledge_hub:knowledge_hub@localhost:5432/knowledge_hub
+      REDIS_URL: redis://localhost:6379
+      LOG_LEVEL: silent
+      SESSION_SECRET: ci-session-secret-at-least-32-characters
+      SESSION_COOKIE_NAME: kh_session
+      SESSION_TTL_SECONDS: 86400
+      NEXT_PUBLIC_API_URL: http://localhost:3101
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Migrate
+        run: pnpm db:migrate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

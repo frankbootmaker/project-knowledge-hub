@@ -1,0 +1,12 @@
+{
+  "name": "@project-knowledge-hub/conversation-import",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Placeholder package for Milestone 0",
+  "scripts": {
+    "build": "node -e \"process.exit(0)\"",
+    "lint": "node -e \"process.exit(0)\"",
+    "typecheck": "node -e \"process.exit(0)\"",
+    "test": "node -e \"process.exit(0)\""
+  }
+}

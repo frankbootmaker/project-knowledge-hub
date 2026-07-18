@@ -1,0 +1,15 @@
+# Production-oriented overrides for full-stack validation.
+# Usage:
+#   docker compose -p knowledge-hub-dev -f compose.yaml -f compose.production.yaml --profile full up --build
+
+services:
+  api:
+    restart: always
+  worker:
+    restart: always
+  web:
+    restart: always
+  postgres:
+    restart: always
+  redis:
+    restart: always

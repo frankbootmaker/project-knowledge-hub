@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Builds
+dist
+.next
+.turbo
+coverage
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs / OS
+*.log
+.DS_Store
+
+# IDE
+.idea
+.vscode
+
+# Test artifacts
+playwright-report
+test-results

@@ -1,0 +1,141 @@
+import Fastify, {
+  type FastifyInstance,
+  type FastifyError,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify';
+import { Redis } from 'ioredis';
+import { ZodError } from 'zod';
+import { loadEnv, type AppEnv } from '@project-knowledge-hub/config';
+import { createDatabase, type Database } from '@project-knowledge-hub/database';
+import { AppError } from '@project-knowledge-hub/domain';
+import { registerAuthHooks } from './plugins/auth.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerHealthRoutes } from './routes/health.js';
+import { registerProjectRoutes } from './routes/projects.js';
+import { registerReadyRoutes } from './routes/ready.js';
+import { registerRootRoutes } from './routes/root.js';
+import { registerSystemRoutes } from './routes/systems.js';
+import { registerWorkspaceRoutes } from './routes/workspaces.js';
+
+export type ApiDependencies = {
+  env: AppEnv;
+  database: Database;
+  redis: Redis;
+};
+
+export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: {
+      level: deps.env.LOG_LEVEL,
+      timestamp: () => `,"time":"${new Date().toISOString()}"`,
+      redact: {
+        paths: [
+          'password',
+          'token',
+          'authorization',
+          'DATABASE_URL',
+          'REDIS_URL',
+          'BOOTSTRAP_ADMIN_PASSWORD',
+          'SESSION_SECRET',
+          'req.headers.authorization',
+          'req.headers.cookie',
+        ],
+        censor: '[Redacted]',
+      },
+    },
+  });
+
+  app.decorate('env', deps.env);
+  app.decorate('database', deps.database);
+  app.decorate('redis', deps.redis);
+
+  app.addHook('onRequest', async (request, reply) => {
+    const origin = request.headers.origin;
+    if (origin && origin === new URL(deps.env.WEB_URL).origin) {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Credentials', 'true');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type');
+      reply.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+      reply.header('Vary', 'Origin');
+    }
+
+    if (request.method === 'OPTIONS') {
+      return reply.status(204).send();
+    }
+  });
+
+  app.setErrorHandler((error: FastifyError | Error, request: FastifyRequest, reply: FastifyReply) => {
+    if (error instanceof ZodError) {
+      return reply.status(400).send({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Request validation failed',
+          details: error.flatten(),
+        },
+      });
+    }
+
+    if (error instanceof AppError) {
+      request.log.warn({ err: error, code: error.code }, error.message);
+      return reply.status(error.statusCode).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.details ?? null,
+        },
+      });
+    }
+
+    const statusCode =
+      'statusCode' in error && typeof error.statusCode === 'number' ? error.statusCode : 500;
+
+    request.log.error({ err: error }, 'Unhandled API error');
+    return reply.status(statusCode).send({
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: statusCode >= 500 ? 'Internal server error' : error.message,
+        details: null,
+      },
+    });
+  });
+
+  await registerAuthHooks(app);
+  await registerRootRoutes(app);
+  await registerHealthRoutes(app);
+  await registerReadyRoutes(app);
+  await registerAuthRoutes(app);
+  await registerWorkspaceRoutes(app);
+  await registerProjectRoutes(app);
+  await registerSystemRoutes(app);
+
+  return app;
+}
+
+export async function createRuntime(): Promise<{
+  app: FastifyInstance;
+  env: AppEnv;
+  database: Database;
+  redis: Redis;
+}> {
+  const env = loadEnv();
+  const database = createDatabase(env.DATABASE_URL);
+  const redis = new Redis(env.REDIS_URL, {
+    maxRetriesPerRequest: 1,
+    enableReadyCheck: true,
+    lazyConnect: true,
+  });
+
+  await redis.connect();
+
+  const app = await buildApp({ env, database, redis });
+  return { app, env, database, redis };
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    env: AppEnv;
+    database: Database;
+    redis: Redis;
+  }
+}
