@@ -3,9 +3,13 @@
 import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useTranslations('login');
+  const tCommon = useTranslations('common');
   const [email, setEmail] = useState('admin@localhost.local');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -30,13 +34,13 @@ export default function LoginPage() {
         : null;
 
       if (!response.ok) {
-        throw new Error(payload?.error?.message ?? `Login failed (${response.status})`);
+        throw new Error(payload?.error?.message ?? `${t('failed')} (${response.status})`);
       }
 
       router.replace('/dashboard');
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : t('failed'));
     } finally {
       setPending(false);
     }
@@ -44,8 +48,11 @@ export default function LoginPage() {
 
   return (
     <main style={{ maxWidth: 420, margin: '4rem auto', padding: '0 1.25rem' }}>
-      <h1 style={{ marginBottom: '0.35rem' }}>Project Knowledge Hub</h1>
-      <p style={{ opacity: 0.75, marginTop: 0 }}>Sign in with a local administrator account.</p>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+        <LanguageSwitcher />
+      </div>
+      <h1 style={{ marginBottom: '0.35rem' }}>{tCommon('appName')}</h1>
+      <p style={{ opacity: 0.75, marginTop: 0 }}>{t('subtitle')}</p>
       <form
         onSubmit={onSubmit}
         style={{
@@ -58,7 +65,7 @@ export default function LoginPage() {
         }}
       >
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Email</span>
+          <span>{t('email')}</span>
           <input
             type="email"
             value={email}
@@ -68,7 +75,7 @@ export default function LoginPage() {
           />
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Password</span>
+          <span>{t('password')}</span>
           <input
             type="password"
             value={password}
@@ -90,7 +97,7 @@ export default function LoginPage() {
             cursor: 'pointer',
           }}
         >
-          {pending ? 'Signing in…' : 'Sign in'}
+          {pending ? t('signingIn') : t('signIn')}
         </button>
       </form>
     </main>

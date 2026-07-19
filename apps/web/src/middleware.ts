@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { defaultLocale, isAppLocale, localeCookieName } from './i18n/config';
 
 const publicPaths = ['/login', '/status'];
 
@@ -17,17 +18,43 @@ export function middleware(request: NextRequest) {
   const cookieName = process.env.SESSION_COOKIE_NAME ?? 'kh_session';
   const hasSession = Boolean(request.cookies.get(cookieName)?.value);
 
+  let response: NextResponse;
+
   if (!isPublic && !hasSession) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', pathname);
-    return NextResponse.redirect(loginUrl);
+    response = NextResponse.redirect(loginUrl);
+  } else if (pathname === '/login' && hasSession) {
+    response = NextResponse.redirect(new URL('/dashboard', request.url));
+  } else {
+    response = NextResponse.next();
   }
 
-  if (pathname === '/login' && hasSession) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  const existingLocale = request.cookies.get(localeCookieName)?.value;
+  if (!isAppLocale(existingLocale)) {
+    const accepted = request.headers.get('accept-language') ?? '';
+    const preferred = accepted
+      .split(',')
+      .map((part) => part.trim().split(';')[0]?.toLowerCase())
+      .find((code) => code === 'en' || code === 'de' || code === 'hu' || code?.startsWith('en-') || code?.startsWith('de-') || code?.startsWith('hu-'));
+
+    const locale =
+      preferred?.startsWith('de')
+        ? 'de'
+        : preferred?.startsWith('hu')
+          ? 'hu'
+          : preferred?.startsWith('en')
+            ? 'en'
+            : defaultLocale;
+
+    response.cookies.set(localeCookieName, locale, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+    });
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { VersionRestoreButton } from '../../../../../../../components/VersionRestoreButton';
 import { apiFetch, requireSession } from '../../../../../../../lib/session';
 
@@ -19,6 +20,7 @@ export default async function KnowledgeRecordHistoryPage({
   params: Promise<{ slug: string; recordSlug: string }>;
 }) {
   const session = await requireSession();
+  const t = await getTranslations('records');
   const { slug, recordSlug } = await params;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -76,11 +78,15 @@ export default async function KnowledgeRecordHistoryPage({
         <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link>
         {' / '}
         <Link href={`/workspaces/${workspace.slug}/records/${record.slug}`}>{record.title}</Link>
-        {' / history'}
+        {' / '}
+        {t('history')}
       </p>
-      <h1 style={{ marginBottom: '0.35rem' }}>Version history</h1>
+      <h1 style={{ marginBottom: '0.35rem' }}>{t('versionHistory')}</h1>
       <p style={{ opacity: 0.7, marginTop: 0 }}>
-        Current version: {versionsPayload.currentVersionNumber} · status: {record.lifecycleStatus}
+        {t('currentVersion', {
+          version: versionsPayload.currentVersionNumber,
+          status: record.lifecycleStatus,
+        })}
       </p>
 
       <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.75rem', marginTop: '1.25rem' }}>
@@ -100,9 +106,9 @@ export default async function KnowledgeRecordHistoryPage({
                 <div>
                   <strong>v{version.versionNumber}</strong>{' '}
                   {isCurrent ? (
-                    <span style={{ color: '#145a36', fontWeight: 600 }}>current</span>
+                    <span style={{ color: '#145a36', fontWeight: 600 }}>{t('current')}</span>
                   ) : (
-                    <span style={{ color: '#8a5a00' }}>historical</span>
+                    <span style={{ color: '#8a5a00' }}>{t('historical')}</span>
                   )}
                   <div style={{ opacity: 0.8, marginTop: '0.35rem' }}>{version.title}</div>
                   <div style={{ opacity: 0.65, fontSize: '0.9rem' }}>
@@ -121,7 +127,7 @@ export default async function KnowledgeRecordHistoryPage({
                         fontSize: '0.9rem',
                       }}
                     >
-                      Historical version — read-only. Restore creates a new version.
+                      {t('historicalWarningList')}
                     </p>
                   ) : null}
                 </div>
@@ -129,7 +135,7 @@ export default async function KnowledgeRecordHistoryPage({
                   <Link
                     href={`/workspaces/${workspace.slug}/records/${record.slug}/history/${version.versionNumber}`}
                   >
-                    View
+                    {t('view')}
                   </Link>
                   {canMutate && isHistorical ? (
                     <VersionRestoreButton

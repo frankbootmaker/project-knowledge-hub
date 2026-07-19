@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { getTranslations } from 'next-intl/server';
+import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { getSession } from '../../lib/session';
 
 const apiUrl = process.env.API_URL ?? 'http://localhost:3101';
@@ -30,6 +32,9 @@ export default async function AppShellLayout({ children }: { children: ReactNode
     redirect('/login');
   }
 
+  const t = await getTranslations('nav');
+  const tCommon = await getTranslations('common');
+
   return (
     <div style={{ minHeight: '100vh' }}>
       <header
@@ -44,15 +49,16 @@ export default async function AppShellLayout({ children }: { children: ReactNode
         }}
       >
         <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
-          <strong>Project Knowledge Hub</strong>
+          <strong>{tCommon('appName')}</strong>
           <nav style={{ display: 'flex', gap: '0.85rem' }}>
-            <Link href="/dashboard">Dashboard</Link>
-            <Link href="/workspaces">Workspaces</Link>
-            <Link href="/search">Search</Link>
-            <Link href="/status">Status</Link>
+            <Link href="/dashboard">{t('dashboard')}</Link>
+            <Link href="/workspaces">{t('workspaces')}</Link>
+            <Link href="/search">{t('search')}</Link>
+            <Link href="/status">{t('status')}</Link>
           </nav>
         </div>
         <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center' }}>
+          <LanguageSwitcher />
           <span style={{ opacity: 0.8 }}>{session.user.displayName}</span>
           <form action={logoutAction}>
             <button
@@ -64,7 +70,7 @@ export default async function AppShellLayout({ children }: { children: ReactNode
                 cursor: 'pointer',
               }}
             >
-              Log out
+              {t('logOut')}
             </button>
           </form>
         </div>

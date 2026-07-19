@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -24,6 +25,8 @@ export default async function SystemDetailPage({
   params: Promise<{ slug: string; systemSlug: string }>;
 }) {
   await requireSession();
+  const t = await getTranslations('systems');
+  const tCommon = await getTranslations('common');
   const { slug, systemSlug } = await params;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -64,7 +67,7 @@ export default async function SystemDetailPage({
   return (
     <main style={{ maxWidth: 880, margin: '0 auto' }}>
       <p style={{ opacity: 0.7 }}>
-        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link> / system
+        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link> / {t('breadcrumb')}
       </p>
       <h1 style={{ marginBottom: '0.35rem' }}>{system.name}</h1>
       <p style={{ opacity: 0.7, marginTop: 0 }}>
@@ -79,25 +82,25 @@ export default async function SystemDetailPage({
           border: '1px solid rgba(21,32,43,0.08)',
         }}
       >
-        <p>{system.summary || 'No summary.'}</p>
-        <p>{system.description || 'No description.'}</p>
+        <p>{system.summary || tCommon('noSummary')}</p>
+        <p>{system.description || tCommon('noDescription')}</p>
         <p style={{ opacity: 0.75 }}>
-          Type: {system.systemType || 'unspecified'}
+          {t('type')}: {system.systemType || t('unspecified')}
           {project ? (
             <>
               {' '}
-              · Project:{' '}
+              · {tCommon('project')}:{' '}
               <Link href={`/workspaces/${workspace.slug}/projects/${project.slug}`}>
                 {project.name}
               </Link>
             </>
           ) : (
-            ' · Independent system'
+            ` · ${t('independentSystem')}`
           )}
         </p>
         {system.tags.length > 0 ? (
           <p style={{ opacity: 0.75, marginBottom: 0 }}>
-            Tags: {system.tags.map((tag) => tag.name).join(', ')}
+            {tCommon('tagsList', { tags: system.tags.map((tag) => tag.name).join(', ') })}
           </p>
         ) : null}
       </section>

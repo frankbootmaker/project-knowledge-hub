@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 
 type TocItem = {
   id: string;
@@ -16,6 +17,7 @@ export function MarkdownDocument({
   toc: TocItem[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const t = useTranslations('records');
 
   useEffect(() => {
     let cancelled = false;
@@ -51,8 +53,8 @@ export function MarkdownDocument({
   return (
     <div style={{ display: 'grid', gridTemplateColumns: toc.length > 0 ? '220px 1fr' : '1fr', gap: '1.5rem' }}>
       {toc.length > 0 ? (
-        <nav aria-label="Table of contents" style={{ position: 'sticky', top: '1rem', alignSelf: 'start' }}>
-          <h2 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Contents</h2>
+        <nav aria-label={t('tocLabel')} style={{ position: 'sticky', top: '1rem', alignSelf: 'start' }}>
+          <h2 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>{t('contents')}</h2>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.35rem' }}>
             {toc.map((item) => (
               <li key={item.id} style={{ paddingLeft: `${(item.depth - 1) * 0.75}rem` }}>

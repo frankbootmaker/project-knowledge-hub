@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -27,6 +28,8 @@ export default async function ProjectDetailPage({
   params: Promise<{ slug: string; projectSlug: string }>;
 }) {
   await requireSession();
+  const t = await getTranslations('projects');
+  const tCommon = await getTranslations('common');
   const { slug, projectSlug } = await params;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -66,7 +69,7 @@ export default async function ProjectDetailPage({
   return (
     <main style={{ maxWidth: 880, margin: '0 auto' }}>
       <p style={{ opacity: 0.7 }}>
-        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link> / project
+        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link> / {t('breadcrumb')}
       </p>
       <h1 style={{ marginBottom: '0.35rem' }}>{project.name}</h1>
       <p style={{ opacity: 0.7, marginTop: 0 }}>
@@ -80,17 +83,17 @@ export default async function ProjectDetailPage({
           border: '1px solid rgba(21,32,43,0.08)',
         }}
       >
-        <p>{project.summary || 'No summary.'}</p>
-        <p>{project.description || 'No description.'}</p>
+        <p>{project.summary || tCommon('noSummary')}</p>
+        <p>{project.description || tCommon('noDescription')}</p>
         {project.tags.length > 0 ? (
           <p style={{ opacity: 0.75, marginBottom: 0 }}>
-            Tags: {project.tags.map((tag) => tag.name).join(', ')}
+            {tCommon('tagsList', { tags: project.tags.map((tag) => tag.name).join(', ') })}
           </p>
         ) : null}
       </section>
 
       <section style={{ marginTop: '2rem' }}>
-        <h2>Linked systems</h2>
+        <h2>{t('linkedSystems')}</h2>
         <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem' }}>
           {systems.map((system) => (
             <li key={system.id}>
@@ -100,7 +103,7 @@ export default async function ProjectDetailPage({
               <span style={{ opacity: 0.7 }}>({system.status})</span>
             </li>
           ))}
-          {systems.length === 0 ? <li>No systems linked to this project.</li> : null}
+          {systems.length === 0 ? <li>{t('noLinkedSystems')}</li> : null}
         </ul>
       </section>
     </main>

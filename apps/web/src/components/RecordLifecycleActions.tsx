@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 
 export function RecordLifecycleActions({
   recordId,
@@ -11,6 +12,7 @@ export function RecordLifecycleActions({
   lifecycleStatus: string;
 }) {
   const router = useRouter();
+  const t = useTranslations('records');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
 
@@ -26,11 +28,11 @@ export function RecordLifecycleActions({
       });
       const payload = (await response.json()) as { error?: { message?: string } };
       if (!response.ok) {
-        throw new Error(payload.error?.message ?? `Failed to ${action}`);
+        throw new Error(payload.error?.message ?? t('failedAction', { action }));
       }
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action}`);
+      setError(err instanceof Error ? err.message : t('failedAction', { action }));
     } finally {
       setPending(null);
     }
@@ -50,7 +52,7 @@ export function RecordLifecycleActions({
             color: 'white',
           }}
         >
-          {pending === 'verify' ? 'Verifying…' : 'Verify'}
+          {pending === 'verify' ? t('verifying') : t('verify')}
         </button>
       ) : null}
       {lifecycleStatus !== 'current' ? (
@@ -65,7 +67,7 @@ export function RecordLifecycleActions({
             color: 'white',
           }}
         >
-          {pending === 'mark-current' ? 'Updating…' : 'Mark current'}
+          {pending === 'mark-current' ? t('updating') : t('markCurrentAction')}
         </button>
       ) : null}
       {error ? <span style={{ color: '#9b1c1c' }}>{error}</span> : null}

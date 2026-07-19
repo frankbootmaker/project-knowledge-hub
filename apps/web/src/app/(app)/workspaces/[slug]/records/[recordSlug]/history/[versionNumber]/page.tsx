@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { MarkdownDocument } from '../../../../../../../../components/MarkdownDocument';
 import { VersionRestoreButton } from '../../../../../../../../components/VersionRestoreButton';
 import { apiFetch, requireSession } from '../../../../../../../../lib/session';
@@ -12,6 +13,7 @@ export default async function KnowledgeVersionDetailPage({
   params: Promise<{ slug: string; recordSlug: string; versionNumber: string }>;
 }) {
   const session = await requireSession();
+  const t = await getTranslations('records');
   const { slug, recordSlug, versionNumber } = await params;
   const versionNum = Number(versionNumber);
   if (!Number.isInteger(versionNum) || versionNum < 1) {
@@ -75,7 +77,7 @@ export default async function KnowledgeVersionDetailPage({
     <main style={{ maxWidth: 1000, margin: '0 auto' }}>
       <p style={{ opacity: 0.7 }}>
         <Link href={`/workspaces/${workspace.slug}/records/${record.slug}/history`}>
-          Version history
+          {t('versionHistory')}
         </Link>
         {` / v${version.versionNumber}`}
       </p>
@@ -108,12 +110,12 @@ export default async function KnowledgeVersionDetailPage({
             border: '1px solid rgba(138,90,0,0.2)',
           }}
         >
-          You are viewing a historical version. It is read-only; restoring creates a new version.
+          {t('historicalWarningDetail')}
         </p>
       ) : null}
 
       {version.changeMessage ? (
-        <p style={{ opacity: 0.8 }}>Change message: {version.changeMessage}</p>
+        <p style={{ opacity: 0.8 }}>{t('changeMessageLabel', { message: version.changeMessage })}</p>
       ) : null}
 
       <section

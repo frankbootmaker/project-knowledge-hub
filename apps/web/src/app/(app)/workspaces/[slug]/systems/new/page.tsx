@@ -3,6 +3,7 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 
 type ProjectOption = { id: string; name: string };
 
@@ -10,6 +11,9 @@ export default function NewSystemPage() {
   const router = useRouter();
   const params = useParams<{ slug: string }>();
   const workspaceSlug = params.slug;
+  const t = useTranslations('systems');
+  const tWorkspaces = useTranslations('workspaces');
+  const tCommon = useTranslations('common');
 
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [name, setName] = useState('');
@@ -59,7 +63,7 @@ export default function NewSystemPage() {
       };
       const workspace = workspacesPayload.workspaces.find((item) => item.slug === workspaceSlug);
       if (!workspace) {
-        throw new Error('Workspace not found');
+        throw new Error(tWorkspaces('notFound'));
       }
 
       const response = await fetch('/api/v1/systems', {
@@ -86,12 +90,12 @@ export default function NewSystemPage() {
         error?: { message?: string };
       };
       if (!response.ok) {
-        throw new Error(payload.error?.message ?? 'Failed to create system');
+        throw new Error(payload.error?.message ?? t('failedCreate'));
       }
       router.push(`/workspaces/${workspaceSlug}/systems/${payload.system?.slug ?? ''}`);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create system');
+      setError(err instanceof Error ? err.message : t('failedCreate'));
     } finally {
       setPending(false);
     }
@@ -99,16 +103,16 @@ export default function NewSystemPage() {
 
   return (
     <main style={{ maxWidth: 560, margin: '0 auto' }}>
-      <h1>Create system</h1>
+      <h1>{t('createTitle')}</h1>
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: '0.85rem' }}>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Name</span>
+          <span>{tCommon('name')}</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required style={{ padding: '0.65rem' }} />
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Project (optional)</span>
+          <span>{t('projectOptional')}</span>
           <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ padding: '0.65rem' }}>
-            <option value="">Independent (no project)</option>
+            <option value="">{t('independentNoProject')}</option>
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
@@ -117,15 +121,15 @@ export default function NewSystemPage() {
           </select>
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Summary</span>
+          <span>{tCommon('summary')}</span>
           <input value={summary} onChange={(e) => setSummary(e.target.value)} style={{ padding: '0.65rem' }} />
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Description</span>
+          <span>{tCommon('description')}</span>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} style={{ padding: '0.65rem' }} />
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Status</span>
+          <span>{tCommon('status')}</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ padding: '0.65rem' }}>
             <option value="proposed">proposed</option>
             <option value="experimental">experimental</option>
@@ -138,20 +142,20 @@ export default function NewSystemPage() {
           </select>
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>System type</span>
+          <span>{t('systemType')}</span>
           <input value={systemType} onChange={(e) => setSystemType(e.target.value)} style={{ padding: '0.65rem' }} />
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Environment</span>
+          <span>{t('environment')}</span>
           <input value={environment} onChange={(e) => setEnvironment(e.target.value)} style={{ padding: '0.65rem' }} />
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Tags (comma-separated)</span>
+          <span>{tCommon('tagsHint')}</span>
           <input value={tags} onChange={(e) => setTags(e.target.value)} style={{ padding: '0.65rem' }} />
         </label>
         {error ? <p style={{ color: '#9b1c1c' }}>{error}</p> : null}
         <button type="submit" disabled={pending} style={{ padding: '0.75rem', border: 'none', background: '#1f4b73', color: 'white' }}>
-          {pending ? 'Creating…' : 'Create system'}
+          {pending ? t('creating') : t('createButton')}
         </button>
       </form>
     </main>

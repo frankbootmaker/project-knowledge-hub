@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import { apiFetch, requireSession } from '../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -40,6 +41,8 @@ export default async function SearchPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireSession();
+  const t = await getTranslations('search');
+  const tCommon = await getTranslations('common');
   const params = await searchParams;
 
   const query = typeof params.q === 'string' ? params.q : '';
@@ -95,16 +98,14 @@ export default async function SearchPage({
       results = ((await searchResponse.json()) as { results: SearchResult[] }).results;
     } else {
       const payload = (await searchResponse.json()) as { error?: { message?: string } };
-      searchError = payload.error?.message ?? 'Search failed';
+      searchError = payload.error?.message ?? t('failed');
     }
   }
 
   return (
     <main style={{ maxWidth: 960, margin: '0 auto' }}>
-      <h1 style={{ marginBottom: '0.35rem' }}>Search</h1>
-      <p style={{ opacity: 0.7, marginTop: 0 }}>
-        Full-text search across knowledge records in a workspace.
-      </p>
+      <h1 style={{ marginBottom: '0.35rem' }}>{t('title')}</h1>
+      <p style={{ opacity: 0.7, marginTop: 0 }}>{t('subtitle')}</p>
 
       <form
         method="get"
@@ -118,19 +119,19 @@ export default async function SearchPage({
         }}
       >
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Query</span>
+          <span>{t('query')}</span>
           <input
             name="q"
             defaultValue={query}
             required
-            placeholder="e.g. Tailscale bridge configuration"
+            placeholder={t('queryPlaceholder')}
             style={{ padding: '0.7rem' }}
           />
         </label>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Workspace</span>
+            <span>{t('workspace')}</span>
             <select name="workspaceId" defaultValue={activeWorkspaceId} style={{ padding: '0.65rem' }}>
               {workspaces.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>
@@ -140,9 +141,9 @@ export default async function SearchPage({
             </select>
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Record type</span>
+            <span>{t('recordType')}</span>
             <select name="recordType" defaultValue={recordType} style={{ padding: '0.65rem' }}>
-              <option value="">Any</option>
+              <option value="">{tCommon('any')}</option>
               <option value="deployment-guide">deployment-guide</option>
               <option value="configuration">configuration</option>
               <option value="configuration-snapshot">configuration-snapshot</option>
@@ -153,9 +154,9 @@ export default async function SearchPage({
             </select>
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Project</span>
+            <span>{tCommon('project')}</span>
             <select name="projectId" defaultValue={projectId} style={{ padding: '0.65rem' }}>
-              <option value="">Any</option>
+              <option value="">{tCommon('any')}</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
@@ -164,9 +165,9 @@ export default async function SearchPage({
             </select>
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>System</span>
+            <span>{tCommon('system')}</span>
             <select name="systemId" defaultValue={systemId} style={{ padding: '0.65rem' }}>
-              <option value="">Any</option>
+              <option value="">{tCommon('any')}</option>
               {systems.map((system) => (
                 <option key={system.id} value={system.id}>
                   {system.name}
@@ -179,11 +180,11 @@ export default async function SearchPage({
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
             <input type="checkbox" name="verifiedOnly" value="true" defaultChecked={verifiedOnly} />
-            Verified only
+            {t('verifiedOnly')}
           </label>
           <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
             <input type="checkbox" name="currentOnly" value="true" defaultChecked={currentOnly} />
-            Current only
+            {t('currentOnly')}
           </label>
           <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
             <input
@@ -192,7 +193,7 @@ export default async function SearchPage({
               value="true"
               defaultChecked={includeHistorical}
             />
-            Include superseded / deprecated
+            {t('includeHistorical')}
           </label>
         </div>
 
@@ -206,7 +207,7 @@ export default async function SearchPage({
             color: 'white',
           }}
         >
-          Search
+          {t('searchButton')}
         </button>
       </form>
 
@@ -215,7 +216,7 @@ export default async function SearchPage({
       {query ? (
         <section style={{ marginTop: '1.75rem' }}>
           <h2 style={{ marginBottom: '0.75rem' }}>
-            Results{results.length ? ` (${results.length})` : ''}
+            {results.length ? t('resultsCount', { count: results.length }) : t('results')}
           </h2>
           <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.75rem' }}>
             {results.map((result) => {
@@ -261,14 +262,14 @@ export default async function SearchPage({
                   ) : null}
                   {result.tags.length > 0 ? (
                     <div style={{ marginTop: '0.45rem', opacity: 0.65, fontSize: '0.9rem' }}>
-                      Tags: {result.tags.join(', ')}
+                      {t('tagsLabel', { tags: result.tags.join(', ') })}
                     </div>
                   ) : null}
                 </li>
               );
             })}
             {results.length === 0 && !searchError ? (
-              <li style={{ opacity: 0.75 }}>No matching records.</li>
+              <li style={{ opacity: 0.75 }}>{t('noMatches')}</li>
             ) : null}
           </ul>
         </section>

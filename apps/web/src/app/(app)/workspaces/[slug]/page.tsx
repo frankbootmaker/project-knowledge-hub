@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { apiFetch, requireSession } from '../../../../lib/session';
 
 type Workspace = {
@@ -46,6 +47,8 @@ export default async function WorkspaceDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const session = await requireSession();
+  const t = await getTranslations('workspaces');
+  const tCommon = await getTranslations('common');
   const { slug } = await params;
 
   const listResponse = await apiFetch('/api/v1/workspaces');
@@ -104,14 +107,14 @@ export default async function WorkspaceDetailPage({
           border: '1px solid rgba(21,32,43,0.08)',
         }}
       >
-        <p>{workspace.description || 'No description provided.'}</p>
+        <p>{workspace.description || t('noDescription')}</p>
       </section>
 
       <section style={{ marginTop: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>Projects</h2>
+          <h2 style={{ margin: 0 }}>{t('projects')}</h2>
           {canMutate ? (
-            <Link href={`/workspaces/${workspace.slug}/projects/new`}>New project</Link>
+            <Link href={`/workspaces/${workspace.slug}/projects/new`}>{t('newProject')}</Link>
           ) : null}
         </div>
         <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
@@ -133,20 +136,20 @@ export default async function WorkspaceDetailPage({
               </div>
               {project.tags.length > 0 ? (
                 <div style={{ opacity: 0.65, marginTop: '0.35rem' }}>
-                  Tags: {project.tags.map((tag) => tag.name).join(', ')}
+                  {tCommon('tagsList', { tags: project.tags.map((tag) => tag.name).join(', ') })}
                 </div>
               ) : null}
             </li>
           ))}
-          {projects.length === 0 ? <li>No projects yet.</li> : null}
+          {projects.length === 0 ? <li>{t('noProjects')}</li> : null}
         </ul>
       </section>
 
       <section style={{ marginTop: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>Systems</h2>
+          <h2 style={{ margin: 0 }}>{t('systems')}</h2>
           {canMutate ? (
-            <Link href={`/workspaces/${workspace.slug}/systems/new`}>New system</Link>
+            <Link href={`/workspaces/${workspace.slug}/systems/new`}>{t('newSystem')}</Link>
           ) : null}
         </div>
         <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
@@ -164,25 +167,25 @@ export default async function WorkspaceDetailPage({
               </Link>
               <div style={{ opacity: 0.7 }}>
                 {system.status}
-                {system.projectId ? ' · linked to a project' : ' · independent'}
+                {system.projectId ? ` · ${t('linkedToProject')}` : ` · ${t('independent')}`}
                 {system.summary ? ` — ${system.summary}` : ''}
               </div>
               {system.tags.length > 0 ? (
                 <div style={{ opacity: 0.65, marginTop: '0.35rem' }}>
-                  Tags: {system.tags.map((tag) => tag.name).join(', ')}
+                  {tCommon('tagsList', { tags: system.tags.map((tag) => tag.name).join(', ') })}
                 </div>
               ) : null}
             </li>
           ))}
-          {systems.length === 0 ? <li>No systems yet.</li> : null}
+          {systems.length === 0 ? <li>{t('noSystems')}</li> : null}
         </ul>
       </section>
 
       <section style={{ marginTop: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>Knowledge records</h2>
+          <h2 style={{ margin: 0 }}>{t('knowledgeRecords')}</h2>
           {canMutate ? (
-            <Link href={`/workspaces/${workspace.slug}/records/new`}>New record</Link>
+            <Link href={`/workspaces/${workspace.slug}/records/new`}>{t('newRecord')}</Link>
           ) : null}
         </div>
         <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
@@ -200,12 +203,12 @@ export default async function WorkspaceDetailPage({
               </Link>
               <div style={{ opacity: 0.7 }}>
                 {record.recordType} · {record.lifecycleStatus}
-                {record.systemId ? ' · linked to a system' : ''}
+                {record.systemId ? ` · ${t('linkedToSystem')}` : ''}
                 {record.summary ? ` — ${record.summary}` : ''}
               </div>
             </li>
           ))}
-          {records.length === 0 ? <li>No knowledge records yet.</li> : null}
+          {records.length === 0 ? <li>{t('noRecords')}</li> : null}
         </ul>
       </section>
     </main>

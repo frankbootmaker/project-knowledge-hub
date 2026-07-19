@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 
 export function VersionRestoreButton({
   recordId,
@@ -15,6 +16,7 @@ export function VersionRestoreButton({
   recordSlug: string;
 }) {
   const router = useRouter();
+  const t = useTranslations('records');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,18 +31,18 @@ export function VersionRestoreButton({
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            changeMessage: `Restored from version ${versionNumber}`,
+            changeMessage: t('restoredFromVersion', { version: versionNumber }),
           }),
         },
       );
       const payload = (await response.json()) as { error?: { message?: string } };
       if (!response.ok) {
-        throw new Error(payload.error?.message ?? 'Failed to restore version');
+        throw new Error(payload.error?.message ?? t('failedRestore'));
       }
       router.push(`/workspaces/${workspaceSlug}/records/${recordSlug}`);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to restore version');
+      setError(err instanceof Error ? err.message : t('failedRestore'));
     } finally {
       setPending(false);
     }
@@ -58,7 +60,7 @@ export function VersionRestoreButton({
           background: 'white',
         }}
       >
-        {pending ? 'Restoring…' : 'Restore'}
+        {pending ? t('restoring') : t('restore')}
       </button>
       {error ? <div style={{ color: '#9b1c1c', fontSize: '0.85rem' }}>{error}</div> : null}
     </div>

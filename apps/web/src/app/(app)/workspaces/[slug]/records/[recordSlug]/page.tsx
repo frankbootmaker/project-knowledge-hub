@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { MarkdownDocument } from '../../../../../../components/MarkdownDocument';
 import { RecordLifecycleActions } from '../../../../../../components/RecordLifecycleActions';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
@@ -59,6 +60,8 @@ export default async function KnowledgeRecordDetailPage({
   params: Promise<{ slug: string; recordSlug: string }>;
 }) {
   const session = await requireSession();
+  const t = await getTranslations('records');
+  const tCommon = await getTranslations('common');
   const { slug, recordSlug } = await params;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -114,11 +117,12 @@ export default async function KnowledgeRecordDetailPage({
     );
 
   const status = statusStyles(record.lifecycleStatus);
+  const dash = tCommon('emDash');
 
   return (
     <main style={{ maxWidth: 1000, margin: '0 auto' }}>
       <p style={{ opacity: 0.7 }}>
-        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link> / knowledge
+        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link> / {tCommon('knowledge')}
       </p>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'start' }}>
         <div>
@@ -129,10 +133,12 @@ export default async function KnowledgeRecordDetailPage({
         </div>
         <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center' }}>
           <Link href={`/workspaces/${workspace.slug}/records/${record.slug}/history`}>
-            History
+            {t('history')}
           </Link>
           {canMutate ? (
-            <Link href={`/workspaces/${workspace.slug}/records/${record.slug}/edit`}>Edit</Link>
+            <Link href={`/workspaces/${workspace.slug}/records/${record.slug}/edit`}>
+              {tCommon('edit')}
+            </Link>
           ) : null}
         </div>
       </div>
@@ -182,7 +188,7 @@ export default async function KnowledgeRecordDetailPage({
             border: '1px solid rgba(155,28,28,0.2)',
           }}
         >
-          This record has been superseded by a newer current configuration in the same series.
+          {t('supersededWarning')}
         </p>
       ) : null}
 
@@ -196,10 +202,10 @@ export default async function KnowledgeRecordDetailPage({
           gap: '0.35rem',
         }}
       >
-        <p style={{ margin: 0 }}>{record.summary || 'No summary.'}</p>
+        <p style={{ margin: 0 }}>{record.summary || tCommon('noSummary')}</p>
         {project ? (
           <p style={{ margin: 0, opacity: 0.8 }}>
-            Project:{' '}
+            {tCommon('project')}:{' '}
             <Link href={`/workspaces/${workspace.slug}/projects/${project.slug}`}>
               {project.name}
             </Link>
@@ -207,7 +213,7 @@ export default async function KnowledgeRecordDetailPage({
         ) : null}
         {system ? (
           <p style={{ margin: 0, opacity: 0.8 }}>
-            System:{' '}
+            {tCommon('system')}:{' '}
             <Link href={`/workspaces/${workspace.slug}/systems/${system.slug}`}>
               {system.name}
             </Link>
@@ -215,7 +221,7 @@ export default async function KnowledgeRecordDetailPage({
         ) : null}
         {record.tags.length > 0 ? (
           <p style={{ margin: 0, opacity: 0.75 }}>
-            Tags: {record.tags.map((tag) => tag.name).join(', ')}
+            {tCommon('tagsList', { tags: record.tags.map((tag) => tag.name).join(', ') })}
           </p>
         ) : null}
       </section>
@@ -228,7 +234,7 @@ export default async function KnowledgeRecordDetailPage({
           border: '1px solid rgba(21,32,43,0.08)',
         }}
       >
-        <h2 style={{ marginTop: 0, fontSize: '1.05rem' }}>Source & verification</h2>
+        <h2 style={{ marginTop: 0, fontSize: '1.05rem' }}>{t('sourceAndVerification')}</h2>
         <dl
           style={{
             display: 'grid',
@@ -237,31 +243,31 @@ export default async function KnowledgeRecordDetailPage({
             margin: 0,
           }}
         >
-          <dt style={{ opacity: 0.7 }}>Source type</dt>
-          <dd style={{ margin: 0 }}>{record.source?.sourceType ?? '—'}</dd>
-          <dt style={{ opacity: 0.7 }}>Source title</dt>
-          <dd style={{ margin: 0 }}>{record.source?.sourceTitle ?? '—'}</dd>
-          <dt style={{ opacity: 0.7 }}>Provider</dt>
-          <dd style={{ margin: 0 }}>{record.source?.sourceProvider ?? '—'}</dd>
-          <dt style={{ opacity: 0.7 }}>Reference</dt>
-          <dd style={{ margin: 0 }}>{record.source?.sourceReference ?? '—'}</dd>
-          <dt style={{ opacity: 0.7 }}>URI</dt>
+          <dt style={{ opacity: 0.7 }}>{t('sourceType')}</dt>
+          <dd style={{ margin: 0 }}>{record.source?.sourceType ?? dash}</dd>
+          <dt style={{ opacity: 0.7 }}>{t('sourceTitle')}</dt>
+          <dd style={{ margin: 0 }}>{record.source?.sourceTitle ?? dash}</dd>
+          <dt style={{ opacity: 0.7 }}>{t('provider')}</dt>
+          <dd style={{ margin: 0 }}>{record.source?.sourceProvider ?? dash}</dd>
+          <dt style={{ opacity: 0.7 }}>{t('reference')}</dt>
+          <dd style={{ margin: 0 }}>{record.source?.sourceReference ?? dash}</dd>
+          <dt style={{ opacity: 0.7 }}>{t('uri')}</dt>
           <dd style={{ margin: 0 }}>
             {record.source?.sourceUri ? (
               <a href={record.source.sourceUri}>{record.source.sourceUri}</a>
             ) : (
-              '—'
+              dash
             )}
           </dd>
-          <dt style={{ opacity: 0.7 }}>Model</dt>
-          <dd style={{ margin: 0 }}>{record.source?.generatedByModel ?? '—'}</dd>
-          <dt style={{ opacity: 0.7 }}>Verified at</dt>
-          <dd style={{ margin: 0 }}>{record.verifiedAt ?? '—'}</dd>
-          <dt style={{ opacity: 0.7 }}>Reviewed by</dt>
-          <dd style={{ margin: 0 }}>{record.reviewedBy ?? '—'}</dd>
-          <dt style={{ opacity: 0.7 }}>Last validated</dt>
-          <dd style={{ margin: 0 }}>{record.lastValidatedAt ?? '—'}</dd>
-          <dt style={{ opacity: 0.7 }}>Updated</dt>
+          <dt style={{ opacity: 0.7 }}>{t('model')}</dt>
+          <dd style={{ margin: 0 }}>{record.source?.generatedByModel ?? dash}</dd>
+          <dt style={{ opacity: 0.7 }}>{t('verifiedAt')}</dt>
+          <dd style={{ margin: 0 }}>{record.verifiedAt ?? dash}</dd>
+          <dt style={{ opacity: 0.7 }}>{t('reviewedBy')}</dt>
+          <dd style={{ margin: 0 }}>{record.reviewedBy ?? dash}</dd>
+          <dt style={{ opacity: 0.7 }}>{t('lastValidated')}</dt>
+          <dd style={{ margin: 0 }}>{record.lastValidatedAt ?? dash}</dd>
+          <dt style={{ opacity: 0.7 }}>{tCommon('updated')}</dt>
           <dd style={{ margin: 0 }}>{record.updatedAt}</dd>
         </dl>
       </section>

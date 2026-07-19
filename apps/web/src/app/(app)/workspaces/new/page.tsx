@@ -3,9 +3,12 @@
 import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 
 export default function NewWorkspacePage() {
   const router = useRouter();
+  const t = useTranslations('workspaces');
+  const tCommon = useTranslations('common');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +31,12 @@ export default function NewWorkspacePage() {
         error?: { message?: string };
       };
       if (!response.ok) {
-        throw new Error(payload.error?.message ?? 'Failed to create workspace');
+        throw new Error(payload.error?.message ?? t('failedCreate'));
       }
       router.push(`/workspaces/${payload.workspace?.slug ?? ''}`);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create workspace');
+      setError(err instanceof Error ? err.message : t('failedCreate'));
     } finally {
       setPending(false);
     }
@@ -41,10 +44,10 @@ export default function NewWorkspacePage() {
 
   return (
     <main style={{ maxWidth: 560, margin: '0 auto' }}>
-      <h1>Create workspace</h1>
+      <h1>{t('createTitle')}</h1>
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: '0.85rem' }}>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Name</span>
+          <span>{tCommon('name')}</span>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -53,7 +56,7 @@ export default function NewWorkspacePage() {
           />
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Description</span>
+          <span>{tCommon('description')}</span>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
@@ -73,7 +76,7 @@ export default function NewWorkspacePage() {
             cursor: 'pointer',
           }}
         >
-          {pending ? 'Creating…' : 'Create workspace'}
+          {pending ? t('creating') : t('createButton')}
         </button>
       </form>
     </main>

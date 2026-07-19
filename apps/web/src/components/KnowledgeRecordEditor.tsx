@@ -3,6 +3,7 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import { MarkdownDocument } from './MarkdownDocument';
 
@@ -83,6 +84,8 @@ export type KnowledgeRecordEditorProps = {
 
 export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
   const router = useRouter();
+  const t = useTranslations('records');
+  const tCommon = useTranslations('common');
   const [title, setTitle] = useState(props.initial?.title ?? '');
   const [summary, setSummary] = useState(props.initial?.summary ?? '');
   const [recordType, setRecordType] = useState(props.initial?.recordType ?? 'deployment-guide');
@@ -198,14 +201,14 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
         error?: { message?: string };
       };
       if (!response.ok) {
-        throw new Error(payload.error?.message ?? 'Failed to save knowledge record');
+        throw new Error(payload.error?.message ?? t('failedSave'));
       }
       router.push(
         `/workspaces/${props.workspaceSlug}/records/${payload.knowledgeRecord?.slug ?? ''}`,
       );
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save knowledge record');
+      setError(err instanceof Error ? err.message : t('failedSave'));
     } finally {
       setPending(false);
     }
@@ -218,11 +221,11 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
 
   return (
     <main style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <h1>{props.mode === 'create' ? 'Create knowledge record' : 'Edit knowledge record'}</h1>
+      <h1>{props.mode === 'create' ? t('createTitle') : t('editTitle')}</h1>
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: '1rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Title</span>
+            <span>{tCommon('title')}</span>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -231,7 +234,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             />
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Record type</span>
+            <span>{t('recordType')}</span>
             <select
               value={recordType}
               onChange={(e) => setRecordType(e.target.value)}
@@ -245,7 +248,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             </select>
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Lifecycle status</span>
+            <span>{t('lifecycleStatus')}</span>
             <select
               value={lifecycleStatus}
               onChange={(e) => setLifecycleStatus(e.target.value)}
@@ -259,7 +262,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             </select>
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Source of truth</span>
+            <span>{t('sourceOfTruth')}</span>
             <select
               value={sourceOfTruthMode}
               onChange={(e) => setSourceOfTruthMode(e.target.value)}
@@ -273,13 +276,13 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             </select>
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Project (optional)</span>
+            <span>{t('projectOptional')}</span>
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
               style={{ padding: '0.65rem' }}
             >
-              <option value="">None</option>
+              <option value="">{tCommon('none')}</option>
               {props.projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
@@ -288,13 +291,13 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             </select>
           </label>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>System (optional)</span>
+            <span>{t('systemOptional')}</span>
             <select
               value={systemId}
               onChange={(e) => setSystemId(e.target.value)}
               style={{ padding: '0.65rem' }}
             >
-              <option value="">None</option>
+              <option value="">{tCommon('none')}</option>
               {props.systems.map((system) => (
                 <option key={system.id} value={system.id}>
                   {system.name}
@@ -305,7 +308,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
         </div>
 
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Summary</span>
+          <span>{tCommon('summary')}</span>
           <input
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
@@ -313,7 +316,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
           />
         </label>
         <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>Tags (comma-separated)</span>
+          <span>{tCommon('tagsHint')}</span>
           <input value={tags} onChange={(e) => setTags(e.target.value)} style={{ padding: '0.65rem' }} />
         </label>
 
@@ -325,10 +328,10 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             gap: '0.65rem',
           }}
         >
-          <legend>Provenance</legend>
+          <legend>{t('provenance')}</legend>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
             <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>Source title</span>
+              <span>{t('sourceTitle')}</span>
               <input
                 value={sourceTitle}
                 onChange={(e) => setSourceTitle(e.target.value)}
@@ -336,7 +339,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               />
             </label>
             <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>Source provider</span>
+              <span>{t('sourceProvider')}</span>
               <input
                 value={sourceProvider}
                 onChange={(e) => setSourceProvider(e.target.value)}
@@ -344,7 +347,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               />
             </label>
             <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>Source reference</span>
+              <span>{t('sourceReference')}</span>
               <input
                 value={sourceReference}
                 onChange={(e) => setSourceReference(e.target.value)}
@@ -352,7 +355,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               />
             </label>
             <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>Source URI</span>
+              <span>{t('sourceUri')}</span>
               <input
                 value={sourceUri}
                 onChange={(e) => setSourceUri(e.target.value)}
@@ -360,7 +363,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               />
             </label>
             <label style={{ display: 'grid', gap: '0.35rem', gridColumn: '1 / -1' }}>
-              <span>Generated by model</span>
+              <span>{t('generatedByModel')}</span>
               <input
                 value={generatedByModel}
                 onChange={(e) => setGeneratedByModel(e.target.value)}
@@ -372,11 +375,11 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
 
         {props.mode === 'edit' ? (
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Change message (for new versions)</span>
+            <span>{t('changeMessage')}</span>
             <input
               value={changeMessage}
               onChange={(e) => setChangeMessage(e.target.value)}
-              placeholder="What changed?"
+              placeholder={t('changeMessagePlaceholder')}
               style={{ padding: '0.65rem' }}
             />
           </label>
@@ -384,7 +387,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
           <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>Markdown</span>
+            <span>{t('markdown')}</span>
             <textarea
               value={contentMarkdown}
               onChange={(e) => setContentMarkdown(e.target.value)}
@@ -397,7 +400,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             />
           </label>
           <div>
-            <div style={{ marginBottom: '0.35rem' }}>Safe preview</div>
+            <div style={{ marginBottom: '0.35rem' }}>{t('safePreview')}</div>
             <div
               style={{
                 padding: '0.85rem',
@@ -421,7 +424,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             onClick={() => void save('draft')}
             style={{ padding: '0.75rem 1rem', border: '1px solid #1f4b73', background: 'white' }}
           >
-            Save draft
+            {t('saveDraft')}
           </button>
           <button
             type="button"
@@ -429,7 +432,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             onClick={() => void save('review_required')}
             style={{ padding: '0.75rem 1rem', border: '1px solid #1f4b73', background: 'white' }}
           >
-            Mark for review
+            {t('markForReview')}
           </button>
           <button
             type="button"
@@ -442,7 +445,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               color: 'white',
             }}
           >
-            Mark verified
+            {t('markVerified')}
           </button>
           <button
             type="button"
@@ -455,14 +458,14 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               color: 'white',
             }}
           >
-            Mark current
+            {t('markCurrent')}
           </button>
           <button
             type="submit"
             disabled={pending}
             style={{ padding: '0.75rem 1rem', border: 'none', background: '#1f4b73', color: 'white' }}
           >
-            {pending ? 'Saving…' : 'Save'}
+            {pending ? tCommon('saving') : tCommon('save')}
           </button>
         </div>
       </form>
