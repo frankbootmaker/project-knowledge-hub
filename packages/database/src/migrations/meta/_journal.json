@@ -64,6 +64,20 @@
       "when": 1784418300000,
       "tag": "0008_platform_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784418500000,
+      "tag": "0009_git_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784418700000,
+      "tag": "0010_workspace_color",
+      "breakpoints": true
     }
   ]
 }

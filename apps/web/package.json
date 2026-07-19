@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@project-knowledge-hub/domain": "workspace:*",
     "@project-knowledge-hub/markdown": "workspace:*",
     "@project-knowledge-hub/mcp": "workspace:*",
     "highlight.js": "^11.11.1",

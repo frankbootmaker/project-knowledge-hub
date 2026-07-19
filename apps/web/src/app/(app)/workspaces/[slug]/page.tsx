@@ -1,24 +1,36 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { ArchiveEntityButton } from '../../../../components/ArchiveEntityButton';
+import { WorkspaceManageMenu } from '../../../../components/WorkspaceManageMenu';
+import { WorkspaceStatusBadge } from '../../../../components/WorkspaceStatusBadge';
 import {
   Badge,
   ListCard,
   Page,
   PageHeader,
-  Panel,
   SectionHeader,
 } from '../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../lib/session';
+import { workspaceAccentClassName } from '../../../../lib/workspace-colors';
+import { resolveWorkspaceStatus } from '../../../../lib/workspace-status';
+import { cn } from '../../../../lib/cn';
+
+type WorkspacePerson = {
+  id: string;
+  displayName: string;
+  email: string;
+};
 
 type Workspace = {
   id: string;
   name: string;
   slug: string;
   description: string | null;
+  color: string | null;
+  createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
+  owners?: WorkspacePerson[];
 };
 
 type Project = {
@@ -68,6 +80,7 @@ export default async function WorkspaceDetailPage({
 }) {
   const session = await requireSession();
   const t = await getTranslations('workspaces');
+  const tGit = await getTranslations('gitSync');
   const tCommon = await getTranslations('common');
   const { slug } = await params;
 
@@ -89,12 +102,15 @@ export default async function WorkspaceDetailPage({
 
   const detailPayload = (await detailResponse.json()) as { workspace: Workspace };
   const workspace = detailPayload.workspace;
+  const owners = workspace.owners ?? [];
 
-  const [projectsResponse, systemsResponse, recordsResponse] = await Promise.all([
-    apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
-    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
-    apiFetch(`/api/v1/knowledge-records?workspaceId=${workspace.id}`),
-  ]);
+  const [projectsResponse, systemsResponse, recordsResponse, gitResponse] =
+    await Promise.all([
+      apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
+      apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
+      apiFetch(`/api/v1/knowledge-records?workspaceId=${workspace.id}`),
+      apiFetch(`/api/v1/workspaces/${workspace.id}/git-connections?checkRemote=true`),
+    ]);
 
   const projects = projectsResponse.ok
     ? ((await projectsResponse.json()) as { projects: Project[] }).projects
@@ -106,6 +122,25 @@ export default async function WorkspaceDetailPage({
     ? ((await recordsResponse.json()) as { knowledgeRecords: KnowledgeRecord[] })
         .knowledgeRecords
     : [];
+  const gitConnections = gitResponse.ok
+    ? (
+        (await gitResponse.json()) as {
+          connections: Array<{ syncHealth?: { status: string } | null }>;
+        }
+      ).connections
+    : [];
+  const workspaceStatus = resolveWorkspaceStatus({
+    archived: Boolean(workspace.archivedAt),
+    workspaceSlug: workspace.slug,
+    gitHealthStatuses: gitConnections.map(
+      (connection) => connection.syncHealth?.status,
+    ),
+  });
+  const gitHealthLabel = workspaceStatus.gitHealth
+    ? tGit(`health_${workspaceStatus.gitHealth}`)
+    : workspaceStatus.kind === 'healthy' && gitConnections.length > 0
+      ? tGit('health_healthy')
+      : null;
 
   const canMutate =
     session.user.isSystemAdmin ||
@@ -114,7 +149,7 @@ export default async function WorkspaceDetailPage({
         membership.workspaceId === workspace.id &&
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
-  const canArchiveWorkspace =
+  const canManageWorkspace =
     session.user.isSystemAdmin ||
     session.memberships.some(
       (membership) =>
@@ -126,30 +161,49 @@ export default async function WorkspaceDetailPage({
     <Page wide>
       <PageHeader
         title={workspace.name}
-        description={workspace.slug}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/workspaces/${workspace.slug}/archived`}
-              className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
-            >
-              {t('archivedItems')}
-            </Link>
-            {canArchiveWorkspace ? (
-              <ArchiveEntityButton
-                kind="workspace"
-                entityId={workspace.id}
-                entityName={workspace.name}
-                archived={Boolean(workspace.archivedAt)}
-                redirectOnArchive="/workspaces"
-              />
-            ) : null}
+            <WorkspaceStatusBadge status={workspaceStatus} />
+            <WorkspaceManageMenu
+              workspaceId={workspace.id}
+              workspaceSlug={workspace.slug}
+              workspaceName={workspace.name}
+              archived={Boolean(workspace.archivedAt)}
+              color={workspace.color}
+              canManageArchive={canManageWorkspace}
+              canManageColor={canManageWorkspace}
+              canEditDetails={canManageWorkspace}
+              gitHealthLabel={gitHealthLabel}
+              details={{
+                id: workspace.id,
+                slug: workspace.slug,
+                description: workspace.description,
+                createdAt: workspace.createdAt,
+                updatedAt: workspace.updatedAt,
+                archived: Boolean(workspace.archivedAt),
+                ownerNames: owners.map((owner) => owner.displayName),
+                projectCount: projects.length,
+                systemCount: systems.length,
+                recordCount: records.length,
+                gitConnectionCount: gitConnections.length,
+                memberAdminCount: owners.length,
+              }}
+            />
           </div>
         }
       />
-      <Panel className="mb-8">
-        <p className="m-0 text-ink-muted">{workspace.description || t('noDescription')}</p>
-      </Panel>
+      {workspace.description?.trim() ? (
+        <p className="mt-0 mb-3 max-w-3xl text-base leading-relaxed text-ink-muted">
+          {workspace.description.trim()}
+        </p>
+      ) : null}
+      <div
+        className={cn(
+          'kh-workspace-accent-bar mb-8',
+          workspaceAccentClassName(workspace.color, workspace.id),
+        )}
+        aria-hidden
+      />
 
       <section className="mb-8">
         <SectionHeader

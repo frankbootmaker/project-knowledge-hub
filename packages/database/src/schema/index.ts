@@ -41,6 +41,8 @@ export const workspaces = pgTable(
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     description: text('description'),
+    /** Curated accent key (ocean, teal, …); null → client picks stable hash color. */
+    color: text('color'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
@@ -416,3 +418,76 @@ export const platformSettings = pgTable('platform_settings', {
     .notNull()
     .defaultNow(),
 });
+
+export type GitPathMapping = {
+  pattern: string;
+  recordType: string;
+  tags?: string[];
+};
+
+/** Git repository connection for Markdown sync into a workspace/project. */
+export const gitRepositoryConnections = pgTable(
+  'git_repository_connections',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, {
+      onDelete: 'set null',
+    }),
+    provider: text('provider').notNull().default('github'),
+    owner: text('owner').notNull(),
+    repo: text('repo').notNull(),
+    branch: text('branch').notNull().default('main'),
+    /** GitHub PAT / fine-grained token — never returned in full by the API. */
+    accessToken: text('access_token').notNull(),
+    includePaths: jsonb('include_paths').$type<string[]>().notNull(),
+    excludePaths: jsonb('exclude_paths').$type<string[]>().notNull(),
+    pathMappings: jsonb('path_mappings').$type<GitPathMapping[]>().notNull(),
+    webhookSecret: text('webhook_secret'),
+    status: text('status').notNull().default('active'),
+    lastError: text('last_error'),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true, mode: 'date' }),
+    lastSyncedCommitSha: text('last_synced_commit_sha'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('git_repository_connections_workspace_id_idx').on(table.workspaceId),
+    index('git_repository_connections_project_id_idx').on(table.projectId),
+    uniqueIndex('git_repository_connections_workspace_repo_uidx').on(
+      table.workspaceId,
+      table.provider,
+      table.owner,
+      table.repo,
+      table.branch,
+    ),
+  ],
+);
+
+export const gitSyncRuns = pgTable(
+  'git_sync_runs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => gitRepositoryConnections.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('queued'),
+    trigger: text('trigger').notNull(),
+    commitSha: text('commit_sha'),
+    statsJson: jsonb('stats_json').$type<Record<string, number>>(),
+    errorMessage: text('error_message'),
+    startedAt: timestamp('started_at', { withTimezone: true, mode: 'date' }),
+    finishedAt: timestamp('finished_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('git_sync_runs_connection_id_idx').on(table.connectionId),
+    index('git_sync_runs_created_at_idx').on(table.createdAt),
+  ],
+);

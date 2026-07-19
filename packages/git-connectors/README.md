@@ -1,9 +1,7 @@
 # @project-knowledge-hub/git-connectors
 
-Git provider interfaces and GitHub synchronization adapters.
+Git provider adapters and repository → knowledge-record sync (Milestone 8).
 
-## Milestone status
-
-This package is a **placeholder** for Milestone 0.
-
-No runtime API is exported yet. Implementation begins in the milestone that first requires this capability. Do not add fake placeholder modules that appear operational.
+* GitHub tree/blob fetch + webhook signature verification
+* Include/exclude path globs and default folder → `recordType` / tag mappings
+* `syncGitRepositoryConnection` upserts `git_managed` records and archives removed paths

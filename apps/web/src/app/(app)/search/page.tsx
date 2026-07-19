@@ -1,3 +1,4 @@
+import { RECORD_TYPE_CATALOG } from '@project-knowledge-hub/domain';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import {
@@ -44,6 +45,7 @@ export default async function SearchPage({
   await requireSession();
   const t = await getTranslations('search');
   const tCommon = await getTranslations('common');
+  const tRecords = await getTranslations('records');
   const params = await searchParams;
 
   const query = typeof params.q === 'string' ? params.q : '';
@@ -131,13 +133,11 @@ export default async function SearchPage({
             <Field label={t('recordType')}>
               <Select name="recordType" defaultValue={recordType}>
                 <option value="">{tCommon('any')}</option>
-                <option value="deployment-guide">deployment-guide</option>
-                <option value="configuration">configuration</option>
-                <option value="configuration-snapshot">configuration-snapshot</option>
-                <option value="runbook">runbook</option>
-                <option value="architecture">architecture</option>
-                <option value="overview">overview</option>
-                <option value="troubleshooting">troubleshooting</option>
+                {RECORD_TYPE_CATALOG.map((entry) => (
+                  <option key={entry.value} value={entry.value}>
+                    {tRecords(`typeLabels.${entry.value}`)}
+                  </option>
+                ))}
               </Select>
             </Field>
             <Field label={tCommon('project')}>

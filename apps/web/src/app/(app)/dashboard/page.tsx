@@ -9,6 +9,8 @@ import {
 } from '../../../components/ui';
 import { loadDashboardData } from '../../../lib/dashboard';
 import { requireSession } from '../../../lib/session';
+import { workspaceTileClassName } from '../../../lib/workspace-colors';
+import { cn } from '../../../lib/cn';
 
 function roleLabel(
   role: string | null,
@@ -97,7 +99,10 @@ export default async function DashboardPage() {
                   <Link
                     key={workspace.id}
                     href={`/workspaces/${workspace.slug}`}
-                    className="kh-panel block no-underline transition hover:border-brand/35 hover:bg-brand-soft/40"
+                    className={cn(
+                      'kh-panel block no-underline transition hover:border-brand/35',
+                      workspaceTileClassName(workspace.color, workspace.id),
+                    )}
                   >
                     <p className="m-0 text-base font-semibold text-ink">
                       {workspace.name}

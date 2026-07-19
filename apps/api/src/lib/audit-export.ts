@@ -56,7 +56,12 @@ export function auditEventsToCsv(events: PublicAuditEvent[]): string {
   return `${lines.join('\n')}\n`;
 }
 
-export function exportFilename(format: 'csv' | 'json', generatedAt = new Date()): string {
+export type AuditExportFormat = 'csv' | 'json' | 'pdf';
+
+export function exportFilename(
+  format: AuditExportFormat,
+  generatedAt = new Date(),
+): string {
   const stamp = generatedAt.toISOString().replace(/[:.]/g, '-');
   return `audit-events-${stamp}.${format}`;
 }

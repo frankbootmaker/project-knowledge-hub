@@ -2,12 +2,14 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { LinkButton, ListCard, Page, PageHeader } from '../../../components/ui';
 import { apiFetch, requireSession } from '../../../lib/session';
+import { workspaceTileClassName } from '../../../lib/workspace-colors';
 
 type Workspace = {
   id: string;
   name: string;
   slug: string;
   description: string | null;
+  color: string | null;
 };
 
 export default async function WorkspacesPage() {
@@ -30,7 +32,10 @@ export default async function WorkspacesPage() {
       />
       <ul className="m-0 grid list-none gap-3 p-0">
         {payload.workspaces.map((workspace) => (
-          <ListCard key={workspace.id}>
+          <ListCard
+            key={workspace.id}
+            className={workspaceTileClassName(workspace.color, workspace.id)}
+          >
             <Link href={`/workspaces/${workspace.slug}`} className="text-lg font-semibold no-underline">
               {workspace.name}
             </Link>

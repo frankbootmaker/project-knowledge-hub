@@ -3,6 +3,8 @@
  * Pure JSON/YAML builders — safe to import from web and API.
  */
 
+import { RECORD_TYPES } from '@project-knowledge-hub/domain';
+
 export type LlmSchemaOptions = {
   mcpUrl: string;
   token: string;
@@ -149,13 +151,22 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
         properties: { recordId: uuidProp('Knowledge record id') },
       },
     },
+    {
+      name: 'list_record_metadata',
+      description:
+        'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, and MCP write constraints. Call before create_knowledge_record.',
+      body: {
+        type: 'object',
+        properties: {},
+      },
+    },
   ];
 
   const write: ToolDef[] = [
     {
       name: 'create_knowledge_record',
       description:
-        'Create a draft knowledge record (requires knowledge:write; humans must verify/mark-current)',
+        'Create a draft knowledge record (requires knowledge:write; humans must verify/mark-current). Prefer list_record_metadata first to choose recordType.',
       write: true,
       body: {
         type: 'object',
@@ -163,7 +174,12 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
         properties: {
           workspaceId: uuidProp('Workspace id'),
           title: stringProp('Title', { minLength: 1, maxLength: 300 }),
-          recordType: stringProp('Record type', { minLength: 1, maxLength: 64 }),
+          recordType: {
+            type: 'string',
+            enum: [...RECORD_TYPES],
+            description:
+              'Record type from list_record_metadata (planning types include business-idea, vision, plan, initiative, note)',
+          },
           contentMarkdown: stringProp('Markdown body', { maxLength: 500_000 }),
           summary: stringProp('Optional summary', { maxLength: 1000 }),
           slug: stringProp('Optional slug', { minLength: 1, maxLength: 96 }),
@@ -192,7 +208,11 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
           changeMessage: stringProp('Why this change was made', { minLength: 1, maxLength: 500 }),
           title: stringProp('Title', { minLength: 1, maxLength: 300 }),
           summary: { type: 'string', nullable: true, maxLength: 1000 },
-          recordType: stringProp('Record type', { minLength: 1, maxLength: 64 }),
+          recordType: {
+            type: 'string',
+            enum: [...RECORD_TYPES],
+            description: 'Record type from list_record_metadata',
+          },
           contentMarkdown: stringProp('Markdown body', { maxLength: 500_000 }),
           projectId: { type: 'string', format: 'uuid', nullable: true },
           systemId: { type: 'string', format: 'uuid', nullable: true },

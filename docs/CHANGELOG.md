@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Milestone execution order: keep localhost/dev first; run **M8** (GitHub sync) and optionally **M9** before **M7** Dokploy. M7 is deferred and staged as Dokploy Dev/UAT, then Prod after testing (`MILESTONE_TRACKING.md`, `ROADMAP.md`).
+
 ### Added
 
+* Workspace header: status badge (Active / Archived / Needs attention — attention links to Git sync) plus a Manage modal for details/statistics (editable brief description ≤280 chars, ID, owners, dates, counts), synchronizations, archived items, color, and archive/restore. Description overview appears above the accent bar on the workspace page.
+* Workspace accent colors: optional curated palette on workspaces (API `color`, migration `0010_workspace_color`), colored tiles on dashboard/list/detail, and create/edit color picker for workspace admins. Unset colors still resolve to a stable hash accent.
+* Milestone 8: GitHub repository connections, Markdown sync into `git_managed` knowledge records, path→type mappings, sync history, BullMQ worker queue, GitHub webhooks, sync-health badges, and workspace **Git sync** UI. Hub edits to git-managed records are blocked. Worker runs a daily safety re-sync (`GIT_SYNC_SAFETY_INTERVAL_MS`, default 24h).
+* MCP/OpenAPI `list_record_metadata` discovery tool: required/optional create fields, record-type catalog with descriptions, lifecycle and source-of-truth enums, and MCP write constraints. OpenAPI `recordType` now uses the shared enum.
+* Knowledge ledger record types: `business-idea`, `vision`, `plan`, `initiative`, and `note` (plus UI type labels in en/de/hu).
+* Audit log PDF export (`format=pdf` on `GET /api/v1/audit-events/export`): Admin Audit menu download with per-page header/footer covering organization, project (when resolvable), filter details, date/timestamp, and page numbers.
 * Soft-archive management UI: archive/restore on workspaces, projects, systems, and knowledge records; header Archive → `/archived` user restore hub; workspace Archived items page; Admin → Archive overview. Lists/search still hide archived by default (`includeArchived` on workspace list).
 * ADR-014: elevated API client capabilities — tiered scopes (`catalogue:write` next), propose/confirm commit protocol, and deferred workspace/org/archive tiers for trusted LLM automation.
 * Design-system feedback layer: toast primitives/recipes/tokens, newest-first admin lists, and a required Changelog in `docs/design/DESIGN_SYSTEM.md` for UI adjustments.
@@ -20,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Light/dark theme preference with cookie persistence, FOUC-safe boot script, and sun/moon header toggle.
 * Platform admin UI (`/admin`) for system administrators: overview, users, memberships, API clients, and audit log.
 * Audit log browsing: full-text search, action/entity/actor filters, date range and calendar day view, pagination, and expandable metadata.
-* Audit log export: CSV/JSON download of the current filtered result set (max 10,000 rows), with export actions themselves audited.
+* Audit log export: CSV/JSON/PDF download of the current filtered result set (max 10,000 rows), with export actions themselves audited.
 * Admin APIs: organizations list, users CRUD (admin), memberships CRUD, audit events list (search, date filters, pagination, day counts).
 * Tailwind CSS UI system for the web app: design tokens, shared primitives (Button, Panel, Field, Badge, Page), modernized shell and pages.
 * Draft-only write-capable MCP: `knowledge:write` scope, `create_knowledge_record` / `update_knowledge_record`, API client `actingUserId`, ADR-013.

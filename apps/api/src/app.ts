@@ -26,6 +26,7 @@ import { registerRootRoutes } from './routes/root.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerSystemRoutes } from './routes/systems.js';
 import { registerUserRoutes } from './routes/users.js';
+import { registerGitConnectionRoutes } from './routes/git-connections.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 
 export type ApiDependencies = {
@@ -110,6 +111,21 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
     });
   });
 
+  // Preserve raw JSON for GitHub webhook HMAC verification.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (request, body, done) => {
+      const text = typeof body === 'string' ? body : body.toString('utf8');
+      (request as { rawBody?: string }).rawBody = text;
+      try {
+        done(null, text.length ? JSON.parse(text) : {});
+      } catch (error) {
+        done(error as Error, undefined);
+      }
+    },
+  );
+
   await registerAuthHooks(app);
   await registerRootRoutes(app);
   await registerHealthRoutes(app);
@@ -120,6 +136,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerSystemRoutes(app);
   await registerKnowledgeRecordRoutes(app);
   await registerSearchRoutes(app);
+  await registerGitConnectionRoutes(app);
   await registerOrganizationRoutes(app);
   await registerUserRoutes(app);
   await registerMembershipRoutes(app);

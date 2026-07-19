@@ -39,6 +39,7 @@ export type McpToolHandlers = {
   }) => Promise<unknown>;
   getKnowledgeRecord: (input: { recordId: string }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
+  listRecordMetadata: () => Promise<unknown>;
   createKnowledgeRecord: (input: {
     workspaceId: string;
     title: string;
@@ -222,8 +223,16 @@ export function createKnowledgeHubMcpServer(
   );
 
   server.tool(
+    'list_record_metadata',
+    'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, and MCP write constraints. Call before create_knowledge_record.',
+    {},
+    async () =>
+      wrap('list_record_metadata', 'knowledge:read', () => handlers.listRecordMetadata())(),
+  );
+
+  server.tool(
     'create_knowledge_record',
-    'Create a draft knowledge record (requires knowledge:write; humans must verify/mark-current)',
+    'Create a draft knowledge record (requires knowledge:write; humans must verify/mark-current). Prefer list_record_metadata first to choose recordType.',
     {
       workspaceId: z.string().uuid(),
       title: z.string().min(1).max(300),

@@ -1,9 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { slugify } from '@project-knowledge-hub/auth';
-import { memberships, workspaces } from '@project-knowledge-hub/database';
-import { AppError } from '@project-knowledge-hub/domain';
+import { memberships, users, workspaces } from '@project-knowledge-hub/database';
+import {
+  AppError,
+  workspaceColorSchema,
+  workspaceDescriptionSchema,
+} from '@project-knowledge-hub/domain';
 import {
   requireSystemAdmin,
   requireWorkspaceAdmin,
@@ -22,12 +26,14 @@ import {
 const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(120),
   slug: z.string().min(1).max(64).optional(),
-  description: z.string().max(2000).optional(),
+  description: workspaceDescriptionSchema.optional(),
+  color: workspaceColorSchema.nullable().optional(),
 });
 
 const updateWorkspaceSchema = z.object({
   name: z.string().min(1).max(120).optional(),
-  description: z.string().max(2000).nullable().optional(),
+  description: workspaceDescriptionSchema.nullable().optional(),
+  color: workspaceColorSchema.nullable().optional(),
   archived: z.boolean().optional(),
 });
 
@@ -117,6 +123,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
         name: body.name,
         slug,
         description: body.description ?? null,
+        color: body.color === undefined ? null : body.color,
         updatedAt: new Date(),
       })
       .returning();
@@ -168,7 +175,35 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
       });
     }
 
-    return { workspace: toPublicWorkspace(workspace) };
+    const adminRows = await app.database.db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        email: users.email,
+        membershipCreatedAt: memberships.createdAt,
+      })
+      .from(memberships)
+      .innerJoin(users, eq(memberships.userId, users.id))
+      .where(
+        and(
+          eq(memberships.workspaceId, params.workspaceId),
+          eq(memberships.role, 'workspace_admin'),
+        ),
+      )
+      .orderBy(asc(memberships.createdAt));
+
+    const owners = adminRows.map((row) => ({
+      id: row.id,
+      displayName: row.displayName,
+      email: row.email,
+    }));
+
+    return {
+      workspace: {
+        ...toPublicWorkspace(workspace),
+        owners,
+      },
+    };
   });
 
   app.patch('/api/v1/workspaces/:workspaceId', async (request) => {
@@ -198,6 +233,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
         name: body.name ?? workspace.name,
         description:
           body.description === undefined ? workspace.description : body.description,
+        color: body.color === undefined ? workspace.color : body.color,
         archivedAt:
           body.archived === undefined
             ? workspace.archivedAt

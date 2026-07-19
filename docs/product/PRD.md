@@ -319,10 +319,15 @@ integration-guide
 conversation-summary
 research-note
 proposal
+business-idea
+vision
+plan
+initiative
+note
 other
 ```
 
-Record types should initially be stored as validated strings but should remain extensible.
+Record types should initially be stored as validated strings but should remain extensible. Planning ledger types (`business-idea`, `vision`, `plan`, `initiative`, `note`) support using the hub across ideas, delivery, operations, and future goals. MCP clients discover the catalog via `list_record_metadata`.
 
 ---
 
@@ -1255,6 +1260,8 @@ Automated secret detection will be implemented later, but the data model should 
 
 # 16. Development Milestones
 
+Milestone **IDs** (M0–M10) stay stable for cross-references. **Execution order** after the localhost MVP (M0–M6) is intentionally: **M8 → M9 → M7 → M10**, so Dokploy packaging is last and staged Dev/UAT → Prod. See `docs/MILESTONE_TRACKING.md` and `docs/product/ROADMAP.md`.
+
 # Milestone 0: Repository and platform foundation
 
 ## Objective
@@ -1492,6 +1499,8 @@ Cursor cannot:
 ---
 
 # Milestone 7: Production packaging and Dokploy deployment
+
+> **Execution note:** Deferred until after M8 (and preferably M9). Localhost/dev remains the primary environment. Dokploy is introduced first as Dev/UAT, then Prod after testing — not as a gate before git sync.
 
 ## Objective
 

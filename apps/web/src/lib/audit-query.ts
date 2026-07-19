@@ -75,7 +75,7 @@ export function buildAuditSearchParams(
 
 export function buildAuditExportHref(
   query: Partial<AuditQuery>,
-  format: 'csv' | 'json',
+  format: 'csv' | 'json' | 'pdf',
 ): string {
   const params = buildAuditFilterParams(query);
   params.set('format', format);

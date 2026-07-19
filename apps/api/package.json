@@ -12,21 +12,25 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@project-knowledge-hub/auth": "workspace:*",
     "@project-knowledge-hub/config": "workspace:*",
     "@project-knowledge-hub/database": "workspace:*",
     "@project-knowledge-hub/domain": "workspace:*",
+    "@project-knowledge-hub/git-connectors": "workspace:*",
+    "@project-knowledge-hub/jobs": "workspace:*",
     "@project-knowledge-hub/markdown": "workspace:*",
     "@project-knowledge-hub/mcp": "workspace:*",
     "@project-knowledge-hub/observability": "workspace:*",
     "@project-knowledge-hub/permissions": "workspace:*",
     "@project-knowledge-hub/search": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "fastify": "^5.4.0",
     "ioredis": "^5.6.1",
+    "pdfkit": "^0.19.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/pdfkit": "^0.17.6",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

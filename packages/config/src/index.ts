@@ -72,6 +72,12 @@ export const envSchema = z.object({
   BOOTSTRAP_ADMIN_DISPLAY_NAME: z.string().min(1).default('Administrator'),
   DEFAULT_ORGANIZATION_NAME: z.string().min(1).default('Default Organization'),
   DEFAULT_ORGANIZATION_SLUG: z.string().min(1).default('default'),
+  /** Daily safety re-sync for git connections (worker). Set 0 to disable. */
+  GIT_SYNC_SAFETY_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(24 * 60 * 60 * 1000),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

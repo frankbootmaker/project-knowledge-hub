@@ -325,6 +325,12 @@ export default async function AdminAuditPage({
                     >
                       {t('auditExportJson')}
                     </a>
+                    <a
+                      href={buildAuditExportHref(query, 'pdf')}
+                      className={buttonClassName('secondary')}
+                    >
+                      {t('auditExportPdf')}
+                    </a>
                   </>
                 )}
               </div>

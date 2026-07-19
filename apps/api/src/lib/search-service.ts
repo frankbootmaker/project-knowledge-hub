@@ -15,7 +15,7 @@ export const searchBodySchema = z.object({
   query: z.string().min(1).max(300),
   projectId: z.string().uuid().optional(),
   systemId: z.string().uuid().optional(),
-  recordTypes: z.array(recordTypeSchema).max(30).optional(),
+  recordTypes: z.array(recordTypeSchema).max(40).optional(),
   lifecycleStatuses: z.array(lifecycleStatusSchema).max(20).optional(),
   verifiedOnly: z.boolean().optional(),
   currentOnly: z.boolean().optional(),

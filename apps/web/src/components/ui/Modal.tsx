@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  useCallback,
   useEffect,
   useId,
   useRef,
@@ -40,10 +39,8 @@ export function Modal({
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
-
-  const close = useCallback(() => {
-    onClose();
-  }, [onClose]);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) {
@@ -60,21 +57,26 @@ export function Modal({
     document.body.style.overflow = 'hidden';
 
     const panel = panelRef.current;
-    const focusables = panel?.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
-    );
     const preferred =
       panel?.querySelector<HTMLElement>('[data-modal-initial-focus]') ??
-      focusables?.[0];
+      panel?.querySelector<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      );
     preferred?.focus();
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
-        close();
+        onCloseRef.current();
         return;
       }
-      if (event.key !== 'Tab' || !panel || !focusables?.length) {
+      if (event.key !== 'Tab' || !panel) {
+        return;
+      }
+      const focusables = panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusables.length) {
         return;
       }
       const list = Array.from(focusables);
@@ -94,7 +96,7 @@ export function Modal({
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.removeProperty('overflow');
     };
-  }, [open, close]);
+  }, [open]);
 
   if (!open) {
     return null;
@@ -108,7 +110,7 @@ export function Modal({
         aria-label={t('closeDialog')}
         onClick={() => {
           if (closeOnBackdrop) {
-            close();
+            onCloseRef.current();
           }
         }}
       />
@@ -136,7 +138,7 @@ export function Modal({
             variant="ghost"
             className={cn(headerControlSquareClassName, 'shrink-0 p-0')}
             aria-label={t('closeDialog')}
-            onClick={close}
+            onClick={() => onCloseRef.current()}
           >
             <svg
               viewBox="0 0 24 24"

@@ -7,7 +7,11 @@ import {
   systems,
   workspaces,
 } from '@project-knowledge-hub/database';
-import { AppError, recordTypeSchema } from '@project-knowledge-hub/domain';
+import {
+  AppError,
+  buildKnowledgeRecordMetadata,
+  recordTypeSchema,
+} from '@project-knowledge-hub/domain';
 import {
   truncateContent,
   type McpClientContext,
@@ -346,6 +350,10 @@ export function createMcpToolHandlers(
           updatedAt: record.updatedAt.toISOString(),
         },
       };
+    },
+
+    async listRecordMetadata() {
+      return buildKnowledgeRecordMetadata();
     },
 
     async getRecordProvenance({ recordId }) {

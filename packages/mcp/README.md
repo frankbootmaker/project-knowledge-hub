@@ -8,6 +8,7 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_systems` / `get_system`
 * `list_knowledge_records` / `search_knowledge` / `get_knowledge_record`
 * `get_record_provenance`
+* `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints
 
 ## Tools (write, opt-in)
 

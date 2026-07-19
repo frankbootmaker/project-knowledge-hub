@@ -110,6 +110,7 @@ export default async function KnowledgeRecordDetailPage({
         membership.workspaceId === workspace.id &&
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
+  const gitManaged = record.sourceOfTruthMode === 'git_managed';
 
   const dash = tCommon('emDash');
   const linkClass = 'text-sm font-medium text-brand no-underline hover:text-brand-hover';
@@ -139,7 +140,7 @@ export default async function KnowledgeRecordDetailPage({
             >
               {t('history')}
             </Link>
-            {canMutate && !isArchived ? (
+            {canMutate && !isArchived && !gitManaged ? (
               <Link
                 href={`/workspaces/${workspace.slug}/records/${record.slug}/edit`}
                 className={linkClass}
@@ -167,11 +168,21 @@ export default async function KnowledgeRecordDetailPage({
         <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
         {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
         <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
-        {canMutate && !isArchived ? (
+        {canMutate && !isArchived && !gitManaged ? (
           <RecordLifecycleActions
             recordId={record.id}
             lifecycleStatus={record.lifecycleStatus}
           />
+        ) : null}
+        {gitManaged && record.source?.sourceUri ? (
+          <a
+            href={record.source.sourceUri}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
+          >
+            {t('viewOnGitHub')}
+          </a>
         ) : null}
       </div>
 

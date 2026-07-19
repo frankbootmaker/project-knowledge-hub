@@ -101,6 +101,7 @@ export function toPublicWorkspace(workspace: WorkspaceRecord) {
     name: workspace.name,
     slug: workspace.slug,
     description: workspace.description,
+    color: workspace.color ?? null,
     archivedAt: workspace.archivedAt?.toISOString() ?? null,
     createdAt: workspace.createdAt.toISOString(),
     updatedAt: workspace.updatedAt.toISOString(),

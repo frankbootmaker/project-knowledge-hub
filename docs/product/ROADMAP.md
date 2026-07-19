@@ -1,18 +1,34 @@
 # Roadmap
 
-Aligned with the PRD development milestones.
+Aligned with the PRD development milestones. **Authoritative status:** `docs/MILESTONE_TRACKING.md`.
+
+## Execution order (post–localhost MVP)
+
+Localhost / Compose Postgres+Redis (`pnpm dev`) is the primary environment through feature work.
+
+| Order | Milestone | Focus | Status |
+| --- | --- | --- | --- |
+| Done | M0–M6 | Foundation through MCP (read + draft write) | Complete |
+| Done | **M8** | GitHub synchronization | Complete |
+| **Next** | M9 | Conversation import | Not started |
+| Then | **M7** | Production packaging and Dokploy | Deferred |
+| Optional | M10 | Semantic and hybrid search | Not started |
+
+**M7 staging:** Dokploy **Dev/UAT** first → validate HTTPS, MCP, persistence, backups → **Prod** only after testing. M7 does not block M8/M9.
+
+## Milestone status (by ID)
 
 | Milestone | Focus | Status |
 | --- | --- | --- |
 | 0 | Repository and platform foundation | Complete |
 | 1 | Identity and workspace foundation | Complete |
 | 2 | Project and system catalogue | Complete |
-| 3 | Knowledge records | Not started |
-| 4 | Versioning and lifecycle | Not started |
-| 5 | Search (PostgreSQL FTS) | Not started |
+| 3 | Knowledge records | Complete |
+| 4 | Versioning and lifecycle | Complete |
+| 5 | Search (PostgreSQL FTS) | Complete |
 | 6 | MCP (read + draft write) | Complete |
-| 7 | Production packaging and Dokploy | Not started |
-| 8 | GitHub synchronization | Not started |
+| 7 | Production packaging and Dokploy | Deferred (after M8/M9; Dev/UAT then Prod) |
+| 8 | GitHub synchronization | Complete |
 | 9 | Conversation import | Not started |
 | 10 | Semantic and hybrid search (optional) | Not started |
 

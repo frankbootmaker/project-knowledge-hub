@@ -26,6 +26,7 @@ const TOOL_NAMES = [
   'search_knowledge',
   'get_knowledge_record',
   'get_record_provenance',
+  'list_record_metadata',
   'create_knowledge_record',
   'update_knowledge_record',
 ] as const;
@@ -43,6 +44,7 @@ const scopeByTool: Record<ToolName, McpScope> = {
   search_knowledge: 'knowledge:search',
   get_knowledge_record: 'knowledge:read',
   get_record_provenance: 'provenance:read',
+  list_record_metadata: 'knowledge:read',
   create_knowledge_record: 'knowledge:write',
   update_knowledge_record: 'knowledge:write',
 };
@@ -187,6 +189,8 @@ async function invokeTool(
         });
       }
       return handlers.getRecordProvenance({ recordId: raw.recordId });
+    case 'list_record_metadata':
+      return handlers.listRecordMetadata();
     case 'create_knowledge_record':
       if (
         typeof raw.workspaceId !== 'string' ||

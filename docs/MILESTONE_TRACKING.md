@@ -20,6 +20,22 @@ This document tracks milestone progress against the PRD. Update status as work c
 
 ---
 
+## Execution order (decision 2026-07-19)
+
+Milestone **IDs** stay as in the PRD (M0–M10). **Build order after the localhost MVP** is:
+
+1. Keep **localhost / Compose dev** solid (`docs/development/LOCAL_DEVELOPMENT.md`) — primary environment for feature work.
+2. **M8** — GitHub synchronization (git-managed docs into projects) — **complete**.
+3. **M9** — Conversation import (next; optional to finish before packaging).
+4. **M7** — Production packaging and Dokploy, staged as:
+   - Dokploy **Dev/UAT** first
+   - **Prod** only after testing (HTTPS, MCP, persistence, backup/restore)
+5. **M10** — Semantic / hybrid search (optional)
+
+M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging step, not the next feature gate.
+
+---
+
 ## Milestone overview
 
 | ID | Name | Status | Notes |
@@ -31,12 +47,25 @@ This document tracks milestone progress against the PRD. Update status as work c
 | M4 | Versioning and lifecycle | `complete` | Validated 2026-07-19 |
 | M5 | Search | `complete` | Validated 2026-07-19 |
 | M6 | MCP (read + draft write) | `complete` | Validated 2026-07-19 |
-| M7 | Production packaging and Dokploy | `not_started` | |
-| M8 | GitHub synchronization | `not_started` | |
-| M9 | Conversation import | `not_started` | |
-| M10 | Semantic and hybrid search | `not_started` | |
+| M7 | Production packaging and Dokploy | `deferred` | After M8 (and preferably M9); Dev/UAT then Prod |
+| M8 | GitHub synchronization | `complete` | Validated 2026-07-19 — see checklist below |
+| M9 | Conversation import | `not_started` | After M8 |
+| M10 | Semantic and hybrid search | `not_started` | Optional; after packaging or in parallel later |
 
 ---
+
+## Milestone 8 checklist
+
+- [x] Git-provider interface + GitHub tree/blob fetch
+- [x] Repository connections (workspace, optional project, branch, include/exclude)
+- [x] Default path → recordType mappings (ADR, deployment, product, …)
+- [x] Initial sync + incremental skip on unchanged blob SHA
+- [x] Deleted paths soft-archived (leave default search)
+- [x] Sync job queue (BullMQ) + worker consumer
+- [x] GitHub webhook with HMAC secret (`POST /api/v1/git/webhooks/github`)
+- [x] Sync history (`git_sync_runs`)
+- [x] Git-managed UI + API edit lock; source URL/commit visible
+- [x] `pnpm` typecheck / unit tests for connectors; API tests green
 
 ## Milestone 6 checklist
 

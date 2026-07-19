@@ -433,6 +433,20 @@ export async function updateKnowledgeRecord(
     });
   }
 
+  if (record.sourceOfTruthMode === 'git_managed') {
+    const archivalOnly =
+      body.archived !== undefined &&
+      Object.keys(body).every((key) => key === 'archived' || key === 'changeMessage');
+    if (!archivalOnly) {
+      throw new AppError({
+        code: 'GIT_MANAGED_READ_ONLY',
+        message:
+          'Git-managed records cannot be edited in the hub; change the file in Git and re-sync',
+        statusCode: 409,
+      });
+    }
+  }
+
   const [workspace] = await app.database.db
     .select()
     .from(workspaces)

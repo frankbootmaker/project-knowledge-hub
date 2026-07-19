@@ -8,6 +8,7 @@ export type DashboardWorkspace = {
   name: string;
   slug: string;
   description: string | null;
+  color: string | null;
   updatedAt: string;
   role: string | null;
   projectCount: number;
@@ -36,6 +37,7 @@ type WorkspaceRow = {
   name: string;
   slug: string;
   description: string | null;
+  color: string | null;
   updatedAt: string;
 };
 
@@ -107,6 +109,7 @@ export async function loadDashboardData(
       name: workspace.name,
       slug: workspace.slug,
       description: workspace.description,
+      color: workspace.color ?? null,
       updatedAt: workspace.updatedAt,
       role: membershipRole(session, workspace.id),
       projectCount: projects.length,

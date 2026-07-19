@@ -245,6 +245,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     const names = (toolsBody.result?.tools ?? []).map((tool) => tool.name);
     expect(names).toContain('search_knowledge');
     expect(names).toContain('list_projects');
+    expect(names).toContain('list_record_metadata');
     expect(names).toContain('create_knowledge_record');
     expect(names).toContain('update_knowledge_record');
 

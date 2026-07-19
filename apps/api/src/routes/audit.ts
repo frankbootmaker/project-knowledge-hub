@@ -16,11 +16,13 @@ import { z } from 'zod';
 import { auditEvents } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
+import { resolveAuditExportLabels } from '../lib/audit-export-context.js';
 import {
   auditEventsToCsv,
   exportFilename,
   type PublicAuditEvent,
 } from '../lib/audit-export.js';
+import { buildAuditEventsPdf } from '../lib/audit-pdf.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { requireAuthenticated } from '../plugins/auth.js';
 
@@ -158,7 +160,7 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
     requireSystemAdmin(principal);
     const query = auditFilterQuerySchema
       .extend({
-        format: z.enum(['csv', 'json']).default('csv'),
+        format: z.enum(['csv', 'json', 'pdf']).default('csv'),
       })
       .parse(request.query);
 
@@ -224,6 +226,30 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
           filters,
           auditEvents: events,
         });
+    }
+
+    if (format === 'pdf') {
+      const labels = await resolveAuditExportLabels(
+        app.database.db,
+        events,
+        query.organizationId,
+      );
+      const filterStrings = Object.fromEntries(
+        Object.entries(filters).map(([key, value]) => [key, String(value)]),
+      );
+      const pdf = await buildAuditEventsPdf(events, {
+        organizationLabel: labels.organizationLabel,
+        projectLabel: labels.projectLabel,
+        filters: filterStrings,
+        exportedAt: generatedAt,
+        exportedCount: events.length,
+        totalMatching,
+      });
+
+      return reply
+        .header('Content-Type', 'application/pdf')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(pdf);
     }
 
     return reply

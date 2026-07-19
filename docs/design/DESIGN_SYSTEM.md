@@ -82,6 +82,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 |--------|------|
 | `.kh-input` / `.kh-label` | Form controls |
 | `.kh-panel` / `.kh-panel-solid` / `.kh-panel-inset` | Surfaces |
+| `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (left bar + soft wash); palette keys from domain |
+| `.kh-workspace-swatch` / `.kh-workspace-swatch-btn*` | Color picker swatches |
 | `.kh-muted` | Secondary text |
 | `.kh-btn` + `.kh-btn-{primary,secondary,ghost,success,danger}` | Buttons / link-buttons |
 | `.kh-nav-link` / `.kh-nav-link-active` | Header nav |
@@ -153,6 +155,12 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-19
 
+* **Modal focus** — `Modal` only runs initial focus / body-scroll lock when `open` flips true (not when `onClose` identity changes), so typing in modal fields does not steal focus each keystroke.
+* **Workspace manage + status** — Workspace header shows a status `Badge` (Active / Archived / Needs attention) and a **Manage** button. A brief description (max 280 chars) can sit above the `.kh-workspace-accent-bar` overview line; edit it via Manage → Details. Needs attention links to Git sync. Manage modal also covers synchronizations, archived items, color, archive/restore.
+* **Workspace colors** — Curated accent palette (`ocean`…`ink`) on workspace tiles (dashboard + list) via `.kh-workspace-tile` / `.kh-workspace-color-*`. Unset color uses a stable hash. Create form + Manage → color use `WorkspaceColorPicker`.
+* **Git sync** — Workspace page link to `/workspaces/{slug}/git` for GitHub connections and Sync now. Connection cards show a sync-health `Badge` (healthy / sync needed / error, etc.) after a lightweight remote commit check. Git-managed records hide Edit / lifecycle actions; show View on GitHub when provenance URI exists.
+* **Record type labels** — Knowledge editor select uses i18n `records.typeLabels.*` driven by the shared domain catalog (incl. planning ledger types).
+* **Audit PDF export** — Admin Audit adds Export PDF beside CSV/JSON; same filter scope. PDF pages carry organization, project, filter details, and export timestamp in header/footer.
 * **Archive UX** — Soft-archive via `ArchiveEntityButton` (confirm + restore). Header + mobile nav link to `/archived` (user restore hub); per-workspace `/workspaces/{slug}/archived`; Admin → Archive for platform ops. Inline header nav starts at `md` so Archive fits without crowding phones/small tablets.
 * **Responsive nav** — Primary inline nav breakpoint raised `sm` → `md` after Archive was added; `MobileNav` (`<md`) is a frosted top sheet portaled to `document.body` (page remains faintly visible underneath).
 * **User dashboard** — Workspace tiles (role + counts), search/admin jump tiles, and a recently-updated list. Interactive `kh-panel` links; `Page wide` for the grid.

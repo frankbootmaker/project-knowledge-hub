@@ -25,11 +25,26 @@ describe('llm-client-schemas', () => {
     const readOnly = buildLlmOpenApiDocument({ ...opts, includeWriteTools: false });
     const paths = readOnly.paths as Record<string, unknown>;
     expect(paths['/api/v1/llm/tools/search_knowledge']).toBeTruthy();
+    expect(paths['/api/v1/llm/tools/list_record_metadata']).toBeTruthy();
     expect(paths['/api/v1/llm/tools/create_knowledge_record']).toBeUndefined();
 
     const withWrite = buildLlmOpenApiDocument({ ...opts, includeWriteTools: true });
     const writePaths = withWrite.paths as Record<string, unknown>;
-    expect(writePaths['/api/v1/llm/tools/create_knowledge_record']).toBeTruthy();
+    const createPath = writePaths['/api/v1/llm/tools/create_knowledge_record'] as {
+      post: {
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: { properties: { recordType: { enum?: string[] } } };
+            };
+          };
+        };
+      };
+    };
+    expect(createPath).toBeTruthy();
+    expect(createPath.post.requestBody.content['application/json'].schema.properties.recordType.enum).toContain(
+      'vision',
+    );
   });
 
   it('builds Copilot Studio MCP swagger with streamable protocol', () => {

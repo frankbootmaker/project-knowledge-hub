@@ -4,6 +4,11 @@ import type { FormEvent } from 'react';
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import {
+  LIFECYCLE_STATUSES,
+  RECORD_TYPE_CATALOG,
+  SOURCE_OF_TRUTH_MODES,
+} from '@project-knowledge-hub/domain';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import { MarkdownDocument } from './MarkdownDocument';
 import {
@@ -17,51 +22,6 @@ import {
   Select,
   Textarea,
 } from './ui';
-
-const RECORD_TYPES = [
-  'overview',
-  'architecture',
-  'deployment-guide',
-  'installation-guide',
-  'configuration',
-  'configuration-snapshot',
-  'runbook',
-  'troubleshooting',
-  'incident-resolution',
-  'migration-guide',
-  'decision',
-  'lessons-learned',
-  'command-reference',
-  'inventory',
-  'status',
-  'roadmap',
-  'recovery-guide',
-  'backup-guide',
-  'security-note',
-  'integration-guide',
-  'conversation-summary',
-  'research-note',
-  'proposal',
-  'other',
-] as const;
-
-const LIFECYCLE_STATUSES = [
-  'draft',
-  'review_required',
-  'verified',
-  'current',
-  'superseded',
-  'deprecated',
-  'archived',
-] as const;
-
-const SOURCE_MODES = [
-  'hub_managed',
-  'git_managed',
-  'imported_snapshot',
-  'ai_generated_draft',
-  'external_authoritative',
-] as const;
 
 type Option = { id: string; name: string; slug: string };
 
@@ -151,6 +111,10 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
   }, [contentMarkdown]);
 
   async function save(nextStatus?: string) {
+    if (props.initial?.sourceOfTruthMode === 'git_managed') {
+      setError(t('gitManagedReadOnly'));
+      return;
+    }
     setPending(true);
     setError(null);
     const status = nextStatus ?? lifecycleStatus;
@@ -230,9 +194,16 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
     void save();
   }
 
+  const gitManaged = props.initial?.sourceOfTruthMode === 'git_managed';
+
   return (
     <Page wide>
       <PageHeader title={props.mode === 'create' ? t('createTitle') : t('editTitle')} />
+      {gitManaged ? (
+        <Panel className="mb-4">
+          <p className="m-0 text-sm text-ink-muted">{t('gitManagedReadOnly')}</p>
+        </Panel>
+      ) : null}
       <form onSubmit={onSubmit} className="grid gap-4">
         <Panel className="grid gap-4 sm:grid-cols-2">
           <Field label={tCommon('title')}>
@@ -247,9 +218,9 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               value={recordType}
               onChange={(e) => setRecordType(e.target.value)}
             >
-              {RECORD_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
+              {RECORD_TYPE_CATALOG.map((entry) => (
+                <option key={entry.value} value={entry.value} title={entry.description}>
+                  {t(`typeLabels.${entry.value}`)}
                 </option>
               ))}
             </Select>
@@ -271,7 +242,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               value={sourceOfTruthMode}
               onChange={(e) => setSourceOfTruthMode(e.target.value)}
             >
-              {SOURCE_MODES.map((mode) => (
+              {SOURCE_OF_TRUTH_MODES.map((mode) => (
                 <option key={mode} value={mode}>
                   {mode}
                 </option>
@@ -388,7 +359,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
           <Button
             type="button"
             variant="secondary"
-            disabled={pending}
+            disabled={pending || gitManaged}
             onClick={() => void save('draft')}
           >
             {t('saveDraft')}
@@ -396,7 +367,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
           <Button
             type="button"
             variant="secondary"
-            disabled={pending}
+            disabled={pending || gitManaged}
             onClick={() => void save('review_required')}
           >
             {t('markForReview')}
@@ -404,7 +375,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
           <Button
             type="button"
             variant="success"
-            disabled={pending}
+            disabled={pending || gitManaged}
             onClick={() => void save('verified')}
           >
             {t('markVerified')}
@@ -412,7 +383,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
           <Button
             type="button"
             variant="success"
-            disabled={pending}
+            disabled={pending || gitManaged}
             onClick={() => void save('current')}
           >
             {t('markCurrent')}
