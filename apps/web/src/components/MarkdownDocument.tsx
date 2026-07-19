@@ -33,10 +33,11 @@ export function MarkdownDocument({
         return;
       }
       const mermaid = (await import('mermaid')).default;
+      const dark = document.documentElement.classList.contains('dark');
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: 'strict',
-        theme: 'neutral',
+        theme: dark ? 'dark' : 'neutral',
       });
       if (!cancelled) {
         await mermaid.run({

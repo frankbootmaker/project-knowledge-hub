@@ -24,6 +24,11 @@
     "noDescription": "No description.",
     "updated": "Updated",
     "language": "Language",
+    "languageCycle": "Language: {current}. Click for {next}.",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeCycle": "Theme: {current}. Click for {next}.",
     "tagsList": "Tags: {tags}",
     "emDash": "—"
   },

@@ -1,28 +1,80 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github.css';
 
+:root {
+  --kh-ink: #15202b;
+  --kh-ink-muted: #4b5a68;
+  --kh-surface: #f4f7fb;
+  --kh-panel: rgba(255, 255, 255, 0.82);
+  --kh-panel-solid: #ffffff;
+  --kh-line: rgba(21, 32, 43, 0.1);
+  --kh-line-strong: rgba(21, 32, 43, 0.18);
+  --kh-brand: #1f4b73;
+  --kh-brand-hover: #183a59;
+  --kh-brand-soft: #e8f0f7;
+  --kh-accent: #145a36;
+  --kh-accent-soft: #e3f6ec;
+  --kh-warn: #8a5a00;
+  --kh-warn-soft: #fff7e6;
+  --kh-danger: #9b1c1c;
+  --kh-danger-soft: #fde8e8;
+  --kh-neutral-soft: #f3f4f6;
+  --kh-bg-glow-a: #d9e8f5;
+  --kh-bg-glow-b: #e8eef4;
+  --kh-bg-base-a: #f4f7fb;
+  --kh-bg-base-b: #eef2f6;
+  --kh-selection: color-mix(in srgb, var(--kh-brand) 22%, white);
+  color-scheme: light;
+}
+
+.dark {
+  --kh-ink: #e7eef5;
+  --kh-ink-muted: #9aabba;
+  --kh-surface: #0f161d;
+  --kh-panel: rgba(22, 31, 41, 0.88);
+  --kh-panel-solid: #1a2430;
+  --kh-line: rgba(231, 238, 245, 0.1);
+  --kh-line-strong: rgba(231, 238, 245, 0.18);
+  --kh-brand: #4a8ec0;
+  --kh-brand-hover: #6aa6d4;
+  --kh-brand-soft: #1a3348;
+  --kh-accent: #4caf7a;
+  --kh-accent-soft: #163526;
+  --kh-warn: #e0a84a;
+  --kh-warn-soft: #3a2a10;
+  --kh-danger: #e57373;
+  --kh-danger-soft: #3a1818;
+  --kh-neutral-soft: #243039;
+  --kh-bg-glow-a: #1a2b3c;
+  --kh-bg-glow-b: #152029;
+  --kh-bg-base-a: #0f161d;
+  --kh-bg-base-b: #121a22;
+  --kh-selection: color-mix(in srgb, var(--kh-brand) 35%, transparent);
+  color-scheme: dark;
+}
+
 @theme {
   --font-sans: var(--font-ibm-plex-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
   --font-mono: var(--font-ibm-plex-mono), 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo,
     monospace;
 
-  --color-ink: #15202b;
-  --color-ink-muted: #4b5a68;
-  --color-surface: #f4f7fb;
-  --color-panel: rgba(255, 255, 255, 0.82);
-  --color-panel-solid: #ffffff;
-  --color-line: rgba(21, 32, 43, 0.1);
-  --color-line-strong: rgba(21, 32, 43, 0.18);
-  --color-brand: #1f4b73;
-  --color-brand-hover: #183a59;
-  --color-brand-soft: #e8f0f7;
-  --color-accent: #145a36;
-  --color-accent-soft: #e3f6ec;
-  --color-warn: #8a5a00;
-  --color-warn-soft: #fff7e6;
-  --color-danger: #9b1c1c;
-  --color-danger-soft: #fde8e8;
-  --color-neutral-soft: #f3f4f6;
+  --color-ink: var(--kh-ink);
+  --color-ink-muted: var(--kh-ink-muted);
+  --color-surface: var(--kh-surface);
+  --color-panel: var(--kh-panel);
+  --color-panel-solid: var(--kh-panel-solid);
+  --color-line: var(--kh-line);
+  --color-line-strong: var(--kh-line-strong);
+  --color-brand: var(--kh-brand);
+  --color-brand-hover: var(--kh-brand-hover);
+  --color-brand-soft: var(--kh-brand-soft);
+  --color-accent: var(--kh-accent);
+  --color-accent-soft: var(--kh-accent-soft);
+  --color-warn: var(--kh-warn);
+  --color-warn-soft: var(--kh-warn-soft);
+  --color-danger: var(--kh-danger);
+  --color-danger-soft: var(--kh-danger-soft);
+  --color-neutral-soft: var(--kh-neutral-soft);
 
   --radius-sm: 0.35rem;
   --radius-md: 0.55rem;
@@ -38,9 +90,9 @@
   body {
     @apply bg-surface font-sans text-ink antialiased;
     background-image:
-      radial-gradient(circle at top left, #d9e8f5 0%, transparent 42%),
-      radial-gradient(circle at bottom right, #e8eef4 0%, transparent 46%),
-      linear-gradient(180deg, #f4f7fb 0%, #eef2f6 100%);
+      radial-gradient(circle at top left, var(--kh-bg-glow-a) 0%, transparent 42%),
+      radial-gradient(circle at bottom right, var(--kh-bg-glow-b) 0%, transparent 46%),
+      linear-gradient(180deg, var(--kh-bg-base-a) 0%, var(--kh-bg-base-b) 100%);
     background-attachment: fixed;
   }
 
@@ -49,7 +101,7 @@
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--color-brand) 22%, white);
+    background: var(--kh-selection);
   }
 }
 
@@ -80,6 +132,37 @@
 
 .knowledge-markdown pre {
   @apply overflow-x-auto rounded-md bg-ink/5 px-4 py-3;
+}
+
+.dark .knowledge-markdown pre {
+  @apply bg-ink/10;
+}
+
+.dark .knowledge-markdown .hljs {
+  background: transparent;
+  color: #d6dee8;
+}
+
+.dark .knowledge-markdown .hljs-comment,
+.dark .knowledge-markdown .hljs-quote {
+  color: #8b9aab;
+}
+
+.dark .knowledge-markdown .hljs-keyword,
+.dark .knowledge-markdown .hljs-selector-tag,
+.dark .knowledge-markdown .hljs-subst {
+  color: #7eb6e0;
+}
+
+.dark .knowledge-markdown .hljs-string,
+.dark .knowledge-markdown .hljs-doctag,
+.dark .knowledge-markdown .hljs-template-variable {
+  color: #8fd0a8;
+}
+
+.dark .knowledge-markdown .hljs-number,
+.dark .knowledge-markdown .hljs-literal {
+  color: #e0a84a;
 }
 
 .knowledge-markdown code {

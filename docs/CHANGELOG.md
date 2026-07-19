@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Light/dark theme preference with cookie persistence, FOUC-safe boot script, and sun/moon header toggle.
 * Platform admin UI (`/admin`) for system administrators: overview, users, memberships, API clients, and audit log.
 * Audit log browsing: full-text search, action/entity/actor filters, date range and calendar day view, pagination, and expandable metadata.
 * Audit log export: CSV/JSON download of the current filtered result set (max 10,000 rows), with export actions themselves audited.

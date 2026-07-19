@@ -24,6 +24,11 @@
     "noDescription": "Nincs leírás.",
     "updated": "Frissítve",
     "language": "Nyelv",
+    "languageCycle": "Nyelv: {current}. Kattintás: {next}.",
+    "theme": "Téma",
+    "themeLight": "Világos",
+    "themeDark": "Sötét",
+    "themeCycle": "Téma: {current}. Kattintás: {next}.",
     "tagsList": "Címkék: {tags}",
     "emDash": "—"
   },

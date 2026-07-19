@@ -24,6 +24,11 @@
     "noDescription": "Keine Beschreibung.",
     "updated": "Aktualisiert",
     "language": "Sprache",
+    "languageCycle": "Sprache: {current}. Klicken für {next}.",
+    "theme": "Design",
+    "themeLight": "Hell",
+    "themeDark": "Dunkel",
+    "themeCycle": "Design: {current}. Klicken für {next}.",
     "tagsList": "Tags: {tags}",
     "emDash": "—"
   },

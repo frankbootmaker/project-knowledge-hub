@@ -3,7 +3,9 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { ThemeSwitcher } from './ThemeSwitcher';
 import { Button } from './ui';
+import { getThemePreference } from '../lib/theme-actions';
 import type { SessionPayload } from '../lib/session';
 
 const apiUrl = process.env.API_URL ?? 'http://localhost:3101';
@@ -33,6 +35,7 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
   const t = await getTranslations('nav');
   const tCommon = await getTranslations('common');
   const tLogin = await getTranslations('login');
+  const theme = await getThemePreference();
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-panel/90 backdrop-blur-md">
@@ -69,7 +72,10 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <LanguageSwitcher />
+          <div className="flex items-center -space-x-0.5">
+            <ThemeSwitcher initialTheme={theme} />
+            <LanguageSwitcher />
+          </div>
           {session ? (
             <>
               <span className="hidden text-sm text-ink-muted md:inline">
