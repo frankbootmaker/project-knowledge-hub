@@ -155,6 +155,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-19
 
+* **Synchronizations hub** — `/workspaces/{slug}/git` lists configured sync connections (provider, health, last sync) with **Manage** per row and header **Add**. Add opens a provider catalog modal (GitHub creatable; others “Coming soon”). Manage opens config/sync/history for a connection.
 * **Modal focus** — `Modal` only runs initial focus / body-scroll lock when `open` flips true (not when `onClose` identity changes), so typing in modal fields does not steal focus each keystroke.
 * **Workspace manage + status** — Workspace header shows a status `Badge` (Active / Archived / Needs attention) and a **Manage** button. A brief description (max 280 chars) can sit above the `.kh-workspace-accent-bar` overview line; edit it via Manage → Details. Needs attention links to Git sync. Manage modal also covers synchronizations, archived items, color, archive/restore.
 * **Workspace colors** — Curated accent palette (`ocean`…`ink`) on workspace tiles (dashboard + list) via `.kh-workspace-tile` / `.kh-workspace-color-*`. Unset color uses a stable hash. Create form + Manage → color use `WorkspaceColorPicker`.

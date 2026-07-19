@@ -13,8 +13,14 @@
 * `@project-knowledge-hub/jobs` — BullMQ `git-sync` queue
 * Worker consumer for webhook-triggered sync + daily safety sweep
 * API: connection CRUD, Sync now (inline), sync history, GitHub webhook (`/api/v1/git/webhooks/github`)
-* Workspace UI: `/workspaces/{slug}/git` + sync-health badges
+* Workspace UI: `/workspaces/{slug}/git` Synchronizations hub (list / Add / Manage) + sync-health badges
+* Provider catalog (`github`, `gitlab`, `azure_devops`, `bitbucket`, `forgejo`); only GitHub sync is implemented
 * Git-managed records are read-only in hub API/UI
+
+## Follow-up (next phase)
+
+* Working connectors + webhooks for GitLab, Azure DevOps, Bitbucket, and Forgejo / self-hosted Git
+* Optional `baseUrl` for Forgejo/GitLab self-hosted instances
 
 ## Defaults
 
@@ -26,8 +32,8 @@
 
 ## Operator flow
 
-1. Workspace admin opens **Git sync**
-2. Connect `owner/repo` + PAT + optional project + webhook secret
-3. **Sync now** (or GitHub push webhook with secret)
+1. Workspace admin opens **Synchronizations** (Manage → Synchronizations)
+2. **Add** → GitHub → connect `owner/repo` + PAT + optional project + webhook secret
+3. **Manage** → **Sync now** (or GitHub push webhook with secret)
 4. Records appear under the workspace/project; edit in git and re-sync
 5. Keep the **worker** running for webhooks and the daily safety re-sync

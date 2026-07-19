@@ -15,7 +15,12 @@ import {
   verifyGitHubWebhookSignature,
   type GitSyncHealth,
 } from '@project-knowledge-hub/git-connectors';
-import { AppError, recordTypeSchema } from '@project-knowledge-hub/domain';
+import {
+  AppError,
+  isSyncProviderSupported,
+  recordTypeSchema,
+  syncProviderSchema,
+} from '@project-knowledge-hub/domain';
 import { createGitSyncQueue, enqueueGitSyncJob } from '@project-knowledge-hub/jobs';
 import {
   requireWorkspaceAdmin,
@@ -34,6 +39,7 @@ const pathMappingSchema = z.object({
 const createConnectionSchema = z.object({
   workspaceId: z.string().uuid(),
   projectId: z.string().uuid().nullable().optional(),
+  provider: syncProviderSchema.default('github'),
   owner: z.string().min(1).max(120),
   repo: z.string().min(1).max(120),
   branch: z.string().min(1).max(200).default('main'),
@@ -165,6 +171,14 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
     const body = createConnectionSchema.parse(request.body);
     requireWorkspaceAdmin(principal, body.workspaceId);
 
+    if (!isSyncProviderSupported(body.provider)) {
+      throw new AppError({
+        code: 'PROVIDER_NOT_IMPLEMENTED',
+        message: `Sync for provider “${body.provider}” is not available yet`,
+        statusCode: 400,
+      });
+    }
+
     const [workspace] = await app.database.db
       .select()
       .from(workspaces)
@@ -185,7 +199,7 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
       .values({
         workspaceId: body.workspaceId,
         projectId: body.projectId ?? null,
-        provider: 'github',
+        provider: body.provider,
         owner: body.owner,
         repo: body.repo,
         branch: body.branch,
@@ -213,7 +227,12 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
       action: 'git_connection.create',
       entityType: 'git_repository_connection',
       entityId: created.id,
-      metadata: { owner: created.owner, repo: created.repo, branch: created.branch },
+      metadata: {
+        provider: created.provider,
+        owner: created.owner,
+        repo: created.repo,
+        branch: created.branch,
+      },
       ipAddress: request.ip,
     });
 

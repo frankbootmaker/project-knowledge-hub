@@ -35,6 +35,16 @@ export {
   workspaceDescriptionSchema,
 } from './workspace.js';
 
+export {
+  SYNC_PROVIDERS,
+  SYNC_PROVIDER_CATALOG,
+  syncProviderSchema,
+  getSyncProviderDefinition,
+  isSyncProviderSupported,
+  type SyncProvider,
+  type SyncProviderDefinition,
+} from './sync-providers.js';
+
 export const projectStatusSchema = z.enum([
   'idea',
   'planned',

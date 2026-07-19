@@ -1,14 +1,12 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
-import { GitConnectionsPanel } from '../../../../../components/GitConnectionsPanel';
-import { Page, PageHeader } from '../../../../../components/ui';
+import { WorkspaceSyncPage } from '../../../../../components/WorkspaceSyncPage';
 import { apiFetch, requireSession } from '../../../../../lib/session';
 
 type Workspace = { id: string; name: string; slug: string };
 type Project = { id: string; name: string; slug: string };
 type Connection = {
   id: string;
+  provider: string;
   owner: string;
   repo: string;
   branch: string;
@@ -20,6 +18,7 @@ type Connection = {
   accessTokenPreview: string;
   includePaths: string[];
   excludePaths: string[];
+  hasWebhookSecret?: boolean;
   syncHealth: {
     status: string;
     remoteCommitSha: string | null;
@@ -35,7 +34,6 @@ export default async function WorkspaceGitPage({
   params: Promise<{ slug: string }>;
 }) {
   const session = await requireSession();
-  const t = await getTranslations('gitSync');
   const { slug } = await params;
 
   const listResponse = await apiFetch('/api/v1/workspaces');
@@ -66,7 +64,7 @@ export default async function WorkspaceGitPage({
         membership.workspaceId === workspace.id && membership.role === 'workspace_admin',
     );
 
-  const worstHealth = connections.reduce<string | null>((worst, connection) => {
+  const overallHealth = connections.reduce<string | null>((worst, connection) => {
     const status = connection.syncHealth?.status;
     if (!status) return worst;
     const rank: Record<string, number> = {
@@ -82,31 +80,16 @@ export default async function WorkspaceGitPage({
   }, null);
 
   return (
-    <Page wide>
-      <PageHeader
-        title={t('title')}
-        description={t('subtitle', { workspace: workspace.name })}
-        actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {worstHealth ? (
-              <span className="text-sm text-ink-muted" title={t(`health_${worstHealth}`)}>
-                {t('overallHealth')}: {t(`health_${worstHealth}`)}
-              </span>
-            ) : null}
-            <Link href={`/workspaces/${workspace.slug}`} className="text-sm text-brand no-underline">
-              {t('backToWorkspace')}
-            </Link>
-          </div>
-        }
-      />
-      <GitConnectionsPanel
-        workspaceId={workspace.id}
-        projects={projects}
-        initialConnections={connections as Parameters<
-          typeof GitConnectionsPanel
-        >[0]['initialConnections']}
-        canManage={canManage}
-      />
-    </Page>
+    <WorkspaceSyncPage
+      workspaceId={workspace.id}
+      workspaceName={workspace.name}
+      workspaceSlug={workspace.slug}
+      projects={projects}
+      connections={connections as Parameters<
+        typeof WorkspaceSyncPage
+      >[0]['connections']}
+      canManage={canManage}
+      overallHealth={overallHealth}
+    />
   );
 }
