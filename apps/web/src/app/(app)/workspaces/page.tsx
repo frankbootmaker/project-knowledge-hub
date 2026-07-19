@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { ListCard, Page, PageHeader } from '../../../components/ui';
+import { LinkButton, ListCard, Page, PageHeader } from '../../../components/ui';
 import { apiFetch, requireSession } from '../../../lib/session';
 
 type Workspace = {
@@ -24,12 +24,7 @@ export default async function WorkspacesPage() {
         title={t('title')}
         actions={
           session.user.isSystemAdmin ? (
-            <Link
-              href="/workspaces/new"
-              className="inline-flex rounded-md bg-brand px-3.5 py-2 text-sm font-medium text-white no-underline transition hover:bg-brand-hover"
-            >
-              {t('new')}
-            </Link>
+            <LinkButton href="/workspaces/new">{t('new')}</LinkButton>
           ) : null
         }
       />

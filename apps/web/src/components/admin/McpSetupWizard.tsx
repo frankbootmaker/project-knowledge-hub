@@ -293,13 +293,11 @@ export function McpSetupWizard({
                 }
                 onClick={() => setStep(item)}
                 className={[
-                  'rounded-md border px-3 py-1.5 text-sm font-medium transition',
-                  active
-                    ? 'border-brand bg-brand text-white dark:text-[#0f161d]'
-                    : done
-                      ? 'border-accent/30 bg-accent-soft text-accent'
-                      : 'border-line bg-panel-solid text-ink-muted',
-                ].join(' ')}
+                  'kh-step',
+                  active ? 'kh-step-active' : done ? 'kh-step-done' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
               >
                 {index + 1}. {t(`mcpWizardStep_${item}`)}
               </button>
@@ -333,7 +331,7 @@ export function McpSetupWizard({
                         .join(', ') || `HTTP ${preflight.ready.statusCode}`
                 }
               />
-              <div className="grid gap-3 rounded-md border border-line bg-panel-solid px-3 py-3">
+              <Panel variant="inset" className="grid gap-3">
                 <p className="m-0 text-sm">
                   <span className="text-ink-muted">{t('mcpWizardInternalUrl')}: </span>
                   <code className="font-mono text-xs">
@@ -359,9 +357,9 @@ export function McpSetupWizard({
                   onCheckedChange={setShowPublicUrlOverride}
                   label={t('mcpWizardPublicUrlToggle')}
                 />
-              </div>
+              </Panel>
               {showPublicUrlOverride ? (
-                <div className="grid gap-3 rounded-md border border-line bg-panel-solid px-3 py-3">
+                <Panel variant="inset" className="grid gap-3">
                   <Field label={t('mcpWizardPublicUrlOverride')}>
                     <Input
                       value={publicUrlDraft}
@@ -392,7 +390,7 @@ export function McpSetupWizard({
                       {t('mcpWizardResetPublicUrl')}
                     </Button>
                   </div>
-                </div>
+                </Panel>
               ) : null}
             </div>
           ) : null}

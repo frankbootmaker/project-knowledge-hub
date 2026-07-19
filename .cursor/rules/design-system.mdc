@@ -1,0 +1,29 @@
+---
+description: Use the web design system (tokens + UI primitives) for consistent UI
+globs: apps/web/**/*.{tsx,ts,css}
+alwaysApply: false
+---
+
+# Design system
+
+Full docs: `docs/design/DESIGN_SYSTEM.md`
+
+## Rules
+
+1. **Tokens first** — Change colors, radii, and control sizes in `apps/web/src/styles/tokens.css` (`--kh-*`). Do not sprinkle hex values in components.
+2. **Primitives over class soup** — Prefer `Button`, `LinkButton`, `NavLink`, `Panel`, `Field`/`Input`/`Select`, `Badge`, `Switch`, `Page`/`PageHeader` from `apps/web/src/components/ui`.
+3. **Shared recipes** — Button look lives in `.kh-btn*` (`globals.css`) via `buttonClassName()`. Native `<a>` download/export links should use `buttonClassName('secondary')`, not duplicated Tailwind.
+4. **New patterns** — Add a CSS recipe + UI primitive first, then use it in pages. Do not invent one-off button/panel/nav styles in route files.
+5. **Text on brand** — Use `text-on-brand` / `--kh-on-brand`, never hardcoded `#0f161d` or `text-white` for primary buttons.
+
+## Quick map
+
+| Need | Use |
+|------|-----|
+| Action button | `Button` |
+| Nav that looks like a button | `LinkButton` |
+| Header / sidebar nav | `NavLink` (`tone="sidebar"` in admin) |
+| Card / inset block | `Panel` (`default` / `solid` / `inset`) |
+| Inline text link | `kh-text-link` |
+| Wizard step chip | `kh-step` / `kh-step-active` / `kh-step-done` |
+| Pagination digit | `kh-page-num` / `kh-page-num-active` |

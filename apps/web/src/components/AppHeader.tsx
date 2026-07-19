@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ThemeSwitcher } from './ThemeSwitcher';
-import { Button } from './ui';
+import { Button, LinkButton, NavLink } from './ui';
 import { getThemePreference } from '../lib/theme-actions';
 import type { SessionPayload } from '../lib/session';
 
@@ -28,9 +28,6 @@ async function logoutAction() {
   redirect('/login');
 }
 
-const navLink =
-  'rounded-md px-2.5 py-1.5 text-sm font-medium text-ink-muted transition hover:bg-brand-soft hover:text-ink';
-
 export async function AppHeader({ session }: { session: SessionPayload | null }) {
   const t = await getTranslations('nav');
   const tCommon = await getTranslations('common');
@@ -50,25 +47,15 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
           <nav className="hidden items-center gap-1 sm:flex">
             {session ? (
               <>
-                <Link href="/dashboard" className={navLink}>
-                  {t('dashboard')}
-                </Link>
-                <Link href="/workspaces" className={navLink}>
-                  {t('workspaces')}
-                </Link>
-                <Link href="/search" className={navLink}>
-                  {t('search')}
-                </Link>
+                <NavLink href="/dashboard">{t('dashboard')}</NavLink>
+                <NavLink href="/workspaces">{t('workspaces')}</NavLink>
+                <NavLink href="/search">{t('search')}</NavLink>
                 {session.user.isSystemAdmin ? (
-                  <Link href="/admin" className={navLink}>
-                    {t('admin')}
-                  </Link>
+                  <NavLink href="/admin">{t('admin')}</NavLink>
                 ) : null}
               </>
             ) : null}
-            <Link href="/status" className={navLink}>
-              {t('status')}
-            </Link>
+            <NavLink href="/status">{t('status')}</NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-3">
@@ -88,12 +75,9 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
               </form>
             </>
           ) : (
-            <Link
-              href="/login"
-              className="inline-flex rounded-md border border-line-strong bg-panel-solid px-3.5 py-2 text-sm font-medium text-ink no-underline transition hover:bg-brand-soft"
-            >
+            <LinkButton href="/login" variant="secondary">
               {tLogin('signIn')}
-            </Link>
+            </LinkButton>
           )}
         </div>
       </div>

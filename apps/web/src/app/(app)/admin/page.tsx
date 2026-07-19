@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { PageHeader, Panel } from '../../../components/ui';
+import { LinkButton, PageHeader, Panel } from '../../../components/ui';
 import { apiFetch } from '../../../lib/session';
 
 export default async function AdminOverviewPage() {
@@ -36,12 +36,7 @@ export default async function AdminOverviewPage() {
           <p className="m-0 text-sm font-semibold">{t('mcpSetup')}</p>
           <p className="mt-1 mb-0 text-sm text-ink-muted">{t('mcpWizardBlurb')}</p>
         </div>
-        <Link
-          href="/admin/mcp-setup"
-          className="inline-flex rounded-md border border-transparent bg-brand px-3.5 py-2 text-sm font-medium text-white no-underline transition hover:bg-brand-hover dark:text-[#0f161d]"
-        >
-          {t('mcpWizardStart')}
-        </Link>
+        <LinkButton href="/admin/mcp-setup">{t('mcpWizardStart')}</LinkButton>
       </Panel>
       <div className="grid gap-4 sm:grid-cols-3">
         {cards.map((card) => (
@@ -50,10 +45,7 @@ export default async function AdminOverviewPage() {
               <p className="m-0 text-sm text-ink-muted">{card.label}</p>
               <p className="mt-1 mb-0 text-3xl font-semibold tracking-tight">{card.count}</p>
             </div>
-            <Link
-              href={card.href}
-              className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
-            >
+            <Link href={card.href} className="kh-text-link self-start">
               {t('open')}
             </Link>
           </Panel>

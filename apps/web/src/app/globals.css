@@ -1,57 +1,6 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github.css';
-
-:root {
-  --kh-ink: #15202b;
-  --kh-ink-muted: #4b5a68;
-  --kh-surface: #f4f7fb;
-  --kh-panel: rgba(255, 255, 255, 0.82);
-  --kh-panel-solid: #ffffff;
-  --kh-line: rgba(21, 32, 43, 0.1);
-  --kh-line-strong: rgba(21, 32, 43, 0.18);
-  --kh-brand: #1f4b73;
-  --kh-brand-hover: #183a59;
-  --kh-brand-soft: #e8f0f7;
-  --kh-accent: #145a36;
-  --kh-accent-soft: #e3f6ec;
-  --kh-warn: #8a5a00;
-  --kh-warn-soft: #fff7e6;
-  --kh-danger: #9b1c1c;
-  --kh-danger-soft: #fde8e8;
-  --kh-neutral-soft: #f3f4f6;
-  --kh-bg-glow-a: #d9e8f5;
-  --kh-bg-glow-b: #e8eef4;
-  --kh-bg-base-a: #f4f7fb;
-  --kh-bg-base-b: #eef2f6;
-  --kh-selection: color-mix(in srgb, var(--kh-brand) 22%, white);
-  color-scheme: light;
-}
-
-.dark {
-  --kh-ink: #e7eef5;
-  --kh-ink-muted: #9aabba;
-  --kh-surface: #0f161d;
-  --kh-panel: rgba(22, 31, 41, 0.88);
-  --kh-panel-solid: #1a2430;
-  --kh-line: rgba(231, 238, 245, 0.1);
-  --kh-line-strong: rgba(231, 238, 245, 0.18);
-  --kh-brand: #4a8ec0;
-  --kh-brand-hover: #6aa6d4;
-  --kh-brand-soft: #1a3348;
-  --kh-accent: #4caf7a;
-  --kh-accent-soft: #163526;
-  --kh-warn: #e0a84a;
-  --kh-warn-soft: #3a2a10;
-  --kh-danger: #e57373;
-  --kh-danger-soft: #3a1818;
-  --kh-neutral-soft: #243039;
-  --kh-bg-glow-a: #1a2b3c;
-  --kh-bg-glow-b: #152029;
-  --kh-bg-base-a: #0f161d;
-  --kh-bg-base-b: #121a22;
-  --kh-selection: color-mix(in srgb, var(--kh-brand) 35%, transparent);
-  color-scheme: dark;
-}
+@import '../styles/tokens.css';
 
 @theme {
   --font-sans: var(--font-ibm-plex-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
@@ -60,6 +9,7 @@
 
   --color-ink: var(--kh-ink);
   --color-ink-muted: var(--kh-ink-muted);
+  --color-on-brand: var(--kh-on-brand);
   --color-surface: var(--kh-surface);
   --color-panel: var(--kh-panel);
   --color-panel-solid: var(--kh-panel-solid);
@@ -76,9 +26,9 @@
   --color-danger-soft: var(--kh-danger-soft);
   --color-neutral-soft: var(--kh-neutral-soft);
 
-  --radius-sm: 0.35rem;
-  --radius-md: 0.55rem;
-  --radius-lg: 0.85rem;
+  --radius-sm: var(--kh-radius-sm);
+  --radius-md: var(--kh-radius-md);
+  --radius-lg: var(--kh-radius-lg);
 }
 
 @layer base {
@@ -121,8 +71,89 @@
     @apply rounded-lg border border-line bg-panel p-5 shadow-sm backdrop-blur-sm;
   }
 
+  .kh-panel-solid {
+    @apply rounded-lg border border-line bg-panel-solid p-5;
+  }
+
+  .kh-panel-inset {
+    @apply rounded-md border border-line bg-panel-solid px-3 py-3;
+  }
+
   .kh-muted {
     @apply text-ink-muted;
+  }
+
+  .kh-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border text-sm font-medium no-underline
+      transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30
+      disabled:cursor-not-allowed;
+    padding: var(--kh-control-pad-y) var(--kh-control-pad-x);
+  }
+
+  .kh-btn-primary {
+    @apply border-transparent bg-brand text-on-brand hover:bg-brand-hover disabled:bg-brand/50;
+  }
+
+  .kh-btn-secondary {
+    @apply border-line-strong bg-panel-solid text-ink hover:bg-brand-soft disabled:opacity-50;
+  }
+
+  .kh-btn-ghost {
+    @apply border-transparent bg-transparent text-ink-muted hover:bg-brand-soft hover:text-ink;
+  }
+
+  .kh-btn-success {
+    @apply border-transparent bg-accent text-on-brand hover:bg-accent/90 disabled:bg-accent/50;
+  }
+
+  .kh-btn-danger {
+    @apply border-transparent bg-danger text-white hover:bg-danger/90 disabled:bg-danger/50;
+  }
+
+  .kh-nav-link {
+    @apply rounded-md px-2.5 py-1.5 text-sm font-medium text-ink-muted no-underline transition
+      hover:bg-brand-soft hover:text-ink;
+  }
+
+  .kh-nav-link-active {
+    @apply bg-brand-soft text-ink;
+  }
+
+  .kh-sidebar-link {
+    @apply rounded-md px-3 py-2 text-sm font-medium text-ink-muted no-underline transition
+      hover:bg-brand-soft hover:text-ink;
+  }
+
+  .kh-sidebar-link-active {
+    @apply bg-brand-soft text-ink;
+  }
+
+  .kh-step {
+    @apply rounded-md border border-line bg-panel-solid px-3 py-1.5 text-sm font-medium
+      text-ink-muted transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .kh-step-active {
+    @apply border-brand bg-brand text-on-brand;
+  }
+
+  .kh-step-done {
+    @apply border-accent/30 bg-accent-soft text-accent;
+  }
+
+  .kh-page-num {
+    @apply inline-flex min-w-9 items-center justify-center rounded-md border border-line-strong
+      bg-panel-solid px-2.5 py-1.5 text-sm font-medium text-ink no-underline transition
+      hover:bg-brand-soft;
+  }
+
+  .kh-page-num-active {
+    @apply inline-flex min-w-9 items-center justify-center rounded-md border border-transparent
+      bg-brand px-2.5 py-1.5 text-sm font-semibold text-on-brand;
+  }
+
+  .kh-text-link {
+    @apply text-sm font-medium text-brand no-underline hover:text-brand-hover;
   }
 }
 

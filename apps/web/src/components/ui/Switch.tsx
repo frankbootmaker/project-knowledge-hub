@@ -19,7 +19,10 @@ export function Switch({
 
   return (
     <div className="flex items-center justify-between gap-3">
-      <label htmlFor={switchId} className="text-sm text-ink">
+      <label
+        htmlFor={switchId}
+        className="text-xs font-semibold tracking-wide text-ink"
+      >
         {label}
       </label>
       <button
@@ -31,18 +34,21 @@ export function Switch({
         disabled={disabled}
         onClick={() => onCheckedChange(!checked)}
         className={cn(
-          'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30',
+          'relative inline-flex shrink-0 items-center rounded-md border transition',
+          'h-[var(--kh-control-height)] w-[var(--kh-control-width)]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kh-focus-ring)]',
           'disabled:cursor-not-allowed disabled:opacity-50',
           checked
-            ? 'border-brand bg-brand'
+            ? 'border-transparent bg-accent-soft'
             : 'border-line-strong bg-neutral-soft',
         )}
       >
         <span
           className={cn(
-            'inline-block size-4 rounded-full bg-panel-solid shadow transition',
-            checked ? 'translate-x-6' : 'translate-x-1',
+            'inline-block size-3 rounded-sm shadow-sm transition',
+            checked
+              ? 'translate-x-[1.05rem] bg-accent'
+              : 'translate-x-0.5 bg-ink-muted/50',
           )}
         />
       </button>

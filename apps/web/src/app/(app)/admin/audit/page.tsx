@@ -4,8 +4,10 @@ import { AuditEventDetails } from '../../../../components/admin/AuditEventDetail
 import {
   Badge,
   Button,
+  buttonClassName,
   Field,
   Input,
+  LinkButton,
   PageHeader,
   Panel,
   Select,
@@ -313,13 +315,13 @@ export default async function AdminAuditPage({
                   <>
                     <a
                       href={buildAuditExportHref(query, 'csv')}
-                      className="inline-flex rounded-md border border-line-strong bg-panel-solid px-3.5 py-2 text-sm font-medium text-ink no-underline transition hover:bg-brand-soft"
+                      className={buttonClassName('secondary')}
                     >
                       {t('auditExportCsv')}
                     </a>
                     <a
                       href={buildAuditExportHref(query, 'json')}
-                      className="inline-flex rounded-md border border-line-strong bg-panel-solid px-3.5 py-2 text-sm font-medium text-ink no-underline transition hover:bg-brand-soft"
+                      className={buttonClassName('secondary')}
                     >
                       {t('auditExportJson')}
                     </a>
@@ -381,12 +383,12 @@ export default async function AdminAuditPage({
               aria-label={t('audit')}
             >
               {payload.pagination.page > 1 ? (
-                <Link
+                <LinkButton
                   href={hrefFor(query, { page: payload.pagination.page - 1, month })}
-                  className="inline-flex rounded-md border border-line-strong bg-panel-solid px-3.5 py-2 text-sm font-medium text-ink no-underline transition hover:bg-brand-soft"
+                  variant="secondary"
                 >
                   {t('auditPrevPage')}
-                </Link>
+                </LinkButton>
               ) : (
                 <span className="inline-flex px-3.5 py-2 text-sm text-ink-muted opacity-40">
                   {t('auditPrevPage')}
@@ -407,18 +409,14 @@ export default async function AdminAuditPage({
                       …
                     </span>
                   ) : item === payload.pagination.page ? (
-                    <span
-                      key={item}
-                      className="inline-flex min-w-9 items-center justify-center rounded-md bg-brand px-2.5 py-1.5 text-sm font-semibold text-white"
-                      aria-current="page"
-                    >
+                    <span key={item} className="kh-page-num-active" aria-current="page">
                       {item}
                     </span>
                   ) : (
                     <Link
                       key={item}
                       href={hrefFor(query, { page: item, month })}
-                      className="inline-flex min-w-9 items-center justify-center rounded-md border border-line-strong bg-panel-solid px-2.5 py-1.5 text-sm font-medium text-ink no-underline transition hover:bg-brand-soft"
+                      className="kh-page-num"
                     >
                       {item}
                     </Link>
@@ -427,12 +425,12 @@ export default async function AdminAuditPage({
               </div>
 
               {payload.pagination.page < payload.pagination.totalPages ? (
-                <Link
+                <LinkButton
                   href={hrefFor(query, { page: payload.pagination.page + 1, month })}
-                  className="inline-flex rounded-md border border-line-strong bg-panel-solid px-3.5 py-2 text-sm font-medium text-ink no-underline transition hover:bg-brand-soft"
+                  variant="secondary"
                 >
                   {t('auditNextPage')}
-                </Link>
+                </LinkButton>
               ) : (
                 <span className="inline-flex px-3.5 py-2 text-sm text-ink-muted opacity-40">
                   {t('auditNextPage')}

@@ -1,0 +1,81 @@
+/**
+ * Project Knowledge Hub design tokens.
+ * Change values here — Tailwind utilities and UI primitives consume these.
+ */
+
+:root {
+  /* Typography / ink */
+  --kh-ink: #15202b;
+  --kh-ink-muted: #4b5a68;
+  --kh-on-brand: #ffffff;
+
+  /* Surfaces */
+  --kh-surface: #f4f7fb;
+  --kh-panel: rgba(255, 255, 255, 0.82);
+  --kh-panel-solid: #ffffff;
+  --kh-line: rgba(21, 32, 43, 0.1);
+  --kh-line-strong: rgba(21, 32, 43, 0.18);
+  --kh-neutral-soft: #f3f4f6;
+
+  /* Brand & status */
+  --kh-brand: #1f4b73;
+  --kh-brand-hover: #183a59;
+  --kh-brand-soft: #e8f0f7;
+  --kh-accent: #145a36;
+  --kh-accent-soft: #e3f6ec;
+  --kh-warn: #8a5a00;
+  --kh-warn-soft: #fff7e6;
+  --kh-danger: #9b1c1c;
+  --kh-danger-soft: #fde8e8;
+
+  /* Atmosphere */
+  --kh-bg-glow-a: #d9e8f5;
+  --kh-bg-glow-b: #e8eef4;
+  --kh-bg-base-a: #f4f7fb;
+  --kh-bg-base-b: #eef2f6;
+  --kh-selection: color-mix(in srgb, var(--kh-brand) 22%, white);
+
+  /* Geometry */
+  --kh-radius-sm: 0.35rem;
+  --kh-radius-md: 0.55rem;
+  --kh-radius-lg: 0.85rem;
+  --kh-control-height: 1.2rem;
+  --kh-control-width: 2.2rem;
+  --kh-control-pad-x: 0.875rem;
+  --kh-control-pad-y: 0.5rem;
+  --kh-focus-ring: color-mix(in srgb, var(--kh-brand) 30%, transparent);
+
+  color-scheme: light;
+}
+
+.dark {
+  --kh-ink: #e7eef5;
+  --kh-ink-muted: #9aabba;
+  --kh-on-brand: #0f161d;
+
+  --kh-surface: #0f161d;
+  --kh-panel: rgba(22, 31, 41, 0.88);
+  --kh-panel-solid: #1a2430;
+  --kh-line: rgba(231, 238, 245, 0.1);
+  --kh-line-strong: rgba(231, 238, 245, 0.18);
+  --kh-neutral-soft: #243039;
+
+  --kh-brand: #4a8ec0;
+  --kh-brand-hover: #6aa6d4;
+  --kh-brand-soft: #1a3348;
+  --kh-accent: #4caf7a;
+  --kh-accent-soft: #163526;
+  --kh-warn: #e0a84a;
+  --kh-warn-soft: #3a2a10;
+  --kh-danger: #e57373;
+  --kh-danger-soft: #3a1818;
+
+  --kh-bg-glow-a: #1a2b3c;
+  --kh-bg-glow-b: #152029;
+  --kh-bg-base-a: #0f161d;
+  --kh-bg-base-b: #121a22;
+  --kh-selection: color-mix(in srgb, var(--kh-brand) 35%, transparent);
+  --kh-focus-ring: color-mix(in srgb, var(--kh-brand) 35%, transparent);
+
+  color-scheme: dark;
+}
