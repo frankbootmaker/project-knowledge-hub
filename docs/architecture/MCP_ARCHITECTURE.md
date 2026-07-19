@@ -19,6 +19,8 @@ Default (read): `projects:read`, `systems:read`, `knowledge:read`, `knowledge:se
 
 Opt-in write: `knowledge:write` — draft create/update only; requires non-empty `allowedWorkspaceIds` and `actingUserId`
 
+Elevated catalogue (planned): `catalogue:write` — propose/confirm create/update for projects and systems in allowlisted workspaces. See [ADR-014](../adr/ADR-014-elevated-api-client-capabilities.md). Higher tiers (`workspace:write`, archive, `org:admin`) are deferred.
+
 ## Limits
 
 * 60 requests / minute / client (Redis)
@@ -32,6 +34,7 @@ Opt-in write: `knowledge:write` — draft create/update only; requires non-empty
 * Provenance defaults to `ai_generated_draft` / source provider `mcp`
 * Updates require `changeMessage`
 * Verify / mark-current / archive / restore are not exposed on MCP
+* Elevated catalogue mutations (when shipped) use propose → commit; hard deletes stay off MCP
 
 ## Audit
 
