@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { Viewport } from 'next';
 import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
@@ -6,6 +7,11 @@ import { ThemeScript } from '../components/ThemeScript';
 import { ToastProvider } from '../components/ui';
 import { getThemePreference } from '../lib/theme-actions';
 import './globals.css';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+};
 
 const sans = IBM_Plex_Sans({
   subsets: ['latin', 'latin-ext'],

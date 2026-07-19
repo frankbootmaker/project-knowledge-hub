@@ -22,13 +22,14 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   const t = await getTranslations('admin');
 
+  // Responsive: sidebar stacks above content below `lg` (DESIGN_SYSTEM.md → Responsive).
   return (
     <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
       <Panel variant="default" className="h-fit p-3">
         <p className="mb-3 px-2 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
           {t('title')}
         </p>
-        <nav className="grid gap-1">
+        <nav className="grid gap-1" aria-label={t('title')}>
           {links.map((link) => (
             <NavLink
               key={link.href}

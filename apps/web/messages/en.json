@@ -38,7 +38,10 @@
     "search": "Search",
     "status": "Status",
     "logOut": "Log out",
-    "admin": "Admin"
+    "admin": "Admin",
+    "menu": "Main menu",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
   },
   "login": {
     "subtitle": "Sign in with a local administrator account.",

@@ -184,6 +184,40 @@
     @apply -mr-1 -mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md
       text-current/70 transition hover:bg-panel-solid/50 hover:text-current;
   }
+
+  .kh-shell {
+    @apply mx-auto max-w-6xl px-4 sm:px-6;
+  }
+
+  .kh-shell-content {
+    @apply py-8;
+  }
+
+  .kh-mobile-nav {
+    @apply fixed inset-0;
+    z-index: var(--kh-z-mobile-nav);
+  }
+
+  .kh-mobile-nav-backdrop {
+    @apply absolute inset-0 border-0 bg-ink/40 p-0;
+  }
+
+  .kh-mobile-nav-panel {
+    @apply absolute inset-x-0 top-0 max-h-[min(100%,32rem)] overflow-y-auto
+      border-b border-line bg-panel-solid p-4 shadow-sm;
+    animation: kh-mobile-nav-in 160ms ease-out;
+  }
+}
+
+@keyframes kh-mobile-nav-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes kh-toast-in {

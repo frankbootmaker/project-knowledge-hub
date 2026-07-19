@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AppHeader } from '../../components/AppHeader';
+import { shellContentClassName } from '../../components/shell';
 import { getSession } from '../../lib/session';
 
 export default async function AppShellLayout({ children }: { children: ReactNode }) {
@@ -12,7 +13,7 @@ export default async function AppShellLayout({ children }: { children: ReactNode
   return (
     <div className="min-h-screen">
       <AppHeader session={session} />
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</div>
+      <div className={shellContentClassName}>{children}</div>
     </div>
   );
 }

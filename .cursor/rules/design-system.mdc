@@ -16,16 +16,19 @@ If you add, change, or remove visible UI (layout, chrome, feedback, colors, cont
 2. **Update `docs/design/DESIGN_SYSTEM.md` in the same change** — tables and the Changelog section.
 3. Use `useToast()` / `pushToast` for create/save/delete/wizard confirmations (i18n `admin.toast*` keys).
 4. Keep admin lists newest-first unless product says otherwise (API `orderBy createdAt desc`).
+5. Prefer shell/layout primitives for responsive structure (`.kh-shell*`, `shell.ts`, `MobileNav`).
+6. Never hide primary navigation without a mobile path (`MobileNav` or equivalent).
 
 Do not finish a UI task without the design-system doc update.
 
 ## Rules
 
-1. **Tokens first** — Colors, radii, control sizes, toast timing in `apps/web/src/styles/tokens.css` (`--kh-*`). No scattered hex.
-2. **Primitives over class soup** — Prefer `Button`, `LinkButton`, `NavLink`, `Panel`, `Field`/`Input`/`Select`, `Badge`, `Switch`, `ToastProvider`/`useToast`, `Page`/`PageHeader` from `apps/web/src/components/ui`.
-3. **Shared recipes** — Button look in `.kh-btn*` via `buttonClassName()`. Toasts use `.kh-toast*`. Native `<a>` download links use `buttonClassName('secondary')`.
-4. **New patterns** — Recipe + primitive first, then pages. Record in DESIGN_SYSTEM.md.
-5. **Text on brand** — `text-on-brand` / `--kh-on-brand`, never hardcoded `#0f161d` or `text-white` for primary buttons.
+1. **Tokens first** — Colors, radii, control sizes, toast timing, z-index in `apps/web/src/styles/tokens.css` (`--kh-*`). No scattered hex.
+2. **Primitives over class soup** — Prefer `Button`, `LinkButton`, `NavLink`, `MobileNav`, `Panel`, `Field`/`Input`/`Select`, `Badge`, `Switch`, `ToastProvider`/`useToast`, `Page`/`PageHeader` from `apps/web/src/components/ui`.
+3. **Shared recipes** — Button look in `.kh-btn*` via `buttonClassName()`. Toasts use `.kh-toast*`. Shell width/padding use `.kh-shell` / `shellClassName`. Native `<a>` download links use `buttonClassName('secondary')`.
+4. **Responsive** — Tailwind default breakpoints only unless documented otherwise. App shell: inline nav from `sm`+; `MobileNav` below `sm`. Admin sidebar stacks below `lg`. Prefer collapsing grids over fixed `Npx_1fr` columns without a mobile fallback.
+5. **New patterns** — Recipe + primitive first, then pages. Record in DESIGN_SYSTEM.md (including responsive conventions).
+6. **Text on brand** — `text-on-brand` / `--kh-on-brand`, never hardcoded `#0f161d` or `text-white` for primary buttons.
 
 ## Quick map
 
@@ -33,7 +36,9 @@ Do not finish a UI task without the design-system doc update.
 |------|-----|
 | Action button | `Button` |
 | Nav that looks like a button | `LinkButton` |
-| Header / sidebar nav | `NavLink` (`tone="sidebar"` in admin) |
+| Header / sidebar nav | `NavLink` (`tone="sidebar"` in admin / mobile sheet) |
+| Primary nav on small screens | `MobileNav` |
+| App max-width shell | `shellClassName` / `shellContentClassName` (`.kh-shell*`) |
 | Card / inset block | `Panel` (`default` / `solid` / `inset`) |
 | Inline text link | `kh-text-link` |
 | Wizard step chip | `kh-step` / `kh-step-active` / `kh-step-done` |

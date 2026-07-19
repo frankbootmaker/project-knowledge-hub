@@ -38,7 +38,10 @@
     "search": "Keresés",
     "status": "Állapot",
     "logOut": "Kijelentkezés",
-    "admin": "Adminisztráció"
+    "admin": "Adminisztráció",
+    "menu": "Főmenü",
+    "openMenu": "Menü megnyitása",
+    "closeMenu": "Menü bezárása"
   },
   "login": {
     "subtitle": "Jelentkezzen be helyi adminisztrátori fiókkal.",

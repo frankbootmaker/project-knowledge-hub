@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { AppHeader } from '../../components/AppHeader';
+import { shellContentClassName } from '../../components/shell';
 import { Page, Panel } from '../../components/ui';
 import { getSession } from '../../lib/session';
 
@@ -34,7 +35,7 @@ export default async function StatusPage() {
   return (
     <div className="min-h-screen">
       <AppHeader session={session} />
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <div className={shellContentClassName}>
         <Page>
           <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-ink-muted uppercase">
             {t('eyebrow')}

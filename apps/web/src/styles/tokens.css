@@ -45,9 +45,10 @@
   --kh-control-pad-y: 0.5rem;
   --kh-focus-ring: color-mix(in srgb, var(--kh-brand) 30%, transparent);
 
-  /* Feedback */
+  /* Feedback / stacking */
   --kh-toast-duration-ms: 4200;
   --kh-z-toast: 50;
+  --kh-z-mobile-nav: 40;
 
   color-scheme: light;
 }

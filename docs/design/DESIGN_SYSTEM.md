@@ -10,10 +10,11 @@ Do not ship page-only styling without updating this document.
 
 | Layer | Location | Role |
 |-------|----------|------|
-| Tokens | `apps/web/src/styles/tokens.css` | Colors, radii, control sizes, toast timing (light + dark) |
+| Tokens | `apps/web/src/styles/tokens.css` | Colors, radii, control sizes, toast timing, z-index (light + dark) |
 | Theme bridge | `apps/web/src/app/globals.css` `@theme` | Maps `--kh-*` → Tailwind utilities (`bg-brand`, `text-ink`, …) |
 | Recipes | `globals.css` `@layer components` | Shared `.kh-*` class recipes |
 | Primitives | `apps/web/src/components/ui/*` | React wrappers — use these in pages |
+| Shell helpers | `apps/web/src/components/shell.ts` | Shared shell class constants |
 | Agent rule | `.cursor/rules/design-system.mdc` | Enforces tokens/primitives + this doc on UI work |
 
 **Do not** hardcode hex colors (e.g. `#0f161d`) or copy long `inline-flex rounded-md border…`
@@ -27,6 +28,7 @@ Before considering UI work done:
 2. If none fits: add a `--kh-*` token and/or `.kh-*` recipe, then a `components/ui` primitive.
 3. **Update this file** in the same change (tables below + [Changelog](#changelog)).
 4. Prefer `pushToast()` for success/failure of create/save/delete flows (see Feedback).
+5. Prefer shell/layout primitives for responsive structure (see [Responsive](#responsive)).
 
 ## Tokens (selected)
 
@@ -44,8 +46,34 @@ Before considering UI work done:
 | `--kh-focus-ring` | Focus ring color mix |
 | `--kh-toast-duration-ms` | Auto-dismiss duration for toasts (JS reads this via constant alignment) |
 | `--kh-z-toast` | Toast stacking context |
+| `--kh-z-mobile-nav` | Mobile nav overlay (below toasts, above sticky header) |
 
 Dark mode flips the same `--kh-*` variables under `.dark` on `<html>`.
+
+## Responsive
+
+Expand this system for narrow viewports — do **not** invent a parallel mobile design system.
+Breakpoints stay Tailwind defaults unless a product need forces a custom set.
+
+| Concern | Convention |
+|---------|------------|
+| Breakpoints | `sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px |
+| Viewport | Root layout exports `viewport: { width: 'device-width', initialScale: 1 }` |
+| Shell padding / width | `.kh-shell` / `shellClassName` — `max-w-6xl` + `px-4 sm:px-6` |
+| Shell content | `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
+| Primary nav | Desktop: inline `NavLink`s from `sm` up. Below `sm`: `MobileNav` disclosure (never hide nav without a mobile path) |
+| Admin sidebar | Stacks above content below `lg` via `lg:grid-cols-[220px_1fr]` in `admin/layout.tsx`. Compact horizontal rail is a later enhancement |
+| Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
+| Touch targets | Prefer existing control tokens / header control squares; keep interactive chrome ≥ ~40px |
+| Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
+
+### Layout shells
+
+| Shell | Pattern |
+|-------|---------|
+| App header | Sticky bar; brand + desktop nav + `MobileNav` (`sm:hidden` toggle) + theme/locale/session |
+| App / status content | `shellContentClassName` |
+| Admin | Single column until `lg`, then sidebar + main; sidebar uses `NavLink tone="sidebar"` |
 
 ## Recipes (`.kh-*`)
 
@@ -56,11 +84,13 @@ Dark mode flips the same `--kh-*` variables under `.dark` on `<html>`.
 | `.kh-muted` | Secondary text |
 | `.kh-btn` + `.kh-btn-{primary,secondary,ghost,success,danger}` | Buttons / link-buttons |
 | `.kh-nav-link` / `.kh-nav-link-active` | Header nav |
-| `.kh-sidebar-link` / `.kh-sidebar-link-active` | Admin sidebar |
+| `.kh-sidebar-link` / `.kh-sidebar-link-active` | Admin sidebar / mobile nav links |
 | `.kh-step` / `.kh-step-active` / `.kh-step-done` | Wizard step chips |
 | `.kh-page-num` / `.kh-page-num-active` | Pagination digits |
 | `.kh-text-link` | Inline text links |
 | `.kh-toast-viewport` / `.kh-toast` / `.kh-toast-{success,danger,info}` / `.kh-toast-dismiss` | Toasts |
+| `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding |
+| `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` | Mobile primary nav overlay |
 
 ## Primitives
 
@@ -69,6 +99,7 @@ Dark mode flips the same `--kh-*` variables under `.dark` on `<html>`.
 | `Button` | Native `<button>` actions |
 | `LinkButton` | Navigation that should look like a button |
 | `NavLink` | Header or admin sidebar links (active state included) |
+| `MobileNav` | Primary nav below `sm` (sheet + backdrop; Esc / route change closes) |
 | `Panel` | `default` / `solid` / `inset` surfaces |
 | `Field`, `Input`, `Select`, `Textarea`, `ErrorText` | Forms |
 | `Badge` | Compact status chips (e.g. health “ok”) |
@@ -90,6 +121,7 @@ from client components. Tones: `success` (default), `danger`, `info`.
 | Confirm actions | After create / save / delete / rotate / important wizard steps, call `pushToast` (success or danger) |
 | i18n for toasts | Prefer `admin.toast*` message keys; do not hardcode English in components |
 | No ad-hoc alerts | Do not invent parallel snackbars; extend `Toast` + recipes |
+| Reachable nav | Primary destinations must be available at phone widths via `MobileNav` or equivalent |
 
 ## Changing a parameter
 
@@ -106,6 +138,9 @@ from client components. Tones: `success` (default), `danger`, `info`.
 * New interactive chrome only as Tailwind soup in a page → extend `components/ui`
 * Custom success banners / `alert()` for CRUD → `useToast()`
 * Shipping UI without updating this document
+* Hiding primary nav with `hidden sm:flex` (or similar) **without** a `MobileNav` / disclosed equivalent
+* Page-only breakpoint one-offs that belong in `Page`, shell helpers, or layout primitives
+* Relying on page-wide horizontal scroll instead of stacking / `overflow-x-auto` on code blocks
 
 ## Changelog
 
@@ -113,6 +148,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-19
 
+* **Responsive** — Documented breakpoints, shell recipes (`.kh-shell*`), admin stack-at-`lg`, and anti-patterns. Explicit root `viewport`. `MobileNav` + `--kh-z-mobile-nav` for primary nav below `sm`. Shell helpers in `shell.ts` used by app/status layouts and header.
+* **Header theme icons** — Sun/moon glyph size reduced ~5% (`themeIconClassName` → `1.556rem`).
 * **Toasts** — `ToastProvider` / `useToast`, recipes `.kh-toast*`, tokens `--kh-toast-duration-ms` / `--kh-z-toast`. Used for admin CRUD and LLM wizard confirmations.
 * **List ordering** — Organizations, users, memberships, API clients: newest `createdAt` first.
 * **Admin Organizations** — `/admin/organizations` for name/slug create, edit, and delete. Delete offers transfer (default; auto-target if only one other org) or permanent destroy of inherited items. Destroy requires a two-step warning plus acknowledgement checkbox before `confirmDestroy`. Last org cannot be deleted.

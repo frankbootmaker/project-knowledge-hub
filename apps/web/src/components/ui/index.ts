@@ -3,6 +3,7 @@ export { Button } from './Button';
 export { buttonClassName, type ButtonVariant } from './buttonStyles';
 export { ErrorText, Field, Input, Select, Textarea } from './Field';
 export { LinkButton } from './LinkButton';
+export { MobileNav, type MobileNavItem } from './MobileNav';
 export { NavLink } from './NavLink';
 export { ListCard, Page, PageHeader, SectionHeader } from './Page';
 export { Panel } from './Panel';

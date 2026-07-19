@@ -38,7 +38,10 @@
     "search": "Suche",
     "status": "Status",
     "logOut": "Abmelden",
-    "admin": "Administration"
+    "admin": "Administration",
+    "menu": "Hauptmenü",
+    "openMenu": "Menü öffnen",
+    "closeMenu": "Menü schließen"
   },
   "login": {
     "subtitle": "Mit einem lokalen Administratorkonto anmelden.",

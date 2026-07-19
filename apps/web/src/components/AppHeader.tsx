@@ -3,8 +3,9 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { shellClassName } from './shell';
 import { ThemeSwitcher } from './ThemeSwitcher';
-import { Button, LinkButton, NavLink } from './ui';
+import { Button, LinkButton, MobileNav, NavLink, type MobileNavItem } from './ui';
 import { getThemePreference } from '../lib/theme-actions';
 import type { SessionPayload } from '../lib/session';
 
@@ -34,10 +35,25 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
   const tLogin = await getTranslations('login');
   const theme = await getThemePreference();
 
+  const navItems: MobileNavItem[] = [
+    ...(session
+      ? [
+          { href: '/dashboard', label: t('dashboard') },
+          { href: '/workspaces', label: t('workspaces') },
+          { href: '/search', label: t('search') },
+          ...(session.user.isSystemAdmin
+            ? [{ href: '/admin', label: t('admin') }]
+            : []),
+        ]
+      : []),
+    { href: '/status', label: t('status') },
+  ];
+
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-panel/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-5">
+      <div className={`${shellClassName} flex items-center justify-between gap-4 py-3`}>
+        <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+          <MobileNav items={navItems} />
           <Link
             href={session ? '/dashboard' : '/status'}
             className="shrink-0 text-base font-semibold tracking-tight text-ink no-underline"
