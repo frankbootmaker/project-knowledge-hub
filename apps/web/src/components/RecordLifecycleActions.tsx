@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Button, ErrorText } from './ui';
 
 export function RecordLifecycleActions({
   recordId,
@@ -39,38 +40,27 @@ export function RecordLifecycleActions({
   }
 
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+    <div className="flex flex-wrap items-center gap-2">
       {lifecycleStatus !== 'verified' && lifecycleStatus !== 'current' ? (
-        <button
+        <Button
           type="button"
+          variant="success"
           disabled={pending !== null}
           onClick={() => void run('verify')}
-          style={{
-            padding: '0.45rem 0.75rem',
-            border: 'none',
-            background: '#1f6b4a',
-            color: 'white',
-          }}
         >
           {pending === 'verify' ? t('verifying') : t('verify')}
-        </button>
+        </Button>
       ) : null}
       {lifecycleStatus !== 'current' ? (
-        <button
+        <Button
           type="button"
           disabled={pending !== null}
           onClick={() => void run('mark-current')}
-          style={{
-            padding: '0.45rem 0.75rem',
-            border: 'none',
-            background: '#1f4b73',
-            color: 'white',
-          }}
         >
           {pending === 'mark-current' ? t('updating') : t('markCurrentAction')}
-        </button>
+        </Button>
       ) : null}
-      {error ? <span style={{ color: '#9b1c1c' }}>{error}</span> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
     </div>
   );
 }

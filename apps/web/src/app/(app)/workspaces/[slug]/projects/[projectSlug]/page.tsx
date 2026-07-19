@@ -1,6 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import {
+  Badge,
+  ListCard,
+  Page,
+  PageHeader,
+  Panel,
+  SectionHeader,
+} from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -67,45 +75,60 @@ export default async function ProjectDetailPage({
     : [];
 
   return (
-    <main style={{ maxWidth: 880, margin: '0 auto' }}>
-      <p style={{ opacity: 0.7 }}>
-        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link> / {t('breadcrumb')}
-      </p>
-      <h1 style={{ marginBottom: '0.35rem' }}>{project.name}</h1>
-      <p style={{ opacity: 0.7, marginTop: 0 }}>
-        {project.slug} · {project.status}
-      </p>
-      <section
-        style={{
-          marginTop: '1.25rem',
-          padding: '1.25rem',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid rgba(21,32,43,0.08)',
-        }}
-      >
-        <p>{project.summary || tCommon('noSummary')}</p>
-        <p>{project.description || tCommon('noDescription')}</p>
+    <Page wide>
+      <PageHeader
+        eyebrow={
+          <>
+            <Link
+              href={`/workspaces/${workspace.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {workspace.name}
+            </Link>
+            {' / '}
+            {t('breadcrumb')}
+          </>
+        }
+        title={project.name}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span>{project.slug}</span>
+            <Badge tone="brand">{project.status}</Badge>
+          </span>
+        }
+      />
+
+      <Panel className="mb-8">
+        <p className="mt-0 mb-3 text-ink-muted">{project.summary || tCommon('noSummary')}</p>
+        <p className="m-0 text-ink-muted">{project.description || tCommon('noDescription')}</p>
         {project.tags.length > 0 ? (
-          <p style={{ opacity: 0.75, marginBottom: 0 }}>
+          <p className="mt-3 mb-0 text-xs text-ink-muted">
             {tCommon('tagsList', { tags: project.tags.map((tag) => tag.name).join(', ') })}
           </p>
         ) : null}
-      </section>
+      </Panel>
 
-      <section style={{ marginTop: '2rem' }}>
-        <h2>{t('linkedSystems')}</h2>
-        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem' }}>
+      <section>
+        <SectionHeader title={t('linkedSystems')} />
+        <ul className="m-0 grid list-none gap-3 p-0">
           {systems.map((system) => (
-            <li key={system.id}>
-              <Link href={`/workspaces/${workspace.slug}/systems/${system.slug}`}>
-                {system.name}
-              </Link>{' '}
-              <span style={{ opacity: 0.7 }}>({system.status})</span>
-            </li>
+            <ListCard key={system.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
+                  className="font-semibold no-underline"
+                >
+                  {system.name}
+                </Link>
+                <Badge>{system.status}</Badge>
+              </div>
+            </ListCard>
           ))}
-          {systems.length === 0 ? <li>{t('noLinkedSystems')}</li> : null}
+          {systems.length === 0 ? (
+            <li className="kh-muted list-none">{t('noLinkedSystems')}</li>
+          ) : null}
         </ul>
       </section>
-    </main>
+    </Page>
   );
 }

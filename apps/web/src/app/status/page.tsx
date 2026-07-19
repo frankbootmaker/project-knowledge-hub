@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
-import { LanguageSwitcher } from '../../components/LanguageSwitcher';
+import { AppHeader } from '../../components/AppHeader';
+import { Page, Panel } from '../../components/ui';
+import { getSession } from '../../lib/session';
 
 async function fetchApiHealth(apiUrl: string): Promise<{
   status: 'ok' | 'error';
@@ -21,6 +23,7 @@ async function fetchApiHealth(apiUrl: string): Promise<{
 }
 
 export default async function StatusPage() {
+  const session = await getSession();
   const t = await getTranslations('statusPage');
   const tCommon = await getTranslations('common');
   const appName = tCommon('appName');
@@ -29,59 +32,58 @@ export default async function StatusPage() {
   const apiHealth = await fetchApiHealth(apiUrl);
 
   return (
-    <main
-      style={{
-        maxWidth: 720,
-        margin: '0 auto',
-        padding: '4rem 1.5rem',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-        <LanguageSwitcher />
+    <div className="min-h-screen">
+      <AppHeader session={session} />
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        <Page>
+          <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-ink-muted uppercase">
+            {t('eyebrow')}
+          </p>
+          <h1 className="mb-8 text-4xl font-semibold tracking-tight">{appName}</h1>
+          <Panel className="grid gap-0 divide-y divide-line overflow-hidden p-0">
+            <StatusRow label={t('application')} value={appName} />
+            <StatusRow label={t('webStatus')} value={t('ok')} />
+            <StatusRow
+              label={t('apiHealth')}
+              value={
+                apiHealth.status === 'ok'
+                  ? t('ok')
+                  : t('error', { detail: apiHealth.detail })
+              }
+              tone={apiHealth.status === 'ok' ? 'ok' : 'error'}
+            />
+            <StatusRow label={t('environment')} value={appEnv} />
+            <StatusRow label={t('apiUrl')} value={apiUrl} />
+          </Panel>
+        </Page>
       </div>
-      <p style={{ letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.7 }}>
-        {t('eyebrow')}
-      </p>
-      <h1 style={{ fontSize: '2.5rem', margin: '0.4rem 0 1.5rem' }}>{appName}</h1>
-      <section
-        style={{
-          display: 'grid',
-          gap: '0.85rem',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid rgba(21,32,43,0.08)',
-          padding: '1.25rem 1.5rem',
-        }}
-      >
-        <StatusRow label={t('application')} value={appName} />
-        <StatusRow label={t('webStatus')} value={t('ok')} />
-        <StatusRow
-          label={t('apiHealth')}
-          value={
-            apiHealth.status === 'ok'
-              ? t('ok')
-              : t('error', { detail: apiHealth.detail })
-          }
-        />
-        <StatusRow label={t('environment')} value={appEnv} />
-        <StatusRow label={t('apiUrl')} value={apiUrl} />
-      </section>
-    </main>
+    </div>
   );
 }
 
-function StatusRow({ label, value }: { label: string; value: string }) {
+function StatusRow({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'ok' | 'error';
+}) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        gap: '1rem',
-        borderBottom: '1px solid rgba(21,32,43,0.08)',
-        paddingBottom: '0.65rem',
-      }}
-    >
-      <strong>{label}</strong>
-      <span>{value}</span>
+    <div className="flex items-center justify-between gap-4 px-5 py-3.5">
+      <strong className="text-sm font-medium text-ink">{label}</strong>
+      <span
+        className={
+          tone === 'ok'
+            ? 'text-sm font-medium text-accent'
+            : tone === 'error'
+              ? 'text-sm font-medium text-danger'
+              : 'text-sm text-ink-muted'
+        }
+      >
+        {value}
+      </span>
     </div>
   );
 }

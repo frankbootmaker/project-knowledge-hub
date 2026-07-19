@@ -22,7 +22,12 @@ export async function registerRootRoutes(app: FastifyInstance): Promise<void> {
         knowledgeRecordVerify: 'POST /api/v1/knowledge-records/:recordId/verify',
         knowledgeRecordMarkCurrent: 'POST /api/v1/knowledge-records/:recordId/mark-current',
         search: '/api/v1/search',
+        organizations: '/api/v1/organizations',
+        users: '/api/v1/users',
+        memberships: '/api/v1/memberships',
         apiClients: '/api/v1/api-clients',
+        auditEvents: '/api/v1/audit-events',
+        auditEventsExport: '/api/v1/audit-events/export',
         mcp: '/mcp',
       },
     };

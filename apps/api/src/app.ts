@@ -13,13 +13,17 @@ import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerApiClientRoutes } from './routes/api-clients.js';
+import { registerAuditRoutes } from './routes/audit.js';
 import { registerKnowledgeRecordRoutes } from './routes/knowledge-records.js';
 import { registerMcpRoutes } from './routes/mcp.js';
+import { registerMembershipRoutes } from './routes/memberships.js';
+import { registerOrganizationRoutes } from './routes/organizations.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerReadyRoutes } from './routes/ready.js';
 import { registerRootRoutes } from './routes/root.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerSystemRoutes } from './routes/systems.js';
+import { registerUserRoutes } from './routes/users.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 
 export type ApiDependencies = {
@@ -114,7 +118,11 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerSystemRoutes(app);
   await registerKnowledgeRecordRoutes(app);
   await registerSearchRoutes(app);
+  await registerOrganizationRoutes(app);
+  await registerUserRoutes(app);
+  await registerMembershipRoutes(app);
   await registerApiClientRoutes(app);
+  await registerAuditRoutes(app);
   await registerMcpRoutes(app);
 
   return app;

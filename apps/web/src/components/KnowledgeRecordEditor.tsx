@@ -6,6 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import { MarkdownDocument } from './MarkdownDocument';
+import {
+  Button,
+  ErrorText,
+  Field,
+  Input,
+  Page,
+  PageHeader,
+  Panel,
+  Select,
+  Textarea,
+} from './ui';
 
 const RECORD_TYPES = [
   'overview',
@@ -220,67 +231,57 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
   }
 
   return (
-    <main style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <h1>{props.mode === 'create' ? t('createTitle') : t('editTitle')}</h1>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: '1rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
-          <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>{tCommon('title')}</span>
-            <input
+    <Page wide>
+      <PageHeader title={props.mode === 'create' ? t('createTitle') : t('editTitle')} />
+      <form onSubmit={onSubmit} className="grid gap-4">
+        <Panel className="grid gap-4 sm:grid-cols-2">
+          <Field label={tCommon('title')}>
+            <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
-              style={{ padding: '0.65rem' }}
             />
-          </label>
-          <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>{t('recordType')}</span>
-            <select
+          </Field>
+          <Field label={t('recordType')}>
+            <Select
               value={recordType}
               onChange={(e) => setRecordType(e.target.value)}
-              style={{ padding: '0.65rem' }}
             >
               {RECORD_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {type}
                 </option>
               ))}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>{t('lifecycleStatus')}</span>
-            <select
+            </Select>
+          </Field>
+          <Field label={t('lifecycleStatus')}>
+            <Select
               value={lifecycleStatus}
               onChange={(e) => setLifecycleStatus(e.target.value)}
-              style={{ padding: '0.65rem' }}
             >
               {LIFECYCLE_STATUSES.map((status) => (
                 <option key={status} value={status}>
                   {status}
                 </option>
               ))}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>{t('sourceOfTruth')}</span>
-            <select
+            </Select>
+          </Field>
+          <Field label={t('sourceOfTruth')}>
+            <Select
               value={sourceOfTruthMode}
               onChange={(e) => setSourceOfTruthMode(e.target.value)}
-              style={{ padding: '0.65rem' }}
             >
               {SOURCE_MODES.map((mode) => (
                 <option key={mode} value={mode}>
                   {mode}
                 </option>
               ))}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>{t('projectOptional')}</span>
-            <select
+            </Select>
+          </Field>
+          <Field label={t('projectOptional')}>
+            <Select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              style={{ padding: '0.65rem' }}
             >
               <option value="">{tCommon('none')}</option>
               {props.projects.map((project) => (
@@ -288,14 +289,12 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
                   {project.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>{t('systemOptional')}</span>
-            <select
+            </Select>
+          </Field>
+          <Field label={t('systemOptional')}>
+            <Select
               value={systemId}
               onChange={(e) => setSystemId(e.target.value)}
-              style={{ padding: '0.65rem' }}
             >
               <option value="">{tCommon('none')}</option>
               {props.systems.map((system) => (
@@ -303,172 +302,126 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
                   {system.name}
                 </option>
               ))}
-            </select>
-          </label>
-        </div>
+            </Select>
+          </Field>
+          <Field label={tCommon('summary')} className="sm:col-span-2">
+            <Input
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+            />
+          </Field>
+          <Field label={tCommon('tagsHint')} className="sm:col-span-2">
+            <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+          </Field>
+        </Panel>
 
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('summary')}</span>
-          <input
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            style={{ padding: '0.65rem' }}
-          />
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('tagsHint')}</span>
-          <input value={tags} onChange={(e) => setTags(e.target.value)} style={{ padding: '0.65rem' }} />
-        </label>
-
-        <fieldset
-          style={{
-            border: '1px solid rgba(21,32,43,0.12)',
-            padding: '0.85rem',
-            display: 'grid',
-            gap: '0.65rem',
-          }}
-        >
-          <legend>{t('provenance')}</legend>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
-            <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>{t('sourceTitle')}</span>
-              <input
+        <Panel>
+          <h2 className="mt-0 mb-3 text-base font-semibold">{t('provenance')}</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t('sourceTitle')}>
+              <Input
                 value={sourceTitle}
                 onChange={(e) => setSourceTitle(e.target.value)}
-                style={{ padding: '0.65rem' }}
               />
-            </label>
-            <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>{t('sourceProvider')}</span>
-              <input
+            </Field>
+            <Field label={t('sourceProvider')}>
+              <Input
                 value={sourceProvider}
                 onChange={(e) => setSourceProvider(e.target.value)}
-                style={{ padding: '0.65rem' }}
               />
-            </label>
-            <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>{t('sourceReference')}</span>
-              <input
+            </Field>
+            <Field label={t('sourceReference')}>
+              <Input
                 value={sourceReference}
                 onChange={(e) => setSourceReference(e.target.value)}
-                style={{ padding: '0.65rem' }}
               />
-            </label>
-            <label style={{ display: 'grid', gap: '0.35rem' }}>
-              <span>{t('sourceUri')}</span>
-              <input
+            </Field>
+            <Field label={t('sourceUri')}>
+              <Input
                 value={sourceUri}
                 onChange={(e) => setSourceUri(e.target.value)}
-                style={{ padding: '0.65rem' }}
               />
-            </label>
-            <label style={{ display: 'grid', gap: '0.35rem', gridColumn: '1 / -1' }}>
-              <span>{t('generatedByModel')}</span>
-              <input
+            </Field>
+            <Field label={t('generatedByModel')} className="sm:col-span-2">
+              <Input
                 value={generatedByModel}
                 onChange={(e) => setGeneratedByModel(e.target.value)}
-                style={{ padding: '0.65rem' }}
               />
-            </label>
+            </Field>
           </div>
-        </fieldset>
+        </Panel>
 
         {props.mode === 'edit' ? (
-          <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>{t('changeMessage')}</span>
-            <input
-              value={changeMessage}
-              onChange={(e) => setChangeMessage(e.target.value)}
-              placeholder={t('changeMessagePlaceholder')}
-              style={{ padding: '0.65rem' }}
-            />
-          </label>
+          <Panel>
+            <Field label={t('changeMessage')}>
+              <Input
+                value={changeMessage}
+                onChange={(e) => setChangeMessage(e.target.value)}
+                placeholder={t('changeMessagePlaceholder')}
+              />
+            </Field>
+          </Panel>
         ) : null}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <label style={{ display: 'grid', gap: '0.35rem' }}>
-            <span>{t('markdown')}</span>
-            <textarea
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label={t('markdown')}>
+            <Textarea
               value={contentMarkdown}
               onChange={(e) => setContentMarkdown(e.target.value)}
               rows={22}
-              style={{
-                padding: '0.75rem',
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                fontSize: '0.9rem',
-              }}
+              className="min-h-[420px] font-mono text-sm"
             />
-          </label>
+          </Field>
           <div>
-            <div style={{ marginBottom: '0.35rem' }}>{t('safePreview')}</div>
-            <div
-              style={{
-                padding: '0.85rem',
-                minHeight: 420,
-                background: 'rgba(255,255,255,0.8)',
-                border: '1px solid rgba(21,32,43,0.1)',
-                overflow: 'auto',
-              }}
-            >
+            <p className="kh-label mb-2">
+              <span>{t('safePreview')}</span>
+            </p>
+            <Panel className="min-h-[420px] overflow-auto">
               <MarkdownDocument html={previewHtml} toc={previewToc} />
-            </div>
+            </Panel>
           </div>
         </div>
 
-        {error ? <p style={{ color: '#9b1c1c' }}>{error}</p> : null}
+        {error ? <ErrorText>{error}</ErrorText> : null}
 
-        <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
-          <button
+        <div className="flex flex-wrap gap-2">
+          <Button
             type="button"
+            variant="secondary"
             disabled={pending}
             onClick={() => void save('draft')}
-            style={{ padding: '0.75rem 1rem', border: '1px solid #1f4b73', background: 'white' }}
           >
             {t('saveDraft')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             disabled={pending}
             onClick={() => void save('review_required')}
-            style={{ padding: '0.75rem 1rem', border: '1px solid #1f4b73', background: 'white' }}
           >
             {t('markForReview')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="success"
             disabled={pending}
             onClick={() => void save('verified')}
-            style={{
-              padding: '0.75rem 1rem',
-              border: 'none',
-              background: '#1f6b4a',
-              color: 'white',
-            }}
           >
             {t('markVerified')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="success"
             disabled={pending}
             onClick={() => void save('current')}
-            style={{
-              padding: '0.75rem 1rem',
-              border: 'none',
-              background: '#145a36',
-              color: 'white',
-            }}
           >
             {t('markCurrent')}
-          </button>
-          <button
-            type="submit"
-            disabled={pending}
-            style={{ padding: '0.75rem 1rem', border: 'none', background: '#1f4b73', color: 'white' }}
-          >
+          </Button>
+          <Button type="submit" disabled={pending}>
             {pending ? tCommon('saving') : tCommon('save')}
-          </button>
+          </Button>
         </div>
       </form>
-    </main>
+    </Page>
   );
 }

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { Page, PageHeader, Panel } from '../../../components/ui';
 import { requireSession } from '../../../lib/session';
 
 export default async function DashboardPage() {
@@ -7,32 +8,39 @@ export default async function DashboardPage() {
   const t = await getTranslations('dashboard');
 
   return (
-    <main style={{ maxWidth: 880, margin: '0 auto' }}>
-      <h1 style={{ marginBottom: '0.35rem' }}>{t('title')}</h1>
-      <p style={{ opacity: 0.75 }}>
-        {t('signedInAs', { email: session.user.email })}
-        {session.user.isSystemAdmin ? ` ${t('systemAdmin')}` : ''}.
-      </p>
-      <section
-        style={{
-          marginTop: '1.5rem',
-          padding: '1.25rem',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid rgba(21,32,43,0.08)',
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>{t('getStarted')}</h2>
-        <ul>
+    <Page>
+      <PageHeader
+        title={t('title')}
+        description={
+          <>
+            {t('signedInAs', { email: session.user.email })}
+            {session.user.isSystemAdmin ? ` ${t('systemAdmin')}` : ''}.
+          </>
+        }
+      />
+      <Panel>
+        <h2 className="mt-0 mb-3 text-lg font-semibold">{t('getStarted')}</h2>
+        <ul className="m-0 grid list-none gap-2 p-0">
           <li>
-            <Link href="/workspaces">{t('browseWorkspaces')}</Link>
+            <Link
+              href="/workspaces"
+              className="block rounded-md border border-line bg-panel-solid px-4 py-3 no-underline transition hover:border-brand/35 hover:bg-brand-soft"
+            >
+              {t('browseWorkspaces')}
+            </Link>
           </li>
           {session.user.isSystemAdmin ? (
             <li>
-              <Link href="/workspaces/new">{t('createWorkspace')}</Link>
+              <Link
+                href="/workspaces/new"
+                className="block rounded-md border border-line bg-panel-solid px-4 py-3 no-underline transition hover:border-brand/35 hover:bg-brand-soft"
+              >
+                {t('createWorkspace')}
+              </Link>
             </li>
           ) : null}
         </ul>
-      </section>
-    </main>
+      </Panel>
+    </Page>
   );
 }

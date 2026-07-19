@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
+import { Button, ErrorText, Field, Input, Page, Panel } from '../../components/ui';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,59 +48,43 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 420, margin: '4rem auto', padding: '0 1.25rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+    <Page narrow className="px-4 py-16">
+      <div className="mb-4 flex justify-end">
         <LanguageSwitcher />
       </div>
-      <h1 style={{ marginBottom: '0.35rem' }}>{tCommon('appName')}</h1>
-      <p style={{ opacity: 0.75, marginTop: 0 }}>{t('subtitle')}</p>
-      <form
-        onSubmit={onSubmit}
-        style={{
-          display: 'grid',
-          gap: '0.85rem',
-          marginTop: '1.5rem',
-          background: 'rgba(255,255,255,0.75)',
-          padding: '1.25rem',
-          border: '1px solid rgba(21,32,43,0.08)',
-        }}
-      >
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{t('email')}</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            style={{ padding: '0.65rem 0.75rem', fontSize: '1rem' }}
-          />
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{t('password')}</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            style={{ padding: '0.65rem 0.75rem', fontSize: '1rem' }}
-          />
-        </label>
-        {error ? <p style={{ color: '#9b1c1c', margin: 0 }}>{error}</p> : null}
-        <button
-          type="submit"
-          disabled={pending}
-          style={{
-            padding: '0.75rem 1rem',
-            border: 'none',
-            background: '#1f4b73',
-            color: 'white',
-            fontSize: '1rem',
-            cursor: 'pointer',
-          }}
-        >
-          {pending ? t('signingIn') : t('signIn')}
-        </button>
-      </form>
-    </main>
+      <div className="mb-6">
+        <p className="mb-1 text-xs font-semibold tracking-[0.14em] text-ink-muted uppercase">
+          {tCommon('appName')}
+        </p>
+        <h1 className="m-0 text-3xl font-semibold tracking-tight">{tCommon('appName')}</h1>
+        <p className="mt-2 text-ink-muted">{t('subtitle')}</p>
+      </div>
+      <Panel>
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <Field label={t('email')}>
+            <Input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              autoComplete="username"
+            />
+          </Field>
+          <Field label={t('password')}>
+            <Input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              autoComplete="current-password"
+            />
+          </Field>
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <Button type="submit" disabled={pending} className="mt-1 w-full py-2.5">
+            {pending ? t('signingIn') : t('signIn')}
+          </Button>
+        </form>
+      </Panel>
+    </Page>
   );
 }

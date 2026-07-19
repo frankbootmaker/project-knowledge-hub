@@ -3,6 +3,13 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { MarkdownDocument } from '../../../../../../../../components/MarkdownDocument';
 import { VersionRestoreButton } from '../../../../../../../../components/VersionRestoreButton';
+import {
+  Badge,
+  Page,
+  PageHeader,
+  Panel,
+  lifecycleTone,
+} from '../../../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -74,60 +81,62 @@ export default async function KnowledgeVersionDetailPage({
     );
 
   return (
-    <main style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <p style={{ opacity: 0.7 }}>
-        <Link href={`/workspaces/${workspace.slug}/records/${record.slug}/history`}>
-          {t('versionHistory')}
-        </Link>
-        {` / v${version.versionNumber}`}
-      </p>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-        <div>
-          <h1 style={{ marginBottom: '0.35rem' }}>
+    <Page wide>
+      <PageHeader
+        eyebrow={
+          <>
+            <Link
+              href={`/workspaces/${workspace.slug}/records/${record.slug}/history`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {t('versionHistory')}
+            </Link>
+            {` / v${version.versionNumber}`}
+          </>
+        }
+        title={
+          <>
             {version.title}{' '}
-            <span style={{ fontSize: '1rem', opacity: 0.7 }}>v{version.versionNumber}</span>
-          </h1>
-          <p style={{ opacity: 0.7, marginTop: 0 }}>
-            {version.lifecycleStatus} · {version.createdAt}
-          </p>
-        </div>
-        {canMutate && version.isHistorical ? (
-          <VersionRestoreButton
-            recordId={record.id}
-            versionNumber={version.versionNumber}
-            workspaceSlug={workspace.slug}
-            recordSlug={record.slug}
-          />
-        ) : null}
-      </div>
+            <span className="text-lg font-normal text-ink-muted">
+              v{version.versionNumber}
+            </span>
+          </>
+        }
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <Badge tone={lifecycleTone(version.lifecycleStatus)}>
+              {version.lifecycleStatus}
+            </Badge>
+            <span>{version.createdAt}</span>
+          </span>
+        }
+        actions={
+          canMutate && version.isHistorical ? (
+            <VersionRestoreButton
+              recordId={record.id}
+              versionNumber={version.versionNumber}
+              workspaceSlug={workspace.slug}
+              recordSlug={record.slug}
+            />
+          ) : null
+        }
+      />
 
       {version.isHistorical ? (
-        <p
-          style={{
-            padding: '0.75rem 1rem',
-            background: '#fff7e6',
-            color: '#8a5a00',
-            border: '1px solid rgba(138,90,0,0.2)',
-          }}
-        >
+        <p className="mb-4 rounded-md border border-warn/20 bg-warn-soft px-4 py-3 text-warn">
           {t('historicalWarningDetail')}
         </p>
       ) : null}
 
       {version.changeMessage ? (
-        <p style={{ opacity: 0.8 }}>{t('changeMessageLabel', { message: version.changeMessage })}</p>
+        <p className="mb-4 text-ink-muted">
+          {t('changeMessageLabel', { message: version.changeMessage })}
+        </p>
       ) : null}
 
-      <section
-        style={{
-          marginTop: '1.25rem',
-          padding: '1.25rem',
-          background: 'rgba(255,255,255,0.8)',
-          border: '1px solid rgba(21,32,43,0.08)',
-        }}
-      >
+      <Panel>
         <MarkdownDocument html={version.contentHtml ?? ''} toc={version.toc ?? []} />
-      </section>
-    </main>
+      </Panel>
+    </Page>
   );
 }

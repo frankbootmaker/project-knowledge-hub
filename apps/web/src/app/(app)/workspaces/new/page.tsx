@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Button, ErrorText, Field, Input, Page, PageHeader, Panel, Textarea } from '../../../../components/ui';
 
 export default function NewWorkspacePage() {
   const router = useRouter();
@@ -43,42 +44,26 @@ export default function NewWorkspacePage() {
   }
 
   return (
-    <main style={{ maxWidth: 560, margin: '0 auto' }}>
-      <h1>{t('createTitle')}</h1>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: '0.85rem' }}>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('name')}</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-            style={{ padding: '0.65rem 0.75rem' }}
-          />
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('description')}</span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            rows={4}
-            style={{ padding: '0.65rem 0.75rem' }}
-          />
-        </label>
-        {error ? <p style={{ color: '#9b1c1c' }}>{error}</p> : null}
-        <button
-          type="submit"
-          disabled={pending}
-          style={{
-            padding: '0.75rem 1rem',
-            border: 'none',
-            background: '#1f4b73',
-            color: 'white',
-            cursor: 'pointer',
-          }}
-        >
-          {pending ? t('creating') : t('createButton')}
-        </button>
-      </form>
-    </main>
+    <Page narrow>
+      <PageHeader title={t('createTitle')} />
+      <Panel>
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <Field label={tCommon('name')}>
+            <Input value={name} onChange={(event) => setName(event.target.value)} required />
+          </Field>
+          <Field label={tCommon('description')}>
+            <Textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={4}
+            />
+          </Field>
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <Button type="submit" disabled={pending}>
+            {pending ? t('creating') : t('createButton')}
+          </Button>
+        </form>
+      </Panel>
+    </Page>
   );
 }

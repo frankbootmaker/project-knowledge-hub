@@ -4,6 +4,17 @@ import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import {
+  Button,
+  ErrorText,
+  Field,
+  Input,
+  Page,
+  PageHeader,
+  Panel,
+  Select,
+  Textarea,
+} from '../../../../../../components/ui';
 
 type ProjectOption = { id: string; name: string };
 
@@ -102,62 +113,56 @@ export default function NewSystemPage() {
   }
 
   return (
-    <main style={{ maxWidth: 560, margin: '0 auto' }}>
-      <h1>{t('createTitle')}</h1>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: '0.85rem' }}>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('name')}</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} required style={{ padding: '0.65rem' }} />
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{t('projectOptional')}</span>
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ padding: '0.65rem' }}>
-            <option value="">{t('independentNoProject')}</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('summary')}</span>
-          <input value={summary} onChange={(e) => setSummary(e.target.value)} style={{ padding: '0.65rem' }} />
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('description')}</span>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} style={{ padding: '0.65rem' }} />
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('status')}</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ padding: '0.65rem' }}>
-            <option value="proposed">proposed</option>
-            <option value="experimental">experimental</option>
-            <option value="active">active</option>
-            <option value="degraded">degraded</option>
-            <option value="maintenance">maintenance</option>
-            <option value="deprecated">deprecated</option>
-            <option value="retired">retired</option>
-            <option value="archived">archived</option>
-          </select>
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{t('systemType')}</span>
-          <input value={systemType} onChange={(e) => setSystemType(e.target.value)} style={{ padding: '0.65rem' }} />
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{t('environment')}</span>
-          <input value={environment} onChange={(e) => setEnvironment(e.target.value)} style={{ padding: '0.65rem' }} />
-        </label>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span>{tCommon('tagsHint')}</span>
-          <input value={tags} onChange={(e) => setTags(e.target.value)} style={{ padding: '0.65rem' }} />
-        </label>
-        {error ? <p style={{ color: '#9b1c1c' }}>{error}</p> : null}
-        <button type="submit" disabled={pending} style={{ padding: '0.75rem', border: 'none', background: '#1f4b73', color: 'white' }}>
-          {pending ? t('creating') : t('createButton')}
-        </button>
-      </form>
-    </main>
+    <Page narrow>
+      <PageHeader title={t('createTitle')} />
+      <Panel>
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <Field label={tCommon('name')}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} required />
+          </Field>
+          <Field label={t('projectOptional')}>
+            <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+              <option value="">{t('independentNoProject')}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={tCommon('summary')}>
+            <Input value={summary} onChange={(e) => setSummary(e.target.value)} />
+          </Field>
+          <Field label={tCommon('description')}>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
+          </Field>
+          <Field label={tCommon('status')}>
+            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="proposed">proposed</option>
+              <option value="experimental">experimental</option>
+              <option value="active">active</option>
+              <option value="degraded">degraded</option>
+              <option value="maintenance">maintenance</option>
+              <option value="deprecated">deprecated</option>
+              <option value="retired">retired</option>
+              <option value="archived">archived</option>
+            </Select>
+          </Field>
+          <Field label={t('systemType')}>
+            <Input value={systemType} onChange={(e) => setSystemType(e.target.value)} />
+          </Field>
+          <Field label={t('environment')}>
+            <Input value={environment} onChange={(e) => setEnvironment(e.target.value)} />
+          </Field>
+          <Field label={tCommon('tagsHint')}>
+            <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+          </Field>
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <Button type="submit" disabled={pending}>
+            {pending ? t('creating') : t('createButton')}
+          </Button>
+        </form>
+      </Panel>
+    </Page>
   );
 }

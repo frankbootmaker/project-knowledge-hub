@@ -1,17 +1,113 @@
+@import 'tailwindcss';
 @import 'highlight.js/styles/github.css';
 
+@theme {
+  --font-sans: var(--font-ibm-plex-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo,
+    monospace;
+
+  --color-ink: #15202b;
+  --color-ink-muted: #4b5a68;
+  --color-surface: #f4f7fb;
+  --color-panel: rgba(255, 255, 255, 0.82);
+  --color-panel-solid: #ffffff;
+  --color-line: rgba(21, 32, 43, 0.1);
+  --color-line-strong: rgba(21, 32, 43, 0.18);
+  --color-brand: #1f4b73;
+  --color-brand-hover: #183a59;
+  --color-brand-soft: #e8f0f7;
+  --color-accent: #145a36;
+  --color-accent-soft: #e3f6ec;
+  --color-warn: #8a5a00;
+  --color-warn-soft: #fff7e6;
+  --color-danger: #9b1c1c;
+  --color-danger-soft: #fde8e8;
+  --color-neutral-soft: #f3f4f6;
+
+  --radius-sm: 0.35rem;
+  --radius-md: 0.55rem;
+  --radius-lg: 0.85rem;
+}
+
+@layer base {
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-surface font-sans text-ink antialiased;
+    background-image:
+      radial-gradient(circle at top left, #d9e8f5 0%, transparent 42%),
+      radial-gradient(circle at bottom right, #e8eef4 0%, transparent 46%),
+      linear-gradient(180deg, #f4f7fb 0%, #eef2f6 100%);
+    background-attachment: fixed;
+  }
+
+  a {
+    @apply text-brand transition-colors hover:text-brand-hover;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-brand) 22%, white);
+  }
+}
+
+@layer components {
+  .kh-input {
+    @apply w-full rounded-md border border-line-strong bg-panel-solid px-3 py-2.5 text-base text-ink
+      outline-none transition
+      placeholder:text-ink-muted/70
+      focus:border-brand focus:ring-2 focus:ring-brand/20;
+  }
+
+  .kh-label {
+    @apply grid gap-1.5 text-sm font-medium text-ink;
+  }
+
+  .kh-panel {
+    @apply rounded-lg border border-line bg-panel p-5 shadow-sm backdrop-blur-sm;
+  }
+
+  .kh-muted {
+    @apply text-ink-muted;
+  }
+}
+
+.knowledge-markdown {
+  @apply leading-relaxed;
+}
+
 .knowledge-markdown pre {
-  overflow-x: auto;
-  padding: 0.85rem 1rem;
-  background: rgba(21, 32, 43, 0.04);
+  @apply overflow-x-auto rounded-md bg-ink/5 px-4 py-3;
 }
 
 .knowledge-markdown code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.9em;
+  @apply font-mono text-[0.9em];
 }
 
 .knowledge-markdown pre.mermaid {
-  background: transparent;
-  text-align: center;
+  @apply bg-transparent text-center;
+}
+
+.knowledge-markdown h1,
+.knowledge-markdown h2,
+.knowledge-markdown h3 {
+  @apply mt-6 mb-2 font-semibold tracking-tight text-ink;
+}
+
+.knowledge-markdown h1 {
+  @apply text-2xl;
+}
+
+.knowledge-markdown h2 {
+  @apply text-xl;
+}
+
+.knowledge-markdown p {
+  @apply my-3;
+}
+
+.knowledge-markdown ul {
+  @apply my-3 list-disc pl-5;
 }

@@ -1,6 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import {
+  Badge,
+  ListCard,
+  Page,
+  PageHeader,
+  Panel,
+  SectionHeader,
+} from '../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../lib/session';
 
 type Workspace = {
@@ -32,7 +40,6 @@ type System = {
 
 type KnowledgeRecord = {
   id: string;
-  name?: string;
   title: string;
   slug: string;
   recordType: string;
@@ -40,6 +47,17 @@ type KnowledgeRecord = {
   summary: string | null;
   systemId: string | null;
 };
+
+function NewLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
+    >
+      {label}
+    </Link>
+  );
+}
 
 export default async function WorkspaceDetailPage({
   params,
@@ -96,121 +114,126 @@ export default async function WorkspaceDetailPage({
     );
 
   return (
-    <main style={{ maxWidth: 960, margin: '0 auto' }}>
-      <h1 style={{ marginBottom: '0.35rem' }}>{workspace.name}</h1>
-      <p style={{ opacity: 0.7, marginTop: 0 }}>{workspace.slug}</p>
-      <section
-        style={{
-          marginTop: '1.25rem',
-          padding: '1.25rem',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid rgba(21,32,43,0.08)',
-        }}
-      >
-        <p>{workspace.description || t('noDescription')}</p>
-      </section>
+    <Page wide>
+      <PageHeader
+        title={workspace.name}
+        description={workspace.slug}
+      />
+      <Panel className="mb-8">
+        <p className="m-0 text-ink-muted">{workspace.description || t('noDescription')}</p>
+      </Panel>
 
-      <section style={{ marginTop: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>{t('projects')}</h2>
-          {canMutate ? (
-            <Link href={`/workspaces/${workspace.slug}/projects/new`}>{t('newProject')}</Link>
-          ) : null}
-        </div>
-        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
+      <section className="mb-8">
+        <SectionHeader
+          title={t('projects')}
+          action={
+            canMutate ? (
+              <NewLink
+                href={`/workspaces/${workspace.slug}/projects/new`}
+                label={t('newProject')}
+              />
+            ) : null
+          }
+        />
+        <ul className="m-0 grid list-none gap-3 p-0">
           {projects.map((project) => (
-            <li
-              key={project.id}
-              style={{
-                padding: '0.9rem 1rem',
-                background: 'rgba(255,255,255,0.72)',
-                border: '1px solid rgba(21,32,43,0.08)',
-              }}
-            >
-              <Link href={`/workspaces/${workspace.slug}/projects/${project.slug}`}>
-                <strong>{project.name}</strong>
-              </Link>
-              <div style={{ opacity: 0.7 }}>
-                {project.status}
-                {project.summary ? ` — ${project.summary}` : ''}
+            <ListCard key={project.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
+                  className="font-semibold no-underline"
+                >
+                  {project.name}
+                </Link>
+                <Badge tone="brand">{project.status}</Badge>
               </div>
+              {project.summary ? (
+                <p className="mt-2 mb-0 text-sm text-ink-muted">{project.summary}</p>
+              ) : null}
               {project.tags.length > 0 ? (
-                <div style={{ opacity: 0.65, marginTop: '0.35rem' }}>
+                <p className="mt-2 mb-0 text-xs text-ink-muted">
                   {tCommon('tagsList', { tags: project.tags.map((tag) => tag.name).join(', ') })}
-                </div>
+                </p>
               ) : null}
-            </li>
+            </ListCard>
           ))}
-          {projects.length === 0 ? <li>{t('noProjects')}</li> : null}
+          {projects.length === 0 ? <li className="kh-muted list-none">{t('noProjects')}</li> : null}
         </ul>
       </section>
 
-      <section style={{ marginTop: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>{t('systems')}</h2>
-          {canMutate ? (
-            <Link href={`/workspaces/${workspace.slug}/systems/new`}>{t('newSystem')}</Link>
-          ) : null}
-        </div>
-        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
+      <section className="mb-8">
+        <SectionHeader
+          title={t('systems')}
+          action={
+            canMutate ? (
+              <NewLink
+                href={`/workspaces/${workspace.slug}/systems/new`}
+                label={t('newSystem')}
+              />
+            ) : null
+          }
+        />
+        <ul className="m-0 grid list-none gap-3 p-0">
           {systems.map((system) => (
-            <li
-              key={system.id}
-              style={{
-                padding: '0.9rem 1rem',
-                background: 'rgba(255,255,255,0.72)',
-                border: '1px solid rgba(21,32,43,0.08)',
-              }}
-            >
-              <Link href={`/workspaces/${workspace.slug}/systems/${system.slug}`}>
-                <strong>{system.name}</strong>
-              </Link>
-              <div style={{ opacity: 0.7 }}>
-                {system.status}
-                {system.projectId ? ` · ${t('linkedToProject')}` : ` · ${t('independent')}`}
-                {system.summary ? ` — ${system.summary}` : ''}
+            <ListCard key={system.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
+                  className="font-semibold no-underline"
+                >
+                  {system.name}
+                </Link>
+                <Badge>{system.status}</Badge>
               </div>
+              <p className="mt-2 mb-0 text-sm text-ink-muted">
+                {system.projectId ? t('linkedToProject') : t('independent')}
+                {system.summary ? ` — ${system.summary}` : ''}
+              </p>
               {system.tags.length > 0 ? (
-                <div style={{ opacity: 0.65, marginTop: '0.35rem' }}>
+                <p className="mt-2 mb-0 text-xs text-ink-muted">
                   {tCommon('tagsList', { tags: system.tags.map((tag) => tag.name).join(', ') })}
-                </div>
+                </p>
               ) : null}
-            </li>
+            </ListCard>
           ))}
-          {systems.length === 0 ? <li>{t('noSystems')}</li> : null}
+          {systems.length === 0 ? <li className="kh-muted list-none">{t('noSystems')}</li> : null}
         </ul>
       </section>
 
-      <section style={{ marginTop: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>{t('knowledgeRecords')}</h2>
-          {canMutate ? (
-            <Link href={`/workspaces/${workspace.slug}/records/new`}>{t('newRecord')}</Link>
-          ) : null}
-        </div>
-        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.65rem', marginTop: '1rem' }}>
+      <section>
+        <SectionHeader
+          title={t('knowledgeRecords')}
+          action={
+            canMutate ? (
+              <NewLink
+                href={`/workspaces/${workspace.slug}/records/new`}
+                label={t('newRecord')}
+              />
+            ) : null
+          }
+        />
+        <ul className="m-0 grid list-none gap-3 p-0">
           {records.map((record) => (
-            <li
-              key={record.id}
-              style={{
-                padding: '0.9rem 1rem',
-                background: 'rgba(255,255,255,0.72)',
-                border: '1px solid rgba(21,32,43,0.08)',
-              }}
-            >
-              <Link href={`/workspaces/${workspace.slug}/records/${record.slug}`}>
-                <strong>{record.title}</strong>
-              </Link>
-              <div style={{ opacity: 0.7 }}>
-                {record.recordType} · {record.lifecycleStatus}
-                {record.systemId ? ` · ${t('linkedToSystem')}` : ''}
-                {record.summary ? ` — ${record.summary}` : ''}
+            <ListCard key={record.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/workspaces/${workspace.slug}/records/${record.slug}`}
+                  className="font-semibold no-underline"
+                >
+                  {record.title}
+                </Link>
+                <Badge tone="brand">{record.recordType}</Badge>
+                <Badge>{record.lifecycleStatus}</Badge>
               </div>
-            </li>
+              <p className="mt-2 mb-0 text-sm text-ink-muted">
+                {record.systemId ? t('linkedToSystem') : null}
+                {record.summary ? `${record.systemId ? ' — ' : ''}${record.summary}` : ''}
+              </p>
+            </ListCard>
           ))}
-          {records.length === 0 ? <li>{t('noRecords')}</li> : null}
+          {records.length === 0 ? <li className="kh-muted list-none">{t('noRecords')}</li> : null}
         </ul>
       </section>
-    </main>
+    </Page>
   );
 }

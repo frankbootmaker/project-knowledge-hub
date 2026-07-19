@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { localeLabels, locales, type AppLocale } from '../i18n/config';
 import { setLocaleAction } from '../lib/locale';
+import { Select } from './ui';
 
 export function LanguageSwitcher() {
   const locale = useLocale() as AppLocale;
@@ -13,12 +14,13 @@ export function LanguageSwitcher() {
   const [pending, startTransition] = useTransition();
 
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.9rem' }}>
-      <span style={{ opacity: 0.7 }}>{t('language')}</span>
-      <select
+    <label className="flex items-center gap-2 text-sm text-ink-muted">
+      <span className="sr-only sm:not-sr-only">{t('language')}</span>
+      <Select
         value={locale}
         disabled={pending}
         aria-label={t('language')}
+        className="w-auto min-w-28 py-1.5 text-sm"
         onChange={(event) => {
           const next = event.target.value;
           startTransition(async () => {
@@ -26,18 +28,13 @@ export function LanguageSwitcher() {
             router.refresh();
           });
         }}
-        style={{
-          padding: '0.3rem 0.45rem',
-          border: '1px solid rgba(21,32,43,0.2)',
-          background: 'white',
-        }}
       >
         {locales.map((code) => (
           <option key={code} value={code}>
             {localeLabels[code]}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }

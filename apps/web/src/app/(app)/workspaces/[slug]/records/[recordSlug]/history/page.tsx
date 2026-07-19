@@ -2,6 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { VersionRestoreButton } from '../../../../../../../components/VersionRestoreButton';
+import {
+  Badge,
+  ListCard,
+  Page,
+  PageHeader,
+  lifecycleTone,
+} from '../../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -73,67 +80,68 @@ export default async function KnowledgeRecordHistoryPage({
     );
 
   return (
-    <main style={{ maxWidth: 880, margin: '0 auto' }}>
-      <p style={{ opacity: 0.7 }}>
-        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link>
-        {' / '}
-        <Link href={`/workspaces/${workspace.slug}/records/${record.slug}`}>{record.title}</Link>
-        {' / '}
-        {t('history')}
-      </p>
-      <h1 style={{ marginBottom: '0.35rem' }}>{t('versionHistory')}</h1>
-      <p style={{ opacity: 0.7, marginTop: 0 }}>
-        {t('currentVersion', {
+    <Page wide>
+      <PageHeader
+        eyebrow={
+          <>
+            <Link
+              href={`/workspaces/${workspace.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {workspace.name}
+            </Link>
+            {' / '}
+            <Link
+              href={`/workspaces/${workspace.slug}/records/${record.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {record.title}
+            </Link>
+            {' / '}
+            {t('history')}
+          </>
+        }
+        title={t('versionHistory')}
+        description={t('currentVersion', {
           version: versionsPayload.currentVersionNumber,
           status: record.lifecycleStatus,
         })}
-      </p>
+      />
 
-      <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: '0.75rem', marginTop: '1.25rem' }}>
+      <ul className="m-0 grid list-none gap-3 p-0">
         {versionsPayload.versions.map((version) => {
           const isCurrent = version.versionNumber === versionsPayload.currentVersionNumber;
           const isHistorical = !isCurrent;
           return (
-            <li
-              key={version.versionNumber}
-              style={{
-                padding: '1rem',
-                background: 'rgba(255,255,255,0.72)',
-                border: '1px solid rgba(21,32,43,0.08)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-                <div>
-                  <strong>v{version.versionNumber}</strong>{' '}
-                  {isCurrent ? (
-                    <span style={{ color: '#145a36', fontWeight: 600 }}>{t('current')}</span>
-                  ) : (
-                    <span style={{ color: '#8a5a00' }}>{t('historical')}</span>
-                  )}
-                  <div style={{ opacity: 0.8, marginTop: '0.35rem' }}>{version.title}</div>
-                  <div style={{ opacity: 0.65, fontSize: '0.9rem' }}>
-                    {version.lifecycleStatus} · {version.createdAt}
+            <ListCard key={version.versionNumber}>
+              <div className="flex justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong>v{version.versionNumber}</strong>
+                    {isCurrent ? (
+                      <Badge tone="success">{t('current')}</Badge>
+                    ) : (
+                      <Badge tone="warn">{t('historical')}</Badge>
+                    )}
+                    <Badge tone={lifecycleTone(version.lifecycleStatus)}>
+                      {version.lifecycleStatus}
+                    </Badge>
                   </div>
+                  <p className="mt-2 mb-0 text-ink">{version.title}</p>
+                  <p className="mt-1 mb-0 text-sm text-ink-muted">{version.createdAt}</p>
                   {version.changeMessage ? (
-                    <div style={{ marginTop: '0.35rem' }}>{version.changeMessage}</div>
+                    <p className="mt-2 mb-0 text-sm">{version.changeMessage}</p>
                   ) : null}
                   {isHistorical ? (
-                    <p
-                      style={{
-                        margin: '0.65rem 0 0',
-                        padding: '0.5rem 0.65rem',
-                        background: '#fff7e6',
-                        color: '#8a5a00',
-                        fontSize: '0.9rem',
-                      }}
-                    >
+                    <p className="mt-3 mb-0 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn">
                       {t('historicalWarningList')}
                     </p>
                   ) : null}
                 </div>
-                <div style={{ display: 'grid', gap: '0.5rem', alignContent: 'start' }}>
+                <div className="grid shrink-0 content-start gap-2">
                   <Link
                     href={`/workspaces/${workspace.slug}/records/${record.slug}/history/${version.versionNumber}`}
+                    className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
                   >
                     {t('view')}
                   </Link>
@@ -147,10 +155,10 @@ export default async function KnowledgeRecordHistoryPage({
                   ) : null}
                 </div>
               </div>
-            </li>
+            </ListCard>
           );
         })}
       </ul>
-    </main>
+    </Page>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
+import { cn } from '../lib/cn';
 
 type TocItem = {
   id: string;
@@ -51,14 +52,28 @@ export function MarkdownDocument({
   }, [html]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: toc.length > 0 ? '220px 1fr' : '1fr', gap: '1.5rem' }}>
+    <div
+      className={cn(
+        'grid gap-6',
+        toc.length > 0 ? 'lg:grid-cols-[220px_1fr]' : 'grid-cols-1',
+      )}
+    >
       {toc.length > 0 ? (
-        <nav aria-label={t('tocLabel')} style={{ position: 'sticky', top: '1rem', alignSelf: 'start' }}>
-          <h2 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>{t('contents')}</h2>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.35rem' }}>
+        <nav
+          aria-label={t('tocLabel')}
+          className="sticky top-4 self-start"
+        >
+          <h2 className="mt-0 mb-3 text-sm font-semibold text-ink">{t('contents')}</h2>
+          <ul className="m-0 grid list-none gap-1.5 p-0">
             {toc.map((item) => (
-              <li key={item.id} style={{ paddingLeft: `${(item.depth - 1) * 0.75}rem` }}>
-                <a href={`#${item.id}`} style={{ opacity: 0.85, fontSize: '0.9rem' }}>
+              <li
+                key={item.id}
+                style={{ paddingLeft: `${(item.depth - 1) * 0.75}rem` }}
+              >
+                <a
+                  href={`#${item.id}`}
+                  className="text-sm text-ink-muted no-underline hover:text-brand"
+                >
                   {item.text}
                 </a>
               </li>
@@ -68,12 +83,8 @@ export function MarkdownDocument({
       ) : null}
       <article
         ref={containerRef}
-        className="knowledge-markdown"
+        className="knowledge-markdown leading-relaxed break-words"
         dangerouslySetInnerHTML={{ __html: html }}
-        style={{
-          lineHeight: 1.65,
-          overflowWrap: 'anywhere',
-        }}
       />
     </div>
   );

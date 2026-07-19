@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Button, ErrorText } from './ui';
 
 export function VersionRestoreButton({
   recordId,
@@ -49,20 +50,16 @@ export function VersionRestoreButton({
   }
 
   return (
-    <div>
-      <button
+    <div className="grid gap-1">
+      <Button
         type="button"
+        variant="secondary"
         disabled={pending}
         onClick={() => void onRestore()}
-        style={{
-          padding: '0.4rem 0.65rem',
-          border: '1px solid #1f4b73',
-          background: 'white',
-        }}
       >
         {pending ? t('restoring') : t('restore')}
-      </button>
-      {error ? <div style={{ color: '#9b1c1c', fontSize: '0.85rem' }}>{error}</div> : null}
+      </Button>
+      {error ? <ErrorText>{error}</ErrorText> : null}
     </div>
   );
 }

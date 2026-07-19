@@ -3,6 +3,13 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { MarkdownDocument } from '../../../../../../components/MarkdownDocument';
 import { RecordLifecycleActions } from '../../../../../../components/RecordLifecycleActions';
+import {
+  Badge,
+  Page,
+  PageHeader,
+  Panel,
+  lifecycleTone,
+} from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -37,22 +44,6 @@ type KnowledgeRecord = {
     generatedByModel: string | null;
   } | null;
 };
-
-function statusStyles(status: string): { background: string; color: string; label: string } {
-  if (status === 'verified' || status === 'current') {
-    return { background: '#e3f6ec', color: '#145a36', label: status };
-  }
-  if (status === 'superseded' || status === 'deprecated') {
-    return { background: '#fde8e8', color: '#9b1c1c', label: status };
-  }
-  if (status === 'draft') {
-    return { background: '#f3f4f6', color: '#374151', label: status };
-  }
-  if (status === 'review_required') {
-    return { background: '#fff7e6', color: '#8a5a00', label: status };
-  }
-  return { background: '#eef2f7', color: '#1f4b73', label: status };
-}
 
 export default async function KnowledgeRecordDetailPage({
   params,
@@ -116,60 +107,52 @@ export default async function KnowledgeRecordDetailPage({
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
 
-  const status = statusStyles(record.lifecycleStatus);
   const dash = tCommon('emDash');
+  const linkClass = 'text-sm font-medium text-brand no-underline hover:text-brand-hover';
 
   return (
-    <main style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <p style={{ opacity: 0.7 }}>
-        <Link href={`/workspaces/${workspace.slug}`}>{workspace.name}</Link> / {tCommon('knowledge')}
-      </p>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'start' }}>
-        <div>
-          <h1 style={{ marginBottom: '0.35rem' }}>{record.title}</h1>
-          <p style={{ opacity: 0.7, marginTop: 0 }}>
-            {record.slug} · {record.recordType}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center' }}>
-          <Link href={`/workspaces/${workspace.slug}/records/${record.slug}/history`}>
-            {t('history')}
-          </Link>
-          {canMutate ? (
-            <Link href={`/workspaces/${workspace.slug}/records/${record.slug}/edit`}>
-              {tCommon('edit')}
+    <Page wide>
+      <PageHeader
+        eyebrow={
+          <>
+            <Link
+              href={`/workspaces/${workspace.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {workspace.name}
             </Link>
-          ) : null}
-        </div>
-      </div>
+            {' / '}
+            {tCommon('knowledge')}
+          </>
+        }
+        title={record.title}
+        description={`${record.slug} · ${record.recordType}`}
+        actions={
+          <>
+            <Link
+              href={`/workspaces/${workspace.slug}/records/${record.slug}/history`}
+              className={linkClass}
+            >
+              {t('history')}
+            </Link>
+            {canMutate ? (
+              <Link
+                href={`/workspaces/${workspace.slug}/records/${record.slug}/edit`}
+                className={linkClass}
+              >
+                {tCommon('edit')}
+              </Link>
+            ) : null}
+          </>
+        }
+      />
 
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem', alignItems: 'center' }}>
-        <span
-          style={{
-            display: 'inline-block',
-            padding: '0.25rem 0.55rem',
-            background: status.background,
-            color: status.color,
-            fontWeight: 600,
-            fontSize: '0.85rem',
-          }}
-        >
-          {status.label}
-        </span>
-        <span
-          style={{
-            display: 'inline-block',
-            padding: '0.25rem 0.55rem',
-            background: '#eef2f7',
-            color: '#1f4b73',
-            fontSize: '0.85rem',
-          }}
-        >
-          {record.sourceOfTruthMode}
-        </span>
-        <span style={{ opacity: 0.7, fontSize: '0.85rem' }}>
-          v{record.currentVersionNumber}
-        </span>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Badge tone={lifecycleTone(record.lifecycleStatus)}>
+          {record.lifecycleStatus}
+        </Badge>
+        <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
+        <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
         {canMutate ? (
           <RecordLifecycleActions
             recordId={record.id}
@@ -179,109 +162,77 @@ export default async function KnowledgeRecordDetailPage({
       </div>
 
       {record.lifecycleStatus === 'superseded' ? (
-        <p
-          style={{
-            marginTop: '1rem',
-            padding: '0.75rem 1rem',
-            background: '#fde8e8',
-            color: '#9b1c1c',
-            border: '1px solid rgba(155,28,28,0.2)',
-          }}
-        >
+        <p className="mb-4 rounded-md border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
           {t('supersededWarning')}
         </p>
       ) : null}
 
-      <section
-        style={{
-          marginTop: '1.25rem',
-          padding: '1.1rem',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid rgba(21,32,43,0.08)',
-          display: 'grid',
-          gap: '0.35rem',
-        }}
-      >
-        <p style={{ margin: 0 }}>{record.summary || tCommon('noSummary')}</p>
+      <Panel className="mb-4 grid gap-2">
+        <p className="m-0">{record.summary || tCommon('noSummary')}</p>
         {project ? (
-          <p style={{ margin: 0, opacity: 0.8 }}>
+          <p className="m-0 text-sm text-ink-muted">
             {tCommon('project')}:{' '}
-            <Link href={`/workspaces/${workspace.slug}/projects/${project.slug}`}>
+            <Link
+              href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
               {project.name}
             </Link>
           </p>
         ) : null}
         {system ? (
-          <p style={{ margin: 0, opacity: 0.8 }}>
+          <p className="m-0 text-sm text-ink-muted">
             {tCommon('system')}:{' '}
-            <Link href={`/workspaces/${workspace.slug}/systems/${system.slug}`}>
+            <Link
+              href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
               {system.name}
             </Link>
           </p>
         ) : null}
         {record.tags.length > 0 ? (
-          <p style={{ margin: 0, opacity: 0.75 }}>
+          <p className="m-0 text-xs text-ink-muted">
             {tCommon('tagsList', { tags: record.tags.map((tag) => tag.name).join(', ') })}
           </p>
         ) : null}
-      </section>
+      </Panel>
 
-      <section
-        style={{
-          marginTop: '1rem',
-          padding: '1.1rem',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid rgba(21,32,43,0.08)',
-        }}
-      >
-        <h2 style={{ marginTop: 0, fontSize: '1.05rem' }}>{t('sourceAndVerification')}</h2>
-        <dl
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '160px 1fr',
-            gap: '0.35rem 0.75rem',
-            margin: 0,
-          }}
-        >
-          <dt style={{ opacity: 0.7 }}>{t('sourceType')}</dt>
-          <dd style={{ margin: 0 }}>{record.source?.sourceType ?? dash}</dd>
-          <dt style={{ opacity: 0.7 }}>{t('sourceTitle')}</dt>
-          <dd style={{ margin: 0 }}>{record.source?.sourceTitle ?? dash}</dd>
-          <dt style={{ opacity: 0.7 }}>{t('provider')}</dt>
-          <dd style={{ margin: 0 }}>{record.source?.sourceProvider ?? dash}</dd>
-          <dt style={{ opacity: 0.7 }}>{t('reference')}</dt>
-          <dd style={{ margin: 0 }}>{record.source?.sourceReference ?? dash}</dd>
-          <dt style={{ opacity: 0.7 }}>{t('uri')}</dt>
-          <dd style={{ margin: 0 }}>
+      <Panel className="mb-6">
+        <h2 className="mt-0 mb-3 text-base font-semibold">{t('sourceAndVerification')}</h2>
+        <dl className="m-0 grid grid-cols-[160px_1fr] gap-x-3 gap-y-1.5">
+          <dt className="text-ink-muted">{t('sourceType')}</dt>
+          <dd className="m-0">{record.source?.sourceType ?? dash}</dd>
+          <dt className="text-ink-muted">{t('sourceTitle')}</dt>
+          <dd className="m-0">{record.source?.sourceTitle ?? dash}</dd>
+          <dt className="text-ink-muted">{t('provider')}</dt>
+          <dd className="m-0">{record.source?.sourceProvider ?? dash}</dd>
+          <dt className="text-ink-muted">{t('reference')}</dt>
+          <dd className="m-0">{record.source?.sourceReference ?? dash}</dd>
+          <dt className="text-ink-muted">{t('uri')}</dt>
+          <dd className="m-0">
             {record.source?.sourceUri ? (
               <a href={record.source.sourceUri}>{record.source.sourceUri}</a>
             ) : (
               dash
             )}
           </dd>
-          <dt style={{ opacity: 0.7 }}>{t('model')}</dt>
-          <dd style={{ margin: 0 }}>{record.source?.generatedByModel ?? dash}</dd>
-          <dt style={{ opacity: 0.7 }}>{t('verifiedAt')}</dt>
-          <dd style={{ margin: 0 }}>{record.verifiedAt ?? dash}</dd>
-          <dt style={{ opacity: 0.7 }}>{t('reviewedBy')}</dt>
-          <dd style={{ margin: 0 }}>{record.reviewedBy ?? dash}</dd>
-          <dt style={{ opacity: 0.7 }}>{t('lastValidated')}</dt>
-          <dd style={{ margin: 0 }}>{record.lastValidatedAt ?? dash}</dd>
-          <dt style={{ opacity: 0.7 }}>{tCommon('updated')}</dt>
-          <dd style={{ margin: 0 }}>{record.updatedAt}</dd>
+          <dt className="text-ink-muted">{t('model')}</dt>
+          <dd className="m-0">{record.source?.generatedByModel ?? dash}</dd>
+          <dt className="text-ink-muted">{t('verifiedAt')}</dt>
+          <dd className="m-0">{record.verifiedAt ?? dash}</dd>
+          <dt className="text-ink-muted">{t('reviewedBy')}</dt>
+          <dd className="m-0">{record.reviewedBy ?? dash}</dd>
+          <dt className="text-ink-muted">{t('lastValidated')}</dt>
+          <dd className="m-0">{record.lastValidatedAt ?? dash}</dd>
+          <dt className="text-ink-muted">{tCommon('updated')}</dt>
+          <dd className="m-0">{record.updatedAt}</dd>
         </dl>
-      </section>
+      </Panel>
 
-      <section
-        style={{
-          marginTop: '1.5rem',
-          padding: '1.25rem',
-          background: 'rgba(255,255,255,0.8)',
-          border: '1px solid rgba(21,32,43,0.08)',
-        }}
-      >
+      <Panel>
         <MarkdownDocument html={record.contentHtml ?? ''} toc={record.toc ?? []} />
-      </section>
-    </main>
+      </Panel>
+    </Page>
   );
 }
