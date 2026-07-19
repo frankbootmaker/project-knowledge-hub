@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ArchiveEntityButton } from '../../../../components/ArchiveEntityButton';
 import {
   Badge,
   ListCard,
@@ -17,6 +18,7 @@ type Workspace = {
   slug: string;
   description: string | null;
   updatedAt: string;
+  archivedAt?: string | null;
 };
 
 type Project = {
@@ -112,12 +114,38 @@ export default async function WorkspaceDetailPage({
         membership.workspaceId === workspace.id &&
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
+  const canArchiveWorkspace =
+    session.user.isSystemAdmin ||
+    session.memberships.some(
+      (membership) =>
+        membership.workspaceId === workspace.id &&
+        membership.role === 'workspace_admin',
+    );
 
   return (
     <Page wide>
       <PageHeader
         title={workspace.name}
         description={workspace.slug}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/workspaces/${workspace.slug}/archived`}
+              className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
+            >
+              {t('archivedItems')}
+            </Link>
+            {canArchiveWorkspace ? (
+              <ArchiveEntityButton
+                kind="workspace"
+                entityId={workspace.id}
+                entityName={workspace.name}
+                archived={Boolean(workspace.archivedAt)}
+                redirectOnArchive="/workspaces"
+              />
+            ) : null}
+          </div>
+        }
       />
       <Panel className="mb-8">
         <p className="m-0 text-ink-muted">{workspace.description || t('noDescription')}</p>

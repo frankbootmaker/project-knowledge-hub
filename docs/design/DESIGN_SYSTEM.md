@@ -62,7 +62,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Viewport | Root layout exports `viewport: { width: 'device-width', initialScale: 1 }` |
 | Shell padding / width | `.kh-shell` / `shellClassName` — `max-w-6xl` + `px-4 sm:px-6` |
 | Shell content | `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
-| Primary nav | Desktop: inline `NavLink`s from `sm` up. Below `sm`: `MobileNav` disclosure (never hide nav without a mobile path) |
+| Primary nav | Desktop: inline `NavLink`s from `md` up (Dashboard, Workspaces, Search, Archive, Admin?, Status). Below `md`: `MobileNav` with the same destinations (never hide nav without a mobile path) |
 | Admin sidebar | Stacks above content below `lg` via `lg:grid-cols-[220px_1fr]` in `admin/layout.tsx`. Compact horizontal rail is a later enhancement |
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
 | Touch targets | Prefer existing control tokens / header control squares; keep interactive chrome ≥ ~40px |
@@ -72,7 +72,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 
 | Shell | Pattern |
 |-------|---------|
-| App header | Sticky bar; brand + desktop nav + `MobileNav` (`sm:hidden` toggle) + theme/locale/session |
+| App header | Sticky bar; brand + desktop nav (`md+`) + `MobileNav` (`md:hidden` toggle) + theme/locale/session |
 | App / status content | `shellContentClassName` |
 | Admin | Single column until `lg`, then sidebar + main; sidebar uses `NavLink tone="sidebar"` |
 
@@ -91,7 +91,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-text-link` | Inline text links |
 | `.kh-toast-viewport` / `.kh-toast` / `.kh-toast-{success,danger,info}` / `.kh-toast-dismiss` | Toasts |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding |
-| `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` | Mobile primary nav overlay |
+| `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
 | `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
 
 ## Primitives
@@ -153,6 +153,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-19
 
+* **Archive UX** — Soft-archive via `ArchiveEntityButton` (confirm + restore). Header + mobile nav link to `/archived` (user restore hub); per-workspace `/workspaces/{slug}/archived`; Admin → Archive for platform ops. Inline header nav starts at `md` so Archive fits without crowding phones/small tablets.
+* **Responsive nav** — Primary inline nav breakpoint raised `sm` → `md` after Archive was added; `MobileNav` (`<md`) is a frosted top sheet portaled to `document.body` (page remains faintly visible underneath).
 * **User dashboard** — Workspace tiles (role + counts), search/admin jump tiles, and a recently-updated list. Interactive `kh-panel` links; `Page wide` for the grid.
 * **Admin create modals** — `Modal` primitive (`.kh-modal*`, `--kh-z-modal`). Organizations, users, memberships, and API clients open create flows in dialogs; lists are the default view. Branch exploration: `function/modals`.
 * **Responsive** — Documented breakpoints, shell recipes (`.kh-shell*`), admin stack-at-`lg`, and anti-patterns. Explicit root `viewport`. `MobileNav` + `--kh-z-mobile-nav` for primary nav below `sm`. Shell helpers in `shell.ts` used by app/status layouts and header.

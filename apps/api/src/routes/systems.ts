@@ -246,7 +246,7 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
       .where(eq(systems.id, params.systemId))
       .limit(1);
 
-    if (!system || system.archivedAt) {
+    if (!system) {
       throw new AppError({
         code: 'SYSTEM_NOT_FOUND',
         message: 'System not found',

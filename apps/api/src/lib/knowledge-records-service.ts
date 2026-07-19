@@ -441,8 +441,12 @@ export async function updateKnowledgeRecord(
 
   const nextProjectId = body.projectId === undefined ? record.projectId : body.projectId;
   const nextSystemId = body.systemId === undefined ? record.systemId : body.systemId;
-  await assertProjectInWorkspace(app.database, record.workspaceId, nextProjectId);
-  await assertSystemInWorkspace(app.database, record.workspaceId, nextSystemId);
+  // Soft-restore may leave links to still-archived projects/systems; skip those checks.
+  const restoringSoftDelete = Boolean(record.archivedAt) && body.archived === false;
+  if (!restoringSoftDelete) {
+    await assertProjectInWorkspace(app.database, record.workspaceId, nextProjectId);
+    await assertSystemInWorkspace(app.database, record.workspaceId, nextSystemId);
+  }
 
   const nextTitle = body.title ?? record.title;
   const nextSummary = body.summary === undefined ? record.summary : body.summary;

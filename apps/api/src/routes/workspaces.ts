@@ -34,12 +34,22 @@ const updateWorkspaceSchema = z.object({
 export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/workspaces', async (request) => {
     const principal = requireAuthenticated(request);
+    const query = z
+      .object({
+        includeArchived: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((value) => value === 'true'),
+      })
+      .parse(request.query);
 
     if (principal.isSystemAdmin) {
-      const rows = await app.database.db
-        .select()
-        .from(workspaces)
-        .where(isNull(workspaces.archivedAt));
+      const rows = query.includeArchived
+        ? await app.database.db.select().from(workspaces)
+        : await app.database.db
+            .select()
+            .from(workspaces)
+            .where(isNull(workspaces.archivedAt));
       return { workspaces: rows.map(toPublicWorkspace) };
     }
 
@@ -51,7 +61,11 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     const rows = await app.database.db
       .select()
       .from(workspaces)
-      .where(and(inArray(workspaces.id, accessibleIds), isNull(workspaces.archivedAt)));
+      .where(
+        query.includeArchived
+          ? inArray(workspaces.id, accessibleIds)
+          : and(inArray(workspaces.id, accessibleIds), isNull(workspaces.archivedAt)),
+      );
 
     return { workspaces: rows.map(toPublicWorkspace) };
   });
@@ -146,7 +160,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
       .where(eq(workspaces.id, params.workspaceId))
       .limit(1);
 
-    if (!workspace || workspace.archivedAt) {
+    if (!workspace) {
       throw new AppError({
         code: 'WORKSPACE_NOT_FOUND',
         message: 'Workspace not found',

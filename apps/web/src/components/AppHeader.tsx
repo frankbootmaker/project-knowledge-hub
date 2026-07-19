@@ -41,6 +41,7 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
           { href: '/dashboard', label: t('dashboard') },
           { href: '/workspaces', label: t('workspaces') },
           { href: '/search', label: t('search') },
+          { href: '/archived', label: t('archive') },
           ...(session.user.isSystemAdmin
             ? [{ href: '/admin', label: t('admin') }]
             : []),
@@ -60,12 +61,13 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
           >
             {tCommon('appName')}
           </Link>
-          <nav className="hidden items-center gap-1 sm:flex">
+          <nav className="hidden items-center gap-1 md:flex">
             {session ? (
               <>
                 <NavLink href="/dashboard">{t('dashboard')}</NavLink>
                 <NavLink href="/workspaces">{t('workspaces')}</NavLink>
                 <NavLink href="/search">{t('search')}</NavLink>
+                <NavLink href="/archived">{t('archive')}</NavLink>
                 {session.user.isSystemAdmin ? (
                   <NavLink href="/admin">{t('admin')}</NavLink>
                 ) : null}

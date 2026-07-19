@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ArchiveEntityButton } from '../../../../../../components/ArchiveEntityButton';
 import {
   Badge,
   ListCard,
@@ -21,6 +22,7 @@ type Project = {
   description: string | null;
   tags: Array<{ name: string }>;
   updatedAt: string;
+  archivedAt: string | null;
 };
 type System = {
   id: string;
@@ -35,8 +37,9 @@ export default async function ProjectDetailPage({
 }: {
   params: Promise<{ slug: string; projectSlug: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const t = await getTranslations('projects');
+  const tArchive = await getTranslations('archive');
   const tCommon = await getTranslations('common');
   const { slug, projectSlug } = await params;
 
@@ -50,7 +53,9 @@ export default async function ProjectDetailPage({
     notFound();
   }
 
-  const projectsResponse = await apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`);
+  const projectsResponse = await apiFetch(
+    `/api/v1/projects?workspaceId=${workspace.id}&includeArchived=true`,
+  );
   if (!projectsResponse.ok) {
     notFound();
   }
@@ -66,6 +71,15 @@ export default async function ProjectDetailPage({
   }
   const detailPayload = (await detailResponse.json()) as { project: Project };
   const project = detailPayload.project;
+  const isArchived = Boolean(project.archivedAt);
+
+  const canMutate =
+    session.user.isSystemAdmin ||
+    session.memberships.some(
+      (membership) =>
+        membership.workspaceId === workspace.id &&
+        (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
+    );
 
   const systemsResponse = await apiFetch(
     `/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`,
@@ -94,7 +108,19 @@ export default async function ProjectDetailPage({
           <span className="inline-flex flex-wrap items-center gap-2">
             <span>{project.slug}</span>
             <Badge tone="brand">{project.status}</Badge>
+            {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
           </span>
+        }
+        actions={
+          canMutate ? (
+            <ArchiveEntityButton
+              kind="project"
+              entityId={project.id}
+              entityName={project.name}
+              archived={isArchived}
+              redirectOnArchive={`/workspaces/${workspace.slug}`}
+            />
+          ) : null
         }
       />
 

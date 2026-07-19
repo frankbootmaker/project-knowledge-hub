@@ -197,7 +197,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       .where(eq(projects.id, params.projectId))
       .limit(1);
 
-    if (!project || project.archivedAt) {
+    if (!project) {
       throw new AppError({
         code: 'PROJECT_NOT_FOUND',
         message: 'Project not found',

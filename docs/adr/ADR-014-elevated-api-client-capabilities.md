@@ -24,7 +24,7 @@ Elevate access only through **named opt-in scopes**. Default API client scopes r
 | A | `knowledge:write` | Draft create/update knowledge records | **Shipped** (ADR-013) |
 | B | `catalogue:write` | Create/update projects and systems in allowlisted workspaces | **Next** |
 | C | `workspace:write` | Create/update workspaces within an org allowlist | Later |
-| D | `workspace:archive`, `catalogue:archive` | Soft-delete / archive only (no hard delete) | Later |
+| D | `workspace:archive`, `catalogue:archive` | Soft-delete / archive only (no hard delete) | Later (UI archive/restore shipped for humans; MCP scopes deferred) |
 | E | `org:admin` | Organization create/update — rare, separate client | Later / exceptional |
 
 Rules for every elevated tier:

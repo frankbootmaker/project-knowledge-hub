@@ -11,6 +11,7 @@ const links = [
   { href: '/admin/api-clients', key: 'apiClients' as const },
   { href: '/admin/users', key: 'users' as const },
   { href: '/admin/memberships', key: 'memberships' as const },
+  { href: '/admin/archive', key: 'archive' as const },
   { href: '/admin/audit', key: 'audit' as const },
 ];
 

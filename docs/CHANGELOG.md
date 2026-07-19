@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Soft-archive management UI: archive/restore on workspaces, projects, systems, and knowledge records; header Archive → `/archived` user restore hub; workspace Archived items page; Admin → Archive overview. Lists/search still hide archived by default (`includeArchived` on workspace list).
 * ADR-014: elevated API client capabilities — tiered scopes (`catalogue:write` next), propose/confirm commit protocol, and deferred workspace/org/archive tiers for trusted LLM automation.
 * Design-system feedback layer: toast primitives/recipes/tokens, newest-first admin lists, and a required Changelog in `docs/design/DESIGN_SYSTEM.md` for UI adjustments.
 * Admin Organizations page (`/admin/organizations`) to create, edit, and delete organizations (name/slug), with `POST`/`PATCH`/`DELETE /api/v1/organizations`. Delete can transfer workspaces, tags, and API clients to another organization (auto-selected when only one remains).

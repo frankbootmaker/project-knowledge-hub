@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ArchiveEntityButton } from '../../../../../../components/ArchiveEntityButton';
 import { MarkdownDocument } from '../../../../../../components/MarkdownDocument';
 import { RecordLifecycleActions } from '../../../../../../components/RecordLifecycleActions';
 import {
@@ -35,6 +36,7 @@ type KnowledgeRecord = {
   lastValidatedAt: string | null;
   createdBy: string;
   updatedAt: string;
+  archivedAt: string | null;
   source: {
     sourceType: string;
     sourceProvider: string | null;
@@ -52,6 +54,7 @@ export default async function KnowledgeRecordDetailPage({
 }) {
   const session = await requireSession();
   const t = await getTranslations('records');
+  const tArchive = await getTranslations('archive');
   const tCommon = await getTranslations('common');
   const { slug, recordSlug } = await params;
 
@@ -66,7 +69,7 @@ export default async function KnowledgeRecordDetailPage({
   }
 
   const listResponse = await apiFetch(
-    `/api/v1/knowledge-records?workspaceId=${workspace.id}`,
+    `/api/v1/knowledge-records?workspaceId=${workspace.id}&includeArchived=true`,
   );
   if (!listResponse.ok) {
     notFound();
@@ -85,6 +88,7 @@ export default async function KnowledgeRecordDetailPage({
   }
   const detailPayload = (await detailResponse.json()) as { knowledgeRecord: KnowledgeRecord };
   const record = detailPayload.knowledgeRecord;
+  const isArchived = Boolean(record.archivedAt);
 
   const [projectsResponse, systemsResponse] = await Promise.all([
     apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
@@ -128,14 +132,14 @@ export default async function KnowledgeRecordDetailPage({
         title={record.title}
         description={`${record.slug} · ${record.recordType}`}
         actions={
-          <>
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href={`/workspaces/${workspace.slug}/records/${record.slug}/history`}
               className={linkClass}
             >
               {t('history')}
             </Link>
-            {canMutate ? (
+            {canMutate && !isArchived ? (
               <Link
                 href={`/workspaces/${workspace.slug}/records/${record.slug}/edit`}
                 className={linkClass}
@@ -143,7 +147,16 @@ export default async function KnowledgeRecordDetailPage({
                 {tCommon('edit')}
               </Link>
             ) : null}
-          </>
+            {canMutate ? (
+              <ArchiveEntityButton
+                kind="record"
+                entityId={record.id}
+                entityName={record.title}
+                archived={isArchived}
+                redirectOnArchive={`/workspaces/${workspace.slug}`}
+              />
+            ) : null}
+          </div>
         }
       />
 
@@ -152,8 +165,9 @@ export default async function KnowledgeRecordDetailPage({
           {record.lifecycleStatus}
         </Badge>
         <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
+        {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
         <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
-        {canMutate ? (
+        {canMutate && !isArchived ? (
           <RecordLifecycleActions
             recordId={record.id}
             lifecycleStatus={record.lifecycleStatus}

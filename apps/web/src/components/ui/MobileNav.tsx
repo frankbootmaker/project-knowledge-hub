@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../lib/cn';
 import { headerControlSquareClassName } from '../header-control';
 import { Button } from './Button';
@@ -58,11 +59,16 @@ export function MobileNav({ items, footer }: Props) {
   const t = useTranslations('nav');
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const panelId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   const close = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     close();
@@ -120,8 +126,61 @@ export function MobileNav({ items, footer }: Props) {
     return null;
   }
 
+  const menu =
+    open && mounted
+      ? createPortal(
+          <div className="kh-mobile-nav">
+            <button
+              type="button"
+              className="kh-mobile-nav-backdrop"
+              aria-label={t('closeMenu')}
+              onClick={close}
+            />
+            <div
+              ref={panelRef}
+              id={panelId}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('menu')}
+              className="kh-mobile-nav-panel"
+            >
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line/80 pb-3">
+                <p className="m-0 text-sm font-semibold text-ink">{t('menu')}</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(headerControlSquareClassName, 'p-0')}
+                  aria-label={t('closeMenu')}
+                  onClick={close}
+                >
+                  <MenuIcon open />
+                </Button>
+              </div>
+              <nav className="kh-mobile-nav-links">
+                {items.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    href={item.href}
+                    tone="sidebar"
+                    exact={item.exact}
+                    onClick={close}
+                    className="rounded-md px-3 py-3 text-base"
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </nav>
+              {footer ? (
+                <div className="mt-4 border-t border-line/80 pt-4">{footer}</div>
+              ) : null}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div className="sm:hidden">
+    <div className="md:hidden">
       <Button
         type="button"
         variant="ghost"
@@ -133,52 +192,7 @@ export function MobileNav({ items, footer }: Props) {
       >
         <MenuIcon open={open} />
       </Button>
-
-      {open ? (
-        <div className="kh-mobile-nav">
-          <button
-            type="button"
-            className="kh-mobile-nav-backdrop"
-            aria-label={t('closeMenu')}
-            onClick={close}
-          />
-          <div
-            ref={panelRef}
-            id={panelId}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('menu')}
-            className="kh-mobile-nav-panel"
-          >
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="m-0 text-sm font-semibold text-ink">{t('menu')}</p>
-              <Button
-                type="button"
-                variant="ghost"
-                className={cn(headerControlSquareClassName, 'p-0')}
-                aria-label={t('closeMenu')}
-                onClick={close}
-              >
-                <MenuIcon open />
-              </Button>
-            </div>
-            <nav className="grid gap-1">
-              {items.map((item) => (
-                <NavLink
-                  key={item.href}
-                  href={item.href}
-                  tone="sidebar"
-                  exact={item.exact}
-                  onClick={close}
-                >
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
-            {footer ? <div className="mt-4 border-t border-line pt-4">{footer}</div> : null}
-          </div>
-        </div>
-      ) : null}
+      {menu}
     </div>
   );
 }

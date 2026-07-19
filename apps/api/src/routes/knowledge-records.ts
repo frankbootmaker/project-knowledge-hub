@@ -112,7 +112,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       .where(eq(knowledgeRecords.id, params.recordId))
       .limit(1);
 
-    if (!record || record.archivedAt) {
+    if (!record) {
       throw new AppError({
         code: 'KNOWLEDGE_RECORD_NOT_FOUND',
         message: 'Knowledge record not found',

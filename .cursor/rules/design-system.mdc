@@ -26,7 +26,7 @@ Do not finish a UI task without the design-system doc update.
 1. **Tokens first** — Colors, radii, control sizes, toast timing, z-index in `apps/web/src/styles/tokens.css` (`--kh-*`). No scattered hex.
 2. **Primitives over class soup** — Prefer `Button`, `LinkButton`, `NavLink`, `MobileNav`, `Modal`, `Panel`, `Field`/`Input`/`Select`, `Badge`, `Switch`, `ToastProvider`/`useToast`, `Page`/`PageHeader` from `apps/web/src/components/ui`.
 3. **Shared recipes** — Button look in `.kh-btn*` via `buttonClassName()`. Toasts use `.kh-toast*`. Shell width/padding use `.kh-shell` / `shellClassName`. Modals use `.kh-modal*`. Native `<a>` download links use `buttonClassName('secondary')`.
-4. **Responsive** — Tailwind default breakpoints only unless documented otherwise. App shell: inline nav from `sm`+; `MobileNav` below `sm`. Admin sidebar stacks below `lg`. Prefer collapsing grids over fixed `Npx_1fr` columns without a mobile fallback.
+4. **Responsive** — Tailwind default breakpoints only unless documented otherwise. App shell: inline nav from `md`+; `MobileNav` below `md` (same destinations, including Archive). Admin sidebar stacks below `lg`. Prefer collapsing grids over fixed `Npx_1fr` columns without a mobile fallback.
 5. **Admin create** — Prefer `Modal` for add/create flows so lists stay primary; do not park always-visible create forms above every admin list.
 6. **New patterns** — Recipe + primitive first, then pages. Record in DESIGN_SYSTEM.md (including responsive conventions).
 7. **Text on brand** — `text-on-brand` / `--kh-on-brand`, never hardcoded `#0f161d` or `text-white` for primary buttons.

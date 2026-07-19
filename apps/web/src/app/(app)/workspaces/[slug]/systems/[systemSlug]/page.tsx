@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ArchiveEntityButton } from '../../../../../../components/ArchiveEntityButton';
 import { Badge, Page, PageHeader, Panel } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
@@ -17,6 +18,7 @@ type System = {
   projectId: string | null;
   tags: Array<{ name: string }>;
   updatedAt: string;
+  archivedAt: string | null;
 };
 type Project = { id: string; name: string; slug: string };
 
@@ -25,8 +27,9 @@ export default async function SystemDetailPage({
 }: {
   params: Promise<{ slug: string; systemSlug: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const t = await getTranslations('systems');
+  const tArchive = await getTranslations('archive');
   const tCommon = await getTranslations('common');
   const { slug, systemSlug } = await params;
 
@@ -40,7 +43,9 @@ export default async function SystemDetailPage({
     notFound();
   }
 
-  const systemsResponse = await apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`);
+  const systemsResponse = await apiFetch(
+    `/api/v1/systems?workspaceId=${workspace.id}&includeArchived=true`,
+  );
   if (!systemsResponse.ok) {
     notFound();
   }
@@ -56,6 +61,15 @@ export default async function SystemDetailPage({
   }
   const detailPayload = (await detailResponse.json()) as { system: System };
   const system = detailPayload.system;
+  const isArchived = Boolean(system.archivedAt);
+
+  const canMutate =
+    session.user.isSystemAdmin ||
+    session.memberships.some(
+      (membership) =>
+        membership.workspaceId === workspace.id &&
+        (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
+    );
 
   let project: Project | null = null;
   if (system.projectId) {
@@ -85,8 +99,20 @@ export default async function SystemDetailPage({
           <span className="inline-flex flex-wrap items-center gap-2">
             <span>{system.slug}</span>
             <Badge>{system.status}</Badge>
+            {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
             {system.environment ? <span>· {system.environment}</span> : null}
           </span>
+        }
+        actions={
+          canMutate ? (
+            <ArchiveEntityButton
+              kind="system"
+              entityId={system.id}
+              entityName={system.name}
+              archived={isArchived}
+              redirectOnArchive={`/workspaces/${workspace.slug}`}
+            />
+          ) : null
         }
       />
 

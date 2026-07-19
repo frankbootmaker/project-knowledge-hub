@@ -193,19 +193,25 @@
     @apply py-8;
   }
 
+  /* Portaled to document.body — must not sit under header backdrop-filter. */
   .kh-mobile-nav {
     @apply fixed inset-0;
     z-index: var(--kh-z-mobile-nav);
   }
 
   .kh-mobile-nav-backdrop {
-    @apply absolute inset-0 border-0 bg-ink/40 p-0;
+    @apply absolute inset-0 border-0 bg-ink/25 p-0 backdrop-blur-[2px];
   }
 
   .kh-mobile-nav-panel {
-    @apply absolute inset-x-0 top-0 max-h-[min(100%,32rem)] overflow-y-auto
-      border-b border-line bg-panel-solid p-4 shadow-sm;
-    animation: kh-mobile-nav-in 160ms ease-out;
+    @apply absolute inset-x-0 top-0 flex max-h-[min(100dvh,36rem)] w-full flex-col
+      overflow-y-auto border-b border-line p-4 shadow-sm backdrop-blur-xl;
+    background: color-mix(in srgb, var(--kh-panel-solid) 78%, transparent);
+    animation: kh-mobile-nav-in 180ms ease-out;
+  }
+
+  .kh-mobile-nav-links {
+    @apply grid content-start gap-1 pt-2;
   }
 
   .kh-modal {
@@ -262,7 +268,7 @@
 @keyframes kh-mobile-nav-in {
   from {
     opacity: 0;
-    transform: translateY(-0.5rem);
+    transform: translateY(-1rem);
   }
   to {
     opacity: 1;
