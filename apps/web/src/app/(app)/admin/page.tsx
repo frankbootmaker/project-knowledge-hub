@@ -6,10 +6,11 @@ import { apiFetch } from '../../../lib/session';
 export default async function AdminOverviewPage() {
   const t = await getTranslations('admin');
 
-  const [usersRes, clientsRes, workspacesRes] = await Promise.all([
+  const [usersRes, clientsRes, workspacesRes, orgsRes] = await Promise.all([
     apiFetch('/api/v1/users'),
     apiFetch('/api/v1/api-clients'),
     apiFetch('/api/v1/workspaces'),
+    apiFetch('/api/v1/organizations'),
   ]);
 
   const userCount = usersRes.ok
@@ -21,8 +22,12 @@ export default async function AdminOverviewPage() {
   const workspaceCount = workspacesRes.ok
     ? ((await workspacesRes.json()) as { workspaces: unknown[] }).workspaces.length
     : 0;
+  const organizationCount = orgsRes.ok
+    ? ((await orgsRes.json()) as { organizations: unknown[] }).organizations.length
+    : 0;
 
   const cards = [
+    { href: '/admin/organizations', label: t('organizationsCard'), count: organizationCount },
     { href: '/admin/users', label: t('usersCard'), count: userCount },
     { href: '/admin/api-clients', label: t('clientsCard'), count: clientCount },
     { href: '/workspaces', label: t('workspacesCard'), count: workspaceCount },
@@ -38,7 +43,7 @@ export default async function AdminOverviewPage() {
         </div>
         <LinkButton href="/admin/mcp-setup">{t('mcpWizardStart')}</LinkButton>
       </Panel>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (
           <Panel key={card.href} className="flex flex-col gap-3">
             <div>

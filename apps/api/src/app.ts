@@ -15,6 +15,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerApiClientRoutes } from './routes/api-clients.js';
 import { registerAuditRoutes } from './routes/audit.js';
 import { registerKnowledgeRecordRoutes } from './routes/knowledge-records.js';
+import { registerLlmOpenApiRoutes } from './routes/llm-openapi.js';
 import { registerMcpRoutes } from './routes/mcp.js';
 import { registerMcpSetupRoutes } from './routes/mcp-setup.js';
 import { registerMembershipRoutes } from './routes/memberships.js';
@@ -125,6 +126,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerApiClientRoutes(app);
   await registerAuditRoutes(app);
   await registerMcpSetupRoutes(app);
+  await registerLlmOpenApiRoutes(app);
   await registerMcpRoutes(app);
 
   return app;

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { hashPassword } from '@project-knowledge-hub/auth';
 import { users } from '@project-knowledge-hub/database';
@@ -43,7 +43,10 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     const principal = requireAuthenticated(request);
     requireSystemAdmin(principal);
 
-    const rows = await app.database.db.select().from(users);
+    const rows = await app.database.db
+      .select()
+      .from(users)
+      .orderBy(desc(users.createdAt));
     return { users: rows.map(toPublicUser) };
   });
 

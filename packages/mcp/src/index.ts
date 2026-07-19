@@ -17,3 +17,17 @@ export {
   type McpClientContext,
   type McpToolHandlers,
 } from './server.js';
+export {
+  apiBaseFromMcpUrl,
+  llmOpenApiUrlFromMcpUrl,
+  buildLlmOpenApiDocument,
+  buildCopilotMcpSwagger,
+  buildCursorMcpConfig,
+  buildOpenWebUiMcpConfig,
+  buildOpenWebUiOpenApiConfig,
+  buildGeminiFunctionDeclarations,
+  buildGeminiMcpConfig,
+  buildChatGptActionsMeta,
+  stringifySchema,
+  type LlmSchemaOptions,
+} from './llm-client-schemas.js';

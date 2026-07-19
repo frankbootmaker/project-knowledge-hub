@@ -7,11 +7,31 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiUrl = process.env.API_URL ?? 'http://localhost:3101';
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
+const mcpSchemasPath = path.join(
+  __dirname,
+  '../../packages/mcp/src/llm-client-schemas.ts',
+);
+
 const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '../..'),
   poweredByHeader: false,
-  transpilePackages: ['@project-knowledge-hub/markdown'],
+  transpilePackages: [
+    '@project-knowledge-hub/markdown',
+    '@project-knowledge-hub/mcp',
+  ],
+  turbopack: {
+    resolveAlias: {
+      '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
+    },
+  },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
+    };
+    return config;
+  },
   async rewrites() {
     return [
       {

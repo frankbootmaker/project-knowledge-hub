@@ -3,6 +3,7 @@ import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeScript } from '../components/ThemeScript';
+import { ToastProvider } from '../components/ui';
 import { getThemePreference } from '../lib/theme-actions';
 import './globals.css';
 
@@ -34,7 +35,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     >
       <body className="font-sans">
         <ThemeScript />
-        <NextIntlClientProvider messages={messages}>{children}</NextIntlClientProvider>
+        <NextIntlClientProvider messages={messages}>
+          <ToastProvider>{children}</ToastProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

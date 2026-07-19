@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Design-system feedback layer: toast primitives/recipes/tokens, newest-first admin lists, and a required Changelog in `docs/design/DESIGN_SYSTEM.md` for UI adjustments.
+* Admin Organizations page (`/admin/organizations`) to create, edit, and delete organizations (name/slug), with `POST`/`PATCH`/`DELETE /api/v1/organizations`. Delete can transfer workspaces, tags, and API clients to another organization (auto-selected when only one remains).
+* LLM setup wizard client schemas for Cursor, ChatGPT (OpenAPI Actions), Gemini (MCP + OpenAPI + functionDeclarations), Microsoft Copilot Studio (Swagger 2.0 MCP streamable), and OpenWebUI (MCP or OpenAPI), plus Bearer-authenticated OpenAPI tool facade at `/api/v1/llm/*`.
 * Centralized web design system: `tokens.css` (`--kh-*`), shared CSS recipes (`.kh-btn*`, panels, nav, steps, pagination), and UI primitives (`LinkButton`, `NavLink`, `Panel` variants) so theme changes propagate site-wide. See `docs/design/DESIGN_SYSTEM.md`.
 * Admin LLM/MCP setup wizard (`/admin/mcp-setup`): platform checks, client creation, connection tests, and Cursor config copy.
 * Optional public MCP URL override for proxies/split DNS (`MCP_PUBLIC_URL` env and admin-saved platform setting).

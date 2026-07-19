@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { memberships, users, workspaces } from '@project-knowledge-hub/database';
 import { AppError, membershipRoleSchema } from '@project-knowledge-hub/domain';
@@ -57,7 +57,8 @@ export async function registerMembershipRoutes(app: FastifyInstance): Promise<vo
       .from(memberships)
       .innerJoin(users, eq(memberships.userId, users.id))
       .innerJoin(workspaces, eq(memberships.workspaceId, workspaces.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined);
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(memberships.createdAt));
 
     return {
       memberships: rows.map((row) => ({

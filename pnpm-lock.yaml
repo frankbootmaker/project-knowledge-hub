@@ -90,6 +90,9 @@ importers:
       '@project-knowledge-hub/markdown':
         specifier: workspace:*
         version: link:../../packages/markdown
+      '@project-knowledge-hub/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1

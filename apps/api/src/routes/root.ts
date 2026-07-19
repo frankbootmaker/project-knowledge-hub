@@ -31,6 +31,8 @@ export async function registerRootRoutes(app: FastifyInstance): Promise<void> {
         mcpSetupPreflight: '/api/v1/mcp/setup/preflight',
         mcpSetupPublicUrl: 'PUT /api/v1/mcp/setup/public-url',
         mcpSetupTest: 'POST /api/v1/mcp/setup/test',
+        llmOpenApi: 'GET /api/v1/llm/openapi.json',
+        llmTools: 'POST /api/v1/llm/tools/:toolName',
         mcp: '/mcp',
       },
     };

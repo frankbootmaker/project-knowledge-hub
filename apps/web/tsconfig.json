@@ -9,7 +9,12 @@
     "allowJs": false,
     "plugins": [{ "name": "next" }],
     "incremental": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "paths": {
+      "@project-knowledge-hub/mcp/schemas": [
+        "../../packages/mcp/src/llm-client-schemas.ts"
+      ]
+    }
   },
   "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]

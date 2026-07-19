@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { apiClients, organizations } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
@@ -60,10 +60,12 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
               isNull(apiClients.revokedAt),
             ),
           )
+          .orderBy(desc(apiClients.createdAt))
       : await app.database.db
           .select()
           .from(apiClients)
-          .where(isNull(apiClients.revokedAt));
+          .where(isNull(apiClients.revokedAt))
+          .orderBy(desc(apiClients.createdAt));
 
     return { apiClients: rows.map(toPublicApiClient) };
   });

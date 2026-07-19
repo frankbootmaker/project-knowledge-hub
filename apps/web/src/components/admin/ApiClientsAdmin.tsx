@@ -10,6 +10,7 @@ import {
   Input,
   Panel,
   Select,
+  useToast,
 } from '../ui';
 
 const MCP_SCOPES = [
@@ -54,6 +55,7 @@ export function ApiClientsAdmin({
   const t = useTranslations('admin');
   const tCommon = useTranslations('common');
   const router = useRouter();
+  const { pushToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
@@ -99,11 +101,15 @@ export function ApiClientsAdmin({
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      const createdName = name;
       setIssuedToken(payload.token ?? null);
       setName('');
+      pushToast(t('toastApiClientCreated', { name: createdName }));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
@@ -127,9 +133,12 @@ export function ApiClientsAdmin({
         throw new Error(payload.error?.message ?? t('failed'));
       }
       setIssuedToken(payload.token ?? null);
+      pushToast(t('toastApiClientRotated'));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
@@ -148,9 +157,12 @@ export function ApiClientsAdmin({
         const payload = (await response.json()) as { error?: { message?: string } };
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      pushToast(t('toastApiClientRevoked'));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }

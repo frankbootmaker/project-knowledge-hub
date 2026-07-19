@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@project-knowledge-hub/markdown": "workspace:*",
+    "@project-knowledge-hub/mcp": "workspace:*",
     "highlight.js": "^11.11.1",
     "mermaid": "^11.7.0",
     "next": "^15.3.4",

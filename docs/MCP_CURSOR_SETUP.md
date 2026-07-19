@@ -1,6 +1,8 @@
-# Cursor MCP setup
+# LLM / MCP client setup
 
-For a guided in-app flow (platform checks → client → connection tests → Cursor config), open **Admin → LLM / MCP setup** at `/admin/mcp-setup` while signed in as a system administrator.
+For a guided in-app flow (platform checks → client → connection tests → client schemas), open **Admin → LLM / MCP setup** at `/admin/mcp-setup` while signed in as a system administrator.
+
+The wizard’s final step exports configs for **Cursor**, **ChatGPT** (OpenAPI Actions), **Gemini** (MCP + OpenAPI + functionDeclarations), **Microsoft Copilot Studio** (Swagger 2.0 MCP streamable), and **OpenWebUI** (native MCP or OpenAPI).
 
 The Cursor config URL defaults to `{API_URL}/mcp`. For reverse proxies or split DNS, set optional env `MCP_PUBLIC_URL`, or save a **public MCP URL override** in the wizard (stored in platform settings). Connection tests still use the internal API URL.
 
@@ -73,7 +75,19 @@ Add to Cursor MCP settings (or `.cursor/mcp.json`):
 }
 ```
 
-## 3. Available tools
+## 3. OpenAPI facade (ChatGPT, OpenWebUI, Gemini OpenAPI)
+
+Clients that expect REST/OpenAPI (not MCP) can use:
+
+```text
+GET  {API_URL}/api/v1/llm/openapi.json
+POST {API_URL}/api/v1/llm/tools/:toolName
+Authorization: Bearer <api-client-token>
+```
+
+Tool names match MCP (`search_knowledge`, `get_knowledge_record`, …). The public OpenAPI document is generated from the same public MCP host resolution (override → `MCP_PUBLIC_URL` → `API_URL`).
+
+## 4. Available tools
 
 Read:
 

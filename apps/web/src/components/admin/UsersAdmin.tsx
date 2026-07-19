@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Badge, Button, ErrorText, Field, Input, Panel, Select } from '../ui';
+import { Badge, Button, ErrorText, Field, Input, Panel, Select, useToast } from '../ui';
 
 export type PublicUser = {
   id: string;
@@ -17,6 +17,7 @@ export type PublicUser = {
 export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
   const t = useTranslations('admin');
   const router = useRouter();
+  const { pushToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [email, setEmail] = useState('');
@@ -38,13 +39,17 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      const createdName = displayName;
       setEmail('');
       setDisplayName('');
       setPassword('');
       setIsSystemAdmin(false);
+      pushToast(t('toastUserCreated', { name: createdName }));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
@@ -67,9 +72,12 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      pushToast(t('toastUserUpdated'));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }

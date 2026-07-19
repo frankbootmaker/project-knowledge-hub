@@ -11,7 +11,14 @@ import {
   Panel,
   Select,
   Switch,
+  useToast,
 } from '../ui';
+import {
+  defaultClientName,
+  LlmClientPicker,
+  McpClientSchemas,
+  type LlmClientId,
+} from './McpClientSchemas';
 
 type Org = { id: string; name: string; slug: string };
 type Workspace = { id: string; name: string; slug: string; organizationId: string };
@@ -51,7 +58,7 @@ const READ_SCOPES = [
 
 const WRITE_SCOPES = [...READ_SCOPES, 'knowledge:write'] as const;
 
-const steps = ['preflight', 'configure', 'create', 'test', 'cursor'] as const;
+const steps = ['preflight', 'configure', 'create', 'test', 'schema'] as const;
 type Step = (typeof steps)[number];
 
 export function McpSetupWizard({
@@ -65,6 +72,7 @@ export function McpSetupWizard({
 }) {
   const t = useTranslations('admin');
   const tCommon = useTranslations('common');
+  const { pushToast } = useToast();
 
   const [step, setStep] = useState<Step>('preflight');
   const [error, setError] = useState<string | null>(null);
@@ -76,11 +84,22 @@ export function McpSetupWizard({
   const [urlSaveMessage, setUrlSaveMessage] = useState<string | null>(null);
   const [showPublicUrlOverride, setShowPublicUrlOverride] = useState(false);
 
+  const [llmClient, setLlmClient] = useState<LlmClientId>('cursor');
   const [mode, setMode] = useState<'read' | 'write'>('read');
-  const [name, setName] = useState('Cursor local');
+  const [name, setName] = useState(defaultClientName('cursor'));
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
   const [workspaceId, setWorkspaceId] = useState('');
   const [actingUserId, setActingUserId] = useState(users[0]?.id ?? '');
+
+  function selectLlmClient(next: LlmClientId) {
+    setLlmClient(next);
+    setName((current) => {
+      const previousDefault = defaultClientName(llmClient);
+      return !current.trim() || current === previousDefault
+        ? defaultClientName(next)
+        : current;
+    });
+  }
 
   const [token, setToken] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string | null>(null);
@@ -155,13 +174,15 @@ export function McpSetupWizard({
       if (payload.endpoints.mcpUrlOverride) {
         setShowPublicUrlOverride(true);
       }
+      const saved = Boolean(payload.endpoints.mcpUrlOverride);
       setUrlSaveMessage(
-        payload.endpoints.mcpUrlOverride
-          ? t('mcpWizardPublicUrlSaved')
-          : t('mcpWizardPublicUrlReset'),
+        saved ? t('mcpWizardPublicUrlSaved') : t('mcpWizardPublicUrlReset'),
       );
+      pushToast(saved ? t('toastMcpPublicUrlSaved') : t('toastMcpPublicUrlReset'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
@@ -198,11 +219,15 @@ export function McpSetupWizard({
       if (!response.ok || !payload.token) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      const issuedName = payload.apiClient?.name ?? name.trim();
       setToken(payload.token);
-      setClientName(payload.apiClient?.name ?? name.trim());
+      setClientName(issuedName);
+      pushToast(t('toastMcpClientCreated', { name: issuedName }));
       setStep('create');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
@@ -233,42 +258,32 @@ export function McpSetupWizard({
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      const ok = Boolean(payload.ok);
       setTestSteps(payload.steps ?? []);
-      setTestOk(Boolean(payload.ok));
+      setTestOk(ok);
       setToolNames(payload.toolNames ?? []);
+      pushToast(ok ? t('toastMcpTestsPassed') : t('toastMcpTestsFailed'), ok ? 'success' : 'danger');
       setStep('test');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
   }
 
   const mcpUrl = preflight?.endpoints.mcpUrl ?? 'http://localhost:3101/mcp';
-  const cursorConfig = token
-    ? JSON.stringify(
-        {
-          mcpServers: {
-            'project-knowledge-hub': {
-              url: mcpUrl,
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            },
-          },
-        },
-        null,
-        2,
-      )
-    : '';
 
   async function copyText(value: string, kind: 'token' | 'config') {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(kind);
+      pushToast(t('toastCopied'));
       window.setTimeout(() => setCopied(null), 2000);
     } catch {
       setError(t('mcpWizardCopyFailed'));
+      pushToast(t('mcpWizardCopyFailed'), 'danger');
     }
   }
 
@@ -288,7 +303,7 @@ export function McpSetupWizard({
                 disabled={
                   (item === 'create' && !token) ||
                   (item === 'test' && !token) ||
-                  (item === 'cursor' && !token) ||
+                  (item === 'schema' && !token) ||
                   (item === 'configure' && !preflightOk)
                 }
                 onClick={() => setStep(item)}
@@ -415,6 +430,7 @@ export function McpSetupWizard({
             <h2 className="mt-0 mb-1 text-lg font-semibold">{t('mcpWizardConfigureTitle')}</h2>
             <p className="m-0 text-sm text-ink-muted">{t('mcpWizardConfigureBlurb')}</p>
           </div>
+          <LlmClientPicker value={llmClient} onChange={selectLlmClient} />
           <Field label={tCommon('name')}>
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </Field>
@@ -508,6 +524,9 @@ export function McpSetupWizard({
             <Button type="button" disabled={pending} onClick={() => void runTests()}>
               {t('mcpWizardRunTests')}
             </Button>
+            <Button type="button" variant="secondary" onClick={() => setStep('schema')}>
+              {t('mcpWizardSkipToSchema')}
+            </Button>
           </div>
         </Panel>
       ) : null}
@@ -541,40 +560,25 @@ export function McpSetupWizard({
             </Button>
             <Button
               type="button"
-              disabled={pending || testOk !== true}
-              onClick={() => setStep('cursor')}
+              disabled={pending || !token}
+              onClick={() => setStep('schema')}
             >
-              {t('mcpWizardContinue')}
+              {testOk === true ? t('mcpWizardContinue') : t('mcpWizardSkipToSchema')}
             </Button>
           </div>
         </Panel>
       ) : null}
 
-      {step === 'cursor' && token ? (
+      {step === 'schema' && token ? (
         <Panel className="grid gap-4">
-          <div>
-            <h2 className="mt-0 mb-1 text-lg font-semibold">{t('mcpWizardCursorTitle')}</h2>
-            <p className="m-0 text-sm text-ink-muted">{t('mcpWizardCursorBlurb')}</p>
-          </div>
-          <pre className="m-0 overflow-x-auto rounded-md bg-panel-solid px-3 py-3 font-mono text-xs">
-            {cursorConfig}
-          </pre>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              onClick={() => void copyText(cursorConfig, 'config')}
-            >
-              {copied === 'config' ? t('mcpWizardCopied') : t('mcpWizardCopyConfig')}
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => setStep('test')}>
-              {t('mcpWizardBack')}
-            </Button>
-          </div>
-          <ul className="m-0 grid list-disc gap-1 pl-5 text-sm text-ink-muted">
-            <li>{t('mcpWizardCursorHint1')}</li>
-            <li>{t('mcpWizardCursorHint2')}</li>
-            <li>{t('mcpWizardCursorHint3')}</li>
-          </ul>
+          <McpClientSchemas
+            client={llmClient}
+            mcpUrl={mcpUrl}
+            token={token}
+            includeWriteTools={mode === 'write'}
+            onBack={() => setStep('test')}
+            onChangeClient={selectLlmClient}
+          />
         </Panel>
       ) : null}
     </div>

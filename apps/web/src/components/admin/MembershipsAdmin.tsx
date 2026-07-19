@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Badge, Button, ErrorText, Field, Panel, Select } from '../ui';
+import { Badge, Button, ErrorText, Field, Panel, Select, useToast } from '../ui';
 
 export type PublicMembership = {
   id: string;
@@ -36,6 +36,7 @@ export function MembershipsAdmin({
 }) {
   const t = useTranslations('admin');
   const router = useRouter();
+  const { pushToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [userId, setUserId] = useState(users[0]?.id ?? '');
@@ -56,9 +57,12 @@ export function MembershipsAdmin({
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      pushToast(t('toastMembershipCreated'));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
@@ -78,9 +82,12 @@ export function MembershipsAdmin({
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      pushToast(t('toastMembershipUpdated'));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
@@ -98,9 +105,12 @@ export function MembershipsAdmin({
         const payload = (await response.json()) as { error?: { message?: string } };
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      pushToast(t('toastMembershipRemoved'));
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      const message = err instanceof Error ? err.message : t('failed');
+      setError(message);
+      pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
