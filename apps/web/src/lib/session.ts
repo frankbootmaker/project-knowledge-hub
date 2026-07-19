@@ -8,7 +8,9 @@ export type SessionUser = {
   id: string;
   email: string;
   displayName: string;
+  fullName?: string | null;
   isSystemAdmin: boolean;
+  avatarUrl?: string | null;
 };
 
 export type SessionPayload = {

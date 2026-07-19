@@ -5,6 +5,7 @@ import { getTranslations } from 'next-intl/server';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { shellClassName } from './shell';
 import { ThemeSwitcher } from './ThemeSwitcher';
+import { UserAvatar } from './UserAvatar';
 import { Button, LinkButton, MobileNav, NavLink, type MobileNavItem } from './ui';
 import { getThemePreference } from '../lib/theme-actions';
 import type { SessionPayload } from '../lib/session';
@@ -42,6 +43,7 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
           { href: '/workspaces', label: t('workspaces') },
           { href: '/search', label: t('search') },
           { href: '/archived', label: t('archive') },
+          { href: '/account/profile', label: t('profile') },
           ...(session.user.isSystemAdmin
             ? [{ href: '/admin', label: t('admin') }]
             : []),
@@ -83,9 +85,19 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
           </div>
           {session ? (
             <>
-              <span className="hidden text-sm text-ink-muted md:inline">
-                {session.user.displayName}
-              </span>
+              <Link
+                href="/account/profile"
+                className="hidden items-center gap-2 text-sm text-ink-muted no-underline hover:text-ink md:inline-flex"
+                title={t('profile')}
+              >
+                <UserAvatar
+                  displayName={session.user.displayName}
+                  fullName={session.user.fullName}
+                  avatarUrl={session.user.avatarUrl}
+                  size="sm"
+                />
+                <span>{session.user.displayName}</span>
+              </Link>
               <form action={logoutAction}>
                 <Button type="submit" variant="secondary">
                   {t('logOut')}

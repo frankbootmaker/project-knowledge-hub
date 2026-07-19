@@ -58,12 +58,23 @@ export const users = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     email: text('email').notNull(),
     displayName: text('display_name').notNull(),
+    /** Formal / legal name; UI may fall back to displayName when null. */
+    fullName: text('full_name'),
     passwordHash: text('password_hash'),
     status: text('status').notNull().default('active'),
     isSystemAdmin: boolean('is_system_admin').notNull().default(false),
+    /** Future SSO provider key (oidc, entra, github, keycloak, …). */
+    idpSource: text('idp_source'),
+    /** External IdP subject / sub claim. */
+    idpSubject: text('idp_subject'),
+    /** MIME type when a profile avatar file exists on disk; null = monogram fallback. */
+    avatarContentType: text('avatar_content_type'),
     ...timestamps,
   },
-  (table) => [uniqueIndex('users_email_uidx').on(table.email)],
+  (table) => [
+    uniqueIndex('users_email_uidx').on(table.email),
+    uniqueIndex('users_idp_source_subject_uidx').on(table.idpSource, table.idpSubject),
+  ],
 );
 
 export const memberships = pgTable(

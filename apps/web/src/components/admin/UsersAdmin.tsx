@@ -19,8 +19,11 @@ export type PublicUser = {
   id: string;
   email: string;
   displayName: string;
+  fullName?: string | null;
   status: string;
   isSystemAdmin: boolean;
+  idpSource?: string | null;
+  idpSubject?: string | null;
   createdAt: string;
 };
 
@@ -34,21 +37,26 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [sendInvite, setSendInvite] = useState(true);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
 
   const [editUser, setEditUser] = useState<PublicUser | null>(null);
   const [editDisplayName, setEditDisplayName] = useState('');
+  const [editFullName, setEditFullName] = useState('');
   const [editStatus, setEditStatus] = useState('active');
   const [editIsSystemAdmin, setEditIsSystemAdmin] = useState(false);
   const [editPassword, setEditPassword] = useState('');
+  const [editIdpSource, setEditIdpSource] = useState('');
+  const [editIdpSubject, setEditIdpSubject] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
 
   function closeCreateModal() {
     setCreateOpen(false);
     setEmail('');
     setDisplayName('');
+    setFullName('');
     setPassword('');
     setSendInvite(true);
     setIsSystemAdmin(false);
@@ -58,9 +66,12 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
   function openEdit(user: PublicUser) {
     setEditUser(user);
     setEditDisplayName(user.displayName);
+    setEditFullName(user.fullName ?? '');
     setEditStatus(user.status);
     setEditIsSystemAdmin(user.isSystemAdmin);
     setEditPassword('');
+    setEditIdpSource(user.idpSource ?? '');
+    setEditIdpSubject(user.idpSubject ?? '');
     setEditError(null);
   }
 
@@ -77,6 +88,7 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
       const body: Record<string, unknown> = {
         email,
         displayName,
+        fullName: fullName.trim() || null,
         isSystemAdmin,
         sendInvite,
       };
@@ -119,8 +131,11 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
     try {
       const patch: Record<string, unknown> = {
         displayName: editDisplayName.trim(),
+        fullName: editFullName.trim() || null,
         status: editStatus,
         isSystemAdmin: editIsSystemAdmin,
+        idpSource: editIdpSource.trim() || null,
+        idpSubject: editIdpSubject.trim() || null,
       };
       if (editPassword.trim()) {
         patch.password = editPassword.trim();
@@ -237,6 +252,13 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
             required
           />
         </Field>
+        <Field label={t('fullName')}>
+          <Input
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder={t('fullNameOptional')}
+          />
+        </Field>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -303,6 +325,13 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
                 data-modal-initial-focus
               />
             </Field>
+            <Field label={t('fullName')}>
+              <Input
+                value={editFullName}
+                onChange={(e) => setEditFullName(e.target.value)}
+                placeholder={t('fullNameOptional')}
+              />
+            </Field>
             <Field label={tCommon('status')}>
               <Select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
                 <option value="active">{t('statusActive')}</option>
@@ -318,6 +347,22 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
                 minLength={12}
                 placeholder={t('passwordHint')}
                 autoComplete="new-password"
+              />
+            </Field>
+            <Field label={t('idpSource')}>
+              <Input
+                value={editIdpSource}
+                onChange={(e) => setEditIdpSource(e.target.value)}
+                placeholder={t('idpStubHint')}
+                autoComplete="off"
+              />
+            </Field>
+            <Field label={t('idpSubject')}>
+              <Input
+                value={editIdpSubject}
+                onChange={(e) => setEditIdpSubject(e.target.value)}
+                placeholder={t('idpStubHint')}
+                autoComplete="off"
               />
             </Field>
             <label className="flex items-center gap-2 text-sm">
@@ -356,8 +401,14 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
                     {user.status}
                   </Badge>
                   {user.isSystemAdmin ? <Badge tone="brand">{t('systemAdmin')}</Badge> : null}
+                  {user.idpSource ? (
+                    <Badge tone="neutral">{user.idpSource}</Badge>
+                  ) : null}
                 </div>
                 <p className="mt-1 mb-0 text-sm text-ink-muted">{user.email}</p>
+                {user.fullName ? (
+                  <p className="mt-0.5 mb-0 text-sm text-ink-muted">{user.fullName}</p>
+                ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {user.status === 'invited' ? (

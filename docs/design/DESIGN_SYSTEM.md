@@ -155,6 +155,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-20
 
+* **Account profile** — `/account/profile` for display name + full name (email read-only; IdP stub shown), optional photo upload, and `UserAvatar` monogram fallback. Header shows avatar + display name linked to profile; mobile nav includes Profile.
 * **Admin overview setup cards** — LLM/MCP and Email promo panels can be hidden per browser (`localStorage`); they remain in the admin sidebar. A small restore strip reappears when either card is hidden.
 * **Admin Email** — Sidebar link `/admin/email` for SMTP / Resend / console mail settings, test send, and overview card on Admin home.
 * **Auth pages** — Public `/forgot-password` and `/set-password` match the login `Page narrow` + `Panel` pattern; login links to forgot-password.

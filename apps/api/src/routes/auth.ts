@@ -21,6 +21,7 @@ import {
   previewAuthToken,
 } from '../lib/auth-tokens.js';
 import { writeAuditEvent } from '../lib/identity.js';
+import { avatarUrlForUser } from '../lib/public-user.js';
 import { MemoryRateLimiter } from '../lib/rate-limit.js';
 
 const loginSchema = z.object({
@@ -94,7 +95,13 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         id: user.id,
         email: user.email,
         displayName: user.displayName,
+        fullName: user.fullName ?? null,
         isSystemAdmin: user.isSystemAdmin,
+        avatarUrl: avatarUrlForUser(
+          user.id,
+          user.avatarContentType ?? null,
+          user.updatedAt,
+        ),
       },
     };
   });
@@ -136,12 +143,28 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/v1/auth/session', async (request) => {
     const principal = requireAuthenticated(request);
+    const [user] = await app.database.db
+      .select({
+        fullName: users.fullName,
+        avatarContentType: users.avatarContentType,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(eq(users.id, principal.userId))
+      .limit(1);
+
     return {
       user: {
         id: principal.userId,
         email: principal.email,
         displayName: principal.displayName,
+        fullName: user?.fullName ?? null,
         isSystemAdmin: principal.isSystemAdmin,
+        avatarUrl: avatarUrlForUser(
+          principal.userId,
+          user?.avatarContentType ?? null,
+          user?.updatedAt,
+        ),
       },
       memberships: principal.memberships,
     };

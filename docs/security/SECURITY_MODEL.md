@@ -8,6 +8,12 @@
 * Postgres/Redis bound to localhost in development Compose
 * Markdown content will be treated as untrusted once records exist (ADR-010)
 
+## Identity providers (stub)
+
+* `users.idp_source` and `users.idp_subject` are reserved for future OIDC / Entra / GitHub / Keycloak login
+* Local accounts keep both null and continue to use password / invite / reset flows
+* No IdP login or token exchange is implemented in this phase
+
 ## Auth email flows
 
 * Password reset and invite links use one-time tokens stored as SHA-256 hashes (`auth_tokens`); raw tokens appear only in email URLs

@@ -12,27 +12,19 @@ import {
 import { mailDeliveryMeta, sendInviteMail } from '../lib/auth-mail.js';
 import { issueAuthToken } from '../lib/auth-tokens.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
-
-function toPublicUser(user: typeof users.$inferSelect) {
-  return {
-    id: user.id,
-    email: user.email,
-    displayName: user.displayName,
-    status: user.status,
-    isSystemAdmin: user.isSystemAdmin,
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
-  };
-}
+import { toPublicUser } from '../lib/public-user.js';
 
 const createUserSchema = z
   .object({
     email: z.string().email().max(320),
     displayName: z.string().min(1).max(160),
+    fullName: z.string().max(200).nullable().optional(),
     password: z.string().min(12).max(200).optional(),
     sendInvite: z.boolean().optional(),
     status: userStatusSchema.optional(),
     isSystemAdmin: z.boolean().optional(),
+    idpSource: z.string().min(1).max(64).nullable().optional(),
+    idpSubject: z.string().min(1).max(320).nullable().optional(),
   })
   .superRefine((value, ctx) => {
     // Password required when explicitly not inviting.
@@ -43,14 +35,55 @@ const createUserSchema = z
         path: ['password'],
       });
     }
+    const hasSource = Boolean(value.idpSource?.trim());
+    const hasSubject = Boolean(value.idpSubject?.trim());
+    if (hasSource !== hasSubject) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'IdP source and subject must be set together',
+        path: ['idpSource'],
+      });
+    }
   });
 
-const updateUserSchema = z.object({
-  displayName: z.string().min(1).max(160).optional(),
-  status: userStatusSchema.optional(),
-  isSystemAdmin: z.boolean().optional(),
-  password: z.string().min(12).max(200).optional(),
-});
+const updateUserSchema = z
+  .object({
+    displayName: z.string().min(1).max(160).optional(),
+    fullName: z.string().max(200).nullable().optional(),
+    status: userStatusSchema.optional(),
+    isSystemAdmin: z.boolean().optional(),
+    password: z.string().min(12).max(200).optional(),
+    idpSource: z.string().min(1).max(64).nullable().optional(),
+    idpSubject: z.string().min(1).max(320).nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.idpSource !== undefined || value.idpSubject !== undefined) {
+      const source = value.idpSource;
+      const subject = value.idpSubject;
+      const clearing =
+        (source === null || source === '') &&
+        (subject === null || subject === '');
+      const bothSet =
+        typeof source === 'string' &&
+        source.trim().length > 0 &&
+        typeof subject === 'string' &&
+        subject.trim().length > 0;
+      if (!clearing && !bothSet && (source !== undefined || subject !== undefined)) {
+        // Allow partial omit (undefined) when only one field is in the patch
+        // if the other is also provided as null to clear, or both set.
+        if (
+          (source === null && subject !== null && subject !== undefined) ||
+          (subject === null && source !== null && source !== undefined)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'IdP source and subject must be cleared or set together',
+            path: ['idpSource'],
+          });
+        }
+      }
+    }
+  });
 
 export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/users', async (request) => {
@@ -85,16 +118,22 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    const idpSource = body.idpSource?.trim() || null;
+    const idpSubject = body.idpSubject?.trim() || null;
+
     const [created] = await app.database.db
       .insert(users)
       .values({
         email,
         displayName: body.displayName,
+        fullName: body.fullName?.trim() ? body.fullName.trim() : null,
         passwordHash: inviteMode
           ? null
           : await hashPassword(body.password!),
         status: inviteMode ? 'invited' : (body.status ?? 'active'),
         isSystemAdmin: body.isSystemAdmin ?? false,
+        idpSource,
+        idpSubject,
       })
       .returning();
 
@@ -243,15 +282,47 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    let nextIdpSource = existing.idpSource;
+    let nextIdpSubject = existing.idpSubject;
+    if (body.idpSource !== undefined || body.idpSubject !== undefined) {
+      const source =
+        body.idpSource === undefined
+          ? existing.idpSource
+          : body.idpSource?.trim() || null;
+      const subject =
+        body.idpSubject === undefined
+          ? existing.idpSubject
+          : body.idpSubject?.trim() || null;
+      if (Boolean(source) !== Boolean(subject)) {
+        throw new AppError({
+          code: 'IDP_FIELDS_INCOMPLETE',
+          message: 'IdP source and subject must be set or cleared together',
+          statusCode: 400,
+        });
+      }
+      nextIdpSource = source;
+      nextIdpSubject = subject;
+    }
+
+    const nextFullName =
+      body.fullName === undefined
+        ? existing.fullName
+        : body.fullName?.trim()
+          ? body.fullName.trim()
+          : null;
+
     const [updated] = await app.database.db
       .update(users)
       .set({
         displayName: body.displayName ?? existing.displayName,
+        fullName: nextFullName,
         status: body.status ?? existing.status,
         isSystemAdmin: body.isSystemAdmin ?? existing.isSystemAdmin,
         passwordHash: body.password
           ? await hashPassword(body.password)
           : existing.passwordHash,
+        idpSource: nextIdpSource,
+        idpSubject: nextIdpSubject,
         updatedAt: new Date(),
       })
       .where(eq(users.id, params.userId))

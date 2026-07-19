@@ -4,6 +4,7 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify';
+import multipart from '@fastify/multipart';
 import { Redis } from 'ioredis';
 import { ZodError } from 'zod';
 import { loadEnv, type AppEnv } from '@project-knowledge-hub/config';
@@ -12,6 +13,7 @@ import { AppError } from '@project-knowledge-hub/domain';
 import type { MailTransport } from '@project-knowledge-hub/mail';
 import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerAvatarRoutes } from './routes/avatars.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerApiClientRoutes } from './routes/api-clients.js';
 import { registerAuditRoutes } from './routes/audit.js';
@@ -28,6 +30,7 @@ import { registerRootRoutes } from './routes/root.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerSystemRoutes } from './routes/systems.js';
 import { registerUserRoutes } from './routes/users.js';
+import { registerMeRoutes } from './routes/me.js';
 import { registerGitConnectionRoutes } from './routes/git-connections.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import {
@@ -143,11 +146,20 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
     },
   );
 
+  await app.register(multipart, {
+    limits: {
+      fileSize: deps.env.AVATAR_MAX_BYTES,
+      files: 1,
+    },
+  });
+
   await registerAuthHooks(app);
   await registerRootRoutes(app);
   await registerHealthRoutes(app);
   await registerReadyRoutes(app);
   await registerAuthRoutes(app);
+  await registerMeRoutes(app);
+  await registerAvatarRoutes(app);
   await registerWorkspaceRoutes(app);
   await registerProjectRoutes(app);
   await registerSystemRoutes(app);

@@ -14,6 +14,9 @@ coverage
 .env.local
 .env.*.local
 
+# Local uploads (avatars, etc.)
+/data/
+
 # Logs / OS
 *.log
 .DS_Store

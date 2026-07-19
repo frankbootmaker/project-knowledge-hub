@@ -22,7 +22,11 @@ Unique: (`organization_id`, `slug`)
 
 ### `users`
 
-`id`, `email`, `display_name`, `password_hash`, `status`, `created_at`, `updated_at`  
+`id`, `email`, `display_name`, `full_name`, `password_hash`, `status`, `is_system_admin`, `idp_source`, `idp_subject`, `avatar_content_type`, `created_at`, `updated_at`
+
+* `full_name` — optional formal name; UI may fall back to `display_name`
+* `idp_source` / `idp_subject` — reserved for future SSO (null for local password accounts); unique together when set
+* `avatar_content_type` — set when a profile image exists on disk (`AVATAR_UPLOAD_DIR/{userId}`); UI uses a monogram when null  
 Unique: `email`
 
 ### `memberships`
