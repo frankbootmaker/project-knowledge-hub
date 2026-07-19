@@ -2,6 +2,8 @@
 
 For a guided in-app flow (platform checks → client → connection tests → Cursor config), open **Admin → LLM / MCP setup** at `/admin/mcp-setup` while signed in as a system administrator.
 
+The Cursor config URL defaults to `{API_URL}/mcp`. For reverse proxies or split DNS, set optional env `MCP_PUBLIC_URL`, or save a **public MCP URL override** in the wizard (stored in platform settings). Connection tests still use the internal API URL.
+
 Project Knowledge Hub exposes MCP at:
 
 ```text

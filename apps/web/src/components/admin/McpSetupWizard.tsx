@@ -10,16 +10,28 @@ import {
   Input,
   Panel,
   Select,
+  Switch,
 } from '../ui';
 
 type Org = { id: string; name: string; slug: string };
 type Workspace = { id: string; name: string; slug: string; organizationId: string };
 type User = { id: string; email: string; displayName: string };
 
+type PreflightEndpoints = {
+  apiUrl: string;
+  webUrl: string;
+  mcpUrl: string;
+  mcpUrlInternal: string;
+  mcpUrlDefault: string;
+  mcpUrlOverride: string | null;
+  mcpUrlEnv: string | null;
+  mcpUrlSource: 'override' | 'env' | 'api_url';
+};
+
 type Preflight = {
   health: { ok: boolean; statusCode: number };
   ready: { ok: boolean; statusCode: number; body?: { checks?: Record<string, string> } };
-  endpoints: { apiUrl: string; webUrl: string; mcpUrl: string };
+  endpoints: PreflightEndpoints;
 };
 
 type TestStep = {
@@ -60,6 +72,9 @@ export function McpSetupWizard({
 
   const [preflight, setPreflight] = useState<Preflight | null>(null);
   const [preflightError, setPreflightError] = useState<string | null>(null);
+  const [publicUrlDraft, setPublicUrlDraft] = useState('');
+  const [urlSaveMessage, setUrlSaveMessage] = useState<string | null>(null);
+  const [showPublicUrlOverride, setShowPublicUrlOverride] = useState(false);
 
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const [name, setName] = useState('Cursor local');
@@ -99,6 +114,9 @@ export function McpSetupWizard({
         throw new Error(payload.error?.message ?? t('failed'));
       }
       setPreflight(payload);
+      setPublicUrlDraft(payload.endpoints.mcpUrlOverride ?? '');
+      setShowPublicUrlOverride(Boolean(payload.endpoints.mcpUrlOverride));
+      setUrlSaveMessage(null);
     } catch (err) {
       setPreflightError(err instanceof Error ? err.message : t('failed'));
     } finally {
@@ -107,38 +125,47 @@ export function McpSetupWizard({
   }
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setPending(true);
-      setPreflightError(null);
-      try {
-        const response = await fetch('/api/v1/mcp/setup/preflight', {
-          credentials: 'include',
-        });
-        const payload = (await response.json()) as Preflight & {
-          error?: { message?: string };
-        };
-        if (!response.ok) {
-          throw new Error(payload.error?.message ?? 'Request failed');
-        }
-        if (!cancelled) {
-          setPreflight(payload);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setPreflightError(err instanceof Error ? err.message : 'Request failed');
-        }
-      } finally {
-        if (!cancelled) {
-          setPending(false);
-        }
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
+    void runPreflight();
   }, []);
+
+  async function savePublicUrl(next: string | null) {
+    setPending(true);
+    setError(null);
+    setUrlSaveMessage(null);
+    try {
+      const response = await fetch('/api/v1/mcp/setup/public-url', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: next && next.trim() ? next.trim() : null }),
+      });
+      const payload = (await response.json()) as {
+        endpoints?: PreflightEndpoints;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.endpoints) {
+        throw new Error(payload.error?.message ?? t('failed'));
+      }
+      setPreflight((current) =>
+        current
+          ? { ...current, endpoints: payload.endpoints as PreflightEndpoints }
+          : current,
+      );
+      setPublicUrlDraft(payload.endpoints.mcpUrlOverride ?? '');
+      if (payload.endpoints.mcpUrlOverride) {
+        setShowPublicUrlOverride(true);
+      }
+      setUrlSaveMessage(
+        payload.endpoints.mcpUrlOverride
+          ? t('mcpWizardPublicUrlSaved')
+          : t('mcpWizardPublicUrlReset'),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failed'));
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function createClient() {
     setPending(true);
@@ -306,9 +333,67 @@ export function McpSetupWizard({
                         .join(', ') || `HTTP ${preflight.ready.statusCode}`
                 }
               />
-              <p className="m-0 text-sm text-ink-muted">
-                MCP URL: <code className="font-mono text-xs">{preflight.endpoints.mcpUrl}</code>
-              </p>
+              <div className="grid gap-3 rounded-md border border-line bg-panel-solid px-3 py-3">
+                <p className="m-0 text-sm">
+                  <span className="text-ink-muted">{t('mcpWizardInternalUrl')}: </span>
+                  <code className="font-mono text-xs">
+                    {preflight.endpoints.mcpUrlInternal}
+                  </code>
+                </p>
+                <p className="m-0 text-sm">
+                  <span className="text-ink-muted">{t('mcpWizardPublicUrlEffective')}: </span>
+                  <code className="font-mono text-xs">{preflight.endpoints.mcpUrl}</code>
+                  <Badge className="ml-2" tone="brand">
+                    {preflight.endpoints.mcpUrlSource}
+                  </Badge>
+                </p>
+                {preflight.endpoints.mcpUrlEnv ? (
+                  <p className="m-0 text-xs text-ink-muted">
+                    {t('mcpWizardEnvUrl')}:{' '}
+                    <code className="font-mono">{preflight.endpoints.mcpUrlEnv}</code>
+                  </p>
+                ) : null}
+                <Switch
+                  id="mcp-public-url-override"
+                  checked={showPublicUrlOverride}
+                  onCheckedChange={setShowPublicUrlOverride}
+                  label={t('mcpWizardPublicUrlToggle')}
+                />
+              </div>
+              {showPublicUrlOverride ? (
+                <div className="grid gap-3 rounded-md border border-line bg-panel-solid px-3 py-3">
+                  <Field label={t('mcpWizardPublicUrlOverride')}>
+                    <Input
+                      value={publicUrlDraft}
+                      onChange={(e) => setPublicUrlDraft(e.target.value)}
+                      placeholder={preflight.endpoints.mcpUrlDefault}
+                    />
+                  </Field>
+                  <p className="m-0 text-xs text-ink-muted">{t('mcpWizardPublicUrlHint')}</p>
+                  {urlSaveMessage ? (
+                    <p className="m-0 text-sm text-accent">{urlSaveMessage}</p>
+                  ) : null}
+                  {error && step === 'preflight' ? <ErrorText>{error}</ErrorText> : null}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => void savePublicUrl(publicUrlDraft)}
+                    >
+                      {t('mcpWizardSavePublicUrl')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={pending || !preflight.endpoints.mcpUrlOverride}
+                      onClick={() => void savePublicUrl(null)}
+                    >
+                      {t('mcpWizardResetPublicUrl')}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">

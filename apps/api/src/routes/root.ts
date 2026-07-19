@@ -29,6 +29,7 @@ export async function registerRootRoutes(app: FastifyInstance): Promise<void> {
         auditEvents: '/api/v1/audit-events',
         auditEventsExport: '/api/v1/audit-events/export',
         mcpSetupPreflight: '/api/v1/mcp/setup/preflight',
+        mcpSetupPublicUrl: 'PUT /api/v1/mcp/setup/public-url',
         mcpSetupTest: 'POST /api/v1/mcp/setup/test',
         mcp: '/mcp',
       },

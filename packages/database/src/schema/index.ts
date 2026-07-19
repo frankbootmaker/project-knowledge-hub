@@ -404,3 +404,15 @@ export const knowledgeRecordVersions = pgTable(
     index('knowledge_record_versions_record_id_idx').on(table.knowledgeRecordId),
   ],
 );
+
+/** Platform-wide key/value settings (e.g. public MCP URL override). */
+export const platformSettings = pgTable('platform_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedBy: uuid('updated_by').references(() => users.id, {
+    onDelete: 'set null',
+  }),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+    .notNull()
+    .defaultNow(),
+});
