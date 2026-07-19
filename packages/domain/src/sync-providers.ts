@@ -17,14 +17,48 @@ export type SyncProviderDefinition = {
   /** i18n key under gitSync.provider_* */
   labelKey: `provider_${SyncProvider}`;
   syncSupported: boolean;
+  /** When true, create/update must supply baseUrl. */
+  requiresBaseUrl: boolean;
+  /** Show optional baseUrl field in UI (self-hosted / override). */
+  showsBaseUrl: boolean;
 };
 
 export const SYNC_PROVIDER_CATALOG: readonly SyncProviderDefinition[] = [
-  { id: 'github', labelKey: 'provider_github', syncSupported: true },
-  { id: 'gitlab', labelKey: 'provider_gitlab', syncSupported: false },
-  { id: 'azure_devops', labelKey: 'provider_azure_devops', syncSupported: false },
-  { id: 'bitbucket', labelKey: 'provider_bitbucket', syncSupported: false },
-  { id: 'forgejo', labelKey: 'provider_forgejo', syncSupported: false },
+  {
+    id: 'github',
+    labelKey: 'provider_github',
+    syncSupported: true,
+    requiresBaseUrl: false,
+    showsBaseUrl: false,
+  },
+  {
+    id: 'gitlab',
+    labelKey: 'provider_gitlab',
+    syncSupported: true,
+    requiresBaseUrl: false,
+    showsBaseUrl: true,
+  },
+  {
+    id: 'azure_devops',
+    labelKey: 'provider_azure_devops',
+    syncSupported: true,
+    requiresBaseUrl: false,
+    showsBaseUrl: true,
+  },
+  {
+    id: 'bitbucket',
+    labelKey: 'provider_bitbucket',
+    syncSupported: true,
+    requiresBaseUrl: false,
+    showsBaseUrl: false,
+  },
+  {
+    id: 'forgejo',
+    labelKey: 'provider_forgejo',
+    syncSupported: true,
+    requiresBaseUrl: true,
+    showsBaseUrl: true,
+  },
 ] as const;
 
 export function getSyncProviderDefinition(
@@ -35,4 +69,12 @@ export function getSyncProviderDefinition(
 
 export function isSyncProviderSupported(provider: string): boolean {
   return getSyncProviderDefinition(provider)?.syncSupported === true;
+}
+
+export function providerNeedsBaseUrl(provider: string): boolean {
+  return getSyncProviderDefinition(provider)?.requiresBaseUrl === true;
+}
+
+export function providerShowsBaseUrl(provider: string): boolean {
+  return getSyncProviderDefinition(provider)?.showsBaseUrl === true;
 }

@@ -19,6 +19,8 @@ describe('loadEnv', () => {
     expect(env.WEB_PORT).toBe(3100);
     expect(env.API_PORT).toBe(3101);
     expect(env.SESSION_COOKIE_NAME).toBe('kh_session');
+    expect(env.MAIL_DRIVER).toBe('console');
+    expect(env.AUTH_PASSWORD_RESET_TTL_SECONDS).toBe(3600);
   });
 
   it('rejects missing database url', () => {

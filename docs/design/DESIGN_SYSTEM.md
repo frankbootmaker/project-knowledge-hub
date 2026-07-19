@@ -153,9 +153,17 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-07-20
+
+* **Admin overview setup cards** — LLM/MCP and Email promo panels can be hidden per browser (`localStorage`); they remain in the admin sidebar. A small restore strip reappears when either card is hidden.
+* **Admin Email** — Sidebar link `/admin/email` for SMTP / Resend / console mail settings, test send, and overview card on Admin home.
+* **Auth pages** — Public `/forgot-password` and `/set-password` match the login `Page narrow` + `Panel` pattern; login links to forgot-password.
+* **Admin users** — Create modal toggles invite-vs-password; list rows open Edit (display name, status, optional password, system admin) with Resend invite for `invited` users.
+
 ### 2026-07-19
 
-* **Synchronizations hub** — `/workspaces/{slug}/git` lists configured sync connections (provider, health, last sync) with **Manage** per row and header **Add**. Add opens a provider catalog modal (GitHub creatable; others “Coming soon”). Manage opens config/sync/history for a connection.
+* **Synchronizations hub** — `/workspaces/{slug}/git` lists configured sync connections (provider, health, last sync) with **Manage** per row and header **Add**. Add opens a provider catalog (GitHub, GitLab, Azure DevOps, Bitbucket, Forgejo) with per-provider owner/repo/token labels, optional or required instance **base URL**, and webhook path hint. Manage edits the same fields plus sync/history.
+* **Synchronizations hub (earlier)** — List / Add / Manage shell; non-GitHub providers were previously “Coming soon” until sync backends shipped.
 * **Modal focus** — `Modal` only runs initial focus / body-scroll lock when `open` flips true (not when `onClose` identity changes), so typing in modal fields does not steal focus each keystroke.
 * **Workspace manage + status** — Workspace header shows a status `Badge` (Active / Archived / Needs attention) and a **Manage** button. A brief description (max 280 chars) can sit above the `.kh-workspace-accent-bar` overview line; edit it via Manage → Details. Needs attention links to Git sync. Manage modal also covers synchronizations, archived items, color, archive/restore.
 * **Workspace colors** — Curated accent palette (`ocean`…`ink`) on workspace tiles (dashboard + list) via `.kh-workspace-tile` / `.kh-workspace-color-*`. Unset color uses a stable hash. Create form + Manage → color use `WorkspaceColorPicker`.

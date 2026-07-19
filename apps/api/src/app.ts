@@ -9,6 +9,7 @@ import { ZodError } from 'zod';
 import { loadEnv, type AppEnv } from '@project-knowledge-hub/config';
 import { createDatabase, type Database } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
+import type { MailTransport } from '@project-knowledge-hub/mail';
 import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -16,6 +17,7 @@ import { registerApiClientRoutes } from './routes/api-clients.js';
 import { registerAuditRoutes } from './routes/audit.js';
 import { registerKnowledgeRecordRoutes } from './routes/knowledge-records.js';
 import { registerLlmOpenApiRoutes } from './routes/llm-openapi.js';
+import { registerMailSettingsRoutes } from './routes/mail-settings.js';
 import { registerMcpRoutes } from './routes/mcp.js';
 import { registerMcpSetupRoutes } from './routes/mcp-setup.js';
 import { registerMembershipRoutes } from './routes/memberships.js';
@@ -28,11 +30,16 @@ import { registerSystemRoutes } from './routes/systems.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerGitConnectionRoutes } from './routes/git-connections.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
+import {
+  createResolvingMailTransport,
+  resolveMailConfig,
+} from './lib/mail-settings.js';
 
 export type ApiDependencies = {
   env: AppEnv;
   database: Database;
   redis: Redis;
+  mail?: MailTransport;
 };
 
 export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> {
@@ -49,6 +56,8 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
           'REDIS_URL',
           'BOOTSTRAP_ADMIN_PASSWORD',
           'SESSION_SECRET',
+          'SMTP_PASS',
+          'RESEND_API_KEY',
           'req.headers.authorization',
           'req.headers.cookie',
         ],
@@ -57,9 +66,17 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
     },
   });
 
+  const mail =
+    deps.mail ??
+    createResolvingMailTransport(async () => {
+      const resolved = await resolveMailConfig(deps.database, deps.env);
+      return resolved.config;
+    });
+
   app.decorate('env', deps.env);
   app.decorate('database', deps.database);
   app.decorate('redis', deps.redis);
+  app.decorate('mail', mail);
 
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;
@@ -139,6 +156,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerGitConnectionRoutes(app);
   await registerOrganizationRoutes(app);
   await registerUserRoutes(app);
+  await registerMailSettingsRoutes(app);
   await registerMembershipRoutes(app);
   await registerApiClientRoutes(app);
   await registerAuditRoutes(app);
@@ -174,5 +192,6 @@ declare module 'fastify' {
     env: AppEnv;
     database: Database;
     redis: Redis;
+    mail: MailTransport;
   }
 }

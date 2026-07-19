@@ -8,6 +8,7 @@ const links = [
   { href: '/admin', key: 'overview' as const, exact: true },
   { href: '/admin/organizations', key: 'organizations' as const },
   { href: '/admin/mcp-setup', key: 'mcpSetup' as const },
+  { href: '/admin/email', key: 'email' as const },
   { href: '/admin/api-clients', key: 'apiClients' as const },
   { href: '/admin/users', key: 'users' as const },
   { href: '/admin/memberships', key: 'memberships' as const },

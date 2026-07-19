@@ -1,13 +1,13 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { AppError } from '@project-knowledge-hub/domain';
+import type {
+  GitSyncProvider,
+  GitTreeEntry,
+  ProviderRepoRef,
+  WebhookMatch,
+} from './provider.js';
 
-export type GitTreeEntry = {
-  path: string;
-  sha: string;
-  type: 'blob' | 'tree' | string;
-  size?: number;
-};
-
+export type { GitTreeEntry };
 export type GitHubRepoRef = {
   owner: string;
   repo: string;
@@ -15,10 +15,16 @@ export type GitHubRepoRef = {
   accessToken: string;
 };
 
-async function githubFetch<T>(
-  ref: GitHubRepoRef,
-  apiPath: string,
-): Promise<T> {
+function asGitHubRef(ref: ProviderRepoRef | GitHubRepoRef): GitHubRepoRef {
+  return {
+    owner: ref.owner,
+    repo: ref.repo,
+    branch: ref.branch,
+    accessToken: ref.accessToken,
+  };
+}
+
+async function githubFetch<T>(ref: GitHubRepoRef, apiPath: string): Promise<T> {
   const response = await fetch(`https://api.github.com${apiPath}`, {
     headers: {
       Accept: 'application/vnd.github+json',
@@ -41,25 +47,26 @@ async function githubFetch<T>(
   return (await response.json()) as T;
 }
 
-export async function resolveBranchCommitSha(ref: GitHubRepoRef): Promise<string> {
+export async function resolveBranchCommitSha(
+  ref: ProviderRepoRef | GitHubRepoRef,
+): Promise<string> {
+  const gh = asGitHubRef(ref);
   const data = await githubFetch<{ object: { sha: string } }>(
-    ref,
-    `/repos/${ref.owner}/${ref.repo}/git/ref/heads/${encodeURIComponent(ref.branch)}`,
+    gh,
+    `/repos/${gh.owner}/${gh.repo}/git/ref/heads/${encodeURIComponent(gh.branch)}`,
   );
   return data.object.sha;
 }
 
 export async function listRepositoryTree(
-  ref: GitHubRepoRef,
+  ref: ProviderRepoRef | GitHubRepoRef,
   commitSha: string,
 ): Promise<GitTreeEntry[]> {
+  const gh = asGitHubRef(ref);
   const data = await githubFetch<{
     tree: GitTreeEntry[];
     truncated: boolean;
-  }>(
-    ref,
-    `/repos/${ref.owner}/${ref.repo}/git/trees/${commitSha}?recursive=1`,
-  );
+  }>(gh, `/repos/${gh.owner}/${gh.repo}/git/trees/${commitSha}?recursive=1`);
   if (data.truncated) {
     throw new AppError({
       code: 'GITHUB_TREE_TRUNCATED',
@@ -71,12 +78,13 @@ export async function listRepositoryTree(
 }
 
 export async function fetchBlobText(
-  ref: GitHubRepoRef,
+  ref: ProviderRepoRef | GitHubRepoRef,
   blobSha: string,
 ): Promise<string> {
+  const gh = asGitHubRef(ref);
   const data = await githubFetch<{ content?: string; encoding?: string }>(
-    ref,
-    `/repos/${ref.owner}/${ref.repo}/git/blobs/${blobSha}`,
+    gh,
+    `/repos/${gh.owner}/${gh.repo}/git/blobs/${blobSha}`,
   );
   if (data.encoding === 'base64' && data.content) {
     return Buffer.from(data.content.replace(/\n/g, ''), 'base64').toString('utf8');
@@ -118,3 +126,36 @@ export function verifyGitHubWebhookSignature(
     return false;
   }
 }
+
+function matchGitHubPushWebhook(
+  payload: unknown,
+  headers: Record<string, string | undefined>,
+): WebhookMatch | null {
+  const event = headers['x-github-event'];
+  if (event !== 'push') return null;
+  const body = payload as {
+    repository?: { name?: string; owner?: { login?: string } };
+    ref?: string;
+  };
+  const owner = body.repository?.owner?.login;
+  const repo = body.repository?.name;
+  if (!owner || !repo) return null;
+  const branch = body.ref?.startsWith('refs/heads/')
+    ? body.ref.slice('refs/heads/'.length)
+    : null;
+  return { owner, repo, branch };
+}
+
+export const githubProvider: GitSyncProvider = {
+  id: 'github',
+  resolveBranchCommitSha,
+  listRepositoryTree,
+  fetchBlobText,
+  blobUrl(ref, path) {
+    return githubBlobUrl(ref.owner, ref.repo, ref.branch, path);
+  },
+  verifyWebhookSignature(rawBody, headers, secret) {
+    return verifyGitHubWebhookSignature(rawBody, headers['x-hub-signature-256'], secret);
+  },
+  matchPushWebhook: matchGitHubPushWebhook,
+};

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { LinkButton, PageHeader, Panel } from '../../../components/ui';
+import { AdminOverviewSetupCards } from '../../../components/admin/AdminOverviewSetupCards';
+import { PageHeader, Panel } from '../../../components/ui';
 import { apiFetch } from '../../../lib/session';
 
 export default async function AdminOverviewPage() {
@@ -36,13 +37,7 @@ export default async function AdminOverviewPage() {
   return (
     <div>
       <PageHeader title={t('title')} description={t('overviewBlurb')} />
-      <Panel className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="m-0 text-sm font-semibold">{t('mcpSetup')}</p>
-          <p className="mt-1 mb-0 text-sm text-ink-muted">{t('mcpWizardBlurb')}</p>
-        </div>
-        <LinkButton href="/admin/mcp-setup">{t('mcpWizardStart')}</LinkButton>
-      </Panel>
+      <AdminOverviewSetupCards />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (
           <Panel key={card.href} className="flex flex-col gap-3">

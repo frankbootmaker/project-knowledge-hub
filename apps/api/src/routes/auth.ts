@@ -14,12 +14,30 @@ import {
   requireAuthenticated,
   setSessionCookie,
 } from '../plugins/auth.js';
+import { sendPasswordResetMail } from '../lib/auth-mail.js';
+import {
+  consumeAuthTokenAndSetPassword,
+  issueAuthToken,
+  previewAuthToken,
+} from '../lib/auth-tokens.js';
 import { writeAuditEvent } from '../lib/identity.js';
+import { MemoryRateLimiter } from '../lib/rate-limit.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const setPasswordSchema = z.object({
+  token: z.string().min(1).max(500),
+  password: z.string().min(12).max(200),
+});
+
+const forgotPasswordLimiter = new MemoryRateLimiter(5, 15 * 60 * 1000);
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/v1/auth/login', async (request, reply) => {
@@ -127,5 +145,89 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       },
       memberships: principal.memberships,
     };
+  });
+
+  app.post('/api/v1/auth/forgot-password', async (request, reply) => {
+    assertMutatingOrigin(app, request);
+    const body = forgotPasswordSchema.parse(request.body);
+    const email = body.email.toLowerCase();
+    const rateKey = `${request.ip}:${email}`;
+
+    if (!forgotPasswordLimiter.allow(rateKey)) {
+      throw new AppError({
+        code: 'RATE_LIMITED',
+        message: 'Too many password reset requests. Try again later.',
+        statusCode: 429,
+      });
+    }
+
+    const [user] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (user && user.status === 'active') {
+      const rawToken = await issueAuthToken(app.database, {
+        userId: user.id,
+        purpose: 'password_reset',
+        ttlSeconds: app.env.AUTH_PASSWORD_RESET_TTL_SECONDS,
+      });
+
+      await sendPasswordResetMail(app.mail, {
+        webUrl: app.env.WEB_URL,
+        to: user.email,
+        displayName: user.displayName,
+        rawToken,
+      });
+
+      await writeAuditEvent(app.database, {
+        actorType: 'user',
+        actorId: user.id,
+        action: 'auth.forgot_password',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: request.ip,
+      });
+    }
+
+    return reply.status(202).send({
+      status: 'ok',
+      message:
+        'If an account exists for that email, password reset instructions were sent.',
+    });
+  });
+
+  app.get('/api/v1/auth/set-password/preview', async (request) => {
+    const query = z
+      .object({ token: z.string().min(1).max(500) })
+      .parse(request.query);
+    const preview = await previewAuthToken(app.database, query.token);
+    return {
+      status: preview.status,
+      purpose: preview.purpose ?? null,
+      email: preview.status === 'valid' ? preview.email ?? null : null,
+    };
+  });
+
+  app.post('/api/v1/auth/set-password', async (request) => {
+    assertMutatingOrigin(app, request);
+    const body = setPasswordSchema.parse(request.body);
+    const result = await consumeAuthTokenAndSetPassword(app.database, {
+      rawToken: body.token,
+      password: body.password,
+    });
+
+    await writeAuditEvent(app.database, {
+      actorType: 'user',
+      actorId: result.userId,
+      action: 'auth.password_set',
+      entityType: 'user',
+      entityId: result.userId,
+      metadata: { purpose: result.purpose },
+      ipAddress: request.ip,
+    });
+
+    return { status: 'ok' };
   });
 }

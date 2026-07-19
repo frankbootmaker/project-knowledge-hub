@@ -1,20 +1,23 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { Button, ErrorText, Field, Input, Page, Panel } from '../../components/ui';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useTranslations('login');
   const tCommon = useTranslations('common');
   const [email, setEmail] = useState('admin@localhost.local');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const passwordSet = searchParams.get('passwordSet') === '1';
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,6 +63,9 @@ export default function LoginPage() {
         <p className="mt-2 text-ink-muted">{t('subtitle')}</p>
       </div>
       <Panel>
+        {passwordSet ? (
+          <p className="mt-0 mb-4 text-sm text-brand">{t('passwordSet')}</p>
+        ) : null}
         <form onSubmit={onSubmit} className="grid gap-4">
           <Field label={t('email')}>
             <Input
@@ -83,8 +89,22 @@ export default function LoginPage() {
           <Button type="submit" disabled={pending} className="mt-1 w-full py-2.5">
             {pending ? t('signingIn') : t('signIn')}
           </Button>
+          <Link
+            href="/forgot-password"
+            className="text-sm text-ink-muted underline-offset-2 hover:underline"
+          >
+            {t('forgotPassword')}
+          </Link>
         </form>
       </Panel>
     </Page>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

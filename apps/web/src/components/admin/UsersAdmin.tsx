@@ -35,34 +35,73 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [sendInvite, setSendInvite] = useState(true);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+
+  const [editUser, setEditUser] = useState<PublicUser | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
+  const [editIsSystemAdmin, setEditIsSystemAdmin] = useState(false);
+  const [editPassword, setEditPassword] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
 
   function closeCreateModal() {
     setCreateOpen(false);
     setEmail('');
     setDisplayName('');
     setPassword('');
+    setSendInvite(true);
     setIsSystemAdmin(false);
     setError(null);
+  }
+
+  function openEdit(user: PublicUser) {
+    setEditUser(user);
+    setEditDisplayName(user.displayName);
+    setEditStatus(user.status);
+    setEditIsSystemAdmin(user.isSystemAdmin);
+    setEditPassword('');
+    setEditError(null);
+  }
+
+  function closeEdit() {
+    setEditUser(null);
+    setEditPassword('');
+    setEditError(null);
   }
 
   async function createUser() {
     setPending(true);
     setError(null);
     try {
+      const body: Record<string, unknown> = {
+        email,
+        displayName,
+        isSystemAdmin,
+        sendInvite,
+      };
+      if (!sendInvite) {
+        body.password = password;
+      }
       const response = await fetch('/api/v1/users', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, displayName, password, isSystemAdmin }),
+        headers: { 'Content-Type': 'application/json', Origin: window.location.origin },
+        body: JSON.stringify(body),
       });
-      const payload = (await response.json()) as { error?: { message?: string } };
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+        mail?: { warning?: string };
+      };
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
       const createdName = displayName;
       closeCreateModal();
       pushToast(t('toastUserCreated', { name: createdName }));
+      if (payload.mail?.warning) {
+        pushToast(payload.mail.warning, 'info');
+      }
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : t('failed');
@@ -73,17 +112,23 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
     }
   }
 
-  async function updateUser(
-    userId: string,
-    patch: Partial<{ status: string; isSystemAdmin: boolean; displayName: string }>,
-  ) {
+  async function saveEdit() {
+    if (!editUser) return;
     setPending(true);
-    setError(null);
+    setEditError(null);
     try {
-      const response = await fetch(`/api/v1/users/${userId}`, {
+      const patch: Record<string, unknown> = {
+        displayName: editDisplayName.trim(),
+        status: editStatus,
+        isSystemAdmin: editIsSystemAdmin,
+      };
+      if (editPassword.trim()) {
+        patch.password = editPassword.trim();
+      }
+      const response = await fetch(`/api/v1/users/${editUser.id}`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Origin: window.location.origin },
         body: JSON.stringify(patch),
       });
       const payload = (await response.json()) as { error?: { message?: string } };
@@ -91,15 +136,51 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
       pushToast(t('toastUserUpdated'));
+      closeEdit();
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : t('failed');
-      setError(message);
+      setEditError(message);
       pushToast(message, 'danger');
     } finally {
       setPending(false);
     }
   }
+
+  async function resendInvite(userId: string) {
+    setPending(true);
+    setEditError(null);
+    try {
+      const response = await fetch(`/api/v1/users/${userId}/resend-invite`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Origin: window.location.origin },
+      });
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+        mail?: { warning?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? t('failed'));
+      }
+      pushToast(t('toastInviteResent'));
+      if (payload.mail?.warning) {
+        pushToast(payload.mail.warning, 'info');
+      }
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('failed');
+      setEditError(message);
+      pushToast(message, 'danger');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const createReady =
+    email.trim().length > 0 &&
+    displayName.trim().length > 0 &&
+    (sendInvite || password.length >= 12);
 
   return (
     <div className="grid gap-6">
@@ -132,10 +213,10 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
             </Button>
             <Button
               type="button"
-              disabled={pending || !email || !displayName || password.length < 12}
+              disabled={pending || !createReady}
               onClick={() => void createUser()}
             >
-              {t('create')}
+              {sendInvite ? t('sendInvite') : t('create')}
             </Button>
           </>
         }
@@ -156,16 +237,32 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
             required
           />
         </Field>
-        <Field label={t('password')}>
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={12}
-            placeholder={t('passwordHint')}
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={sendInvite}
+            onChange={(e) => {
+              setSendInvite(e.target.checked);
+              if (e.target.checked) setPassword('');
+            }}
           />
-        </Field>
+          {t('sendInviteEmail')}
+        </label>
+        {!sendInvite ? (
+          <Field label={t('password')}>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={12}
+              placeholder={t('passwordHint')}
+              autoComplete="new-password"
+            />
+          </Field>
+        ) : (
+          <p className="m-0 text-sm text-ink-muted">{t('inviteHint')}</p>
+        )}
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -175,6 +272,75 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
           {t('systemAdmin')}
         </label>
         {error ? <ErrorText>{error}</ErrorText> : null}
+      </Modal>
+
+      <Modal
+        open={editUser != null}
+        onClose={closeEdit}
+        title={t('editUser')}
+        description={editUser?.email}
+        footer={
+          <>
+            <Button type="button" variant="secondary" disabled={pending} onClick={closeEdit}>
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || !editDisplayName.trim()}
+              onClick={() => void saveEdit()}
+            >
+              {tCommon('save')}
+            </Button>
+          </>
+        }
+      >
+        {editUser ? (
+          <div className="grid gap-3">
+            <Field label={t('displayName')}>
+              <Input
+                value={editDisplayName}
+                onChange={(e) => setEditDisplayName(e.target.value)}
+                data-modal-initial-focus
+              />
+            </Field>
+            <Field label={tCommon('status')}>
+              <Select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                <option value="active">{t('statusActive')}</option>
+                <option value="disabled">{t('statusDisabled')}</option>
+                <option value="invited">{t('statusInvited')}</option>
+              </Select>
+            </Field>
+            <Field label={t('newPasswordOptional')}>
+              <Input
+                type="password"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                minLength={12}
+                placeholder={t('passwordHint')}
+                autoComplete="new-password"
+              />
+            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={editIsSystemAdmin}
+                onChange={(e) => setEditIsSystemAdmin(e.target.checked)}
+              />
+              {t('systemAdmin')}
+            </label>
+            {editUser.status === 'invited' ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => void resendInvite(editUser.id)}
+              >
+                {t('resendInvite')}
+              </Button>
+            ) : null}
+            {editError ? <ErrorText>{editError}</ErrorText> : null}
+          </div>
+        ) : null}
       </Modal>
 
       <div className="grid gap-3">
@@ -194,25 +360,23 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
                 <p className="mt-1 mb-0 text-sm text-ink-muted">{user.email}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  className="w-auto"
-                  value={user.status}
-                  disabled={pending}
-                  onChange={(e) => void updateUser(user.id, { status: e.target.value })}
-                >
-                  <option value="active">{t('statusActive')}</option>
-                  <option value="disabled">{t('statusDisabled')}</option>
-                  <option value="invited">{t('statusInvited')}</option>
-                </Select>
+                {user.status === 'invited' ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() => void resendInvite(user.id)}
+                  >
+                    {t('resendInvite')}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"
                   disabled={pending}
-                  onClick={() =>
-                    void updateUser(user.id, { isSystemAdmin: !user.isSystemAdmin })
-                  }
+                  onClick={() => openEdit(user)}
                 >
-                  {user.isSystemAdmin ? t('removeSystemAdmin') : t('makeSystemAdmin')}
+                  {t('editUser')}
                 </Button>
               </div>
             </Panel>

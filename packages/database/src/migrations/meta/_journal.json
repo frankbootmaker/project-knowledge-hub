@@ -78,6 +78,20 @@
       "when": 1784418700000,
       "tag": "0010_workspace_color",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784418900000,
+      "tag": "0011_git_connection_base_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784419100000,
+      "tag": "0012_auth_tokens",
+      "breakpoints": true
     }
   ]
 }

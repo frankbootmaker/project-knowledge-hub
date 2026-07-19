@@ -9,6 +9,8 @@ import {
   assertMutatingOrigin,
   requireAuthenticated,
 } from '../plugins/auth.js';
+import { mailDeliveryMeta, sendInviteMail } from '../lib/auth-mail.js';
+import { issueAuthToken } from '../lib/auth-tokens.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 
 function toPublicUser(user: typeof users.$inferSelect) {
@@ -23,13 +25,25 @@ function toPublicUser(user: typeof users.$inferSelect) {
   };
 }
 
-const createUserSchema = z.object({
-  email: z.string().email().max(320),
-  displayName: z.string().min(1).max(160),
-  password: z.string().min(12).max(200),
-  status: userStatusSchema.optional(),
-  isSystemAdmin: z.boolean().optional(),
-});
+const createUserSchema = z
+  .object({
+    email: z.string().email().max(320),
+    displayName: z.string().min(1).max(160),
+    password: z.string().min(12).max(200).optional(),
+    sendInvite: z.boolean().optional(),
+    status: userStatusSchema.optional(),
+    isSystemAdmin: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    // Password required when explicitly not inviting.
+    if (value.sendInvite === false && !value.password) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Password is required unless sending an invite',
+        path: ['password'],
+      });
+    }
+  });
 
 const updateUserSchema = z.object({
   displayName: z.string().min(1).max(160).optional(),
@@ -56,6 +70,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     requireSystemAdmin(principal);
     const body = createUserSchema.parse(request.body);
     const email = body.email.toLowerCase();
+    const inviteMode = body.sendInvite === true || !body.password;
 
     const [existing] = await app.database.db
       .select()
@@ -75,8 +90,10 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       .values({
         email,
         displayName: body.displayName,
-        passwordHash: await hashPassword(body.password),
-        status: body.status ?? 'active',
+        passwordHash: inviteMode
+          ? null
+          : await hashPassword(body.password!),
+        status: inviteMode ? 'invited' : (body.status ?? 'active'),
         isSystemAdmin: body.isSystemAdmin ?? false,
       })
       .returning();
@@ -94,14 +111,93 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       organizationId: organization?.id ?? null,
       actorType: 'user',
       actorId: principal.userId,
-      action: 'user.create',
+      action: inviteMode ? 'user.invite' : 'user.create',
       entityType: 'user',
       entityId: created.id,
-      metadata: { email: created.email, isSystemAdmin: created.isSystemAdmin },
+      metadata: {
+        email: created.email,
+        isSystemAdmin: created.isSystemAdmin,
+        invited: inviteMode,
+      },
       ipAddress: request.ip,
     });
 
-    return { user: toPublicUser(created) };
+    let mail:
+      | { sent: boolean; driver: string; warning?: string }
+      | undefined;
+
+    if (inviteMode) {
+      const rawToken = await issueAuthToken(app.database, {
+        userId: created.id,
+        purpose: 'invite',
+        ttlSeconds: app.env.AUTH_INVITE_TTL_SECONDS,
+      });
+      const result = await sendInviteMail(app.mail, {
+        webUrl: app.env.WEB_URL,
+        to: created.email,
+        displayName: created.displayName,
+        rawToken,
+      });
+      mail = mailDeliveryMeta(result);
+    }
+
+    return { user: toPublicUser(created), mail };
+  });
+
+  app.post('/api/v1/users/:userId/resend-invite', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, params.userId))
+      .limit(1);
+    if (!existing) {
+      throw new AppError({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      });
+    }
+    if (existing.status !== 'invited') {
+      throw new AppError({
+        code: 'USER_NOT_INVITED',
+        message: 'Only invited users can receive a new invite email',
+        statusCode: 400,
+      });
+    }
+
+    const rawToken = await issueAuthToken(app.database, {
+      userId: existing.id,
+      purpose: 'invite',
+      ttlSeconds: app.env.AUTH_INVITE_TTL_SECONDS,
+    });
+    const result = await sendInviteMail(app.mail, {
+      webUrl: app.env.WEB_URL,
+      to: existing.email,
+      displayName: existing.displayName,
+      rawToken,
+    });
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'user.invite',
+      entityType: 'user',
+      entityId: existing.id,
+      metadata: { resent: true, email: existing.email },
+      ipAddress: request.ip,
+    });
+
+    return {
+      user: toPublicUser(existing),
+      mail: mailDeliveryMeta(result),
+    };
   });
 
   app.patch('/api/v1/users/:userId', async (request) => {

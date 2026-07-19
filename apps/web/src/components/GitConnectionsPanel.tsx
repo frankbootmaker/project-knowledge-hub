@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl';
 import {
   SYNC_PROVIDER_CATALOG,
   isSyncProviderSupported,
+  providerNeedsBaseUrl,
+  providerShowsBaseUrl,
   type SyncProvider,
 } from '@project-knowledge-hub/domain';
 import {
@@ -44,6 +46,7 @@ type Connection = {
   owner: string;
   repo: string;
   branch: string;
+  baseUrl?: string | null;
   projectId: string | null;
   status: string;
   lastError: string | null;
@@ -114,6 +117,7 @@ export function GitConnectionsPanel(props: {
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
   const [branch, setBranch] = useState('main');
+  const [baseUrl, setBaseUrl] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [projectId, setProjectId] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
@@ -121,6 +125,7 @@ export function GitConnectionsPanel(props: {
 
   const [manageConnectionId, setManageConnectionId] = useState<string | null>(null);
   const [manageBranch, setManageBranch] = useState('');
+  const [manageBaseUrl, setManageBaseUrl] = useState('');
   const [manageToken, setManageToken] = useState('');
   const [manageWebhook, setManageWebhook] = useState('');
   const [manageStatus, setManageStatus] = useState<'active' | 'paused'>('active');
@@ -158,6 +163,7 @@ export function GitConnectionsPanel(props: {
     setOwner('');
     setRepo('');
     setBranch('main');
+    setBaseUrl('');
     setAccessToken('');
     setProjectId('');
     setWebhookSecret('');
@@ -178,6 +184,7 @@ export function GitConnectionsPanel(props: {
   function openManage(connection: Connection) {
     setManageConnectionId(connection.id);
     setManageBranch(connection.branch);
+    setManageBaseUrl(connection.baseUrl ?? '');
     setManageToken('');
     setManageWebhook('');
     setManageStatus(connection.status === 'paused' ? 'paused' : 'active');
@@ -207,6 +214,10 @@ export function GitConnectionsPanel(props: {
       setError(t('providerComingSoon'));
       return;
     }
+    if (providerNeedsBaseUrl(selectedProvider) && !baseUrl.trim()) {
+      setError(t('baseUrlRequired'));
+      return;
+    }
     setError(null);
     const response = await fetch('/api/v1/git-connections', {
       method: 'POST',
@@ -218,6 +229,7 @@ export function GitConnectionsPanel(props: {
         owner: owner.trim(),
         repo: repo.trim(),
         branch: branch.trim() || 'main',
+        baseUrl: baseUrl.trim() || null,
         accessToken: accessToken.trim(),
         projectId: projectId || null,
         includePaths: includePathList,
@@ -249,6 +261,7 @@ export function GitConnectionsPanel(props: {
       status: manageStatus,
       includePaths: include,
       projectId: manageProjectId || null,
+      baseUrl: manageBaseUrl.trim() || null,
     };
     if (manageToken.trim()) {
       body.accessToken = manageToken.trim();
@@ -330,6 +343,31 @@ export function GitConnectionsPanel(props: {
     return new Date(value).toLocaleString();
   }
 
+  function webhookPathForProvider(provider: SyncProvider): string {
+    const slug =
+      provider === 'azure_devops'
+        ? 'azure-devops'
+        : provider;
+    return `/api/v1/git/webhooks/${slug}`;
+  }
+
+  function fieldLabel(provider: SyncProvider, field: 'owner' | 'repo' | 'token'): string {
+    return t(`${field}_${provider}`);
+  }
+
+  function fieldPlaceholder(provider: SyncProvider, field: 'owner' | 'repo' | 'token'): string {
+    return t(`${field}Placeholder_${provider}`);
+  }
+
+  const addFormReady =
+    Boolean(selectedProvider) &&
+    owner.trim().length > 0 &&
+    repo.trim().length > 0 &&
+    accessToken.trim().length > 0 &&
+    (!selectedProvider ||
+      !providerNeedsBaseUrl(selectedProvider) ||
+      baseUrl.trim().length > 0);
+
   return (
     <div className="grid gap-6">
       {error && !addOpen && !manageConnection ? <ErrorText>{error}</ErrorText> : null}
@@ -397,10 +435,14 @@ export function GitConnectionsPanel(props: {
       <Modal
         open={addOpen}
         onClose={closeAdd}
-        title={addStep === 'provider' ? t('addTitle') : t('connectTitle')}
-        description={
-          addStep === 'provider' ? t('addBlurb') : t('connectBlurb')
+        title={
+          addStep === 'provider'
+            ? t('addTitle')
+            : selectedProvider
+              ? t(`connectTitle_${selectedProvider}`)
+              : t('addTitle')
         }
+        description={addStep === 'provider' ? t('addBlurb') : undefined}
         size="lg"
       >
         {addStep === 'provider' ? (
@@ -429,23 +471,26 @@ export function GitConnectionsPanel(props: {
               );
             })}
           </ul>
-        ) : (
+        ) : selectedProvider ? (
           <div className="grid gap-3">
+            <p className="m-0 text-sm text-ink-muted">
+              {t(`connectBlurb_${selectedProvider}`)}
+            </p>
             <p className="m-0 text-sm text-ink-muted">{t('safetySweepHint')}</p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('owner')}>
+              <Field label={fieldLabel(selectedProvider, 'owner')}>
                 <Input
                   autoFocus
                   value={owner}
                   onChange={(e) => setOwner(e.target.value)}
-                  placeholder="org-or-user"
+                  placeholder={fieldPlaceholder(selectedProvider, 'owner')}
                 />
               </Field>
-              <Field label={t('repo')}>
+              <Field label={fieldLabel(selectedProvider, 'repo')}>
                 <Input
                   value={repo}
                   onChange={(e) => setRepo(e.target.value)}
-                  placeholder="repo-name"
+                  placeholder={fieldPlaceholder(selectedProvider, 'repo')}
                 />
               </Field>
               <Field label={t('branch')}>
@@ -461,12 +506,29 @@ export function GitConnectionsPanel(props: {
                   ))}
                 </Select>
               </Field>
-              <Field label={t('accessToken')} className="sm:col-span-2">
+              {providerShowsBaseUrl(selectedProvider) ? (
+                <Field
+                  label={
+                    providerNeedsBaseUrl(selectedProvider)
+                      ? t('baseUrlRequiredLabel')
+                      : t('baseUrlOptional')
+                  }
+                  className="sm:col-span-2"
+                >
+                  <Input
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder={t(`baseUrlPlaceholder_${selectedProvider}`)}
+                    autoComplete="off"
+                  />
+                </Field>
+              ) : null}
+              <Field label={fieldLabel(selectedProvider, 'token')} className="sm:col-span-2">
                 <Input
                   type="password"
                   value={accessToken}
                   onChange={(e) => setAccessToken(e.target.value)}
-                  placeholder="github_pat_…"
+                  placeholder={fieldPlaceholder(selectedProvider, 'token')}
                   autoComplete="off"
                 />
               </Field>
@@ -479,6 +541,11 @@ export function GitConnectionsPanel(props: {
                   autoComplete="off"
                 />
               </Field>
+              <p className="m-0 sm:col-span-2 text-sm text-ink-muted">
+                {t('webhookPathHint', {
+                  path: webhookPathForProvider(selectedProvider),
+                })}
+              </p>
               <Field label={t('includePaths')} className="sm:col-span-2">
                 <Textarea
                   rows={4}
@@ -491,7 +558,7 @@ export function GitConnectionsPanel(props: {
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                disabled={pending || !owner.trim() || !repo.trim() || !accessToken.trim()}
+                disabled={pending || !addFormReady}
                 onClick={() => startTransition(() => void createConnection())}
               >
                 {t('connect')}
@@ -509,7 +576,7 @@ export function GitConnectionsPanel(props: {
               </Button>
             </div>
           </div>
-        )}
+        ) : null}
       </Modal>
 
       <Modal
@@ -576,6 +643,25 @@ export function GitConnectionsPanel(props: {
                     ))}
                   </Select>
                 </Field>
+                {providerShowsBaseUrl(manageConnection.provider) ? (
+                  <Field
+                    label={
+                      providerNeedsBaseUrl(manageConnection.provider)
+                        ? t('baseUrlRequiredLabel')
+                        : t('baseUrlOptional')
+                    }
+                    className="sm:col-span-2"
+                  >
+                    <Input
+                      value={manageBaseUrl}
+                      onChange={(e) => setManageBaseUrl(e.target.value)}
+                      placeholder={t(
+                        `baseUrlPlaceholder_${manageConnection.provider as SyncProvider}`,
+                      )}
+                      autoComplete="off"
+                    />
+                  </Field>
+                ) : null}
                 <Field label={t('accessToken')} className="sm:col-span-2">
                   <Input
                     type="password"
@@ -600,6 +686,13 @@ export function GitConnectionsPanel(props: {
                     autoComplete="off"
                   />
                 </Field>
+                <p className="m-0 sm:col-span-2 text-sm text-ink-muted">
+                  {t('webhookPathHint', {
+                    path: webhookPathForProvider(
+                      manageConnection.provider as SyncProvider,
+                    ),
+                  })}
+                </p>
                 <Field label={t('includePaths')} className="sm:col-span-2">
                   <Textarea
                     rows={4}

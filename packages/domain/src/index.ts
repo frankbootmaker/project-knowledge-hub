@@ -41,6 +41,8 @@ export {
   syncProviderSchema,
   getSyncProviderDefinition,
   isSyncProviderSupported,
+  providerNeedsBaseUrl,
+  providerShowsBaseUrl,
   type SyncProvider,
   type SyncProviderDefinition,
 } from './sync-providers.js';

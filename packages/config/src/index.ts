@@ -78,6 +78,27 @@ export const envSchema = z.object({
     .int()
     .min(0)
     .default(24 * 60 * 60 * 1000),
+  MAIL_DRIVER: z.enum(['console', 'smtp', 'resend']).default('console'),
+  MAIL_FROM: z.string().min(1).default('Project Knowledge Hub <noreply@localhost.local>'),
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  AUTH_PASSWORD_RESET_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60),
+  AUTH_INVITE_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60 * 24 * 7),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -93,5 +114,33 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       .join('; ');
     throw new Error(`Invalid environment configuration: ${details}`);
   }
-  return parsed.data;
+  const env = parsed.data;
+  if (env.MAIL_DRIVER === 'smtp' && !env.SMTP_HOST) {
+    throw new Error('Invalid environment configuration: SMTP_HOST is required when MAIL_DRIVER=smtp');
+  }
+  if (env.MAIL_DRIVER === 'resend' && !env.RESEND_API_KEY) {
+    throw new Error(
+      'Invalid environment configuration: RESEND_API_KEY is required when MAIL_DRIVER=resend',
+    );
+  }
+  return env;
+}
+
+export function mailConfigFromEnv(env: AppEnv) {
+  return {
+    driver: env.MAIL_DRIVER,
+    from: env.MAIL_FROM,
+    webUrl: env.WEB_URL,
+    smtp:
+      env.MAIL_DRIVER === 'smtp'
+        ? {
+            host: env.SMTP_HOST!,
+            port: env.SMTP_PORT,
+            secure: env.SMTP_SECURE ?? false,
+            user: env.SMTP_USER,
+            pass: env.SMTP_PASS,
+          }
+        : undefined,
+    resendApiKey: env.RESEND_API_KEY,
+  };
 }

@@ -10,6 +10,7 @@ type Connection = {
   owner: string;
   repo: string;
   branch: string;
+  baseUrl?: string | null;
   projectId: string | null;
   status: string;
   lastError: string | null;

@@ -67,6 +67,7 @@ M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging ste
 - [x] Git-managed UI + API edit lock; source URL/commit visible
 - [x] `pnpm` typecheck / unit tests for connectors; API tests green
 - [x] Synchronizations hub UI (multi-connection list, Add provider catalog, Manage); non-GitHub providers catalogued as coming soon
+- [x] Multi-provider sync backends (GitLab, Azure DevOps, Bitbucket, Forgejo) + `baseUrl` + per-provider webhooks
 
 ## Milestone 6 checklist
 

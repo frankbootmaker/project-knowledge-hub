@@ -1,4 +1,5 @@
-import { resolveBranchCommitSha, type GitHubRepoRef } from './github.js';
+import type { ProviderRepoRef } from './provider.js';
+import { getGitSyncProvider } from './registry.js';
 
 export type GitSyncHealthStatus =
   | 'healthy'
@@ -21,8 +22,8 @@ export async function assessGitSyncHealth(input: {
   lastError: string | null;
   lastSyncedAt: Date | null;
   lastSyncedCommitSha: string | null;
-  ref: GitHubRepoRef;
-  /** When false, skip remote GitHub call (offline / list optimization). */
+  ref: ProviderRepoRef;
+  /** When false, skip remote call (offline / list optimization). */
   checkRemote?: boolean;
 }): Promise<GitSyncHealth> {
   const lastSyncedAt = input.lastSyncedAt?.toISOString() ?? null;
@@ -69,7 +70,8 @@ export async function assessGitSyncHealth(input: {
   }
 
   try {
-    const remoteCommitSha = await resolveBranchCommitSha(input.ref);
+    const provider = getGitSyncProvider(input.ref.provider);
+    const remoteCommitSha = await provider.resolveBranchCommitSha(input.ref);
     if (remoteCommitSha === lastSyncedCommitSha) {
       return {
         status: 'healthy',

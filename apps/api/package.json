@@ -19,6 +19,7 @@
     "@project-knowledge-hub/domain": "workspace:*",
     "@project-knowledge-hub/git-connectors": "workspace:*",
     "@project-knowledge-hub/jobs": "workspace:*",
+    "@project-knowledge-hub/mail": "workspace:*",
     "@project-knowledge-hub/markdown": "workspace:*",
     "@project-knowledge-hub/mcp": "workspace:*",
     "@project-knowledge-hub/observability": "workspace:*",

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { defaultLocale, isAppLocale, localeCookieName } from './i18n/config';
 
-const publicPaths = ['/login', '/status'];
+const publicPaths = ['/login', '/forgot-password', '/set-password', '/status'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import {
@@ -8,18 +8,22 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   assessGitSyncHealth,
+  connectionToProviderRef,
   DEFAULT_EXCLUDE_PATHS,
   DEFAULT_INCLUDE_PATHS,
   DEFAULT_PATH_MAPPINGS,
+  getGitSyncProvider,
+  normalizeBaseUrl,
   syncGitRepositoryConnection,
-  verifyGitHubWebhookSignature,
   type GitSyncHealth,
 } from '@project-knowledge-hub/git-connectors';
 import {
   AppError,
   isSyncProviderSupported,
+  providerNeedsBaseUrl,
   recordTypeSchema,
   syncProviderSchema,
+  type SyncProvider,
 } from '@project-knowledge-hub/domain';
 import { createGitSyncQueue, enqueueGitSyncJob } from '@project-knowledge-hub/jobs';
 import {
@@ -40,9 +44,10 @@ const createConnectionSchema = z.object({
   workspaceId: z.string().uuid(),
   projectId: z.string().uuid().nullable().optional(),
   provider: syncProviderSchema.default('github'),
-  owner: z.string().min(1).max(120),
-  repo: z.string().min(1).max(120),
+  owner: z.string().min(1).max(200),
+  repo: z.string().min(1).max(200),
   branch: z.string().min(1).max(200).default('main'),
+  baseUrl: z.string().url().max(500).nullable().optional(),
   accessToken: z.string().min(8).max(500),
   includePaths: z.array(z.string().min(1).max(300)).max(50).optional(),
   excludePaths: z.array(z.string().min(1).max(300)).max(50).optional(),
@@ -53,6 +58,7 @@ const createConnectionSchema = z.object({
 const updateConnectionSchema = z.object({
   projectId: z.string().uuid().nullable().optional(),
   branch: z.string().min(1).max(200).optional(),
+  baseUrl: z.string().url().max(500).nullable().optional(),
   accessToken: z.string().min(8).max(500).optional(),
   includePaths: z.array(z.string().min(1).max(300)).max(50).optional(),
   excludePaths: z.array(z.string().min(1).max(300)).max(50).optional(),
@@ -78,6 +84,7 @@ function toPublicConnection(
     owner: row.owner,
     repo: row.repo,
     branch: row.branch,
+    baseUrl: row.baseUrl ?? null,
     accessTokenPreview: maskToken(row.accessToken),
     includePaths: row.includePaths,
     excludePaths: row.excludePaths,
@@ -103,14 +110,36 @@ async function healthForConnection(
     lastError: row.lastError,
     lastSyncedAt: row.lastSyncedAt,
     lastSyncedCommitSha: row.lastSyncedCommitSha,
-    ref: {
-      owner: row.owner,
-      repo: row.repo,
-      branch: row.branch,
-      accessToken: row.accessToken,
-    },
+    ref: connectionToProviderRef(row),
     checkRemote,
   });
+}
+
+function headerMap(headers: Record<string, unknown>): Record<string, string | undefined> {
+  const mapped: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value === 'string') {
+      mapped[key.toLowerCase()] = value;
+    } else if (Array.isArray(value) && typeof value[0] === 'string') {
+      mapped[key.toLowerCase()] = value[0];
+    }
+  }
+  return mapped;
+}
+
+function assertBaseUrlForProvider(
+  provider: SyncProvider,
+  baseUrl: string | null | undefined,
+): string | null {
+  const normalized = normalizeBaseUrl(baseUrl ?? null);
+  if (providerNeedsBaseUrl(provider) && !normalized) {
+    throw new AppError({
+      code: 'BASE_URL_REQUIRED',
+      message: `Provider “${provider}” requires a base URL`,
+      statusCode: 400,
+    });
+  }
+  return normalized;
 }
 
 function toPublicSyncRun(row: typeof gitSyncRuns.$inferSelect) {
@@ -173,11 +202,13 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
 
     if (!isSyncProviderSupported(body.provider)) {
       throw new AppError({
-        code: 'PROVIDER_NOT_IMPLEMENTED',
-        message: `Sync for provider “${body.provider}” is not available yet`,
+        code: 'UNKNOWN_GIT_PROVIDER',
+        message: `Unknown git provider “${body.provider}”`,
         statusCode: 400,
       });
     }
+
+    const baseUrl = assertBaseUrlForProvider(body.provider, body.baseUrl);
 
     const [workspace] = await app.database.db
       .select()
@@ -203,6 +234,7 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
         owner: body.owner,
         repo: body.repo,
         branch: body.branch,
+        baseUrl,
         accessToken: body.accessToken,
         includePaths: body.includePaths ?? DEFAULT_INCLUDE_PATHS,
         excludePaths: body.excludePaths ?? DEFAULT_EXCLUDE_PATHS,
@@ -302,11 +334,20 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
       await assertProjectInWorkspace(app.database, row.workspaceId, body.projectId);
     }
 
+    const nextBaseUrl =
+      body.baseUrl === undefined
+        ? row.baseUrl
+        : assertBaseUrlForProvider(
+            syncProviderSchema.parse(row.provider),
+            body.baseUrl,
+          );
+
     const [updated] = await app.database.db
       .update(gitRepositoryConnections)
       .set({
         projectId: body.projectId === undefined ? row.projectId : body.projectId,
         branch: body.branch ?? row.branch,
+        baseUrl: nextBaseUrl,
         accessToken: body.accessToken ?? row.accessToken,
         includePaths: body.includePaths ?? row.includePaths,
         excludePaths: body.excludePaths ?? row.excludePaths,
@@ -409,12 +450,12 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
     return { syncRuns: runs.map(toPublicSyncRun) };
   });
 
-  app.post('/api/v1/git/webhooks/github', async (request, reply) => {
-    const signature = request.headers['x-hub-signature-256'];
-    const event = typeof request.headers['x-github-event'] === 'string'
-      ? request.headers['x-github-event']
-      : '';
-    // Prefer raw body when available (set by content-type parser); fall back to JSON.
+  async function handleProviderWebhook(
+    provider: SyncProvider,
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const headers = headerMap(request.headers as Record<string, unknown>);
     const requestWithRaw = request as unknown as { rawBody?: string; body?: unknown };
     const rawBody =
       typeof requestWithRaw.rawBody === 'string'
@@ -422,67 +463,55 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
         : typeof request.body === 'string'
           ? request.body
           : JSON.stringify(request.body ?? {});
+    const payload =
+      typeof request.body === 'string'
+        ? JSON.parse(request.body)
+        : (request.body ?? {});
 
-    const payload = z
-      .object({
-        repository: z
-          .object({
-            name: z.string(),
-            owner: z.object({ login: z.string() }),
-          })
-          .optional(),
-        ref: z.string().optional(),
-      })
-      .passthrough()
-      .parse(
-        typeof request.body === 'string'
-          ? JSON.parse(request.body)
-          : (request.body ?? {}),
-      );
-
-    if (!payload.repository || (event !== 'push' && event !== 'ping')) {
-      return reply.status(202).send({ ok: true, ignored: true, event });
-    }
-
+    // GitHub / Forgejo ping
+    const event =
+      headers['x-github-event'] ??
+      headers['x-gitea-event'] ??
+      headers['x-forgejo-event'] ??
+      headers['x-gitlab-event'] ??
+      headers['x-event-key'] ??
+      '';
     if (event === 'ping') {
-      return reply.status(200).send({ ok: true, event: 'ping' });
+      return reply.status(200).send({ ok: true, event: 'ping', provider });
     }
 
-    const owner = payload.repository.owner.login;
-    const repo = payload.repository.name;
-    const branchFromRef = payload.ref?.startsWith('refs/heads/')
-      ? payload.ref.slice('refs/heads/'.length)
-      : undefined;
+    const adapter = getGitSyncProvider(provider);
+    const match = adapter.matchPushWebhook?.(payload, headers);
+    if (!match) {
+      return reply.status(202).send({ ok: true, ignored: true, provider, event });
+    }
 
     const connections = await app.database.db
       .select()
       .from(gitRepositoryConnections)
       .where(
         and(
-          eq(gitRepositoryConnections.provider, 'github'),
-          eq(gitRepositoryConnections.owner, owner),
-          eq(gitRepositoryConnections.repo, repo),
+          eq(gitRepositoryConnections.provider, provider),
+          eq(gitRepositoryConnections.repo, match.repo),
           eq(gitRepositoryConnections.status, 'active'),
         ),
       );
 
-    const matched = connections.filter(
-      (connection) => !branchFromRef || connection.branch === branchFromRef,
-    );
+    const matched = connections.filter((connection) => {
+      if (match.owner && connection.owner !== match.owner) return false;
+      if (match.branch && connection.branch !== match.branch) return false;
+      return true;
+    });
 
     let enqueued = 0;
     for (const connection of matched) {
-      if (!connection.webhookSecret) {
-        continue;
-      }
-      const ok = verifyGitHubWebhookSignature(
+      if (!connection.webhookSecret) continue;
+      const ok = adapter.verifyWebhookSignature?.(
         rawBody,
-        typeof signature === 'string' ? signature : undefined,
+        headers,
         connection.webhookSecret,
       );
-      if (!ok) {
-        continue;
-      }
+      if (!ok) continue;
 
       const queue = createGitSyncQueue(app.env.REDIS_URL);
       try {
@@ -497,6 +526,22 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
       }
     }
 
-    return reply.status(202).send({ ok: true, enqueued, event });
-  });
+    return reply.status(202).send({ ok: true, enqueued, provider, event });
+  }
+
+  app.post('/api/v1/git/webhooks/github', async (request, reply) =>
+    handleProviderWebhook('github', request, reply),
+  );
+  app.post('/api/v1/git/webhooks/gitlab', async (request, reply) =>
+    handleProviderWebhook('gitlab', request, reply),
+  );
+  app.post('/api/v1/git/webhooks/azure-devops', async (request, reply) =>
+    handleProviderWebhook('azure_devops', request, reply),
+  );
+  app.post('/api/v1/git/webhooks/bitbucket', async (request, reply) =>
+    handleProviderWebhook('bitbucket', request, reply),
+  );
+  app.post('/api/v1/git/webhooks/forgejo', async (request, reply) =>
+    handleProviderWebhook('forgejo', request, reply),
+  );
 }

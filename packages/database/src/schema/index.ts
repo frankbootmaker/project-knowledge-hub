@@ -174,6 +174,29 @@ export const sessions = pgTable(
   ],
 );
 
+/** One-time tokens for password reset and invite set-password emails. */
+export const authTokens = pgTable(
+  'auth_tokens',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    purpose: text('purpose').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('auth_tokens_token_hash_uidx').on(table.tokenHash),
+    index('auth_tokens_user_purpose_idx').on(table.userId, table.purpose),
+    index('auth_tokens_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
 export const auditEvents = pgTable(
   'audit_events',
   {
@@ -440,7 +463,9 @@ export const gitRepositoryConnections = pgTable(
     owner: text('owner').notNull(),
     repo: text('repo').notNull(),
     branch: text('branch').notNull().default('main'),
-    /** GitHub PAT / fine-grained token — never returned in full by the API. */
+    /** Instance root for Forgejo / self-hosted GitLab; optional Azure org override. */
+    baseUrl: text('base_url'),
+    /** Provider PAT / fine-grained token — never returned in full by the API. */
     accessToken: text('access_token').notNull(),
     includePaths: jsonb('include_paths').$type<string[]>().notNull(),
     excludePaths: jsonb('exclude_paths').$type<string[]>().notNull(),

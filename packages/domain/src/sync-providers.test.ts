@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   isSyncProviderSupported,
+  providerNeedsBaseUrl,
   SYNC_PROVIDER_CATALOG,
   syncProviderSchema,
 } from './sync-providers.js';
 
 describe('sync providers', () => {
-  it('lists expected providers with only GitHub supported', () => {
+  it('lists expected providers with sync supported for all', () => {
     expect(SYNC_PROVIDER_CATALOG.map((entry) => entry.id)).toEqual([
       'github',
       'gitlab',
@@ -14,8 +15,11 @@ describe('sync providers', () => {
       'bitbucket',
       'forgejo',
     ]);
-    expect(isSyncProviderSupported('github')).toBe(true);
-    expect(isSyncProviderSupported('gitlab')).toBe(false);
+    for (const entry of SYNC_PROVIDER_CATALOG) {
+      expect(isSyncProviderSupported(entry.id)).toBe(true);
+    }
+    expect(providerNeedsBaseUrl('forgejo')).toBe(true);
+    expect(providerNeedsBaseUrl('github')).toBe(false);
   });
 
   it('parses provider enum', () => {

@@ -37,6 +37,10 @@ export function hashSessionToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+/** Opaque token for password reset / invite emails (same entropy as sessions). */
+export const createAuthToken = createSessionToken;
+export const hashAuthToken = hashSessionToken;
+
 export function slugify(input: string): string {
   return input
     .trim()

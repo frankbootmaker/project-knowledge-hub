@@ -11,15 +11,9 @@ import {
 } from '@project-knowledge-hub/database';
 import { AppError, recordTypeSchema } from '@project-knowledge-hub/domain';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
-import {
-  fetchBlobText,
-  githubBlobUrl,
-  listRepositoryTree,
-  resolveBranchCommitSha,
-  type GitHubRepoRef,
-} from './github.js';
 import { mapPathToRecord, titleFromMarkdown } from './path-map.js';
 import { filterSyncedPaths } from './path-match.js';
+import { connectionToProviderRef, getGitSyncProvider } from './registry.js';
 
 export type SyncTrigger = 'manual' | 'webhook' | 'scheduled';
 
@@ -48,15 +42,6 @@ function contentSha(content: string): string {
 function slugForGitPath(path: string): string {
   const base = slugify(`git-${path.replace(/\//g, '-')}`) || 'git-doc';
   return base.slice(0, 96);
-}
-
-function connectionRef(row: typeof gitRepositoryConnections.$inferSelect): GitHubRepoRef {
-  return {
-    owner: row.owner,
-    repo: row.repo,
-    branch: row.branch,
-    accessToken: row.accessToken,
-  };
 }
 
 async function ensureUniqueSlug(
@@ -148,9 +133,10 @@ export async function syncGitRepositoryConnection(options: {
   };
 
   try {
-    const ref = connectionRef(connection);
-    const commitSha = await resolveBranchCommitSha(ref);
-    const tree = await listRepositoryTree(ref, commitSha);
+    const ref = connectionToProviderRef(connection);
+    const provider = getGitSyncProvider(ref.provider);
+    const commitSha = await provider.resolveBranchCommitSha(ref);
+    const tree = await provider.listRepositoryTree(ref, commitSha);
     const paths = filterSyncedPaths(
       tree.map((entry) => entry.path),
       connection.includePaths,
@@ -201,22 +187,18 @@ export async function syncGitRepositoryConnection(options: {
           continue;
         }
 
-        const markdown = await fetchBlobText(ref, entry.sha);
+        const markdown = await provider.fetchBlobText(ref, entry.sha);
         const title = titleFromMarkdown(markdown, path);
         const rendered = await renderMarkdown(markdown);
         const sha = contentSha(markdown);
-        const sourceUri = githubBlobUrl(
-          connection.owner,
-          connection.repo,
-          connection.branch,
-          path,
-        );
+        const sourceUri = provider.blobUrl(ref, path);
         const metadata = {
           gitConnectionId: connectionId,
-          gitProvider: 'github',
+          gitProvider: ref.provider,
           gitOwner: connection.owner,
           gitRepo: connection.repo,
           gitBranch: connection.branch,
+          gitBaseUrl: connection.baseUrl ?? null,
           gitPath: path,
           gitBlobSha: entry.sha,
           gitCommitSha: commitSha,
@@ -255,7 +237,7 @@ export async function syncGitRepositoryConnection(options: {
             await database.db.insert(knowledgeSources).values({
               knowledgeRecordId: updated.id,
               sourceType: 'git',
-              sourceProvider: 'github',
+              sourceProvider: ref.provider,
               sourceReference: `${commitSha}:${path}`,
               sourceTitle: path,
               sourceUri,
@@ -294,7 +276,7 @@ export async function syncGitRepositoryConnection(options: {
             await database.db.insert(knowledgeSources).values({
               knowledgeRecordId: created.id,
               sourceType: 'git',
-              sourceProvider: 'github',
+              sourceProvider: ref.provider,
               sourceReference: `${commitSha}:${path}`,
               sourceTitle: path,
               sourceUri,

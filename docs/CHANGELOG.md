@@ -13,7 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Synchronizations hub UI: multi-connection list with provider, status, last sync, Manage, and Add (provider catalog). GitHub sync remains the only working connector; GitLab, Azure DevOps, Bitbucket, and Forgejo are catalogued as coming soon.
+* Admin → Email settings: SMTP / Resend / console configuration stored in `platform_settings` (overrides `.env`), test-send, and sidebar nav entry.
+* Email, invites, and forgotten password: pluggable mail package (`console` / `smtp` / `resend`), `auth_tokens` table, forgot/set-password APIs and pages, admin invite-without-password + resend invite, and admin user edit (display name / password / status).
+* Multi-provider git sync backends: shared `GitSyncProvider` interface + adapters for GitHub, GitLab, Azure DevOps, Bitbucket, and Forgejo (PAT auth; optional/required `baseUrl` for self-hosted). Sync, health, create/update API, and per-provider webhook routes (`/api/v1/git/webhooks/{provider}`). Migration `0011_git_connection_base_url`.
+* Synchronizations hub UI: multi-connection list with provider, status, last sync, Manage, and Add (provider catalog). All catalog providers are creatable with per-provider field labels and base URL where needed.
 * Workspace header: status badge (Active / Archived / Needs attention — attention links to Git sync) plus a Manage modal for details/statistics (editable brief description ≤280 chars, ID, owners, dates, counts), synchronizations, archived items, color, and archive/restore. Description overview appears above the accent bar on the workspace page.
 * Workspace accent colors: optional curated palette on workspaces (API `color`, migration `0010_workspace_color`), colored tiles on dashboard/list/detail, and create/edit color picker for workspace admins. Unset colors still resolve to a stable hash accent.
 * Milestone 8: GitHub repository connections, Markdown sync into `git_managed` knowledge records, path→type mappings, sync history, BullMQ worker queue, GitHub webhooks, sync-health badges, and workspace **Git sync** UI. Hub edits to git-managed records are blocked. Worker runs a daily safety re-sync (`GIT_SYNC_SAFETY_INTERVAL_MS`, default 24h).

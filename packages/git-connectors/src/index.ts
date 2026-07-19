@@ -9,12 +9,23 @@ export { filterSyncedPaths, isMarkdownPath, pathMatches } from './path-match.js'
 export {
   fetchBlobText,
   githubBlobUrl,
+  githubProvider,
   listRepositoryTree,
   resolveBranchCommitSha,
   verifyGitHubWebhookSignature,
   type GitHubRepoRef,
-  type GitTreeEntry,
 } from './github.js';
+export type { GitTreeEntry, GitSyncProvider, ProviderRepoRef, WebhookMatch } from './provider.js';
+export { normalizeBaseUrl } from './provider.js';
+export {
+  connectionToProviderRef,
+  getGitSyncProvider,
+  listGitSyncProviders,
+} from './registry.js';
+export { parseAzureRepo, azureDevopsProvider } from './azure-devops.js';
+export { gitlabProvider } from './gitlab.js';
+export { bitbucketProvider } from './bitbucket.js';
+export { forgejoProvider } from './forgejo.js';
 export {
   syncGitRepositoryConnection,
   type SyncResult,
