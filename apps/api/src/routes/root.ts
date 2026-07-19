@@ -28,6 +28,8 @@ export async function registerRootRoutes(app: FastifyInstance): Promise<void> {
         apiClients: '/api/v1/api-clients',
         auditEvents: '/api/v1/audit-events',
         auditEventsExport: '/api/v1/audit-events/export',
+        mcpSetupPreflight: '/api/v1/mcp/setup/preflight',
+        mcpSetupTest: 'POST /api/v1/mcp/setup/test',
         mcp: '/mcp',
       },
     };

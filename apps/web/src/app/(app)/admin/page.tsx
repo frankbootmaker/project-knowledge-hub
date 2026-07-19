@@ -31,6 +31,18 @@ export default async function AdminOverviewPage() {
   return (
     <div>
       <PageHeader title={t('title')} description={t('overviewBlurb')} />
+      <Panel className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="m-0 text-sm font-semibold">{t('mcpSetup')}</p>
+          <p className="mt-1 mb-0 text-sm text-ink-muted">{t('mcpWizardBlurb')}</p>
+        </div>
+        <Link
+          href="/admin/mcp-setup"
+          className="inline-flex rounded-md border border-transparent bg-brand px-3.5 py-2 text-sm font-medium text-white no-underline transition hover:bg-brand-hover dark:text-[#0f161d]"
+        >
+          {t('mcpWizardStart')}
+        </Link>
+      </Panel>
       <div className="grid gap-4 sm:grid-cols-3">
         {cards.map((card) => (
           <Panel key={card.href} className="flex flex-col gap-3">

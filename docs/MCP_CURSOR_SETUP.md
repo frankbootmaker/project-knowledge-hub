@@ -1,5 +1,7 @@
 # Cursor MCP setup
 
+For a guided in-app flow (platform checks → client → connection tests → Cursor config), open **Admin → LLM / MCP setup** at `/admin/mcp-setup` while signed in as a system administrator.
+
 Project Knowledge Hub exposes MCP at:
 
 ```text
