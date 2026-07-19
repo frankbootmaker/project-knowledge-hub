@@ -11,6 +11,8 @@ import {
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import { writeAuditEvent } from '../lib/identity.js';
 import {
+  assertActingUserForOrganization,
+  assertWriteClientConfig,
   issueApiClientToken,
   toPublicApiClient,
 } from '../lib/api-clients.js';
@@ -26,6 +28,7 @@ const createSchema = z.object({
   scopes: z.array(scopeSchema).min(1).max(20).optional(),
   allowedWorkspaceIds: z.array(z.string().uuid()).max(100).optional(),
   allowedProjectIds: z.array(z.string().uuid()).max(200).optional(),
+  actingUserId: z.string().uuid().nullable().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
 });
 
@@ -35,6 +38,7 @@ const updateSchema = z.object({
   scopes: z.array(scopeSchema).min(1).max(20).optional(),
   allowedWorkspaceIds: z.array(z.string().uuid()).max(100).optional(),
   allowedProjectIds: z.array(z.string().uuid()).max(200).optional(),
+  actingUserId: z.string().uuid().nullable().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
 });
 
@@ -83,6 +87,15 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
       });
     }
 
+    const scopes = body.scopes ?? [...DEFAULT_MCP_SCOPES];
+    const allowedWorkspaceIds = body.allowedWorkspaceIds ?? [];
+    const actingUserId = body.actingUserId ?? null;
+
+    assertWriteClientConfig({ scopes, actingUserId, allowedWorkspaceIds });
+    if (actingUserId) {
+      await assertActingUserForOrganization(app.database, body.organizationId, actingUserId);
+    }
+
     const issued = issueApiClientToken();
     const [created] = await app.database.db
       .insert(apiClients)
@@ -92,9 +105,10 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
         description: body.description ?? null,
         tokenHash: issued.tokenHash,
         tokenPrefix: issued.tokenPrefix,
-        scopes: body.scopes ?? [...DEFAULT_MCP_SCOPES],
-        allowedWorkspaceIds: body.allowedWorkspaceIds ?? [],
+        scopes,
+        allowedWorkspaceIds,
         allowedProjectIds: body.allowedProjectIds ?? [],
+        actingUserId,
         expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
       })
       .returning();
@@ -144,14 +158,29 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
       });
     }
 
+    const scopes = body.scopes ?? existing.scopes;
+    const allowedWorkspaceIds = body.allowedWorkspaceIds ?? existing.allowedWorkspaceIds;
+    const actingUserId =
+      body.actingUserId === undefined ? existing.actingUserId : body.actingUserId;
+
+    assertWriteClientConfig({ scopes, actingUserId, allowedWorkspaceIds });
+    if (actingUserId) {
+      await assertActingUserForOrganization(
+        app.database,
+        existing.organizationId,
+        actingUserId,
+      );
+    }
+
     const [updated] = await app.database.db
       .update(apiClients)
       .set({
         name: body.name ?? existing.name,
         description: body.description === undefined ? existing.description : body.description,
-        scopes: body.scopes ?? existing.scopes,
-        allowedWorkspaceIds: body.allowedWorkspaceIds ?? existing.allowedWorkspaceIds,
+        scopes,
+        allowedWorkspaceIds,
         allowedProjectIds: body.allowedProjectIds ?? existing.allowedProjectIds,
+        actingUserId,
         expiresAt:
           body.expiresAt === undefined
             ? existing.expiresAt

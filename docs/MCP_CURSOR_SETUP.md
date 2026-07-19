@@ -1,6 +1,6 @@
-# Cursor MCP setup (Milestone 6)
+# Cursor MCP setup
 
-Project Knowledge Hub exposes a **read-only** MCP endpoint:
+Project Knowledge Hub exposes MCP at:
 
 ```text
 POST|GET|DELETE http://localhost:3101/mcp
@@ -9,7 +9,7 @@ Authorization: Bearer <api-client-token>
 
 ## 1. Create an API client
 
-As a system administrator (session cookie), create a client:
+As a system administrator (session cookie), create a **read** client:
 
 ```bash
 curl -sS -X POST http://localhost:3101/api/v1/api-clients \
@@ -24,6 +24,33 @@ curl -sS -X POST http://localhost:3101/api/v1/api-clients \
 ```
 
 The response includes `token` **once**. Store it securely.
+
+### Write-capable client (optional)
+
+To let agents create/update **draft** records, grant `knowledge:write`, set `actingUserId`, and keep a non-empty workspace allowlist:
+
+```bash
+curl -sS -X POST http://localhost:3101/api/v1/api-clients \
+  -H "Content-Type: application/json" \
+  -H "Origin: http://localhost:3100" \
+  -H "Cookie: kh_session=<session>" \
+  -d '{
+    "organizationId": "<org-uuid>",
+    "name": "Cursor writer",
+    "scopes": [
+      "projects:read",
+      "systems:read",
+      "knowledge:read",
+      "knowledge:search",
+      "provenance:read",
+      "knowledge:write"
+    ],
+    "allowedWorkspaceIds": ["<workspace-uuid>"],
+    "actingUserId": "<user-uuid>"
+  }'
+```
+
+`actingUserId` is stored as `created_by` on records/versions. Verify and mark-current stay human-only in the UI/API.
 
 ## 2. Cursor MCP configuration
 
@@ -44,6 +71,8 @@ Add to Cursor MCP settings (or `.cursor/mcp.json`):
 
 ## 3. Available tools
 
+Read:
+
 * `list_projects` / `get_project`
 * `list_systems` / `get_system`
 * `list_knowledge_records`
@@ -51,4 +80,9 @@ Add to Cursor MCP settings (or `.cursor/mcp.json`):
 * `get_knowledge_record`
 * `get_record_provenance`
 
-Write tools are not exposed. Responses are size-limited; markdown may be truncated.
+Write (requires `knowledge:write`):
+
+* `create_knowledge_record` — always `draft` / `ai_generated_draft`
+* `update_knowledge_record` — forces `draft`; requires `changeMessage`
+
+Responses are size-limited; markdown may be truncated on read.

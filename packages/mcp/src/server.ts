@@ -10,6 +10,7 @@ export type McpClientContext = {
   scopes: string[];
   allowedWorkspaceIds: string[];
   allowedProjectIds: string[];
+  actingUserId: string | null;
 };
 
 export type McpToolHandlers = {
@@ -38,6 +39,34 @@ export type McpToolHandlers = {
   }) => Promise<unknown>;
   getKnowledgeRecord: (input: { recordId: string }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
+  createKnowledgeRecord: (input: {
+    workspaceId: string;
+    title: string;
+    recordType: string;
+    contentMarkdown: string;
+    summary?: string;
+    slug?: string;
+    projectId?: string;
+    systemId?: string;
+    tags?: string[];
+    language?: string;
+    generatedByModel?: string;
+    sourceTitle?: string;
+  }) => Promise<unknown>;
+  updateKnowledgeRecord: (input: {
+    recordId: string;
+    changeMessage: string;
+    title?: string;
+    summary?: string | null;
+    recordType?: string;
+    contentMarkdown?: string;
+    projectId?: string | null;
+    systemId?: string | null;
+    tags?: string[];
+    language?: string | null;
+    generatedByModel?: string;
+    sourceTitle?: string;
+  }) => Promise<unknown>;
   onToolCall?: (toolName: string, ok: boolean) => Promise<void>;
 };
 
@@ -189,6 +218,52 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('get_record_provenance', 'provenance:read', () =>
         handlers.getRecordProvenance(args),
+      )(),
+  );
+
+  server.tool(
+    'create_knowledge_record',
+    'Create a draft knowledge record (requires knowledge:write; humans must verify/mark-current)',
+    {
+      workspaceId: z.string().uuid(),
+      title: z.string().min(1).max(300),
+      recordType: z.string().min(1).max(64),
+      contentMarkdown: z.string().max(500_000),
+      summary: z.string().max(1000).optional(),
+      slug: z.string().min(1).max(96).optional(),
+      projectId: z.string().uuid().optional(),
+      systemId: z.string().uuid().optional(),
+      tags: z.array(z.string().min(1).max(64)).max(30).optional(),
+      language: z.string().min(2).max(16).optional(),
+      generatedByModel: z.string().max(160).optional(),
+      sourceTitle: z.string().max(300).optional(),
+    },
+    async (args) =>
+      wrap('create_knowledge_record', 'knowledge:write', () =>
+        handlers.createKnowledgeRecord(args),
+      )(),
+  );
+
+  server.tool(
+    'update_knowledge_record',
+    'Update a knowledge record as draft (requires knowledge:write and a changeMessage)',
+    {
+      recordId: z.string().uuid(),
+      changeMessage: z.string().min(1).max(500),
+      title: z.string().min(1).max(300).optional(),
+      summary: z.string().max(1000).nullable().optional(),
+      recordType: z.string().min(1).max(64).optional(),
+      contentMarkdown: z.string().max(500_000).optional(),
+      projectId: z.string().uuid().nullable().optional(),
+      systemId: z.string().uuid().nullable().optional(),
+      tags: z.array(z.string().min(1).max(64)).max(30).optional(),
+      language: z.string().min(2).max(16).nullable().optional(),
+      generatedByModel: z.string().max(160).optional(),
+      sourceTitle: z.string().max(300).optional(),
+    },
+    async (args) =>
+      wrap('update_knowledge_record', 'knowledge:write', () =>
+        handlers.updateKnowledgeRecord(args),
       )(),
   );
 

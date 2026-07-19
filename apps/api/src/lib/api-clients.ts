@@ -1,6 +1,13 @@
 import { and, eq, isNull, or, gt } from 'drizzle-orm';
 import { createSessionToken, hashSessionToken } from '@project-knowledge-hub/auth';
-import { apiClients, type Database } from '@project-knowledge-hub/database';
+import {
+  apiClients,
+  memberships,
+  users,
+  workspaces,
+  type Database,
+} from '@project-knowledge-hub/database';
+import { AppError } from '@project-knowledge-hub/domain';
 import { DEFAULT_MCP_SCOPES, type McpClientContext } from '@project-knowledge-hub/mcp';
 
 export function toPublicApiClient(client: typeof apiClients.$inferSelect) {
@@ -13,6 +20,7 @@ export function toPublicApiClient(client: typeof apiClients.$inferSelect) {
     scopes: client.scopes,
     allowedWorkspaceIds: client.allowedWorkspaceIds,
     allowedProjectIds: client.allowedProjectIds,
+    actingUserId: client.actingUserId,
     expiresAt: client.expiresAt?.toISOString() ?? null,
     lastUsedAt: client.lastUsedAt?.toISOString() ?? null,
     revokedAt: client.revokedAt?.toISOString() ?? null,
@@ -27,6 +35,75 @@ export function issueApiClientToken(): { token: string; tokenHash: string; token
     tokenHash: hashSessionToken(token),
     tokenPrefix: token.slice(0, 12),
   };
+}
+
+export async function assertActingUserForOrganization(
+  database: Database,
+  organizationId: string,
+  actingUserId: string,
+): Promise<void> {
+  const [user] = await database.db
+    .select()
+    .from(users)
+    .where(eq(users.id, actingUserId))
+    .limit(1);
+
+  if (!user || user.status !== 'active') {
+    throw new AppError({
+      code: 'ACTING_USER_NOT_FOUND',
+      message: 'Acting user not found or inactive',
+      statusCode: 400,
+    });
+  }
+
+  if (user.isSystemAdmin) {
+    return;
+  }
+
+  const [membership] = await database.db
+    .select({ id: memberships.id })
+    .from(memberships)
+    .innerJoin(workspaces, eq(memberships.workspaceId, workspaces.id))
+    .where(
+      and(
+        eq(memberships.userId, actingUserId),
+        eq(workspaces.organizationId, organizationId),
+        isNull(workspaces.archivedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!membership) {
+    throw new AppError({
+      code: 'ACTING_USER_NOT_IN_ORGANIZATION',
+      message: 'Acting user must be a system admin or a member of a workspace in the organization',
+      statusCode: 400,
+    });
+  }
+}
+
+export function assertWriteClientConfig(input: {
+  scopes: string[];
+  actingUserId: string | null | undefined;
+  allowedWorkspaceIds: string[];
+}): void {
+  if (!input.scopes.includes('knowledge:write')) {
+    return;
+  }
+  if (!input.actingUserId) {
+    throw new AppError({
+      code: 'ACTING_USER_REQUIRED',
+      message: 'actingUserId is required when scopes include knowledge:write',
+      statusCode: 400,
+    });
+  }
+  if (input.allowedWorkspaceIds.length === 0) {
+    throw new AppError({
+      code: 'WORKSPACE_ALLOWLIST_REQUIRED',
+      message: 'allowedWorkspaceIds must be non-empty when scopes include knowledge:write',
+      statusCode: 400,
+    });
+  }
 }
 
 export async function loadApiClientByBearerToken(
@@ -65,6 +142,7 @@ export async function loadApiClientByBearerToken(
       scopes: client.scopes.length > 0 ? client.scopes : [...DEFAULT_MCP_SCOPES],
       allowedWorkspaceIds: client.allowedWorkspaceIds,
       allowedProjectIds: client.allowedProjectIds,
+      actingUserId: client.actingUserId,
     },
   };
 }

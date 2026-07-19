@@ -30,7 +30,7 @@ This document tracks milestone progress against the PRD. Update status as work c
 | M3 | Knowledge records | `complete` | Validated 2026-07-19 |
 | M4 | Versioning and lifecycle | `complete` | Validated 2026-07-19 |
 | M5 | Search | `complete` | Validated 2026-07-19 |
-| M6 | Read-only MCP | `complete` | Validated 2026-07-19 |
+| M6 | MCP (read + draft write) | `complete` | Validated 2026-07-19 |
 | M7 | Production packaging and Dokploy | `not_started` | |
 | M8 | GitHub synchronization | `not_started` | |
 | M9 | Conversation import | `not_started` | |
@@ -43,6 +43,7 @@ This document tracks milestone progress against the PRD. Update status as work c
 - [x] API clients + hashed bearer tokens
 - [x] MCP Streamable HTTP endpoint (`/mcp`)
 - [x] Read-only discovery/search/retrieval/provenance tools
+- [x] Draft-only write tools (`knowledge:write`, `actingUserId`, workspace allowlist)
 - [x] Scopes, rate limit, response size limits
 - [x] MCP audit logging + Cursor config example
 - [x] Integration tests

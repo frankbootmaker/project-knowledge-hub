@@ -50,6 +50,13 @@
       "when": 1784417900000,
       "tag": "0006_api_clients",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784418100000,
+      "tag": "0007_api_client_acting_user",
+      "breakpoints": true
     }
   ]
 }

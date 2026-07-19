@@ -211,6 +211,9 @@ export const apiClients = pgTable(
     scopes: jsonb('scopes').$type<string[]>().notNull(),
     allowedWorkspaceIds: jsonb('allowed_workspace_ids').$type<string[]>().notNull(),
     allowedProjectIds: jsonb('allowed_project_ids').$type<string[]>().notNull(),
+    actingUserId: uuid('acting_user_id').references(() => users.id, {
+      onDelete: 'restrict',
+    }),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }),
     revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
@@ -222,6 +225,7 @@ export const apiClients = pgTable(
     uniqueIndex('api_clients_token_hash_uidx').on(table.tokenHash),
     index('api_clients_organization_id_idx').on(table.organizationId),
     index('api_clients_token_prefix_idx').on(table.tokenPrefix),
+    index('api_clients_acting_user_id_idx').on(table.actingUserId),
   ],
 );
 

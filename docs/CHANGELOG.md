@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Draft-only write-capable MCP: `knowledge:write` scope, `create_knowledge_record` / `update_knowledge_record`, API client `actingUserId`, ADR-013.
 * UI internationalization (English, German, Hungarian) via `next-intl`, cookie locale, and language switcher.
 * Milestone 6 read-only MCP: API clients, Streamable HTTP `/mcp`, scopes, rate/size limits, Cursor setup.
 * Milestone 5 search: PostgreSQL FTS index, filtered search API, snippets, `/search` UI.

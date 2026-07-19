@@ -7,7 +7,7 @@ import {
   systems,
   workspaces,
 } from '@project-knowledge-hub/database';
-import { AppError } from '@project-knowledge-hub/domain';
+import { AppError, recordTypeSchema } from '@project-knowledge-hub/domain';
 import {
   truncateContent,
   type McpClientContext,
@@ -15,6 +15,7 @@ import {
 } from '@project-knowledge-hub/mcp';
 import { runSearch } from './search-service.js';
 import { writeAuditEvent } from './identity.js';
+import { createKnowledgeRecord, updateKnowledgeRecord } from './knowledge-records-service.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -27,6 +28,34 @@ function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): 
       statusCode: 403,
     });
   }
+}
+
+function assertWriteWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
+  if (client.allowedWorkspaceIds.length === 0) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Write-capable API clients must have a non-empty workspace allowlist',
+      statusCode: 403,
+    });
+  }
+  if (!client.allowedWorkspaceIds.includes(workspaceId)) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Workspace is not allowed for this API client',
+      statusCode: 403,
+    });
+  }
+}
+
+function requireActingUserId(client: McpClientContext): string {
+  if (!client.actingUserId) {
+    throw new AppError({
+      code: 'ACTING_USER_REQUIRED',
+      message: 'API client is missing actingUserId required for knowledge:write',
+      statusCode: 403,
+    });
+  }
+  return client.actingUserId;
 }
 
 function assertProjectAllowed(client: McpClientContext, projectId: string | null): void {
@@ -356,6 +385,136 @@ export function createMcpToolHandlers(
           generatedByModel: source.generatedByModel,
           sourceCreatedAt: source.sourceCreatedAt?.toISOString() ?? null,
         })),
+      };
+    },
+
+    async createKnowledgeRecord(input) {
+      assertWriteWorkspaceAllowed(client, input.workspaceId);
+      if (input.projectId) {
+        assertProjectAllowed(client, input.projectId);
+      }
+      const actingUserId = requireActingUserId(client);
+      const recordType = recordTypeSchema.parse(input.recordType);
+
+      const result = await createKnowledgeRecord(
+        app,
+        {
+          workspaceId: input.workspaceId,
+          title: input.title,
+          recordType,
+          contentMarkdown: input.contentMarkdown,
+          summary: input.summary,
+          slug: input.slug,
+          projectId: input.projectId ?? null,
+          systemId: input.systemId ?? null,
+          tags: input.tags,
+          language: input.language,
+          lifecycleStatus: 'draft',
+          sourceOfTruthMode: 'ai_generated_draft',
+          source: {
+            sourceType: 'conversation',
+            sourceProvider: 'mcp',
+            sourceTitle: input.sourceTitle ?? 'Created via MCP',
+            generatedByModel: input.generatedByModel ?? null,
+          },
+        },
+        {
+          actorType: 'api_client',
+          actorId: client.id,
+          userId: actingUserId,
+        },
+        ipAddress,
+      );
+
+      return {
+        knowledgeRecord: {
+          id: result.knowledgeRecord.id,
+          workspaceId: result.knowledgeRecord.workspaceId,
+          title: result.knowledgeRecord.title,
+          slug: result.knowledgeRecord.slug,
+          recordType: result.knowledgeRecord.recordType,
+          lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
+          sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
+          currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
+          projectId: result.knowledgeRecord.projectId,
+          systemId: result.knowledgeRecord.systemId,
+        },
+      };
+    },
+
+    async updateKnowledgeRecord(input) {
+      const actingUserId = requireActingUserId(client);
+
+      const [existing] = await app.database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(and(eq(knowledgeRecords.id, input.recordId), isNull(knowledgeRecords.archivedAt)))
+        .limit(1);
+      if (!existing) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found',
+          statusCode: 404,
+        });
+      }
+
+      assertWriteWorkspaceAllowed(client, existing.workspaceId);
+      const nextProjectId =
+        input.projectId === undefined ? existing.projectId : input.projectId;
+      assertProjectAllowed(client, nextProjectId);
+
+      const recordType =
+        input.recordType === undefined
+          ? undefined
+          : recordTypeSchema.parse(input.recordType);
+
+      const result = await updateKnowledgeRecord(
+        app,
+        input.recordId,
+        {
+          title: input.title,
+          summary: input.summary,
+          recordType,
+          contentMarkdown: input.contentMarkdown,
+          projectId: input.projectId,
+          systemId: input.systemId,
+          tags: input.tags,
+          language: input.language,
+          changeMessage: input.changeMessage,
+          lifecycleStatus: 'draft',
+          sourceOfTruthMode: 'ai_generated_draft',
+          source:
+            input.generatedByModel !== undefined || input.sourceTitle !== undefined
+              ? {
+                  sourceType: 'conversation',
+                  sourceProvider: 'mcp',
+                  sourceTitle: input.sourceTitle ?? 'Updated via MCP',
+                  generatedByModel: input.generatedByModel ?? null,
+                }
+              : undefined,
+        },
+        {
+          actorType: 'api_client',
+          actorId: client.id,
+          userId: actingUserId,
+        },
+        ipAddress,
+      );
+
+      return {
+        knowledgeRecord: {
+          id: result.knowledgeRecord.id,
+          workspaceId: result.knowledgeRecord.workspaceId,
+          title: result.knowledgeRecord.title,
+          slug: result.knowledgeRecord.slug,
+          recordType: result.knowledgeRecord.recordType,
+          lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
+          sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
+          currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
+          projectId: result.knowledgeRecord.projectId,
+          systemId: result.knowledgeRecord.systemId,
+          versioned: result.shouldVersion,
+        },
       };
     },
 
