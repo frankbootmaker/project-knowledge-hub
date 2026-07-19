@@ -46,6 +46,7 @@ Before considering UI work done:
 | `--kh-focus-ring` | Focus ring color mix |
 | `--kh-toast-duration-ms` | Auto-dismiss duration for toasts (JS reads this via constant alignment) |
 | `--kh-z-toast` | Toast stacking context |
+| `--kh-z-modal` | Modal dialogs (below toasts, above mobile nav) |
 | `--kh-z-mobile-nav` | Mobile nav overlay (below toasts, above sticky header) |
 
 Dark mode flips the same `--kh-*` variables under `.dark` on `<html>`.
@@ -91,6 +92,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-toast-viewport` / `.kh-toast` / `.kh-toast-{success,danger,info}` / `.kh-toast-dismiss` | Toasts |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` | Mobile primary nav overlay |
+| `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
 
 ## Primitives
 
@@ -100,6 +102,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `LinkButton` | Navigation that should look like a button |
 | `NavLink` | Header or admin sidebar links (active state included) |
 | `MobileNav` | Primary nav below `sm` (sheet + backdrop; Esc / route change closes) |
+| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer` actions; `size="lg"` for denser forms |
 | `Panel` | `default` / `solid` / `inset` surfaces |
 | `Field`, `Input`, `Select`, `Textarea`, `ErrorText` | Forms |
 | `Badge` | Compact status chips (e.g. health “ok”) |
@@ -122,6 +125,7 @@ from client components. Tones: `success` (default), `danger`, `info`.
 | i18n for toasts | Prefer `admin.toast*` message keys; do not hardcode English in components |
 | No ad-hoc alerts | Do not invent parallel snackbars; extend `Toast` + recipes |
 | Reachable nav | Primary destinations must be available at phone widths via `MobileNav` or equivalent |
+| Admin create | Prefer `Modal` for adding users, organizations, memberships, API clients — list stays primary; open via a top-right create button |
 
 ## Changing a parameter
 
@@ -141,6 +145,7 @@ from client components. Tones: `success` (default), `danger`, `info`.
 * Hiding primary nav with `hidden sm:flex` (or similar) **without** a `MobileNav` / disclosed equivalent
 * Page-only breakpoint one-offs that belong in `Page`, shell helpers, or layout primitives
 * Relying on page-wide horizontal scroll instead of stacking / `overflow-x-auto` on code blocks
+* Always-visible admin create forms that crowd the list — prefer `Modal` + create CTA
 
 ## Changelog
 
@@ -148,6 +153,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-19
 
+* **Admin create modals** — `Modal` primitive (`.kh-modal*`, `--kh-z-modal`). Organizations, users, memberships, and API clients open create flows in dialogs; lists are the default view. Branch exploration: `function/modals`.
 * **Responsive** — Documented breakpoints, shell recipes (`.kh-shell*`), admin stack-at-`lg`, and anti-patterns. Explicit root `viewport`. `MobileNav` + `--kh-z-mobile-nav` for primary nav below `sm`. Shell helpers in `shell.ts` used by app/status layouts and header.
 * **Header theme icons** — Sun/moon glyph size reduced ~5% (`themeIconClassName` → `1.556rem`).
 * **Toasts** — `ToastProvider` / `useToast`, recipes `.kh-toast*`, tokens `--kh-toast-duration-ms` / `--kh-z-toast`. Used for admin CRUD and LLM wizard confirmations.

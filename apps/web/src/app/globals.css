@@ -207,6 +207,56 @@
       border-b border-line bg-panel-solid p-4 shadow-sm;
     animation: kh-mobile-nav-in 160ms ease-out;
   }
+
+  .kh-modal {
+    @apply fixed inset-0 flex items-end justify-center p-4 sm:items-center;
+    z-index: var(--kh-z-modal);
+  }
+
+  .kh-modal-backdrop {
+    @apply absolute inset-0 border-0 bg-ink/40 p-0;
+  }
+
+  .kh-modal-panel {
+    @apply relative flex max-h-[min(100%,40rem)] w-full max-w-lg flex-col overflow-hidden
+      rounded-lg border border-line bg-panel-solid shadow-sm;
+    animation: kh-modal-in 160ms ease-out;
+  }
+
+  .kh-modal-panel-lg {
+    @apply max-w-2xl max-h-[min(100%,44rem)];
+  }
+
+  .kh-modal-header {
+    @apply flex items-start justify-between gap-3 border-b border-line px-4 py-3;
+  }
+
+  .kh-modal-title {
+    @apply m-0 text-lg font-semibold tracking-tight text-ink;
+  }
+
+  .kh-modal-description {
+    @apply mt-1 mb-0 text-sm text-ink-muted;
+  }
+
+  .kh-modal-body {
+    @apply grid flex-1 gap-4 overflow-y-auto px-4 py-4;
+  }
+
+  .kh-modal-footer {
+    @apply flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-3;
+  }
+}
+
+@keyframes kh-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes kh-mobile-nav-in {

@@ -4,6 +4,7 @@ export { buttonClassName, type ButtonVariant } from './buttonStyles';
 export { ErrorText, Field, Input, Select, Textarea } from './Field';
 export { LinkButton } from './LinkButton';
 export { MobileNav, type MobileNavItem } from './MobileNav';
+export { Modal } from './Modal';
 export { NavLink } from './NavLink';
 export { ListCard, Page, PageHeader, SectionHeader } from './Page';
 export { Panel } from './Panel';

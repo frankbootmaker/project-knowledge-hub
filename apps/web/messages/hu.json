@@ -30,7 +30,8 @@
     "themeDark": "Sötét",
     "themeCycle": "Téma: {current}. Kattintás: {next}.",
     "tagsList": "Címkék: {tags}",
-    "emDash": "—"
+    "emDash": "—",
+    "closeDialog": "Párbeszédablak bezárása"
   },
   "nav": {
     "dashboard": "Irányítópult",

@@ -3,7 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Button, ErrorText, Field, Input, Panel, Select, useToast } from '../ui';
+import {
+  Button,
+  ErrorText,
+  Field,
+  Input,
+  Modal,
+  Panel,
+  Select,
+  useToast,
+} from '../ui';
 
 export type PublicOrganization = {
   id: string;
@@ -30,6 +39,7 @@ export function OrganizationsAdmin({
   const { pushToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
   const [createSlug, setCreateSlug] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -100,6 +110,13 @@ export function OrganizationsAdmin({
     return initialOrganizations.filter((org) => org.id !== orgId);
   }
 
+  function closeCreateModal() {
+    setCreateOpen(false);
+    setCreateName('');
+    setCreateSlug('');
+    setError(null);
+  }
+
   async function createOrganization() {
     setPending(true);
     setError(null);
@@ -118,8 +135,7 @@ export function OrganizationsAdmin({
         throw new Error(payload.error?.message ?? t('failed'));
       }
       const name = createName.trim();
-      setCreateName('');
-      setCreateSlug('');
+      closeCreateModal();
       pushToast(t('toastOrganizationCreated', { name }));
       router.refresh();
     } catch (err) {
@@ -248,17 +264,52 @@ export function OrganizationsAdmin({
 
   return (
     <div className="grid gap-6">
-      <Panel className="grid gap-4">
-        <div>
-          <h2 className="mt-0 mb-1 text-lg font-semibold">{t('createOrganization')}</h2>
-          <p className="m-0 text-sm text-ink-muted">{t('organizationsBlurb')}</p>
-        </div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="m-0 max-w-xl text-sm text-ink-muted">{t('organizationsBlurb')}</p>
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setError(null);
+            setCreateOpen(true);
+          }}
+        >
+          {t('createOrganization')}
+        </Button>
+      </div>
+
+      <Modal
+        open={createOpen}
+        onClose={closeCreateModal}
+        title={t('createOrganization')}
+        description={t('organizationsBlurb')}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={closeCreateModal}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || !createName.trim()}
+              onClick={() => void createOrganization()}
+            >
+              {t('create')}
+            </Button>
+          </>
+        }
+      >
         <Field label={tCommon('name')}>
           <Input
             value={createName}
             onChange={(e) => setCreateName(e.target.value)}
             required
             maxLength={160}
+            data-modal-initial-focus
           />
         </Field>
         <Field label={t('slug')}>
@@ -270,14 +321,7 @@ export function OrganizationsAdmin({
           />
         </Field>
         {error ? <ErrorText>{error}</ErrorText> : null}
-        <Button
-          type="button"
-          disabled={pending || !createName.trim()}
-          onClick={() => void createOrganization()}
-        >
-          {t('create')}
-        </Button>
-      </Panel>
+      </Modal>
 
       <div className="grid gap-3">
         {initialOrganizations.length === 0 ? (

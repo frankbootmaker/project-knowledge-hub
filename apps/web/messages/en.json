@@ -30,7 +30,8 @@
     "themeDark": "Dark",
     "themeCycle": "Theme: {current}. Click for {next}.",
     "tagsList": "Tags: {tags}",
-    "emDash": "—"
+    "emDash": "—",
+    "closeDialog": "Close dialog"
   },
   "nav": {
     "dashboard": "Dashboard",

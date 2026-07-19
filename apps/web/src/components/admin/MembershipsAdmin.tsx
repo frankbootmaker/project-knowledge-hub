@@ -3,7 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Badge, Button, ErrorText, Field, Panel, Select, useToast } from '../ui';
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  Modal,
+  Panel,
+  Select,
+  useToast,
+} from '../ui';
 
 export type PublicMembership = {
   id: string;
@@ -35,13 +44,23 @@ export function MembershipsAdmin({
   workspaces: WorkspaceOption[];
 }) {
   const t = useTranslations('admin');
+  const tCommon = useTranslations('common');
   const router = useRouter();
   const { pushToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [userId, setUserId] = useState(users[0]?.id ?? '');
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? '');
   const [role, setRole] = useState<(typeof ROLES)[number]>('reader');
+
+  function closeCreateModal() {
+    setCreateOpen(false);
+    setError(null);
+    setUserId(users[0]?.id ?? '');
+    setWorkspaceId(workspaces[0]?.id ?? '');
+    setRole('reader');
+  }
 
   async function createMembership() {
     setPending(true);
@@ -57,6 +76,7 @@ export function MembershipsAdmin({
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
+      closeCreateModal();
       pushToast(t('toastMembershipCreated'));
       router.refresh();
     } catch (err) {
@@ -125,49 +145,82 @@ export function MembershipsAdmin({
 
   return (
     <div className="grid gap-6">
-      <Panel>
-        <h2 className="mt-0 mb-4 text-lg font-semibold">{t('addMembership')}</h2>
-        <div className="grid gap-4">
-          <Field label={t('user')}>
-            <Select value={userId} onChange={(e) => setUserId(e.target.value)}>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.displayName} ({user.email})
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('workspace')}>
-            <Select value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('role')}>
-            <Select
-              value={role}
-              onChange={(e) => setRole(e.target.value as (typeof ROLES)[number])}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button
+          type="button"
+          disabled={pending || users.length === 0 || workspaces.length === 0}
+          onClick={() => {
+            setError(null);
+            setUserId(users[0]?.id ?? '');
+            setWorkspaceId(workspaces[0]?.id ?? '');
+            setRole('reader');
+            setCreateOpen(true);
+          }}
+        >
+          {t('addMembership')}
+        </Button>
+      </div>
+
+      <Modal
+        open={createOpen}
+        onClose={closeCreateModal}
+        title={t('addMembership')}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={closeCreateModal}
             >
-              {ROLES.map((value) => (
-                <option key={value} value={value}>
-                  {roleLabel(value)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <Button
-            type="button"
-            disabled={pending || !userId || !workspaceId}
-            onClick={() => void createMembership()}
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || !userId || !workspaceId}
+              onClick={() => void createMembership()}
+            >
+              {t('create')}
+            </Button>
+          </>
+        }
+      >
+        <Field label={t('user')}>
+          <Select
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            data-modal-initial-focus
           >
-            {t('create')}
-          </Button>
-        </div>
-      </Panel>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.displayName} ({user.email})
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('workspace')}>
+          <Select value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
+            {workspaces.map((workspace) => (
+              <option key={workspace.id} value={workspace.id}>
+                {workspace.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('role')}>
+          <Select
+            value={role}
+            onChange={(e) => setRole(e.target.value as (typeof ROLES)[number])}
+          >
+            {ROLES.map((value) => (
+              <option key={value} value={value}>
+                {roleLabel(value)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {error ? <ErrorText>{error}</ErrorText> : null}
+      </Modal>
 
       <div className="grid gap-3">
         {initialMemberships.length === 0 ? (

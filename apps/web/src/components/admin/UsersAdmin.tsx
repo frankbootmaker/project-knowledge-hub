@@ -3,7 +3,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Badge, Button, ErrorText, Field, Input, Panel, Select, useToast } from '../ui';
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  Input,
+  Modal,
+  Panel,
+  Select,
+  useToast,
+} from '../ui';
 
 export type PublicUser = {
   id: string;
@@ -16,14 +26,25 @@ export type PublicUser = {
 
 export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
   const t = useTranslations('admin');
+  const tCommon = useTranslations('common');
   const router = useRouter();
   const { pushToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+
+  function closeCreateModal() {
+    setCreateOpen(false);
+    setEmail('');
+    setDisplayName('');
+    setPassword('');
+    setIsSystemAdmin(false);
+    setError(null);
+  }
 
   async function createUser() {
     setPending(true);
@@ -40,10 +61,7 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
         throw new Error(payload.error?.message ?? t('failed'));
       }
       const createdName = displayName;
-      setEmail('');
-      setDisplayName('');
-      setPassword('');
-      setIsSystemAdmin(false);
+      closeCreateModal();
       pushToast(t('toastUserCreated', { name: createdName }));
       router.refresh();
     } catch (err) {
@@ -85,52 +103,79 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
 
   return (
     <div className="grid gap-6">
-      <Panel>
-        <h2 className="mt-0 mb-4 text-lg font-semibold">{t('createUser')}</h2>
-        <div className="grid gap-4">
-          <Field label={t('email')}>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label={t('displayName')}>
-            <Input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label={t('password')}>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={12}
-              placeholder={t('passwordHint')}
-            />
-          </Field>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={isSystemAdmin}
-              onChange={(e) => setIsSystemAdmin(e.target.checked)}
-            />
-            {t('systemAdmin')}
-          </label>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <Button
-            type="button"
-            disabled={pending || !email || !displayName || password.length < 12}
-            onClick={() => void createUser()}
-          >
-            {t('create')}
-          </Button>
-        </div>
-      </Panel>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setError(null);
+            setCreateOpen(true);
+          }}
+        >
+          {t('createUser')}
+        </Button>
+      </div>
+
+      <Modal
+        open={createOpen}
+        onClose={closeCreateModal}
+        title={t('createUser')}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={closeCreateModal}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || !email || !displayName || password.length < 12}
+              onClick={() => void createUser()}
+            >
+              {t('create')}
+            </Button>
+          </>
+        }
+      >
+        <Field label={t('email')}>
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            data-modal-initial-focus
+          />
+        </Field>
+        <Field label={t('displayName')}>
+          <Input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label={t('password')}>
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={12}
+            placeholder={t('passwordHint')}
+          />
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isSystemAdmin}
+            onChange={(e) => setIsSystemAdmin(e.target.checked)}
+          />
+          {t('systemAdmin')}
+        </label>
+        {error ? <ErrorText>{error}</ErrorText> : null}
+      </Modal>
 
       <div className="grid gap-3">
         {initialUsers.length === 0 ? (

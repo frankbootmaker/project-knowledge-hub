@@ -8,6 +8,7 @@ import {
   ErrorText,
   Field,
   Input,
+  Modal,
   Panel,
   Select,
   useToast,
@@ -58,6 +59,7 @@ export function ApiClientsAdmin({
   const { pushToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
 
   const [name, setName] = useState('');
@@ -76,6 +78,26 @@ export function ApiClientsAdmin({
     () => workspaces.filter((workspace) => workspace.organizationId === organizationId),
     [workspaces, organizationId],
   );
+
+  function resetCreateForm() {
+    setName('');
+    setOrganizationId(organizations[0]?.id ?? '');
+    setScopes([
+      'projects:read',
+      'systems:read',
+      'knowledge:read',
+      'knowledge:search',
+      'provenance:read',
+    ]);
+    setAllowedWorkspaceIds([]);
+    setActingUserId('');
+    setError(null);
+  }
+
+  function closeCreateModal() {
+    setCreateOpen(false);
+    resetCreateForm();
+  }
 
   async function createClient() {
     setPending(true);
@@ -103,7 +125,7 @@ export function ApiClientsAdmin({
       }
       const createdName = name;
       setIssuedToken(payload.token ?? null);
-      setName('');
+      closeCreateModal();
       pushToast(t('toastApiClientCreated', { name: createdName }));
       router.refresh();
     } catch (err) {
@@ -195,84 +217,116 @@ export function ApiClientsAdmin({
         </Panel>
       ) : null}
 
-      <Panel>
-        <h2 className="mt-0 mb-4 text-lg font-semibold">{t('createClient')}</h2>
-        <div className="grid gap-4">
-          <Field label={tCommon('name')}>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required />
-          </Field>
-          <Field label={t('organization')}>
-            <Select
-              value={organizationId}
-              onChange={(e) => {
-                setOrganizationId(e.target.value);
-                setAllowedWorkspaceIds([]);
-              }}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button
+          type="button"
+          disabled={pending || organizations.length === 0}
+          onClick={() => {
+            resetCreateForm();
+            setCreateOpen(true);
+          }}
+        >
+          {t('createClient')}
+        </Button>
+      </div>
+
+      <Modal
+        open={createOpen}
+        onClose={closeCreateModal}
+        title={t('createClient')}
+        size="lg"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={closeCreateModal}
             >
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <fieldset className="m-0 grid gap-2 border-0 p-0">
-            <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {MCP_SCOPES.map((scope) => (
-                <label key={scope} className="flex items-center gap-2 text-sm">
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || !name || !organizationId}
+              onClick={() => void createClient()}
+            >
+              {t('create')}
+            </Button>
+          </>
+        }
+      >
+        <Field label={tCommon('name')}>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            data-modal-initial-focus
+          />
+        </Field>
+        <Field label={t('organization')}>
+          <Select
+            value={organizationId}
+            onChange={(e) => {
+              setOrganizationId(e.target.value);
+              setAllowedWorkspaceIds([]);
+            }}
+          >
+            {organizations.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <fieldset className="m-0 grid gap-2 border-0 p-0">
+          <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {MCP_SCOPES.map((scope) => (
+              <label key={scope} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={scopes.includes(scope)}
+                  onChange={() => toggleScope(scope)}
+                />
+                <span className="font-mono text-xs">{scope}</span>
+              </label>
+            ))}
+          </div>
+          {scopes.includes('knowledge:write') ? (
+            <p className="m-0 text-xs text-ink-muted">{t('writeScopeHint')}</p>
+          ) : null}
+        </fieldset>
+        <fieldset className="m-0 grid gap-2 border-0 p-0">
+          <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
+          <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
+            {orgWorkspaces.length === 0 ? (
+              <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
+            ) : (
+              orgWorkspaces.map((workspace) => (
+                <label key={workspace.id} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={scopes.includes(scope)}
-                    onChange={() => toggleScope(scope)}
+                    checked={allowedWorkspaceIds.includes(workspace.id)}
+                    onChange={() => toggleWorkspace(workspace.id)}
                   />
-                  <span className="font-mono text-xs">{scope}</span>
+                  {workspace.name}
                 </label>
-              ))}
-            </div>
-            {scopes.includes('knowledge:write') ? (
-              <p className="m-0 text-xs text-ink-muted">{t('writeScopeHint')}</p>
-            ) : null}
-          </fieldset>
-          <fieldset className="m-0 grid gap-2 border-0 p-0">
-            <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
-            <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
-              {orgWorkspaces.length === 0 ? (
-                <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
-              ) : (
-                orgWorkspaces.map((workspace) => (
-                  <label key={workspace.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={allowedWorkspaceIds.includes(workspace.id)}
-                      onChange={() => toggleWorkspace(workspace.id)}
-                    />
-                    {workspace.name}
-                  </label>
-                ))
-              )}
-            </div>
-          </fieldset>
-          <Field label={t('actingUser')}>
-            <Select value={actingUserId} onChange={(e) => setActingUserId(e.target.value)}>
-              <option value="">{tCommon('none')}</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.displayName} ({user.email})
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <Button
-            type="button"
-            disabled={pending || !name || !organizationId}
-            onClick={() => void createClient()}
-          >
-            {t('create')}
-          </Button>
-        </div>
-      </Panel>
+              ))
+            )}
+          </div>
+        </fieldset>
+        <Field label={t('actingUser')}>
+          <Select value={actingUserId} onChange={(e) => setActingUserId(e.target.value)}>
+            <option value="">{tCommon('none')}</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.displayName} ({user.email})
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {error ? <ErrorText>{error}</ErrorText> : null}
+      </Modal>
 
       <div className="grid gap-3">
         {initialClients.length === 0 ? (
