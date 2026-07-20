@@ -308,4 +308,42 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
 
     return { workspace: archived ? toPublicWorkspace(archived) : null };
   });
+
+  /** Permanent delete — cascades projects, systems, records, git connections, memberships. */
+  app.post('/api/v1/workspaces/:workspaceId/purge', async (request, reply) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    z.object({ confirmDestroy: z.literal(true) }).parse(request.body ?? {});
+    requireWorkspaceAdmin(principal, params.workspaceId);
+
+    const [workspace] = await app.database.db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, params.workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      throw new AppError({
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'Workspace not found',
+        statusCode: 404,
+      });
+    }
+
+    await app.database.db.delete(workspaces).where(eq(workspaces.id, workspace.id));
+
+    await writeAuditEvent(app.database, {
+      organizationId: workspace.organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'workspace.purge',
+      entityType: 'workspace',
+      entityId: workspace.id,
+      metadata: { name: workspace.name, slug: workspace.slug },
+      ipAddress: request.ip,
+    });
+
+    return reply.status(204).send();
+  });
 }

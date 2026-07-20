@@ -3,10 +3,16 @@ import { getTranslations } from 'next-intl/server';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { LinkButton, Page, Panel } from '../../components/ui';
 
-const apiUrl =
+/** Server-side fetch target (may be internal Compose DNS like http://api:3101). */
+const internalApiUrl =
   process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3101';
-const webUrl =
-  process.env.WEB_URL ?? process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3100';
+
+/** Public origin shown to humans and external AI clients. */
+const publicOrigin = (
+  process.env.WEB_URL ??
+  process.env.NEXT_PUBLIC_WEB_URL ??
+  'http://localhost:3100'
+).replace(/\/$/, '');
 
 export default async function AiDiscoverPage() {
   const t = await getTranslations('aiDiscover');
@@ -15,6 +21,7 @@ export default async function AiDiscoverPage() {
   type DiscoverDoc = {
     mcpUrl?: string;
     openapiUrl?: string;
+    publicApiBase?: string;
     pairingCodeTtlSeconds?: number;
     defaultScopes?: string[];
     endpoints?: Record<string, string>;
@@ -25,7 +32,7 @@ export default async function AiDiscoverPage() {
   let discover: DiscoverDoc | null = null;
 
   try {
-    const response = await fetch(`${apiUrl}/api/v1/ai-discover`, {
+    const response = await fetch(`${internalApiUrl}/api/v1/ai-discover`, {
       cache: 'no-store',
     });
     if (response.ok) {
@@ -35,10 +42,17 @@ export default async function AiDiscoverPage() {
     discover = null;
   }
 
-  const mcpUrl = discover?.mcpUrl ?? `${apiUrl.replace(/\/$/, '')}/mcp`;
+  const apiBase = (discover?.publicApiBase ?? publicOrigin).replace(/\/$/, '');
+  const mcpUrl = discover?.mcpUrl ?? `${apiBase}/mcp`;
   const openapiUrl =
-    discover?.openapiUrl ?? `${apiUrl.replace(/\/$/, '')}/api/v1/llm/openapi.json`;
-  const apiDiscoverUrl = `${apiUrl.replace(/\/$/, '')}/api/v1/ai-discover`;
+    discover?.openapiUrl ?? `${apiBase}/api/v1/llm/openapi.json`;
+  const apiDiscoverUrl =
+    discover?.endpoints?.discover ?? `${apiBase}/api/v1/ai-discover`;
+  const createRequestUrl =
+    discover?.endpoints?.createRequest ?? `${apiBase}/api/v1/ai-discover/requests`;
+  const claimOrPollUrl =
+    discover?.endpoints?.claimOrPoll ??
+    `${apiBase}/api/v1/ai-discover/requests/<requestId>?claimSecret=<secret>`;
 
   return (
     <Page narrow className="px-4 py-16">
@@ -95,7 +109,7 @@ export default async function AiDiscoverPage() {
           <h2 className="m-0 text-base font-semibold">{t('requestTitle')}</h2>
           <p className="m-0 text-sm text-ink-muted">{t('requestBlurb')}</p>
           <pre className="m-0 overflow-x-auto rounded-md bg-panel-solid p-3 text-xs">
-            {`POST ${apiUrl.replace(/\/$/, '')}/api/v1/ai-discover/requests
+            {`POST ${createRequestUrl}
 Content-Type: application/json
 
 {
@@ -107,7 +121,7 @@ Content-Type: application/json
           </pre>
           <p className="m-0 text-sm text-ink-muted">{t('pollBlurb')}</p>
           <pre className="m-0 overflow-x-auto rounded-md bg-panel-solid p-3 text-xs">
-            {`GET ${apiUrl.replace(/\/$/, '')}/api/v1/ai-discover/requests/<requestId>?claimSecret=<secret>`}
+            {`GET ${claimOrPollUrl}`}
           </pre>
         </Panel>
 
@@ -126,7 +140,7 @@ Content-Type: application/json
             </LinkButton>
           </div>
           <p className="m-0 text-xs text-ink-muted">
-            {t('siteHint', { url: webUrl.replace(/\/$/, '') })}
+            {t('siteHint', { url: publicOrigin })}
           </p>
         </Panel>
 

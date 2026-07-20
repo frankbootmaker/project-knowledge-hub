@@ -339,6 +339,26 @@ export function GitConnectionsPanel(props: {
     router.refresh();
   }
 
+  async function clearHistory(connectionId: string) {
+    if (!window.confirm(t('clearHistoryConfirm'))) {
+      return;
+    }
+    setManageError(null);
+    setError(null);
+    const response = await fetch(`/api/v1/git-connections/${connectionId}/sync-runs`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { Origin: window.location.origin },
+    });
+    if (!response.ok && response.status !== 204) {
+      const payload = (await response.json()) as { error?: { message?: string } };
+      setManageError(payload.error?.message ?? t('failedClearHistory'));
+      setError(payload.error?.message ?? t('failedClearHistory'));
+      return;
+    }
+    await loadRuns(connectionId);
+  }
+
   function formatLastSync(value: string | null): string {
     if (!value) return t('neverSynced');
     return new Date(value).toLocaleString();
@@ -740,7 +760,22 @@ export function GitConnectionsPanel(props: {
             </div>
 
             <div>
-              <h3 className="mt-0 mb-2 text-base font-semibold">{t('history')}</h3>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="m-0 text-base font-semibold">{t('history')}</h3>
+                {props.canManage &&
+                (runsByConnection[manageConnection.id] ?? []).length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() =>
+                      startTransition(() => void clearHistory(manageConnection.id))
+                    }
+                  >
+                    {t('clearHistory')}
+                  </Button>
+                ) : null}
+              </div>
               {(runsByConnection[manageConnection.id] ?? []).length === 0 ? (
                 <p className="m-0 text-sm text-ink-muted">{t('historyEmpty')}</p>
               ) : (

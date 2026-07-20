@@ -4,7 +4,7 @@ For a guided in-app flow (platform checks → client → connection tests → cl
 
 The wizard’s final step exports configs for **Cursor**, **ChatGPT** (OpenAPI Actions), **Gemini** (MCP + OpenAPI + functionDeclarations), **Microsoft Copilot Studio** (Swagger 2.0 MCP streamable), and **OpenWebUI** (native MCP or OpenAPI).
 
-The Cursor config URL defaults to `{API_URL}/mcp`. For reverse proxies or split DNS, set optional env `MCP_PUBLIC_URL`, or save a **public MCP URL override** in the wizard (stored in platform settings). Connection tests still use the internal API URL.
+The Cursor config URL defaults to `{WEB_URL}/mcp` (same-origin via the web reverse rewrite). For a different public host, set optional env `MCP_PUBLIC_URL`, or save a **public MCP URL override** in the wizard (stored in platform settings). Connection tests still use the internal `API_URL`. Never advertise internal Compose hosts (e.g. `http://api:3101`) to external LLM clients.
 
 Project Knowledge Hub exposes MCP at:
 

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ArchiveEntityButton } from '../../../../../../components/ArchiveEntityButton';
+import { PurgeEntityButton } from '../../../../../../components/PurgeEntityButton';
 import {
   Badge,
   ListCard,
@@ -80,6 +81,13 @@ export default async function ProjectDetailPage({
         membership.workspaceId === workspace.id &&
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
+  const canPurge =
+    session.user.isSystemAdmin ||
+    session.memberships.some(
+      (membership) =>
+        membership.workspaceId === workspace.id &&
+        membership.role === 'workspace_admin',
+    );
 
   const systemsResponse = await apiFetch(
     `/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`,
@@ -112,14 +120,26 @@ export default async function ProjectDetailPage({
           </span>
         }
         actions={
-          canMutate ? (
-            <ArchiveEntityButton
-              kind="project"
-              entityId={project.id}
-              entityName={project.name}
-              archived={isArchived}
-              redirectOnArchive={`/workspaces/${workspace.slug}`}
-            />
+          canMutate || canPurge ? (
+            <div className="flex flex-wrap items-start gap-2">
+              {canMutate ? (
+                <ArchiveEntityButton
+                  kind="project"
+                  entityId={project.id}
+                  entityName={project.name}
+                  archived={isArchived}
+                  redirectOnArchive={`/workspaces/${workspace.slug}`}
+                />
+              ) : null}
+              {canPurge ? (
+                <PurgeEntityButton
+                  kind="project"
+                  entityId={project.id}
+                  entityName={project.name}
+                  redirectOnPurge={`/workspaces/${workspace.slug}`}
+                />
+              ) : null}
+            </div>
           ) : null
         }
       />

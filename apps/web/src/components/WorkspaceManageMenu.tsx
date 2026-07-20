@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { WORKSPACE_DESCRIPTION_MAX_LENGTH } from '@project-knowledge-hub/domain';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
+import { PurgeEntityButton } from './PurgeEntityButton';
 import { WorkspaceColorPicker } from './WorkspaceColorPicker';
 import {
   WORKSPACE_COLORS,
@@ -35,7 +36,7 @@ export type WorkspaceDetailsInfo = {
   memberAdminCount: number;
 };
 
-type Section = 'menu' | 'details' | 'color' | 'archive';
+type Section = 'menu' | 'details' | 'color' | 'archive' | 'delete';
 
 const menuItemClass =
   'kh-panel-inset flex w-full cursor-pointer items-center justify-between gap-3 border border-line bg-panel-solid text-left transition hover:border-brand/35';
@@ -110,6 +111,7 @@ export function WorkspaceManageMenu(props: {
     if (section === 'menu') return t('manageTitle');
     if (section === 'details') return t('manageDetails');
     if (section === 'color') return t('colorLabel');
+    if (section === 'delete') return t('manageDelete');
     return props.archived ? t('manageRestore') : t('manageArchive');
   }
 
@@ -311,6 +313,27 @@ export function WorkspaceManageMenu(props: {
                 </button>
               </li>
             ) : null}
+            {props.canManageArchive ? (
+              <li>
+                <button
+                  type="button"
+                  className={menuItemClass}
+                  onClick={() => setSection('delete')}
+                >
+                  <span>
+                    <span className="block font-medium text-ink">
+                      {t('manageDelete')}
+                    </span>
+                    <span className="mt-0.5 block text-sm text-ink-muted">
+                      {t('manageDeleteHint')}
+                    </span>
+                  </span>
+                  <span className="text-ink-muted" aria-hidden>
+                    →
+                  </span>
+                </button>
+              </li>
+            ) : null}
           </ul>
         ) : null}
 
@@ -491,6 +514,27 @@ export function WorkspaceManageMenu(props: {
               entityName={props.workspaceName}
               archived={props.archived}
               redirectOnArchive="/workspaces"
+            />
+            <div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setSection('menu')}
+              >
+                {tCommon('back')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {section === 'delete' ? (
+          <div className="grid gap-4">
+            <p className="m-0 text-sm text-ink-muted">{t('manageDeleteHint')}</p>
+            <PurgeEntityButton
+              kind="workspace"
+              entityId={props.workspaceId}
+              entityName={props.workspaceName}
+              redirectOnPurge="/workspaces"
             />
             <div>
               <Button

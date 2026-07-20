@@ -20,7 +20,10 @@ import {
 } from '@project-knowledge-hub/mcp';
 import type { AppEnv } from '@project-knowledge-hub/config';
 import { getDefaultOrganization } from './identity.js';
-import { resolveMcpPublicUrl } from './mcp-public-url.js';
+import {
+  publicOriginFromWebUrl,
+  resolveMcpPublicUrl,
+} from './mcp-public-url.js';
 import { toPublicApiClient } from './api-clients.js';
 
 export const PAIRING_CODE_TTL_SECONDS = 15 * 60;
@@ -333,14 +336,20 @@ export async function buildAiDiscoverDocument(
 ): Promise<Record<string, unknown>> {
   const mcpResolved = await resolveMcpPublicUrl(database, env);
   const mcpUrl = mcpResolved.mcpUrl;
-  const apiBase = new URL(mcpUrl).origin;
-  const webDiscoverUrl = `${env.WEB_URL.replace(/\/$/, '')}/ai-discover`;
-  const openapiUrl = `${apiBase}/api/v1/llm/openapi.json`;
+  const publicApiBase = publicOriginFromWebUrl(env.WEB_URL);
+  const webDiscoverUrl = `${publicApiBase}/ai-discover`;
+  // Prefer WEB_URL for HTTP API paths — API_URL is often an internal Compose host.
+  const openapiUrl = `${publicApiBase}/api/v1/llm/openapi.json`;
+  const discoverUrl = `${publicApiBase}/api/v1/ai-discover`;
+  const createRequestUrl = `${publicApiBase}/api/v1/ai-discover/requests`;
+  const claimOrPollUrl =
+    `${publicApiBase}/api/v1/ai-discover/requests/{requestId}?claimSecret={claimSecret}`;
 
   return {
     service: 'project-knowledge-hub',
     purpose: 'AI agent autodiscovery for MCP / OpenAPI API client pairing',
     webDiscoverUrl,
+    publicApiBase,
     mcpUrl,
     openapiUrl,
     pairingCodeTtlSeconds: PAIRING_CODE_TTL_SECONDS,
@@ -349,17 +358,17 @@ export async function buildAiDiscoverDocument(
       'User creates an active account in the Knowledge Hub and signs in.',
       'User opens Profile → Connect AI (or /account/ai-connections) and generates a pairing code.',
       'User pastes the pairing code and this discover URL into the AI chat.',
-      'AI calls POST /api/v1/ai-discover/requests with the pairing code.',
+      `AI calls POST ${createRequestUrl} with the pairing code.`,
       'User or a system admin approves the pending request in the hub.',
-      'AI polls GET /api/v1/ai-discover/requests/:requestId?claimSecret=… until approved, then saves the bearer token.',
-      'AI uses Authorization: Bearer <token> against /mcp or /api/v1/llm/tools/:toolName.',
+      `AI polls GET ${claimOrPollUrl} until approved, then saves the bearer token.`,
+      `AI uses Authorization: Bearer <token> against ${mcpUrl} or ${publicApiBase}/api/v1/llm/tools/:toolName.`,
     ],
     endpoints: {
-      discover: 'GET /api/v1/ai-discover',
-      createRequest: 'POST /api/v1/ai-discover/requests',
-      claimOrPoll: 'GET /api/v1/ai-discover/requests/:requestId?claimSecret=',
-      mintPairingCode: 'POST /api/v1/me/ai-pairing-codes (session auth)',
-      listMyClients: 'GET /api/v1/me/api-clients (session auth)',
+      discover: discoverUrl,
+      createRequest: createRequestUrl,
+      claimOrPoll: claimOrPollUrl,
+      mintPairingCode: `${publicApiBase}/api/v1/me/ai-pairing-codes (session auth)`,
+      listMyClients: `${publicApiBase}/api/v1/me/api-clients (session auth)`,
     },
     createRequestBody: {
       pairingCode: 'string (from user)',
