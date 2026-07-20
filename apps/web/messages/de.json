@@ -217,6 +217,9 @@
   },
   "statusPage": {
     "eyebrow": "Plattformstatus",
+    "backToAdmin": "Zurück zur Admin",
+    "overallHealthy": "Gesund",
+    "overallDegraded": "Eingeschränkt",
     "application": "Anwendung",
     "webStatus": "Web-Status",
     "apiHealth": "API-Gesundheit",
@@ -594,6 +597,7 @@
     "memberships": "Mitgliedschaften",
     "archive": "Archiv",
     "audit": "Audit-Protokoll",
+    "status": "Status",
     "auditBlurb": "Suchen, nach Tag oder Zeitraum filtern, Audit-Ereignisse seitenweise durchsuchen und die gefilterte Ansicht exportieren.",
     "auditExportCsv": "CSV exportieren",
     "auditExportJson": "JSON exportieren",

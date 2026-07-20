@@ -217,6 +217,9 @@
   },
   "statusPage": {
     "eyebrow": "Platformállapot",
+    "backToAdmin": "Vissza az Adminhoz",
+    "overallHealthy": "Egészséges",
+    "overallDegraded": "Csökkentett",
     "application": "Alkalmazás",
     "webStatus": "Web állapot",
     "apiHealth": "API egészség",
@@ -594,6 +597,7 @@
     "memberships": "Tagságok",
     "archive": "Archívum",
     "audit": "Auditnapló",
+    "status": "Állapot",
     "auditBlurb": "Keresés, nap vagy dátumtartomány szerinti szűrés, lapozható audit események és a szűrt nézet exportálása.",
     "auditExportCsv": "CSV export",
     "auditExportJson": "JSON export",

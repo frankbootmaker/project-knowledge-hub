@@ -71,7 +71,7 @@
     @apply rounded-lg border border-line bg-panel p-5 shadow-sm backdrop-blur-sm;
   }
 
-  /* Workspace accent tiles — left bar + soft wash */
+  /* Workspace accent tiles — soft wash + stronger wash on hover */
   .kh-workspace-accent-bar {
     height: 0.375rem;
     border-radius: 999px;
@@ -79,9 +79,6 @@
   }
 
   .kh-workspace-tile {
-    border-left-width: 4px;
-    border-left-style: solid;
-    border-left-color: var(--kh-workspace-accent);
     background: linear-gradient(
       105deg,
       color-mix(in srgb, var(--kh-workspace-accent) 14%, var(--kh-panel)) 0%,

@@ -62,8 +62,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Viewport | Root layout exports `viewport: { width: 'device-width', initialScale: 1 }` |
 | Shell padding / width | `.kh-shell` / `shellClassName` — `max-w-6xl` + `px-4 sm:px-6` |
 | Shell content | `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
-| Primary nav | Desktop: inline `NavLink`s from `md` up (Dashboard, Workspaces, Search, Archive, Admin?, Status). Below `md`: `MobileNav` with the same destinations (never hide nav without a mobile path) |
-| Admin sidebar | Stacks above content below `lg` via `lg:grid-cols-[220px_1fr]` in `admin/layout.tsx`. Compact horizontal rail is a later enhancement |
+| Primary nav | Desktop: inline `NavLink`s from `md` up (Dashboard, Workspaces, Search, Archive, Admin?). Below `md`: `MobileNav` with the same destinations (never hide nav without a mobile path). Platform Status lives under Admin sidebar |
+| Admin sidebar | Stacks above content below `lg` via `lg:grid-cols-[220px_1fr]` in `admin/layout.tsx`. Includes Overview … Audit, then **Status** (`/status`). Compact horizontal rail is a later enhancement |
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
 | Touch targets | Prefer existing control tokens / header control squares; keep interactive chrome ≥ ~40px |
 | Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
@@ -73,7 +73,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Shell | Pattern |
 |-------|---------|
 | App header | Sticky bar; brand + desktop nav (`md+`) + `MobileNav` (`md:hidden` toggle) + theme/locale/session |
-| App / status content | `shellContentClassName` |
+| App / status content | `shellContentClassName`. Status page: eyebrow + back link on one row; overall health `Badge` beside title; row values use `Badge` tones (no left accent bars) |
 | Admin | Single column until `lg`, then sidebar + main; sidebar uses `NavLink tone="sidebar"` |
 
 ## Recipes (`.kh-*`)
@@ -82,7 +82,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 |--------|------|
 | `.kh-input` / `.kh-label` | Form controls |
 | `.kh-panel` / `.kh-panel-solid` / `.kh-panel-inset` | Surfaces |
-| `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (left bar + soft wash); palette keys from domain |
+| `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (soft wash + hover; no left bar); palette keys from domain |
 | `.kh-workspace-swatch` / `.kh-workspace-swatch-btn*` | Color picker swatches |
 | `.kh-muted` | Secondary text |
 | `.kh-btn` + `.kh-btn-{primary,secondary,ghost,success,danger}` | Buttons / link-buttons |
@@ -155,6 +155,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-20
 
+* **Status page** — Platform `/status` lives under Admin sidebar (not primary header nav). Eyebrow row shares space with **Back to Admin** (right). Overall health `Badge` beside the title; row values use colored `Badge`s (no left accent bars).
+* **Workspace tiles** — Left accent bar removed from `.kh-workspace-tile`; soft color wash remains, with a stronger wash on hover. Horizontal `.kh-workspace-accent-bar` on workspace detail pages is unchanged.
 * **Password strength** — `PasswordStrengthHint` under new-password fields (register, set-password, admin users). Shared policy: 8+ chars, one uppercase, one number/symbol = **Safe**; 12+ with those rules = **Strong**.
 * **Password visibility** — Shared `PasswordInput` primitive with show/hide toggle on auth, admin user, mail secrets, and git token fields.
 * **Signup approval** — Registration collects password, sends confirm-email, then Admin → Users shows pending queues; Approve requires ≥1 workspace membership. Public `/confirm-email` matches other auth pages.
@@ -171,7 +173,7 @@ Record durable UI / design-system changes here (newest first).
 * **Synchronizations hub (earlier)** — List / Add / Manage shell; non-GitHub providers were previously “Coming soon” until sync backends shipped.
 * **Modal focus** — `Modal` only runs initial focus / body-scroll lock when `open` flips true (not when `onClose` identity changes), so typing in modal fields does not steal focus each keystroke.
 * **Workspace manage + status** — Workspace header shows a status `Badge` (Active / Archived / Needs attention) and a **Manage** button. A brief description (max 280 chars) can sit above the `.kh-workspace-accent-bar` overview line; edit it via Manage → Details. Needs attention links to Git sync. Manage modal also covers synchronizations, archived items, color, archive/restore.
-* **Workspace colors** — Curated accent palette (`ocean`…`ink`) on workspace tiles (dashboard + list) via `.kh-workspace-tile` / `.kh-workspace-color-*`. Unset color uses a stable hash. Create form + Manage → color use `WorkspaceColorPicker`.
+* **Workspace colors** — Curated accent palette (`ocean`…`ink`) on workspace tiles (dashboard + list) via `.kh-workspace-tile` / `.kh-workspace-color-*` (soft wash + hover). Unset color uses a stable hash. Create form + Manage → color use `WorkspaceColorPicker`.
 * **Git sync** — Workspace page link to `/workspaces/{slug}/git` for GitHub connections and Sync now. Connection cards show a sync-health `Badge` (healthy / sync needed / error, etc.) after a lightweight remote commit check. Git-managed records hide Edit / lifecycle actions; show View on GitHub when provenance URI exists.
 * **Record type labels** — Knowledge editor select uses i18n `records.typeLabels.*` driven by the shared domain catalog (incl. planning ledger types).
 * **Audit PDF export** — Admin Audit adds Export PDF beside CSV/JSON; same filter scope. PDF pages carry organization, project, filter details, and export timestamp in header/footer.

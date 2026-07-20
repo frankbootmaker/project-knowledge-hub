@@ -49,7 +49,6 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
             : []),
         ]
       : []),
-    { href: '/status', label: t('status') },
   ];
 
   return (
@@ -58,7 +57,7 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
         <div className="flex min-w-0 items-center gap-3 sm:gap-5">
           <MobileNav items={navItems} />
           <Link
-            href={session ? '/dashboard' : '/status'}
+            href={session ? '/dashboard' : '/login'}
             className="shrink-0 text-base font-semibold tracking-tight text-ink no-underline"
           >
             {tCommon('appName')}
@@ -75,7 +74,6 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
                 ) : null}
               </>
             ) : null}
-            <NavLink href="/status">{t('status')}</NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-3">
