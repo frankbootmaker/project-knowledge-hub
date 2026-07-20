@@ -47,6 +47,19 @@ export {
   type SyncProviderDefinition,
 } from './sync-providers.js';
 
+export {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_STRONG_LENGTH,
+  evaluatePasswordStrength,
+  passwordHasNonLetter,
+  passwordHasUppercase,
+  passwordSchema,
+  optionalPasswordSchema,
+  type PasswordRequirementKey,
+  type PasswordStrength,
+  type PasswordStrengthLevel,
+} from './password.js';
+
 export const projectStatusSchema = z.enum([
   'idea',
   'planned',

@@ -3,7 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { hashPassword } from '@project-knowledge-hub/auth';
 import { users } from '@project-knowledge-hub/database';
-import { AppError, userStatusSchema } from '@project-knowledge-hub/domain';
+import { AppError, passwordSchema, userStatusSchema } from '@project-knowledge-hub/domain';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import {
   assertMutatingOrigin,
@@ -19,7 +19,7 @@ const createUserSchema = z
     email: z.string().email().max(320),
     displayName: z.string().min(1).max(160),
     fullName: z.string().max(200).nullable().optional(),
-    password: z.string().min(12).max(200).optional(),
+    password: passwordSchema.optional(),
     sendInvite: z.boolean().optional(),
     status: userStatusSchema.optional(),
     isSystemAdmin: z.boolean().optional(),
@@ -52,7 +52,7 @@ const updateUserSchema = z
     fullName: z.string().max(200).nullable().optional(),
     status: userStatusSchema.optional(),
     isSystemAdmin: z.boolean().optional(),
-    password: z.string().min(12).max(200).optional(),
+    password: passwordSchema.optional(),
     idpSource: z.string().min(1).max(64).nullable().optional(),
     idpSubject: z.string().min(1).max(320).nullable().optional(),
   })

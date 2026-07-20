@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { evaluatePasswordStrength } from '@project-knowledge-hub/domain';
 import {
   Badge,
   Button,
@@ -11,6 +12,8 @@ import {
   Input,
   Modal,
   Panel,
+  PasswordInput,
+  PasswordStrengthHint,
   Select,
   useToast,
 } from '../ui';
@@ -138,6 +141,11 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
         idpSubject: editIdpSubject.trim() || null,
       };
       if (editPassword.trim()) {
+        if (!evaluatePasswordStrength(editPassword.trim()).acceptable) {
+          setEditError(tCommon('passwordPolicy'));
+          setPending(false);
+          return;
+        }
         patch.password = editPassword.trim();
       }
       const response = await fetch(`/api/v1/users/${editUser.id}`, {
@@ -195,7 +203,7 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
   const createReady =
     email.trim().length > 0 &&
     displayName.trim().length > 0 &&
-    (sendInvite || password.length >= 12);
+    (sendInvite || evaluatePasswordStrength(password).acceptable);
 
   return (
     <div className="grid gap-6">
@@ -271,17 +279,19 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
           {t('sendInviteEmail')}
         </label>
         {!sendInvite ? (
-          <Field label={t('password')}>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={12}
-              placeholder={t('passwordHint')}
-              autoComplete="new-password"
-            />
-          </Field>
+          <div className="grid gap-2">
+            <Field label={t('password')}>
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                placeholder={t('passwordHint')}
+                autoComplete="new-password"
+              />
+            </Field>
+            <PasswordStrengthHint value={password} />
+          </div>
         ) : (
           <p className="m-0 text-sm text-ink-muted">{t('inviteHint')}</p>
         )}
@@ -339,16 +349,18 @@ export function UsersAdmin({ initialUsers }: { initialUsers: PublicUser[] }) {
                 <option value="invited">{t('statusInvited')}</option>
               </Select>
             </Field>
-            <Field label={t('newPasswordOptional')}>
-              <Input
-                type="password"
-                value={editPassword}
-                onChange={(e) => setEditPassword(e.target.value)}
-                minLength={12}
-                placeholder={t('passwordHint')}
-                autoComplete="new-password"
-              />
-            </Field>
+            <div className="grid gap-2">
+              <Field label={t('newPasswordOptional')}>
+                <PasswordInput
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  minLength={8}
+                  placeholder={t('passwordHint')}
+                  autoComplete="new-password"
+                />
+              </Field>
+              <PasswordStrengthHint value={editPassword} />
+            </div>
             <Field label={t('idpSource')}>
               <Input
                 value={editIdpSource}

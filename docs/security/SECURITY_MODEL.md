@@ -19,6 +19,9 @@
 * Password reset and invite links use one-time tokens stored as SHA-256 hashes (`auth_tokens`); raw tokens appear only in email URLs
 * Reset TTL defaults to 1 hour; invite TTL defaults to 7 days (`AUTH_PASSWORD_RESET_TTL_SECONDS`, `AUTH_INVITE_TTL_SECONDS`)
 * `POST /api/v1/auth/forgot-password` always returns a generic success response (no email enumeration); rate-limited per IP+email in-process
+* `POST /api/v1/auth/register` creates a non-admin local account and signs the user in; rate-limited per IP+email in-process
+* Passwords must be at least 8 characters with one uppercase letter and one non-letter character (digit or symbol); 12+ with those rules is treated as strong in the UI
+* Admin invite flows remain available for provisioning without a password
 * Outbound mail is pluggable (`MAIL_DRIVER=console|smtp|resend`); secrets (`SMTP_PASS`, `RESEND_API_KEY`) are redacted from logs
 
 ## Upcoming controls

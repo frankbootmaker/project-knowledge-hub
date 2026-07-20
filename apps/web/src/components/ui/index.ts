@@ -2,6 +2,8 @@ export { Badge, lifecycleTone } from './Badge';
 export { Button } from './Button';
 export { buttonClassName, type ButtonVariant } from './buttonStyles';
 export { ErrorText, Field, Input, Select, Textarea } from './Field';
+export { PasswordInput } from './PasswordInput';
+export { PasswordStrengthHint } from './PasswordStrengthHint';
 export { LinkButton } from './LinkButton';
 export { MobileNav, type MobileNavItem } from './MobileNav';
 export { Modal } from './Modal';

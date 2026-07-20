@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { Button, ErrorText, Field, Input, Page, Panel } from '../../components/ui';
+import { Button, ErrorText, Field, Input, Page, Panel, PasswordInput } from '../../components/ui';
 
 function LoginForm() {
   const router = useRouter();
@@ -57,7 +57,7 @@ function LoginForm() {
       </div>
       <div className="mb-6">
         <p className="mb-1 text-xs font-semibold tracking-[0.14em] text-ink-muted uppercase">
-          {tCommon('appName')}
+          {tCommon('brandName')}
         </p>
         <h1 className="m-0 text-3xl font-semibold tracking-tight">{tCommon('appName')}</h1>
         <p className="mt-2 text-ink-muted">{t('subtitle')}</p>
@@ -77,8 +77,7 @@ function LoginForm() {
             />
           </Field>
           <Field label={t('password')}>
-            <Input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
@@ -89,12 +88,20 @@ function LoginForm() {
           <Button type="submit" disabled={pending} className="mt-1 w-full py-2.5">
             {pending ? t('signingIn') : t('signIn')}
           </Button>
-          <Link
-            href="/forgot-password"
-            className="text-sm text-ink-muted underline-offset-2 hover:underline"
-          >
-            {t('forgotPassword')}
-          </Link>
+          <div className="flex items-center justify-between gap-4">
+            <Link
+              href="/register"
+              className="text-sm text-ink-muted underline-offset-2 hover:underline"
+            >
+              {t('register')}
+            </Link>
+            <Link
+              href="/forgot-password"
+              className="text-sm text-ink-muted underline-offset-2 hover:underline"
+            >
+              {t('forgotPassword')}
+            </Link>
+          </div>
         </form>
       </Panel>
     </Page>

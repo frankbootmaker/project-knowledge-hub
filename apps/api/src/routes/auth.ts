@@ -3,11 +3,12 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   createSessionToken,
+  hashPassword,
   hashSessionToken,
   verifyPassword,
 } from '@project-knowledge-hub/auth';
 import { sessions, users } from '@project-knowledge-hub/database';
-import { AppError } from '@project-knowledge-hub/domain';
+import { AppError, passwordSchema } from '@project-knowledge-hub/domain';
 import {
   assertMutatingOrigin,
   clearSessionCookie,
@@ -29,16 +30,23 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const registerSchema = z.object({
+  email: z.string().email().max(320),
+  displayName: z.string().min(1).max(160),
+  password: passwordSchema,
+});
+
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
 });
 
 const setPasswordSchema = z.object({
   token: z.string().min(1).max(500),
-  password: z.string().min(12).max(200),
+  password: passwordSchema,
 });
 
 const forgotPasswordLimiter = new MemoryRateLimiter(5, 15 * 60 * 1000);
+const registerLimiter = new MemoryRateLimiter(5, 15 * 60 * 1000);
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/v1/auth/login', async (request, reply) => {
@@ -167,6 +175,91 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         ),
       },
       memberships: principal.memberships,
+    };
+  });
+
+  app.post('/api/v1/auth/register', async (request, reply) => {
+    assertMutatingOrigin(app, request);
+    const body = registerSchema.parse(request.body);
+    const email = body.email.toLowerCase();
+    const rateKey = `${request.ip}:${email}`;
+
+    if (!registerLimiter.allow(rateKey)) {
+      throw new AppError({
+        code: 'RATE_LIMITED',
+        message: 'Too many registration attempts. Try again later.',
+        statusCode: 429,
+      });
+    }
+
+    const [existing] = await app.database.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (existing) {
+      throw new AppError({
+        code: 'USER_EMAIL_CONFLICT',
+        message: 'A user with this email already exists',
+        statusCode: 409,
+      });
+    }
+
+    const [created] = await app.database.db
+      .insert(users)
+      .values({
+        email,
+        displayName: body.displayName.trim(),
+        passwordHash: await hashPassword(body.password),
+        status: 'active',
+        isSystemAdmin: false,
+      })
+      .returning();
+
+    if (!created) {
+      throw new AppError({
+        code: 'USER_CREATE_FAILED',
+        message: 'Failed to create user',
+        statusCode: 500,
+      });
+    }
+
+    const token = createSessionToken();
+    const expiresAt = new Date(Date.now() + app.env.SESSION_TTL_SECONDS * 1000);
+
+    await app.database.db.insert(sessions).values({
+      userId: created.id,
+      tokenHash: hashSessionToken(token),
+      expiresAt,
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'] ?? null,
+    });
+
+    await writeAuditEvent(app.database, {
+      actorType: 'user',
+      actorId: created.id,
+      action: 'auth.register',
+      entityType: 'user',
+      entityId: created.id,
+      ipAddress: request.ip,
+    });
+
+    setSessionCookie(app, reply, token, app.env.SESSION_TTL_SECONDS);
+
+    return {
+      user: {
+        id: created.id,
+        email: created.email,
+        displayName: created.displayName,
+        fullName: created.fullName ?? null,
+        isSystemAdmin: created.isSystemAdmin,
+        avatarUrl: avatarUrlForUser(
+          created.id,
+          created.avatarContentType ?? null,
+          created.updatedAt,
+        ),
+      },
     };
   });
 

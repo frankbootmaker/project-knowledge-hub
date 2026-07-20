@@ -1,5 +1,6 @@
 {
   "common": {
+    "brandName": "IN3 Technology",
     "appName": "Project Knowledge Hub",
     "loading": "Loading…",
     "save": "Save",
@@ -32,7 +33,23 @@
     "themeCycle": "Theme: {current}. Click for {next}.",
     "tagsList": "Tags: {tags}",
     "emDash": "—",
-    "closeDialog": "Close dialog"
+    "closeDialog": "Close dialog",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "passwordStrengthLabel": "Password strength",
+    "passwordStrength": {
+      "empty": "",
+      "weak": "Weak",
+      "fair": "Fair",
+      "safe": "Safe",
+      "strong": "Strong"
+    },
+    "passwordRequirements": {
+      "length": "At least 8 characters",
+      "uppercase": "At least one uppercase letter",
+      "nonLetter": "At least one number or symbol"
+    },
+    "passwordPolicy": "Use at least 8 characters, one uppercase letter, and one number or symbol"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -102,7 +119,24 @@
     "signingIn": "Signing in…",
     "failed": "Login failed",
     "forgotPassword": "Forgot password?",
+    "register": "Registration",
     "passwordSet": "Password updated. You can sign in now."
+  },
+  "register": {
+    "title": "Registration",
+    "subtitle": "Create a local account to get started.",
+    "email": "Email",
+    "displayName": "Display name",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "submit": "Create account",
+    "submitting": "Creating account…",
+    "mismatch": "Passwords do not match",
+    "tooShort": "Password must be at least 8 characters",
+    "failed": "Could not create account",
+    "backToLogin": "Back to sign in",
+    "haveAccount": "Already have an account?",
+    "weakPassword": "Use at least 8 characters, one uppercase letter, and one number or symbol"
   },
   "forgotPassword": {
     "title": "Forgot password",
@@ -123,7 +157,7 @@
     "submit": "Save password",
     "saving": "Saving…",
     "mismatch": "Passwords do not match",
-    "tooShort": "Password must be at least 12 characters",
+    "tooShort": "Password must be at least 8 characters",
     "failed": "Could not set password",
     "missingToken": "This link is missing a token.",
     "invalidLink": "This link is invalid.",
@@ -588,7 +622,7 @@
     "idpSubject": "IdP subject",
     "idpStubHint": "Stub for future SSO (leave empty for local)",
     "password": "Password",
-    "passwordHint": "At least 12 characters",
+    "passwordHint": "At least 8 characters, one uppercase letter, and one number or symbol",
     "systemAdmin": "System administrator",
     "makeSystemAdmin": "Make system admin",
     "removeSystemAdmin": "Remove system admin",

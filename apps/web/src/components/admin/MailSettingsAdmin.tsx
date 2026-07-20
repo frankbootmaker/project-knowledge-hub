@@ -10,6 +10,7 @@ import {
   Field,
   Input,
   Panel,
+  PasswordInput,
   Select,
   useToast,
 } from '../ui';
@@ -263,8 +264,7 @@ export function MailSettingsAdmin({
               />
             </Field>
             <Field label={t('mailSmtpPass')}>
-              <Input
-                type="password"
+              <PasswordInput
                 value={smtpPass}
                 onChange={(e) => {
                   setSmtpPass(e.target.value);
@@ -295,8 +295,7 @@ export function MailSettingsAdmin({
         {driver === 'resend' ? (
           <div className="grid gap-3">
             <Field label={t('mailResendApiKey')}>
-              <Input
-                type="password"
+              <PasswordInput
                 value={resendApiKey}
                 onChange={(e) => {
                   setResendApiKey(e.target.value);

@@ -18,6 +18,7 @@ import {
   Input,
   Modal,
   Panel,
+  PasswordInput,
   Select,
   Textarea,
 } from './ui';
@@ -524,8 +525,7 @@ export function GitConnectionsPanel(props: {
                 </Field>
               ) : null}
               <Field label={fieldLabel(selectedProvider, 'token')} className="sm:col-span-2">
-                <Input
-                  type="password"
+                <PasswordInput
                   value={accessToken}
                   onChange={(e) => setAccessToken(e.target.value)}
                   placeholder={fieldPlaceholder(selectedProvider, 'token')}
@@ -533,8 +533,7 @@ export function GitConnectionsPanel(props: {
                 />
               </Field>
               <Field label={t('webhookSecret')} className="sm:col-span-2">
-                <Input
-                  type="password"
+                <PasswordInput
                   value={webhookSecret}
                   onChange={(e) => setWebhookSecret(e.target.value)}
                   placeholder={t('webhookSecretHint')}
@@ -663,8 +662,7 @@ export function GitConnectionsPanel(props: {
                   </Field>
                 ) : null}
                 <Field label={t('accessToken')} className="sm:col-span-2">
-                  <Input
-                    type="password"
+                  <PasswordInput
                     value={manageToken}
                     onChange={(e) => setManageToken(e.target.value)}
                     placeholder={t('tokenLeaveBlank', {
@@ -674,8 +672,7 @@ export function GitConnectionsPanel(props: {
                   />
                 </Field>
                 <Field label={t('webhookSecret')} className="sm:col-span-2">
-                  <Input
-                    type="password"
+                  <PasswordInput
                     value={manageWebhook}
                     onChange={(e) => setManageWebhook(e.target.value)}
                     placeholder={

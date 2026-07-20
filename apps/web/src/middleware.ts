@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { defaultLocale, isAppLocale, localeCookieName } from './i18n/config';
 
-const publicPaths = ['/login', '/forgot-password', '/set-password', '/status'];
+const publicPaths = [
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/set-password',
+  '/status',
+];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -24,7 +30,10 @@ export function middleware(request: NextRequest) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', pathname);
     response = NextResponse.redirect(loginUrl);
-  } else if (pathname === '/login' && hasSession) {
+  } else if (
+    (pathname === '/login' || pathname === '/register') &&
+    hasSession
+  ) {
     response = NextResponse.redirect(new URL('/dashboard', request.url));
   } else {
     response = NextResponse.next();

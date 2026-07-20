@@ -1,5 +1,6 @@
 {
   "common": {
+    "brandName": "IN3 Technology",
     "appName": "Project Knowledge Hub",
     "loading": "Laden…",
     "save": "Speichern",
@@ -32,7 +33,23 @@
     "themeCycle": "Design: {current}. Klicken für {next}.",
     "tagsList": "Tags: {tags}",
     "emDash": "—",
-    "closeDialog": "Dialog schließen"
+    "closeDialog": "Dialog schließen",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen",
+    "passwordStrengthLabel": "Passwortstärke",
+    "passwordStrength": {
+      "empty": "",
+      "weak": "Schwach",
+      "fair": "Mittel",
+      "safe": "Sicher",
+      "strong": "Stark"
+    },
+    "passwordRequirements": {
+      "length": "Mindestens 8 Zeichen",
+      "uppercase": "Mindestens ein Großbuchstabe",
+      "nonLetter": "Mindestens eine Zahl oder ein Sonderzeichen"
+    },
+    "passwordPolicy": "Mindestens 8 Zeichen, ein Großbuchstabe und eine Zahl oder ein Sonderzeichen"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -102,7 +119,24 @@
     "signingIn": "Anmeldung…",
     "failed": "Anmeldung fehlgeschlagen",
     "forgotPassword": "Passwort vergessen?",
+    "register": "Registrierung",
     "passwordSet": "Passwort aktualisiert. Sie können sich jetzt anmelden."
+  },
+  "register": {
+    "title": "Registrierung",
+    "subtitle": "Erstellen Sie ein lokales Konto, um zu starten.",
+    "email": "E-Mail",
+    "displayName": "Anzeigename",
+    "password": "Passwort",
+    "confirmPassword": "Passwort bestätigen",
+    "submit": "Konto erstellen",
+    "submitting": "Konto wird erstellt…",
+    "mismatch": "Passwörter stimmen nicht überein",
+    "tooShort": "Passwort muss mindestens 8 Zeichen lang sein",
+    "failed": "Konto konnte nicht erstellt werden",
+    "backToLogin": "Zurück zur Anmeldung",
+    "haveAccount": "Bereits ein Konto?",
+    "weakPassword": "Mindestens 8 Zeichen, ein Großbuchstabe und eine Zahl oder ein Sonderzeichen"
   },
   "forgotPassword": {
     "title": "Passwort vergessen",
@@ -123,7 +157,7 @@
     "submit": "Passwort speichern",
     "saving": "Speichern…",
     "mismatch": "Passwörter stimmen nicht überein",
-    "tooShort": "Passwort muss mindestens 12 Zeichen haben",
+    "tooShort": "Passwort muss mindestens 8 Zeichen haben",
     "failed": "Passwort konnte nicht gesetzt werden",
     "missingToken": "Diesem Link fehlt ein Token.",
     "invalidLink": "Dieser Link ist ungültig.",
@@ -588,7 +622,7 @@
     "idpSubject": "IdP-Subject",
     "idpStubHint": "Stub für späteres SSO (leer = lokal)",
     "password": "Passwort",
-    "passwordHint": "Mindestens 12 Zeichen",
+    "passwordHint": "Mindestens 8 Zeichen, ein Großbuchstabe und eine Zahl oder ein Sonderzeichen",
     "systemAdmin": "Systemadministrator",
     "makeSystemAdmin": "Zum Systemadmin machen",
     "removeSystemAdmin": "Systemadmin entfernen",

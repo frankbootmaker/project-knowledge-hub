@@ -106,7 +106,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `MobileNav` | Primary nav below `sm` (sheet + backdrop; Esc / route change closes) |
 | `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer` actions; `size="lg"` for denser forms |
 | `Panel` | `default` / `solid` / `inset` surfaces |
-| `Field`, `Input`, `Select`, `Textarea`, `ErrorText` | Forms |
+| `Field`, `Input`, `PasswordInput`, `PasswordStrengthHint`, `Select`, `Textarea`, `ErrorText` | Forms (`PasswordInput` show/hide; strength meter for new passwords) |
 | `Badge` | Compact status chips (e.g. health “ok”) |
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`) |
@@ -155,10 +155,13 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-20
 
+* **Password strength** — `PasswordStrengthHint` under new-password fields (register, set-password, admin users). Shared policy: 8+ chars, one uppercase, one number/symbol = **Safe**; 12+ with those rules = **Strong**.
+* **Password visibility** — Shared `PasswordInput` primitive with show/hide toggle on auth, admin user, mail secrets, and git token fields.
+* **Login branding** — Upper eyebrow shows **IN3 Technology**; product title remains Project Knowledge Hub. Registration sits opposite Forgot password and opens `/register`.
 * **Account profile** — `/account/profile` for display name + full name (email read-only; IdP stub shown), optional photo upload, and `UserAvatar` monogram fallback. Header shows avatar + display name linked to profile; mobile nav includes Profile.
 * **Admin overview setup cards** — LLM/MCP and Email promo panels can be hidden per browser (`localStorage`); they remain in the admin sidebar. A small restore strip reappears when either card is hidden.
 * **Admin Email** — Sidebar link `/admin/email` for SMTP / Resend / console mail settings, test send, and overview card on Admin home.
-* **Auth pages** — Public `/forgot-password` and `/set-password` match the login `Page narrow` + `Panel` pattern; login links to forgot-password.
+* **Auth pages** — Public `/forgot-password`, `/set-password`, and `/register` match the login `Page narrow` + `Panel` pattern; login links to registration and forgot-password.
 * **Admin users** — Create modal toggles invite-vs-password; list rows open Edit (display name, status, optional password, system admin) with Resend invite for `invited` users.
 
 ### 2026-07-19

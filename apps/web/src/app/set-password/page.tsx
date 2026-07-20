@@ -5,8 +5,9 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { evaluatePasswordStrength } from '@project-knowledge-hub/domain';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { Button, ErrorText, Field, Input, Page, Panel } from '../../components/ui';
+import { Button, ErrorText, Field, Page, Panel, PasswordInput, PasswordStrengthHint } from '../../components/ui';
 
 function SetPasswordForm() {
   const t = useTranslations('setPassword');
@@ -77,8 +78,8 @@ function SetPasswordForm() {
       setError(t('mismatch'));
       return;
     }
-    if (password.length < 12) {
-      setError(t('tooShort'));
+    if (!evaluatePasswordStrength(password).acceptable) {
+      setError(tCommon('passwordPolicy'));
       return;
     }
 
@@ -137,22 +138,21 @@ function SetPasswordForm() {
         ) : (
           <form onSubmit={onSubmit} className="grid gap-4">
             <Field label={t('password')}>
-              <Input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required
-                minLength={12}
+                minLength={8}
                 autoComplete="new-password"
               />
             </Field>
+            <PasswordStrengthHint value={password} />
             <Field label={t('confirmPassword')}>
-              <Input
-                type="password"
+              <PasswordInput
                 value={confirm}
                 onChange={(event) => setConfirm(event.target.value)}
                 required
-                minLength={12}
+                minLength={8}
                 autoComplete="new-password"
               />
             </Field>

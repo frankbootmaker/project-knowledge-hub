@@ -1,5 +1,6 @@
 {
   "common": {
+    "brandName": "IN3 Technology",
     "appName": "Project Knowledge Hub",
     "loading": "Betöltés…",
     "save": "Mentés",
@@ -32,7 +33,23 @@
     "themeCycle": "Téma: {current}. Kattintás: {next}.",
     "tagsList": "Címkék: {tags}",
     "emDash": "—",
-    "closeDialog": "Párbeszédablak bezárása"
+    "closeDialog": "Párbeszédablak bezárása",
+    "showPassword": "Jelszó megjelenítése",
+    "hidePassword": "Jelszó elrejtése",
+    "passwordStrengthLabel": "Jelszó erőssége",
+    "passwordStrength": {
+      "empty": "",
+      "weak": "Gyenge",
+      "fair": "Közepes",
+      "safe": "Biztonságos",
+      "strong": "Erős"
+    },
+    "passwordRequirements": {
+      "length": "Legalább 8 karakter",
+      "uppercase": "Legalább egy nagybetű",
+      "nonLetter": "Legalább egy szám vagy szimbólum"
+    },
+    "passwordPolicy": "Legalább 8 karakter, egy nagybetű és egy szám vagy szimbólum"
   },
   "nav": {
     "dashboard": "Irányítópult",
@@ -102,7 +119,24 @@
     "signingIn": "Bejelentkezés…",
     "failed": "Sikertelen bejelentkezés",
     "forgotPassword": "Elfelejtett jelszó?",
+    "register": "Regisztráció",
     "passwordSet": "Jelszó frissítve. Most már bejelentkezhet."
+  },
+  "register": {
+    "title": "Regisztráció",
+    "subtitle": "Hozzon létre egy helyi fiókot a kezdéshez.",
+    "email": "E-mail",
+    "displayName": "Megjelenített név",
+    "password": "Jelszó",
+    "confirmPassword": "Jelszó megerősítése",
+    "submit": "Fiók létrehozása",
+    "submitting": "Fiók létrehozása…",
+    "mismatch": "A jelszavak nem egyeznek",
+    "tooShort": "A jelszónak legalább 8 karakteresnek kell lennie",
+    "failed": "Nem sikerült létrehozni a fiókot",
+    "backToLogin": "Vissza a bejelentkezéshez",
+    "haveAccount": "Már van fiókja?",
+    "weakPassword": "Legalább 8 karakter, egy nagybetű és egy szám vagy szimbólum"
   },
   "forgotPassword": {
     "title": "Elfelejtett jelszó",
@@ -123,7 +157,7 @@
     "submit": "Jelszó mentése",
     "saving": "Mentés…",
     "mismatch": "A jelszavak nem egyeznek",
-    "tooShort": "A jelszónak legalább 12 karakteresnek kell lennie",
+    "tooShort": "A jelszónak legalább 8 karakteresnek kell lennie",
     "failed": "Nem sikerült beállítani a jelszót",
     "missingToken": "A linkből hiányzik a token.",
     "invalidLink": "Ez a link érvénytelen.",
@@ -588,7 +622,7 @@
     "idpSubject": "IdP subject",
     "idpStubHint": "SSO stub (üres = helyi)",
     "password": "Jelszó",
-    "passwordHint": "Legalább 12 karakter",
+    "passwordHint": "Legalább 8 karakter, egy nagybetű és egy szám vagy szimbólum",
     "systemAdmin": "Rendszergazda",
     "makeSystemAdmin": "Rendszergazdává tesz",
     "removeSystemAdmin": "Rendszergazda jog elvétele",
