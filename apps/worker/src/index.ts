@@ -1,20 +1,30 @@
 import { Worker } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { Redis } from 'ioredis';
-import { loadEnv } from '@project-knowledge-hub/config';
+import { embeddingConfigFromEnv, loadEnv } from '@project-knowledge-hub/config';
 import {
   createDatabase,
   gitRepositoryConnections,
+  knowledgeRecords,
 } from '@project-knowledge-hub/database';
+import {
+  createEmbeddingProvider,
+  reindexKnowledgeRecord,
+} from '@project-knowledge-hub/embeddings';
 import { syncGitRepositoryConnection } from '@project-knowledge-hub/git-connectors';
 import {
+  createEmbeddingReindexQueue,
   createGitSyncQueue,
+  enqueueEmbeddingReindexJob,
   enqueueGitSyncJob,
   ensureGitSyncSafetySchedule,
+  EMBEDDING_REINDEX_QUEUE,
   GIT_SYNC_JOB,
   GIT_SYNC_QUEUE,
   GIT_SYNC_SAFETY_JOB,
+  isEmbeddingWorkspaceReindexJob,
   isGitSyncSafetyJob,
+  type EmbeddingReindexQueueJobData,
   type GitSyncQueueJobData,
 } from '@project-knowledge-hub/jobs';
 import { createLogger } from '@project-knowledge-hub/observability';
@@ -36,7 +46,11 @@ async function main(): Promise<void> {
 
   let shuttingDown = false;
   let gitWorker: Worker<GitSyncQueueJobData> | null = null;
+  let embeddingWorker: Worker<EmbeddingReindexQueueJobData> | null = null;
   const gitSyncQueue = createGitSyncQueue(env.REDIS_URL);
+  const embeddingQueue = createEmbeddingReindexQueue(env.REDIS_URL);
+  const embeddingConfig = embeddingConfigFromEnv(env);
+  const embeddingProvider = createEmbeddingProvider(embeddingConfig);
 
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) {
@@ -49,7 +63,11 @@ async function main(): Promise<void> {
       if (gitWorker) {
         await gitWorker.close();
       }
+      if (embeddingWorker) {
+        await embeddingWorker.close();
+      }
       await gitSyncQueue.close();
+      await embeddingQueue.close();
       await redis.quit();
       await database.close();
       logger.info('Worker shutdown complete');
@@ -156,12 +174,76 @@ async function main(): Promise<void> {
     );
   });
 
+  embeddingWorker = new Worker<EmbeddingReindexQueueJobData>(
+    EMBEDDING_REINDEX_QUEUE,
+    async (job) => {
+      if (isEmbeddingWorkspaceReindexJob(job.data)) {
+        const rows = await database.db
+          .select({ id: knowledgeRecords.id })
+          .from(knowledgeRecords)
+          .where(
+            and(
+              eq(knowledgeRecords.workspaceId, job.data.workspaceId),
+              isNull(knowledgeRecords.archivedAt),
+            ),
+          );
+
+        let enqueued = 0;
+        for (const row of rows) {
+          await enqueueEmbeddingReindexJob(embeddingQueue, {
+            knowledgeRecordId: row.id,
+            force: job.data.force,
+          });
+          enqueued += 1;
+        }
+        logger.info(
+          { workspaceId: job.data.workspaceId, enqueued },
+          'Workspace embedding reindex enqueued records',
+        );
+        return { enqueued };
+      }
+
+      if (!('knowledgeRecordId' in job.data)) {
+        logger.warn({ jobName: job.name }, 'Ignoring unknown embedding job');
+        return { ignored: true };
+      }
+
+      const result = await reindexKnowledgeRecord({
+        database,
+        provider: embeddingProvider,
+        knowledgeRecordId: job.data.knowledgeRecordId,
+        force: job.data.force,
+      });
+      logger.info(result, 'Embedding reindex finished');
+      return result;
+    },
+    {
+      connection: { url: env.REDIS_URL, maxRetriesPerRequest: null },
+      concurrency: 1,
+    },
+  );
+
+  embeddingWorker.on('failed', (job, error) => {
+    logger.error(
+      {
+        jobId: job?.id,
+        err: error,
+        knowledgeRecordId:
+          job?.data && 'knowledgeRecordId' in job.data
+            ? job.data.knowledgeRecordId
+            : undefined,
+      },
+      'Embedding reindex job failed',
+    );
+  });
+
   logger.info(
     {
       appEnv: env.APP_ENV,
       redis: 'connected',
-      queues: [GIT_SYNC_QUEUE],
+      queues: [GIT_SYNC_QUEUE, EMBEDDING_REINDEX_QUEUE],
       gitSyncSafety: safetySchedule,
+      embeddingProvider: embeddingConfig.provider,
       status: 'ready',
     },
     'Worker ready',

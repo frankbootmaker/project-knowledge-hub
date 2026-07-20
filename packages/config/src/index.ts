@@ -107,6 +107,26 @@ export const envSchema = z.object({
   /** Directory for profile avatar binaries (one file per user id). */
   AVATAR_UPLOAD_DIR: z.string().min(1).default('./data/avatars'),
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
+  /** Milestone 10: embedding provider (disabled = FTS-only). */
+  EMBEDDING_PROVIDER: z
+    .enum(['disabled', 'ollama', 'openai_compatible'])
+    .default('disabled'),
+  EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text'),
+  EMBEDDING_BASE_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
+  EMBEDDING_API_KEY: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  /** Must match pgvector column (vector(768)) and the active model. */
+  EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(768),
+  /** When true and provider is live, hybrid mode may be requested. */
+  SEARCH_HYBRID_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -131,7 +151,33 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       'Invalid environment configuration: RESEND_API_KEY is required when MAIL_DRIVER=resend',
     );
   }
+  if (env.EMBEDDING_PROVIDER === 'ollama' && !env.EMBEDDING_BASE_URL) {
+    // Default local Ollama endpoint when unset
+    return {
+      ...env,
+      EMBEDDING_BASE_URL: 'http://127.0.0.1:11434',
+    };
+  }
+  if (
+    env.EMBEDDING_PROVIDER === 'openai_compatible' &&
+    !env.EMBEDDING_BASE_URL
+  ) {
+    throw new Error(
+      'Invalid environment configuration: EMBEDDING_BASE_URL is required when EMBEDDING_PROVIDER=openai_compatible',
+    );
+  }
   return env;
+}
+
+export function embeddingConfigFromEnv(env: AppEnv) {
+  return {
+    provider: env.EMBEDDING_PROVIDER,
+    model: env.EMBEDDING_MODEL,
+    baseUrl: env.EMBEDDING_BASE_URL,
+    apiKey: env.EMBEDDING_API_KEY,
+    dimensions: env.EMBEDDING_DIMENSIONS,
+    hybridEnabled: env.SEARCH_HYBRID_ENABLED && env.EMBEDDING_PROVIDER !== 'disabled',
+  };
 }
 
 export function mailConfigFromEnv(env: AppEnv) {

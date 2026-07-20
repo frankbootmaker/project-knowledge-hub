@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { combineSearchScore, lifecycleRankBoost, titleMatchBoost } from './ranking.js';
+import {
+  combineHybridScore,
+  combineSearchScore,
+  lifecycleRankBoost,
+  titleMatchBoost,
+} from './ranking.js';
 import { buildSnippet } from './snippet.js';
 
 describe('search ranking', () => {
@@ -45,5 +50,17 @@ describe('search ranking', () => {
     );
     expect(snippet.toLowerCase()).toContain('tailscale');
     expect(snippet.length).toBeLessThan(260);
+  });
+
+  it('blends vector similarity into hybrid score', () => {
+    const base = {
+      tsRank: 0.1,
+      title: 'Bridge',
+      query: 'network',
+      lifecycleStatus: 'verified' as const,
+    };
+    const withoutVector = combineHybridScore(base);
+    const withVector = combineHybridScore({ ...base, vectorScore: 0.9 });
+    expect(withVector).toBeGreaterThan(withoutVector);
   });
 });

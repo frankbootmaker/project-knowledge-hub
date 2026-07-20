@@ -569,6 +569,7 @@
     "verifiedOnly": "Verified only",
     "currentOnly": "Current only",
     "includeHistorical": "Include superseded / deprecated",
+    "hybridSearch": "Hybrid (FTS + semantic)",
     "searchButton": "Search",
     "results": "Results",
     "resultsCount": "Results ({count})",

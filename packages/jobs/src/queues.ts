@@ -21,3 +21,27 @@ export function isGitSyncSafetyJob(
 ): data is GitSyncSafetyJobPayload {
   return 'kind' in data && data.kind === 'safety-sweep';
 }
+
+export const EMBEDDING_REINDEX_QUEUE = 'embedding-reindex';
+export const EMBEDDING_REINDEX_JOB = 'reindex';
+
+export type EmbeddingReindexJobPayload = {
+  knowledgeRecordId: string;
+  force?: boolean;
+};
+
+export type EmbeddingReindexWorkspaceJobPayload = {
+  kind: 'workspace';
+  workspaceId: string;
+  force?: boolean;
+};
+
+export type EmbeddingReindexQueueJobData =
+  | EmbeddingReindexJobPayload
+  | EmbeddingReindexWorkspaceJobPayload;
+
+export function isEmbeddingWorkspaceReindexJob(
+  data: EmbeddingReindexQueueJobData,
+): data is EmbeddingReindexWorkspaceJobPayload {
+  return 'kind' in data && data.kind === 'workspace';
+}

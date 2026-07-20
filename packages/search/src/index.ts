@@ -1,4 +1,5 @@
 export {
+  combineHybridScore,
   combineSearchScore,
   DEFAULT_EXCLUDED_LIFECYCLE_STATUSES,
   lifecycleRankBoost,

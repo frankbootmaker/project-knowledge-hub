@@ -51,6 +51,39 @@ export function combineSearchScore(options: {
   );
 }
 
+/**
+ * Blend lexical FTS score with vector similarity (0–1 cosine-like).
+ * When vectorScore is absent, falls back to FTS-only combine.
+ */
+export function combineHybridScore(options: {
+  tsRank: number;
+  vectorScore?: number | null;
+  title: string;
+  query: string;
+  lifecycleStatus: string;
+  ftsWeight?: number;
+  vectorWeight?: number;
+}): number {
+  const ftsWeight = options.ftsWeight ?? 0.55;
+  const vectorWeight = options.vectorWeight ?? 0.45;
+  const ftsScore = combineSearchScore({
+    tsRank: options.tsRank,
+    title: options.title,
+    query: options.query,
+    lifecycleStatus: options.lifecycleStatus,
+  });
+  if (options.vectorScore == null || Number.isNaN(options.vectorScore)) {
+    return ftsScore;
+  }
+  const vector = Math.max(0, Math.min(1, options.vectorScore));
+  const lifecycle = lifecycleRankBoost(options.lifecycleStatus);
+  return (
+    ftsWeight * ftsScore +
+    vectorWeight * (vector * 3 * lifecycle) +
+    titleMatchBoost(options.title, options.query) * 0.25
+  );
+}
+
 export const DEFAULT_EXCLUDED_LIFECYCLE_STATUSES = [
   'deprecated',
   'superseded',

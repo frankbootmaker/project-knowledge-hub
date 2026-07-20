@@ -569,6 +569,7 @@
     "verifiedOnly": "Nur verifiziert",
     "currentOnly": "Nur aktuell",
     "includeHistorical": "Ersetzte / veraltete einbeziehen",
+    "hybridSearch": "Hybrid (Volltext + semantisch)",
     "searchButton": "Suchen",
     "results": "Ergebnisse",
     "resultsCount": "Ergebnisse ({count})",

@@ -56,11 +56,22 @@ export default async function SearchPage({
   const verifiedOnly = params.verifiedOnly === 'true';
   const currentOnly = params.currentOnly === 'true';
   const includeHistorical = params.includeHistorical === 'true';
+  const hybrid = params.hybrid === 'true';
 
-  const workspacesResponse = await apiFetch('/api/v1/workspaces');
+  const [workspacesResponse, capabilitiesResponse] = await Promise.all([
+    apiFetch('/api/v1/workspaces'),
+    apiFetch('/api/v1/search/capabilities'),
+  ]);
   const workspaces = workspacesResponse.ok
     ? ((await workspacesResponse.json()) as { workspaces: Workspace[] }).workspaces
     : [];
+  const hybridAvailable = capabilitiesResponse.ok
+    ? Boolean(
+        (
+          (await capabilitiesResponse.json()) as { hybridAvailable?: boolean }
+        ).hybridAvailable,
+      )
+    : false;
 
   const activeWorkspaceId = workspaceId || workspaces[0]?.id || '';
   const activeWorkspace = workspaces.find((item) => item.id === activeWorkspaceId);
@@ -95,6 +106,7 @@ export default async function SearchPage({
     if (verifiedOnly) searchUrl.set('verifiedOnly', 'true');
     if (currentOnly) searchUrl.set('currentOnly', 'true');
     if (includeHistorical) searchUrl.set('includeHistorical', 'true');
+    if (hybrid && hybridAvailable) searchUrl.set('mode', 'hybrid');
 
     const searchResponse = await apiFetch(`/api/v1/search?${searchUrl.toString()}`);
     if (searchResponse.ok) {
@@ -190,6 +202,17 @@ export default async function SearchPage({
               />
               {t('includeHistorical')}
             </label>
+            {hybridAvailable ? (
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="hybrid"
+                  value="true"
+                  defaultChecked={hybrid}
+                />
+                {t('hybridSearch')}
+              </label>
+            ) : null}
           </div>
 
           <Button type="submit" className="justify-self-start">

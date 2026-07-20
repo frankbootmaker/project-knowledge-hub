@@ -56,6 +56,9 @@ importers:
       '@project-knowledge-hub/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@project-knowledge-hub/embeddings':
+        specifier: workspace:*
+        version: link:../../packages/embeddings
       '@project-knowledge-hub/git-connectors':
         specifier: workspace:*
         version: link:../../packages/git-connectors
@@ -166,6 +169,9 @@ importers:
       '@project-knowledge-hub/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@project-knowledge-hub/embeddings':
+        specifier: workspace:*
+        version: link:../../packages/embeddings
       '@project-knowledge-hub/git-connectors':
         specifier: workspace:*
         version: link:../../packages/git-connectors
@@ -178,6 +184,9 @@ importers:
       bullmq:
         specifier: ^5.80.9
         version: 5.80.9
+      drizzle-orm:
+        specifier: ^0.44.2
+        version: 0.44.7(postgres@3.4.9)
       ioredis:
         specifier: ^5.6.1
         version: 5.11.1
@@ -277,7 +286,24 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)
 
-  packages/embeddings: {}
+  packages/embeddings:
+    dependencies:
+      '@project-knowledge-hub/database':
+        specifier: workspace:*
+        version: link:../database
+      drizzle-orm:
+        specifier: ^0.44.2
+        version: 0.44.7(postgres@3.4.9)
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)
 
   packages/git-connectors:
     dependencies:

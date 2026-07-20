@@ -36,6 +36,7 @@ export type McpToolHandlers = {
     recordTypes?: string[];
     statuses?: string[];
     limit: number;
+    mode?: 'fts' | 'hybrid';
   }) => Promise<unknown>;
   getKnowledgeRecord: (input: { recordId: string }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
@@ -183,7 +184,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'search_knowledge',
-    'Full-text search across knowledge records',
+    'Search knowledge records (full-text by default; optional hybrid when embeddings are enabled)',
     {
       workspaceId: z.string().uuid(),
       query: z.string().min(1).max(300),
@@ -192,12 +193,14 @@ export function createKnowledgeHubMcpServer(
       recordTypes: z.array(z.string()).optional(),
       statuses: z.array(z.string()).optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
+      mode: z.enum(['fts', 'hybrid']).optional(),
     },
     async (args) =>
       wrap('search_knowledge', 'knowledge:search', () =>
         handlers.searchKnowledge({
           ...args,
           limit: args.limit ?? 10,
+          mode: args.mode,
         }),
       )(),
   );

@@ -8,8 +8,30 @@ import {
   integer,
   uniqueIndex,
   index,
+  customType,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+
+/** pgvector column fixed at 768 dims (nomic-embed-text / EMBEDDING_DIMENSIONS default). */
+const vector768 = customType<{ data: number[]; driverData: string }>({
+  dataType() {
+    return 'vector(768)';
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(',')}]`;
+  },
+  fromDriver(value: unknown): number[] {
+    if (Array.isArray(value)) {
+      return value.map((entry) => Number(entry));
+    }
+    if (typeof value !== 'string') {
+      return [];
+    }
+    const trimmed = value.trim().replace(/^\[/, '').replace(/\]$/, '');
+    if (!trimmed) return [];
+    return trimmed.split(',').map((part) => Number(part.trim()));
+  },
+});
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
@@ -628,5 +650,58 @@ export const conversationImportRecords = pgTable(
     ),
     index('conversation_import_records_import_id_idx').on(table.importId),
     index('conversation_import_records_record_id_idx').on(table.knowledgeRecordId),
+  ],
+);
+
+/** Registered embedding model metadata (provider + model + dimensions). */
+export const embeddingModels = pgTable(
+  'embedding_models',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    provider: text('provider').notNull(),
+    modelName: text('model_name').notNull(),
+    dimensions: integer('dimensions').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('embedding_models_provider_model_uidx').on(
+      table.provider,
+      table.modelName,
+    ),
+  ],
+);
+
+/** Chunked knowledge content with embeddings for hybrid search (Milestone 10). */
+export const knowledgeRecordChunks = pgTable(
+  'knowledge_record_chunks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    knowledgeRecordId: uuid('knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    chunkIndex: integer('chunk_index').notNull(),
+    content: text('content').notNull(),
+    tokenEstimate: integer('token_estimate'),
+    embeddingModelId: uuid('embedding_model_id')
+      .notNull()
+      .references(() => embeddingModels.id, { onDelete: 'restrict' }),
+    embedding: vector768('embedding').notNull(),
+    contentHash: text('content_hash').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('knowledge_record_chunks_record_index_uidx').on(
+      table.knowledgeRecordId,
+      table.chunkIndex,
+    ),
+    index('knowledge_record_chunks_workspace_id_idx').on(table.workspaceId),
+    index('knowledge_record_chunks_record_id_idx').on(table.knowledgeRecordId),
   ],
 );

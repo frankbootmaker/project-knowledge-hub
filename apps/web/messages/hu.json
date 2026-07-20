@@ -569,6 +569,7 @@
     "verifiedOnly": "Csak ellenőrzött",
     "currentOnly": "Csak aktuális",
     "includeHistorical": "Felülírt / elavult belefoglalása",
+    "hybridSearch": "Hibrid (szöveg + szemantikus)",
     "searchButton": "Keresés",
     "results": "Találatok",
     "resultsCount": "Találatok ({count})",

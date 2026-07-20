@@ -296,6 +296,7 @@ export function createMcpToolHandlers(
         recordTypes: input.recordTypes as never,
         lifecycleStatuses: input.statuses as never,
         limit: input.limit,
+        mode: input.mode === 'hybrid' ? 'hybrid' : 'fts',
         verifiedOnly: input.statuses?.every((status) =>
           ['verified', 'current'].includes(status),
         ),

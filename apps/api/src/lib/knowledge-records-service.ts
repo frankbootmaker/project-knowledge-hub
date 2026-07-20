@@ -400,6 +400,9 @@ export async function createKnowledgeRecord(
     ipAddress: ipAddress ?? null,
   });
 
+  const { maybeEnqueueEmbeddingReindex } = await import('./embedding-jobs.js');
+  await maybeEnqueueEmbeddingReindex(app, finalRecord.id).catch(() => undefined);
+
   return {
     knowledgeRecord: toPublicRecord(finalRecord, tagList, source, {
       includeHtml: true,
@@ -603,6 +606,11 @@ export async function updateKnowledgeRecord(
     },
     ipAddress: ipAddress ?? null,
   });
+
+  if (shouldVersion || body.contentMarkdown !== undefined || body.title !== undefined) {
+    const { maybeEnqueueEmbeddingReindex } = await import('./embedding-jobs.js');
+    await maybeEnqueueEmbeddingReindex(app, finalRecord.id).catch(() => undefined);
+  }
 
   return {
     knowledgeRecord: toPublicRecord(finalRecord, tagList, source, {

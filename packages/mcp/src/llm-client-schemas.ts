@@ -102,7 +102,8 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     },
     {
       name: 'search_knowledge',
-      description: 'Full-text search across knowledge records',
+      description:
+        'Search knowledge records (full-text by default; optional hybrid when embeddings are enabled)',
       body: {
         type: 'object',
         required: ['workspaceId', 'query'],
@@ -130,6 +131,11 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
             description: 'Optional lifecycle status filters',
           },
           limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
+          mode: {
+            type: 'string',
+            enum: ['fts', 'hybrid'],
+            description: 'fts (default) or hybrid when embeddings are enabled',
+          },
         },
       },
     },

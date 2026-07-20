@@ -27,10 +27,10 @@ Milestone **IDs** stay as in the PRD (M0–M10). **Build order after the localho
 1. Keep **localhost / Compose dev** solid (`docs/development/LOCAL_DEVELOPMENT.md`) — primary environment for feature work.
 2. **M8** — GitHub synchronization (git-managed docs into projects) — **complete**.
 3. **M9** — Conversation import (first slice complete; optional automations later).
-4. **M7** — Production packaging and Dokploy, staged as:
+4. **M10** — Semantic / hybrid search (first slice; optional, before packaging).
+5. **M7** — Production packaging and Dokploy, staged as:
    - Dokploy **Dev/UAT** first
    - **Prod** only after testing (HTTPS, MCP, persistence, backup/restore)
-5. **M10** — Semantic / hybrid search (optional)
 
 M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging step, not the next feature gate.
 
@@ -50,13 +50,25 @@ M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging ste
 | M7 | Production packaging and Dokploy | `deferred` | After M8 (and preferably M9); Dev/UAT then Prod |
 | M8 | GitHub synchronization | `complete` | Validated 2026-07-19 — see checklist below |
 | M9 | Conversation import | `complete` | First slice validated 2026-07-20 — see checklist below |
-| M10 | Semantic and hybrid search | `not_started` | Optional; after packaging or in parallel later |
+| M10 | Semantic and hybrid search | `complete` | First slice on `feature/m10-semantic-search` — see checklist below |
 
 ### Next features (not PRD milestones)
 
 See `docs/product/NEXT_FEATURES.md`. Doc Factory (NF-001) is **parked** pending a precise module brief; early notes in `docs/product/DOC_FACTORY.md`. Does not displace M9.
 
 ---
+
+## Milestone 10 checklist
+
+- [x] Postgres image with pgvector (`pgvector/pgvector:pg16`) in Compose + CI
+- [x] Migration `0020` — extension, embedding models, chunks + HNSW
+- [x] `@project-knowledge-hub/embeddings` (disabled / ollama / openai_compatible)
+- [x] Env config + `.env.example`
+- [x] `embedding-reindex` BullMQ queue + worker
+- [x] Enqueue on knowledge write + workspace reindex API
+- [x] Hybrid search mode + capabilities endpoint + UI/MCP
+- [x] Docs (implementation plan, tracking, changelog)
+- [ ] Later: admin embedding settings UI, multi-model migration wizard (deferred)
 
 ## Milestone 9 checklist
 

@@ -1,11 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { embeddingConfigFromEnv } from '@project-knowledge-hub/config';
 import {
   lifecycleStatusSchema,
   recordTypeSchema,
 } from '@project-knowledge-hub/domain';
 import {
+  createEmbeddingProvider,
+  vectorLiteral,
+} from '@project-knowledge-hub/embeddings';
+import {
   buildSnippet,
+  combineHybridScore,
   combineSearchScore,
   DEFAULT_EXCLUDED_LIFECYCLE_STATUSES,
 } from '@project-knowledge-hub/search';
@@ -22,6 +28,8 @@ export const searchBodySchema = z.object({
   includeHistorical: z.boolean().optional(),
   sourceType: z.string().max(80).optional(),
   limit: z.number().int().min(1).max(50).optional(),
+  /** fts (default) or hybrid when embeddings are enabled. */
+  mode: z.enum(['fts', 'hybrid']).optional(),
 });
 
 export type SearchInput = z.infer<typeof searchBodySchema>;
@@ -75,14 +83,58 @@ export function parseSearchInput(raw: unknown) {
         typeof input.lifecycleStatuses === 'string'
           ? input.lifecycleStatuses.split(',').filter(Boolean)
           : input.lifecycleStatuses,
+      mode: typeof input.mode === 'string' ? input.mode : input.mode,
     });
   }
   return searchBodySchema.parse(raw);
 }
 
+async function loadVectorScores(
+  app: FastifyInstance,
+  workspaceId: string,
+  query: string,
+  limit: number,
+): Promise<Map<string, number>> {
+  const config = embeddingConfigFromEnv(app.env);
+  if (!config.hybridEnabled) {
+    return new Map();
+  }
+  const provider = createEmbeddingProvider(config);
+  if (!provider.enabled) {
+    return new Map();
+  }
+
+  const queryVector = await provider.embedQuery(query);
+  const literal = vectorLiteral(queryVector);
+  const sql = `
+    SELECT
+      knowledge_record_id,
+      MAX(1 - (embedding <=> $1::vector))::float8 AS vector_score
+    FROM knowledge_record_chunks
+    WHERE workspace_id = $2
+    GROUP BY knowledge_record_id
+    ORDER BY MAX(embedding <=> $1::vector) ASC
+    LIMIT $3
+  `;
+  const rows = (await app.database.client.unsafe(sql, [
+    literal,
+    workspaceId,
+    Math.max(limit * 4, 40),
+  ] as never[])) as Array<{ knowledge_record_id: string; vector_score: number }>;
+
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    map.set(row.knowledge_record_id, Number(row.vector_score) || 0);
+  }
+  return map;
+}
+
 export async function runSearch(app: FastifyInstance, input: SearchInput) {
   const limit = input.limit ?? 20;
   const includeHistorical = input.includeHistorical ?? false;
+  const config = embeddingConfigFromEnv(app.env);
+  const requestedHybrid = input.mode === 'hybrid';
+  const useHybrid = requestedHybrid && config.hybridEnabled;
 
   const conditions: string[] = [
     'kr.workspace_id = $1',
@@ -145,7 +197,31 @@ export async function runSearch(app: FastifyInstance, input: SearchInput) {
     )
   )`;
 
-  params.push(limit);
+  // Hybrid: also include records that only match via vector ANN
+  let vectorScores = new Map<string, number>();
+  if (useHybrid) {
+    try {
+      vectorScores = await loadVectorScores(
+        app,
+        input.workspaceId,
+        input.query,
+        limit,
+      );
+      if (vectorScores.size > 0) {
+        const ids = [...vectorScores.keys()];
+        conditions[2] = `(
+          ${conditions[2]}
+          OR kr.id = ANY($${paramIndex}::uuid[])
+        )`;
+        params.push(ids);
+        paramIndex += 1;
+      }
+    } catch {
+      vectorScores = new Map();
+    }
+  }
+
+  params.push(useHybrid ? Math.max(limit * 3, 60) : limit);
   const limitParam = paramIndex;
 
   const sql = `
@@ -193,12 +269,21 @@ export async function runSearch(app: FastifyInstance, input: SearchInput) {
 
   const results = rows
     .map((row) => {
-      const score = combineSearchScore({
-        tsRank: Number(row.ts_rank) || 0,
-        title: row.title,
-        query: input.query,
-        lifecycleStatus: row.lifecycle_status,
-      });
+      const vectorScore = vectorScores.get(row.id) ?? null;
+      const score = useHybrid
+        ? combineHybridScore({
+            tsRank: Number(row.ts_rank) || 0,
+            vectorScore,
+            title: row.title,
+            query: input.query,
+            lifecycleStatus: row.lifecycle_status,
+          })
+        : combineSearchScore({
+            tsRank: Number(row.ts_rank) || 0,
+            title: row.title,
+            query: input.query,
+            lifecycleStatus: row.lifecycle_status,
+          });
       const excerptSource = row.summary?.trim()
         ? `${row.summary}\n\n${row.content_markdown}`
         : row.content_markdown;
@@ -231,15 +316,18 @@ export async function runSearch(app: FastifyInstance, input: SearchInput) {
           ? row.updated_at.toISOString()
           : String(row.updated_at),
         score,
+        vectorScore,
       };
     })
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 
   return {
     query: input.query,
     workspaceId: input.workspaceId,
+    mode: useHybrid ? 'hybrid' : 'fts',
+    hybridAvailable: config.hybridEnabled,
     total: results.length,
     results,
   };
 }
-

@@ -2,7 +2,9 @@ name: knowledge-hub-dev
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector-enabled Postgres 16 (Milestone 10). Existing volumes usually keep data
+    # across this image swap; do not use `down -v` unless you intend to wipe data.
+    image: pgvector/pgvector:pg16
     container_name: knowledge-hub-dev-postgres
     restart: unless-stopped
     environment:
