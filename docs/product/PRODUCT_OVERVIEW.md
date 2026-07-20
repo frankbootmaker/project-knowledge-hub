@@ -32,5 +32,7 @@ Product CRUD, authentication UI, knowledge records, search, and MCP are intentio
 
 * `PRD.md` — full requirements
 * `ROADMAP.md` — milestone sequence
+* `NEXT_FEATURES.md` — post-milestone feature backlog
+* `DOC_FACTORY.md` — Doc Factory design notes (parked; NF-001)
 * `../architecture/SYSTEM_ARCHITECTURE.md`
 * `../MILESTONE_TRACKING.md`

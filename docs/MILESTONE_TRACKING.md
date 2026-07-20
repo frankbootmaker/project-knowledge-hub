@@ -2,7 +2,7 @@
 
 **Product:** Project Knowledge Hub  
 **Repository:** `project-knowledge-hub`  
-**Last updated:** 2026-07-19
+**Last updated:** 2026-07-20
 
 This document tracks milestone progress against the PRD. Update status as work completes. Do not mark a milestone complete while lint, typecheck, tests, build, or Docker validation fail.
 
@@ -51,6 +51,10 @@ M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging ste
 | M8 | GitHub synchronization | `complete` | Validated 2026-07-19 — see checklist below |
 | M9 | Conversation import | `not_started` | After M8 |
 | M10 | Semantic and hybrid search | `not_started` | Optional; after packaging or in parallel later |
+
+### Next features (not PRD milestones)
+
+See `docs/product/NEXT_FEATURES.md`. Doc Factory (NF-001) is **parked** pending a precise module brief; early notes in `docs/product/DOC_FACTORY.md`. Does not displace M9.
 
 ---
 

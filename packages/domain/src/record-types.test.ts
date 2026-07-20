@@ -20,6 +20,14 @@ describe('record types catalog', () => {
     }
   });
 
+  it('includes Doc Factory summary types', () => {
+    for (const value of ['management-summary', 'progress-summary'] as const) {
+      expect(RECORD_TYPES).toContain(value);
+      expect(recordTypeSchema.parse(value)).toBe(value);
+      expect(RECORD_TYPE_CATALOG.some((entry) => entry.value === value)).toBe(true);
+    }
+  });
+
   it('keeps catalog values aligned with the enum', () => {
     expect(RECORD_TYPE_CATALOG.map((entry) => entry.value).sort()).toEqual(
       [...RECORD_TYPES].sort(),

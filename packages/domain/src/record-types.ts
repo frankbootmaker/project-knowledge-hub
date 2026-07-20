@@ -20,6 +20,8 @@ export const RECORD_TYPES = [
   'command-reference',
   'inventory',
   'status',
+  'management-summary',
+  'progress-summary',
   'roadmap',
   'recovery-guide',
   'backup-guide',
@@ -145,6 +147,20 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
     category: 'operations',
     label: 'Status',
     description: 'Current operational or delivery status snapshot.',
+  },
+  {
+    value: 'management-summary',
+    category: 'planning',
+    label: 'Management summary',
+    description:
+      'Executive-oriented summary of situation, outcomes, risks, and decisions needed.',
+  },
+  {
+    value: 'progress-summary',
+    category: 'planning',
+    label: 'Progress summary',
+    description:
+      'Period progress report: completed, in progress, blocked, and upcoming work.',
   },
   {
     value: 'roadmap',
