@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { apiClients, organizations } from '@project-knowledge-hub/database';
+import { apiClients, organizations, users } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 import { DEFAULT_MCP_SCOPES, MCP_SCOPES } from '@project-knowledge-hub/mcp';
 import {
@@ -9,7 +9,12 @@ import {
   requireAuthenticated,
 } from '../plugins/auth.js';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
+import {
+  sendAiConnectionApprovedMail,
+  sendAiConnectionRejectedMail,
+} from '../lib/auth-mail.js';
 import { writeAuditEvent } from '../lib/identity.js';
+import { shouldSendOptionalEmail } from '../lib/notification-prefs.js';
 import {
   approveApiClient,
   assertActingUserForOrganization,
@@ -172,6 +177,24 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
       ipAddress: request.ip,
     });
 
+    const ownerId = client.requestedByUserId ?? client.actingUserId;
+    if (ownerId) {
+      const [owner] = await app.database.db
+        .select()
+        .from(users)
+        .where(eq(users.id, ownerId))
+        .limit(1);
+      if (owner && shouldSendOptionalEmail(owner.emailNotificationPrefs, 'aiConnectionApproved')) {
+        await sendAiConnectionApprovedMail(app.mail, {
+          webUrl: app.env.WEB_URL,
+          to: owner.email,
+          displayName: owner.displayName,
+          agentName: client.agentLabel ?? client.name,
+          locale: owner.preferredLocale,
+        });
+      }
+    }
+
     return { apiClient: toPublicApiClient(client), token };
   });
 
@@ -193,6 +216,24 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
       metadata: { by: 'admin' },
       ipAddress: request.ip,
     });
+
+    const ownerId = rejected.requestedByUserId ?? rejected.actingUserId;
+    if (ownerId) {
+      const [owner] = await app.database.db
+        .select()
+        .from(users)
+        .where(eq(users.id, ownerId))
+        .limit(1);
+      if (owner && shouldSendOptionalEmail(owner.emailNotificationPrefs, 'aiConnectionRejected')) {
+        await sendAiConnectionRejectedMail(app.mail, {
+          webUrl: app.env.WEB_URL,
+          to: owner.email,
+          displayName: owner.displayName,
+          agentName: rejected.agentLabel ?? rejected.name,
+          locale: owner.preferredLocale,
+        });
+      }
+    }
 
     return { apiClient: toPublicApiClient(rejected) };
   });

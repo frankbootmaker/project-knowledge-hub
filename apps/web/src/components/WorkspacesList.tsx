@@ -22,7 +22,7 @@ export type WorkspaceListItem = {
   archivedAt: string | null;
 };
 
-const STATUS_FILTERS = ['all', 'active', 'archived'] as const;
+type StatusFilter = 'all' | 'active' | 'archived';
 
 function matchesWorkspaceSearch(workspace: WorkspaceListItem, query: string): boolean {
   if (!query) return true;
@@ -41,8 +41,7 @@ export function WorkspacesList({
 }) {
   const t = useTranslations('workspaces');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] =
-    useState<(typeof STATUS_FILTERS)[number]>('active');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -70,7 +69,7 @@ export function WorkspacesList({
           <Select
             value={statusFilter}
             onChange={(e) =>
-              setStatusFilter(e.target.value as (typeof STATUS_FILTERS)[number])
+              setStatusFilter(e.target.value as StatusFilter)
             }
             aria-label={t('filterStatus')}
           >

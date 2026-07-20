@@ -3,6 +3,9 @@ import {
   inviteEmail,
   passwordResetEmail,
   emailConfirmEmail,
+  passwordChangedEmail,
+  accountClosedEmail,
+  aiConnectionPendingEmail,
   setPasswordUrl,
   confirmEmailUrl,
 } from './templates.js';
@@ -20,23 +23,38 @@ describe('mail templates', () => {
     );
   });
 
-  it('includes action link in password reset content', () => {
+  it('includes branded layout and action link in password reset', () => {
     const mail = passwordResetEmail({
+      locale: 'en',
       displayName: 'Ada',
       actionUrl: 'http://localhost:3100/set-password?token=t',
     });
     expect(mail.subject).toMatch(/password/i);
-    expect(mail.text).toContain('http://localhost:3100/set-password?token=t');
+    expect(mail.html).toContain('IN3 Technology');
+    expect(mail.html).toContain('Project Knowledge Hub');
     expect(mail.html).toContain('href="http://localhost:3100/set-password?token=t"');
+    expect(mail.text).toContain('http://localhost:3100/set-password?token=t');
   });
 
-  it('includes action link in invite content', () => {
-    const mail = inviteEmail({
+  it('localizes password reset to German', () => {
+    const mail = passwordResetEmail({
+      locale: 'de',
       displayName: 'Ada',
       actionUrl: 'http://localhost:3100/set-password?token=t',
     });
-    expect(mail.subject).toMatch(/invited/i);
-    expect(mail.text).toContain('set your password');
+    expect(mail.subject).toMatch(/Passwort/i);
+    expect(mail.html).toContain('lang="de"');
+    expect(mail.html).toContain('Neues Passwort wählen');
+  });
+
+  it('localizes invite to Hungarian', () => {
+    const mail = inviteEmail({
+      locale: 'hu',
+      displayName: 'Ada',
+      actionUrl: 'http://localhost:3100/set-password?token=t',
+    });
+    expect(mail.subject).toMatch(/Meghívó/i);
+    expect(mail.html).toContain('Jelszó beállítása');
   });
 
   it('includes action link in email confirm content', () => {
@@ -45,6 +63,33 @@ describe('mail templates', () => {
       actionUrl: 'http://localhost:3100/confirm-email?token=t',
     });
     expect(mail.subject).toMatch(/confirm/i);
-    expect(mail.text).toContain('confirm your email');
+    expect(mail.text).toContain('Confirm your email address');
+  });
+
+  it('renders password-changed and account-closed notices', () => {
+    const changed = passwordChangedEmail({
+      locale: 'en',
+      displayName: 'Ada',
+      loginUrl: 'http://localhost:3100/login',
+    });
+    expect(changed.subject).toMatch(/changed/i);
+    expect(changed.html).toContain('Password changed');
+
+    const closed = accountClosedEmail({
+      locale: 'de',
+      displayName: 'Ada',
+    });
+    expect(closed.subject).toMatch(/geschlossen/i);
+  });
+
+  it('renders AI pending notice with agent label', () => {
+    const mail = aiConnectionPendingEmail({
+      locale: 'en',
+      displayName: 'Ada',
+      agentName: 'Cursor',
+      manageUrl: 'http://localhost:3100/account/ai-connections',
+    });
+    expect(mail.html).toContain('Cursor');
+    expect(mail.html).toContain('/account/ai-connections');
   });
 });

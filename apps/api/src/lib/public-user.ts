@@ -1,4 +1,5 @@
 import type { users } from '@project-knowledge-hub/database';
+import { mergeEmailNotificationPrefs } from '@project-knowledge-hub/domain';
 
 export function avatarUrlForUser(
   userId: string,
@@ -26,6 +27,10 @@ export function toPublicUser(user: typeof users.$inferSelect) {
     idpSource: user.idpSource ?? null,
     idpSubject: user.idpSubject ?? null,
     hasPassword: Boolean(user.passwordHash),
+    preferredLocale: user.preferredLocale ?? 'en',
+    emailNotificationPrefs: mergeEmailNotificationPrefs(
+      user.emailNotificationPrefs,
+    ),
     avatarUrl: avatarUrlForUser(
       user.id,
       user.avatarContentType ?? null,

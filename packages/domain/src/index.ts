@@ -97,6 +97,74 @@ export const userStatusSchema = z.enum([
   'pending_approval',
 ]);
 
+/** UI / email locale preference (matches web next-intl locales). */
+export const APP_LOCALES = ['en', 'de', 'hu'] as const;
+export const appLocaleSchema = z.enum(APP_LOCALES);
+export type AppLocale = z.infer<typeof appLocaleSchema>;
+export const DEFAULT_APP_LOCALE: AppLocale = 'en';
+
+export function normalizeAppLocale(value: string | null | undefined): AppLocale {
+  if (value && (APP_LOCALES as readonly string[]).includes(value)) {
+    return value as AppLocale;
+  }
+  return DEFAULT_APP_LOCALE;
+}
+
+/** Optional product emails the user can mute (security/lifecycle mails stay always-on). */
+export const EMAIL_NOTIFICATION_KEYS = [
+  'passwordChanged',
+  'aiConnectionPending',
+  'aiConnectionApproved',
+  'aiConnectionRejected',
+] as const;
+
+export type EmailNotificationKey = (typeof EMAIL_NOTIFICATION_KEYS)[number];
+
+export type EmailNotificationPrefs = Record<EmailNotificationKey, boolean>;
+
+export const DEFAULT_EMAIL_NOTIFICATION_PREFS: EmailNotificationPrefs = {
+  passwordChanged: true,
+  aiConnectionPending: true,
+  aiConnectionApproved: true,
+  aiConnectionRejected: true,
+};
+
+export const emailNotificationPrefsSchema = z.object({
+  passwordChanged: z.boolean(),
+  aiConnectionPending: z.boolean(),
+  aiConnectionApproved: z.boolean(),
+  aiConnectionRejected: z.boolean(),
+});
+
+export const emailNotificationPrefsPatchSchema = z
+  .object({
+    passwordChanged: z.boolean().optional(),
+    aiConnectionPending: z.boolean().optional(),
+    aiConnectionApproved: z.boolean().optional(),
+    aiConnectionRejected: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one notification preference is required',
+  });
+
+export function mergeEmailNotificationPrefs(
+  value: unknown,
+): EmailNotificationPrefs {
+  const parsed = emailNotificationPrefsSchema.partial().safeParse(value ?? {});
+  const partial = parsed.success ? parsed.data : {};
+  return {
+    ...DEFAULT_EMAIL_NOTIFICATION_PREFS,
+    ...partial,
+  };
+}
+
+export function allowsEmailNotification(
+  prefs: unknown,
+  key: EmailNotificationKey,
+): boolean {
+  return mergeEmailNotificationPrefs(prefs)[key];
+}
+
 export type ProjectStatus = z.infer<typeof projectStatusSchema>;
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 export type MembershipRole = z.infer<typeof membershipRoleSchema>;

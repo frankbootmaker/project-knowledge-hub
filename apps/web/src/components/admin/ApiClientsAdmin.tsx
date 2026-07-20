@@ -47,7 +47,7 @@ type Org = { id: string; name: string; slug: string };
 type Workspace = { id: string; name: string; slug: string; organizationId: string };
 type User = { id: string; email: string; displayName: string };
 
-const STATUS_FILTERS = ['all', 'active', 'pending_approval'] as const;
+type StatusFilter = 'all' | 'active' | 'pending_approval';
 
 function matchesClientSearch(client: PublicApiClient, query: string): boolean {
   if (!query) return true;
@@ -84,7 +84,7 @@ export function ApiClientsAdmin({
   const [createOpen, setCreateOpen] = useState(false);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const [name, setName] = useState('');
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
@@ -379,7 +379,7 @@ export function ApiClientsAdmin({
           <Select
             value={statusFilter}
             onChange={(e) =>
-              setStatusFilter(e.target.value as (typeof STATUS_FILTERS)[number])
+              setStatusFilter(e.target.value as StatusFilter)
             }
             aria-label={t('apiClientsFilterStatus')}
           >

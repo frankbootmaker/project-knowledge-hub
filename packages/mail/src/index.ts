@@ -14,7 +14,16 @@ export {
   passwordResetEmail,
   emailConfirmEmail,
   accountApprovedEmail,
+  passwordChangedEmail,
+  accountClosedEmail,
+  signupRejectedEmail,
+  aiConnectionPendingEmail,
+  aiConnectionApprovedEmail,
+  aiConnectionRejectedEmail,
   setPasswordUrl,
   confirmEmailUrl,
   loginUrl,
+  aiConnectionsUrl,
 } from './templates.js';
+export { renderMailLayout, MAIL_COLORS } from './layout.js';
+export { getMailMessages } from './messages.js';

@@ -4,13 +4,15 @@ import type { FormEvent } from 'react';
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { Button, ErrorText, Field, Input, Page, Panel, PasswordInput } from '../../components/ui';
+import type { AppLocale } from '../../i18n/config';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const locale = useLocale() as AppLocale;
   const t = useTranslations('login');
   const tCommon = useTranslations('common');
   const [email, setEmail] = useState('admin@localhost.local');
@@ -30,7 +32,7 @@ function LoginForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, preferredLocale: locale }),
       });
 
       const contentType = response.headers.get('content-type') ?? '';

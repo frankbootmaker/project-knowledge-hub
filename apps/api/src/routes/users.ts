@@ -12,7 +12,9 @@ import {
 import {
   mailDeliveryMeta,
   sendAccountApprovedMail,
+  sendAccountClosedMail,
   sendInviteMail,
+  sendSignupRejectedMail,
 } from '../lib/auth-mail.js';
 import { issueAuthToken } from '../lib/auth-tokens.js';
 import { closeUserAccount, purgeUserAccount } from '../lib/close-user.js';
@@ -194,6 +196,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
         to: created.email,
         displayName: created.displayName,
         rawToken,
+        locale: created.preferredLocale,
       });
       mail = mailDeliveryMeta(result);
     }
@@ -237,6 +240,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       to: existing.email,
       displayName: existing.displayName,
       rawToken,
+      locale: existing.preferredLocale,
     });
 
     const organization = await getDefaultOrganization(app.database);
@@ -457,6 +461,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       webUrl: app.env.WEB_URL,
       to: existing.email,
       displayName: existing.displayName,
+      locale: existing.preferredLocale,
     });
 
     return {
@@ -515,6 +520,12 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       entityId: existing.id,
       metadata: { previousStatus: existing.status },
       ipAddress: request.ip,
+    });
+
+    await sendSignupRejectedMail(app.mail, {
+      to: existing.email,
+      displayName: existing.displayName,
+      locale: existing.preferredLocale,
     });
 
     return { user: updated ? toPublicUser(updated) : null };
@@ -583,6 +594,12 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
 
       return { status: 'purged', user: purged };
     }
+
+    await sendAccountClosedMail(app.mail, {
+      to: existing.email,
+      displayName: existing.displayName,
+      locale: existing.preferredLocale,
+    });
 
     const closed = await closeUserAccount(app.database, {
       userId: params.userId,

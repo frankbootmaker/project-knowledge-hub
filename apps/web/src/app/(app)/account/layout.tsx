@@ -7,6 +7,7 @@ const links = [
   { href: '/account/profile', key: 'profile' as const, exact: true },
   { href: '/account/identity', key: 'identity' as const, exact: true },
   { href: '/account/password', key: 'password' as const, exact: true },
+  { href: '/account/notifications', key: 'notifications' as const, exact: true },
   { href: '/account/ai-connections', key: 'aiConnections' as const },
 ];
 

@@ -3,12 +3,23 @@ import {
   passwordResetEmail,
   emailConfirmEmail,
   accountApprovedEmail,
+  passwordChangedEmail,
+  accountClosedEmail,
+  signupRejectedEmail,
+  aiConnectionPendingEmail,
+  aiConnectionApprovedEmail,
+  aiConnectionRejectedEmail,
   setPasswordUrl,
   confirmEmailUrl,
   loginUrl,
+  aiConnectionsUrl,
   type MailSendResult,
   type MailTransport,
 } from '@project-knowledge-hub/mail';
+
+type LocaleInput = {
+  locale?: string | null;
+};
 
 export async function sendPasswordResetMail(
   mail: MailTransport,
@@ -17,10 +28,11 @@ export async function sendPasswordResetMail(
     to: string;
     displayName: string;
     rawToken: string;
-  },
+  } & LocaleInput,
 ): Promise<MailSendResult> {
   const actionUrl = setPasswordUrl(input.webUrl, input.rawToken);
   const content = passwordResetEmail({
+    locale: input.locale,
     displayName: input.displayName,
     actionUrl,
   });
@@ -39,10 +51,11 @@ export async function sendInviteMail(
     to: string;
     displayName: string;
     rawToken: string;
-  },
+  } & LocaleInput,
 ): Promise<MailSendResult> {
   const actionUrl = setPasswordUrl(input.webUrl, input.rawToken);
   const content = inviteEmail({
+    locale: input.locale,
     displayName: input.displayName,
     actionUrl,
   });
@@ -61,10 +74,11 @@ export async function sendEmailConfirmMail(
     to: string;
     displayName: string;
     rawToken: string;
-  },
+  } & LocaleInput,
 ): Promise<MailSendResult> {
   const actionUrl = confirmEmailUrl(input.webUrl, input.rawToken);
   const content = emailConfirmEmail({
+    locale: input.locale,
     displayName: input.displayName,
     actionUrl,
   });
@@ -82,11 +96,140 @@ export async function sendAccountApprovedMail(
     webUrl: string;
     to: string;
     displayName: string;
-  },
+  } & LocaleInput,
 ): Promise<MailSendResult> {
   const content = accountApprovedEmail({
+    locale: input.locale,
     displayName: input.displayName,
     loginUrl: loginUrl(input.webUrl),
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendPasswordChangedMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = passwordChangedEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+    loginUrl: loginUrl(input.webUrl),
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendAccountClosedMail(
+  mail: MailTransport,
+  input: {
+    to: string;
+    displayName: string;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = accountClosedEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendSignupRejectedMail(
+  mail: MailTransport,
+  input: {
+    to: string;
+    displayName: string;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = signupRejectedEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendAiConnectionPendingMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+    agentName?: string | null;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = aiConnectionPendingEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+    agentName: input.agentName,
+    manageUrl: aiConnectionsUrl(input.webUrl),
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendAiConnectionApprovedMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+    agentName?: string | null;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = aiConnectionApprovedEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+    agentName: input.agentName,
+    manageUrl: aiConnectionsUrl(input.webUrl),
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendAiConnectionRejectedMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+    agentName?: string | null;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = aiConnectionRejectedEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+    agentName: input.agentName,
+    manageUrl: aiConnectionsUrl(input.webUrl),
   });
   return mail.send({
     to: input.to,

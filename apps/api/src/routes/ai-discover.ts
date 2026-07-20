@@ -1,12 +1,16 @@
 import type { FastifyInstance } from 'fastify';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { users } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 import {
   buildAiDiscoverDocument,
   claimAiDiscoverRequest,
   createAiDiscoverRequest,
 } from '../lib/ai-discover.js';
+import { sendAiConnectionPendingMail } from '../lib/auth-mail.js';
 import { writeAuditEvent } from '../lib/identity.js';
+import { shouldSendOptionalEmail } from '../lib/notification-prefs.js';
 import { MemoryRateLimiter } from '../lib/rate-limit.js';
 
 const requestLimiter = new MemoryRateLimiter(20, 15 * 60 * 1000);
@@ -57,6 +61,23 @@ export async function registerAiDiscoverRoutes(app: FastifyInstance): Promise<vo
       },
       ipAddress: request.ip,
     });
+
+    if (created.apiClient.requestedByUserId) {
+      const [owner] = await app.database.db
+        .select()
+        .from(users)
+        .where(eq(users.id, created.apiClient.requestedByUserId))
+        .limit(1);
+      if (owner && shouldSendOptionalEmail(owner.emailNotificationPrefs, 'aiConnectionPending')) {
+        await sendAiConnectionPendingMail(app.mail, {
+          webUrl: app.env.WEB_URL,
+          to: owner.email,
+          displayName: owner.displayName,
+          agentName: created.apiClient.agentLabel ?? created.apiClient.name,
+          locale: owner.preferredLocale,
+        });
+      }
+    }
 
     return {
       requestId: created.requestId,

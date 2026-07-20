@@ -30,6 +30,22 @@ function GlobeIcon() {
   );
 }
 
+async function syncPreferredLocale(locale: AppLocale): Promise<void> {
+  try {
+    await fetch('/api/v1/me', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: window.location.origin,
+      },
+      body: JSON.stringify({ preferredLocale: locale }),
+    });
+  } catch {
+    // Anonymous visitors only keep the cookie; ignore session sync failures.
+  }
+}
+
 export function LanguageSwitcher() {
   const locale = useLocale() as AppLocale;
   const t = useTranslations('common');
@@ -54,6 +70,7 @@ export function LanguageSwitcher() {
       onClick={() => {
         startTransition(async () => {
           await setLocaleAction(upcoming);
+          await syncPreferredLocale(upcoming);
           router.refresh();
         });
       }}

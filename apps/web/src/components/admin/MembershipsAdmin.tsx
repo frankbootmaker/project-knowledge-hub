@@ -35,7 +35,7 @@ type UserOption = { id: string; email: string; displayName: string };
 type WorkspaceOption = { id: string; name: string; slug: string };
 
 const ROLES = ['workspace_admin', 'maintainer', 'reader'] as const;
-const ROLE_FILTERS = ['all', ...ROLES] as const;
+type RoleFilter = 'all' | (typeof ROLES)[number];
 
 function matchesMembershipSearch(membership: PublicMembership, query: string): boolean {
   if (!query) return true;
@@ -71,7 +71,7 @@ export function MembershipsAdmin({
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? '');
   const [role, setRole] = useState<(typeof ROLES)[number]>('reader');
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState<(typeof ROLE_FILTERS)[number]>('all');
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
 
   const filteredMemberships = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -187,7 +187,7 @@ export function MembershipsAdmin({
           <Select
             value={roleFilter}
             onChange={(e) =>
-              setRoleFilter(e.target.value as (typeof ROLE_FILTERS)[number])
+              setRoleFilter(e.target.value as RoleFilter)
             }
             aria-label={t('membershipsFilterRole')}
           >

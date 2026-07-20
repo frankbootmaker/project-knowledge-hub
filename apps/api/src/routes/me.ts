@@ -7,7 +7,7 @@ import {
   verifyPassword,
 } from '@project-knowledge-hub/auth';
 import { apiClients, sessions, users } from '@project-knowledge-hub/database';
-import { AppError, passwordSchema } from '@project-knowledge-hub/domain';
+import { AppError, appLocaleSchema, emailNotificationPrefsPatchSchema, mergeEmailNotificationPrefs, passwordSchema } from '@project-knowledge-hub/domain';
 import { DEFAULT_MCP_SCOPES, MCP_SCOPES } from '@project-knowledge-hub/mcp';
 import {
   assertMutatingOrigin,
@@ -25,13 +25,19 @@ import {
   rejectApiClient,
   toPublicApiClient,
 } from '../lib/api-clients.js';
+import {
+  sendAccountClosedMail,
+  sendPasswordChangedMail,
+} from '../lib/auth-mail.js';
 import { closeUserAccount } from '../lib/close-user.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
+import { shouldSendOptionalEmail } from '../lib/notification-prefs.js';
 import { toPublicUser } from '../lib/public-user.js';
 
 const updateMeSchema = z.object({
   displayName: z.string().min(1).max(160).optional(),
   fullName: z.string().max(200).nullable().optional(),
+  preferredLocale: appLocaleSchema.optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -72,12 +78,63 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
     return { user: toPublicUser(user) };
   });
 
+  app.patch('/api/v1/me/notification-prefs', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const body = emailNotificationPrefsPatchSchema.parse(request.body);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, principal.userId))
+      .limit(1);
+    if (!existing) {
+      throw new AppError({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      });
+    }
+
+    const nextPrefs = mergeEmailNotificationPrefs({
+      ...mergeEmailNotificationPrefs(existing.emailNotificationPrefs),
+      ...body,
+    });
+
+    const [updated] = await app.database.db
+      .update(users)
+      .set({
+        emailNotificationPrefs: nextPrefs,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, principal.userId))
+      .returning();
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'user.notification_prefs_update',
+      entityType: 'user',
+      entityId: principal.userId,
+      metadata: { fields: Object.keys(body) },
+      ipAddress: request.ip,
+    });
+
+    return { user: updated ? toPublicUser(updated) : null };
+  });
+
   app.patch('/api/v1/me', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
     const body = updateMeSchema.parse(request.body);
 
-    if (body.displayName === undefined && body.fullName === undefined) {
+    if (
+      body.displayName === undefined &&
+      body.fullName === undefined &&
+      body.preferredLocale === undefined
+    ) {
       throw new AppError({
         code: 'VALIDATION_ERROR',
         message: 'No profile fields to update',
@@ -110,6 +167,7 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
       .set({
         displayName: body.displayName?.trim() ?? existing.displayName,
         fullName: nextFullName,
+        preferredLocale: body.preferredLocale ?? existing.preferredLocale,
         updatedAt: new Date(),
       })
       .where(eq(users.id, principal.userId))
@@ -212,6 +270,15 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
       ipAddress: request.ip,
     });
 
+    if (shouldSendOptionalEmail(existing.emailNotificationPrefs, 'passwordChanged')) {
+      await sendPasswordChangedMail(app.mail, {
+        webUrl: app.env.WEB_URL,
+        to: existing.email,
+        displayName: existing.displayName,
+        locale: existing.preferredLocale,
+      });
+    }
+
     return { status: 'ok' };
   });
 
@@ -233,6 +300,12 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
         statusCode: 404,
       });
     }
+
+    await sendAccountClosedMail(app.mail, {
+      to: existing.email,
+      displayName: existing.displayName,
+      locale: existing.preferredLocale,
+    });
 
     const closed = await closeUserAccount(app.database, {
       userId: principal.userId,

@@ -8,7 +8,7 @@ import {
   verifyPassword,
 } from '@project-knowledge-hub/auth';
 import { sessions, users } from '@project-knowledge-hub/database';
-import { AppError, passwordSchema } from '@project-knowledge-hub/domain';
+import { AppError, appLocaleSchema, passwordSchema } from '@project-knowledge-hub/domain';
 import {
   assertMutatingOrigin,
   clearSessionCookie,
@@ -32,12 +32,14 @@ import { MemoryRateLimiter } from '../lib/rate-limit.js';
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  preferredLocale: appLocaleSchema.optional(),
 });
 
 const registerSchema = z.object({
   email: z.string().email().max(320),
   displayName: z.string().min(1).max(160),
   password: passwordSchema,
+  preferredLocale: appLocaleSchema.optional(),
 });
 
 const forgotPasswordSchema = z.object({
@@ -66,7 +68,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     assertMutatingOrigin(app, request);
     const body = loginSchema.parse(request.body);
 
-    const [user] = await app.database.db
+    let [user] = await app.database.db
       .select()
       .from(users)
       .where(eq(users.email, body.email.toLowerCase()))
@@ -87,6 +89,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         message: 'Invalid email or password',
         statusCode: 401,
       });
+    }
+
+    if (body.preferredLocale && body.preferredLocale !== user.preferredLocale) {
+      const [updatedLocale] = await app.database.db
+        .update(users)
+        .set({ preferredLocale: body.preferredLocale, updatedAt: new Date() })
+        .where(eq(users.id, user.id))
+        .returning();
+      if (updatedLocale) {
+        user = updatedLocale;
+      }
     }
 
     const token = createSessionToken();
@@ -227,6 +240,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         passwordHash: await hashPassword(body.password),
         status: 'pending_email',
         isSystemAdmin: false,
+        preferredLocale: body.preferredLocale ?? 'en',
       })
       .returning();
 
@@ -249,6 +263,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       to: created.email,
       displayName: created.displayName,
       rawToken,
+      locale: created.preferredLocale,
     });
 
     await writeAuditEvent(app.database, {
@@ -340,6 +355,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         to: user.email,
         displayName: user.displayName,
         rawToken,
+        locale: user.preferredLocale,
       });
 
       await writeAuditEvent(app.database, {
@@ -391,6 +407,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         to: user.email,
         displayName: user.displayName,
         rawToken,
+        locale: user.preferredLocale,
       });
 
       await writeAuditEvent(app.database, {

@@ -39,7 +39,6 @@ export function UserAvatar({
     >
       {showImage ? (
         // Same-origin /api proxy sends session cookie automatically.
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={avatarUrl!}
           alt=""

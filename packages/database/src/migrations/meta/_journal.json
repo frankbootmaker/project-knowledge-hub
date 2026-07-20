@@ -120,6 +120,20 @@
       "when": 1784419900000,
       "tag": "0016_ai_discover_api_clients",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784420100000,
+      "tag": "0017_user_preferred_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784420300000,
+      "tag": "0018_user_email_notification_prefs",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@project-knowledge-hub/domain": "workspace:*",
     "nodemailer": "^7.0.5"
   },
   "devDependencies": {

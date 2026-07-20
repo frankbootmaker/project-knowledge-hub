@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Locale-aware branded product emails (`packages/mail`): shared HTML layout (IN3 / Project Knowledge Hub), en/de/hu catalogs, and `users.preferred_locale` (synced from language switcher, login, and register). Covers password reset, invite, email confirm, account approved, password changed, account closed, signup rejected, and AI connection pending/approved/rejected. Optional alerts are user-toggleable under Account → Email notifications (`users.email_notification_prefs`).
 * Admin user remove (`DELETE /api/v1/users/:userId`) soft-closes accounts for audit. In **development/test** only, `?hard=1` permanently purges the user and authored knowledge/git connections (`user.purge`). Production/staging keep soft-close.
 * AI MCP autodiscover: public `/ai-discover` + `GET /api/v1/ai-discover`, user pairing codes, pending API client requests (`POST /api/v1/ai-discover/requests` + claim poll). User or system admin can approve/reject; token issued once for the agent. Profile → Connect AI and Admin → API clients pending section.
 * Admin user remove (`DELETE /api/v1/users/:userId`) and self-service account close (`DELETE /api/v1/me` with `confirmPhrase: "CLOSE"`): soft-close (sessions revoked, credentials cleared, email freed); last system admin protected. Admin Users list has search/status filter via `FunctionHeader`; profile Close account uses double confirmation.

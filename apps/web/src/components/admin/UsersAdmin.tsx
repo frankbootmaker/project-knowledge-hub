@@ -39,14 +39,13 @@ type ApproveMembershipRow = {
 };
 
 const ROLES = ['workspace_admin', 'maintainer', 'reader'] as const;
-const STATUS_FILTERS = [
-  'all',
-  'active',
-  'disabled',
-  'invited',
-  'pending_email',
-  'pending_approval',
-] as const;
+type StatusFilter =
+  | 'all'
+  | 'active'
+  | 'disabled'
+  | 'invited'
+  | 'pending_email'
+  | 'pending_approval';
 
 function statusTone(status: string): 'success' | 'warn' | 'danger' | 'neutral' | 'brand' {
   if (status === 'active') return 'success';
@@ -101,7 +100,7 @@ export function UsersAdmin({
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const [editUser, setEditUser] = useState<PublicUser | null>(null);
   const [editDisplayName, setEditDisplayName] = useState('');
@@ -545,7 +544,7 @@ export function UsersAdmin({
           <Select
             value={statusFilter}
             onChange={(e) =>
-              setStatusFilter(e.target.value as (typeof STATUS_FILTERS)[number])
+              setStatusFilter(e.target.value as StatusFilter)
             }
             aria-label={t('usersFilterStatus')}
           >

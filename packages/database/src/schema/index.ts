@@ -69,6 +69,13 @@ export const users = pgTable(
     idpSubject: text('idp_subject'),
     /** MIME type when a profile avatar file exists on disk; null = monogram fallback. */
     avatarContentType: text('avatar_content_type'),
+    /** UI / email locale: en | de | hu (last used or chosen language). */
+    preferredLocale: text('preferred_locale').notNull().default('en'),
+    /** Optional product email notification toggles (missing keys default to on). */
+    emailNotificationPrefs: jsonb('email_notification_prefs')
+      .$type<Record<string, boolean>>()
+      .notNull()
+      .default({}),
     ...timestamps,
   },
   (table) => [

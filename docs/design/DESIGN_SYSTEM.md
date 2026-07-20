@@ -64,7 +64,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Shell content | `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
 | Primary nav | Desktop: inline `NavLink`s from `md` up (Dashboard, Workspaces, Search, Archive, Admin?). Below `md`: `MobileNav` with the same destinations (never hide nav without a mobile path). Platform Status lives under Admin sidebar |
 | Admin sidebar | Stacks above content below `lg` via `lg:grid-cols-[220px_1fr]` in `admin/layout.tsx`. Includes Overview … Audit, then **Status** (`/status`). Compact horizontal rail is a later enhancement |
-| Account sidebar | Same grid pattern in `account/layout.tsx` for all signed-in users: **Profile**, **Sign-in identity**, **Change password**, **AI connections**, then a **Danger zone** divider with **Close account**. Header avatar still links to Profile |
+| Account sidebar | Same grid pattern in `account/layout.tsx` for all signed-in users: **Profile**, **Sign-in identity**, **Change password**, **Email notifications**, **AI connections**, then a **Danger zone** divider with **Close account**. Header avatar still links to Profile |
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
 | Touch targets | Prefer existing control tokens / header control squares; keep interactive chrome ≥ ~40px |
 | Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
@@ -171,7 +171,7 @@ Record durable UI / design-system changes here (newest first).
 * **Login branding** — Upper eyebrow shows **IN3 Technology**; product title remains Project Knowledge Hub. Registration sits opposite Forgot password and opens `/register`.
 * **Account profile** — `/account/profile` for display name + full name (email read-only), optional photo upload, and `UserAvatar` monogram fallback. **Sign-in identity** and **Change password** are separate Account sidebar pages (`/account/identity`, `/account/password`; `POST /api/v1/me/password`). Account area uses the same left sidebar layout as Admin. Header shows avatar + display name linked to profile; mobile nav includes Profile.
 * **Admin overview setup cards** — LLM/MCP and Email promo panels can be hidden per browser (`localStorage`); they remain in the admin sidebar. A small restore strip reappears when either card is hidden.
-* **Admin Email** — Sidebar link `/admin/email` for SMTP / Resend / console mail settings, test send, and overview card on Admin home.
+* **Admin Email** — Sidebar link `/admin/email` for SMTP / Resend / console mail settings, test send, and overview card on Admin home. Product emails use a shared branded HTML layout in `packages/mail` with en/de/hu catalogs; locale comes from `users.preferred_locale` (synced from the language switcher / login / register).
 * **Auth pages** — Public `/forgot-password`, `/set-password`, `/register`, and `/confirm-email` match the login `Page narrow` + `Panel` pattern.
 * **Admin users** — Create modal toggles invite-vs-password; list rows open Edit (display name, status, optional password, system admin) with Resend invite for `invited` users.
 

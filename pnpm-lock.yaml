@@ -310,6 +310,9 @@ importers:
 
   packages/mail:
     dependencies:
+      '@project-knowledge-hub/domain':
+        specifier: workspace:*
+        version: link:../domain
       nodemailer:
         specifier: ^7.0.5
         version: 7.0.13

@@ -3,7 +3,7 @@
 import type { FormEvent } from 'react';
 import { useState } from 'react';
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { evaluatePasswordStrength } from '@project-knowledge-hub/domain';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import {
@@ -16,8 +16,10 @@ import {
   PasswordInput,
   PasswordStrengthHint,
 } from '../../components/ui';
+import type { AppLocale } from '../../i18n/config';
 
 export default function RegisterPage() {
+  const locale = useLocale() as AppLocale;
   const t = useTranslations('register');
   const tCommon = useTranslations('common');
   const [email, setEmail] = useState('');
@@ -56,6 +58,7 @@ export default function RegisterPage() {
           email,
           displayName,
           password,
+          preferredLocale: locale,
         }),
       });
 
