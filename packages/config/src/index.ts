@@ -99,6 +99,11 @@ export const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 60 * 24 * 7),
+  AUTH_EMAIL_CONFIRM_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60 * 24),
   /** Directory for profile avatar binaries (one file per user id). */
   AVATAR_UPLOAD_DIR: z.string().min(1).default('./data/avatars'),
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),

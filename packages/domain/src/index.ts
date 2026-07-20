@@ -89,7 +89,13 @@ export const membershipRoleSchema = z.enum([
   'mcp_client',
 ]);
 
-export const userStatusSchema = z.enum(['active', 'disabled', 'invited']);
+export const userStatusSchema = z.enum([
+  'active',
+  'disabled',
+  'invited',
+  'pending_email',
+  'pending_approval',
+]);
 
 export type ProjectStatus = z.infer<typeof projectStatusSchema>;
 export type SystemStatus = z.infer<typeof systemStatusSchema>;

@@ -4,6 +4,7 @@ import { defaultLocale, isAppLocale, localeCookieName } from './i18n/config';
 const publicPaths = [
   '/login',
   '/register',
+  '/confirm-email',
   '/forgot-password',
   '/set-password',
   '/status',

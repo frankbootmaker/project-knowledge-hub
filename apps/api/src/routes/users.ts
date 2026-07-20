@@ -1,18 +1,35 @@
 import type { FastifyInstance } from 'fastify';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { hashPassword } from '@project-knowledge-hub/auth';
-import { users } from '@project-knowledge-hub/database';
+import { memberships, users, workspaces } from '@project-knowledge-hub/database';
 import { AppError, passwordSchema, userStatusSchema } from '@project-knowledge-hub/domain';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import {
   assertMutatingOrigin,
   requireAuthenticated,
 } from '../plugins/auth.js';
-import { mailDeliveryMeta, sendInviteMail } from '../lib/auth-mail.js';
+import {
+  mailDeliveryMeta,
+  sendAccountApprovedMail,
+  sendInviteMail,
+} from '../lib/auth-mail.js';
 import { issueAuthToken } from '../lib/auth-tokens.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { toPublicUser } from '../lib/public-user.js';
+
+const assignableRoleSchema = z.enum(['workspace_admin', 'maintainer', 'reader']);
+
+const approveUserSchema = z.object({
+  memberships: z
+    .array(
+      z.object({
+        workspaceId: z.string().uuid(),
+        role: assignableRoleSchema,
+      }),
+    )
+    .min(1),
+});
 
 const createUserSchema = z
   .object({
@@ -340,6 +357,162 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
         fields: Object.keys(body),
         passwordChanged: Boolean(body.password),
       },
+      ipAddress: request.ip,
+    });
+
+    return { user: updated ? toPublicUser(updated) : null };
+  });
+
+  app.post('/api/v1/users/:userId/approve', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+    const body = approveUserSchema.parse(request.body);
+
+    const workspaceIds = [...new Set(body.memberships.map((m) => m.workspaceId))];
+    if (workspaceIds.length !== body.memberships.length) {
+      throw new AppError({
+        code: 'MEMBERSHIP_DUPLICATE_WORKSPACE',
+        message: 'Each workspace may only appear once in the approval memberships',
+        statusCode: 400,
+      });
+    }
+
+    const [existing] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, params.userId))
+      .limit(1);
+
+    if (!existing) {
+      throw new AppError({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      });
+    }
+
+    if (existing.status !== 'pending_approval') {
+      throw new AppError({
+        code: 'USER_NOT_PENDING_APPROVAL',
+        message: 'Only email-confirmed users awaiting approval can be approved',
+        statusCode: 400,
+      });
+    }
+
+    const workspaceRows = await app.database.db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(and(inArray(workspaces.id, workspaceIds), isNull(workspaces.archivedAt)));
+
+    if (workspaceRows.length !== workspaceIds.length) {
+      throw new AppError({
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'One or more workspaces were not found or are archived',
+        statusCode: 404,
+      });
+    }
+
+    await app.database.db.transaction(async (tx) => {
+      await tx.insert(memberships).values(
+        body.memberships.map((item) => ({
+          userId: existing.id,
+          workspaceId: item.workspaceId,
+          role: item.role,
+        })),
+      );
+
+      await tx
+        .update(users)
+        .set({
+          status: 'active',
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, existing.id));
+    });
+
+    const [updated] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, existing.id))
+      .limit(1);
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'user.approve',
+      entityType: 'user',
+      entityId: existing.id,
+      metadata: {
+        memberships: body.memberships,
+      },
+      ipAddress: request.ip,
+    });
+
+    const mailResult = await sendAccountApprovedMail(app.mail, {
+      webUrl: app.env.WEB_URL,
+      to: existing.email,
+      displayName: existing.displayName,
+    });
+
+    return {
+      user: updated ? toPublicUser(updated) : null,
+      mail: mailDeliveryMeta(mailResult),
+    };
+  });
+
+  app.post('/api/v1/users/:userId/reject', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, params.userId))
+      .limit(1);
+
+    if (!existing) {
+      throw new AppError({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      });
+    }
+
+    if (
+      existing.status !== 'pending_approval' &&
+      existing.status !== 'pending_email'
+    ) {
+      throw new AppError({
+        code: 'USER_NOT_PENDING',
+        message: 'Only pending signup users can be rejected',
+        statusCode: 400,
+      });
+    }
+
+    const [updated] = await app.database.db
+      .update(users)
+      .set({
+        status: 'disabled',
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, existing.id))
+      .returning();
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'user.reject',
+      entityType: 'user',
+      entityId: existing.id,
+      metadata: { previousStatus: existing.status },
       ipAddress: request.ip,
     });
 

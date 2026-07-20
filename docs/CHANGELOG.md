@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Auth login: eyebrow brand **IN3 Technology**, product title Project Knowledge Hub, Registration opposite Forgot password (`/register` + `POST /api/v1/auth/register`), password show/hide, and strength meter (safe = 8+ chars, uppercase, number/symbol).
+* Auth login: eyebrow brand **IN3 Technology**, product title Project Knowledge Hub, Registration with email confirmation then admin approval (`pending_email` → `pending_approval` → `active` + workspace memberships), password show/hide, and strength meter (safe = 8+ chars, uppercase, number/symbol).
 * User profile: `full_name` plus IdP stub columns (`idp_source`, `idp_subject`), optional avatar upload (JPEG/PNG/WebP) with monogram fallback, self-service `/account/profile` (`GET/PATCH /api/v1/me`, avatar POST/DELETE), header avatar + profile link, and admin create/edit for full name / IdP stub.
 * Admin → Email settings: SMTP / Resend / console configuration stored in `platform_settings` (overrides `.env`), test-send, and sidebar nav entry.
 * Email, invites, and forgotten password: pluggable mail package (`console` / `smtp` / `resend`), `auth_tokens` table, forgot/set-password APIs and pages, admin invite-without-password + resend invite, and admin user edit (display name / password / status).

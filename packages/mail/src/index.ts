@@ -12,5 +12,9 @@ export { ResendMailTransport } from './resend.js';
 export {
   inviteEmail,
   passwordResetEmail,
+  emailConfirmEmail,
+  accountApprovedEmail,
   setPasswordUrl,
+  confirmEmailUrl,
+  loginUrl,
 } from './templates.js';

@@ -1,7 +1,11 @@
 import {
   inviteEmail,
   passwordResetEmail,
+  emailConfirmEmail,
+  accountApprovedEmail,
   setPasswordUrl,
+  confirmEmailUrl,
+  loginUrl,
   type MailSendResult,
   type MailTransport,
 } from '@project-knowledge-hub/mail';
@@ -41,6 +45,48 @@ export async function sendInviteMail(
   const content = inviteEmail({
     displayName: input.displayName,
     actionUrl,
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendEmailConfirmMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+    rawToken: string;
+  },
+): Promise<MailSendResult> {
+  const actionUrl = confirmEmailUrl(input.webUrl, input.rawToken);
+  const content = emailConfirmEmail({
+    displayName: input.displayName,
+    actionUrl,
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendAccountApprovedMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+  },
+): Promise<MailSendResult> {
+  const content = accountApprovedEmail({
+    displayName: input.displayName,
+    loginUrl: loginUrl(input.webUrl),
   });
   return mail.send({
     to: input.to,

@@ -60,9 +60,69 @@ export function inviteEmail(input: {
   return { subject, text, html };
 }
 
+export function emailConfirmEmail(input: {
+  displayName: string;
+  actionUrl: string;
+}): LinkMailContent {
+  const name = input.displayName.trim() || 'there';
+  const subject = 'Confirm your Project Knowledge Hub email';
+  const text = [
+    `Hi ${name},`,
+    '',
+    'Thanks for signing up for Project Knowledge Hub.',
+    'Open this link to confirm your email address:',
+    input.actionUrl,
+    '',
+    'After confirmation, an administrator must approve your access before you can sign in.',
+    '',
+    'If you did not create an account, you can ignore this email.',
+  ].join('\n');
+  const html = `
+<p>Hi ${escapeHtml(name)},</p>
+<p>Thanks for signing up for Project Knowledge Hub.</p>
+<p><a href="${escapeHtml(input.actionUrl)}">Confirm your email</a></p>
+<p>After confirmation, an administrator must approve your access before you can sign in.</p>
+<p>If you did not create an account, you can ignore this email.</p>
+`.trim();
+  return { subject, text, html };
+}
+
+export function accountApprovedEmail(input: {
+  displayName: string;
+  loginUrl: string;
+}): LinkMailContent {
+  const name = input.displayName.trim() || 'there';
+  const subject = 'Your Project Knowledge Hub account is ready';
+  const text = [
+    `Hi ${name},`,
+    '',
+    'An administrator has approved your account.',
+    `You can sign in here:`,
+    input.loginUrl,
+  ].join('\n');
+  const html = `
+<p>Hi ${escapeHtml(name)},</p>
+<p>An administrator has approved your account.</p>
+<p><a href="${escapeHtml(input.loginUrl)}">Sign in</a></p>
+`.trim();
+  return { subject, text, html };
+}
+
 export function setPasswordUrl(webUrl: string, token: string): string {
   const base = webUrl.replace(/\/$/, '');
   const url = new URL('/set-password', `${base}/`);
   url.searchParams.set('token', token);
   return url.toString();
+}
+
+export function confirmEmailUrl(webUrl: string, token: string): string {
+  const base = webUrl.replace(/\/$/, '');
+  const url = new URL('/confirm-email', `${base}/`);
+  url.searchParams.set('token', token);
+  return url.toString();
+}
+
+export function loginUrl(webUrl: string): string {
+  const base = webUrl.replace(/\/$/, '');
+  return new URL('/login', `${base}/`).toString();
 }

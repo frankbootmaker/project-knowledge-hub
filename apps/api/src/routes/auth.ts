@@ -15,9 +15,13 @@ import {
   requireAuthenticated,
   setSessionCookie,
 } from '../plugins/auth.js';
-import { sendPasswordResetMail } from '../lib/auth-mail.js';
+import {
+  sendEmailConfirmMail,
+  sendPasswordResetMail,
+} from '../lib/auth-mail.js';
 import {
   consumeAuthTokenAndSetPassword,
+  consumeEmailConfirmToken,
   issueAuthToken,
   previewAuthToken,
 } from '../lib/auth-tokens.js';
@@ -40,6 +44,14 @@ const forgotPasswordSchema = z.object({
   email: z.string().email(),
 });
 
+const resendConfirmationSchema = z.object({
+  email: z.string().email(),
+});
+
+const confirmEmailSchema = z.object({
+  token: z.string().min(1).max(500),
+});
+
 const setPasswordSchema = z.object({
   token: z.string().min(1).max(500),
   password: passwordSchema,
@@ -47,6 +59,7 @@ const setPasswordSchema = z.object({
 
 const forgotPasswordLimiter = new MemoryRateLimiter(5, 15 * 60 * 1000);
 const registerLimiter = new MemoryRateLimiter(5, 15 * 60 * 1000);
+const resendConfirmLimiter = new MemoryRateLimiter(5, 15 * 60 * 1000);
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/v1/auth/login', async (request, reply) => {
@@ -212,7 +225,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         email,
         displayName: body.displayName.trim(),
         passwordHash: await hashPassword(body.password),
-        status: 'active',
+        status: 'pending_email',
         isSystemAdmin: false,
       })
       .returning();
@@ -225,15 +238,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    const token = createSessionToken();
-    const expiresAt = new Date(Date.now() + app.env.SESSION_TTL_SECONDS * 1000);
-
-    await app.database.db.insert(sessions).values({
+    const rawToken = await issueAuthToken(app.database, {
       userId: created.id,
-      tokenHash: hashSessionToken(token),
-      expiresAt,
-      ipAddress: request.ip,
-      userAgent: request.headers['user-agent'] ?? null,
+      purpose: 'email_confirm',
+      ttlSeconds: app.env.AUTH_EMAIL_CONFIRM_TTL_SECONDS,
+    });
+
+    await sendEmailConfirmMail(app.mail, {
+      webUrl: app.env.WEB_URL,
+      to: created.email,
+      displayName: created.displayName,
+      rawToken,
     });
 
     await writeAuditEvent(app.database, {
@@ -242,25 +257,106 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       action: 'auth.register',
       entityType: 'user',
       entityId: created.id,
+      metadata: { status: 'pending_email' },
       ipAddress: request.ip,
     });
 
-    setSessionCookie(app, reply, token, app.env.SESSION_TTL_SECONDS);
+    return reply.status(202).send({
+      status: 'ok',
+      message:
+        'Check your email to confirm your address. An administrator must approve access before you can sign in.',
+    });
+  });
+
+  app.get('/api/v1/auth/confirm-email/preview', async (request) => {
+    const query = z
+      .object({ token: z.string().min(1).max(500) })
+      .parse(request.query);
+    const preview = await previewAuthToken(app.database, query.token);
+    if (preview.purpose && preview.purpose !== 'email_confirm') {
+      return { status: 'invalid' as const, purpose: null, email: null };
+    }
+    return {
+      status: preview.status,
+      purpose: preview.purpose === 'email_confirm' ? preview.purpose : null,
+      email:
+        preview.status === 'valid' && preview.purpose === 'email_confirm'
+          ? preview.email ?? null
+          : null,
+    };
+  });
+
+  app.post('/api/v1/auth/confirm-email', async (request) => {
+    assertMutatingOrigin(app, request);
+    const body = confirmEmailSchema.parse(request.body);
+    const result = await consumeEmailConfirmToken(app.database, body.token);
+
+    await writeAuditEvent(app.database, {
+      actorType: 'user',
+      actorId: result.userId,
+      action: 'auth.email_confirm',
+      entityType: 'user',
+      entityId: result.userId,
+      ipAddress: request.ip,
+    });
 
     return {
-      user: {
-        id: created.id,
-        email: created.email,
-        displayName: created.displayName,
-        fullName: created.fullName ?? null,
-        isSystemAdmin: created.isSystemAdmin,
-        avatarUrl: avatarUrlForUser(
-          created.id,
-          created.avatarContentType ?? null,
-          created.updatedAt,
-        ),
-      },
+      status: 'ok',
+      message:
+        'Email confirmed. An administrator must approve your access before you can sign in.',
+      email: result.email,
     };
+  });
+
+  app.post('/api/v1/auth/resend-confirmation', async (request, reply) => {
+    assertMutatingOrigin(app, request);
+    const body = resendConfirmationSchema.parse(request.body);
+    const email = body.email.toLowerCase();
+    const rateKey = `${request.ip}:${email}`;
+
+    if (!resendConfirmLimiter.allow(rateKey)) {
+      throw new AppError({
+        code: 'RATE_LIMITED',
+        message: 'Too many confirmation requests. Try again later.',
+        statusCode: 429,
+      });
+    }
+
+    const [user] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (user && user.status === 'pending_email') {
+      const rawToken = await issueAuthToken(app.database, {
+        userId: user.id,
+        purpose: 'email_confirm',
+        ttlSeconds: app.env.AUTH_EMAIL_CONFIRM_TTL_SECONDS,
+      });
+
+      await sendEmailConfirmMail(app.mail, {
+        webUrl: app.env.WEB_URL,
+        to: user.email,
+        displayName: user.displayName,
+        rawToken,
+      });
+
+      await writeAuditEvent(app.database, {
+        actorType: 'user',
+        actorId: user.id,
+        action: 'auth.resend_confirmation',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: request.ip,
+      });
+    }
+
+    return reply.status(202).send({
+      status: 'ok',
+      message:
+        'If that email is awaiting confirmation, a new link was sent.',
+    });
   });
 
   app.post('/api/v1/auth/forgot-password', async (request, reply) => {
