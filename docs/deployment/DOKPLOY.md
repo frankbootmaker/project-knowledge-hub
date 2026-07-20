@@ -68,15 +68,23 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 * Never commit real secrets; configure them in Dokploy.
 * Do not export empty optional env vars into containers (`SMTP_HOST=` fails validation).
 
-## Domain + HTTPS
+## Dokploy 0.29+ UI notes
 
-1. Create a Dokploy application from this repo (or pre-built images).
-2. Attach `compose.dokploy.yaml` (or equivalent services).
-3. Point a domain at the **web** service (port 3100).
-4. Enable Dokploy-managed HTTPS (Traefik/Caddy).
-5. Set `WEB_URL` (and optional `MCP_PUBLIC_URL`) to the HTTPS origin.
+1. Create a **Project**, then **Create Service → Compose** (one service for the whole stack).
+2. Set Compose file path to `compose.dokploy.yaml`.
+3. Put required env vars on the **Compose service Environment** tab (`KEY=value`).  
+   **Project-level Environment alone is not enough** — Compose interpolates from the `.env` Dokploy writes next to the compose file, which is fed by the service Environment. Missing `WEB_URL` / `POSTGRES_PASSWORD` fails before containers start.
+4. Point a domain at the **web** service (port **3100**); enable HTTPS.
+5. Set `WEB_URL` to that HTTPS origin. Do not expose Postgres or Redis.
 
-Do not expose Postgres or Redis through Dokploy domains.
+**Networking:** `compose.dokploy.yaml` attaches every service to Compose `default` **and** external `dokploy-network`. That keeps `web` → `api:3101` rewrites working after Dokploy injects Traefik on `web`. If `/api/v1/*` returns a plain-text `Internal Server Error` while `/login` works, `web` cannot reach `api`. Redeploy after pulling this compose, or on the Dokploy host temporarily:
+
+```bash
+# Inspect which networks each container has, then bridge them, e.g.:
+docker network connect knowledge_hub_net knowledge-hub-dev-vru1om-web-1
+# and/or:
+docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
+```
 
 ## Deploy order
 

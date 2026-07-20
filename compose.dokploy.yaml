@@ -1,15 +1,13 @@
 # Dokploy Dev/UAT stack — private Postgres/Redis, migrate-on-deploy, HTTPS at the proxy.
 # Usage (local validation):
 #   docker compose -f compose.dokploy.yaml --env-file .env.dokploy.example up --build
-# Dokploy: attach this file (or equivalent service definitions) and set secrets in the UI.
+# Dokploy: attach this file; set env on the Compose *service* Environment tab (not only project).
 #
 # Browser → web only. Next rewrites /api/v1 and /mcp to the internal API (API_URL at image build).
 #
-# Note: DATABASE_URL / REDIS_URL are built from service hostnames below so a laptop shell
-# `.env` (127.0.0.1) cannot override Compose network addresses.
-# Do not set empty optional secrets (SMTP_*, MCP_PUBLIC_URL) — empty strings fail Zod.
-
-name: knowledge-hub-dokploy
+# Networking: use the Compose default network for app traffic, and attach every service to
+# external `dokploy-network` so Traefik domain routing on `web` does not isolate it from `api`
+# (Dokploy domain injection historically drops custom-only networks on the published service).
 
 x-app-env: &app-env
   NODE_ENV: production
@@ -45,7 +43,8 @@ services:
       retries: 12
       start_period: 10s
     networks:
-      - knowledge_hub_net
+      - default
+      - dokploy-network
 
   redis:
     image: redis:7-alpine
@@ -59,7 +58,8 @@ services:
       retries: 12
       start_period: 5s
     networks:
-      - knowledge_hub_net
+      - default
+      - dokploy-network
 
   migrate:
     build:
@@ -80,7 +80,8 @@ services:
         'packages/database/src/migrate.ts',
       ]
     networks:
-      - knowledge_hub_net
+      - default
+      - dokploy-network
 
   api:
     build:
@@ -112,7 +113,8 @@ services:
       retries: 12
       start_period: 25s
     networks:
-      - knowledge_hub_net
+      - default
+      - dokploy-network
 
   worker:
     build:
@@ -129,7 +131,8 @@ services:
       migrate:
         condition: service_completed_successfully
     networks:
-      - knowledge_hub_net
+      - default
+      - dokploy-network
 
   web:
     build:
@@ -148,8 +151,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       WEB_URL: ${WEB_URL:?WEB_URL is required}
       API_URL: ${INTERNAL_API_URL:-http://api:3101}
-    ports:
-      - '${WEB_HOST_PORT:-3100}:3100'
+    # Traefik (Dokploy Domains) reaches the container port; avoid publishing to the host.
+    expose:
+      - '3100'
     depends_on:
       api:
         condition: service_healthy
@@ -166,7 +170,8 @@ services:
       retries: 12
       start_period: 35s
     networks:
-      - knowledge_hub_net
+      - default
+      - dokploy-network
 
 volumes:
   knowledge_hub_postgres_data:
@@ -175,5 +180,5 @@ volumes:
     name: knowledge_hub_redis_data
 
 networks:
-  knowledge_hub_net:
-    name: knowledge_hub_net
+  dokploy-network:
+    external: true
