@@ -139,8 +139,8 @@ services:
       context: .
       dockerfile: infrastructure/docker/web.Dockerfile
       args:
-        # Baked into Next rewrites at build time. Rebuild if the API service hostname changes.
-        API_URL: ${INTERNAL_API_URL:-http://api:3101}
+        # Hardcoded on purpose — do not pass Dokploy API_URL=localhost into the build.
+        NEXT_REWRITE_API_ORIGIN: http://api:3101
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -150,7 +150,8 @@ services:
       HOSTNAME: 0.0.0.0
       LOG_LEVEL: ${LOG_LEVEL:-info}
       WEB_URL: ${WEB_URL:?WEB_URL is required}
-      API_URL: ${INTERNAL_API_URL:-http://api:3101}
+      # SSR → api over Compose DNS (must not be localhost).
+      API_URL: http://api:3101
     # Traefik (Dokploy Domains) reaches the container port; avoid publishing to the host.
     expose:
       - '3100'

@@ -18,7 +18,8 @@ api / worker ──► redis
 ```
 
 * Public traffic should hit **only the web** origin (`WEB_URL`).
-* `API_URL` / `INTERNAL_API_URL` for Next rewrites defaults to `http://api:3101` and is set as a **Docker build arg** on the web image. Changing the internal API hostname requires a **web rebuild**.
+* Next rewrites are baked at **web image build** via `NEXT_REWRITE_API_ORIGIN=http://api:3101`.  
+  **Never** set `API_URL=http://localhost:3101` (or `127.0.0.1`) in Dokploy env — that value is for laptop `pnpm dev` only and will make `/api/v1` proxy to the web container itself (`ECONNREFUSED 127.0.0.1:3101`).
 * Postgres and Redis are **not** published to the host in `compose.dokploy.yaml` (Compose network only).
 * Set public `WEB_URL=https://<dev-domain>` at runtime for cookies, mail links, and AI discover.
 * Optional `MCP_PUBLIC_URL=https://<dev-domain>/mcp` (same-origin via web rewrite).
@@ -29,7 +30,7 @@ api / worker ──► redis
 | --- | --- |
 | api (+ migrate one-shot) | `infrastructure/docker/api.Dockerfile` |
 | worker | `infrastructure/docker/worker.Dockerfile` |
-| web | `infrastructure/docker/web.Dockerfile` (`ARG API_URL`) |
+| web | `infrastructure/docker/web.Dockerfile` (`ARG NEXT_REWRITE_API_ORIGIN`) |
 
 Build validation (local):
 
@@ -49,7 +50,7 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | Variable | Where | Notes |
 | --- | --- | --- |
 | `WEB_URL` | runtime | Public HTTPS origin |
-| `INTERNAL_API_URL` / web build `API_URL` | **build** (web) | Default `http://api:3101` |
+| (web rewrite target) | **build** (web) | Hardcoded `http://api:3101` — do not override with localhost |
 | `POSTGRES_*` | runtime | Compose builds `DATABASE_URL` as `postgres://…@postgres:5432/…` |
 | (Redis) | runtime | Fixed `redis://redis:6379` on the Compose network |
 | `SESSION_SECRET` | runtime | Long random secret |

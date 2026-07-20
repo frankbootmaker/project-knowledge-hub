@@ -13,7 +13,7 @@ services:
     restart: always
     build:
       args:
-        API_URL: ${INTERNAL_API_URL:-http://api:3101}
+        NEXT_REWRITE_API_ORIGIN: ${INTERNAL_API_URL:-http://api:3101}
   postgres:
     restart: always
   redis:
