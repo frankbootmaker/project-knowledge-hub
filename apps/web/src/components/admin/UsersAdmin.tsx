@@ -9,6 +9,7 @@ import {
   Button,
   ErrorText,
   Field,
+  FunctionHeader,
   Input,
   Modal,
   Panel,
@@ -38,6 +39,14 @@ type ApproveMembershipRow = {
 };
 
 const ROLES = ['workspace_admin', 'maintainer', 'reader'] as const;
+const STATUS_FILTERS = [
+  'all',
+  'active',
+  'disabled',
+  'invited',
+  'pending_email',
+  'pending_approval',
+] as const;
 
 function statusTone(status: string): 'success' | 'warn' | 'danger' | 'neutral' | 'brand' {
   if (status === 'active') return 'success';
@@ -47,12 +56,35 @@ function statusTone(status: string): 'success' | 'warn' | 'danger' | 'neutral' |
   return 'warn';
 }
 
+function isClosedAccount(user: PublicUser): boolean {
+  return user.email.endsWith('@closed.local');
+}
+
+function matchesSearch(user: PublicUser, query: string): boolean {
+  if (!query) return true;
+  const haystack = [
+    user.displayName,
+    user.email,
+    user.fullName ?? '',
+    user.idpSource ?? '',
+    user.idpSubject ?? '',
+  ]
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
 export function UsersAdmin({
   initialUsers,
   workspaces,
+  currentUserId,
+  allowHardDelete = false,
 }: {
   initialUsers: PublicUser[];
   workspaces: WorkspaceOption[];
+  currentUserId: string;
+  /** Development/test only — permanent purge of user + authored knowledge. */
+  allowHardDelete?: boolean;
 }) {
   const t = useTranslations('admin');
   const tCommon = useTranslations('common');
@@ -67,6 +99,9 @@ export function UsersAdmin({
   const [password, setPassword] = useState('');
   const [sendInvite, setSendInvite] = useState(true);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('all');
 
   const [editUser, setEditUser] = useState<PublicUser | null>(null);
   const [editDisplayName, setEditDisplayName] = useState('');
@@ -84,22 +119,44 @@ export function UsersAdmin({
   ]);
   const [approveError, setApproveError] = useState<string | null>(null);
 
+  const [removeStep, setRemoveStep] = useState<0 | 1 | 2>(0);
+  const [removeAcknowledged, setRemoveAcknowledged] = useState(false);
+  const [removeHardDelete, setRemoveHardDelete] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const filteredUsers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return initialUsers.filter((user) => {
+      if (statusFilter !== 'all' && user.status !== statusFilter) return false;
+      return matchesSearch(user, query);
+    });
+  }, [initialUsers, searchQuery, statusFilter]);
+
   const pendingApproval = useMemo(
-    () => initialUsers.filter((user) => user.status === 'pending_approval'),
-    [initialUsers],
+    () => filteredUsers.filter((user) => user.status === 'pending_approval'),
+    [filteredUsers],
   );
   const pendingEmail = useMemo(
-    () => initialUsers.filter((user) => user.status === 'pending_email'),
-    [initialUsers],
+    () => filteredUsers.filter((user) => user.status === 'pending_email'),
+    [filteredUsers],
   );
   const otherUsers = useMemo(
     () =>
-      initialUsers.filter(
+      filteredUsers.filter(
         (user) =>
           user.status !== 'pending_approval' && user.status !== 'pending_email',
       ),
-    [initialUsers],
+    [filteredUsers],
   );
+
+  function statusLabel(status: string): string {
+    if (status === 'pending_email') return t('statusPendingEmail');
+    if (status === 'pending_approval') return t('statusPendingApproval');
+    if (status === 'active') return t('statusActive');
+    if (status === 'disabled') return t('statusDisabled');
+    if (status === 'invited') return t('statusInvited');
+    return status;
+  }
 
   function closeCreateModal() {
     setCreateOpen(false);
@@ -112,6 +169,13 @@ export function UsersAdmin({
     setError(null);
   }
 
+  function resetRemoveFlow() {
+    setRemoveStep(0);
+    setRemoveAcknowledged(false);
+    setRemoveHardDelete(false);
+    setRemoveError(null);
+  }
+
   function openEdit(user: PublicUser) {
     setEditUser(user);
     setEditDisplayName(user.displayName);
@@ -122,12 +186,14 @@ export function UsersAdmin({
     setEditIdpSource(user.idpSource ?? '');
     setEditIdpSubject(user.idpSubject ?? '');
     setEditError(null);
+    resetRemoveFlow();
   }
 
   function closeEdit() {
     setEditUser(null);
     setEditPassword('');
     setEditError(null);
+    resetRemoveFlow();
   }
 
   function openApprove(user: PublicUser) {
@@ -335,6 +401,40 @@ export function UsersAdmin({
     }
   }
 
+  async function confirmRemoveUser() {
+    if (!editUser || !removeAcknowledged) return;
+    const hard = allowHardDelete && (removeHardDelete || isClosedAccount(editUser));
+    setPending(true);
+    setRemoveError(null);
+    try {
+      const url = hard
+        ? `/api/v1/users/${editUser.id}?hard=1`
+        : `/api/v1/users/${editUser.id}`;
+      const response = await fetch(url, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { Origin: window.location.origin },
+      });
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? t('removeUserFailed'));
+      }
+      pushToast(
+        hard
+          ? t('toastUserPurged', { name: editUser.displayName })
+          : t('toastUserRemoved', { name: editUser.displayName }),
+      );
+      closeEdit();
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('removeUserFailed');
+      setRemoveError(message);
+      pushToast(message, 'danger');
+    } finally {
+      setPending(false);
+    }
+  }
+
   const createReady =
     email.trim().length > 0 &&
     displayName.trim().length > 0 &&
@@ -344,27 +444,30 @@ export function UsersAdmin({
     approveRows.some((row) => row.workspaceId) &&
     workspaces.length > 0;
 
+  function canEdit(user: PublicUser): boolean {
+    if (user.id === currentUserId) return false;
+    if (isClosedAccount(user)) return allowHardDelete;
+    return true;
+  }
+
+  function canRemove(user: PublicUser): boolean {
+    if (user.id === currentUserId) return false;
+    if (isClosedAccount(user)) return allowHardDelete;
+    return true;
+  }
+
   function renderUserRow(user: PublicUser, options?: { showApprove?: boolean }) {
     return (
       <Panel key={user.id} className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <strong>{user.displayName}</strong>
-            <Badge tone={statusTone(user.status)}>
-              {user.status === 'pending_email'
-                ? t('statusPendingEmail')
-                : user.status === 'pending_approval'
-                  ? t('statusPendingApproval')
-                  : user.status === 'active'
-                    ? t('statusActive')
-                    : user.status === 'disabled'
-                      ? t('statusDisabled')
-                      : user.status === 'invited'
-                        ? t('statusInvited')
-                        : user.status}
-            </Badge>
+            <Badge tone={statusTone(user.status)}>{statusLabel(user.status)}</Badge>
             {user.isSystemAdmin ? <Badge tone="brand">{t('systemAdmin')}</Badge> : null}
             {user.idpSource ? <Badge tone="neutral">{user.idpSource}</Badge> : null}
+            {isClosedAccount(user) ? (
+              <Badge tone="danger">{t('statusClosed')}</Badge>
+            ) : null}
           </div>
           <p className="mt-1 mb-0 text-sm text-ink-muted">{user.email}</p>
           {user.fullName ? (
@@ -411,14 +514,16 @@ export function UsersAdmin({
               {t('resendInvite')}
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending}
-            onClick={() => openEdit(user)}
-          >
-            {t('editUser')}
-          </Button>
+          {!isClosedAccount(user) || allowHardDelete ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending || !canEdit(user)}
+              onClick={() => openEdit(user)}
+            >
+              {t('editUser')}
+            </Button>
+          ) : null}
         </div>
       </Panel>
     );
@@ -426,18 +531,45 @@ export function UsersAdmin({
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <Button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            setError(null);
-            setCreateOpen(true);
-          }}
-        >
-          {t('createUser')}
-        </Button>
-      </div>
+      <FunctionHeader
+        search={
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('usersSearchPlaceholder')}
+            aria-label={t('usersSearchPlaceholder')}
+          />
+        }
+        filters={
+          <Select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as (typeof STATUS_FILTERS)[number])
+            }
+            aria-label={t('usersFilterStatus')}
+          >
+            <option value="all">{t('usersFilterAll')}</option>
+            <option value="active">{t('statusActive')}</option>
+            <option value="disabled">{t('statusDisabled')}</option>
+            <option value="invited">{t('statusInvited')}</option>
+            <option value="pending_email">{t('statusPendingEmail')}</option>
+            <option value="pending_approval">{t('statusPendingApproval')}</option>
+          </Select>
+        }
+        actions={
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              setError(null);
+              setCreateOpen(true);
+            }}
+          >
+            {t('createUser')}
+          </Button>
+        }
+      />
 
       <Modal
         open={createOpen}
@@ -531,22 +663,30 @@ export function UsersAdmin({
         title={t('editUser')}
         description={editUser?.email}
         footer={
-          <>
+          editUser && isClosedAccount(editUser) && allowHardDelete ? (
             <Button type="button" variant="secondary" disabled={pending} onClick={closeEdit}>
               {tCommon('cancel')}
             </Button>
-            <Button
-              type="button"
-              disabled={pending || !editDisplayName.trim()}
-              onClick={() => void saveEdit()}
-            >
-              {tCommon('save')}
-            </Button>
-          </>
+          ) : (
+            <>
+              <Button type="button" variant="secondary" disabled={pending} onClick={closeEdit}>
+                {tCommon('cancel')}
+              </Button>
+              <Button
+                type="button"
+                disabled={pending || removeStep > 0 || !editDisplayName.trim()}
+                onClick={() => void saveEdit()}
+              >
+                {tCommon('save')}
+              </Button>
+            </>
+          )
         }
       >
         {editUser ? (
           <div className="grid gap-3">
+            {!(isClosedAccount(editUser) && allowHardDelete) ? (
+              <>
             <Field label={t('displayName')}>
               <Input
                 value={editDisplayName}
@@ -617,6 +757,133 @@ export function UsersAdmin({
               </Button>
             ) : null}
             {editError ? <ErrorText>{editError}</ErrorText> : null}
+              </>
+            ) : (
+              <p className="m-0 text-sm text-ink-muted">{t('purgeClosedHint')}</p>
+            )}
+
+            {canRemove(editUser) ? (
+              <div className="grid gap-3 border-t border-line pt-3">
+                {removeStep === 0 ? (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={pending}
+                    onClick={() => {
+                      setRemoveStep(1);
+                      setRemoveAcknowledged(false);
+                      setRemoveHardDelete(isClosedAccount(editUser));
+                      setRemoveError(null);
+                    }}
+                  >
+                    {isClosedAccount(editUser)
+                      ? t('purgeUser')
+                      : t('removeUser')}
+                  </Button>
+                ) : null}
+
+                {removeStep === 1 ? (
+                  <Panel variant="inset" className="grid gap-3">
+                    <p className="m-0 text-sm text-danger">
+                      {allowHardDelete &&
+                      (removeHardDelete || isClosedAccount(editUser))
+                        ? t('purgeUserWarning1', { name: editUser.displayName })
+                        : t('removeUserWarning1', { name: editUser.displayName })}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        disabled={pending}
+                        onClick={() => {
+                          setRemoveStep(2);
+                          setRemoveAcknowledged(false);
+                        }}
+                      >
+                        {t('removeUserContinue')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={resetRemoveFlow}
+                      >
+                        {tCommon('cancel')}
+                      </Button>
+                    </div>
+                  </Panel>
+                ) : null}
+
+                {removeStep === 2 ? (
+                  <Panel variant="inset" className="grid gap-3">
+                    <p className="m-0 text-sm text-danger">
+                      {allowHardDelete &&
+                      (removeHardDelete || isClosedAccount(editUser))
+                        ? t('purgeUserWarning2', { name: editUser.displayName })
+                        : t('removeUserWarning2', { name: editUser.displayName })}
+                    </p>
+                    {allowHardDelete && !isClosedAccount(editUser) ? (
+                      <label className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={removeHardDelete}
+                          disabled={pending}
+                          onChange={(e) => setRemoveHardDelete(e.target.checked)}
+                        />
+                        <span>{t('purgeUserOption')}</span>
+                      </label>
+                    ) : null}
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={removeAcknowledged}
+                        disabled={pending}
+                        onChange={(e) => setRemoveAcknowledged(e.target.checked)}
+                      />
+                      <span>
+                        {allowHardDelete &&
+                        (removeHardDelete || isClosedAccount(editUser))
+                          ? t('purgeUserAcknowledge')
+                          : t('removeUserAcknowledge')}
+                      </span>
+                    </label>
+                    {removeError ? <ErrorText>{removeError}</ErrorText> : null}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        disabled={pending || !removeAcknowledged}
+                        onClick={() => void confirmRemoveUser()}
+                      >
+                        {allowHardDelete &&
+                        (removeHardDelete || isClosedAccount(editUser))
+                          ? t('purgeUserConfirmFinal')
+                          : t('removeUserConfirmFinal')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={() => {
+                          setRemoveStep(1);
+                          setRemoveAcknowledged(false);
+                        }}
+                      >
+                        {t('removeUserBack')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={resetRemoveFlow}
+                      >
+                        {tCommon('cancel')}
+                      </Button>
+                    </div>
+                  </Panel>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </Modal>
@@ -745,10 +1012,14 @@ export function UsersAdmin({
         {pendingApproval.length > 0 || pendingEmail.length > 0 ? (
           <h2 className="m-0 text-base font-semibold">{t('allUsersTitle')}</h2>
         ) : null}
-        {otherUsers.length === 0 &&
-        pendingApproval.length === 0 &&
-        pendingEmail.length === 0 ? (
-          <p className="kh-muted">{t('emptyUsers')}</p>
+        {filteredUsers.length === 0 ? (
+          <p className="kh-muted">
+            {initialUsers.length === 0 ? t('emptyUsers') : t('emptyUsersFiltered')}
+          </p>
+        ) : otherUsers.length === 0 &&
+          pendingApproval.length === 0 &&
+          pendingEmail.length === 0 ? (
+          <p className="kh-muted">{t('emptyOtherUsers')}</p>
         ) : otherUsers.length === 0 ? (
           <p className="kh-muted">{t('emptyOtherUsers')}</p>
         ) : (

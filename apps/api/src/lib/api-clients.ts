@@ -10,6 +10,14 @@ import {
 import { AppError } from '@project-knowledge-hub/domain';
 import { DEFAULT_MCP_SCOPES, type McpClientContext } from '@project-knowledge-hub/mcp';
 
+export const API_CLIENT_STATUSES = [
+  'pending_approval',
+  'active',
+  'rejected',
+] as const;
+
+export type ApiClientStatus = (typeof API_CLIENT_STATUSES)[number];
+
 export function toPublicApiClient(client: typeof apiClients.$inferSelect) {
   return {
     id: client.id,
@@ -21,6 +29,12 @@ export function toPublicApiClient(client: typeof apiClients.$inferSelect) {
     allowedWorkspaceIds: client.allowedWorkspaceIds,
     allowedProjectIds: client.allowedProjectIds,
     actingUserId: client.actingUserId,
+    status: client.status,
+    requestedByUserId: client.requestedByUserId,
+    approvedByUserId: client.approvedByUserId,
+    approvedAt: client.approvedAt?.toISOString() ?? null,
+    agentLabel: client.agentLabel,
+    tokenClaimedAt: client.tokenClaimedAt?.toISOString() ?? null,
     expiresAt: client.expiresAt?.toISOString() ?? null,
     lastUsedAt: client.lastUsedAt?.toISOString() ?? null,
     revokedAt: client.revokedAt?.toISOString() ?? null,
@@ -106,6 +120,132 @@ export function assertWriteClientConfig(input: {
   }
 }
 
+export async function approveApiClient(
+  database: Database,
+  input: {
+    clientId: string;
+    approverUserId: string;
+    scopes?: string[];
+    allowedWorkspaceIds?: string[];
+    allowedProjectIds?: string[];
+    name?: string;
+  },
+): Promise<{ client: typeof apiClients.$inferSelect; token: string }> {
+  const [existing] = await database.db
+    .select()
+    .from(apiClients)
+    .where(eq(apiClients.id, input.clientId))
+    .limit(1);
+
+  if (!existing || existing.revokedAt) {
+    throw new AppError({
+      code: 'API_CLIENT_NOT_FOUND',
+      message: 'API client not found',
+      statusCode: 404,
+    });
+  }
+
+  if (existing.status !== 'pending_approval') {
+    throw new AppError({
+      code: 'API_CLIENT_NOT_PENDING',
+      message: 'Only pending API client requests can be approved',
+      statusCode: 400,
+    });
+  }
+
+  const scopes = input.scopes ?? existing.scopes;
+  const allowedWorkspaceIds = input.allowedWorkspaceIds ?? existing.allowedWorkspaceIds;
+  const allowedProjectIds = input.allowedProjectIds ?? existing.allowedProjectIds;
+  const actingUserId = existing.actingUserId ?? existing.requestedByUserId;
+
+  assertWriteClientConfig({ scopes, actingUserId, allowedWorkspaceIds });
+  if (actingUserId) {
+    await assertActingUserForOrganization(
+      database,
+      existing.organizationId,
+      actingUserId,
+    );
+  }
+
+  const issued = issueApiClientToken();
+  const now = new Date();
+  const [updated] = await database.db
+    .update(apiClients)
+    .set({
+      name: input.name?.trim() || existing.name,
+      scopes,
+      allowedWorkspaceIds,
+      allowedProjectIds,
+      actingUserId,
+      status: 'active',
+      approvedByUserId: input.approverUserId,
+      approvedAt: now,
+      tokenHash: issued.tokenHash,
+      tokenPrefix: issued.tokenPrefix,
+      unclaimedToken: issued.token,
+      tokenClaimedAt: null,
+    })
+    .where(eq(apiClients.id, existing.id))
+    .returning();
+
+  if (!updated) {
+    throw new AppError({
+      code: 'API_CLIENT_NOT_FOUND',
+      message: 'API client not found',
+      statusCode: 404,
+    });
+  }
+
+  return { client: updated, token: issued.token };
+}
+
+export async function rejectApiClient(
+  database: Database,
+  clientId: string,
+): Promise<typeof apiClients.$inferSelect> {
+  const [existing] = await database.db
+    .select()
+    .from(apiClients)
+    .where(eq(apiClients.id, clientId))
+    .limit(1);
+
+  if (!existing || existing.revokedAt) {
+    throw new AppError({
+      code: 'API_CLIENT_NOT_FOUND',
+      message: 'API client not found',
+      statusCode: 404,
+    });
+  }
+
+  if (existing.status !== 'pending_approval') {
+    throw new AppError({
+      code: 'API_CLIENT_NOT_PENDING',
+      message: 'Only pending API client requests can be rejected',
+      statusCode: 400,
+    });
+  }
+
+  const [updated] = await database.db
+    .update(apiClients)
+    .set({
+      status: 'rejected',
+      claimSecretHash: null,
+      unclaimedToken: null,
+    })
+    .where(eq(apiClients.id, existing.id))
+    .returning();
+
+  if (!updated) {
+    throw new AppError({
+      code: 'API_CLIENT_NOT_FOUND',
+      message: 'API client not found',
+      statusCode: 404,
+    });
+  }
+
+  return updated;
+}
+
 export async function loadApiClientByBearerToken(
   database: Database,
   token: string,
@@ -118,6 +258,7 @@ export async function loadApiClientByBearerToken(
     .where(
       and(
         eq(apiClients.tokenHash, tokenHash),
+        eq(apiClients.status, 'active'),
         isNull(apiClients.revokedAt),
         or(isNull(apiClients.expiresAt), gt(apiClients.expiresAt, now)),
       ),

@@ -81,6 +81,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Recipe | Role |
 |--------|------|
 | `.kh-input` / `.kh-label` | Form controls |
+| `.kh-function-header` / `-controls` / `-actions` | List toolbar (search/filters + primary actions) |
 | `.kh-panel` / `.kh-panel-solid` / `.kh-panel-inset` | Surfaces |
 | `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (soft wash + hover; no left bar); palette keys from domain |
 | `.kh-workspace-swatch` / `.kh-workspace-swatch-btn*` | Color picker swatches |
@@ -111,6 +112,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`) |
 | `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout |
+| `FunctionHeader` | List/admin toolbar: search + filters + primary actions on one row |
 
 Shared button classes live in `buttonStyles.ts` and `.kh-btn*` recipes so Button and
 LinkButton stay identical.
@@ -128,6 +130,7 @@ from client components. Tones: `success` (default), `danger`, `info`.
 | No ad-hoc alerts | Do not invent parallel snackbars; extend `Toast` + recipes |
 | Reachable nav | Primary destinations must be available at phone widths via `MobileNav` or equivalent |
 | Admin create | Prefer `Modal` for adding users, organizations, memberships, API clients — list stays primary; open via a top-right create button |
+| Function header | Use `FunctionHeader` (`.kh-function-header*`) when a list needs search/filters on the same row as the primary create/action button |
 
 ## Changing a parameter
 
@@ -155,6 +158,9 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-20
 
+* **AI Connect** — Public `/ai-discover` (login-adjacent) plus authenticated `/account/ai-connections` for pairing codes and approve/revoke. Admin → API clients shows a pending AI requests section (same approve mental model as signup).
+* **Function header** — `FunctionHeader` + `.kh-function-header*` for list toolbars (search/filters left, primary actions right). Admin → Users uses it for search, status filter, and Create user.
+* **User remove / close account** — Admin removes a user from the Edit user modal (two-step inset confirm + acknowledgement). Profile → Close account uses a double confirmation (warning step, then type `CLOSE` + checkbox). Soft-close keeps knowledge authorship; last system admin cannot be removed.
 * **Status page** — Platform `/status` lives under Admin sidebar (not primary header nav). Eyebrow row shares space with **Back to Admin** (right). Overall health `Badge` beside the title; row values use colored `Badge`s (no left accent bars).
 * **Workspace tiles** — Left accent bar removed from `.kh-workspace-tile`; soft color wash remains, with a stronger wash on hover. Horizontal `.kh-workspace-accent-bar` on workspace detail pages is unchanged.
 * **Password strength** — `PasswordStrengthHint` under new-password fields (register, set-password, admin users). Shared policy: 8+ chars, one uppercase, one number/symbol = **Safe**; 12+ with those rules = **Strong**.

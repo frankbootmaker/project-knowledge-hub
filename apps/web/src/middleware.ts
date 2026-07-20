@@ -8,6 +8,7 @@ const publicPaths = [
   '/forgot-password',
   '/set-password',
   '/status',
+  '/ai-discover',
 ];
 
 export function middleware(request: NextRequest) {

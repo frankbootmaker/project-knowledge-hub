@@ -13,6 +13,18 @@
 * Scopes + optional workspace/project allowlists
 * Optional `acting_user_id` (required for `knowledge:write`)
 
+## AI autodiscover (pairing)
+
+Agents can request an API client without an admin manually creating one first:
+
+1. Active user mints a short-lived pairing code (`POST /api/v1/me/ai-pairing-codes`).
+2. Agent reads `GET /api/v1/ai-discover` (and the public web page `/ai-discover`).
+3. Agent creates a pending client with `POST /api/v1/ai-discover/requests` + pairing code.
+4. The **requesting user** or a **system admin** approves (scopes / workspace allowlist).
+5. Agent polls `GET /api/v1/ai-discover/requests/:id?claimSecret=` and receives the bearer token once.
+
+Pending rows use `api_clients.status = pending_approval` with null token until approval. MCP auth only accepts `status = active`.
+
 ## Scopes
 
 Default (read): `projects:read`, `systems:read`, `knowledge:read`, `knowledge:search`, `provenance:read`

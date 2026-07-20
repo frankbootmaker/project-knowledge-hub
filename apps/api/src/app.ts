@@ -15,6 +15,7 @@ import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerAiDiscoverRoutes } from './routes/ai-discover.js';
 import { registerApiClientRoutes } from './routes/api-clients.js';
 import { registerAuditRoutes } from './routes/audit.js';
 import { registerKnowledgeRecordRoutes } from './routes/knowledge-records.js';
@@ -171,6 +172,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerMailSettingsRoutes(app);
   await registerMembershipRoutes(app);
   await registerApiClientRoutes(app);
+  await registerAiDiscoverRoutes(app);
   await registerAuditRoutes(app);
   await registerMcpSetupRoutes(app);
   await registerLlmOpenApiRoutes(app);

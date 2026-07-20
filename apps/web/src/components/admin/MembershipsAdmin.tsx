@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -8,6 +8,8 @@ import {
   Button,
   ErrorText,
   Field,
+  FunctionHeader,
+  Input,
   Modal,
   Panel,
   Select,
@@ -33,6 +35,21 @@ type UserOption = { id: string; email: string; displayName: string };
 type WorkspaceOption = { id: string; name: string; slug: string };
 
 const ROLES = ['workspace_admin', 'maintainer', 'reader'] as const;
+const ROLE_FILTERS = ['all', ...ROLES] as const;
+
+function matchesMembershipSearch(membership: PublicMembership, query: string): boolean {
+  if (!query) return true;
+  const haystack = [
+    membership.user.displayName,
+    membership.user.email,
+    membership.workspace.name,
+    membership.workspace.slug,
+    membership.role,
+  ]
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(query);
+}
 
 export function MembershipsAdmin({
   initialMemberships,
@@ -53,6 +70,16 @@ export function MembershipsAdmin({
   const [userId, setUserId] = useState(users[0]?.id ?? '');
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? '');
   const [role, setRole] = useState<(typeof ROLES)[number]>('reader');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<(typeof ROLE_FILTERS)[number]>('all');
+
+  const filteredMemberships = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return initialMemberships.filter((membership) => {
+      if (roleFilter !== 'all' && membership.role !== roleFilter) return false;
+      return matchesMembershipSearch(membership, query);
+    });
+  }, [initialMemberships, searchQuery, roleFilter]);
 
   function closeCreateModal() {
     setCreateOpen(false);
@@ -120,6 +147,7 @@ export function MembershipsAdmin({
       const response = await fetch(`/api/v1/memberships/${membershipId}`, {
         method: 'DELETE',
         credentials: 'include',
+        headers: { Origin: window.location.origin },
       });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: { message?: string } };
@@ -145,21 +173,46 @@ export function MembershipsAdmin({
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <Button
-          type="button"
-          disabled={pending || users.length === 0 || workspaces.length === 0}
-          onClick={() => {
-            setError(null);
-            setUserId(users[0]?.id ?? '');
-            setWorkspaceId(workspaces[0]?.id ?? '');
-            setRole('reader');
-            setCreateOpen(true);
-          }}
-        >
-          {t('addMembership')}
-        </Button>
-      </div>
+      <FunctionHeader
+        search={
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('membershipsSearchPlaceholder')}
+            aria-label={t('membershipsSearchPlaceholder')}
+          />
+        }
+        filters={
+          <Select
+            value={roleFilter}
+            onChange={(e) =>
+              setRoleFilter(e.target.value as (typeof ROLE_FILTERS)[number])
+            }
+            aria-label={t('membershipsFilterRole')}
+          >
+            <option value="all">{t('membershipsFilterAll')}</option>
+            <option value="workspace_admin">{t('roleWorkspaceAdmin')}</option>
+            <option value="maintainer">{t('roleMaintainer')}</option>
+            <option value="reader">{t('roleReader')}</option>
+          </Select>
+        }
+        actions={
+          <Button
+            type="button"
+            disabled={pending || users.length === 0 || workspaces.length === 0}
+            onClick={() => {
+              setError(null);
+              setUserId(users[0]?.id ?? '');
+              setWorkspaceId(workspaces[0]?.id ?? '');
+              setRole('reader');
+              setCreateOpen(true);
+            }}
+          >
+            {t('addMembership')}
+          </Button>
+        }
+      />
 
       <Modal
         open={createOpen}
@@ -223,10 +276,14 @@ export function MembershipsAdmin({
       </Modal>
 
       <div className="grid gap-3">
-        {initialMemberships.length === 0 ? (
-          <p className="kh-muted">{t('emptyMemberships')}</p>
+        {filteredMemberships.length === 0 ? (
+          <p className="kh-muted">
+            {initialMemberships.length === 0
+              ? t('emptyMemberships')
+              : t('emptyMembershipsFiltered')}
+          </p>
         ) : (
-          initialMemberships.map((membership) => (
+          filteredMemberships.map((membership) => (
             <Panel
               key={membership.id}
               className="flex flex-wrap items-center justify-between gap-3"

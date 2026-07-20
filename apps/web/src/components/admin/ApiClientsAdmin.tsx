@@ -4,9 +4,11 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
+  Badge,
   Button,
   ErrorText,
   Field,
+  FunctionHeader,
   Input,
   Modal,
   Panel,
@@ -28,11 +30,14 @@ export type PublicApiClient = {
   organizationId: string;
   name: string;
   description: string | null;
-  tokenPrefix: string;
+  tokenPrefix: string | null;
   scopes: string[];
   allowedWorkspaceIds: string[];
   allowedProjectIds: string[];
   actingUserId: string | null;
+  status?: string;
+  requestedByUserId?: string | null;
+  agentLabel?: string | null;
   expiresAt: string | null;
   lastUsedAt: string | null;
   createdAt: string;
@@ -41,6 +46,23 @@ export type PublicApiClient = {
 type Org = { id: string; name: string; slug: string };
 type Workspace = { id: string; name: string; slug: string; organizationId: string };
 type User = { id: string; email: string; displayName: string };
+
+const STATUS_FILTERS = ['all', 'active', 'pending_approval'] as const;
+
+function matchesClientSearch(client: PublicApiClient, query: string): boolean {
+  if (!query) return true;
+  const haystack = [
+    client.name,
+    client.description ?? '',
+    client.tokenPrefix ?? '',
+    client.agentLabel ?? '',
+    client.scopes.join(' '),
+    client.status ?? '',
+  ]
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(query);
+}
 
 export function ApiClientsAdmin({
   initialClients,
@@ -61,6 +83,8 @@ export function ApiClientsAdmin({
   const [pending, setPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('all');
 
   const [name, setName] = useState('');
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
@@ -74,10 +98,49 @@ export function ApiClientsAdmin({
   const [allowedWorkspaceIds, setAllowedWorkspaceIds] = useState<string[]>([]);
   const [actingUserId, setActingUserId] = useState('');
 
+  const [approveClient, setApproveClient] = useState<PublicApiClient | null>(null);
+  const [approveScopes, setApproveScopes] = useState<string[]>([]);
+  const [approveWorkspaces, setApproveWorkspaces] = useState<string[]>([]);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  const filteredClients = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return initialClients.filter((client) => {
+      const status = client.status ?? 'active';
+      if (statusFilter !== 'all' && status !== statusFilter) return false;
+      return matchesClientSearch(client, query);
+    });
+  }, [initialClients, searchQuery, statusFilter]);
+
+  const pendingClients = useMemo(
+    () => filteredClients.filter((client) => client.status === 'pending_approval'),
+    [filteredClients],
+  );
+  const activeClients = useMemo(
+    () =>
+      filteredClients.filter(
+        (client) => (client.status ?? 'active') === 'active',
+      ),
+    [filteredClients],
+  );
+
   const orgWorkspaces = useMemo(
     () => workspaces.filter((workspace) => workspace.organizationId === organizationId),
     [workspaces, organizationId],
   );
+
+  const approveOrgWorkspaces = useMemo(() => {
+    if (!approveClient) return [];
+    return workspaces.filter(
+      (workspace) => workspace.organizationId === approveClient.organizationId,
+    );
+  }, [workspaces, approveClient]);
+
+  function userLabel(userId: string | null | undefined): string {
+    if (!userId) return '—';
+    const user = users.find((item) => item.id === userId);
+    return user ? `${user.displayName} (${user.email})` : userId;
+  }
 
   function resetCreateForm() {
     setName('');
@@ -97,6 +160,13 @@ export function ApiClientsAdmin({
   function closeCreateModal() {
     setCreateOpen(false);
     resetCreateForm();
+  }
+
+  function openApprove(client: PublicApiClient) {
+    setApproveClient(client);
+    setApproveScopes([...client.scopes]);
+    setApproveWorkspaces([...client.allowedWorkspaceIds]);
+    setApproveError(null);
   }
 
   async function createClient() {
@@ -131,6 +201,68 @@ export function ApiClientsAdmin({
     } catch (err) {
       const message = err instanceof Error ? err.message : t('failed');
       setError(message);
+      pushToast(message, 'danger');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function approvePending() {
+    if (!approveClient) return;
+    setPending(true);
+    setApproveError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/api-clients/${approveClient.id}/approve`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({
+            scopes: approveScopes,
+            allowedWorkspaceIds: approveWorkspaces,
+          }),
+        },
+      );
+      const payload = (await response.json()) as {
+        token?: string;
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? t('failed'));
+      }
+      setIssuedToken(payload.token ?? null);
+      setApproveClient(null);
+      pushToast(t('toastApiClientApproved'));
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('failed');
+      setApproveError(message);
+      pushToast(message, 'danger');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function rejectPending(clientId: string) {
+    setPending(true);
+    try {
+      const response = await fetch(`/api/v1/api-clients/${clientId}/reject`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Origin: window.location.origin },
+      });
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? t('failed'));
+      }
+      pushToast(t('toastApiClientRejected'));
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('failed');
       pushToast(message, 'danger');
     } finally {
       setPending(false);
@@ -190,16 +322,32 @@ export function ApiClientsAdmin({
     }
   }
 
-  function toggleScope(scope: string) {
-    setScopes((current) =>
+  function toggleScope(scope: string, target: 'create' | 'approve') {
+    if (target === 'create') {
+      setScopes((current) =>
+        current.includes(scope)
+          ? current.filter((item) => item !== scope)
+          : [...current, scope],
+      );
+      return;
+    }
+    setApproveScopes((current) =>
       current.includes(scope)
         ? current.filter((item) => item !== scope)
         : [...current, scope],
     );
   }
 
-  function toggleWorkspace(workspaceId: string) {
-    setAllowedWorkspaceIds((current) =>
+  function toggleWorkspace(workspaceId: string, target: 'create' | 'approve') {
+    if (target === 'create') {
+      setAllowedWorkspaceIds((current) =>
+        current.includes(workspaceId)
+          ? current.filter((item) => item !== workspaceId)
+          : [...current, workspaceId],
+      );
+      return;
+    }
+    setApproveWorkspaces((current) =>
       current.includes(workspaceId)
         ? current.filter((item) => item !== workspaceId)
         : [...current, workspaceId],
@@ -217,18 +365,42 @@ export function ApiClientsAdmin({
         </Panel>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <Button
-          type="button"
-          disabled={pending || organizations.length === 0}
-          onClick={() => {
-            resetCreateForm();
-            setCreateOpen(true);
-          }}
-        >
-          {t('createClient')}
-        </Button>
-      </div>
+      <FunctionHeader
+        search={
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('apiClientsSearchPlaceholder')}
+            aria-label={t('apiClientsSearchPlaceholder')}
+          />
+        }
+        filters={
+          <Select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as (typeof STATUS_FILTERS)[number])
+            }
+            aria-label={t('apiClientsFilterStatus')}
+          >
+            <option value="all">{t('apiClientsFilterAll')}</option>
+            <option value="active">{t('statusActive')}</option>
+            <option value="pending_approval">{t('statusPendingApproval')}</option>
+          </Select>
+        }
+        actions={
+          <Button
+            type="button"
+            disabled={pending || organizations.length === 0}
+            onClick={() => {
+              resetCreateForm();
+              setCreateOpen(true);
+            }}
+          >
+            {t('createClient')}
+          </Button>
+        }
+      />
 
       <Modal
         open={createOpen}
@@ -286,7 +458,7 @@ export function ApiClientsAdmin({
                 <input
                   type="checkbox"
                   checked={scopes.includes(scope)}
-                  onChange={() => toggleScope(scope)}
+                  onChange={() => toggleScope(scope, 'create')}
                 />
                 <span className="font-mono text-xs">{scope}</span>
               </label>
@@ -307,7 +479,7 @@ export function ApiClientsAdmin({
                   <input
                     type="checkbox"
                     checked={allowedWorkspaceIds.includes(workspace.id)}
-                    onChange={() => toggleWorkspace(workspace.id)}
+                    onChange={() => toggleWorkspace(workspace.id, 'create')}
                   />
                   {workspace.name}
                 </label>
@@ -328,17 +500,140 @@ export function ApiClientsAdmin({
         {error ? <ErrorText>{error}</ErrorText> : null}
       </Modal>
 
-      <div className="grid gap-3">
-        {initialClients.length === 0 ? (
-          <p className="kh-muted">{t('emptyClients')}</p>
+      <Modal
+        open={approveClient != null}
+        onClose={() => setApproveClient(null)}
+        title={t('approveApiClient')}
+        description={approveClient?.name}
+        size="lg"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setApproveClient(null)}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || approveScopes.length === 0}
+              onClick={() => void approvePending()}
+            >
+              {t('approveApiClientConfirm')}
+            </Button>
+          </>
+        }
+      >
+        {approveClient ? (
+          <div className="grid gap-3">
+            <p className="m-0 text-sm text-ink-muted">
+              {t('approveApiClientHint', {
+                user: userLabel(approveClient.requestedByUserId),
+              })}
+            </p>
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {MCP_SCOPES.map((scope) => (
+                  <label key={scope} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={approveScopes.includes(scope)}
+                      onChange={() => toggleScope(scope, 'approve')}
+                    />
+                    <span className="font-mono text-xs">{scope}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
+              <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
+                {approveOrgWorkspaces.map((workspace) => (
+                  <label key={workspace.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={approveWorkspaces.includes(workspace.id)}
+                      onChange={() => toggleWorkspace(workspace.id, 'approve')}
+                    />
+                    {workspace.name}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            {approveError ? <ErrorText>{approveError}</ErrorText> : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      {pendingClients.length > 0 ? (
+        <section className="grid gap-3">
+          <h2 className="m-0 text-base font-semibold">{t('pendingApiClientsTitle')}</h2>
+          <p className="m-0 text-sm text-ink-muted">{t('pendingApiClientsHint')}</p>
+          {pendingClients.map((client) => (
+            <Panel key={client.id} className="grid gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="m-0 text-base font-semibold">{client.name}</h3>
+                    <Badge tone="brand">{t('statusPendingApproval')}</Badge>
+                    {client.agentLabel ? (
+                      <Badge tone="neutral">{client.agentLabel}</Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 mb-0 text-sm text-ink-muted">
+                    {t('requestedBy')}: {userLabel(client.requestedByUserId)}
+                  </p>
+                  <p className="mt-1 mb-0 font-mono text-xs text-ink-muted">
+                    {client.scopes.join(', ')}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => openApprove(client)}
+                  >
+                    {t('approveApiClient')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={pending}
+                    onClick={() => void rejectPending(client.id)}
+                  >
+                    {t('rejectApiClient')}
+                  </Button>
+                </div>
+              </div>
+            </Panel>
+          ))}
+        </section>
+      ) : null}
+
+      <section className="grid gap-3">
+        {pendingClients.length > 0 ? (
+          <h2 className="m-0 text-base font-semibold">{t('activeApiClientsTitle')}</h2>
+        ) : null}
+        {filteredClients.length === 0 ? (
+          <p className="kh-muted">
+            {initialClients.length === 0
+              ? t('emptyClients')
+              : t('emptyClientsFiltered')}
+          </p>
+        ) : activeClients.length === 0 ? (
+          <p className="kh-muted">{t('emptyActiveClientsFiltered')}</p>
         ) : (
-          initialClients.map((client) => (
+          activeClients.map((client) => (
             <Panel key={client.id} className="grid gap-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="m-0 text-base font-semibold">{client.name}</h3>
                   <p className="mt-1 mb-0 text-sm text-ink-muted">
-                    {t('tokenPrefix')}: <span className="font-mono">{client.tokenPrefix}</span>
+                    {t('tokenPrefix')}:{' '}
+                    <span className="font-mono">{client.tokenPrefix ?? '—'}</span>
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -372,7 +667,7 @@ export function ApiClientsAdmin({
             </Panel>
           ))
         )}
-      </div>
+      </section>
     </div>
   );
 }

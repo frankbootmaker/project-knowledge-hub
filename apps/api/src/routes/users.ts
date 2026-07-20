@@ -15,6 +15,7 @@ import {
   sendInviteMail,
 } from '../lib/auth-mail.js';
 import { issueAuthToken } from '../lib/auth-tokens.js';
+import { closeUserAccount, purgeUserAccount } from '../lib/close-user.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { toPublicUser } from '../lib/public-user.js';
 
@@ -517,5 +518,92 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return { user: updated ? toPublicUser(updated) : null };
+  });
+
+  app.delete('/api/v1/users/:userId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+    const query = z
+      .object({
+        hard: z
+          .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
+          .optional(),
+      })
+      .parse(request.query);
+    const hardDelete = query.hard === '1' || query.hard === 'true';
+
+    if (params.userId === principal.userId) {
+      throw new AppError({
+        code: 'CANNOT_REMOVE_SELF',
+        message: 'Use account settings to close your own account',
+        statusCode: 400,
+      });
+    }
+
+    const [existing] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, params.userId))
+      .limit(1);
+
+    if (!existing) {
+      throw new AppError({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      });
+    }
+
+    const organization = await getDefaultOrganization(app.database);
+
+    if (hardDelete) {
+      const purged = await purgeUserAccount(app.database, {
+        userId: params.userId,
+        avatarUploadDir: app.env.AVATAR_UPLOAD_DIR,
+        appEnv: app.env.APP_ENV,
+      });
+
+      await writeAuditEvent(app.database, {
+        organizationId: organization?.id ?? null,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'user.purge',
+        entityType: 'user',
+        entityId: params.userId,
+        metadata: {
+          previousEmail: existing.email,
+          previousStatus: existing.status,
+          hard: true,
+          appEnv: app.env.APP_ENV,
+        },
+        ipAddress: request.ip,
+      });
+
+      return { status: 'purged', user: purged };
+    }
+
+    const closed = await closeUserAccount(app.database, {
+      userId: params.userId,
+      avatarUploadDir: app.env.AVATAR_UPLOAD_DIR,
+    });
+
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'user.remove',
+      entityType: 'user',
+      entityId: params.userId,
+      metadata: {
+        previousEmail: existing.email,
+        previousStatus: existing.status,
+        hard: false,
+      },
+      ipAddress: request.ip,
+    });
+
+    return { user: toPublicUser(closed) };
   });
 }

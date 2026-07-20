@@ -18,6 +18,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const passwordSet = searchParams.get('passwordSet') === '1';
+  const accountClosed = searchParams.get('accountClosed') === '1';
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,6 +67,9 @@ function LoginForm() {
         {passwordSet ? (
           <p className="mt-0 mb-4 text-sm text-brand">{t('passwordSet')}</p>
         ) : null}
+        {accountClosed ? (
+          <p className="mt-0 mb-4 text-sm text-ink-muted">{t('accountClosed')}</p>
+        ) : null}
         <form onSubmit={onSubmit} className="grid gap-4">
           <Field label={t('email')}>
             <Input
@@ -102,6 +106,14 @@ function LoginForm() {
               {t('forgotPassword')}
             </Link>
           </div>
+          <p className="m-0 text-center text-sm text-ink-muted">
+            <Link
+              href="/ai-discover"
+              className="underline-offset-2 hover:underline"
+            >
+              {t('aiDiscover')}
+            </Link>
+          </p>
         </form>
       </Panel>
     </Page>

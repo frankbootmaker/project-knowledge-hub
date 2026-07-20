@@ -113,6 +113,13 @@
       "when": 1784419700000,
       "tag": "0015_user_signup_statuses",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784419900000,
+      "tag": "0016_ai_discover_api_clients",
+      "breakpoints": true
     }
   ]
 }

@@ -67,6 +67,22 @@
     @apply grid gap-1.5 text-sm font-medium text-ink;
   }
 
+  .kh-function-header {
+    @apply mb-4 flex flex-wrap items-center justify-between gap-3;
+  }
+
+  .kh-function-header-controls {
+    @apply flex min-w-0 flex-1 flex-wrap items-center gap-2;
+  }
+
+  .kh-function-header-controls .kh-input {
+    @apply w-auto min-w-[12rem] max-w-xs flex-1;
+  }
+
+  .kh-function-header-actions {
+    @apply ml-auto flex flex-wrap items-center justify-end gap-2;
+  }
+
   .kh-panel {
     @apply rounded-lg border border-line bg-panel p-5 shadow-sm backdrop-blur-sm;
   }

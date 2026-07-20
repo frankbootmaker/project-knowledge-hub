@@ -233,6 +233,28 @@ export const auditEvents = pgTable(
   ],
 );
 
+/** Short-lived codes users paste into an AI to request an API client. */
+export const aiPairingCodes = pgTable(
+  'ai_pairing_codes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ai_pairing_codes_code_hash_uidx').on(table.codeHash),
+    index('ai_pairing_codes_user_id_idx').on(table.userId),
+    index('ai_pairing_codes_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
 export const apiClients = pgTable(
   'api_clients',
   {
@@ -242,14 +264,28 @@ export const apiClients = pgTable(
       .references(() => organizations.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     description: text('description'),
-    tokenHash: text('token_hash').notNull(),
-    tokenPrefix: text('token_prefix').notNull(),
+    /** Null until a pending AI request is approved. */
+    tokenHash: text('token_hash'),
+    tokenPrefix: text('token_prefix'),
     scopes: jsonb('scopes').$type<string[]>().notNull(),
     allowedWorkspaceIds: jsonb('allowed_workspace_ids').$type<string[]>().notNull(),
     allowedProjectIds: jsonb('allowed_project_ids').$type<string[]>().notNull(),
     actingUserId: uuid('acting_user_id').references(() => users.id, {
       onDelete: 'restrict',
     }),
+    status: text('status').notNull().default('active'),
+    requestedByUserId: uuid('requested_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    approvedByUserId: uuid('approved_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    approvedAt: timestamp('approved_at', { withTimezone: true, mode: 'date' }),
+    agentLabel: text('agent_label'),
+    claimSecretHash: text('claim_secret_hash'),
+    /** Plaintext token held until the AI claims it (cleared after claim). */
+    unclaimedToken: text('unclaimed_token'),
+    tokenClaimedAt: timestamp('token_claimed_at', { withTimezone: true, mode: 'date' }),
     expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }),
     revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
@@ -262,6 +298,8 @@ export const apiClients = pgTable(
     index('api_clients_organization_id_idx').on(table.organizationId),
     index('api_clients_token_prefix_idx').on(table.tokenPrefix),
     index('api_clients_acting_user_id_idx').on(table.actingUserId),
+    index('api_clients_status_idx').on(table.status),
+    index('api_clients_requested_by_user_id_idx').on(table.requestedByUserId),
   ],
 );
 

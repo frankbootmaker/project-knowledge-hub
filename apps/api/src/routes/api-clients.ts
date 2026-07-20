@@ -11,9 +11,11 @@ import {
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import { writeAuditEvent } from '../lib/identity.js';
 import {
+  approveApiClient,
   assertActingUserForOrganization,
   assertWriteClientConfig,
   issueApiClientToken,
+  rejectApiClient,
   toPublicApiClient,
 } from '../lib/api-clients.js';
 
@@ -67,6 +69,8 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
           .where(isNull(apiClients.revokedAt))
           .orderBy(desc(apiClients.createdAt));
 
+    // Include rejected pending requests briefly so admins can see outcomes in-session lists
+    // are still filtered by revokedAt only (rejected keeps revokedAt null).
     return { apiClients: rows.map(toPublicApiClient) };
   });
 
@@ -111,6 +115,7 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
         allowedWorkspaceIds,
         allowedProjectIds: body.allowedProjectIds ?? [],
         actingUserId,
+        status: 'active',
         expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
       })
       .returning();
@@ -140,6 +145,58 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
     };
   });
 
+  app.post('/api/v1/api-clients/:clientId/approve', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ clientId: z.string().uuid() }).parse(request.params);
+    const body = updateSchema.parse(request.body ?? {});
+
+    const { client, token } = await approveApiClient(app.database, {
+      clientId: params.clientId,
+      approverUserId: principal.userId,
+      name: body.name,
+      scopes: body.scopes,
+      allowedWorkspaceIds: body.allowedWorkspaceIds,
+      allowedProjectIds: body.allowedProjectIds,
+    });
+
+    await writeAuditEvent(app.database, {
+      organizationId: client.organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'api_client.approve',
+      entityType: 'api_client',
+      entityId: client.id,
+      metadata: { name: client.name, by: 'admin' },
+      ipAddress: request.ip,
+    });
+
+    return { apiClient: toPublicApiClient(client), token };
+  });
+
+  app.post('/api/v1/api-clients/:clientId/reject', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ clientId: z.string().uuid() }).parse(request.params);
+
+    const rejected = await rejectApiClient(app.database, params.clientId);
+
+    await writeAuditEvent(app.database, {
+      organizationId: rejected.organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'api_client.reject',
+      entityType: 'api_client',
+      entityId: rejected.id,
+      metadata: { by: 'admin' },
+      ipAddress: request.ip,
+    });
+
+    return { apiClient: toPublicApiClient(rejected) };
+  });
+
   app.patch('/api/v1/api-clients/:clientId', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
@@ -152,7 +209,7 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
       .from(apiClients)
       .where(eq(apiClients.id, params.clientId))
       .limit(1);
-    if (!existing || existing.revokedAt) {
+    if (!existing || existing.revokedAt || existing.status === 'pending_approval') {
       throw new AppError({
         code: 'API_CLIENT_NOT_FOUND',
         message: 'API client not found',
@@ -218,7 +275,12 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
       .from(apiClients)
       .where(eq(apiClients.id, params.clientId))
       .limit(1);
-    if (!existing || existing.revokedAt) {
+    if (
+      !existing ||
+      existing.revokedAt ||
+      existing.status !== 'active' ||
+      !existing.tokenHash
+    ) {
       throw new AppError({
         code: 'API_CLIENT_NOT_FOUND',
         message: 'API client not found',
@@ -232,6 +294,8 @@ export async function registerApiClientRoutes(app: FastifyInstance): Promise<voi
       .set({
         tokenHash: issued.tokenHash,
         tokenPrefix: issued.tokenPrefix,
+        unclaimedToken: null,
+        tokenClaimedAt: new Date(),
       })
       .where(eq(apiClients.id, params.clientId))
       .returning();

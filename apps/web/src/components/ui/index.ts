@@ -2,6 +2,7 @@ export { Badge, lifecycleTone } from './Badge';
 export { Button } from './Button';
 export { buttonClassName, type ButtonVariant } from './buttonStyles';
 export { ErrorText, Field, Input, Select, Textarea } from './Field';
+export { FunctionHeader } from './FunctionHeader';
 export { PasswordInput } from './PasswordInput';
 export { PasswordStrengthHint } from './PasswordStrengthHint';
 export { LinkButton } from './LinkButton';

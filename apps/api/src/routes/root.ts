@@ -26,6 +26,8 @@ export async function registerRootRoutes(app: FastifyInstance): Promise<void> {
         users: '/api/v1/users',
         memberships: '/api/v1/memberships',
         apiClients: '/api/v1/api-clients',
+        aiDiscover: 'GET /api/v1/ai-discover',
+        aiDiscoverRequests: 'POST /api/v1/ai-discover/requests',
         auditEvents: '/api/v1/audit-events',
         auditEventsExport: '/api/v1/audit-events/export',
         mcpSetupPreflight: '/api/v1/mcp/setup/preflight',
