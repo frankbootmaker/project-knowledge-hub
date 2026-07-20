@@ -1,22 +1,147 @@
-# Dokploy Deployment
+# Dokploy Deployment (Dev/UAT)
 
-**Status:** Planned (Milestone 7)
+**Status:** Milestone 7 — Dev/UAT packaging (first slice)  
+**Compose entrypoint:** [`compose.dokploy.yaml`](../../compose.dokploy.yaml)  
+**Env template:** [`.env.dokploy.example`](../../.env.dokploy.example)
 
-## Intent
+Production cutover, registry automation, and admin log export are **out of scope** for this slice.
 
-Deploy Project Knowledge Hub to Dokploy using Docker images built from:
+## Architecture
 
-* `infrastructure/docker/web.Dockerfile`
-* `infrastructure/docker/api.Dockerfile`
-* `infrastructure/docker/worker.Dockerfile`
+```text
+Browser ──HTTPS──► web:3100
+                      │  Next rewrites (baked at image build)
+                      ├── /api/v1/* ──► api:3101
+                      └── /mcp      ──► api:3101
+api / worker ──► postgres (pgvector/pgvector:pg16)
+api / worker ──► redis
+```
 
-## Requirements (when implemented)
+* Public traffic should hit **only the web** origin (`WEB_URL`).
+* `API_URL` / `INTERNAL_API_URL` for Next rewrites defaults to `http://api:3101` and is set as a **Docker build arg** on the web image. Changing the internal API hostname requires a **web rebuild**.
+* Postgres and Redis are **not** published to the host in `compose.dokploy.yaml` (Compose network only).
+* Set public `WEB_URL=https://<dev-domain>` at runtime for cookies, mail links, and AI discover.
+* Optional `MCP_PUBLIC_URL=https://<dev-domain>/mcp` (same-origin via web rewrite).
 
-* Explicit release tag or immutable image tag
-* Managed HTTPS domains
-* Persistent volumes for PostgreSQL
-* Health checks for API and web
-* Secrets provided via Dokploy environment configuration (never committed)
-* Redis and PostgreSQL not publicly exposed
+## Images
 
-Milestone 0 only prepares Dockerfiles and Compose overlays; production Dokploy cutover is deferred.
+| Service | Dockerfile |
+| --- | --- |
+| api (+ migrate one-shot) | `infrastructure/docker/api.Dockerfile` |
+| worker | `infrastructure/docker/worker.Dockerfile` |
+| web | `infrastructure/docker/web.Dockerfile` (`ARG API_URL`) |
+
+Build validation (local):
+
+```bash
+docker compose -f compose.dokploy.yaml --env-file .env.dokploy.example config
+docker compose -f compose.dokploy.yaml --env-file .env.dokploy.example build
+```
+
+Or with the local overlay profile:
+
+```bash
+docker compose -f compose.yaml -f compose.production.yaml --profile full build
+```
+
+## Environment matrix
+
+| Variable | Where | Notes |
+| --- | --- | --- |
+| `WEB_URL` | runtime | Public HTTPS origin |
+| `INTERNAL_API_URL` / web build `API_URL` | **build** (web) | Default `http://api:3101` |
+| `POSTGRES_*` | runtime | Compose builds `DATABASE_URL` as `postgres://…@postgres:5432/…` |
+| (Redis) | runtime | Fixed `redis://redis:6379` on the Compose network |
+| `SESSION_SECRET` | runtime | Long random secret |
+| `APP_ENV` | runtime | Use `staging` for Dev/UAT |
+| `NODE_ENV` | runtime | Always `production` in containers |
+| `MCP_PUBLIC_URL` | runtime | Optional; prefer `https://<domain>/mcp` |
+| `EMBEDDING_PROVIDER` | runtime | Default `disabled` (FTS only) |
+| `MAIL_DRIVER` | runtime | `console` (default), `smtp`, or `resend` |
+| `SMTP_*` / `RESEND_API_KEY` / `MCP_PUBLIC_URL` | runtime | Set only when used — omit empty values |
+| `BOOTSTRAP_ADMIN_*` | seed only | Optional first admin |
+
+**Warnings**
+
+* Do not bake host `.env` with `NODE_ENV=development` into image builds — Dockerfiles force `NODE_ENV=production` during `pnpm build`.
+* Use **pgvector** Postgres (`pgvector/pgvector:pg16`). Plain Postgres 16 will fail migration `0020`.
+* Never commit real secrets; configure them in Dokploy.
+* Do not export empty optional env vars into containers (`SMTP_HOST=` fails validation).
+
+## Domain + HTTPS
+
+1. Create a Dokploy application from this repo (or pre-built images).
+2. Attach `compose.dokploy.yaml` (or equivalent services).
+3. Point a domain at the **web** service (port 3100).
+4. Enable Dokploy-managed HTTPS (Traefik/Caddy).
+5. Set `WEB_URL` (and optional `MCP_PUBLIC_URL`) to the HTTPS origin.
+
+Do not expose Postgres or Redis through Dokploy domains.
+
+## Deploy order
+
+1. **Build** api, worker, web images.
+2. **Start** postgres + redis; wait until healthy.
+3. **Migrate** — Compose `migrate` one-shot runs automatically (`service_completed_successfully` before api/worker).  
+   Manual / Dokploy “Run command” on the api image:
+
+   ```bash
+   node node_modules/tsx/dist/cli.mjs packages/database/src/migrate.ts
+   ```
+
+   Or from a checkout with deps: `DATABASE_URL=... ./infrastructure/scripts/migrate.sh`
+4. **Start** api, worker, web.
+5. **Optional seed** (once):
+
+   ```bash
+   DATABASE_URL=... BOOTSTRAP_ADMIN_EMAIL=... BOOTSTRAP_ADMIN_PASSWORD=... \
+     ./infrastructure/scripts/seed.sh
+   ```
+
+   Or Dokploy run on api image:
+
+   ```bash
+   node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts
+   ```
+
+## Smoke checklist
+
+After deploy:
+
+* [ ] `https://<domain>/` loads the web app
+* [ ] `https://<domain>/api/v1/...` reaches the API via rewrite (e.g. login)
+* [ ] API health via internal checks / Dokploy: `/health` and `/ready` on api
+* [ ] Login (or bootstrap admin after seed)
+* [ ] MCP over HTTPS: `https://<domain>/mcp` (or configured `MCP_PUBLIC_URL`)
+* [ ] Restart stack; Postgres data persists (named volume)
+* [ ] Worker is running (git sync / embedding queues idle is OK)
+
+## Logs
+
+Until admin log export exists, use the **Dokploy UI** (per-service container logs) for api, worker, and web.
+
+## Backup / restore (Dev)
+
+Scripts (Dev-tested path; full DR certification can wait for Prod):
+
+* `infrastructure/scripts/backup-db.sh` — `pg_dump` (`-Fc`)
+* `infrastructure/scripts/restore-db.sh` — `pg_restore`
+
+Against the Compose postgres container:
+
+```bash
+export POSTGRES_CONTAINER=<postgres-container-name>
+export POSTGRES_USER=knowledge_hub
+export POSTGRES_DB=knowledge_hub
+export POSTGRES_PASSWORD=...
+./infrastructure/scripts/backup-db.sh ./backups/dev.dump
+./infrastructure/scripts/restore-db.sh ./backups/dev.dump
+```
+
+Or with a reachable `DATABASE_URL` and local `pg_dump` / `pg_restore` clients.
+
+## Related
+
+* Release flow: [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md)
+* Milestone plan: [`../MILESTONE_7_IMPLEMENTATION_PLAN.md`](../MILESTONE_7_IMPLEMENTATION_PLAN.md)
+* Local Compose (host-published PG/Redis): [`DOCKER_COMPOSE.md`](DOCKER_COMPOSE.md)

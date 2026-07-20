@@ -1,0 +1,179 @@
+# Dokploy Dev/UAT stack — private Postgres/Redis, migrate-on-deploy, HTTPS at the proxy.
+# Usage (local validation):
+#   docker compose -f compose.dokploy.yaml --env-file .env.dokploy.example up --build
+# Dokploy: attach this file (or equivalent service definitions) and set secrets in the UI.
+#
+# Browser → web only. Next rewrites /api/v1 and /mcp to the internal API (API_URL at image build).
+#
+# Note: DATABASE_URL / REDIS_URL are built from service hostnames below so a laptop shell
+# `.env` (127.0.0.1) cannot override Compose network addresses.
+# Do not set empty optional secrets (SMTP_*, MCP_PUBLIC_URL) — empty strings fail Zod.
+
+name: knowledge-hub-dokploy
+
+x-app-env: &app-env
+  NODE_ENV: production
+  APP_ENV: ${APP_ENV:-staging}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-knowledge_hub}
+  REDIS_URL: redis://redis:6379
+  WEB_URL: ${WEB_URL:?WEB_URL is required}
+  API_URL: http://api:3101
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-disabled}
+  SEARCH_HYBRID_ENABLED: ${SEARCH_HYBRID_ENABLED:-false}
+  MAIL_DRIVER: ${MAIL_DRIVER:-console}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge_hub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - knowledge_hub_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - knowledge_hub_net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - knowledge_hub_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - knowledge_hub_net
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    restart: 'no'
+    environment:
+      NODE_ENV: production
+      APP_ENV: ${APP_ENV:-staging}
+      DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-knowledge_hub}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      [
+        'node',
+        'node_modules/tsx/dist/cli.mjs',
+        'packages/database/src/migrate.ts',
+      ]
+    networks:
+      - knowledge_hub_net
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      API_PORT: 3101
+      DEFAULT_ORGANIZATION_NAME: ${DEFAULT_ORGANIZATION_NAME:-Default Organization}
+      DEFAULT_ORGANIZATION_SLUG: ${DEFAULT_ORGANIZATION_SLUG:-default}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3101/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+    networks:
+      - knowledge_hub_net
+
+  worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - knowledge_hub_net
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/web.Dockerfile
+      args:
+        # Baked into Next rewrites at build time. Rebuild if the API service hostname changes.
+        API_URL: ${INTERNAL_API_URL:-http://api:3101}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_ENV: ${APP_ENV:-staging}
+      WEB_PORT: 3100
+      PORT: 3100
+      HOSTNAME: 0.0.0.0
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WEB_URL: ${WEB_URL:?WEB_URL is required}
+      API_URL: ${INTERNAL_API_URL:-http://api:3101}
+    ports:
+      - '${WEB_HOST_PORT:-3100}:3100'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3100').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 35s
+    networks:
+      - knowledge_hub_net
+
+volumes:
+  knowledge_hub_postgres_data:
+    name: knowledge_hub_postgres_data
+  knowledge_hub_redis_data:
+    name: knowledge_hub_redis_data
+
+networks:
+  knowledge_hub_net:
+    name: knowledge_hub_net

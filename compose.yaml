@@ -109,6 +109,8 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/web.Dockerfile
+      args:
+        API_URL: ${INTERNAL_API_URL:-http://api:3101}
     container_name: knowledge-hub-dev-web
     restart: unless-stopped
     env_file:
