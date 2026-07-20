@@ -282,7 +282,7 @@ export default async function WorkspaceDetailPage({
         </ul>
       </section>
 
-      <section>
+      <section className="mb-8">
         <SectionHeader
           title={t('knowledgeRecords')}
           action={
@@ -315,6 +315,25 @@ export default async function WorkspaceDetailPage({
           ))}
           {records.length === 0 ? <li className="kh-muted list-none">{t('noRecords')}</li> : null}
         </ul>
+      </section>
+
+      <section>
+        <SectionHeader
+          title={t('imports')}
+          action={
+            canMutate ? (
+              <NewLink
+                href={`/workspaces/${workspace.slug}/imports/new`}
+                label={t('newImport')}
+              />
+            ) : (
+              <NewLink
+                href={`/workspaces/${workspace.slug}/imports`}
+                label={t('imports')}
+              />
+            )
+          }
+        />
       </section>
     </Page>
   );

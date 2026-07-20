@@ -10,8 +10,8 @@ Localhost / Compose Postgres+Redis (`pnpm dev`) is the primary environment throu
 | --- | --- | --- | --- |
 | Done | M0–M6 | Foundation through MCP (read + draft write) | Complete |
 | Done | **M8** | GitHub synchronization | Complete |
-| **Next** | M9 | Conversation import | Not started |
-| Then | **M7** | Production packaging and Dokploy | Deferred |
+| Done | **M9** | Conversation import (first slice) | Complete |
+| **Next** | **M7** | Production packaging and Dokploy | Deferred |
 | Optional | M10 | Semantic and hybrid search | Not started |
 **M7 staging:** Dokploy **Dev/UAT** first → validate HTTPS, MCP, persistence, backups → **Prod** only after testing. M7 does not block M8/M9.
 
@@ -30,7 +30,7 @@ Post-milestone ideas (including Doc Factory) live in [`NEXT_FEATURES.md`](NEXT_F
 | 6 | MCP (read + draft write) | Complete |
 | 7 | Production packaging and Dokploy | Deferred (after M8/M9; Dev/UAT then Prod) |
 | 8 | GitHub synchronization | Complete |
-| 9 | Conversation import | Not started |
+| 9 | Conversation import | Complete (first slice; later automations deferred) |
 | 10 | Semantic and hybrid search (optional) | Not started |
 
 ## Next features

@@ -16,6 +16,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@project-knowledge-hub/auth": "workspace:*",
     "@project-knowledge-hub/config": "workspace:*",
+    "@project-knowledge-hub/conversation-import": "workspace:*",
     "@project-knowledge-hub/database": "workspace:*",
     "@project-knowledge-hub/domain": "workspace:*",
     "@project-knowledge-hub/git-connectors": "workspace:*",

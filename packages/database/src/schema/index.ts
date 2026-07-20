@@ -572,3 +572,61 @@ export const gitSyncRuns = pgTable(
     index('git_sync_runs_created_at_idx').on(table.createdAt),
   ],
 );
+
+/** Raw pasted LLM conversation / Markdown — never indexed for MCP or FTS. */
+export const conversationImports = pgTable(
+  'conversation_imports',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, {
+      onDelete: 'set null',
+    }),
+    systemId: uuid('system_id').references(() => systems.id, {
+      onDelete: 'set null',
+    }),
+    title: text('title').notNull(),
+    contentFormat: text('content_format').notNull().default('markdown'),
+    rawContent: text('raw_content').notNull(),
+    sourceProvider: text('source_provider'),
+    generatedByModel: text('generated_by_model'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('conversation_imports_workspace_id_idx').on(table.workspaceId),
+    index('conversation_imports_project_id_idx').on(table.projectId),
+    index('conversation_imports_system_id_idx').on(table.systemId),
+  ],
+);
+
+/** Links draft knowledge records created from a conversation import. */
+export const conversationImportRecords = pgTable(
+  'conversation_import_records',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    importId: uuid('import_id')
+      .notNull()
+      .references(() => conversationImports.id, { onDelete: 'cascade' }),
+    knowledgeRecordId: uuid('knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    excerptNote: text('excerpt_note'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('conversation_import_records_pair_uidx').on(
+      table.importId,
+      table.knowledgeRecordId,
+    ),
+    index('conversation_import_records_import_id_idx').on(table.importId),
+    index('conversation_import_records_record_id_idx').on(table.knowledgeRecordId),
+  ],
+);

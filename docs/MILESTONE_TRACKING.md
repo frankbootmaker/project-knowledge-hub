@@ -26,7 +26,7 @@ Milestone **IDs** stay as in the PRD (M0–M10). **Build order after the localho
 
 1. Keep **localhost / Compose dev** solid (`docs/development/LOCAL_DEVELOPMENT.md`) — primary environment for feature work.
 2. **M8** — GitHub synchronization (git-managed docs into projects) — **complete**.
-3. **M9** — Conversation import (next; optional to finish before packaging).
+3. **M9** — Conversation import (first slice complete; optional automations later).
 4. **M7** — Production packaging and Dokploy, staged as:
    - Dokploy **Dev/UAT** first
    - **Prod** only after testing (HTTPS, MCP, persistence, backup/restore)
@@ -49,7 +49,7 @@ M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging ste
 | M6 | MCP (read + draft write) | `complete` | Validated 2026-07-19 |
 | M7 | Production packaging and Dokploy | `deferred` | After M8 (and preferably M9); Dev/UAT then Prod |
 | M8 | GitHub synchronization | `complete` | Validated 2026-07-19 — see checklist below |
-| M9 | Conversation import | `not_started` | After M8 |
+| M9 | Conversation import | `complete` | First slice validated 2026-07-20 — see checklist below |
 | M10 | Semantic and hybrid search | `not_started` | Optional; after packaging or in parallel later |
 
 ### Next features (not PRD milestones)
@@ -57,6 +57,17 @@ M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging ste
 See `docs/product/NEXT_FEATURES.md`. Doc Factory (NF-001) is **parked** pending a precise module brief; early notes in `docs/product/DOC_FACTORY.md`. Does not displace M9.
 
 ---
+
+## Milestone 9 checklist
+
+- [x] `conversation_imports` + `conversation_import_records` (migration `0019`)
+- [x] Package `@project-knowledge-hub/conversation-import` (schemas/helpers)
+- [x] API create/list/get/archive + create draft from import
+- [x] Draft provenance (`conversation` / `imported_snapshot` / sourceReference = import id)
+- [x] Raw imports excluded from MCP/search (separate table)
+- [x] Workspace Imports UI (list / new / detail + create draft) + i18n en/de/hu
+- [x] Integration + package unit tests
+- [ ] Later: ChatGPT / Open WebUI / JSON importers, auto-split, secret detection (deferred)
 
 ## Milestone 8 checklist
 

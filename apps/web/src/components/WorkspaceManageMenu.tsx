@@ -235,6 +235,23 @@ export function WorkspaceManageMenu(props: {
             </li>
             <li>
               <Link
+                href={`/workspaces/${props.workspaceSlug}/imports`}
+                className={menuLinkClass}
+                onClick={close}
+              >
+                <span>
+                  <span className="block font-medium text-ink">{t('manageImports')}</span>
+                  <span className="mt-0.5 block text-sm text-ink-muted">
+                    {t('manageImportsHint')}
+                  </span>
+                </span>
+                <span className="text-ink-muted" aria-hidden>
+                  →
+                </span>
+              </Link>
+            </li>
+            <li>
+              <Link
                 href={`/workspaces/${props.workspaceSlug}/archived`}
                 className={menuLinkClass}
                 onClick={close}
