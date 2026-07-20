@@ -107,11 +107,18 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
      ./infrastructure/scripts/seed.sh
    ```
 
-   Or Dokploy run on api image:
+   Or Dokploy run on api image (cwd **`/app`**, env on the **same** command line):
 
    ```bash
-   node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts
+   cd /app && BOOTSTRAP_ADMIN_EMAIL=admin@example.com BOOTSTRAP_ADMIN_PASSWORD='your-long-password' \
+     node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts
    ```
+
+## Follow-ups
+
+* **NF-002** — automatic bootstrap admin via Compose one-shot `seed` after `migrate` when `BOOTSTRAP_ADMIN_*` secrets are set ([`NEXT_FEATURES.md`](../product/NEXT_FEATURES.md)). Until then, use the manual seed command above.
+* Admin central log export (after Dev is stable).
+* Production Dokploy cutover + immutable image tags.
 
 ## Smoke checklist
 

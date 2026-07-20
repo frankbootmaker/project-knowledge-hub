@@ -24,6 +24,7 @@ Browser talks only to the **web** origin. Next rewrites `/api/v1/*` and `/mcp` t
 
 * Production Dokploy environment and immutable registry CI
 * Admin central log export (post-Dev follow-up)
+* Automatic Compose `seed` one-shot for bootstrap admin (**NF-002**)
 * Copying a local laptop DB into Dev
 * Kubernetes / HA
 

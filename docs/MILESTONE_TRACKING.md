@@ -66,7 +66,7 @@ See `docs/product/NEXT_FEATURES.md`. Doc Factory (NF-001) is **parked** pending 
 - [x] Scripts: migrate / seed / backup-db / restore-db
 - [x] Operator docs (`DOKPLOY.md`, `RELEASE_PROCESS.md`, M7 plan, tracking/roadmap/changelog)
 - [ ] Operator: attach domain + smoke deploy on Dokploy (manual)
-- [ ] Later: Prod Dokploy + registry CI; admin log export (deferred)
+- [ ] Later: Prod Dokploy + registry CI; admin log export; Compose bootstrap seed one-shot (**NF-002**) (deferred)
 
 ## Milestone 10 checklist
 
