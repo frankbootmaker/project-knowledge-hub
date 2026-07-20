@@ -25,6 +25,7 @@ export function toPublicUser(user: typeof users.$inferSelect) {
     isSystemAdmin: user.isSystemAdmin,
     idpSource: user.idpSource ?? null,
     idpSubject: user.idpSubject ?? null,
+    hasPassword: Boolean(user.passwordHash),
     avatarUrl: avatarUrlForUser(
       user.id,
       user.avatarContentType ?? null,
