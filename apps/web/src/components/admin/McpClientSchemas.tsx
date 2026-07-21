@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
+  buildAntigravityMcpConfig,
+  buildAntigravitySetupSteps,
   buildChatGptActionsMeta,
   buildCopilotMcpSwagger,
   buildCursorMcpConfig,
@@ -18,6 +20,7 @@ import { Button, useToast } from '../ui';
 export const LLM_CLIENTS = [
   'cursor',
   'chatgpt',
+  'antigravity',
   'gemini',
   'copilot',
   'openwebui',
@@ -37,8 +40,10 @@ export function defaultClientName(client: LlmClientId): string {
       return 'Cursor local';
     case 'chatgpt':
       return 'ChatGPT Actions';
+    case 'antigravity':
+      return 'Antigravity CLI';
     case 'gemini':
-      return 'Gemini';
+      return 'Gemini API';
     case 'copilot':
       return 'Microsoft Copilot';
     case 'openwebui':
@@ -123,6 +128,19 @@ function panesForClient(
         },
       ];
     }
+    case 'antigravity':
+      return [
+        {
+          id: 'antigravity-steps',
+          labelKey: 'mcpWizardSchema_antigravitySteps',
+          value: buildAntigravitySetupSteps(options),
+        },
+        {
+          id: 'antigravity-mcp',
+          labelKey: 'mcpWizardSchema_antigravityMcp',
+          value: stringifySchema(buildAntigravityMcpConfig(options)),
+        },
+      ];
     case 'gemini':
       return [
         {

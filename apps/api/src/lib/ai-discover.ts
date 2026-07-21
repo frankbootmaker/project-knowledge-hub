@@ -12,6 +12,7 @@ import {
 import { AppError } from '@project-knowledge-hub/domain';
 import {
   DEFAULT_MCP_SCOPES,
+  buildAntigravityMcpConfig,
   buildChatGptActionsMeta,
   buildCursorMcpConfig,
   buildGeminiMcpConfig,
@@ -306,6 +307,11 @@ export async function claimAiDiscoverRequest(
       string,
       unknown
     >;
+  } else if (
+    agentLabel.includes('antigravity') ||
+    agentLabel.includes('agy')
+  ) {
+    suggestedConfig = buildAntigravityMcpConfig(schemaOptions);
   } else if (agentLabel.includes('gemini')) {
     suggestedConfig = buildGeminiMcpConfig(schemaOptions);
   } else if (agentLabel.includes('openwebui') || agentLabel.includes('open-webui')) {
@@ -374,7 +380,7 @@ export async function buildAiDiscoverDocument(
       pairingCode: 'string (from user)',
       name: 'string (agent / connection label)',
       description: 'optional string',
-      agentLabel: 'optional: cursor | chatgpt | gemini | openwebui | …',
+      agentLabel: 'optional: cursor | chatgpt | antigravity | gemini | openwebui | …',
       requestWrite: 'optional boolean — requests knowledge:write (still needs approval + workspaces)',
     },
   };

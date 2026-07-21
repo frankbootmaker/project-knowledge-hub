@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   apiBaseFromMcpUrl,
+  buildAntigravityMcpConfig,
+  buildAntigravitySetupSteps,
   buildCopilotMcpSwagger,
   buildCursorMcpConfig,
   buildGeminiFunctionDeclarations,
@@ -73,6 +75,24 @@ describe('llm-client-schemas', () => {
         '#/components/schemas/ToolResult',
       );
     }
+  });
+
+  it('builds Antigravity stdio proxy MCP config and setup steps', () => {
+    const config = buildAntigravityMcpConfig(opts);
+    const server = (
+      config.mcpServers as Record<
+        string,
+        { command: string; env: { MCP_URL: string; MCP_TOKEN: string } }
+      >
+    )['project-knowledge-hub'];
+    expect(server.command).toBe('node');
+    expect(server.env.MCP_URL).toBe(opts.mcpUrl);
+    expect(server.env.MCP_TOKEN).toBe(opts.token);
+
+    const steps = buildAntigravitySetupSteps(opts);
+    expect(steps).toContain('Antigravity CLI');
+    expect(steps).toContain('mcp-bearer-stdio-proxy.mjs');
+    expect(steps).toContain(opts.mcpUrl);
   });
 
   it('builds Copilot Studio MCP swagger with streamable protocol', () => {

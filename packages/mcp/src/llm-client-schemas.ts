@@ -408,6 +408,63 @@ export function buildCursorMcpConfig(options: LlmSchemaOptions): Record<string, 
   };
 }
 
+/**
+ * Antigravity CLI (`agy`) MCP config — stdio Bearer proxy.
+ * Direct `serverUrl` + headers is unreliable; mcp-remote OAuth breaks on our hub.
+ */
+export function buildAntigravityMcpConfig(options: LlmSchemaOptions): Record<string, unknown> {
+  const name = options.serverName ?? DEFAULT_NAME;
+  return {
+    mcpServers: {
+      [name]: {
+        command: 'node',
+        args: [
+          'C:\\\\Users\\\\YOUR_USER\\\\AppData\\\\Local\\\\Temp\\\\mcp-bearer-stdio-proxy.mjs',
+        ],
+        env: {
+          MCP_URL: options.mcpUrl,
+          MCP_TOKEN: options.token,
+        },
+      },
+    },
+  };
+}
+
+/** Human-readable Antigravity setup checklist (wizard copy pane). */
+export function buildAntigravitySetupSteps(options: LlmSchemaOptions): string {
+  return [
+    'Antigravity CLI setup (Google AI Pro / free — not Gemini CLI)',
+    '',
+    'Context: As of 2026-06-18, Gemini CLI (`gemini`) stopped serving individual',
+    'Google AI Pro/Ultra/free accounts. Use Antigravity CLI (`agy`) instead.',
+    'Enterprise Gemini Code Assist licenses can still use Gemini CLI.',
+    '',
+    '1. Install Antigravity CLI',
+    '   Windows PowerShell:',
+    '     irm https://antigravity.google/cli/install.ps1 | iex',
+    '   macOS/Linux:',
+    '     curl -fsSL https://antigravity.google/cli/install.sh | bash',
+    '   Then run: agy  (sign in with Google)',
+    '',
+    '2. Download the Knowledge Hub Bearer stdio proxy',
+    '   File: scripts/mcp-bearer-stdio-proxy.mjs (from this repo)',
+    '   PowerShell example:',
+    '     Invoke-WebRequest -Uri "https://raw.githubusercontent.com/frankbootmaker/project-knowledge-hub/feature/m7-dokploy/scripts/mcp-bearer-stdio-proxy.mjs" -OutFile "$env:TEMP\\mcp-bearer-stdio-proxy.mjs"',
+    '',
+    '3. Write %USERPROFILE%\\.gemini\\config\\mcp_config.json',
+    '   Paste the Antigravity MCP config from the wizard (next pane).',
+    '   - Replace YOUR_USER path with the real proxy path',
+    '   - MCP_TOKEN is the raw API token (no "Bearer " prefix)',
+    `   - MCP_URL should stay: ${options.mcpUrl}`,
+    '',
+    '4. Fully quit agy, start again, run /mcp',
+    '   Expect: project-knowledge-hub with list_projects, search_knowledge, …',
+    '',
+    'Avoid: gemini CLI on consumer accounts; mcp-remote (OAuth HTML errors);',
+    'raw serverUrl+headers in Antigravity (Authorization often dropped).',
+  ].join('\n');
+}
+
 /** OpenWebUI native MCP (Streamable HTTP) connection snippet. */
 export function buildOpenWebUiMcpConfig(options: LlmSchemaOptions): Record<string, unknown> {
   const name = options.serverName ?? DEFAULT_NAME;
@@ -436,7 +493,8 @@ export function buildOpenWebUiOpenApiConfig(options: LlmSchemaOptions): Record<s
 
 /**
  * Gemini API functionDeclarations (OpenAPI-subset parameter schemas).
- * Use with the Gemini API / Vertex function calling; for Gemini CLI prefer MCP config.
+ * Use with the Gemini API / Vertex function calling.
+ * Consumer terminal agents: prefer Antigravity CLI (`agy`), not Gemini CLI.
  */
 export function buildGeminiFunctionDeclarations(
   options: LlmSchemaOptions,
@@ -453,7 +511,9 @@ export function buildGeminiFunctionDeclarations(
   };
 }
 
-/** Gemini CLI / MCP-compatible remote server config (same shape as Cursor). */
+/** Gemini API / Vertex MCP-compatible remote server config (same shape as Cursor).
+ * Enterprise Gemini CLI only — consumers should use Antigravity (`buildAntigravityMcpConfig`).
+ */
 export function buildGeminiMcpConfig(options: LlmSchemaOptions): Record<string, unknown> {
   return buildCursorMcpConfig(options);
 }

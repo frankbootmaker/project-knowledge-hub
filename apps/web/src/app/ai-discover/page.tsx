@@ -123,6 +123,9 @@ Content-Type: application/json
           <pre className="m-0 overflow-x-auto rounded-md bg-panel-solid p-3 text-xs">
             {`GET ${claimOrPollUrl}`}
           </pre>
+          <p className="m-0 text-xs text-ink-muted">
+            agentLabel examples: cursor | chatgpt | antigravity | gemini | openwebui
+          </p>
         </Panel>
 
         <Panel className="grid gap-3">
