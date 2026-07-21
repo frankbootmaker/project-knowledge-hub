@@ -24,7 +24,7 @@ RUN case "$NEXT_REWRITE_API_ORIGIN" in \
         echo "ERROR: NEXT_REWRITE_API_ORIGIN must be the Compose service URL (e.g. http://api:3101), not localhost: $NEXT_REWRITE_API_ORIGIN" >&2; \
         exit 1 ;; \
     esac \
-  && pnpm exec turbo run build --filter=@project-knowledge-hub/web...
+  && pnpm exec turbo run build --filter=@project-knowledge-hub/web... --concurrency=1
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app

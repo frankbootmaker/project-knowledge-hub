@@ -14,7 +14,7 @@ COPY packages ./packages
 COPY turbo.json tsconfig.base.json ./
 RUN pnpm install --frozen-lockfile || pnpm install
 ENV NODE_ENV=production
-RUN pnpm exec turbo run build --filter=@project-knowledge-hub/worker...
+RUN pnpm exec turbo run build --filter=@project-knowledge-hub/worker... --concurrency=1
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app

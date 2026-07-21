@@ -28,11 +28,11 @@ api / worker ──► redis
 
 | Service | Dockerfile | Image tag |
 | --- | --- | --- |
-| api + migrate (one-shot) | `infrastructure/docker/api.Dockerfile` | `knowledge-hub-api:dokploy` (shared) |
+| api (+ migrate one-shot reuses this image) | `infrastructure/docker/api.Dockerfile` | `knowledge-hub-api:dokploy` |
 | worker | `infrastructure/docker/worker.Dockerfile` | `knowledge-hub-worker:dokploy` |
 | web | `infrastructure/docker/web.Dockerfile` (`ARG NEXT_REWRITE_API_ORIGIN`) | `knowledge-hub-web:dokploy` |
 
-`migrate` and `api` share one image so Compose builds the API Dockerfile **once**. Building both in parallel used to OOM smaller Dokploy hosts mid-turbo (log cuts off with no TypeScript error).
+`migrate` has **no** `build:` — only `image: knowledge-hub-api:dokploy` + `pull_policy: never`, so Compose builds the API Dockerfile once (via `api`), then runs migrate from that tag.
 
 Build validation (local):
 
@@ -89,7 +89,18 @@ docker network connect knowledge_hub_net knowledge-hub-dev-vru1om-web-1
 docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
 ```
 
-**Build dies mid-turbo with no TypeScript error:** usually host RAM pressure. Compose used to build `api` and `migrate` from the same Dockerfile **twice in parallel** (plus web + worker). They now share `knowledge-hub-api:dokploy`. If it still OOMs, clear a stuck Dokploy queue (Settings → clean deployment queue) and redeploy; as a host-side workaround set `COMPOSE_PARALLEL_LIMIT=1` for the Dokploy compose runner.
+**Build dies mid-turbo with no TypeScript error:** almost always **host RAM**. Symptoms: log stops during `tsc` / Next compile; Dokploy shows cancelled/stuck “running”. Mitigations in this repo:
+
+1. `migrate` **reuses** `knowledge-hub-api:dokploy` (no second `api.Dockerfile` build).
+2. Dockerfiles use `turbo ... --concurrency=1` to cut peak memory **inside** each image build.
+3. Compose still builds **api + web + worker in parallel**. On a small VPS, serialize them on the Dokploy host before deploy:
+
+   ```bash
+   # On the Dokploy server (SSH), once — or export in the environment that runs compose:
+   export COMPOSE_PARALLEL_LIMIT=1
+   ```
+
+   Or temporarily stop other heavy containers, free RAM (`free -h`), then Redeploy. If the queue is stuck after an OOM, clear it in Dokploy Settings and/or restart the Dokploy service.
 
 ## Deploy order
 

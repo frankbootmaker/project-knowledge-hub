@@ -15,7 +15,8 @@ COPY packages ./packages
 COPY turbo.json tsconfig.base.json ./
 RUN pnpm install --frozen-lockfile || pnpm install
 ENV NODE_ENV=production
-RUN pnpm exec turbo run build --filter=@project-knowledge-hub/api...
+# Limit parallel package compiles — three images (api/web/worker) already build at once.
+RUN pnpm exec turbo run build --filter=@project-knowledge-hub/api... --concurrency=1
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
