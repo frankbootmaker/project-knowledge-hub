@@ -106,7 +106,35 @@ ChatGPT’s normal client does **not** use MCP. Wire Knowledge Hub as a **Custom
 
 Humans use the web UI; Cursor, Antigravity CLI (`agy`), and other MCP clients use `/mcp`; ChatGPT uses the same ledger via OpenAPI Actions — one shared knowledge base across systems.
 
-**Note:** Public `/mcp` must not be redirected to the login page by the web middleware (Bearer auth is enforced on the API). If MCP clients get `initialize` EOF / connection closed, check that `apps/web` lets `/mcp` through like `/api/*`.
+**Note:** Public `/mcp` must not be redirected to the login page by the web middleware (Bearer auth is enforced on the API). If MCP clients get `initialize` EOF / connection closed, check that `apps/web` lets `/mcp` through like `/api/*`. `/.well-known/*` must return JSON **404** (not a login HTML page) so proxies like `mcp-remote` do not crash parsing `<!DOCTYPE` during OAuth discovery.
+
+### 3.2 Antigravity CLI (`agy`) on Windows
+
+Antigravity often drops `headers` on remote `serverUrl` connections. Prefer a local `mcp-remote` stdio bridge. Put this in `%USERPROFILE%\.gemini\config\mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "project-knowledge-hub": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://knowhub-dev.in3.technology/mcp",
+        "--header",
+        "Authorization:${AUTH_HEADER}"
+      ],
+      "env": {
+        "AUTH_HEADER": "Bearer YOUR_HUB_TOKEN"
+      }
+    }
+  }
+}
+```
+
+- Keep the space inside `AUTH_HEADER` (`Bearer ` + token); do **not** put a space after `Authorization:` in the `args` line (Windows arg splitting).
+- First confirm the token with `curl` against `/mcp` (expect MCP JSON, not 401).
+- After hub deploys that return JSON 404 for `/.well-known/*`, restart `agy` and `/mcp` reload.
 
 ## 4. Available tools
 
