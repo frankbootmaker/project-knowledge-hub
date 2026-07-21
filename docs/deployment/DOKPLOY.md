@@ -26,11 +26,13 @@ api / worker ──► redis
 
 ## Images
 
-| Service | Dockerfile |
-| --- | --- |
-| api (+ migrate one-shot) | `infrastructure/docker/api.Dockerfile` |
-| worker | `infrastructure/docker/worker.Dockerfile` |
-| web | `infrastructure/docker/web.Dockerfile` (`ARG NEXT_REWRITE_API_ORIGIN`) |
+| Service | Dockerfile | Image tag |
+| --- | --- | --- |
+| api + migrate (one-shot) | `infrastructure/docker/api.Dockerfile` | `knowledge-hub-api:dokploy` (shared) |
+| worker | `infrastructure/docker/worker.Dockerfile` | `knowledge-hub-worker:dokploy` |
+| web | `infrastructure/docker/web.Dockerfile` (`ARG NEXT_REWRITE_API_ORIGIN`) | `knowledge-hub-web:dokploy` |
+
+`migrate` and `api` share one image so Compose builds the API Dockerfile **once**. Building both in parallel used to OOM smaller Dokploy hosts mid-turbo (log cuts off with no TypeScript error).
 
 Build validation (local):
 
@@ -86,6 +88,8 @@ docker network connect knowledge_hub_net knowledge-hub-dev-vru1om-web-1
 # and/or:
 docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
 ```
+
+**Build dies mid-turbo with no TypeScript error:** usually host RAM pressure. Compose used to build `api` and `migrate` from the same Dockerfile **twice in parallel** (plus web + worker). They now share `knowledge-hub-api:dokploy`. If it still OOMs, clear a stuck Dokploy queue (Settings → clean deployment queue) and redeploy; as a host-side workaround set `COMPOSE_PARALLEL_LIMIT=1` for the Dokploy compose runner.
 
 ## Deploy order
 
