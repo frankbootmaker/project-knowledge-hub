@@ -238,6 +238,48 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
   return includeWriteTools ? [...read, ...write] : read;
 }
 
+/**
+ * ChatGPT Actions rejects bare `{ type: object, additionalProperties: true }`
+ * (object schemas must declare `properties`) and requires `components.schemas`
+ * to be an object when components is present.
+ */
+const TOOL_RESULT_SCHEMA = {
+  type: 'object',
+  description:
+    'JSON tool result. Shape varies by operation (lists, records, search hits, etc.).',
+  properties: {
+    items: {
+      type: 'array',
+      description: 'Present for list/search-style tools',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Entity id when present' },
+          title: { type: 'string', description: 'Display title when present' },
+        },
+      },
+    },
+    record: {
+      type: 'object',
+      description: 'Present for single-record tools',
+      properties: {
+        id: { type: 'string' },
+        title: { type: 'string' },
+        slug: { type: 'string' },
+        contentMarkdown: { type: 'string' },
+      },
+    },
+    total: {
+      type: 'integer',
+      description: 'Total count when the tool returns paging metadata',
+    },
+    message: {
+      type: 'string',
+      description: 'Human-readable status or error detail when present',
+    },
+  },
+} as const;
+
 /** OpenAPI 3.1 for ChatGPT Actions, OpenWebUI OpenAPI tools, and generic OpenAPI clients. */
 export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<string, unknown> {
   const includeWrite = options.includeWriteTools !== false;
@@ -267,7 +309,7 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
             description: 'Tool result JSON',
             content: {
               'application/json': {
-                schema: { type: 'object', additionalProperties: true },
+                schema: { $ref: '#/components/schemas/ToolResult' },
               },
             },
           },
@@ -289,6 +331,9 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
     },
     servers: [{ url: apiBase }],
     components: {
+      schemas: {
+        ToolResult: TOOL_RESULT_SCHEMA,
+      },
       securitySchemes: {
         bearerAuth: {
           type: 'http',

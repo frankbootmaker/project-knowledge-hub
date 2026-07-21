@@ -47,6 +47,34 @@ describe('llm-client-schemas', () => {
     );
   });
 
+  it('satisfies ChatGPT Actions schema constraints', () => {
+    const doc = buildLlmOpenApiDocument(opts);
+    const components = doc.components as {
+      schemas: { ToolResult: { type: string; properties: Record<string, unknown> } };
+    };
+    expect(components.schemas).toBeTypeOf('object');
+    expect(components.schemas.ToolResult.type).toBe('object');
+    expect(components.schemas.ToolResult.properties).toBeTruthy();
+
+    const paths = doc.paths as Record<
+      string,
+      {
+        post: {
+          responses: {
+            '200': {
+              content: { 'application/json': { schema: { $ref?: string } } };
+            };
+          };
+        };
+      }
+    >;
+    for (const path of Object.values(paths)) {
+      expect(path.post.responses['200'].content['application/json'].schema.$ref).toBe(
+        '#/components/schemas/ToolResult',
+      );
+    }
+  });
+
   it('builds Copilot Studio MCP swagger with streamable protocol', () => {
     const swagger = buildCopilotMcpSwagger(opts);
     expect(swagger.swagger).toBe('2.0');
