@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 * Milestone execution order: M8–M10 feature work preceded **M7** Dokploy packaging. M7 is staged as Dokploy Dev/UAT, then Prod after testing (`MILESTONE_TRACKING.md`, `ROADMAP.md`).
+* Docs: ChatGPT Custom GPT Actions setup (verified read + write against public OpenAPI) in `MCP_CURSOR_SETUP.md`.
 
 ### Added
 

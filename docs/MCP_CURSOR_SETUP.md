@@ -77,15 +77,34 @@ Add to Cursor MCP settings (or `.cursor/mcp.json`):
 
 ## 3. OpenAPI facade (ChatGPT, OpenWebUI, Gemini OpenAPI)
 
-Clients that expect REST/OpenAPI (not MCP) can use:
+Clients that expect REST/OpenAPI (not MCP) use the public origin (`WEB_URL`), never the internal Compose API host:
 
 ```text
-GET  {API_URL}/api/v1/llm/openapi.json
-POST {API_URL}/api/v1/llm/tools/:toolName
+GET  {WEB_URL}/api/v1/llm/openapi.json
+POST {WEB_URL}/api/v1/llm/tools/:toolName
 Authorization: Bearer <api-client-token>
 ```
 
-Tool names match MCP (`search_knowledge`, `get_knowledge_record`, …). The public OpenAPI document is generated from the same public MCP host resolution (override → `MCP_PUBLIC_URL` → `API_URL`).
+Tool names match MCP (`search_knowledge`, `get_knowledge_record`, …). The OpenAPI `servers[0].url` is derived from the resolved public MCP URL (override → `MCP_PUBLIC_URL` → `WEB_URL`).
+
+### 3.1 ChatGPT Custom GPT (what works)
+
+ChatGPT’s normal client does **not** use MCP. Wire Knowledge Hub as a **Custom GPT → Action** (Plus / Team / Enterprise). Verified on the Dokploy Dev host with both read and write (`knowledge:write`) creating draft knowledge records.
+
+1. **Token** — Admin → **LLM / MCP setup** (`/admin/mcp-setup`): create a client (include `knowledge:write`, `actingUserId`, and workspace allowlist if the GPT should create/update drafts), copy the bearer token once.  
+   Or Account → **Connect AI** pairing flow, then approve the pending client.
+2. **Create a GPT** — ChatGPT → Explore GPTs → **Create** → **Configure** → **Actions** → **Create new action**.
+3. **Import schema** — **Import from URL**:
+   ```text
+   https://<your-public-host>/api/v1/llm/openapi.json
+   ```
+   Example (Dev): `https://knowhub-dev.in3.technology/api/v1/llm/openapi.json`  
+   The document must advertise the public HTTPS origin (not `http://api:3101`). Response schemas use `components.schemas.ToolResult` with explicit `properties` so ChatGPT’s Actions validator accepts the import.
+4. **Authentication** — API Key, auth type **Bearer**, paste the hub token (no `Bearer ` prefix; ChatGPT adds it).
+5. **Instructions** (optional) — e.g. search Knowledge Hub before answering; create/update only as drafts when write is enabled.
+6. **Save** the GPT and chat **in that Custom GPT** (not the default ChatGPT thread).
+
+Humans use the web UI; Cursor and other MCP clients use `/mcp`; ChatGPT uses the same ledger via OpenAPI Actions — one shared knowledge base across systems.
 
 ## 4. Available tools
 
@@ -97,6 +116,7 @@ Read:
 * `search_knowledge`
 * `get_knowledge_record`
 * `get_record_provenance`
+* `list_record_metadata`
 
 Write (requires `knowledge:write`):
 
