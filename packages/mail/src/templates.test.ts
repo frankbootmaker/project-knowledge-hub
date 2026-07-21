@@ -6,6 +6,7 @@ import {
   passwordChangedEmail,
   accountClosedEmail,
   aiConnectionPendingEmail,
+  testEmail,
   setPasswordUrl,
   confirmEmailUrl,
 } from './templates.js';
@@ -91,5 +92,21 @@ describe('mail templates', () => {
     });
     expect(mail.html).toContain('Cursor');
     expect(mail.html).toContain('/account/ai-connections');
+  });
+
+  it('renders branded test email with driver metadata', () => {
+    const mail = testEmail({
+      locale: 'en',
+      displayName: 'Ada',
+      driver: 'console',
+      source: 'env',
+      from: 'hub@example.com',
+      settingsUrl: 'http://localhost:3100/admin/email',
+    });
+    expect(mail.subject).toMatch(/test email/i);
+    expect(mail.html).toContain('IN3 Technology');
+    expect(mail.html).toContain('Driver: console');
+    expect(mail.html).toContain('href="http://localhost:3100/admin/email"');
+    expect(mail.text).toContain('hub@example.com');
   });
 });

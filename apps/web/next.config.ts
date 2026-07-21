@@ -4,7 +4,12 @@ import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const apiUrl = process.env.API_URL ?? 'http://localhost:3101';
+// Prefer NEXT_REWRITE_API_ORIGIN (Docker build) so a host/Dokploy API_URL=localhost
+// cannot bake broken rewrites into the web image.
+const apiUrl =
+  process.env.NEXT_REWRITE_API_ORIGIN ??
+  process.env.API_URL ??
+  'http://localhost:3101';
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const mcpSchemasPath = path.join(
@@ -37,6 +42,14 @@ const nextConfig: NextConfig = {
       {
         source: '/api/v1/:path*',
         destination: `${apiUrl}/api/v1/:path*`,
+      },
+      {
+        source: '/mcp',
+        destination: `${apiUrl}/mcp`,
+      },
+      {
+        source: '/mcp/:path*',
+        destination: `${apiUrl}/mcp/:path*`,
       },
     ];
   },

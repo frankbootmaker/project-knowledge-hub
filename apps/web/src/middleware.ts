@@ -14,8 +14,16 @@ const publicPaths = [
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // API calls are proxied to Fastify; never treat them as page routes.
-  if (pathname.startsWith('/api/')) {
+  // OAuth discovery probes (mcp-remote, Claude, etc.) must not get a login HTML
+  // redirect — that yields "Unexpected token '<'" during initialize.
+  if (pathname.startsWith('/.well-known/')) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+
+  // API and MCP are proxied to Fastify; never treat them as page routes.
+  // Without this, unauthenticated POST /mcp gets a 307 to /login and MCP clients
+  // (Cursor, Antigravity, etc.) fail with "initialize" EOF.
+  if (pathname.startsWith('/api/') || pathname === '/mcp' || pathname.startsWith('/mcp/')) {
     return NextResponse.next();
   }
 

@@ -1,15 +1,9 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { WorkspaceCatalogueSections } from '../../../../components/WorkspaceCatalogueSections';
 import { WorkspaceManageMenu } from '../../../../components/WorkspaceManageMenu';
 import { WorkspaceStatusBadge } from '../../../../components/WorkspaceStatusBadge';
-import {
-  Badge,
-  ListCard,
-  Page,
-  PageHeader,
-  SectionHeader,
-} from '../../../../components/ui';
+import { Page, PageHeader } from '../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../lib/session';
 import { workspaceAccentClassName } from '../../../../lib/workspace-colors';
 import { resolveWorkspaceStatus } from '../../../../lib/workspace-status';
@@ -62,26 +56,13 @@ type KnowledgeRecord = {
   systemId: string | null;
 };
 
-function NewLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
-    >
-      {label}
-    </Link>
-  );
-}
-
 export default async function WorkspaceDetailPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const session = await requireSession();
-  const t = await getTranslations('workspaces');
   const tGit = await getTranslations('gitSync');
-  const tCommon = await getTranslations('common');
   const { slug } = await params;
 
   const listResponse = await apiFetch('/api/v1/workspaces');
@@ -205,136 +186,13 @@ export default async function WorkspaceDetailPage({
         aria-hidden
       />
 
-      <section className="mb-8">
-        <SectionHeader
-          title={t('projects')}
-          action={
-            canMutate ? (
-              <NewLink
-                href={`/workspaces/${workspace.slug}/projects/new`}
-                label={t('newProject')}
-              />
-            ) : null
-          }
-        />
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {projects.map((project) => (
-            <ListCard key={project.id}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
-                  className="font-semibold no-underline"
-                >
-                  {project.name}
-                </Link>
-                <Badge tone="brand">{project.status}</Badge>
-              </div>
-              {project.summary ? (
-                <p className="mt-2 mb-0 text-sm text-ink-muted">{project.summary}</p>
-              ) : null}
-              {project.tags.length > 0 ? (
-                <p className="mt-2 mb-0 text-xs text-ink-muted">
-                  {tCommon('tagsList', { tags: project.tags.map((tag) => tag.name).join(', ') })}
-                </p>
-              ) : null}
-            </ListCard>
-          ))}
-          {projects.length === 0 ? <li className="kh-muted list-none">{t('noProjects')}</li> : null}
-        </ul>
-      </section>
-
-      <section className="mb-8">
-        <SectionHeader
-          title={t('systems')}
-          action={
-            canMutate ? (
-              <NewLink
-                href={`/workspaces/${workspace.slug}/systems/new`}
-                label={t('newSystem')}
-              />
-            ) : null
-          }
-        />
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {systems.map((system) => (
-            <ListCard key={system.id}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
-                  className="font-semibold no-underline"
-                >
-                  {system.name}
-                </Link>
-                <Badge>{system.status}</Badge>
-              </div>
-              <p className="mt-2 mb-0 text-sm text-ink-muted">
-                {system.projectId ? t('linkedToProject') : t('independent')}
-                {system.summary ? ` — ${system.summary}` : ''}
-              </p>
-              {system.tags.length > 0 ? (
-                <p className="mt-2 mb-0 text-xs text-ink-muted">
-                  {tCommon('tagsList', { tags: system.tags.map((tag) => tag.name).join(', ') })}
-                </p>
-              ) : null}
-            </ListCard>
-          ))}
-          {systems.length === 0 ? <li className="kh-muted list-none">{t('noSystems')}</li> : null}
-        </ul>
-      </section>
-
-      <section className="mb-8">
-        <SectionHeader
-          title={t('knowledgeRecords')}
-          action={
-            canMutate ? (
-              <NewLink
-                href={`/workspaces/${workspace.slug}/records/new`}
-                label={t('newRecord')}
-              />
-            ) : null
-          }
-        />
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {records.map((record) => (
-            <ListCard key={record.id}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/workspaces/${workspace.slug}/records/${record.slug}`}
-                  className="font-semibold no-underline"
-                >
-                  {record.title}
-                </Link>
-                <Badge tone="brand">{record.recordType}</Badge>
-                <Badge>{record.lifecycleStatus}</Badge>
-              </div>
-              <p className="mt-2 mb-0 text-sm text-ink-muted">
-                {record.systemId ? t('linkedToSystem') : null}
-                {record.summary ? `${record.systemId ? ' — ' : ''}${record.summary}` : ''}
-              </p>
-            </ListCard>
-          ))}
-          {records.length === 0 ? <li className="kh-muted list-none">{t('noRecords')}</li> : null}
-        </ul>
-      </section>
-
-      <section>
-        <SectionHeader
-          title={t('imports')}
-          action={
-            canMutate ? (
-              <NewLink
-                href={`/workspaces/${workspace.slug}/imports/new`}
-                label={t('newImport')}
-              />
-            ) : (
-              <NewLink
-                href={`/workspaces/${workspace.slug}/imports`}
-                label={t('imports')}
-              />
-            )
-          }
-        />
-      </section>
+      <WorkspaceCatalogueSections
+        workspaceSlug={workspace.slug}
+        projects={projects}
+        systems={systems}
+        records={records}
+        canMutate={canMutate}
+      />
     </Page>
   );
 }

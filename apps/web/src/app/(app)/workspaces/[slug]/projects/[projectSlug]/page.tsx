@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { ArchiveEntityButton } from '../../../../../../components/ArchiveEntityButton';
+import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
 import {
   Badge,
   ListCard,
@@ -21,6 +21,7 @@ type Project = {
   summary: string | null;
   description: string | null;
   tags: Array<{ name: string }>;
+  createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
 };
@@ -80,6 +81,13 @@ export default async function ProjectDetailPage({
         membership.workspaceId === workspace.id &&
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
+  const canPurge =
+    session.user.isSystemAdmin ||
+    session.memberships.some(
+      (membership) =>
+        membership.workspaceId === workspace.id &&
+        membership.role === 'workspace_admin',
+    );
 
   const systemsResponse = await apiFetch(
     `/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`,
@@ -112,15 +120,12 @@ export default async function ProjectDetailPage({
           </span>
         }
         actions={
-          canMutate ? (
-            <ArchiveEntityButton
-              kind="project"
-              entityId={project.id}
-              entityName={project.name}
-              archived={isArchived}
-              redirectOnArchive={`/workspaces/${workspace.slug}`}
-            />
-          ) : null
+          <ProjectManageMenu
+            workspaceSlug={workspace.slug}
+            project={project}
+            canMutate={canMutate}
+            canPurge={canPurge}
+          />
         }
       />
 

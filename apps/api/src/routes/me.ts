@@ -335,8 +335,10 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
     const minted = await mintAiPairingCode(app.database, principal.userId);
-    const discoverUrl = `${app.env.WEB_URL.replace(/\/$/, '')}/ai-discover`;
-    const apiDiscoverUrl = `${app.env.API_URL.replace(/\/$/, '')}/api/v1/ai-discover`;
+    const publicOrigin = app.env.WEB_URL.replace(/\/$/, '');
+    const discoverUrl = `${publicOrigin}/ai-discover`;
+    // Same-origin public API (Next rewrites) — never expose internal API_URL to clients.
+    const apiDiscoverUrl = `${publicOrigin}/api/v1/ai-discover`;
 
     return {
       code: minted.code,

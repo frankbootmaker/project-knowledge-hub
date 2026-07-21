@@ -1,12 +1,17 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { WORKSPACE_DESCRIPTION_MAX_LENGTH } from '@project-knowledge-hub/domain';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
+import { PurgeEntityButton } from './PurgeEntityButton';
 import { WorkspaceColorPicker } from './WorkspaceColorPicker';
+import {
+  ManageDetailRow,
+  ManageMenuItem,
+  ManageMenuLink,
+} from './manage-menu-shared';
 import {
   WORKSPACE_COLORS,
   type WorkspaceColor,
@@ -35,30 +40,7 @@ export type WorkspaceDetailsInfo = {
   memberAdminCount: number;
 };
 
-type Section = 'menu' | 'details' | 'color' | 'archive';
-
-const menuItemClass =
-  'kh-panel-inset flex w-full cursor-pointer items-center justify-between gap-3 border border-line bg-panel-solid text-left transition hover:border-brand/35';
-
-const menuLinkClass =
-  'kh-panel-inset flex items-center justify-between gap-3 no-underline transition hover:border-brand/35';
-
-function DetailRow(props: { label: string; value: ReactNode; mono?: boolean }) {
-  return (
-    <div className="grid gap-0.5 sm:grid-cols-[8.5rem_1fr] sm:gap-3">
-      <dt className="text-sm text-ink-muted">{props.label}</dt>
-      <dd
-        className={
-          props.mono
-            ? 'm-0 break-all font-mono text-sm text-ink'
-            : 'm-0 text-sm text-ink'
-        }
-      >
-        {props.value}
-      </dd>
-    </div>
-  );
-}
+type Section = 'menu' | 'details' | 'color' | 'archive' | 'delete';
 
 export function WorkspaceManageMenu(props: {
   workspaceId: string;
@@ -110,6 +92,7 @@ export function WorkspaceManageMenu(props: {
     if (section === 'menu') return t('manageTitle');
     if (section === 'details') return t('manageDetails');
     if (section === 'color') return t('colorLabel');
+    if (section === 'delete') return t('manageDelete');
     return props.archived ? t('manageRestore') : t('manageArchive');
   }
 
@@ -197,119 +180,55 @@ export function WorkspaceManageMenu(props: {
       >
         {section === 'menu' ? (
           <ul className="m-0 grid list-none gap-2 p-0">
-            <li>
-              <button
-                type="button"
-                className={menuItemClass}
-                onClick={() => setSection('details')}
-              >
-                <span>
-                  <span className="block font-medium text-ink">{t('manageDetails')}</span>
-                  <span className="mt-0.5 block text-sm text-ink-muted">
-                    {t('manageDetailsHint')}
-                  </span>
-                </span>
-                <span className="text-ink-muted" aria-hidden>
-                  →
-                </span>
-              </button>
-            </li>
-            <li>
-              <Link
-                href={`/workspaces/${props.workspaceSlug}/git`}
-                className={menuLinkClass}
-                onClick={close}
-              >
-                <span>
-                  <span className="block font-medium text-ink">{t('manageSync')}</span>
-                  <span className="mt-0.5 block text-sm text-ink-muted">
-                    {props.gitHealthLabel
-                      ? t('manageSyncDetail', { status: props.gitHealthLabel })
-                      : t('manageSyncHint')}
-                  </span>
-                </span>
-                <span className="text-ink-muted" aria-hidden>
-                  →
-                </span>
-              </Link>
-            </li>
-            <li>
-              <Link
-                href={`/workspaces/${props.workspaceSlug}/imports`}
-                className={menuLinkClass}
-                onClick={close}
-              >
-                <span>
-                  <span className="block font-medium text-ink">{t('manageImports')}</span>
-                  <span className="mt-0.5 block text-sm text-ink-muted">
-                    {t('manageImportsHint')}
-                  </span>
-                </span>
-                <span className="text-ink-muted" aria-hidden>
-                  →
-                </span>
-              </Link>
-            </li>
-            <li>
-              <Link
-                href={`/workspaces/${props.workspaceSlug}/archived`}
-                className={menuLinkClass}
-                onClick={close}
-              >
-                <span>
-                  <span className="block font-medium text-ink">
-                    {t('manageArchivedItems')}
-                  </span>
-                  <span className="mt-0.5 block text-sm text-ink-muted">
-                    {t('manageArchivedItemsHint')}
-                  </span>
-                </span>
-                <span className="text-ink-muted" aria-hidden>
-                  →
-                </span>
-              </Link>
-            </li>
+            <ManageMenuItem
+              title={t('manageDetails')}
+              hint={t('manageDetailsHint')}
+              onClick={() => setSection('details')}
+            />
+            <ManageMenuLink
+              href={`/workspaces/${props.workspaceSlug}/git`}
+              title={t('manageSync')}
+              hint={
+                props.gitHealthLabel
+                  ? t('manageSyncDetail', { status: props.gitHealthLabel })
+                  : t('manageSyncHint')
+              }
+              onClick={close}
+            />
+            <ManageMenuLink
+              href={`/workspaces/${props.workspaceSlug}/imports`}
+              title={t('manageImports')}
+              hint={t('manageImportsHint')}
+              onClick={close}
+            />
+            <ManageMenuLink
+              href={`/workspaces/${props.workspaceSlug}/archived`}
+              title={t('manageArchivedItems')}
+              hint={t('manageArchivedItemsHint')}
+              onClick={close}
+            />
             {props.canManageColor ? (
-              <li>
-                <button
-                  type="button"
-                  className={menuItemClass}
-                  onClick={() => setSection('color')}
-                >
-                  <span>
-                    <span className="block font-medium text-ink">{t('colorLabel')}</span>
-                    <span className="mt-0.5 block text-sm text-ink-muted">
-                      {t('manageColorHint')}
-                    </span>
-                  </span>
-                  <span className="text-ink-muted" aria-hidden>
-                    →
-                  </span>
-                </button>
-              </li>
+              <ManageMenuItem
+                title={t('colorLabel')}
+                hint={t('manageColorHint')}
+                onClick={() => setSection('color')}
+              />
             ) : null}
             {props.canManageArchive ? (
-              <li>
-                <button
-                  type="button"
-                  className={menuItemClass}
-                  onClick={() => setSection('archive')}
-                >
-                  <span>
-                    <span className="block font-medium text-ink">
-                      {props.archived ? t('manageRestore') : t('manageArchive')}
-                    </span>
-                    <span className="mt-0.5 block text-sm text-ink-muted">
-                      {props.archived
-                        ? t('manageRestoreHint')
-                        : t('manageArchiveHint')}
-                    </span>
-                  </span>
-                  <span className="text-ink-muted" aria-hidden>
-                    →
-                  </span>
-                </button>
-              </li>
+              <ManageMenuItem
+                title={props.archived ? t('manageRestore') : t('manageArchive')}
+                hint={
+                  props.archived ? t('manageRestoreHint') : t('manageArchiveHint')
+                }
+                onClick={() => setSection('archive')}
+              />
+            ) : null}
+            {props.canManageArchive ? (
+              <ManageMenuItem
+                title={t('manageDelete')}
+                hint={t('manageDeleteHint')}
+                onClick={() => setSection('delete')}
+              />
             ) : null}
           </ul>
         ) : null}
@@ -317,8 +236,8 @@ export function WorkspaceManageMenu(props: {
         {section === 'details' ? (
           <div className="grid gap-4">
             <dl className="m-0 grid gap-3">
-              <DetailRow label={t('detailsId')} value={details.id} mono />
-              <DetailRow label={t('detailsSlug')} value={details.slug} mono />
+              <ManageDetailRow label={t('detailsId')} value={details.id} mono />
+              <ManageDetailRow label={t('detailsSlug')} value={details.slug} mono />
               <div className="grid gap-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="m-0 text-sm font-medium text-ink">
@@ -390,18 +309,18 @@ export function WorkspaceManageMenu(props: {
                   </p>
                 )}
               </div>
-              <DetailRow label={t('detailsOwners')} value={ownersLabel} />
-              <DetailRow
+              <ManageDetailRow label={t('detailsOwners')} value={ownersLabel} />
+              <ManageDetailRow
                 label={tCommon('status')}
                 value={
                   details.archived ? t('statusArchived') : t('statusHealthy')
                 }
               />
-              <DetailRow
+              <ManageDetailRow
                 label={t('detailsCreated')}
                 value={new Date(details.createdAt).toLocaleString()}
               />
-              <DetailRow
+              <ManageDetailRow
                 label={tCommon('updated')}
                 value={new Date(details.updatedAt).toLocaleString()}
               />
@@ -491,6 +410,27 @@ export function WorkspaceManageMenu(props: {
               entityName={props.workspaceName}
               archived={props.archived}
               redirectOnArchive="/workspaces"
+            />
+            <div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setSection('menu')}
+              >
+                {tCommon('back')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {section === 'delete' ? (
+          <div className="grid gap-4">
+            <p className="m-0 text-sm text-ink-muted">{t('manageDeleteHint')}</p>
+            <PurgeEntityButton
+              kind="workspace"
+              entityId={props.workspaceId}
+              entityName={props.workspaceName}
+              redirectOnPurge="/workspaces"
             />
             <div>
               <Button

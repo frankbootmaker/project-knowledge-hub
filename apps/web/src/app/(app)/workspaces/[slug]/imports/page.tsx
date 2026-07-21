@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ImportTypePickerButton } from '../../../../../components/ImportTypePickerButton';
 import {
   Badge,
   ListCard,
@@ -65,12 +66,7 @@ export default async function WorkspaceImportsPage({
         description={t('subtitle', { workspace: workspace.name })}
         actions={
           canMutate ? (
-            <Link
-              href={`/workspaces/${workspace.slug}/imports/new`}
-              className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
-            >
-              {t('new')}
-            </Link>
+            <ImportTypePickerButton workspaceSlug={workspace.slug} />
           ) : null
         }
       />

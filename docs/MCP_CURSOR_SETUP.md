@@ -2,9 +2,9 @@
 
 For a guided in-app flow (platform checks → client → connection tests → client schemas), open **Admin → LLM / MCP setup** at `/admin/mcp-setup` while signed in as a system administrator.
 
-The wizard’s final step exports configs for **Cursor**, **ChatGPT** (OpenAPI Actions), **Gemini** (MCP + OpenAPI + functionDeclarations), **Microsoft Copilot Studio** (Swagger 2.0 MCP streamable), and **OpenWebUI** (native MCP or OpenAPI).
+The wizard’s final step exports configs for **Cursor**, **ChatGPT** (OpenAPI Actions), **Antigravity CLI** (`agy`, consumer Google AI), **Gemini API** / enterprise Gemini CLI, **Microsoft Copilot Studio** (Swagger 2.0 MCP streamable), and **OpenWebUI** (native MCP or OpenAPI).
 
-The Cursor config URL defaults to `{API_URL}/mcp`. For reverse proxies or split DNS, set optional env `MCP_PUBLIC_URL`, or save a **public MCP URL override** in the wizard (stored in platform settings). Connection tests still use the internal API URL.
+The Cursor config URL defaults to `{WEB_URL}/mcp` (same-origin via the web reverse rewrite). For a different public host, set optional env `MCP_PUBLIC_URL`, or save a **public MCP URL override** in the wizard (stored in platform settings). Connection tests still use the internal `API_URL`. Never advertise internal Compose hosts (e.g. `http://api:3101`) to external LLM clients.
 
 Project Knowledge Hub exposes MCP at:
 
@@ -77,15 +77,74 @@ Add to Cursor MCP settings (or `.cursor/mcp.json`):
 
 ## 3. OpenAPI facade (ChatGPT, OpenWebUI, Gemini OpenAPI)
 
-Clients that expect REST/OpenAPI (not MCP) can use:
+Clients that expect REST/OpenAPI (not MCP) use the public origin (`WEB_URL`), never the internal Compose API host:
 
 ```text
-GET  {API_URL}/api/v1/llm/openapi.json
-POST {API_URL}/api/v1/llm/tools/:toolName
+GET  {WEB_URL}/api/v1/llm/openapi.json
+POST {WEB_URL}/api/v1/llm/tools/:toolName
 Authorization: Bearer <api-client-token>
 ```
 
-Tool names match MCP (`search_knowledge`, `get_knowledge_record`, …). The public OpenAPI document is generated from the same public MCP host resolution (override → `MCP_PUBLIC_URL` → `API_URL`).
+Tool names match MCP (`search_knowledge`, `get_knowledge_record`, …). The OpenAPI `servers[0].url` is derived from the resolved public MCP URL (override → `MCP_PUBLIC_URL` → `WEB_URL`).
+
+### 3.1 ChatGPT Custom GPT (what works)
+
+ChatGPT’s normal client does **not** use MCP. Wire Knowledge Hub as a **Custom GPT → Action** (Plus / Team / Enterprise). Verified on the Dokploy Dev host with both read and write (`knowledge:write`) creating draft knowledge records.
+
+1. **Token** — Admin → **LLM / MCP setup** (`/admin/mcp-setup`): create a client (include `knowledge:write`, `actingUserId`, and workspace allowlist if the GPT should create/update drafts), copy the bearer token once.  
+   Or Account → **Connect AI** pairing flow, then approve the pending client.
+2. **Create a GPT** — ChatGPT → Explore GPTs → **Create** → **Configure** → **Actions** → **Create new action**.
+3. **Import schema** — **Import from URL**:
+   ```text
+   https://<your-public-host>/api/v1/llm/openapi.json
+   ```
+   Example (Dev): `https://knowhub-dev.in3.technology/api/v1/llm/openapi.json`  
+   The document must advertise the public HTTPS origin (not `http://api:3101`). Response schemas use `components.schemas.ToolResult` with explicit `properties` so ChatGPT’s Actions validator accepts the import.
+4. **Authentication** — API Key, auth type **Bearer**, paste the hub token (no `Bearer ` prefix; ChatGPT adds it).
+5. **Instructions** (optional) — e.g. search Knowledge Hub before answering; create/update only as drafts when write is enabled.
+6. **Save** the GPT and chat **in that Custom GPT** (not the default ChatGPT thread).
+
+Humans use the web UI; Cursor, Antigravity CLI (`agy`), and other MCP clients use `/mcp`; ChatGPT uses the same ledger via OpenAPI Actions — one shared knowledge base across systems.
+
+**Note:** Public `/mcp` must not be redirected to the login page by the web middleware (Bearer auth is enforced on the API). If MCP clients get `initialize` EOF / connection closed, check that `apps/web` lets `/mcp` through like `/api/*`. `/.well-known/*` must return JSON **404** (not a login HTML page) so proxies like `mcp-remote` do not crash parsing `<!DOCTYPE` during OAuth discovery.
+
+### 3.2 Antigravity CLI (`agy`) on Windows
+
+Antigravity often drops `headers` on remote `serverUrl` connections. Avoid `mcp-remote` (OAuth HTML crashes) and `supergateway` (crashes on Antigravity’s `server/discover`).
+
+Use the repo’s **Bearer stdio proxy** (Node 20+, no extra packages):
+
+1. Download [`scripts/mcp-bearer-stdio-proxy.mjs`](../../scripts/mcp-bearer-stdio-proxy.mjs) (or clone the repo).
+2. Put this in `%USERPROFILE%\.gemini\config\mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "project-knowledge-hub": {
+      "command": "node",
+      "args": [
+        "C:\\\\Users\\\\YOUR_USER\\\\AppData\\\\Local\\\\Temp\\\\mcp-bearer-stdio-proxy.mjs"
+      ],
+      "env": {
+        "MCP_URL": "https://knowhub-dev.in3.technology/mcp",
+        "MCP_TOKEN": "YOUR_HUB_TOKEN"
+      }
+    }
+  }
+}
+```
+
+3. `YOUR_HUB_TOKEN` is the raw hub token (no `Bearer ` prefix).
+4. Fully quit `agy`, start again, `/mcp` reload.
+5. Confirm the token with `curl` against `/mcp` first (expect MCP JSON, not 401).
+
+Quick download (PowerShell):
+
+```powershell
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/frankbootmaker/project-knowledge-hub/feature/m7-dokploy/scripts/mcp-bearer-stdio-proxy.mjs" `
+  -OutFile "$env:TEMP\mcp-bearer-stdio-proxy.mjs"
+```
 
 ## 4. Available tools
 
@@ -97,6 +156,7 @@ Read:
 * `search_knowledge`
 * `get_knowledge_record`
 * `get_record_provenance`
+* `list_record_metadata`
 
 Write (requires `knowledge:write`):
 

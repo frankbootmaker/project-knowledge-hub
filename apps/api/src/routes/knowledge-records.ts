@@ -8,6 +8,7 @@ import {
 import { AppError } from '@project-knowledge-hub/domain';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import {
+  requireWorkspaceAdmin,
   requireWorkspaceMaintainer,
   requireWorkspaceView,
 } from '@project-knowledge-hub/permissions';
@@ -548,5 +549,56 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         ? toPublicRecord(archived, tagMap.get(archived.id) ?? [], source)
         : null,
     };
+  });
+
+  /** Permanent delete — versions/tags cascade; git sync may recreate git_managed paths. */
+  app.post('/api/v1/knowledge-records/:recordId/purge', async (request, reply) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    z.object({ confirmDestroy: z.literal(true) }).parse(request.body ?? {});
+
+    const [record] = await app.database.db
+      .select()
+      .from(knowledgeRecords)
+      .where(eq(knowledgeRecords.id, params.recordId))
+      .limit(1);
+
+    if (!record) {
+      throw new AppError({
+        code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+        message: 'Knowledge record not found',
+        statusCode: 404,
+      });
+    }
+
+    requireWorkspaceAdmin(principal, record.workspaceId);
+
+    const [workspace] = await app.database.db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, record.workspaceId))
+      .limit(1);
+
+    await app.database.db
+      .delete(knowledgeRecords)
+      .where(eq(knowledgeRecords.id, record.id));
+
+    await writeAuditEvent(app.database, {
+      organizationId: workspace?.organizationId ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'knowledge_record.purge',
+      entityType: 'knowledge_record',
+      entityId: record.id,
+      metadata: {
+        title: record.title,
+        slug: record.slug,
+        sourceOfTruthMode: record.sourceOfTruthMode,
+      },
+      ipAddress: request.ip,
+    });
+
+    return reply.status(204).send();
   });
 }

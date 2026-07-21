@@ -1,0 +1,190 @@
+# Dokploy Dev/UAT stack — private Postgres/Redis, migrate-on-deploy, HTTPS at the proxy.
+# Usage (local validation):
+#   docker compose -f compose.dokploy.yaml --env-file .env.dokploy.example up --build
+# Dokploy: attach this file; set env on the Compose *service* Environment tab (not only project).
+#
+# Browser → web only. Next rewrites /api/v1 and /mcp to the internal API (API_URL at image build).
+#
+# Networking: use the Compose default network for app traffic, and attach every service to
+# external `dokploy-network` so Traefik domain routing on `web` does not isolate it from `api`
+# (Dokploy domain injection historically drops custom-only networks on the published service).
+
+x-app-env: &app-env
+  NODE_ENV: production
+  APP_ENV: ${APP_ENV:-staging}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-knowledge_hub}
+  REDIS_URL: redis://redis:6379
+  WEB_URL: ${WEB_URL:?WEB_URL is required}
+  API_URL: http://api:3101
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-disabled}
+  SEARCH_HYBRID_ENABLED: ${SEARCH_HYBRID_ENABLED:-false}
+  MAIL_DRIVER: ${MAIL_DRIVER:-console}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge_hub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - knowledge_hub_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - default
+      - dokploy-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - knowledge_hub_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - default
+      - dokploy-network
+
+  migrate:
+    # Reuse the image built by `api` (no build: here). Compose builds images first,
+    # then starts migrate — so the tag exists before this one-shot runs. Avoids a
+    # second parallel api.Dockerfile build that OOMs smaller Dokploy hosts.
+    image: knowledge-hub-api:dokploy
+    pull_policy: never
+    restart: 'no'
+    environment:
+      NODE_ENV: production
+      APP_ENV: ${APP_ENV:-staging}
+      DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-knowledge_hub}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      [
+        'node',
+        'node_modules/tsx/dist/cli.mjs',
+        'packages/database/src/migrate.ts',
+      ]
+    networks:
+      - default
+      - dokploy-network
+
+  api:
+    image: knowledge-hub-api:dokploy
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      API_PORT: 3101
+      DEFAULT_ORGANIZATION_NAME: ${DEFAULT_ORGANIZATION_NAME:-Default Organization}
+      DEFAULT_ORGANIZATION_SLUG: ${DEFAULT_ORGANIZATION_SLUG:-default}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3101/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+    networks:
+      - default
+      - dokploy-network
+
+  worker:
+    image: knowledge-hub-worker:dokploy
+    build:
+      context: .
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - default
+      - dokploy-network
+
+  web:
+    image: knowledge-hub-web:dokploy
+    build:
+      context: .
+      dockerfile: infrastructure/docker/web.Dockerfile
+      args:
+        # Hardcoded on purpose — do not pass Dokploy API_URL=localhost into the build.
+        NEXT_REWRITE_API_ORIGIN: http://api:3101
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_ENV: ${APP_ENV:-staging}
+      WEB_PORT: 3100
+      PORT: 3100
+      HOSTNAME: 0.0.0.0
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WEB_URL: ${WEB_URL:?WEB_URL is required}
+      # SSR → api over Compose DNS (must not be localhost).
+      API_URL: http://api:3101
+    # Traefik (Dokploy Domains) reaches the container port; avoid publishing to the host.
+    expose:
+      - '3100'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3100').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 35s
+    networks:
+      - default
+      - dokploy-network
+
+volumes:
+  knowledge_hub_postgres_data:
+    name: knowledge_hub_postgres_data
+  knowledge_hub_redis_data:
+    name: knowledge_hub_redis_data
+
+networks:
+  dokploy-network:
+    external: true

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   gitRepositoryConnections,
@@ -448,6 +448,31 @@ export async function registerGitConnectionRoutes(app: FastifyInstance): Promise
       .limit(50);
 
     return { syncRuns: runs.map(toPublicSyncRun) };
+  });
+
+  app.delete('/api/v1/git-connections/:connectionId/sync-runs', async (request, reply) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ connectionId: z.string().uuid() }).parse(request.params);
+    const [row] = await app.database.db
+      .select()
+      .from(gitRepositoryConnections)
+      .where(eq(gitRepositoryConnections.id, params.connectionId))
+      .limit(1);
+    if (!row) {
+      throw new AppError({
+        code: 'GIT_CONNECTION_NOT_FOUND',
+        message: 'Git connection not found',
+        statusCode: 404,
+      });
+    }
+    requireWorkspaceAdmin(principal, row.workspaceId);
+
+    // Keep in-flight runs so an active sync can still finish updating its row.
+    await app.database.db
+      .delete(gitSyncRuns)
+      .where(and(eq(gitSyncRuns.connectionId, row.id), ne(gitSyncRuns.status, 'running')));
+
+    return reply.status(204).send();
   });
 
   async function handleProviderWebhook(

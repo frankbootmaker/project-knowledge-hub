@@ -79,13 +79,18 @@ export async function registerAiDiscoverRoutes(app: FastifyInstance): Promise<vo
       }
     }
 
+    const publicApiBase = app.env.WEB_URL.replace(/\/$/, '');
+    const pollUrl =
+      `${publicApiBase}/api/v1/ai-discover/requests/${created.requestId}` +
+      `?claimSecret=${encodeURIComponent(created.claimSecret)}`;
+
     return {
       requestId: created.requestId,
       claimSecret: created.claimSecret,
       status: created.status,
       apiClient: created.apiClient,
-      pollHint:
-        'Poll GET /api/v1/ai-discover/requests/:requestId?claimSecret=… until status is active',
+      pollUrl,
+      pollHint: `Poll GET ${pollUrl} until status is active`,
     };
   });
 

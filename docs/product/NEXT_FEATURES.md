@@ -15,6 +15,7 @@ Short backlog of product work **after** the current milestone track (see `ROADMA
 | ID | Feature | Status | Needs before build | Notes |
 | --- | --- | --- | --- | --- |
 | NF-001 | **Doc Factory** — standard documents (overview, management summary, progress summary, …) filled from workspace knowledge via connected AI (MCP), versioned in the hub, export PDF/DOCX | `parked` — awaiting precise module description | Module brief: package/module boundaries, UX entry points, template ownership, export scope | Early design spike: [`DOC_FACTORY.md`](DOC_FACTORY.md). Branch `feature/docfactory` holds spike notes + domain type stubs only. **Does not** displace M9. |
+| NF-002 | **Dokploy bootstrap admin seed** — Compose one-shot `seed` service (after `migrate`) that creates the default org + admin when `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` are set; no-op if admin already exists | `ready` — small ops follow-up | Wire into `compose.dokploy.yaml`; document secrets; avoid empty-env Zod failures | Removes manual `tsx` seed in Dokploy terminal. See [`docs/deployment/DOKPLOY.md`](../deployment/DOKPLOY.md) follow-ups. |
 
 ---
 

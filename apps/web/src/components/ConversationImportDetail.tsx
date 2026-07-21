@@ -16,7 +16,6 @@ import {
   Panel,
   Select,
   Textarea,
-  useToast,
 } from './ui';
 
 type LinkedRecord = {
@@ -50,7 +49,6 @@ export function ConversationImportDetail(props: {
   const tRecords = useTranslations('records');
   const tCommon = useTranslations('common');
   const router = useRouter();
-  const { pushToast } = useToast();
 
   const [title, setTitle] = useState(
     `${props.conversationImport.title} — summary`,
@@ -62,7 +60,6 @@ export function ConversationImportDetail(props: {
   const [excerptNote, setExcerptNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [archiving, setArchiving] = useState(false);
 
   async function onCreateDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,33 +100,6 @@ export function ConversationImportDetail(props: {
     }
   }
 
-  async function onArchive() {
-    setArchiving(true);
-    try {
-      const response = await fetch(
-        `/api/v1/conversation-imports/${props.conversationImport.id}/archive`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: { message?: string } };
-        throw new Error(payload.error?.message ?? t('failedArchive'));
-      }
-      pushToast(t('archived'), 'success');
-      router.refresh();
-    } catch (err) {
-      pushToast(
-        err instanceof Error ? err.message : t('failedArchive'),
-        'danger',
-      );
-    } finally {
-      setArchiving(false);
-    }
-  }
-
   return (
     <div className="grid gap-8">
       <Panel>
@@ -148,18 +118,6 @@ export function ConversationImportDetail(props: {
         <pre className="kh-panel-inset m-0 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-sm text-ink">
           {props.conversationImport.rawContent}
         </pre>
-        {props.canMutate && !props.conversationImport.archivedAt ? (
-          <div className="mt-4">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={archiving}
-              onClick={() => void onArchive()}
-            >
-              {archiving ? t('archiving') : t('archiveButton')}
-            </Button>
-          </div>
-        ) : null}
       </Panel>
 
       <section>

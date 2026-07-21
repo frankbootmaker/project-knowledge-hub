@@ -27,6 +27,8 @@ export {
   buildOpenWebUiOpenApiConfig,
   buildGeminiFunctionDeclarations,
   buildGeminiMcpConfig,
+  buildAntigravityMcpConfig,
+  buildAntigravitySetupSteps,
   buildChatGptActionsMeta,
   stringifySchema,
   type LlmSchemaOptions,

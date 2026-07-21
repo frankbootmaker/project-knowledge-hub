@@ -29,10 +29,10 @@ Milestone **IDs** stay as in the PRD (M0–M10). **Build order after the localho
 3. **M9** — Conversation import (first slice complete; optional automations later).
 4. **M10** — Semantic / hybrid search (first slice; optional, before packaging).
 5. **M7** — Production packaging and Dokploy, staged as:
-   - Dokploy **Dev/UAT** first
+   - Dokploy **Dev/UAT** first (`in_progress` — packaging slice)
    - **Prod** only after testing (HTTPS, MCP, persistence, backup/restore)
 
-M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging step, not the next feature gate.
+M8–M10 no longer block M7 packaging. Operator Dokploy click-deploy and Prod cutover remain after this slice.
 
 ---
 
@@ -47,7 +47,7 @@ M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging ste
 | M4 | Versioning and lifecycle | `complete` | Validated 2026-07-19 |
 | M5 | Search | `complete` | Validated 2026-07-19 |
 | M6 | MCP (read + draft write) | `complete` | Validated 2026-07-19 |
-| M7 | Production packaging and Dokploy | `deferred` | After M8 (and preferably M9); Dev/UAT then Prod |
+| M7 | Production packaging and Dokploy | `in_progress` | Dev/UAT packaging on `feature/m7-dokploy`; Prod later |
 | M8 | GitHub synchronization | `complete` | Validated 2026-07-19 — see checklist below |
 | M9 | Conversation import | `complete` | First slice validated 2026-07-20 — see checklist below |
 | M10 | Semantic and hybrid search | `complete` | First slice on `feature/m10-semantic-search` — see checklist below |
@@ -57,6 +57,16 @@ M7 is **`deferred`**: it does not block M8/M9. Dokploy is the last packaging ste
 See `docs/product/NEXT_FEATURES.md`. Doc Factory (NF-001) is **parked** pending a precise module brief; early notes in `docs/product/DOC_FACTORY.md`. Does not displace M9.
 
 ---
+
+## Milestone 7 checklist
+
+- [x] Fix api/web/worker Dockerfiles for current monorepo + `NODE_ENV=production` build
+- [x] Web `ARG API_URL` for same-origin rewrites (`/api/v1`, `/mcp`)
+- [x] `compose.dokploy.yaml` (private pgvector Postgres/Redis, migrate one-shot, volumes)
+- [x] Scripts: migrate / seed / backup-db / restore-db
+- [x] Operator docs (`DOKPLOY.md`, `RELEASE_PROCESS.md`, M7 plan, tracking/roadmap/changelog)
+- [ ] Operator: attach domain + smoke deploy on Dokploy (manual)
+- [ ] Later: Prod Dokploy + registry CI; admin log export; Compose bootstrap seed one-shot (**NF-002**) (deferred)
 
 ## Milestone 10 checklist
 

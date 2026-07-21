@@ -158,6 +158,11 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-07-21
+
+* **Import type picker** — “New import” opens a modal (paste chat available; documents and images marked coming soon), shared on the workspace catalogue and imports list.
+* **Workspace catalogue sections** — Projects, systems, and knowledge records each use `FunctionHeader` (search, status/lifecycle filter, page size) plus client pagination; create CTAs are `LinkButton`s (not text links).
+
 ### 2026-07-20
 
 * **AI Connect** — Public `/ai-discover` (login-adjacent) plus authenticated `/account/ai-connections` (Account sidebar) for pairing codes and approve/revoke. Admin → API clients shows a pending AI requests section (same approve mental model as signup).
@@ -185,7 +190,7 @@ Record durable UI / design-system changes here (newest first).
 * **Git sync** — Workspace page link to `/workspaces/{slug}/git` for GitHub connections and Sync now. Connection cards show a sync-health `Badge` (healthy / sync needed / error, etc.) after a lightweight remote commit check. Git-managed records hide Edit / lifecycle actions; show View on GitHub when provenance URI exists.
 * **Record type labels** — Knowledge editor select uses i18n `records.typeLabels.*` driven by the shared domain catalog (incl. planning ledger types).
 * **Audit PDF export** — Admin Audit adds Export PDF beside CSV/JSON; same filter scope. PDF pages carry organization, project, filter details, and export timestamp in header/footer.
-* **Archive UX** — Soft-archive via `ArchiveEntityButton` (confirm + restore). Header + mobile nav link to `/archived` (user restore hub); per-workspace `/workspaces/{slug}/archived`; Admin → Archive for platform ops. Inline header nav starts at `md` so Archive fits without crowding phones/small tablets.
+* **Archive UX** — Soft-archive via `ArchiveEntityButton` (confirm + restore). Catalogue entities (project, system, knowledge record, import) and workspaces use a **Manage** modal (Details / Edit where applicable / Archive / Delete). Header + mobile nav link to `/archived` (user restore hub); per-workspace `/workspaces/{slug}/archived`; Admin → Archive for platform ops. Inline header nav starts at `md` so Archive fits without crowding phones/small tablets.
 * **Responsive nav** — Primary inline nav breakpoint raised `sm` → `md` after Archive was added; `MobileNav` (`<md`) is a frosted top sheet portaled to `document.body` (page remains faintly visible underneath).
 * **User dashboard** — Workspace tiles (role + counts), search/admin jump tiles, and a recently-updated list. Interactive `kh-panel` links; `Page wide` for the grid.
 * **Admin create modals** — `Modal` primitive (`.kh-modal*`, `--kh-z-modal`). Organizations, users, memberships, and API clients open create flows in dialogs; lists are the default view. Branch exploration: `function/modals`.

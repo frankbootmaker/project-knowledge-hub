@@ -32,7 +32,7 @@ type PreflightEndpoints = {
   mcpUrlDefault: string;
   mcpUrlOverride: string | null;
   mcpUrlEnv: string | null;
-  mcpUrlSource: 'override' | 'env' | 'api_url';
+  mcpUrlSource: 'override' | 'env' | 'web_url' | 'api_url';
 };
 
 type Preflight = {
@@ -353,12 +353,10 @@ export function McpSetupWizard({
                     {preflight.endpoints.mcpUrlInternal}
                   </code>
                 </p>
-                <p className="m-0 text-sm">
-                  <span className="text-ink-muted">{t('mcpWizardPublicUrlEffective')}: </span>
+                <p className="m-0 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-ink-muted">{t('mcpWizardPublicUrlEffective')}:</span>
                   <code className="font-mono text-xs">{preflight.endpoints.mcpUrl}</code>
-                  <Badge className="ml-2" tone="brand">
-                    {preflight.endpoints.mcpUrlSource}
-                  </Badge>
+                  <Badge tone="brand">{preflight.endpoints.mcpUrlSource}</Badge>
                 </p>
                 {preflight.endpoints.mcpUrlEnv ? (
                   <p className="m-0 text-xs text-ink-muted">

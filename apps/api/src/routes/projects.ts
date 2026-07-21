@@ -5,6 +5,7 @@ import { slugify } from '@project-knowledge-hub/auth';
 import { projects, workspaces } from '@project-knowledge-hub/database';
 import { AppError, projectStatusSchema } from '@project-knowledge-hub/domain';
 import {
+  requireWorkspaceAdmin,
   requireWorkspaceMaintainer,
   requireWorkspaceView,
 } from '@project-knowledge-hub/permissions';
@@ -343,5 +344,50 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         ? toPublicProject(archived, tagMap.get(archived.id) ?? [])
         : null,
     };
+  });
+
+  /** Permanent delete — linked systems/records/git keep their rows but lose projectId. */
+  app.post('/api/v1/projects/:projectId/purge', async (request, reply) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
+    z.object({ confirmDestroy: z.literal(true) }).parse(request.body ?? {});
+
+    const [project] = await app.database.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, params.projectId))
+      .limit(1);
+
+    if (!project) {
+      throw new AppError({
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found',
+        statusCode: 404,
+      });
+    }
+
+    requireWorkspaceAdmin(principal, project.workspaceId);
+
+    const [workspace] = await app.database.db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, project.workspaceId))
+      .limit(1);
+
+    await app.database.db.delete(projects).where(eq(projects.id, project.id));
+
+    await writeAuditEvent(app.database, {
+      organizationId: workspace?.organizationId ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.purge',
+      entityType: 'project',
+      entityId: project.id,
+      metadata: { name: project.name, slug: project.slug },
+      ipAddress: request.ip,
+    });
+
+    return reply.status(204).send();
   });
 }

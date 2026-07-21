@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ConversationImportDetail } from '../../../../../../components/ConversationImportDetail';
+import { ConversationImportManageMenu } from '../../../../../../components/ConversationImportManageMenu';
 import { Page, PageHeader } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
@@ -17,6 +18,7 @@ type ConversationImport = {
   generatedByModel: string | null;
   archivedAt: string | null;
   createdAt: string;
+  updatedAt?: string;
   linkedRecords: Array<{
     knowledgeRecordId: string;
     title: string;
@@ -60,10 +62,38 @@ export default async function ConversationImportDetailPage({
         membership.workspaceId === summary.id &&
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
+  const canPurge =
+    session.user.isSystemAdmin ||
+    session.memberships.some(
+      (membership) =>
+        membership.workspaceId === summary.id &&
+        membership.role === 'workspace_admin',
+    );
 
   return (
     <Page wide>
-      <PageHeader title={conversationImport.title} description={t('detailSubtitle')} />
+      <PageHeader
+        title={conversationImport.title}
+        description={t('detailSubtitle')}
+        actions={
+          <ConversationImportManageMenu
+            workspaceSlug={summary.slug}
+            conversationImport={{
+              id: conversationImport.id,
+              title: conversationImport.title,
+              contentFormat: conversationImport.contentFormat,
+              sourceProvider: conversationImport.sourceProvider,
+              generatedByModel: conversationImport.generatedByModel,
+              archivedAt: conversationImport.archivedAt,
+              createdAt: conversationImport.createdAt,
+              updatedAt: conversationImport.updatedAt,
+              linkedRecordCount: conversationImport.linkedRecords.length,
+            }}
+            canMutate={canMutate}
+            canPurge={canPurge}
+          />
+        }
+      />
       <p className="mt-0 mb-6">
         <Link
           href={`/workspaces/${summary.slug}/imports`}

@@ -1,5 +1,7 @@
-# Production-oriented overrides for full-stack validation.
-# Usage:
+# Lightweight production-oriented overrides for the local Compose stack.
+# For Dokploy Dev/UAT, prefer `compose.dokploy.yaml` (private PG/Redis + migrate one-shot).
+#
+# Usage (local full stack with always-restart):
 #   docker compose -p knowledge-hub-dev -f compose.yaml -f compose.production.yaml --profile full up --build
 
 services:
@@ -9,6 +11,9 @@ services:
     restart: always
   web:
     restart: always
+    build:
+      args:
+        NEXT_REWRITE_API_ORIGIN: ${INTERNAL_API_URL:-http://api:3101}
   postgres:
     restart: always
   redis:

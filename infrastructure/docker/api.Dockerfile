@@ -6,34 +6,28 @@ RUN corepack enable && corepack prepare pnpm@10.12.4 --activate
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 
-FROM base AS deps
+FROM base AS build
+# Keep install in non-production so TypeScript/tsx/dev tooling remain available.
+ENV NODE_ENV=development
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc ./
-COPY apps/api/package.json apps/api/
-COPY apps/web/package.json apps/web/
-COPY apps/worker/package.json apps/worker/
-COPY packages/config/package.json packages/config/
-COPY packages/database/package.json packages/database/
-COPY packages/domain/package.json packages/domain/
-COPY packages/observability/package.json packages/observability/
-COPY packages/auth/package.json packages/auth/
-COPY packages/permissions/package.json packages/permissions/
+COPY apps ./apps
+COPY packages ./packages
+COPY turbo.json tsconfig.base.json ./
 RUN pnpm install --frozen-lockfile || pnpm install
-
-FROM deps AS build
-COPY . .
-RUN pnpm --filter @project-knowledge-hub/config build \
-  && pnpm --filter @project-knowledge-hub/domain build \
-  && pnpm --filter @project-knowledge-hub/observability build \
-  && pnpm --filter @project-knowledge-hub/auth build \
-  && pnpm --filter @project-knowledge-hub/permissions build \
-  && pnpm --filter @project-knowledge-hub/database build \
-  && pnpm --filter @project-knowledge-hub/api build
+ENV NODE_ENV=production
+# Limit parallel package compiles — three images (api/web/worker) already build at once.
+RUN pnpm exec turbo run build --filter=@project-knowledge-hub/api... --concurrency=1
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-RUN useradd --system --uid 1001 knowledgehub
+RUN useradd --system --uid 1001 knowledgehub \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app /app
 USER knowledgehub
 EXPOSE 3101
+HEALTHCHECK --interval=15s --timeout=5s --start-period=25s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:${API_PORT:-3101}/health" || exit 1
 CMD ["node", "apps/api/dist/index.js"]

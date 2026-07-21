@@ -262,6 +262,48 @@ export async function archiveConversationImport(
   return toPublicConversationImport(updated, linked);
 }
 
+export async function purgeConversationImport(
+  app: FastifyInstance,
+  importId: string,
+  actor: KnowledgeActor,
+  ipAddress?: string | null,
+) {
+  const [row] = await app.database.db
+    .select()
+    .from(conversationImports)
+    .where(eq(conversationImports.id, importId))
+    .limit(1);
+
+  if (!row) {
+    throw new AppError({
+      code: 'CONVERSATION_IMPORT_NOT_FOUND',
+      message: 'Conversation import not found',
+      statusCode: 404,
+    });
+  }
+
+  const [workspace] = await app.database.db
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.id, row.workspaceId))
+    .limit(1);
+
+  await app.database.db
+    .delete(conversationImports)
+    .where(eq(conversationImports.id, row.id));
+
+  await writeAuditEvent(app.database, {
+    organizationId: workspace?.organizationId ?? null,
+    actorType: actor.actorType,
+    actorId: actor.actorId,
+    action: 'conversation_import.purge',
+    entityType: 'conversation_import',
+    entityId: row.id,
+    metadata: { title: row.title },
+    ipAddress: ipAddress ?? null,
+  });
+}
+
 export async function createDraftFromConversationImport(
   app: FastifyInstance,
   importId: string,

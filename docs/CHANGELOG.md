@@ -9,10 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-* Milestone execution order: keep localhost/dev first; run **M8** (GitHub sync) and optionally **M9** before **M7** Dokploy. M7 is deferred and staged as Dokploy Dev/UAT, then Prod after testing (`MILESTONE_TRACKING.md`, `ROADMAP.md`).
+* Milestone execution order: M8–M10 feature work preceded **M7** Dokploy packaging. M7 is staged as Dokploy Dev/UAT, then Prod after testing (`MILESTONE_TRACKING.md`, `ROADMAP.md`).
+* Docs: ChatGPT Custom GPT Actions setup (verified read + write against public OpenAPI) in `MCP_CURSOR_SETUP.md`.
+* Web middleware: allow unauthenticated `/mcp` through to the API rewrite (fixes MCP `initialize` EOF when clients hit `{WEB_URL}/mcp`).
+* Web middleware: return JSON 404 for `/.well-known/*` so MCP OAuth discovery does not receive the login HTML page.
+* Admin LLM wizard: **Antigravity** client tab with verified `agy` + Bearer stdio proxy setup; Gemini tab clarified as API/enterprise CLI.
+* Workspace detail: per-section search, filter, and pagination for projects/systems/records; create actions use `LinkButton`.
+* Imports: “New import” opens a type-picker modal (paste chat live; documents/images coming soon).
 
 ### Added
 
+* Backlog **NF-002**: Dokploy Compose one-shot bootstrap admin seed after migrate (`NEXT_FEATURES.md`, `DOKPLOY.md` follow-ups).
+* Milestone 7 Dokploy Dev/UAT packaging (first slice): fixed api/web/worker Dockerfiles for the current monorepo, `compose.dokploy.yaml` (private pgvector Postgres/Redis, migrate one-shot, volumes), migrate/seed/backup/restore scripts, and operator runbook (`docs/deployment/DOKPLOY.md`). Prod cutover deferred.
 * Milestone 10 semantic/hybrid search (first slice): `pgvector` Postgres image, migration `0020`, `@project-knowledge-hub/embeddings` (disabled/ollama/openai_compatible), embedding reindex worker queue, search `mode=hybrid` + capabilities API, UI checkbox and MCP `mode`. Default remains FTS-only (`EMBEDDING_PROVIDER=disabled`).
 * Milestone 9 conversation import (first slice): paste text/Markdown into workspace-scoped `conversation_imports`, create one or more draft knowledge records with conversation provenance, keep raw pastes out of MCP/search. API under `/api/v1/conversation-imports`, workspace Imports UI, package `@project-knowledge-hub/conversation-import`, migration `0019`.
 * Locale-aware branded product emails (`packages/mail`): shared HTML layout (IN3 / Project Knowledge Hub), en/de/hu catalogs, and `users.preferred_locale` (synced from language switcher, login, and register). Covers password reset, invite, email confirm, account approved, password changed, account closed, signup rejected, and AI connection pending/approved/rejected. Optional alerts are user-toggleable under Account → Email notifications (`users.email_notification_prefs`).
