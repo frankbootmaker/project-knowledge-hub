@@ -110,34 +110,41 @@ Humans use the web UI; Cursor, Antigravity CLI (`agy`), and other MCP clients us
 
 ### 3.2 Antigravity CLI (`agy`) on Windows
 
-Antigravity often drops `headers` on remote `serverUrl` connections. Do **not** use `mcp-remote` for Knowledge Hub: it still runs OAuth discovery/registration and crashes on HTML pages (`/register`, etc.).
+Antigravity often drops `headers` on remote `serverUrl` connections. Avoid `mcp-remote` (OAuth HTML crashes) and `supergateway` (crashes on Antigravity’s `server/discover`).
 
-Use **supergateway** (Streamable HTTP → stdio) with `--oauth2Bearer` (token only; it adds `Authorization: Bearer …`):
+Use the repo’s **Bearer stdio proxy** (Node 20+, no extra packages):
+
+1. Download [`scripts/mcp-bearer-stdio-proxy.mjs`](../../scripts/mcp-bearer-stdio-proxy.mjs) (or clone the repo).
+2. Put this in `%USERPROFILE%\.gemini\config\mcp_config.json`:
 
 ```json
 {
   "mcpServers": {
     "project-knowledge-hub": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "supergateway",
-        "--streamableHttp",
-        "https://knowhub-dev.in3.technology/mcp",
-        "--oauth2Bearer",
-        "YOUR_HUB_TOKEN"
-      ]
+        "C:\\\\Users\\\\YOUR_USER\\\\AppData\\\\Local\\\\Temp\\\\mcp-bearer-stdio-proxy.mjs"
+      ],
+      "env": {
+        "MCP_URL": "https://knowhub-dev.in3.technology/mcp",
+        "MCP_TOKEN": "YOUR_HUB_TOKEN"
+      }
     }
   }
 }
 ```
 
-Put that in `%USERPROFILE%\.gemini\config\mcp_config.json`.
+3. `YOUR_HUB_TOKEN` is the raw hub token (no `Bearer ` prefix).
+4. Fully quit `agy`, start again, `/mcp` reload.
+5. Confirm the token with `curl` against `/mcp` first (expect MCP JSON, not 401).
 
-- `YOUR_HUB_TOKEN` is the raw hub token (**no** `Bearer ` prefix — the flag adds it).
-- Needs Node.js / `npx` on PATH.
-- Confirm the token with `curl` against `/mcp` first (expect MCP JSON, not 401).
-- Fully quit `agy`, start again, then `/mcp` reload.
+Quick download (PowerShell):
+
+```powershell
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/frankbootmaker/project-knowledge-hub/feature/m7-dokploy/scripts/mcp-bearer-stdio-proxy.mjs" `
+  -OutFile "$env:TEMP\mcp-bearer-stdio-proxy.mjs"
+```
 
 ## 4. Available tools
 
