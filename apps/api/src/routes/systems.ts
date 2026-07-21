@@ -5,6 +5,7 @@ import { slugify } from '@project-knowledge-hub/auth';
 import { projects, systems, workspaces } from '@project-knowledge-hub/database';
 import { AppError, systemStatusSchema } from '@project-knowledge-hub/domain';
 import {
+  requireWorkspaceAdmin,
   requireWorkspaceMaintainer,
   requireWorkspaceView,
 } from '@project-knowledge-hub/permissions';
@@ -396,5 +397,50 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
     return {
       system: archived ? toPublicSystem(archived, tagMap.get(archived.id) ?? []) : null,
     };
+  });
+
+  /** Permanent delete — linked records/imports keep rows but lose systemId. */
+  app.post('/api/v1/systems/:systemId/purge', async (request, reply) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ systemId: z.string().uuid() }).parse(request.params);
+    z.object({ confirmDestroy: z.literal(true) }).parse(request.body ?? {});
+
+    const [system] = await app.database.db
+      .select()
+      .from(systems)
+      .where(eq(systems.id, params.systemId))
+      .limit(1);
+
+    if (!system) {
+      throw new AppError({
+        code: 'SYSTEM_NOT_FOUND',
+        message: 'System not found',
+        statusCode: 404,
+      });
+    }
+
+    requireWorkspaceAdmin(principal, system.workspaceId);
+
+    const [workspace] = await app.database.db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, system.workspaceId))
+      .limit(1);
+
+    await app.database.db.delete(systems).where(eq(systems.id, system.id));
+
+    await writeAuditEvent(app.database, {
+      organizationId: workspace?.organizationId ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'system.purge',
+      entityType: 'system',
+      entityId: system.id,
+      metadata: { name: system.name, slug: system.slug },
+      ipAddress: request.ip,
+    });
+
+    return reply.status(204).send();
   });
 }

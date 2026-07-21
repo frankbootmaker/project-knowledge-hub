@@ -5,6 +5,7 @@ import {
   createDraftFromImportInputSchema,
 } from '@project-knowledge-hub/conversation-import';
 import {
+  requireWorkspaceAdmin,
   requireWorkspaceMaintainer,
   requireWorkspaceView,
 } from '@project-knowledge-hub/permissions';
@@ -18,6 +19,7 @@ import {
   createDraftFromConversationImport,
   getConversationImport,
   listConversationImports,
+  purgeConversationImport,
 } from '../lib/conversation-import-service.js';
 
 export async function registerConversationImportRoutes(
@@ -115,5 +117,28 @@ export async function registerConversationImportRoutes(
     );
 
     return { conversationImport };
+  });
+
+  app.post('/api/v1/conversation-imports/:id/purge', async (request, reply) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    z.object({ confirmDestroy: z.literal(true) }).parse(request.body ?? {});
+
+    const existing = await getConversationImport(app, params.id);
+    requireWorkspaceAdmin(principal, existing.workspaceId);
+
+    await purgeConversationImport(
+      app,
+      params.id,
+      {
+        actorType: 'user',
+        actorId: principal.userId,
+        userId: principal.userId,
+      },
+      request.ip,
+    );
+
+    return reply.status(204).send();
   });
 }

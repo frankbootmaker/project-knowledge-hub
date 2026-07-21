@@ -230,6 +230,41 @@ export function aiConnectionRejectedEmail(input: {
   });
 }
 
+export function testEmail(input: {
+  locale?: string | null;
+  displayName: string;
+  driver: string;
+  source: string;
+  from: string;
+  settingsUrl: string;
+}): LinkMailContent {
+  const locale = normalizeAppLocale(input.locale);
+  const m = getMailMessages(locale).testEmail;
+  const name = displayNameOrFallback(input.displayName, locale);
+  const greeting = interpolate(m.greeting, { name });
+  const driverLine = interpolate(m.driverLabel, { driver: input.driver });
+  const sourceLine = interpolate(m.sourceLabel, { source: input.source });
+  const fromLine = interpolate(m.fromLabel, { from: input.from });
+  return renderMailLayout({
+    locale,
+    subject: m.subject,
+    title: m.title,
+    bodyHtml: `${p(greeting)}${p(m.body)}${p(driverLine)}${p(sourceLine)}${p(fromLine)}`,
+    cta: { label: m.cta, url: input.settingsUrl },
+    textLines: [
+      greeting,
+      '',
+      m.body,
+      '',
+      driverLine,
+      sourceLine,
+      fromLine,
+      '',
+      input.settingsUrl,
+    ],
+  });
+}
+
 export function setPasswordUrl(webUrl: string, token: string): string {
   const base = webUrl.replace(/\/$/, '');
   const url = new URL('/set-password', `${base}/`);
@@ -252,4 +287,9 @@ export function loginUrl(webUrl: string): string {
 export function aiConnectionsUrl(webUrl: string): string {
   const base = webUrl.replace(/\/$/, '');
   return new URL('/account/ai-connections', `${base}/`).toString();
+}
+
+export function mailSettingsUrl(webUrl: string): string {
+  const base = webUrl.replace(/\/$/, '');
+  return new URL('/admin/email', `${base}/`).toString();
 }

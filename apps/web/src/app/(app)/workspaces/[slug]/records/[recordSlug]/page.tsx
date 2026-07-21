@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { ArchiveEntityButton } from '../../../../../../components/ArchiveEntityButton';
+import { KnowledgeRecordManageMenu } from '../../../../../../components/KnowledgeRecordManageMenu';
 import { MarkdownDocument } from '../../../../../../components/MarkdownDocument';
 import { RecordLifecycleActions } from '../../../../../../components/RecordLifecycleActions';
 import {
@@ -110,10 +110,16 @@ export default async function KnowledgeRecordDetailPage({
         membership.workspaceId === workspace.id &&
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
+  const canPurge =
+    session.user.isSystemAdmin ||
+    session.memberships.some(
+      (membership) =>
+        membership.workspaceId === workspace.id &&
+        membership.role === 'workspace_admin',
+    );
   const gitManaged = record.sourceOfTruthMode === 'git_managed';
 
   const dash = tCommon('emDash');
-  const linkClass = 'text-sm font-medium text-brand no-underline hover:text-brand-hover';
 
   return (
     <Page wide>
@@ -133,31 +139,12 @@ export default async function KnowledgeRecordDetailPage({
         title={record.title}
         description={`${record.slug} · ${record.recordType}`}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href={`/workspaces/${workspace.slug}/records/${record.slug}/history`}
-              className={linkClass}
-            >
-              {t('history')}
-            </Link>
-            {canMutate && !isArchived && !gitManaged ? (
-              <Link
-                href={`/workspaces/${workspace.slug}/records/${record.slug}/edit`}
-                className={linkClass}
-              >
-                {tCommon('edit')}
-              </Link>
-            ) : null}
-            {canMutate ? (
-              <ArchiveEntityButton
-                kind="record"
-                entityId={record.id}
-                entityName={record.title}
-                archived={isArchived}
-                redirectOnArchive={`/workspaces/${workspace.slug}`}
-              />
-            ) : null}
-          </div>
+          <KnowledgeRecordManageMenu
+            workspaceSlug={workspace.slug}
+            record={record}
+            canMutate={canMutate}
+            canPurge={canPurge}
+          />
         }
       />
 

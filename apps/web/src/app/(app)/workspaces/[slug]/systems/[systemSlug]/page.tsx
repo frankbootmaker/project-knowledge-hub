@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { ArchiveEntityButton } from '../../../../../../components/ArchiveEntityButton';
+import { SystemManageMenu } from '../../../../../../components/SystemManageMenu';
 import { Badge, Page, PageHeader, Panel } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
@@ -17,6 +17,7 @@ type System = {
   environment: string | null;
   projectId: string | null;
   tags: Array<{ name: string }>;
+  createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
 };
@@ -70,12 +71,27 @@ export default async function SystemDetailPage({
         membership.workspaceId === workspace.id &&
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
+  const canPurge =
+    session.user.isSystemAdmin ||
+    session.memberships.some(
+      (membership) =>
+        membership.workspaceId === workspace.id &&
+        membership.role === 'workspace_admin',
+    );
+
+  const projectsResponse = await apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`);
+  const projects = projectsResponse.ok
+    ? ((await projectsResponse.json()) as { projects: Project[] }).projects
+    : [];
 
   let project: Project | null = null;
   if (system.projectId) {
-    const projectResponse = await apiFetch(`/api/v1/projects/${system.projectId}`);
-    if (projectResponse.ok) {
-      project = ((await projectResponse.json()) as { project: Project }).project;
+    project = projects.find((item) => item.id === system.projectId) ?? null;
+    if (!project) {
+      const projectResponse = await apiFetch(`/api/v1/projects/${system.projectId}`);
+      if (projectResponse.ok) {
+        project = ((await projectResponse.json()) as { project: Project }).project;
+      }
     }
   }
 
@@ -104,15 +120,13 @@ export default async function SystemDetailPage({
           </span>
         }
         actions={
-          canMutate ? (
-            <ArchiveEntityButton
-              kind="system"
-              entityId={system.id}
-              entityName={system.name}
-              archived={isArchived}
-              redirectOnArchive={`/workspaces/${workspace.slug}`}
-            />
-          ) : null
+          <SystemManageMenu
+            workspaceSlug={workspace.slug}
+            system={system}
+            projects={projects}
+            canMutate={canMutate}
+            canPurge={canPurge}
+          />
         }
       />
 

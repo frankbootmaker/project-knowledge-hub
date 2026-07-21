@@ -5,11 +5,34 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Button, ErrorText, Panel } from './ui';
 
-export type PurgeEntityKind = 'workspace' | 'project';
+export type PurgeEntityKind =
+  | 'workspace'
+  | 'project'
+  | 'system'
+  | 'record'
+  | 'import';
 
 const pathByKind: Record<PurgeEntityKind, string> = {
   workspace: 'workspaces',
   project: 'projects',
+  system: 'systems',
+  record: 'knowledge-records',
+  import: 'conversation-imports',
+};
+
+const hintKeyByKind: Record<
+  PurgeEntityKind,
+  | 'deleteHintWorkspace'
+  | 'deleteHintProject'
+  | 'deleteHintSystem'
+  | 'deleteHintRecord'
+  | 'deleteHintImport'
+> = {
+  workspace: 'deleteHintWorkspace',
+  project: 'deleteHintProject',
+  system: 'deleteHintSystem',
+  record: 'deleteHintRecord',
+  import: 'deleteHintImport',
 };
 
 export function PurgeEntityButton({
@@ -18,12 +41,15 @@ export function PurgeEntityButton({
   entityName,
   disabled,
   redirectOnPurge,
+  extraHint,
 }: {
   kind: PurgeEntityKind;
   entityId: string;
   entityName: string;
   disabled?: boolean;
   redirectOnPurge: string;
+  /** Optional extra warning (e.g. git_managed may reappear). */
+  extraHint?: string | null;
 }) {
   const t = useTranslations('archive');
   const tCommon = useTranslations('common');
@@ -84,9 +110,10 @@ export function PurgeEntityButton({
       <p className="m-0 text-sm text-danger">
         {t('confirmDelete', { name: entityName })}
       </p>
-      <p className="m-0 text-xs text-ink-muted">
-        {kind === 'workspace' ? t('deleteHintWorkspace') : t('deleteHintProject')}
-      </p>
+      <p className="m-0 text-xs text-ink-muted">{t(hintKeyByKind[kind])}</p>
+      {extraHint ? (
+        <p className="m-0 text-xs text-ink-muted">{extraHint}</p>
+      ) : null}
       <label className="flex items-start gap-2 text-sm text-ink">
         <input
           type="checkbox"

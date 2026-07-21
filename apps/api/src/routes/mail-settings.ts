@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { users } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
+import { mailSettingsUrl, testEmail } from '@project-knowledge-hub/mail';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import {
   assertMutatingOrigin,
@@ -114,17 +117,26 @@ export async function registerMailSettingsRoutes(app: FastifyInstance): Promise<
     const to = body.to?.toLowerCase() ?? principal.email;
 
     const { config, source } = await resolveMailConfig(app.database, app.env);
+    const [user] = await app.database.db
+      .select({ preferredLocale: users.preferredLocale })
+      .from(users)
+      .where(eq(users.id, principal.userId))
+      .limit(1);
+
+    const content = testEmail({
+      locale: user?.preferredLocale,
+      displayName: principal.displayName,
+      driver: config.driver,
+      source,
+      from: config.from,
+      settingsUrl: mailSettingsUrl(app.env.WEB_URL),
+    });
+
     const result = await app.mail.send({
       to,
-      subject: 'Project Knowledge Hub — test email',
-      text: [
-        'This is a test message from Project Knowledge Hub.',
-        `Driver: ${config.driver}`,
-        `Source: ${source}`,
-        `From: ${config.from}`,
-      ].join('\n'),
-      html: `<p>This is a test message from Project Knowledge Hub.</p>
-<p>Driver: <code>${config.driver}</code><br/>Source: <code>${source}</code></p>`,
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
     });
 
     if (!result.ok) {

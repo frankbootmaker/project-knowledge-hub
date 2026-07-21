@@ -82,6 +82,16 @@ export type MailMessages = {
     agentLabel: string;
     cta: string;
   };
+  testEmail: {
+    subject: string;
+    title: string;
+    greeting: string;
+    body: string;
+    driverLabel: string;
+    sourceLabel: string;
+    fromLabel: string;
+    cta: string;
+  };
 };
 
 export const en: MailMessages = {
@@ -169,6 +179,16 @@ export const en: MailMessages = {
     body: 'An AI connection request for your account was rejected.',
     agentLabel: 'Agent: {agent}',
     cta: 'View AI connections',
+  },
+  testEmail: {
+    subject: 'Project Knowledge Hub — test email',
+    title: 'Test email',
+    greeting: 'Hi {name},',
+    body: 'This is a test message from Project Knowledge Hub. Mail delivery is working with the settings below.',
+    driverLabel: 'Driver: {driver}',
+    sourceLabel: 'Config source: {source}',
+    fromLabel: 'From: {from}',
+    cta: 'Open mail settings',
   },
 };
 
@@ -258,6 +278,16 @@ export const de: MailMessages = {
     agentLabel: 'Agent: {agent}',
     cta: 'KI-Verbindungen anzeigen',
   },
+  testEmail: {
+    subject: 'Project Knowledge Hub — Test-E-Mail',
+    title: 'Test-E-Mail',
+    greeting: 'Hallo {name},',
+    body: 'Dies ist eine Testnachricht von Project Knowledge Hub. Der E-Mail-Versand funktioniert mit den folgenden Einstellungen.',
+    driverLabel: 'Treiber: {driver}',
+    sourceLabel: 'Konfigurationsquelle: {source}',
+    fromLabel: 'Absender: {from}',
+    cta: 'E-Mail-Einstellungen öffnen',
+  },
 };
 
 export const hu: MailMessages = {
@@ -345,6 +375,16 @@ export const hu: MailMessages = {
     body: 'A fiókodhoz tartozó AI-kapcsolat kérelmet elutasították.',
     agentLabel: 'Ügynök: {agent}',
     cta: 'AI-kapcsolatok megtekintése',
+  },
+  testEmail: {
+    subject: 'Project Knowledge Hub — teszt e-mail',
+    title: 'Teszt e-mail',
+    greeting: 'Szia {name}!',
+    body: 'Ez egy tesztüzenet a Project Knowledge Hubtól. Az e-mail küldés a lenti beállításokkal működik.',
+    driverLabel: 'Illesztő: {driver}',
+    sourceLabel: 'Konfig forrás: {source}',
+    fromLabel: 'Feladó: {from}',
+    cta: 'E-mail beállítások megnyitása',
   },
 };
 

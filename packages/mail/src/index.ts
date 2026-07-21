@@ -20,10 +20,12 @@ export {
   aiConnectionPendingEmail,
   aiConnectionApprovedEmail,
   aiConnectionRejectedEmail,
+  testEmail,
   setPasswordUrl,
   confirmEmailUrl,
   loginUrl,
   aiConnectionsUrl,
+  mailSettingsUrl,
 } from './templates.js';
 export { renderMailLayout, MAIL_COLORS } from './layout.js';
 export { getMailMessages } from './messages.js';
