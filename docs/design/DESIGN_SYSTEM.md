@@ -160,6 +160,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-21
 
+* **Import type picker** — “New import” opens a modal (paste chat available; documents and images marked coming soon), shared on the workspace catalogue and imports list.
 * **Workspace catalogue sections** — Projects, systems, and knowledge records each use `FunctionHeader` (search, status/lifecycle filter, page size) plus client pagination; create CTAs are `LinkButton`s (not text links).
 
 ### 2026-07-20

@@ -13,6 +13,7 @@ import {
   SectionHeader,
   Select,
 } from './ui';
+import { ImportTypePickerButton } from './ImportTypePickerButton';
 
 const DEFAULT_PAGE_SIZE = 5;
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
@@ -359,9 +360,10 @@ export function WorkspaceCatalogueSections({
           title={t('imports')}
           action={
             canMutate ? (
-              <LinkButton href={`/workspaces/${workspaceSlug}/imports/new`}>
-                {t('newImport')}
-              </LinkButton>
+              <ImportTypePickerButton
+                workspaceSlug={workspaceSlug}
+                label={t('newImport')}
+              />
             ) : (
               <LinkButton
                 href={`/workspaces/${workspaceSlug}/imports`}

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Web middleware: return JSON 404 for `/.well-known/*` so MCP OAuth discovery does not receive the login HTML page.
 * Admin LLM wizard: **Antigravity** client tab with verified `agy` + Bearer stdio proxy setup; Gemini tab clarified as API/enterprise CLI.
 * Workspace detail: per-section search, filter, and pagination for projects/systems/records; create actions use `LinkButton`.
+* Imports: “New import” opens a type-picker modal (paste chat live; documents/images coming soon).
 
 ### Added
 
