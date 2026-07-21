@@ -110,7 +110,9 @@ Humans use the web UI; Cursor, Antigravity CLI (`agy`), and other MCP clients us
 
 ### 3.2 Antigravity CLI (`agy`) on Windows
 
-Antigravity often drops `headers` on remote `serverUrl` connections. Prefer a local `mcp-remote` stdio bridge. Put this in `%USERPROFILE%\.gemini\config\mcp_config.json`:
+Antigravity often drops `headers` on remote `serverUrl` connections. Do **not** use `mcp-remote` for Knowledge Hub: it still runs OAuth discovery/registration and crashes on HTML pages (`/register`, etc.).
+
+Use **supergateway** (Streamable HTTP → stdio) with `--oauth2Bearer` (token only; it adds `Authorization: Bearer …`):
 
 ```json
 {
@@ -119,22 +121,23 @@ Antigravity often drops `headers` on remote `serverUrl` connections. Prefer a lo
       "command": "npx",
       "args": [
         "-y",
-        "mcp-remote",
+        "supergateway",
+        "--streamableHttp",
         "https://knowhub-dev.in3.technology/mcp",
-        "--header",
-        "Authorization:${AUTH_HEADER}"
-      ],
-      "env": {
-        "AUTH_HEADER": "Bearer YOUR_HUB_TOKEN"
-      }
+        "--oauth2Bearer",
+        "YOUR_HUB_TOKEN"
+      ]
     }
   }
 }
 ```
 
-- Keep the space inside `AUTH_HEADER` (`Bearer ` + token); do **not** put a space after `Authorization:` in the `args` line (Windows arg splitting).
-- First confirm the token with `curl` against `/mcp` (expect MCP JSON, not 401).
-- After hub deploys that return JSON 404 for `/.well-known/*`, restart `agy` and `/mcp` reload.
+Put that in `%USERPROFILE%\.gemini\config\mcp_config.json`.
+
+- `YOUR_HUB_TOKEN` is the raw hub token (**no** `Bearer ` prefix — the flag adds it).
+- Needs Node.js / `npx` on PATH.
+- Confirm the token with `curl` against `/mcp` first (expect MCP JSON, not 401).
+- Fully quit `agy`, start again, then `/mcp` reload.
 
 ## 4. Available tools
 
