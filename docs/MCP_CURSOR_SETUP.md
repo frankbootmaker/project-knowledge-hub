@@ -104,7 +104,9 @@ ChatGPT’s normal client does **not** use MCP. Wire Knowledge Hub as a **Custom
 5. **Instructions** (optional) — e.g. search Knowledge Hub before answering; create/update only as drafts when write is enabled.
 6. **Save** the GPT and chat **in that Custom GPT** (not the default ChatGPT thread).
 
-Humans use the web UI; Cursor and other MCP clients use `/mcp`; ChatGPT uses the same ledger via OpenAPI Actions — one shared knowledge base across systems.
+Humans use the web UI; Cursor, Antigravity CLI (`agy`), and other MCP clients use `/mcp`; ChatGPT uses the same ledger via OpenAPI Actions — one shared knowledge base across systems.
+
+**Note:** Public `/mcp` must not be redirected to the login page by the web middleware (Bearer auth is enforced on the API). If MCP clients get `initialize` EOF / connection closed, check that `apps/web` lets `/mcp` through like `/api/*`.
 
 ## 4. Available tools
 
