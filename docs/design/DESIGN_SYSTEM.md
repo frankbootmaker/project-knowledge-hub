@@ -158,6 +158,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-07-21
+
+* **Workspace catalogue sections** — Projects, systems, and knowledge records each use `FunctionHeader` (search, status/lifecycle filter, page size) plus client pagination; create CTAs are `LinkButton`s (not text links).
+
 ### 2026-07-20
 
 * **AI Connect** — Public `/ai-discover` (login-adjacent) plus authenticated `/account/ai-connections` (Account sidebar) for pairing codes and approve/revoke. Admin → API clients shows a pending AI requests section (same approve mental model as signup).
