@@ -1,8 +1,11 @@
 # LLM / MCP client setup
 
-For a guided in-app flow (platform checks → client → connection tests → client schemas), open **Admin → LLM / MCP setup** at `/admin/mcp-setup` while signed in as a system administrator.
+For a guided in-app flow (platform checks → client → connection tests → client schemas):
 
-The wizard’s final step exports configs for **Cursor**, **ChatGPT** (OpenAPI Actions), **Antigravity CLI** (`agy`, consumer Google AI), **Gemini API** / enterprise Gemini CLI, **Microsoft Copilot Studio** (Swagger 2.0 MCP streamable), and **OpenWebUI** (native MCP or OpenAPI).
+* **Members:** Account → **AI connections** at `/account/ai-connections` (create a client for your workspaces, test, copy schemas).
+* **System admins:** Admin → **LLM / MCP setup** at `/admin/mcp-setup` (org-wide options, public MCP URL override, acting-as-another-user).
+
+The wizard’s final step exports configs for **Cursor**, **ChatGPT** (OpenAPI Actions), **Claude** (Desktop / Code / claude.ai remote MCP), **Antigravity CLI** (`agy`, consumer Google AI), **Gemini API** / enterprise Gemini CLI, **Microsoft Copilot Studio** (Swagger 2.0 MCP streamable), and **OpenWebUI** (native MCP or OpenAPI).
 
 The Cursor config URL defaults to `{WEB_URL}/mcp` (same-origin via the web reverse rewrite). For a different public host, set optional env `MCP_PUBLIC_URL`, or save a **public MCP URL override** in the wizard (stored in platform settings). Connection tests still use the internal `API_URL`. Never advertise internal Compose hosts (e.g. `http://api:3101`) to external LLM clients.
 

@@ -158,10 +158,14 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-07-22
+
+* **User MCP setup wizard** — Account → AI connections leads with a guided setup (`UserMcpSetupWizard`): preflight → configure → create → test → client schemas. Shared pieces live under `components/mcp-setup/` (schemas, LLM picker, status rows). Agent pairing requests stay as a secondary section on the same page.
+
 ### 2026-07-21
 
 * **Import type picker** — “New import” opens a modal (paste chat available; documents and images marked coming soon), shared on the workspace catalogue and imports list.
-* **Workspace catalogue sections** — Projects, systems, and knowledge records each use `FunctionHeader` (search, status/lifecycle filter, page size) plus client pagination; create CTAs are `LinkButton`s (not text links).
+* **Workspace catalogue sections** — Projects, systems, and knowledge records each use `FunctionHeader` with search/filters collapsed behind a toggle icon (left of the create `LinkButton`); status/lifecycle filter, page size, and client pagination stay available when expanded.
 
 ### 2026-07-20
 

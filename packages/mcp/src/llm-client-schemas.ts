@@ -465,6 +465,66 @@ export function buildAntigravitySetupSteps(options: LlmSchemaOptions): string {
   ].join('\n');
 }
 
+/**
+ * Claude Desktop / Claude Code MCP JSON (same Streamable HTTP + Bearer shape as Cursor).
+ */
+export function buildClaudeMcpConfig(options: LlmSchemaOptions): Record<string, unknown> {
+  return buildCursorMcpConfig(options);
+}
+
+/** claude.ai custom connector hints (remote MCP; not OpenAPI Actions). */
+export function buildClaudeAiConnectorMeta(options: LlmSchemaOptions): {
+  name: string;
+  remoteMcpUrl: string;
+  authentication: string;
+  authorizationHeader: string;
+  where: string;
+} {
+  return {
+    name: options.serverName ?? DEFAULT_NAME,
+    remoteMcpUrl: options.mcpUrl,
+    authentication: 'HTTP header Authorization Bearer (API client token)',
+    authorizationHeader: `Bearer ${options.token}`,
+    where: 'claude.ai → Settings → Connectors → Add custom connector (remote MCP)',
+  };
+}
+
+/** Human-readable Claude setup (Desktop, Code CLI, and claude.ai chat). */
+export function buildClaudeSetupSteps(options: LlmSchemaOptions): string {
+  const name = options.serverName ?? DEFAULT_NAME;
+  return [
+    'Claude setup (Desktop, Claude Code, and claude.ai chat)',
+    '',
+    'Claude uses MCP everywhere — not ChatGPT-style OpenAPI Actions.',
+    'Public HTTPS + Bearer token required (same hub token as Cursor / ChatGPT).',
+    '',
+    'A) Claude Desktop',
+    '   Paste the MCP JSON from the wizard into claude_desktop_config.json',
+    '   (macOS: ~/Library/Application Support/Claude/claude_desktop_config.json).',
+    '   Restart Desktop; enable the server if prompted.',
+    '',
+    'B) Claude Code (CLI)',
+    '   Option 1 — same MCP JSON in your Claude Code MCP settings / project config.',
+    '   Option 2 — CLI (header syntax may vary by Claude Code version):',
+    `     claude mcp add --transport http ${name} ${options.mcpUrl} \\`,
+    `       --header "Authorization: Bearer YOUR_HUB_TOKEN"`,
+    '   Then: claude  →  /mcp',
+    '',
+    'C) claude.ai chat (Custom connector)',
+    '   1. Open Settings → Connectors (or Custom connectors).',
+    '   2. Add a remote MCP connector.',
+    `   3. Server URL: ${options.mcpUrl}`,
+    '   4. Auth: Authorization header with Bearer <api-client-token>',
+    '      (use the connector meta pane from this wizard).',
+    '   5. Enable the connector for the chat / project; try a search prompt.',
+    '',
+    'Notes:',
+    '- Remote connectors are reached from Anthropic cloud — /mcp must be public HTTPS.',
+    '- If chat connector auth is flaky, Claude Code/Desktop with local MCP JSON is the reliable path.',
+    '- Team/Enterprise: org owners may need to allow custom connectors first.',
+  ].join('\n');
+}
+
 /** OpenWebUI native MCP (Streamable HTTP) connection snippet. */
 export function buildOpenWebUiMcpConfig(options: LlmSchemaOptions): Record<string, unknown> {
   const name = options.serverName ?? DEFAULT_NAME;

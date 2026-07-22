@@ -22,6 +22,9 @@ import {
 } from '../lib/ai-discover.js';
 import {
   approveApiClient,
+  assertUserMemberOfWorkspaces,
+  assertWriteClientConfig,
+  issueApiClientToken,
   rejectApiClient,
   toPublicApiClient,
 } from '../lib/api-clients.js';
@@ -58,6 +61,13 @@ const approveMeClientSchema = z.object({
   scopes: z.array(scopeSchema).min(1).max(20).optional(),
   allowedWorkspaceIds: z.array(z.string().uuid()).max(100).optional(),
   allowedProjectIds: z.array(z.string().uuid()).max(200).optional(),
+});
+
+const createMeClientSchema = z.object({
+  name: z.string().min(1).max(160),
+  description: z.string().max(1000).optional(),
+  scopes: z.array(scopeSchema).min(1).max(20).optional(),
+  allowedWorkspaceIds: z.array(z.string().uuid()).min(1).max(100),
 });
 
 export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
@@ -359,6 +369,123 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
       .orderBy(desc(apiClients.createdAt));
 
     return { apiClients: rows.map(toPublicApiClient) };
+  });
+
+  app.post('/api/v1/me/api-clients', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const body = createMeClientSchema.parse(request.body);
+
+    const scopes = body.scopes ?? [...DEFAULT_MCP_SCOPES];
+    const allowedWorkspaceIds = body.allowedWorkspaceIds;
+    const wantsWrite = scopes.includes('knowledge:write');
+    const actingUserId = wantsWrite ? principal.userId : null;
+
+    const { organizationId } = await assertUserMemberOfWorkspaces(
+      app.database,
+      principal.userId,
+      allowedWorkspaceIds,
+    );
+
+    assertWriteClientConfig({ scopes, actingUserId, allowedWorkspaceIds });
+
+    const issued = issueApiClientToken();
+    const [created] = await app.database.db
+      .insert(apiClients)
+      .values({
+        organizationId,
+        name: body.name,
+        description: body.description ?? null,
+        tokenHash: issued.tokenHash,
+        tokenPrefix: issued.tokenPrefix,
+        scopes,
+        allowedWorkspaceIds,
+        allowedProjectIds: [],
+        actingUserId,
+        status: 'active',
+        requestedByUserId: principal.userId,
+        approvedByUserId: principal.userId,
+        approvedAt: new Date(),
+        tokenClaimedAt: new Date(),
+      })
+      .returning();
+
+    if (!created) {
+      throw new AppError({
+        code: 'API_CLIENT_CREATE_FAILED',
+        message: 'Failed to create API client',
+        statusCode: 500,
+      });
+    }
+
+    await writeAuditEvent(app.database, {
+      organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'api_client.create',
+      entityType: 'api_client',
+      entityId: created.id,
+      metadata: { name: created.name, tokenPrefix: created.tokenPrefix, by: 'self' },
+      ipAddress: request.ip,
+    });
+
+    return {
+      apiClient: toPublicApiClient(created),
+      token: issued.token,
+    };
+  });
+
+  app.post('/api/v1/me/api-clients/:clientId/rotate', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ clientId: z.string().uuid() }).parse(request.params);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(apiClients)
+      .where(eq(apiClients.id, params.clientId))
+      .limit(1);
+    if (
+      !existing ||
+      existing.revokedAt ||
+      existing.status !== 'active' ||
+      !existing.tokenHash
+    ) {
+      throw new AppError({
+        code: 'API_CLIENT_NOT_FOUND',
+        message: 'API client not found',
+        statusCode: 404,
+      });
+    }
+    assertOwnsApiClient(existing, principal.userId);
+
+    const issued = issueApiClientToken();
+    const [updated] = await app.database.db
+      .update(apiClients)
+      .set({
+        tokenHash: issued.tokenHash,
+        tokenPrefix: issued.tokenPrefix,
+        unclaimedToken: null,
+        tokenClaimedAt: new Date(),
+      })
+      .where(eq(apiClients.id, params.clientId))
+      .returning();
+
+    await writeAuditEvent(app.database, {
+      organizationId: existing.organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'api_client.rotate',
+      entityType: 'api_client',
+      entityId: existing.id,
+      metadata: { by: 'owner' },
+      ipAddress: request.ip,
+    });
+
+    return {
+      apiClient: updated ? toPublicApiClient(updated) : null,
+      token: issued.token,
+    };
   });
 
   app.post('/api/v1/me/api-clients/:clientId/approve', async (request) => {
