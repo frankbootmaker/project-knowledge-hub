@@ -2,7 +2,7 @@
 
 **Product:** Project Knowledge Hub  
 **Repository:** `project-knowledge-hub`  
-**Last updated:** 2026-07-20
+**Last updated:** 2026-07-22
 
 This document tracks milestone progress against the PRD. Update status as work completes. Do not mark a milestone complete while lint, typecheck, tests, build, or Docker validation fail.
 
@@ -54,7 +54,7 @@ M8–M10 no longer block M7 packaging. Operator Dokploy click-deploy and Prod cu
 
 ### Next features (not PRD milestones)
 
-See `docs/product/NEXT_FEATURES.md`. Doc Factory (NF-001) is **parked** pending a precise module brief; early notes in `docs/product/DOC_FACTORY.md`. Does not displace M9.
+See `docs/product/NEXT_FEATURES.md`. Doc Factory (NF-001) is **parked** pending a precise module brief; early notes in `docs/product/DOC_FACTORY.md`. Ops / backup / blob storage backlog (**NF-005**–**NF-009**) is captured in `docs/deployment/OPERATIONS.md` (includes Azure Blob + OneDrive/SharePoint). Does not displace M9.
 
 ---
 

@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Docs: operations & maintenance backlog — scheduled/offsite DB backups, `BlobStore` (S3-compatible + Azure Blob + optional OneDrive/SharePoint), admin maintenance console, observability (**NF-005**–**NF-009**) in `docs/deployment/OPERATIONS.md` / `NEXT_FEATURES.md`.
 * User-facing MCP setup wizard on Account → AI connections: members create scoped API clients for their workspaces (`POST /api/v1/me/api-clients`, rotate), run preflight/connection tests (`/api/v1/me/mcp/setup/*`), and copy Cursor/ChatGPT/Claude/… schemas, then **Finish** with a clear done step and connection troubleshooting (admin wizard shares the same finish/troubleshoot UX with extra diagnostics). Agent pairing remains a secondary path on the same page; admin wizard keeps org-wide options and public URL override.
 * Backlog **NF-004**: ChatGPT MCP App (Developer Mode / Workspace) for normal-chat tools — separate from Custom GPT Actions and `/ai-discover` (`NEXT_FEATURES.md`).
 * Backlog **NF-002**: Dokploy Compose one-shot bootstrap admin seed after migrate (`NEXT_FEATURES.md`, `DOKPLOY.md` follow-ups).

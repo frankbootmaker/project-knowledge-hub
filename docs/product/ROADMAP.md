@@ -35,7 +35,7 @@ Post-milestone ideas (including Doc Factory) live in [`NEXT_FEATURES.md`](NEXT_F
 
 ## Next features
 
-See [`NEXT_FEATURES.md`](NEXT_FEATURES.md). Doc Factory (NF-001) is **parked** pending a more precise module description.
+See [`NEXT_FEATURES.md`](NEXT_FEATURES.md). Doc Factory (NF-001) is **parked** pending a more precise module description. Ops / backup / blob storage (**NF-005**–**NF-009**, including Azure Blob and OneDrive/SharePoint) is outlined in [`docs/deployment/OPERATIONS.md`](../deployment/OPERATIONS.md).
 
 ## Explicitly deferred until after MVP
 
