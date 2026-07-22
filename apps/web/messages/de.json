@@ -486,6 +486,7 @@
     "createTitle": "Projekt erstellen",
     "creating": "Wird erstellt…",
     "createButton": "Projekt erstellen",
+    "backToWorkspace": "Zurück zum Workspace",
     "failedCreate": "Projekt konnte nicht erstellt werden",
     "failedUpdate": "Projekt konnte nicht aktualisiert werden",
     "updated": "Projekt aktualisiert.",
@@ -517,6 +518,7 @@
     "createTitle": "System erstellen",
     "creating": "Wird erstellt…",
     "createButton": "System erstellen",
+    "backToWorkspace": "Zurück zum Workspace",
     "failedCreate": "System konnte nicht erstellt werden",
     "failedUpdate": "System konnte nicht aktualisiert werden",
     "updated": "System aktualisiert.",
@@ -549,6 +551,7 @@
   "records": {
     "createTitle": "Wissenseintrag erstellen",
     "editTitle": "Wissenseintrag bearbeiten",
+    "backToWorkspace": "Zurück zum Workspace",
     "failedSave": "Wissenseintrag konnte nicht gespeichert werden",
     "recordType": "Eintragstyp",
     "lifecycleStatus": "Lebenszyklusstatus",

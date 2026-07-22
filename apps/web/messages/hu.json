@@ -486,6 +486,7 @@
     "createTitle": "Projekt létrehozása",
     "creating": "Létrehozás…",
     "createButton": "Projekt létrehozása",
+    "backToWorkspace": "Vissza a munkaterülethez",
     "failedCreate": "Nem sikerült létrehozni a projektet",
     "failedUpdate": "Nem sikerült frissíteni a projektet",
     "updated": "Projekt frissítve.",
@@ -515,6 +516,7 @@
     "createTitle": "Rendszer létrehozása",
     "creating": "Létrehozás…",
     "createButton": "Rendszer létrehozása",
+    "backToWorkspace": "Vissza a munkaterülethez",
     "failedCreate": "Nem sikerült létrehozni a rendszert",
     "failedUpdate": "Nem sikerült frissíteni a rendszert",
     "updated": "Rendszer frissítve.",
@@ -547,6 +549,7 @@
   "records": {
     "createTitle": "Tudásbejegyzés létrehozása",
     "editTitle": "Tudásbejegyzés szerkesztése",
+    "backToWorkspace": "Vissza a munkaterülethez",
     "failedSave": "Nem sikerült menteni a tudásbejegyzést",
     "recordType": "Bejegyzéstípus",
     "lifecycleStatus": "Életciklus-állapot",

@@ -486,6 +486,7 @@
     "createTitle": "Create project",
     "creating": "Creating…",
     "createButton": "Create project",
+    "backToWorkspace": "Back to workspace",
     "failedCreate": "Failed to create project",
     "failedUpdate": "Failed to update project",
     "updated": "Project updated.",
@@ -517,6 +518,7 @@
     "createTitle": "Create system",
     "creating": "Creating…",
     "createButton": "Create system",
+    "backToWorkspace": "Back to workspace",
     "failedCreate": "Failed to create system",
     "failedUpdate": "Failed to update system",
     "updated": "System updated.",
@@ -549,6 +551,7 @@
   "records": {
     "createTitle": "Create knowledge record",
     "editTitle": "Edit knowledge record",
+    "backToWorkspace": "Back to workspace",
     "failedSave": "Failed to save knowledge record",
     "recordType": "Record type",
     "lifecycleStatus": "Lifecycle status",

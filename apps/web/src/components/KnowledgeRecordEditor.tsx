@@ -2,6 +2,7 @@
 
 import type { FormEvent } from 'react';
 import { useEffect, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -205,7 +206,16 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
     void save();
   }
 
+  function handleCancel() {
+    if (props.onCancel) {
+      props.onCancel();
+      return;
+    }
+    router.push(`/workspaces/${props.workspaceSlug}`);
+  }
+
   const gitManaged = props.initial?.sourceOfTruthMode === 'git_managed';
+  const showCancel = Boolean(props.onCancel) || layout === 'page';
   const previewMinClass = layout === 'modal' ? 'min-h-[min(50vh,28rem)]' : 'min-h-[420px]';
   const textareaRows = layout === 'modal' ? 18 : 22;
 
@@ -369,8 +379,8 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
       {error ? <ErrorText>{error}</ErrorText> : null}
 
       <div className="flex flex-wrap gap-2">
-        {props.onCancel ? (
-          <Button type="button" variant="secondary" disabled={pending} onClick={props.onCancel}>
+        {showCancel ? (
+          <Button type="button" variant="secondary" disabled={pending} onClick={handleCancel}>
             {tCommon('cancel')}
           </Button>
         ) : null}
@@ -420,6 +430,14 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
   return (
     <Page viewport>
       <PageHeader title={props.mode === 'create' ? t('createTitle') : t('editTitle')} />
+      <p className="mt-0 mb-6">
+        <Link
+          href={`/workspaces/${props.workspaceSlug}`}
+          className="text-sm text-ink-muted no-underline hover:text-ink"
+        >
+          {t('backToWorkspace')}
+        </Link>
+      </p>
       {form}
     </Page>
   );

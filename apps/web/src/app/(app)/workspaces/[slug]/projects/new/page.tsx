@@ -2,6 +2,7 @@
 
 import type { FormEvent } from 'react';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -82,6 +83,14 @@ export default function NewProjectPage() {
   return (
     <Page narrow>
       <PageHeader title={t('createTitle')} />
+      <p className="mt-0 mb-6">
+        <Link
+          href={`/workspaces/${workspaceSlug}`}
+          className="text-sm text-ink-muted no-underline hover:text-ink"
+        >
+          {t('backToWorkspace')}
+        </Link>
+      </p>
       <Panel>
         <form onSubmit={onSubmit} className="grid gap-4">
           <Field label={tCommon('name')}>
