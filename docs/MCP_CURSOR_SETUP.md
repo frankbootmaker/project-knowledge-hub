@@ -1,8 +1,11 @@
 # LLM / MCP client setup
 
-For a guided in-app flow (platform checks → client → connection tests → client schemas), open **Admin → LLM / MCP setup** at `/admin/mcp-setup` while signed in as a system administrator.
+For a guided in-app flow (platform checks → client → connection tests → client schemas):
 
-The wizard’s final step exports configs for **Cursor**, **ChatGPT** (OpenAPI Actions), **Antigravity CLI** (`agy`, consumer Google AI), **Gemini API** / enterprise Gemini CLI, **Microsoft Copilot Studio** (Swagger 2.0 MCP streamable), and **OpenWebUI** (native MCP or OpenAPI).
+* **Members:** Account → **AI connections** at `/account/ai-connections` (create a client for your workspaces, test, copy schemas).
+* **System admins:** Admin → **LLM / MCP setup** at `/admin/mcp-setup` (org-wide options, public MCP URL override, acting-as-another-user).
+
+The wizard’s final step exports configs for **Cursor**, **ChatGPT** (OpenAPI Actions), **Claude** (Desktop / Code / claude.ai remote MCP), **Antigravity CLI** (`agy`, consumer Google AI), **Gemini API** / enterprise Gemini CLI, **Microsoft Copilot Studio** (Swagger 2.0 MCP streamable), and **OpenWebUI** (native MCP or OpenAPI).
 
 The Cursor config URL defaults to `{WEB_URL}/mcp` (same-origin via the web reverse rewrite). For a different public host, set optional env `MCP_PUBLIC_URL`, or save a **public MCP URL override** in the wizard (stored in platform settings). Connection tests still use the internal `API_URL`. Never advertise internal Compose hosts (e.g. `http://api:3101`) to external LLM clients.
 
@@ -91,8 +94,11 @@ Tool names match MCP (`search_knowledge`, `get_knowledge_record`, …). The Open
 
 ChatGPT’s normal client does **not** use MCP. Wire Knowledge Hub as a **Custom GPT → Action** (Plus / Team / Enterprise). Verified on the Dokploy Dev host with both read and write (`knowledge:write`) creating draft knowledge records.
 
-1. **Token** — Admin → **LLM / MCP setup** (`/admin/mcp-setup`): create a client (include `knowledge:write`, `actingUserId`, and workspace allowlist if the GPT should create/update drafts), copy the bearer token once.  
-   Or Account → **Connect AI** pairing flow, then approve the pending client.
+**User FAQ (setup, how to work, moving older chats into the hub):**  
+[`docs/product/CHATGPT_CUSTOM_GPT_FAQ.md`](product/CHATGPT_CUSTOM_GPT_FAQ.md) — keep the Custom GPT path for now; normal-chat `@` / MCP App is backlog NF-004.
+
+1. **Token** — Account → **AI connections** (`/account/ai-connections`): setup wizard → ChatGPT → create client (include `knowledge:write` if the GPT should create/update drafts). Copy the bearer token once.  
+   System admins may instead use Admin → **LLM / MCP setup** (`/admin/mcp-setup`). Pairing under AI connections remains optional for agents that speak `/ai-discover`.
 2. **Create a GPT** — ChatGPT → Explore GPTs → **Create** → **Configure** → **Actions** → **Create new action**.
 3. **Import schema** — **Import from URL**:
    ```text
@@ -102,7 +108,7 @@ ChatGPT’s normal client does **not** use MCP. Wire Knowledge Hub as a **Custom
    The document must advertise the public HTTPS origin (not `http://api:3101`). Response schemas use `components.schemas.ToolResult` with explicit `properties` so ChatGPT’s Actions validator accepts the import.
 4. **Authentication** — API Key, auth type **Bearer**, paste the hub token (no `Bearer ` prefix; ChatGPT adds it).
 5. **Instructions** (optional) — e.g. search Knowledge Hub before answering; create/update only as drafts when write is enabled.
-6. **Save** the GPT and chat **in that Custom GPT** (not the default ChatGPT thread).
+6. **Save** the GPT and chat **in that Custom GPT** (not the default ChatGPT thread, and not via `@` mention alone).
 
 Humans use the web UI; Cursor, Antigravity CLI (`agy`), and other MCP clients use `/mcp`; ChatGPT uses the same ledger via OpenAPI Actions — one shared knowledge base across systems.
 

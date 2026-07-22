@@ -32,6 +32,13 @@ type System = {
   status: string;
   projectId: string | null;
 };
+type KnowledgeRecordSummary = {
+  id: string;
+  title: string;
+  slug: string;
+  recordType: string;
+  lifecycleStatus: string;
+};
 
 export default async function ProjectDetailPage({
   params,
@@ -89,11 +96,18 @@ export default async function ProjectDetailPage({
         membership.role === 'workspace_admin',
     );
 
-  const systemsResponse = await apiFetch(
-    `/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`,
-  );
+  const [systemsResponse, recordsResponse] = await Promise.all([
+    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
+    apiFetch(
+      `/api/v1/knowledge-records?workspaceId=${workspace.id}&projectId=${project.id}`,
+    ),
+  ]);
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
+    : [];
+  const knowledgeRecords = recordsResponse.ok
+    ? ((await recordsResponse.json()) as { knowledgeRecords: KnowledgeRecordSummary[] })
+        .knowledgeRecords
     : [];
 
   return (
@@ -157,6 +171,29 @@ export default async function ProjectDetailPage({
           ))}
           {systems.length === 0 ? (
             <li className="kh-muted list-none">{t('noLinkedSystems')}</li>
+          ) : null}
+        </ul>
+      </section>
+
+      <section className="mt-8">
+        <SectionHeader title={t('linkedKnowledge')} />
+        <ul className="m-0 grid list-none gap-3 p-0">
+          {knowledgeRecords.map((record) => (
+            <ListCard key={record.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/workspaces/${workspace.slug}/records/${record.slug}`}
+                  className="font-semibold no-underline"
+                >
+                  {record.title}
+                </Link>
+                <Badge tone="brand">{record.recordType}</Badge>
+                <Badge>{record.lifecycleStatus}</Badge>
+              </div>
+            </ListCard>
+          ))}
+          {knowledgeRecords.length === 0 ? (
+            <li className="kh-muted list-none">{t('noLinkedKnowledge')}</li>
           ) : null}
         </ul>
       </section>

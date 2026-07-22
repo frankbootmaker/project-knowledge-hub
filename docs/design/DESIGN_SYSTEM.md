@@ -158,10 +158,15 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-07-22
+
+* **Markdown TOC + editor width** — Contents starts collapsed (Show/Hide); section branches expand on click; TOC uses `scrollIntoView` with heading `scroll-margin-top`. Knowledge editor uses `Page viewport` / Modal `xl` (~90vw). Project detail lists linked knowledge records beside linked systems.
+* **User MCP setup wizard** — Account → AI connections leads with a guided setup (`UserMcpSetupWizard`): preflight → configure → create → test → schema → **done**. Shared pieces live under `components/mcp-setup/` (schemas, LLM picker, status rows, finish panel, connection troubleshooting). Agent pairing requests stay as a secondary section on the same page. Admin wizard shares Finish + troubleshooting (with extra diagnostics).
+
 ### 2026-07-21
 
 * **Import type picker** — “New import” opens a modal (paste chat available; documents and images marked coming soon), shared on the workspace catalogue and imports list.
-* **Workspace catalogue sections** — Projects, systems, and knowledge records each use `FunctionHeader` (search, status/lifecycle filter, page size) plus client pagination; create CTAs are `LinkButton`s (not text links).
+* **Workspace catalogue sections** — Projects, systems, and knowledge records each use `FunctionHeader` with search/filters collapsed behind a toggle icon (left of the create `LinkButton`); status/lifecycle filter, page size, and client pagination stay available when expanded.
 
 ### 2026-07-20
 

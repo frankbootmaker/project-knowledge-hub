@@ -94,10 +94,11 @@ export async function renderMarkdown(markdown: string): Promise<RenderedMarkdown
     .use(rehypeSlug)
     .use(rehypeMermaidBlocks)
     .use(rehypeHighlight, { detect: false, ignoreMissing: true })
+    .use(rehypeSanitize, knowledgeSanitizeSchema)
+    // After sanitize: ids may be prefixed (e.g. user-content-); TOC must match HTML.
     .use(() => (tree: Root) => {
       toc = collectToc(tree);
     })
-    .use(rehypeSanitize, knowledgeSanitizeSchema)
     .use(rehypeStringify)
     .process(markdown);
 

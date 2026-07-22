@@ -52,5 +52,8 @@ graph TD
 `);
     expect(result.toc.map((item) => item.text)).toEqual(['One', 'Two', 'Three']);
     expect(result.toc.every((item) => item.id.length > 0)).toBe(true);
+    for (const item of result.toc) {
+      expect(result.html).toContain(`id="${item.id}"`);
+    }
   });
 });

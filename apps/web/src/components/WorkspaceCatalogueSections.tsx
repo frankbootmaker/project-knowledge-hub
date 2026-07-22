@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { cn } from '../lib/cn';
 import {
   Badge,
   Button,
@@ -17,6 +18,24 @@ import { ImportTypePickerButton } from './ImportTypePickerButton';
 
 const DEFAULT_PAGE_SIZE = 5;
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
+
+function FilterToggleIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className="size-4 shrink-0"
+      fill="none"
+    >
+      <path
+        d="M4 6h16M7 12h10M10 18h4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 export type CatalogueListItem = {
   id: string;
@@ -54,6 +73,8 @@ function CatalogueSection({
   canCreate: boolean;
 }) {
   const t = useTranslations('workspaces');
+  const controlsId = useId();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterValue, setFilterValue] = useState('all');
   const [page, setPage] = useState(1);
@@ -84,6 +105,10 @@ function CatalogueSection({
   const pageItems = filtered.slice(pageStart, pageStart + pageSize);
   const rangeFrom = filtered.length === 0 ? 0 : pageStart + 1;
   const rangeTo = Math.min(pageStart + pageSize, filtered.length);
+  const filtersActive =
+    searchQuery.trim() !== '' ||
+    filterValue !== 'all' ||
+    pageSize !== DEFAULT_PAGE_SIZE;
 
   function updateSearch(value: string) {
     setSearchQuery(value);
@@ -106,45 +131,74 @@ function CatalogueSection({
       <FunctionHeader
         className="mb-3"
         search={
-          <Input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => updateSearch(e.target.value)}
-            placeholder={searchPlaceholder}
-            aria-label={searchPlaceholder}
-          />
+          filtersOpen ? (
+            <Input
+              id={`${controlsId}-search`}
+              type="search"
+              value={searchQuery}
+              onChange={(e) => updateSearch(e.target.value)}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+            />
+          ) : undefined
         }
         filters={
-          <>
-            <Select
-              value={filterValue}
-              onChange={(e) => updateFilter(e.target.value)}
-              aria-label={filterLabel}
-            >
-              <option value="all">{filterAllLabel}</option>
-              {filterOptions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={String(pageSize)}
-              onChange={(e) => updatePageSize(Number(e.target.value))}
-              aria-label={t('sectionPageSize')}
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {t('sectionPageSizeOption', { count: size })}
-                </option>
-              ))}
-            </Select>
-          </>
+          filtersOpen ? (
+            <div id={controlsId} className="contents">
+              <Select
+                value={filterValue}
+                onChange={(e) => updateFilter(e.target.value)}
+                aria-label={filterLabel}
+              >
+                <option value="all">{filterAllLabel}</option>
+                {filterOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                value={String(pageSize)}
+                onChange={(e) => updatePageSize(Number(e.target.value))}
+                aria-label={t('sectionPageSize')}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {t('sectionPageSizeOption', { count: size })}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : undefined
         }
         actions={
-          canCreate ? (
-            <LinkButton href={createHref}>{createLabel}</LinkButton>
-          ) : null
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              className={cn(
+                'relative size-[2.0475rem] shrink-0 px-0 py-0',
+                filtersOpen && 'ring-2 ring-brand/35',
+              )}
+              aria-expanded={filtersOpen}
+              aria-controls={filtersOpen ? controlsId : undefined}
+              aria-label={
+                filtersOpen ? t('sectionHideFilters') : t('sectionShowFilters')
+              }
+              onClick={() => setFiltersOpen((open) => !open)}
+            >
+              <FilterToggleIcon />
+              {filtersActive ? (
+                <span
+                  className="absolute top-1 right-1 size-1.5 rounded-full bg-brand"
+                  aria-hidden
+                />
+              ) : null}
+            </Button>
+            {canCreate ? (
+              <LinkButton href={createHref}>{createLabel}</LinkButton>
+            ) : null}
+          </>
         }
       />
 

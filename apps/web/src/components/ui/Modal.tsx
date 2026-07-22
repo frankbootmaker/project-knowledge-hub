@@ -18,8 +18,8 @@ type Props = {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  /** Wider sheet for denser forms (e.g. API client scopes). */
-  size?: 'md' | 'lg';
+  /** Wider sheet for denser forms (e.g. API client scopes). `xl` ≈ 90vw editor. */
+  size?: 'md' | 'lg' | 'xl';
   /** When false, backdrop click does not close (Esc still does). Default true. */
   closeOnBackdrop?: boolean;
 };
@@ -120,7 +120,11 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className={cn('kh-modal-panel', size === 'lg' && 'kh-modal-panel-lg')}
+        className={cn(
+          'kh-modal-panel',
+          size === 'lg' && 'kh-modal-panel-lg',
+          size === 'xl' && 'kh-modal-panel-xl',
+        )}
       >
         <div className="kh-modal-header">
           <div className="min-w-0">

@@ -50,10 +50,10 @@ export default async function NewConversationImportPage({
       <PageHeader title={t('createTitle')} description={t('createHelp')} />
       <p className="mt-0 mb-6">
         <Link
-          href={`/workspaces/${workspace.slug}/imports`}
+          href={`/workspaces/${workspace.slug}`}
           className="text-sm text-ink-muted no-underline hover:text-ink"
         >
-          {t('backToList')}
+          {t('backToWorkspace')}
         </Link>
       </p>
       <ConversationImportForm

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { KnowledgeRecordManageMenu } from '../../../../../../components/KnowledgeRecordManageMenu';
+import { KnowledgeRecordDetailActions } from '../../../../../../components/KnowledgeRecordDetailActions';
+import { KnowledgeRecordMoreDetails } from '../../../../../../components/KnowledgeRecordMoreDetails';
 import { MarkdownDocument } from '../../../../../../components/MarkdownDocument';
 import { RecordLifecycleActions } from '../../../../../../components/RecordLifecycleActions';
 import {
@@ -26,6 +27,7 @@ type KnowledgeRecord = {
   lifecycleStatus: string;
   sourceOfTruthMode: string;
   currentVersionNumber: number;
+  contentMarkdown: string;
   contentHtml?: string;
   toc?: Array<{ id: string; text: string; depth: number }>;
   projectId: string | null;
@@ -139,39 +141,48 @@ export default async function KnowledgeRecordDetailPage({
         title={record.title}
         description={`${record.slug} · ${record.recordType}`}
         actions={
-          <KnowledgeRecordManageMenu
+          <KnowledgeRecordDetailActions
             workspaceSlug={workspace.slug}
-            record={record}
+            workspaceId={workspace.id}
+            record={{
+              id: record.id,
+              title: record.title,
+              slug: record.slug,
+              summary: record.summary,
+              recordType: record.recordType,
+              lifecycleStatus: record.lifecycleStatus,
+              sourceOfTruthMode: record.sourceOfTruthMode,
+              currentVersionNumber: record.currentVersionNumber,
+              updatedAt: record.updatedAt,
+              archivedAt: record.archivedAt,
+              tags: record.tags,
+              projectName: project?.name ?? null,
+              systemName: system?.name ?? null,
+              verifiedAt: record.verifiedAt,
+              reviewedBy: record.reviewedBy,
+              lastValidatedAt: record.lastValidatedAt,
+              source: record.source,
+            }}
+            editorInitial={{
+              id: record.id,
+              title: record.title,
+              summary: record.summary,
+              recordType: record.recordType,
+              lifecycleStatus: record.lifecycleStatus,
+              sourceOfTruthMode: record.sourceOfTruthMode,
+              contentMarkdown: record.contentMarkdown,
+              projectId: record.projectId,
+              systemId: record.systemId,
+              tags: record.tags,
+              source: record.source,
+            }}
+            projects={projects}
+            systems={systems}
             canMutate={canMutate}
             canPurge={canPurge}
           />
         }
       />
-
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Badge tone={lifecycleTone(record.lifecycleStatus)}>
-          {record.lifecycleStatus}
-        </Badge>
-        <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
-        {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
-        <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
-        {canMutate && !isArchived && !gitManaged ? (
-          <RecordLifecycleActions
-            recordId={record.id}
-            lifecycleStatus={record.lifecycleStatus}
-          />
-        ) : null}
-        {gitManaged && record.source?.sourceUri ? (
-          <a
-            href={record.source.sourceUri}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
-          >
-            {t('viewOnGitHub')}
-          </a>
-        ) : null}
-      </div>
 
       {record.lifecycleStatus === 'superseded' ? (
         <p className="mb-4 rounded-md border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
@@ -179,68 +190,87 @@ export default async function KnowledgeRecordDetailPage({
         </p>
       ) : null}
 
-      <Panel className="mb-4 grid gap-2">
-        <p className="m-0">{record.summary || tCommon('noSummary')}</p>
-        {project ? (
-          <p className="m-0 text-sm text-ink-muted">
-            {tCommon('project')}:{' '}
-            <Link
-              href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
-              className="text-brand no-underline hover:text-brand-hover"
-            >
-              {project.name}
-            </Link>
-          </p>
-        ) : null}
-        {system ? (
-          <p className="m-0 text-sm text-ink-muted">
-            {tCommon('system')}:{' '}
-            <Link
-              href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
-              className="text-brand no-underline hover:text-brand-hover"
-            >
-              {system.name}
-            </Link>
-          </p>
-        ) : null}
-        {record.tags.length > 0 ? (
-          <p className="m-0 text-xs text-ink-muted">
-            {tCommon('tagsList', { tags: record.tags.map((tag) => tag.name).join(', ') })}
-          </p>
-        ) : null}
-      </Panel>
-
-      <Panel className="mb-6">
-        <h2 className="mt-0 mb-3 text-base font-semibold">{t('sourceAndVerification')}</h2>
-        <dl className="m-0 grid grid-cols-[160px_1fr] gap-x-3 gap-y-1.5">
-          <dt className="text-ink-muted">{t('sourceType')}</dt>
-          <dd className="m-0">{record.source?.sourceType ?? dash}</dd>
-          <dt className="text-ink-muted">{t('sourceTitle')}</dt>
-          <dd className="m-0">{record.source?.sourceTitle ?? dash}</dd>
-          <dt className="text-ink-muted">{t('provider')}</dt>
-          <dd className="m-0">{record.source?.sourceProvider ?? dash}</dd>
-          <dt className="text-ink-muted">{t('reference')}</dt>
-          <dd className="m-0">{record.source?.sourceReference ?? dash}</dd>
-          <dt className="text-ink-muted">{t('uri')}</dt>
-          <dd className="m-0">
-            {record.source?.sourceUri ? (
+      <KnowledgeRecordMoreDetails
+        leading={
+          <>
+            <Badge tone={lifecycleTone(record.lifecycleStatus)}>
+              {record.lifecycleStatus}
+            </Badge>
+            <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
+            {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
+            <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
+            {canMutate && !isArchived && !gitManaged ? (
+              <RecordLifecycleActions
+                recordId={record.id}
+                lifecycleStatus={record.lifecycleStatus}
+              />
+            ) : null}
+            {gitManaged && record.source?.sourceUri ? (
+              <a
+                href={record.source.sourceUri}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
+              >
+                {t('viewOnGitHub')}
+              </a>
+            ) : null}
+          </>
+        }
+        summary={<p className="m-0">{record.summary || tCommon('noSummary')}</p>}
+        links={
+          <>
+            {project ? (
+              <p className="m-0 text-ink-muted">
+                {tCommon('project')}:{' '}
+                <Link
+                  href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
+                  className="text-brand no-underline hover:text-brand-hover"
+                >
+                  {project.name}
+                </Link>
+              </p>
+            ) : null}
+            {system ? (
+              <p className="m-0 text-ink-muted">
+                {tCommon('system')}:{' '}
+                <Link
+                  href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
+                  className="text-brand no-underline hover:text-brand-hover"
+                >
+                  {system.name}
+                </Link>
+              </p>
+            ) : null}
+            {record.tags.length > 0 ? (
+              <p className="m-0 text-xs text-ink-muted">
+                {tCommon('tagsList', {
+                  tags: record.tags.map((tag) => tag.name).join(', '),
+                })}
+              </p>
+            ) : null}
+          </>
+        }
+        sourceRows={[
+          { label: t('sourceType'), value: record.source?.sourceType ?? dash },
+          { label: t('sourceTitle'), value: record.source?.sourceTitle ?? dash },
+          { label: t('provider'), value: record.source?.sourceProvider ?? dash },
+          { label: t('reference'), value: record.source?.sourceReference ?? dash },
+          {
+            label: t('uri'),
+            value: record.source?.sourceUri ? (
               <a href={record.source.sourceUri}>{record.source.sourceUri}</a>
             ) : (
               dash
-            )}
-          </dd>
-          <dt className="text-ink-muted">{t('model')}</dt>
-          <dd className="m-0">{record.source?.generatedByModel ?? dash}</dd>
-          <dt className="text-ink-muted">{t('verifiedAt')}</dt>
-          <dd className="m-0">{record.verifiedAt ?? dash}</dd>
-          <dt className="text-ink-muted">{t('reviewedBy')}</dt>
-          <dd className="m-0">{record.reviewedBy ?? dash}</dd>
-          <dt className="text-ink-muted">{t('lastValidated')}</dt>
-          <dd className="m-0">{record.lastValidatedAt ?? dash}</dd>
-          <dt className="text-ink-muted">{tCommon('updated')}</dt>
-          <dd className="m-0">{record.updatedAt}</dd>
-        </dl>
-      </Panel>
+            ),
+          },
+          { label: t('model'), value: record.source?.generatedByModel ?? dash },
+          { label: t('verifiedAt'), value: record.verifiedAt ?? dash },
+          { label: t('reviewedBy'), value: record.reviewedBy ?? dash },
+          { label: t('lastValidated'), value: record.lastValidatedAt ?? dash },
+          { label: tCommon('updated'), value: record.updatedAt },
+        ]}
+      />
 
       <Panel>
         <MarkdownDocument html={record.contentHtml ?? ''} toc={record.toc ?? []} />

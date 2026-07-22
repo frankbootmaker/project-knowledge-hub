@@ -14,6 +14,7 @@ import {
   DEFAULT_MCP_SCOPES,
   buildAntigravityMcpConfig,
   buildChatGptActionsMeta,
+  buildClaudeMcpConfig,
   buildCursorMcpConfig,
   buildGeminiMcpConfig,
   buildOpenWebUiMcpConfig,
@@ -307,6 +308,8 @@ export async function claimAiDiscoverRequest(
       string,
       unknown
     >;
+  } else if (agentLabel.includes('claude') || agentLabel.includes('anthropic')) {
+    suggestedConfig = buildClaudeMcpConfig(schemaOptions);
   } else if (
     agentLabel.includes('antigravity') ||
     agentLabel.includes('agy')
@@ -380,7 +383,7 @@ export async function buildAiDiscoverDocument(
       pairingCode: 'string (from user)',
       name: 'string (agent / connection label)',
       description: 'optional string',
-      agentLabel: 'optional: cursor | chatgpt | antigravity | gemini | openwebui | …',
+      agentLabel: 'optional: cursor | chatgpt | claude | antigravity | gemini | openwebui | …',
       requestWrite: 'optional boolean — requests knowledge:write (still needs approval + workspaces)',
     },
   };

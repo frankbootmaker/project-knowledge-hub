@@ -124,7 +124,7 @@ Content-Type: application/json
             {`GET ${claimOrPollUrl}`}
           </pre>
           <p className="m-0 text-xs text-ink-muted">
-            agentLabel examples: cursor | chatgpt | antigravity | gemini | openwebui
+            agentLabel examples: cursor | chatgpt | claude | antigravity | gemini | openwebui
           </p>
         </Panel>
 

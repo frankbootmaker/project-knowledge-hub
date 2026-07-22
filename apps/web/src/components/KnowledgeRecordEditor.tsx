@@ -2,6 +2,7 @@
 
 import type { FormEvent } from 'react';
 import { useEffect, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -25,38 +26,45 @@ import {
 
 type Option = { id: string; name: string; slug: string };
 
+export type KnowledgeRecordEditorInitial = {
+  id: string;
+  title: string;
+  summary: string | null;
+  recordType: string;
+  lifecycleStatus: string;
+  sourceOfTruthMode: string;
+  contentMarkdown: string;
+  projectId: string | null;
+  systemId: string | null;
+  tags: Array<{ name: string }>;
+  source: {
+    sourceType: string;
+    sourceProvider: string | null;
+    sourceReference: string | null;
+    sourceTitle: string | null;
+    sourceUri: string | null;
+    generatedByModel: string | null;
+  } | null;
+};
+
 export type KnowledgeRecordEditorProps = {
   mode: 'create' | 'edit';
   workspaceSlug: string;
   workspaceId: string;
   projects: Option[];
   systems: Option[];
-  initial?: {
-    id: string;
-    title: string;
-    summary: string | null;
-    recordType: string;
-    lifecycleStatus: string;
-    sourceOfTruthMode: string;
-    contentMarkdown: string;
-    projectId: string | null;
-    systemId: string | null;
-    tags: Array<{ name: string }>;
-    source: {
-      sourceType: string;
-      sourceProvider: string | null;
-      sourceReference: string | null;
-      sourceTitle: string | null;
-      sourceUri: string | null;
-      generatedByModel: string | null;
-    } | null;
-  };
+  initial?: KnowledgeRecordEditorInitial;
+  /** `page` = full route shell; `modal` = content only for Modal xl. */
+  layout?: 'page' | 'modal';
+  onCancel?: () => void;
+  onSaved?: (slug: string) => void;
 };
 
 export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
   const router = useRouter();
   const t = useTranslations('records');
   const tCommon = useTranslations('common');
+  const layout = props.layout ?? 'page';
   const [title, setTitle] = useState(props.initial?.title ?? '');
   const [summary, setSummary] = useState(props.initial?.summary ?? '');
   const [recordType, setRecordType] = useState(props.initial?.recordType ?? 'deployment-guide');
@@ -178,10 +186,14 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failedSave'));
       }
-      router.push(
-        `/workspaces/${props.workspaceSlug}/records/${payload.knowledgeRecord?.slug ?? ''}`,
-      );
-      router.refresh();
+      const slug = payload.knowledgeRecord?.slug ?? '';
+      if (props.onSaved) {
+        props.onSaved(slug);
+        router.refresh();
+      } else {
+        router.push(`/workspaces/${props.workspaceSlug}/records/${slug}`);
+        router.refresh();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedSave'));
     } finally {
@@ -194,205 +206,239 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
     void save();
   }
 
-  const gitManaged = props.initial?.sourceOfTruthMode === 'git_managed';
+  function handleCancel() {
+    if (props.onCancel) {
+      props.onCancel();
+      return;
+    }
+    router.push(`/workspaces/${props.workspaceSlug}`);
+  }
 
-  return (
-    <Page wide>
-      <PageHeader title={props.mode === 'create' ? t('createTitle') : t('editTitle')} />
+  const gitManaged = props.initial?.sourceOfTruthMode === 'git_managed';
+  const showCancel = Boolean(props.onCancel) || layout === 'page';
+  const previewMinClass = layout === 'modal' ? 'min-h-[min(50vh,28rem)]' : 'min-h-[420px]';
+  const textareaRows = layout === 'modal' ? 18 : 22;
+
+  const form = (
+    <form onSubmit={onSubmit} className="grid gap-4">
       {gitManaged ? (
-        <Panel className="mb-4">
+        <Panel>
           <p className="m-0 text-sm text-ink-muted">{t('gitManagedReadOnly')}</p>
         </Panel>
       ) : null}
-      <form onSubmit={onSubmit} className="grid gap-4">
-        <Panel className="grid gap-4 sm:grid-cols-2">
-          <Field label={tCommon('title')}>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label={t('recordType')}>
-            <Select
-              value={recordType}
-              onChange={(e) => setRecordType(e.target.value)}
-            >
-              {RECORD_TYPE_CATALOG.map((entry) => (
-                <option key={entry.value} value={entry.value} title={entry.description}>
-                  {t(`typeLabels.${entry.value}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('lifecycleStatus')}>
-            <Select
-              value={lifecycleStatus}
-              onChange={(e) => setLifecycleStatus(e.target.value)}
-            >
-              {LIFECYCLE_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('sourceOfTruth')}>
-            <Select
-              value={sourceOfTruthMode}
-              onChange={(e) => setSourceOfTruthMode(e.target.value)}
-            >
-              {SOURCE_OF_TRUTH_MODES.map((mode) => (
-                <option key={mode} value={mode}>
-                  {mode}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('projectOptional')}>
-            <Select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-            >
-              <option value="">{tCommon('none')}</option>
-              {props.projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('systemOptional')}>
-            <Select
-              value={systemId}
-              onChange={(e) => setSystemId(e.target.value)}
-            >
-              <option value="">{tCommon('none')}</option>
-              {props.systems.map((system) => (
-                <option key={system.id} value={system.id}>
-                  {system.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={tCommon('summary')} className="sm:col-span-2">
-            <Input
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-            />
-          </Field>
-          <Field label={tCommon('tagsHint')} className="sm:col-span-2">
-            <Input value={tags} onChange={(e) => setTags(e.target.value)} />
-          </Field>
-        </Panel>
 
+      <Panel className="grid gap-4 sm:grid-cols-2">
+        <Field label={tCommon('title')}>
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            data-modal-initial-focus={layout === 'modal' ? true : undefined}
+          />
+        </Field>
+        <Field label={t('recordType')}>
+          <Select
+            value={recordType}
+            onChange={(e) => setRecordType(e.target.value)}
+          >
+            {RECORD_TYPE_CATALOG.map((entry) => (
+              <option key={entry.value} value={entry.value} title={entry.description}>
+                {t(`typeLabels.${entry.value}`)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('lifecycleStatus')}>
+          <Select
+            value={lifecycleStatus}
+            onChange={(e) => setLifecycleStatus(e.target.value)}
+          >
+            {LIFECYCLE_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('sourceOfTruth')}>
+          <Select
+            value={sourceOfTruthMode}
+            onChange={(e) => setSourceOfTruthMode(e.target.value)}
+          >
+            {SOURCE_OF_TRUTH_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('projectOptional')}>
+          <Select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+          >
+            <option value="">{tCommon('none')}</option>
+            {props.projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('systemOptional')}>
+          <Select
+            value={systemId}
+            onChange={(e) => setSystemId(e.target.value)}
+          >
+            <option value="">{tCommon('none')}</option>
+            {props.systems.map((system) => (
+              <option key={system.id} value={system.id}>
+                {system.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={tCommon('summary')} className="sm:col-span-2">
+          <Input
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+          />
+        </Field>
+        <Field label={tCommon('tagsHint')} className="sm:col-span-2">
+          <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+        </Field>
+      </Panel>
+
+      <Panel>
+        <h2 className="mt-0 mb-3 text-base font-semibold">{t('provenance')}</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={t('sourceTitle')}>
+            <Input
+              value={sourceTitle}
+              onChange={(e) => setSourceTitle(e.target.value)}
+            />
+          </Field>
+          <Field label={t('sourceProvider')}>
+            <Input
+              value={sourceProvider}
+              onChange={(e) => setSourceProvider(e.target.value)}
+            />
+          </Field>
+          <Field label={t('sourceReference')}>
+            <Input
+              value={sourceReference}
+              onChange={(e) => setSourceReference(e.target.value)}
+            />
+          </Field>
+          <Field label={t('sourceUri')}>
+            <Input
+              value={sourceUri}
+              onChange={(e) => setSourceUri(e.target.value)}
+            />
+          </Field>
+          <Field label={t('generatedByModel')} className="sm:col-span-2">
+            <Input
+              value={generatedByModel}
+              onChange={(e) => setGeneratedByModel(e.target.value)}
+            />
+          </Field>
+        </div>
+      </Panel>
+
+      {props.mode === 'edit' ? (
         <Panel>
-          <h2 className="mt-0 mb-3 text-base font-semibold">{t('provenance')}</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t('sourceTitle')}>
-              <Input
-                value={sourceTitle}
-                onChange={(e) => setSourceTitle(e.target.value)}
-              />
-            </Field>
-            <Field label={t('sourceProvider')}>
-              <Input
-                value={sourceProvider}
-                onChange={(e) => setSourceProvider(e.target.value)}
-              />
-            </Field>
-            <Field label={t('sourceReference')}>
-              <Input
-                value={sourceReference}
-                onChange={(e) => setSourceReference(e.target.value)}
-              />
-            </Field>
-            <Field label={t('sourceUri')}>
-              <Input
-                value={sourceUri}
-                onChange={(e) => setSourceUri(e.target.value)}
-              />
-            </Field>
-            <Field label={t('generatedByModel')} className="sm:col-span-2">
-              <Input
-                value={generatedByModel}
-                onChange={(e) => setGeneratedByModel(e.target.value)}
-              />
-            </Field>
-          </div>
-        </Panel>
-
-        {props.mode === 'edit' ? (
-          <Panel>
-            <Field label={t('changeMessage')}>
-              <Input
-                value={changeMessage}
-                onChange={(e) => setChangeMessage(e.target.value)}
-                placeholder={t('changeMessagePlaceholder')}
-              />
-            </Field>
-          </Panel>
-        ) : null}
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Field label={t('markdown')}>
-            <Textarea
-              value={contentMarkdown}
-              onChange={(e) => setContentMarkdown(e.target.value)}
-              rows={22}
-              className="min-h-[420px] font-mono text-sm"
+          <Field label={t('changeMessage')}>
+            <Input
+              value={changeMessage}
+              onChange={(e) => setChangeMessage(e.target.value)}
+              placeholder={t('changeMessagePlaceholder')}
             />
           </Field>
-          <div>
-            <p className="kh-label mb-2">
-              <span>{t('safePreview')}</span>
-            </p>
-            <Panel className="min-h-[420px] overflow-auto">
-              <MarkdownDocument html={previewHtml} toc={previewToc} />
-            </Panel>
-          </div>
-        </div>
+        </Panel>
+      ) : null}
 
-        {error ? <ErrorText>{error}</ErrorText> : null}
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending || gitManaged}
-            onClick={() => void save('draft')}
-          >
-            {t('saveDraft')}
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending || gitManaged}
-            onClick={() => void save('review_required')}
-          >
-            {t('markForReview')}
-          </Button>
-          <Button
-            type="button"
-            variant="success"
-            disabled={pending || gitManaged}
-            onClick={() => void save('verified')}
-          >
-            {t('markVerified')}
-          </Button>
-          <Button
-            type="button"
-            variant="success"
-            disabled={pending || gitManaged}
-            onClick={() => void save('current')}
-          >
-            {t('markCurrent')}
-          </Button>
-          <Button type="submit" disabled={pending}>
-            {pending ? tCommon('saving') : tCommon('save')}
-          </Button>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Field label={t('markdown')}>
+          <Textarea
+            value={contentMarkdown}
+            onChange={(e) => setContentMarkdown(e.target.value)}
+            rows={textareaRows}
+            className={`${previewMinClass} font-mono text-sm`}
+          />
+        </Field>
+        <div>
+          <p className="kh-label mb-2">
+            <span>{t('safePreview')}</span>
+          </p>
+          <Panel className={`${previewMinClass} overflow-auto`}>
+            <MarkdownDocument html={previewHtml} toc={previewToc} />
+          </Panel>
         </div>
-      </form>
+      </div>
+
+      {error ? <ErrorText>{error}</ErrorText> : null}
+
+      <div className="flex flex-wrap gap-2">
+        {showCancel ? (
+          <Button type="button" variant="secondary" disabled={pending} onClick={handleCancel}>
+            {tCommon('cancel')}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={pending || gitManaged}
+          onClick={() => void save('draft')}
+        >
+          {t('saveDraft')}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={pending || gitManaged}
+          onClick={() => void save('review_required')}
+        >
+          {t('markForReview')}
+        </Button>
+        <Button
+          type="button"
+          variant="success"
+          disabled={pending || gitManaged}
+          onClick={() => void save('verified')}
+        >
+          {t('markVerified')}
+        </Button>
+        <Button
+          type="button"
+          variant="success"
+          disabled={pending || gitManaged}
+          onClick={() => void save('current')}
+        >
+          {t('markCurrent')}
+        </Button>
+        <Button type="submit" disabled={pending}>
+          {pending ? tCommon('saving') : tCommon('save')}
+        </Button>
+      </div>
+    </form>
+  );
+
+  if (layout === 'modal') {
+    return form;
+  }
+
+  return (
+    <Page viewport>
+      <PageHeader title={props.mode === 'create' ? t('createTitle') : t('editTitle')} />
+      <p className="mt-0 mb-6">
+        <Link
+          href={`/workspaces/${props.workspaceSlug}`}
+          className="text-sm text-ink-muted no-underline hover:text-ink"
+        >
+          {t('backToWorkspace')}
+        </Link>
+      </p>
+      {form}
     </Page>
   );
 }

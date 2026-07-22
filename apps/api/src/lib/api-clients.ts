@@ -120,6 +120,60 @@ export function assertWriteClientConfig(input: {
   }
 }
 
+/**
+ * Ensure every workspace id is an active membership of the user and return
+ * the organization id (all workspaces must share one org).
+ */
+export async function assertUserMemberOfWorkspaces(
+  database: Database,
+  userId: string,
+  workspaceIds: string[],
+): Promise<{ organizationId: string }> {
+  if (workspaceIds.length === 0) {
+    throw new AppError({
+      code: 'WORKSPACE_ALLOWLIST_REQUIRED',
+      message: 'At least one workspace is required',
+      statusCode: 400,
+    });
+  }
+
+  const uniqueIds = [...new Set(workspaceIds)];
+  const rows = await database.db
+    .select({
+      workspaceId: workspaces.id,
+      organizationId: workspaces.organizationId,
+    })
+    .from(memberships)
+    .innerJoin(workspaces, eq(memberships.workspaceId, workspaces.id))
+    .where(
+      and(
+        eq(memberships.userId, userId),
+        isNull(workspaces.archivedAt),
+      ),
+    );
+
+  const byId = new Map(rows.map((row) => [row.workspaceId, row.organizationId]));
+  const missing = uniqueIds.filter((id) => !byId.has(id));
+  if (missing.length > 0) {
+    throw new AppError({
+      code: 'WORKSPACE_ACCESS_DENIED',
+      message: 'You must be a member of every workspace in the allowlist',
+      statusCode: 403,
+    });
+  }
+
+  const organizationIds = new Set(uniqueIds.map((id) => byId.get(id)!));
+  if (organizationIds.size !== 1) {
+    throw new AppError({
+      code: 'WORKSPACE_ORG_MISMATCH',
+      message: 'All workspaces must belong to the same organization',
+      statusCode: 400,
+    });
+  }
+
+  return { organizationId: [...organizationIds][0]! };
+}
+
 export async function approveApiClient(
   database: Database,
   input: {

@@ -3,6 +3,9 @@ import {
   apiBaseFromMcpUrl,
   buildAntigravityMcpConfig,
   buildAntigravitySetupSteps,
+  buildClaudeAiConnectorMeta,
+  buildClaudeMcpConfig,
+  buildClaudeSetupSteps,
   buildCopilotMcpSwagger,
   buildCursorMcpConfig,
   buildGeminiFunctionDeclarations,
@@ -92,6 +95,24 @@ describe('llm-client-schemas', () => {
     const steps = buildAntigravitySetupSteps(opts);
     expect(steps).toContain('Antigravity CLI');
     expect(steps).toContain('mcp-bearer-stdio-proxy.mjs');
+    expect(steps).toContain(opts.mcpUrl);
+  });
+
+  it('builds Claude MCP config and claude.ai connector meta', () => {
+    const config = buildClaudeMcpConfig(opts);
+    const server = (
+      config.mcpServers as Record<string, { url: string; headers: { Authorization: string } }>
+    )['project-knowledge-hub'];
+    expect(server.url).toBe(opts.mcpUrl);
+    expect(server.headers.Authorization).toBe(`Bearer ${opts.token}`);
+
+    const connector = buildClaudeAiConnectorMeta(opts);
+    expect(connector.remoteMcpUrl).toBe(opts.mcpUrl);
+    expect(connector.authorizationHeader).toBe(`Bearer ${opts.token}`);
+
+    const steps = buildClaudeSetupSteps(opts);
+    expect(steps).toContain('claude.ai');
+    expect(steps).toContain('Claude Code');
     expect(steps).toContain(opts.mcpUrl);
   });
 

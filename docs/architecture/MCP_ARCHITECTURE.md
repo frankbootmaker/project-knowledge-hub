@@ -13,9 +13,22 @@
 * Scopes + optional workspace/project allowlists
 * Optional `acting_user_id` (required for `knowledge:write`)
 
+## User setup wizard
+
+Signed-in members use **Account → AI connections** (`/account/ai-connections`):
+
+1. Preflight (`GET /api/v1/me/mcp/setup/preflight`) — health/ready + public MCP URL (no override).
+2. Create client (`POST /api/v1/me/api-clients`) for workspaces they belong to; write mode sets `actingUserId` to self.
+3. Optional connection test (`POST /api/v1/me/mcp/setup/test`).
+4. Copy client schemas (Cursor, ChatGPT, Claude, …) via shared `McpClientSchemas`.
+
+Rotate: `POST /api/v1/me/api-clients/:id/rotate` (owner only).
+
+System admins keep `/admin/mcp-setup` for org-wide create, public URL override, and acting-as-another-user.
+
 ## AI autodiscover (pairing)
 
-Agents can request an API client without an admin manually creating one first:
+Agents can request an API client without the user using the wizard create path:
 
 1. Active user mints a short-lived pairing code (`POST /api/v1/me/ai-pairing-codes`).
 2. Agent reads `GET /api/v1/ai-discover` (and the public web page `/ai-discover`).
@@ -24,6 +37,10 @@ Agents can request an API client without an admin manually creating one first:
 5. Agent polls `GET /api/v1/ai-discover/requests/:id?claimSecret=` and receives the bearer token once.
 
 Pending rows use `api_clients.status = pending_approval` with null token until approval. MCP auth only accepts `status = active`.
+
+This pairing protocol is **optional / advanced** — mainstream clients (Cursor, ChatGPT, OpenWebUI, …) should use the Account or Admin setup wizard and paste Bearer configs.
+
+**ChatGPT note:** Custom GPT **Actions** (OpenAPI + Bearer) work only inside that GPT. Normal-chat / `@` tool use needs a separate **ChatGPT MCP App** (see backlog **NF-004**). ChatGPT does not implement `/ai-discover` pairing; teaching it via GPT instructions or a Custom GPT Action wrapper is brittle and is not a substitute for NF-004.
 
 ## Scopes
 

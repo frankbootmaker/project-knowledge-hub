@@ -17,6 +17,7 @@
     "db:generate": "pnpm --filter @project-knowledge-hub/database generate",
     "db:migrate": "pnpm --filter @project-knowledge-hub/database migrate",
     "db:seed": "pnpm --filter @project-knowledge-hub/database seed",
+    "db:seed:demo": "pnpm --filter @project-knowledge-hub/database seed:demo",
     "db:studio": "pnpm --filter @project-knowledge-hub/database studio"
   },
   "devDependencies": {

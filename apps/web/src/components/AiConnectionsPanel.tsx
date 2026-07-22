@@ -11,6 +11,8 @@ import {
   Panel,
   useToast,
 } from './ui';
+import { UserMcpSetupWizard } from './mcp-setup';
+import { MCP_READ_SCOPES } from './mcp-setup/scopes';
 
 export type MyApiClient = {
   id: string;
@@ -26,14 +28,6 @@ export type MyApiClient = {
 };
 
 type WorkspaceOption = { id: string; name: string; slug: string };
-
-const READ_SCOPES = [
-  'projects:read',
-  'systems:read',
-  'knowledge:read',
-  'knowledge:search',
-  'provenance:read',
-] as const;
 
 export function AiConnectionsPanel({
   initialClients,
@@ -54,10 +48,11 @@ export function AiConnectionsPanel({
   const [apiDiscoverUrl, setApiDiscoverUrl] = useState<string | null>(null);
 
   const [approveClient, setApproveClient] = useState<MyApiClient | null>(null);
-  const [approveScopes, setApproveScopes] = useState<string[]>([...READ_SCOPES]);
+  const [approveScopes, setApproveScopes] = useState<string[]>([...MCP_READ_SCOPES]);
   const [approveWorkspaces, setApproveWorkspaces] = useState<string[]>([]);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [issuedClientName, setIssuedClientName] = useState<string | null>(null);
 
   const pendingClients = useMemo(
     () => initialClients.filter((client) => client.status === 'pending_approval'),
@@ -120,7 +115,7 @@ export function AiConnectionsPanel({
   function openApprove(client: MyApiClient) {
     setApproveClient(client);
     setApproveScopes(
-      client.scopes.length > 0 ? [...client.scopes] : [...READ_SCOPES],
+      client.scopes.length > 0 ? [...client.scopes] : [...MCP_READ_SCOPES],
     );
     setApproveWorkspaces([...client.allowedWorkspaceIds]);
     setApproveError(null);
@@ -148,12 +143,14 @@ export function AiConnectionsPanel({
       );
       const payload = (await response.json()) as {
         token?: string;
+        apiClient?: { name?: string };
         error?: { message?: string };
       };
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('approveFailed'));
       }
       setIssuedToken(payload.token ?? null);
+      setIssuedClientName(payload.apiClient?.name ?? approveClient?.name ?? null);
       setApproveClient(null);
       pushToast(t('toastApproved'));
       router.refresh();
@@ -227,7 +224,23 @@ export function AiConnectionsPanel({
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-8">
+      <UserMcpSetupWizard
+        workspaces={workspaces}
+        initialToken={issuedToken}
+        initialClientName={issuedClientName}
+        onTokenIssued={() => {
+          setIssuedToken(null);
+          setIssuedClientName(null);
+        }}
+      />
+
+      <div className="grid gap-6">
+        <div>
+          <h2 className="m-0 text-base font-semibold">{t('pairingSectionTitle')}</h2>
+          <p className="mt-1 mb-0 text-sm text-ink-muted">{t('pairingSectionBlurb')}</p>
+        </div>
+
       {issuedToken ? (
         <Panel className="border-accent/30 bg-accent-soft/40">
           <p className="mt-0 mb-2 text-sm font-medium text-accent">{t('tokenOnce')}</p>
@@ -235,6 +248,7 @@ export function AiConnectionsPanel({
             {issuedToken}
           </code>
           <p className="mt-2 mb-0 text-xs text-ink-muted">{t('tokenOnceHint')}</p>
+          <p className="mt-2 mb-0 text-xs text-ink-muted">{t('tokenWizardHint')}</p>
         </Panel>
       ) : null}
 
@@ -405,7 +419,7 @@ export function AiConnectionsPanel({
             <p className="m-0 text-sm text-ink-muted">{t('approveHint')}</p>
             <fieldset className="m-0 grid gap-2 border-0 p-0">
               <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
-              {[...READ_SCOPES, 'knowledge:write'].map((scope) => (
+              {[...MCP_READ_SCOPES, 'knowledge:write'].map((scope) => (
                 <label key={scope} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -442,6 +456,7 @@ export function AiConnectionsPanel({
           </div>
         ) : null}
       </Modal>
+      </div>
     </div>
   );
 }

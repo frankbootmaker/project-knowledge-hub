@@ -130,6 +130,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       knowledgeRecord: toPublicRecord(record, tagMap.get(record.id) ?? [], source, {
         includeHtml: true,
         includeToc: true,
+        html: rendered.html,
         toc: rendered.toc,
       }),
     };
@@ -348,6 +349,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       knowledgeRecord: toPublicRecord(updated, tagMap.get(updated.id) ?? [], source, {
         includeHtml: true,
         includeToc: true,
+        html: rendered.html,
         toc: rendered.toc,
       }),
     };
@@ -417,6 +419,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       knowledgeRecord: toPublicRecord(updated, tagMap.get(updated.id) ?? [], source, {
         includeHtml: true,
         includeToc: true,
+        html: rendered.html,
         toc: rendered.toc,
       }),
     };
@@ -493,6 +496,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       knowledgeRecord: toPublicRecord(updated, tagMap.get(updated.id) ?? [], source, {
         includeHtml: true,
         includeToc: true,
+        html: rendered.html,
         toc: rendered.toc,
       }),
       superseded,
