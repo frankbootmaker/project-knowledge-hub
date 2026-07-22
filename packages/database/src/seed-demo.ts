@@ -413,18 +413,20 @@ Prefer a tool-capable model; tiny local models often skip tools.
     }
 
     // Final counts
-    const [{ n: usersLeft }] = await database.db
+    const [usersCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(users);
-    const [{ n: wsLeft }] = await database.db
+    const [wsCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(workspaces);
-    const [{ n: recLeft }] = await database.db
+    const [recCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(knowledgeRecords);
 
     console.log('Done.');
-    console.log(`  users=${usersLeft} workspaces=${wsLeft} knowledge_records=${recLeft}`);
+    console.log(
+      `  users=${usersCount?.n ?? 0} workspaces=${wsCount?.n ?? 0} knowledge_records=${recCount?.n ?? 0}`,
+    );
     console.log(`  Sign in: ${admin.email} / (BOOTSTRAP_ADMIN_PASSWORD)`);
     console.log(`  Open: /workspaces/${DEMO_WORKSPACE_SLUG}`);
     console.log('  Try: Homelab Platform → linked systems + knowledge; long TOC on overview/runbook.');
