@@ -160,7 +160,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-22
 
-* **User MCP setup wizard** — Account → AI connections leads with a guided setup (`UserMcpSetupWizard`): preflight → configure → create → test → client schemas. Shared pieces live under `components/mcp-setup/` (schemas, LLM picker, status rows). Agent pairing requests stay as a secondary section on the same page.
+* **Markdown TOC + editor width** — Contents starts collapsed (Show/Hide); section branches expand on click; TOC uses `scrollIntoView` with heading `scroll-margin-top`. Knowledge editor uses `Page viewport` / Modal `xl` (~90vw). Project detail lists linked knowledge records beside linked systems.
+* **User MCP setup wizard** — Account → AI connections leads with a guided setup (`UserMcpSetupWizard`): preflight → configure → create → test → schema → **done**. Shared pieces live under `components/mcp-setup/` (schemas, LLM picker, status rows, finish panel, connection troubleshooting). Agent pairing requests stay as a secondary section on the same page. Admin wizard shares Finish + troubleshooting (with extra diagnostics).
 
 ### 2026-07-21
 

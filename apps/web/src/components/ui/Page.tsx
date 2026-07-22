@@ -5,18 +5,27 @@ export function Page({
   children,
   narrow,
   wide,
+  viewport,
   className,
 }: {
   children: ReactNode;
   narrow?: boolean;
   wide?: boolean;
+  /** Near-full viewport width (knowledge editor pages). */
+  viewport?: boolean;
   className?: string;
 }) {
   return (
     <main
       className={cn(
         'mx-auto w-full',
-        narrow ? 'max-w-xl' : wide ? 'max-w-5xl' : 'max-w-3xl',
+        narrow
+          ? 'max-w-xl'
+          : viewport
+            ? 'max-w-[min(90vw,96rem)]'
+            : wide
+              ? 'max-w-5xl'
+              : 'max-w-3xl',
         className,
       )}
     >

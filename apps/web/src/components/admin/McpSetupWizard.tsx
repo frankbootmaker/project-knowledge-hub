@@ -19,6 +19,10 @@ import {
   McpClientSchemas,
   type LlmClientId,
 } from './McpClientSchemas';
+import { McpConnectionTroubleshoot } from '../mcp-setup/McpConnectionTroubleshoot';
+import { McpSetupDonePanel } from '../mcp-setup/McpSetupDonePanel';
+import { McpSetupStatusRow } from '../mcp-setup/McpSetupStatusRow';
+import { MCP_SETUP_STEPS, type McpSetupStep } from '../mcp-setup/scopes';
 
 type Org = { id: string; name: string; slug: string };
 type Workspace = { id: string; name: string; slug: string; organizationId: string };
@@ -58,9 +62,6 @@ const READ_SCOPES = [
 
 const WRITE_SCOPES = [...READ_SCOPES, 'knowledge:write'] as const;
 
-const steps = ['preflight', 'configure', 'create', 'test', 'schema'] as const;
-type Step = (typeof steps)[number];
-
 export function McpSetupWizard({
   organizations,
   workspaces,
@@ -74,7 +75,7 @@ export function McpSetupWizard({
   const tCommon = useTranslations('common');
   const { pushToast } = useToast();
 
-  const [step, setStep] = useState<Step>('preflight');
+  const [step, setStep] = useState<McpSetupStep>('preflight');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -287,13 +288,36 @@ export function McpSetupWizard({
     }
   }
 
-  const stepIndex = steps.indexOf(step);
+  function finishSetup() {
+    setStep('done');
+    pushToast(t('toastMcpSetupFinished'));
+  }
+
+  function startAnother() {
+    setStep('preflight');
+    setError(null);
+    setToken(null);
+    setClientName(null);
+    setTestSteps([]);
+    setTestOk(null);
+    setToolNames([]);
+    setCopied(null);
+    setMode('read');
+    setLlmClient('cursor');
+    setName(defaultClientName('cursor'));
+    setOrganizationId(organizations[0]?.id ?? '');
+    setWorkspaceId('');
+    setActingUserId(users[0]?.id ?? '');
+    void runPreflight();
+  }
+
+  const stepIndex = MCP_SETUP_STEPS.indexOf(step);
   const preflightOk = Boolean(preflight?.health.ok && preflight.ready.ok);
 
   return (
     <div className="grid gap-6">
       <ol className="m-0 flex list-none flex-wrap gap-2 p-0">
-        {steps.map((item, index) => {
+        {MCP_SETUP_STEPS.map((item, index) => {
           const active = item === step;
           const done = index < stepIndex;
           return (
@@ -304,6 +328,7 @@ export function McpSetupWizard({
                   (item === 'create' && !token) ||
                   (item === 'test' && !token) ||
                   (item === 'schema' && !token) ||
+                  (item === 'done' && !token) ||
                   (item === 'configure' && !preflightOk)
                 }
                 onClick={() => setStep(item)}
@@ -330,12 +355,12 @@ export function McpSetupWizard({
           {preflightError ? <ErrorText>{preflightError}</ErrorText> : null}
           {preflight ? (
             <div className="grid gap-3">
-              <StatusRow
+              <McpSetupStatusRow
                 ok={preflight.health.ok}
                 label={t('mcpWizardHealth')}
                 detail={preflight.health.ok ? 'ok' : `HTTP ${preflight.health.statusCode}`}
               />
-              <StatusRow
+              <McpSetupStatusRow
                 ok={preflight.ready.ok}
                 label={t('mcpWizardReady')}
                 detail={
@@ -538,7 +563,7 @@ export function McpSetupWizard({
           {error ? <ErrorText>{error}</ErrorText> : null}
           <div className="grid gap-2">
             {testSteps.map((item) => (
-              <StatusRow
+              <McpSetupStatusRow
                 key={item.id}
                 ok={item.ok}
                 skipped={item.skipped}
@@ -564,6 +589,9 @@ export function McpSetupWizard({
               {testOk === true ? t('mcpWizardContinue') : t('mcpWizardSkipToSchema')}
             </Button>
           </div>
+          {testOk === false ? (
+            <McpConnectionTroubleshoot variant="admin" mcpUrl={mcpUrl} defaultOpen />
+          ) : null}
         </Panel>
       ) : null}
 
@@ -574,34 +602,22 @@ export function McpSetupWizard({
             mcpUrl={mcpUrl}
             token={token}
             includeWriteTools={mode === 'write'}
-            onBack={() => setStep('test')}
+            onBack={() => setStep(testSteps.length > 0 ? 'test' : 'create')}
+            onFinish={finishSetup}
             onChangeClient={selectLlmClient}
           />
+          <McpConnectionTroubleshoot variant="admin" mcpUrl={mcpUrl} />
         </Panel>
       ) : null}
-    </div>
-  );
-}
 
-function StatusRow({
-  ok,
-  skipped,
-  label,
-  detail,
-}: {
-  ok: boolean;
-  skipped?: boolean;
-  label: string;
-  detail: string;
-}) {
-  const tone = skipped ? 'neutral' : ok ? 'success' : 'danger';
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-line bg-panel-solid px-3 py-2">
-      <div>
-        <p className="m-0 text-sm font-medium">{label}</p>
-        <p className="mt-1 mb-0 text-xs text-ink-muted">{detail}</p>
-      </div>
-      <Badge tone={tone}>{skipped ? 'skipped' : ok ? 'ok' : 'fail'}</Badge>
+      {step === 'done' ? (
+        <McpSetupDonePanel
+          variant="admin"
+          clientName={clientName}
+          mcpUrl={mcpUrl}
+          onStartAnother={startAnother}
+        />
+      ) : null}
     </div>
   );
 }

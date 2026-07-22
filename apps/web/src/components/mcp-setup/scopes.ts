@@ -14,6 +14,7 @@ export const MCP_SETUP_STEPS = [
   'create',
   'test',
   'schema',
+  'done',
 ] as const;
 
 export type McpSetupStep = (typeof MCP_SETUP_STEPS)[number];

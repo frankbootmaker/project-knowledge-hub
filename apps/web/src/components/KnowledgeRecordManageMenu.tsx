@@ -15,6 +15,7 @@ export type RecordManageDetails = {
   id: string;
   title: string;
   slug: string;
+  summary: string | null;
   recordType: string;
   lifecycleStatus: string;
   sourceOfTruthMode: string;
@@ -23,6 +24,19 @@ export type RecordManageDetails = {
   updatedAt: string;
   archivedAt: string | null;
   tags: Array<{ name: string }>;
+  projectName?: string | null;
+  systemName?: string | null;
+  verifiedAt?: string | null;
+  reviewedBy?: string | null;
+  lastValidatedAt?: string | null;
+  source?: {
+    sourceType: string;
+    sourceProvider: string | null;
+    sourceReference: string | null;
+    sourceTitle: string | null;
+    sourceUri: string | null;
+    generatedByModel: string | null;
+  } | null;
 };
 
 type Section = 'menu' | 'details' | 'archive' | 'delete';
@@ -32,6 +46,8 @@ export function KnowledgeRecordManageMenu(props: {
   record: RecordManageDetails;
   canMutate: boolean;
   canPurge: boolean;
+  /** When set, Edit opens the wide editor modal instead of navigating. */
+  onEdit?: () => void;
 }) {
   const t = useTranslations('records');
   const tCommon = useTranslations('common');
@@ -82,12 +98,23 @@ export function KnowledgeRecordManageMenu(props: {
               onClick={() => setSection('details')}
             />
             {props.canMutate && !archived && !gitManaged ? (
-              <ManageMenuLink
-                href={editHref}
-                title={t('manageEdit')}
-                hint={t('manageEditHint')}
-                onClick={close}
-              />
+              props.onEdit ? (
+                <ManageMenuItem
+                  title={t('manageEdit')}
+                  hint={t('manageEditHint')}
+                  onClick={() => {
+                    close();
+                    props.onEdit?.();
+                  }}
+                />
+              ) : (
+                <ManageMenuLink
+                  href={editHref}
+                  title={t('manageEdit')}
+                  hint={t('manageEditHint')}
+                  onClick={close}
+                />
+              )
             ) : null}
             <ManageMenuLink
               href={historyHref}
@@ -119,6 +146,10 @@ export function KnowledgeRecordManageMenu(props: {
             <dl className="m-0 grid gap-3">
               <ManageDetailRow label={t('detailsId')} value={props.record.id} mono />
               <ManageDetailRow label={t('detailsSlug')} value={props.record.slug} mono />
+              <ManageDetailRow
+                label={tCommon('summary')}
+                value={props.record.summary?.trim() || tCommon('noSummary')}
+              />
               <ManageDetailRow label={t('recordType')} value={props.record.recordType} />
               <ManageDetailRow
                 label={t('lifecycleStatus')}
@@ -129,11 +160,63 @@ export function KnowledgeRecordManageMenu(props: {
                 value={props.record.sourceOfTruthMode}
               />
               <ManageDetailRow
+                label={tCommon('project')}
+                value={props.record.projectName ?? tCommon('none')}
+              />
+              <ManageDetailRow
+                label={tCommon('system')}
+                value={props.record.systemName ?? tCommon('none')}
+              />
+              <ManageDetailRow
                 label={tCommon('tags')}
                 value={
                   props.record.tags.length > 0
                     ? props.record.tags.map((tag) => tag.name).join(', ')
                     : tCommon('none')
+                }
+              />
+              <ManageDetailRow
+                label={t('sourceType')}
+                value={props.record.source?.sourceType ?? tCommon('emDash')}
+              />
+              <ManageDetailRow
+                label={t('sourceTitle')}
+                value={props.record.source?.sourceTitle ?? tCommon('emDash')}
+              />
+              <ManageDetailRow
+                label={t('provider')}
+                value={props.record.source?.sourceProvider ?? tCommon('emDash')}
+              />
+              <ManageDetailRow
+                label={t('reference')}
+                value={props.record.source?.sourceReference ?? tCommon('emDash')}
+              />
+              <ManageDetailRow
+                label={t('uri')}
+                value={props.record.source?.sourceUri ?? tCommon('emDash')}
+              />
+              <ManageDetailRow
+                label={t('model')}
+                value={props.record.source?.generatedByModel ?? tCommon('emDash')}
+              />
+              <ManageDetailRow
+                label={t('verifiedAt')}
+                value={
+                  props.record.verifiedAt
+                    ? new Date(props.record.verifiedAt).toLocaleString()
+                    : tCommon('emDash')
+                }
+              />
+              <ManageDetailRow
+                label={t('reviewedBy')}
+                value={props.record.reviewedBy ?? tCommon('emDash')}
+              />
+              <ManageDetailRow
+                label={t('lastValidated')}
+                value={
+                  props.record.lastValidatedAt
+                    ? new Date(props.record.lastValidatedAt).toLocaleString()
+                    : tCommon('emDash')
                 }
               />
               <ManageDetailRow

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Knowledge markdown viewer: collapsible TOC with section jumps that match sanitized heading ids; summary / links / source metadata collapsed behind **More details** (also in Manage → Details); record edit opens in ~90% Modal `xl`.
+* Project detail: list linked knowledge records (via `projectId`) alongside linked systems.
+* Docs: ChatGPT Custom GPT user FAQ (setup, best workflow, moving older chats into the hub; screenshot checklist) in `docs/product/CHATGPT_CUSTOM_GPT_FAQ.md`.
 * Milestone execution order: M8–M10 feature work preceded **M7** Dokploy packaging. M7 is staged as Dokploy Dev/UAT, then Prod after testing (`MILESTONE_TRACKING.md`, `ROADMAP.md`).
 * Docs: ChatGPT Custom GPT Actions setup (verified read + write against public OpenAPI) in `MCP_CURSOR_SETUP.md`.
 * Web middleware: allow unauthenticated `/mcp` through to the API rewrite (fixes MCP `initialize` EOF when clients hit `{WEB_URL}/mcp`).
@@ -20,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* User-facing MCP setup wizard on Account → AI connections: members create scoped API clients for their workspaces (`POST /api/v1/me/api-clients`, rotate), run preflight/connection tests (`/api/v1/me/mcp/setup/*`), and copy Cursor/ChatGPT/Claude/… schemas. Agent pairing remains a secondary path on the same page; admin wizard keeps org-wide options and public URL override.
+* User-facing MCP setup wizard on Account → AI connections: members create scoped API clients for their workspaces (`POST /api/v1/me/api-clients`, rotate), run preflight/connection tests (`/api/v1/me/mcp/setup/*`), and copy Cursor/ChatGPT/Claude/… schemas, then **Finish** with a clear done step and connection troubleshooting (admin wizard shares the same finish/troubleshoot UX with extra diagnostics). Agent pairing remains a secondary path on the same page; admin wizard keeps org-wide options and public URL override.
+* Backlog **NF-004**: ChatGPT MCP App (Developer Mode / Workspace) for normal-chat tools — separate from Custom GPT Actions and `/ai-discover` (`NEXT_FEATURES.md`).
 * Backlog **NF-002**: Dokploy Compose one-shot bootstrap admin seed after migrate (`NEXT_FEATURES.md`, `DOKPLOY.md` follow-ups).
 * Milestone 7 Dokploy Dev/UAT packaging (first slice): fixed api/web/worker Dockerfiles for the current monorepo, `compose.dokploy.yaml` (private pgvector Postgres/Redis, migrate one-shot, volumes), migrate/seed/backup/restore scripts, and operator runbook (`docs/deployment/DOKPLOY.md`). Prod cutover deferred.
 * Milestone 10 semantic/hybrid search (first slice): `pgvector` Postgres image, migration `0020`, `@project-knowledge-hub/embeddings` (disabled/ollama/openai_compatible), embedding reindex worker queue, search `mode=hybrid` + capabilities API, UI checkbox and MCP `mode`. Default remains FTS-only (`EMBEDDING_PROVIDER=disabled`).

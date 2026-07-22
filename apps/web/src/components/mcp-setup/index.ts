@@ -12,4 +12,6 @@ export {
   type McpSetupStep,
 } from './scopes';
 export { McpSetupStatusRow } from './McpSetupStatusRow';
+export { McpConnectionTroubleshoot } from './McpConnectionTroubleshoot';
+export { McpSetupDonePanel } from './McpSetupDonePanel';
 export { UserMcpSetupWizard } from './UserMcpSetupWizard';

@@ -225,6 +225,7 @@ export function McpClientSchemas({
   token,
   includeWriteTools,
   onBack,
+  onFinish,
   onChangeClient,
 }: {
   client: LlmClientId;
@@ -232,6 +233,7 @@ export function McpClientSchemas({
   token: string;
   includeWriteTools: boolean;
   onBack: () => void;
+  onFinish?: () => void;
   onChangeClient?: (client: LlmClientId) => void;
 }) {
   const t = useTranslations('admin');
@@ -305,6 +307,11 @@ export function McpClientSchemas({
         <Button type="button" variant="secondary" onClick={onBack}>
           {t('mcpWizardBack')}
         </Button>
+        {onFinish ? (
+          <Button type="button" onClick={onFinish}>
+            {t('mcpWizardFinish')}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

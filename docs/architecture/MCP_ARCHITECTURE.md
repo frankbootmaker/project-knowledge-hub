@@ -40,6 +40,8 @@ Pending rows use `api_clients.status = pending_approval` with null token until a
 
 This pairing protocol is **optional / advanced** — mainstream clients (Cursor, ChatGPT, OpenWebUI, …) should use the Account or Admin setup wizard and paste Bearer configs.
 
+**ChatGPT note:** Custom GPT **Actions** (OpenAPI + Bearer) work only inside that GPT. Normal-chat / `@` tool use needs a separate **ChatGPT MCP App** (see backlog **NF-004**). ChatGPT does not implement `/ai-discover` pairing; teaching it via GPT instructions or a Custom GPT Action wrapper is brittle and is not a substitute for NF-004.
+
 ## Scopes
 
 Default (read): `projects:read`, `systems:read`, `knowledge:read`, `knowledge:search`, `provenance:read`

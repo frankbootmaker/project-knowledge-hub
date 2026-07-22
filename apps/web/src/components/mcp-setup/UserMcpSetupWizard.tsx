@@ -18,6 +18,8 @@ import {
   McpClientSchemas,
   type LlmClientId,
 } from './McpClientSchemas';
+import { McpConnectionTroubleshoot } from './McpConnectionTroubleshoot';
+import { McpSetupDonePanel } from './McpSetupDonePanel';
 import { McpSetupStatusRow } from './McpSetupStatusRow';
 import {
   MCP_READ_SCOPES,
@@ -244,6 +246,28 @@ export function UserMcpSetupWizard({
     }
   }
 
+  function finishSetup() {
+    setStep('done');
+    pushToast(t('toastMcpSetupFinished'));
+  }
+
+  function startAnother() {
+    setStep('preflight');
+    setError(null);
+    setToken(null);
+    setClientName(null);
+    setTestSteps([]);
+    setTestOk(null);
+    setToolNames([]);
+    setCopied(false);
+    setMode('read');
+    setLlmClient('cursor');
+    setName(defaultClientName('cursor'));
+    setWorkspaceId(workspaces[0]?.id ?? '');
+    onTokenIssued?.();
+    void runPreflight();
+  }
+
   return (
     <div className="grid gap-6">
       <div>
@@ -263,6 +287,7 @@ export function UserMcpSetupWizard({
                   (item === 'create' && !token) ||
                   (item === 'test' && !token) ||
                   (item === 'schema' && !token) ||
+                  (item === 'done' && !token) ||
                   (item === 'configure' && !preflightOk)
                 }
                 onClick={() => setStep(item)}
@@ -469,6 +494,9 @@ export function UserMcpSetupWizard({
               {testOk === true ? t('mcpWizardContinue') : t('mcpWizardSkipToSchema')}
             </Button>
           </div>
+          {testOk === false ? (
+            <McpConnectionTroubleshoot variant="user" mcpUrl={mcpUrl} defaultOpen />
+          ) : null}
         </Panel>
       ) : null}
 
@@ -480,9 +508,20 @@ export function UserMcpSetupWizard({
             token={token}
             includeWriteTools={mode === 'write'}
             onBack={() => setStep(testSteps.length > 0 ? 'test' : 'create')}
+            onFinish={finishSetup}
             onChangeClient={selectLlmClient}
           />
+          <McpConnectionTroubleshoot variant="user" mcpUrl={mcpUrl} />
         </Panel>
+      ) : null}
+
+      {step === 'done' ? (
+        <McpSetupDonePanel
+          variant="user"
+          clientName={clientName}
+          mcpUrl={mcpUrl}
+          onStartAnother={startAnother}
+        />
       ) : null}
     </div>
   );

@@ -115,6 +115,8 @@ export function toPublicRecord(
   options?: {
     includeHtml?: boolean;
     includeToc?: boolean;
+    /** Prefer fresh HTML from the same render pass as `toc` when provided. */
+    html?: string;
     toc?: Array<{ id: string; text: string; depth: number }>;
   },
 ) {
@@ -130,7 +132,9 @@ export function toPublicRecord(
     lifecycleStatus: record.lifecycleStatus,
     sourceOfTruthMode: record.sourceOfTruthMode,
     contentMarkdown: record.contentMarkdown,
-    contentHtml: options?.includeHtml ? record.contentHtmlCache : undefined,
+    contentHtml: options?.includeHtml
+      ? (options.html ?? record.contentHtmlCache)
+      : undefined,
     toc: options?.includeToc ? (options.toc ?? []) : undefined,
     language: record.language,
     metadata: record.metadataJson,
@@ -407,6 +411,7 @@ export async function createKnowledgeRecord(
     knowledgeRecord: toPublicRecord(finalRecord, tagList, source, {
       includeHtml: true,
       includeToc: true,
+      html: rendered.html,
       toc: rendered.toc,
     }),
     rendered,
@@ -616,6 +621,7 @@ export async function updateKnowledgeRecord(
     knowledgeRecord: toPublicRecord(finalRecord, tagList, source, {
       includeHtml: true,
       includeToc: true,
+      html: rendered.html,
       toc: rendered.toc,
     }),
     rendered,
