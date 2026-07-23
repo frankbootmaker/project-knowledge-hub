@@ -1103,7 +1103,7 @@
     "monitoringExportFailed": "Az export sikertelen",
     "monitoringImportOpen": "Mentés importálása…",
     "monitoringImportTitle": "Adatbázis-mentés importálása",
-    "monitoringImportWarning": "Ez teljesen lecseréli az adatbázist. A titkok az env-ben maradnak — ellenőrizze a cél WEB_URL-t, majd smoke-tesztelje a belépést.",
+    "monitoringImportWarning": "Ez futó szolgáltatások mellett teljesen lecseréli az adatbázist. A Postgres munkamenetek lezárulnak; az API újraindul — a workert is indítsa újra Dokployban. A importált mentés felhasználóival lépjen be. A titkok az env-ben maradnak.",
     "monitoringImportArtifact": "Meglévő mentési fájl",
     "monitoringImportPick": "Válasszon mentési fájlt…",
     "monitoringImportUpload": "Vagy töltsön fel .dump fájlt",

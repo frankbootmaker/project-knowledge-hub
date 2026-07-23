@@ -1103,7 +1103,7 @@
     "monitoringExportFailed": "Export failed",
     "monitoringImportOpen": "Import dump…",
     "monitoringImportTitle": "Import database dump",
-    "monitoringImportWarning": "This replaces the entire database. Secrets stay in env — update WEB_URL on the target, then smoke-test login. Prefer an empty or wiped DB for cross-instance moves.",
+    "monitoringImportWarning": "This replaces the entire database while services are running. Sessions on Postgres are terminated first; the API restarts afterward — also restart worker in Dokploy. Log in with users from the imported dump (not the old Dokploy seed). Secrets stay in env.",
     "monitoringImportArtifact": "Existing artifact",
     "monitoringImportPick": "Select a dump…",
     "monitoringImportUpload": "Or upload a .dump file",

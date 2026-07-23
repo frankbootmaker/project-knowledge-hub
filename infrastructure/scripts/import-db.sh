@@ -66,6 +66,25 @@ if [[ "${WIPE_DATABASE:-0}" == "1" ]]; then
 fi
 
 echo "Importing ${DUMP} (pg_restore --clean --if-exists)…"
+
+# Terminate other sessions so DROP/replace is not blocked by live API/worker pools.
+if [[ -z "${SKIP_TERMINATE_SESSIONS:-}" ]]; then
+  echo "Terminating other sessions on the target database…"
+  term_sql="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid();"
+  if [[ -n "${POSTGRES_CONTAINER:-}" ]]; then
+    docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "$POSTGRES_CONTAINER" \
+      psql -U "${POSTGRES_USER:-knowledge_hub}" -d "${POSTGRES_DB:-knowledge_hub}" \
+      -v ON_ERROR_STOP=1 -c "$term_sql" || true
+  elif [[ -n "${POSTGRES_HOST:-}" ]]; then
+    PGPASSWORD="${POSTGRES_PASSWORD:-}" psql \
+      -h "$POSTGRES_HOST" -p "${POSTGRES_PORT:-5432}" \
+      -U "${POSTGRES_USER:-knowledge_hub}" -d "${POSTGRES_DB:-knowledge_hub}" \
+      -v ON_ERROR_STOP=1 -c "$term_sql" || true
+  elif [[ -n "${DATABASE_URL:-}" ]] && command -v psql >/dev/null 2>&1; then
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "$term_sql" || true
+  fi
+fi
+
 "${SCRIPT_DIR}/restore-db.sh" "$DUMP"
 
 SCHEMA_VERSION="$(db_ops_schema_version)"

@@ -493,23 +493,41 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       schemaVersion,
     });
 
-    const organization = await getDefaultOrganization(app.database);
-    await writeAuditEvent(app.database, {
-      organizationId: organization?.id ?? null,
-      actorType: 'user',
-      actorId: principal.userId,
-      action: 'backup.import',
-      entityType: 'database_backup',
-      entityId: artifactName,
-      metadata: { schemaVersion: result.stamp.schemaVersion },
-      ipAddress: request.ip,
-    });
+    try {
+      const organization = await getDefaultOrganization(app.database);
+      await writeAuditEvent(app.database, {
+        organizationId: organization?.id ?? null,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'backup.import',
+        entityType: 'database_backup',
+        entityId: artifactName,
+        metadata: { schemaVersion: result.stamp.schemaVersion },
+        ipAddress: request.ip,
+      });
+    } catch (error) {
+      request.log.warn(
+        { err: error },
+        'Import succeeded but audit write failed (expected if connections were reset)',
+      );
+    }
+
+    // Fresh pools after --clean replace; Docker restarts this process (unless-stopped).
+    setTimeout(() => {
+      void app.database
+        .close()
+        .catch(() => undefined)
+        .finally(() => {
+          process.exit(0);
+        });
+    }, 750);
 
     return {
       artifact: artifactName,
       stamp: result.stamp,
+      restartRequired: true,
       warning:
-        'Full replace import completed. Re-check WEB_URL/secrets, run migrate if needed, then smoke-test login.',
+        'Import finished. API is restarting; restart worker (and web if needed) in Dokploy, then log in with users from the imported dump.',
     };
   });
 }

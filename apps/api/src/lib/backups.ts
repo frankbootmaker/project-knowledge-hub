@@ -178,6 +178,74 @@ function parseDatabaseUrl(databaseUrl: string): {
   }
 }
 
+/** Kick other backends so pg_restore --clean can DROP/replace objects. */
+export async function terminateOtherDbSessions(databaseUrl: string): Promise<void> {
+  const creds = parseDatabaseUrl(databaseUrl);
+  const sql =
+    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid();";
+
+  if (await which('psql')) {
+    const result = await runCommand(
+      'psql',
+      [
+        '-h',
+        creds.host,
+        '-p',
+        creds.port,
+        '-U',
+        creds.user,
+        '-d',
+        creds.database,
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-c',
+        sql,
+      ],
+      { env: { PGPASSWORD: creds.password } },
+    );
+    if (result.code !== 0) {
+      throw new AppError({
+        code: 'BACKUP_IMPORT_FAILED',
+        message: `Could not terminate DB sessions before import: ${result.stderr.slice(0, 400)}`,
+        statusCode: 500,
+      });
+    }
+    return;
+  }
+
+  // Best-effort when psql is missing (local docker fallback path).
+  if (await which('docker')) {
+    const container = process.env.POSTGRES_CONTAINER;
+    if (container) {
+      const result = await runCommand(
+        'docker',
+        [
+          'exec',
+          '-e',
+          `PGPASSWORD=${creds.password}`,
+          container,
+          'psql',
+          '-U',
+          creds.user,
+          '-d',
+          creds.database,
+          '-v',
+          'ON_ERROR_STOP=1',
+          '-c',
+          sql,
+        ],
+      );
+      if (result.code !== 0) {
+        throw new AppError({
+          code: 'BACKUP_IMPORT_FAILED',
+          message: `Could not terminate DB sessions before import: ${result.stderr.slice(0, 400)}`,
+          statusCode: 500,
+        });
+      }
+    }
+  }
+}
+
 async function streamDumpCommand(
   command: string,
   args: string[],
@@ -413,6 +481,10 @@ export async function importDatabaseDump(input: {
     });
   }
 
+  // Live API/worker pools hold locks; --clean DROP fails → partial DB + exit 1
+  // (treated as soft success) which leaves the stack unhealthy.
+  await terminateOtherDbSessions(input.databaseUrl);
+
   const hasPgRestore = await which('pg_restore');
   if (hasPgRestore) {
     const creds = parseDatabaseUrl(input.databaseUrl);
@@ -441,6 +513,17 @@ export async function importDatabaseDump(input: {
         message: `pg_restore failed (exit ${result.code}): ${result.stderr.slice(0, 500)}`,
         statusCode: 500,
       });
+    }
+    if (result.code === 1 && /fatal|could not|ERROR:/i.test(result.stderr)) {
+      // Exit 1 is often benign (missing roles); surface hard errors when present.
+      const snippet = result.stderr.slice(0, 500);
+      if (/being accessed by other users|is already in use/i.test(result.stderr)) {
+        throw new AppError({
+          code: 'BACKUP_IMPORT_FAILED',
+          message: `pg_restore could not replace objects (sessions still active): ${snippet}`,
+          statusCode: 500,
+        });
+      }
     }
   } else if (await which('docker')) {
     const dumpBuffer = await fs.readFile(resolved);

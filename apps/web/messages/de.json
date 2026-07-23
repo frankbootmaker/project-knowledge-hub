@@ -1103,7 +1103,7 @@
     "monitoringExportFailed": "Export fehlgeschlagen",
     "monitoringImportOpen": "Dump importieren…",
     "monitoringImportTitle": "Datenbank-Dump importieren",
-    "monitoringImportWarning": "Ersetzt die gesamte Datenbank. Secrets bleiben in der Env — WEB_URL am Ziel prüfen und Login smoke-testen.",
+    "monitoringImportWarning": "Ersetzt die gesamte Datenbank bei laufenden Diensten. Postgres-Sessions werden beendet; die API startet neu — Worker in Dokploy ebenfalls neu starten. Mit Benutzern aus dem importierten Dump anmelden. Secrets bleiben in der Env.",
     "monitoringImportArtifact": "Vorhandenes Artefakt",
     "monitoringImportPick": "Dump wählen…",
     "monitoringImportUpload": "Oder .dump-Datei hochladen",

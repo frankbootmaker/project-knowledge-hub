@@ -408,6 +408,7 @@ export function MonitoringDashboard({
       const body = (await response.json().catch(() => ({}))) as {
         error?: { message?: string };
         warning?: string;
+        restartRequired?: boolean;
       };
       if (!response.ok) {
         throw new Error(body.error?.message ?? `HTTP ${response.status}`);
@@ -420,6 +421,13 @@ export function MonitoringDashboard({
       setImportOpen(false);
       setConfirmPhrase('');
       setUploadFile(null);
+      if (body.restartRequired) {
+        // API process exits after import; give it a moment then reload.
+        setTimeout(() => {
+          window.location.assign('/login');
+        }, 2500);
+        return;
+      }
       await refresh();
       router.refresh();
     } catch (err) {

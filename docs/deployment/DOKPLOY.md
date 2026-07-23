@@ -184,6 +184,36 @@ CONFIRM_IMPORT=REPLACE WIPE_DATABASE=1 \
 # then migrate if needed; re-apply target WEB_URL / secrets; smoke login
 ```
 
+**If the site is unreachable after import:** redeploy alone is not enough when Postgres is half-replaced — **migrate fails** and Compose never starts `api`/`web` (`depends_on: migrate: service_completed_successfully`).
+
+### Recover now (Dokploy)
+
+1. Open the Compose project → check **which services failed**. Look at **`migrate`** logs first (then `api`).
+2. Open a terminal on **`db-backup`** (has `/backups` + `/scripts`):
+
+   ```bash
+   ls -lt /backups/knowledge-hub-*.dump
+   # Prefer a dump from *before* the bad import, or re-upload the known-good local dump into /backups.
+
+   CONFIRM_IMPORT=REPLACE WIPE_DATABASE=1 \
+     POSTGRES_PASSWORD='your-postgres-password' \
+     /scripts/dokploy-recover-db.sh /backups/knowledge-hub-YYYYMMDDTHHMMSSZ.dump
+   ```
+
+   If `dokploy-recover-db.sh` is missing (old image/scripts mount), use:
+
+   ```bash
+   CONFIRM_IMPORT=REPLACE WIPE_DATABASE=1 \
+     POSTGRES_HOST=postgres POSTGRES_PASSWORD='…' \
+     /scripts/import-db.sh /backups/<dump>.dump
+   ```
+
+3. **Redeploy** (or Restart) the whole stack so `migrate` runs again, then `api` / `web`.
+4. Log in with accounts from the **restored** dump.
+5. If still down: paste **`migrate`** and **`api`** log tails — that pinpoints the next fix.
+
+**After a live Admin → Monitoring import:** restart **api** + **worker** (and web if Traefik shows 502). Import terminates other Postgres sessions, then the API process exits so Docker can restart it. Log in with accounts from the **imported** dump.
+
 Copy dumps off the volume for transfer (Dokploy volume browser, `docker cp`, or Monitoring download). **Offsite:** set `BLOB_PROVIDER=s3` (+ bucket/keys); Monitoring export and the worker sync upload to `{prefix}/backups/…`. Azure Blob is **NF-007**. Full runbook: [`OPERATIONS.md`](OPERATIONS.md).
 
 ## Related
