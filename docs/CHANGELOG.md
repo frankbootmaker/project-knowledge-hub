@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Wave E (until IdP):** Compose **seed** one-shot (**NF-002**); Monitoring **Mon-1** client leaderboard + catalogue tops; **NF-008** embedding reindex + archived counts; **Ops-2** avatars via BlobStore with local fallback; **NF-009** light support dump + stale-backup chip (`BACKUP_STALE_AFTER_HOURS`).
 * **NF-006:** Admin → **Storage** for S3-compatible connection settings (override `BLOB_*` env, test connection); Monitoring offsite uses these settings with env fallback.
 * **NF-006 / Ops-1:** `@project-knowledge-hub/blob-store` with `disabled` + **S3-compatible** provider; auto offsite upload after Monitoring export; worker sync for sidecar dumps; `last-offsite.json` + Monitoring **Push offsite**.
 * **NF-011 Mon-0:** Admin → **Monitoring** (health + ready checks, MCP/session strip, backup stamps) with export / download / import (`CONFIRM REPLACE`), **manual dump delete**, and **retention / auto-rotate** controls (`retention.json`). `/status` redirects here. API `GET/POST/PUT/DELETE /api/v1/admin/monitoring…`; api image includes `postgresql-client`; Dokploy api mounts `knowledge_hub_backups`.

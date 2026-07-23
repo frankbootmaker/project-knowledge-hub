@@ -527,7 +527,7 @@ export function createMcpToolHandlers(
       };
     },
 
-    async onToolCall(toolName, ok) {
+    async onToolCall(toolName, ok, context) {
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -535,7 +535,15 @@ export function createMcpToolHandlers(
         action: ok ? 'mcp.tool_call' : 'mcp.tool_error',
         entityType: 'mcp_tool',
         entityId: toolName,
-        metadata: { clientName: client.name, toolName, ok },
+        metadata: {
+          clientName: client.name,
+          toolName,
+          ok,
+          ...(context?.recordId ? { recordId: context.recordId } : {}),
+          ...(context?.projectId ? { projectId: context.projectId } : {}),
+          ...(context?.systemId ? { systemId: context.systemId } : {}),
+          ...(context?.workspaceId ? { workspaceId: context.workspaceId } : {}),
+        },
         ipAddress: ipAddress ?? null,
       });
     },

@@ -95,6 +95,33 @@ services:
       - default
       - dokploy-network
 
+  # NF-002: optional bootstrap org + admin when BOOTSTRAP_ADMIN_* are set (no-op otherwise).
+  seed:
+    image: knowledge-hub-api:dokploy
+    pull_policy: never
+    restart: 'no'
+    environment:
+      <<: *app-env
+      DEFAULT_ORGANIZATION_NAME: ${DEFAULT_ORGANIZATION_NAME:-Default Organization}
+      DEFAULT_ORGANIZATION_SLUG: ${DEFAULT_ORGANIZATION_SLUG:-default}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:-Administrator}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command:
+      [
+        'node',
+        'node_modules/tsx/dist/cli.mjs',
+        'packages/database/src/seed.ts',
+      ]
+    networks:
+      - default
+      - dokploy-network
+
   api:
     image: knowledge-hub-api:dokploy
     build:
@@ -116,6 +143,8 @@ services:
       redis:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      seed:
         condition: service_completed_successfully
     healthcheck:
       test:
@@ -150,6 +179,8 @@ services:
       redis:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      seed:
         condition: service_completed_successfully
     networks:
       - default

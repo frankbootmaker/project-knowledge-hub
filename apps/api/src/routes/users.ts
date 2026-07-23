@@ -574,6 +574,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
         userId: params.userId,
         avatarUploadDir: app.env.AVATAR_UPLOAD_DIR,
         appEnv: app.env.APP_ENV,
+        blobStore: (await app.getBlobStore()).store,
       });
 
       await writeAuditEvent(app.database, {
@@ -604,6 +605,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     const closed = await closeUserAccount(app.database, {
       userId: params.userId,
       avatarUploadDir: app.env.AVATAR_UPLOAD_DIR,
+      blobStore: (await app.getBlobStore()).store,
     });
 
     await writeAuditEvent(app.database, {

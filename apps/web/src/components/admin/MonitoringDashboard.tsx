@@ -29,7 +29,12 @@ export type MonitoringPayload = {
     ready: boolean;
     checks: { postgres: 'ok' | 'error'; redis: 'ok' | 'error' };
   };
-  attention: { pendingUsers: number; pendingApiClients: number };
+  attention: {
+    pendingUsers: number;
+    pendingApiClients: number;
+    staleBackup: boolean;
+    staleBackupAfterHours: number;
+  };
   sessions: { active: number };
   mcp: {
     range: string;
@@ -37,6 +42,32 @@ export type MonitoringPayload = {
     toolCallCount: number;
     toolErrorCount: number;
     topActions: Array<{ action: string; count: number }>;
+  };
+  clients: {
+    range: string;
+    leaderboard: Array<{
+      actorId: string;
+      clientName: string | null;
+      requestCount: number;
+      toolCallCount: number;
+      toolErrorCount: number;
+    }>;
+  };
+  catalogue: {
+    range: string;
+    topRecords: Array<{ entityId: string; label: string | null; count: number }>;
+    topProjects: Array<{ entityId: string; label: string | null; count: number }>;
+    topSystems: Array<{ entityId: string; label: string | null; count: number }>;
+  };
+  maintenance: {
+    embeddingProvider: string;
+    workspaces: Array<{ id: string; name: string; slug: string }>;
+    archived: {
+      workspaces: number;
+      projects: number;
+      systems: number;
+      knowledgeRecords: number;
+    };
   };
   backups: {
     dir: string;
@@ -88,6 +119,7 @@ export type MonitoringPayload = {
       provider: string;
       auto: boolean;
     };
+    staleAfterHours: number;
   };
 };
 
@@ -171,6 +203,7 @@ export function MonitoringDashboard({
     initial.backups.artifacts[0]?.name ?? '',
   );
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [reindexWorkspaceId, setReindexWorkspaceId] = useState('');
   const [keepDaily, setKeepDaily] = useState(String(initial.backups.retention.keepDaily));
   const [keepWeekly, setKeepWeekly] = useState(String(initial.backups.retention.keepWeekly));
   const [keepMonthly, setKeepMonthly] = useState(String(initial.backups.retention.keepMonthly));
@@ -180,11 +213,11 @@ export function MonitoringDashboard({
   const overallOk = data.overall === 'healthy';
 
   const backupAgeTone = useMemo(() => {
+    if (data.attention.staleBackup) return 'warn' as const;
     const age = data.backups.lastSuccess.ageSeconds;
     if (age == null) return 'warn' as const;
-    if (age > 48 * 3600) return 'warn' as const;
     return 'success' as const;
-  }, [data.backups.lastSuccess.ageSeconds]);
+  }, [data.attention.staleBackup, data.backups.lastSuccess.ageSeconds]);
 
   async function refresh(nextRange = range) {
     setPending(true);
@@ -373,6 +406,44 @@ export function MonitoringDashboard({
     }
   }
 
+  async function runReindex() {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/admin/monitoring/embeddings/reindex', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId: reindexWorkspaceId || undefined,
+          force: true,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+        enqueued?: boolean;
+        reason?: string;
+        jobs?: unknown[];
+      };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? `HTTP ${response.status}`);
+      }
+      if (!body.enqueued) {
+        pushToast(t('monitoringReindexDisabled'));
+      } else {
+        pushToast(
+          t('monitoringReindexOk', { count: body.jobs?.length ?? 0 }),
+        );
+      }
+      await refresh();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('monitoringReindexFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function runImport() {
     if (confirmPhrase !== 'REPLACE') {
       setError(t('monitoringImportConfirmHint'));
@@ -437,6 +508,38 @@ export function MonitoringDashboard({
     }
   }
 
+  async function downloadSupportDump() {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/admin/monitoring/support-dump', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        throw new Error(body.error?.message ?? `HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const filename = match?.[1] ?? `knowhub-support-${Date.now()}.json`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      pushToast(t('monitoringSupportDumpOk'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('monitoringSupportDumpFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="grid gap-8">
       <div className="flex flex-wrap items-center gap-3">
@@ -450,6 +553,14 @@ export function MonitoringDashboard({
           onClick={() => void refresh()}
         >
           {t('monitoringRefresh')}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={pending}
+          onClick={() => void downloadSupportDump()}
+        >
+          {t('monitoringSupportDump')}
         </Button>
       </div>
 
@@ -550,6 +661,13 @@ export function MonitoringDashboard({
             <Badge tone={data.attention.pendingApiClients > 0 ? 'warn' : 'neutral'}>
               {t('monitoringPendingClients', { count: data.attention.pendingApiClients })}
             </Badge>
+            <Badge tone={data.attention.staleBackup ? 'warn' : 'neutral'}>
+              {data.attention.staleBackup
+                ? t('monitoringStaleBackup', {
+                    hours: data.attention.staleBackupAfterHours,
+                  })
+                : t('monitoringBackupFresh')}
+            </Badge>
           </div>
           {data.mcp.topActions.length > 0 ? (
             <ul className="mt-4 mb-0 grid gap-1 pl-0 list-none">
@@ -566,6 +684,132 @@ export function MonitoringDashboard({
           ) : (
             <p className="mt-3 mb-0 text-sm text-ink-muted">{t('monitoringMcpEmpty')}</p>
           )}
+        </Panel>
+      </section>
+
+      <section className="grid gap-3 lg:grid-cols-2">
+        <Panel className="overflow-hidden p-0">
+          <div className="border-b border-line px-5 py-3">
+            <strong className="text-sm font-medium text-ink">
+              {t('monitoringClientsTitle')}
+            </strong>
+          </div>
+          {data.clients.leaderboard.length === 0 ? (
+            <p className="m-0 px-5 py-4 text-sm text-ink-muted">{t('monitoringClientsEmpty')}</p>
+          ) : (
+            <ul className="m-0 grid list-none gap-0 divide-y divide-line p-0">
+              {data.clients.leaderboard.map((row) => (
+                <li
+                  key={row.actorId}
+                  className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="m-0 truncate text-sm font-medium text-ink">
+                      {row.clientName ?? row.actorId}
+                    </p>
+                    <p className="m-0 truncate font-mono text-xs text-ink-muted">{row.actorId}</p>
+                  </div>
+                  <p className="m-0 text-xs text-ink-muted tabular-nums">
+                    {t('monitoringClientCounts', {
+                      requests: row.requestCount,
+                      calls: row.toolCallCount,
+                      errors: row.toolErrorCount,
+                    })}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        <Panel className="overflow-hidden p-0">
+          <div className="border-b border-line px-5 py-3">
+            <strong className="text-sm font-medium text-ink">
+              {t('monitoringCatalogueTitle')}
+            </strong>
+          </div>
+          <div className="grid gap-4 px-5 py-4">
+            <CatalogueTopList
+              title={t('monitoringTopRecords')}
+              empty={t('monitoringCatalogueEmpty')}
+              rows={data.catalogue.topRecords}
+            />
+            <CatalogueTopList
+              title={t('monitoringTopProjects')}
+              empty={t('monitoringCatalogueEmpty')}
+              rows={data.catalogue.topProjects}
+            />
+            <CatalogueTopList
+              title={t('monitoringTopSystems')}
+              empty={t('monitoringCatalogueEmpty')}
+              rows={data.catalogue.topSystems}
+            />
+          </div>
+        </Panel>
+      </section>
+
+      <section className="grid gap-3">
+        <h2 className="m-0 text-lg font-semibold text-ink">
+          {t('monitoringMaintenanceTitle')}
+        </h2>
+        <p className="m-0 text-sm text-ink-muted">{t('monitoringMaintenanceBlurb')}</p>
+        <Panel className="grid gap-4 p-5">
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label={t('monitoringReindexWorkspace')} className="min-w-[14rem]">
+              <Select
+                value={reindexWorkspaceId}
+                disabled={pending}
+                onChange={(event) => setReindexWorkspaceId(event.target.value)}
+              >
+                <option value="">{t('monitoringReindexAll')}</option>
+                {data.maintenance.workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => void runReindex()}
+            >
+              {t('monitoringReindexRun')}
+            </Button>
+          </div>
+          <p className="m-0 text-xs text-ink-muted">
+            {t('monitoringEmbeddingProvider', {
+              provider: data.maintenance.embeddingProvider,
+            })}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone="neutral">
+              {t('monitoringArchivedWorkspaces', {
+                count: data.maintenance.archived.workspaces,
+              })}
+            </Badge>
+            <Badge tone="neutral">
+              {t('monitoringArchivedProjects', {
+                count: data.maintenance.archived.projects,
+              })}
+            </Badge>
+            <Badge tone="neutral">
+              {t('monitoringArchivedSystems', {
+                count: data.maintenance.archived.systems,
+              })}
+            </Badge>
+            <Badge tone="neutral">
+              {t('monitoringArchivedRecords', {
+                count: data.maintenance.archived.knowledgeRecords,
+              })}
+            </Badge>
+          </div>
+          <p className="m-0 text-sm text-ink-muted">
+            {t('monitoringPurgeHint')}{' '}
+            <a className="text-brand no-underline hover:underline" href="/admin/archive">
+              {t('monitoringArchiveLink')}
+            </a>
+          </p>
         </Panel>
       </section>
 
@@ -853,6 +1097,37 @@ export function MonitoringDashboard({
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+function CatalogueTopList(props: {
+  title: string;
+  empty: string;
+  rows: Array<{ entityId: string; label: string | null; count: number }>;
+}) {
+  return (
+    <div>
+      <p className="mt-0 mb-2 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
+        {props.title}
+      </p>
+      {props.rows.length === 0 ? (
+        <p className="m-0 text-sm text-ink-muted">{props.empty}</p>
+      ) : (
+        <ul className="m-0 grid list-none gap-1 p-0">
+          {props.rows.map((row) => (
+            <li
+              key={row.entityId}
+              className="flex justify-between gap-3 text-sm text-ink-muted"
+            >
+              <span className="min-w-0 truncate text-ink">
+                {row.label ?? row.entityId}
+              </span>
+              <span className="tabular-nums">{row.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

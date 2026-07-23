@@ -1,6 +1,6 @@
 # Admin monitoring dashboard
 
-**Status:** Mon-0 **shipped** (**NF-011**) — health + MCP/session strip + backup management  
+**Status:** Mon-0 + **Mon-1** shipped (**NF-011**); maintenance strip (**NF-008**); light support dump / stale backup (**NF-009**)  
 **Home:** Admin sidebar → **Monitoring** (absorbs today’s **Status**)  
 **Related:** Admin → Audit, `/status` → redirects here, MCP audit actions (`mcp.request`, `mcp.tool_call`, `mcp.tool_error`), API `/health` + `/ready`, Ops-0 stamps (`BACKUP_DIR`)
 
@@ -100,6 +100,6 @@ Reuse the existing Status UI patterns (colored `Badge`s, no left accent bars) as
 | Phase | Scope |
 | --- | --- |
 | **Mon-0** | **Done:** Status → Admin → Monitoring + `/status` redirect; health (`/ready` checks); MCP volume/tools/errors + active sessions; **backup stamps + export/import/download** (`GET/POST /api/v1/admin/monitoring…`) |
-| **Mon-1** | Top records/projects/systems from mutations + MCP gets; client leaderboard |
+| **Mon-1** | **Done:** client leaderboard; top records/projects/systems (mutation audits + MCP metadata ids); embedding reindex + archived counts on Monitoring |
 | **Mon-2** | `knowledge.view` / search telemetry; anomaly chips; queue strip enrichment |
 | **Mon-3** | Rollup tables + longer history charts |

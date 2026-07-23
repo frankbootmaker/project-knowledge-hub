@@ -320,6 +320,7 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
     const closed = await closeUserAccount(app.database, {
       userId: principal.userId,
       avatarUploadDir: app.env.AVATAR_UPLOAD_DIR,
+      blobStore: (await app.getBlobStore()).store,
     });
 
     const organization = await getDefaultOrganization(app.database);

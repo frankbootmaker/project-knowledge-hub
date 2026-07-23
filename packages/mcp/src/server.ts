@@ -69,7 +69,18 @@ export type McpToolHandlers = {
     generatedByModel?: string;
     sourceTitle?: string;
   }) => Promise<unknown>;
-  onToolCall?: (toolName: string, ok: boolean) => Promise<void>;
+  onToolCall?: (
+    toolName: string,
+    ok: boolean,
+    context?: McpToolCallContext,
+  ) => Promise<void>;
+};
+
+export type McpToolCallContext = {
+  recordId?: string;
+  projectId?: string;
+  systemId?: string;
+  workspaceId?: string;
 };
 
 function requireScope(client: McpClientContext, scope: McpScope): void {
@@ -89,6 +100,47 @@ function textResult(data: unknown) {
   };
 }
 
+function extractToolContext(data: unknown): McpToolCallContext {
+  if (!data || typeof data !== 'object') {
+    return {};
+  }
+  const root = data as Record<string, unknown>;
+  const ctx: McpToolCallContext = {};
+
+  const take = (obj: Record<string, unknown>) => {
+    if (typeof obj.id === 'string') {
+      if ('contentMarkdown' in obj || 'lifecycleStatus' in obj || 'recordType' in obj) {
+        ctx.recordId = obj.id;
+      } else if ('criticality' in obj || 'systemType' in obj) {
+        ctx.systemId = obj.id;
+      } else if ('businessDomain' in obj || 'slug' in obj) {
+        // project-like
+        if (!ctx.projectId && !ctx.systemId) {
+          ctx.projectId = ctx.projectId ?? obj.id;
+        }
+      }
+    }
+    if (typeof obj.workspaceId === 'string') ctx.workspaceId = obj.workspaceId;
+    if (typeof obj.projectId === 'string') ctx.projectId = obj.projectId;
+    if (typeof obj.systemId === 'string') ctx.systemId = obj.systemId;
+    if (typeof obj.recordId === 'string') ctx.recordId = obj.recordId;
+  };
+
+  take(root);
+  for (const key of [
+    'knowledgeRecord',
+    'project',
+    'system',
+    'record',
+  ] as const) {
+    const nested = root[key];
+    if (nested && typeof nested === 'object') {
+      take(nested as Record<string, unknown>);
+    }
+  }
+  return ctx;
+}
+
 export function createKnowledgeHubMcpServer(
   client: McpClientContext,
   handlers: McpToolHandlers,
@@ -98,21 +150,31 @@ export function createKnowledgeHubMcpServer(
     version: '0.1.0',
   });
 
-  const wrap = (toolName: string, scope: McpScope, fn: () => Promise<unknown>) => async () => {
-    try {
-      requireScope(client, scope);
-      const data = await fn();
-      await handlers.onToolCall?.(toolName, true);
-      return textResult(data);
-    } catch (error) {
-      await handlers.onToolCall?.(toolName, false);
-      const message = error instanceof Error ? error.message : 'Tool failed';
-      return {
-        isError: true,
-        content: [{ type: 'text' as const, text: message }],
-      };
-    }
-  };
+  const wrap =
+    (
+      toolName: string,
+      scope: McpScope,
+      fn: () => Promise<unknown>,
+      argContext?: McpToolCallContext,
+    ) =>
+    async () => {
+      try {
+        requireScope(client, scope);
+        const data = await fn();
+        await handlers.onToolCall?.(toolName, true, {
+          ...argContext,
+          ...extractToolContext(data),
+        });
+        return textResult(data);
+      } catch (error) {
+        await handlers.onToolCall?.(toolName, false, argContext);
+        const message = error instanceof Error ? error.message : 'Tool failed';
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: message }],
+        };
+      }
+    };
 
   server.tool(
     'list_projects',
@@ -153,7 +215,9 @@ export function createKnowledgeHubMcpServer(
     'Get a project by id',
     { projectId: z.string().uuid() },
     async (args) =>
-      wrap('get_project', 'projects:read', () => handlers.getProject(args))(),
+      wrap('get_project', 'projects:read', () => handlers.getProject(args), {
+        projectId: args.projectId,
+      })(),
   );
 
   server.tool(
@@ -161,7 +225,9 @@ export function createKnowledgeHubMcpServer(
     'Get a system by id',
     { systemId: z.string().uuid() },
     async (args) =>
-      wrap('get_system', 'systems:read', () => handlers.getSystem(args))(),
+      wrap('get_system', 'systems:read', () => handlers.getSystem(args), {
+        systemId: args.systemId,
+      })(),
   );
 
   server.tool(
@@ -174,11 +240,19 @@ export function createKnowledgeHubMcpServer(
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
     },
     async (args) =>
-      wrap('list_knowledge_records', 'knowledge:read', () =>
-        handlers.listKnowledgeRecords({
-          ...args,
-          limit: args.limit ?? MCP_MAX_LIST_LIMIT,
-        }),
+      wrap(
+        'list_knowledge_records',
+        'knowledge:read',
+        () =>
+          handlers.listKnowledgeRecords({
+            ...args,
+            limit: args.limit ?? MCP_MAX_LIST_LIMIT,
+          }),
+        {
+          workspaceId: args.workspaceId,
+          projectId: args.projectId,
+          systemId: args.systemId,
+        },
       )(),
   );
 
@@ -210,8 +284,11 @@ export function createKnowledgeHubMcpServer(
     'Retrieve a knowledge record including truncated markdown content',
     { recordId: z.string().uuid() },
     async (args) =>
-      wrap('get_knowledge_record', 'knowledge:read', () =>
-        handlers.getKnowledgeRecord(args),
+      wrap(
+        'get_knowledge_record',
+        'knowledge:read',
+        () => handlers.getKnowledgeRecord(args),
+        { recordId: args.recordId },
       )(),
   );
 
@@ -220,8 +297,11 @@ export function createKnowledgeHubMcpServer(
     'Retrieve verification and source provenance for a knowledge record',
     { recordId: z.string().uuid() },
     async (args) =>
-      wrap('get_record_provenance', 'provenance:read', () =>
-        handlers.getRecordProvenance(args),
+      wrap(
+        'get_record_provenance',
+        'provenance:read',
+        () => handlers.getRecordProvenance(args),
+        { recordId: args.recordId },
       )(),
   );
 
@@ -251,8 +331,15 @@ export function createKnowledgeHubMcpServer(
       sourceTitle: z.string().max(300).optional(),
     },
     async (args) =>
-      wrap('create_knowledge_record', 'knowledge:write', () =>
-        handlers.createKnowledgeRecord(args),
+      wrap(
+        'create_knowledge_record',
+        'knowledge:write',
+        () => handlers.createKnowledgeRecord(args),
+        {
+          workspaceId: args.workspaceId,
+          projectId: args.projectId,
+          systemId: args.systemId,
+        },
       )(),
   );
 

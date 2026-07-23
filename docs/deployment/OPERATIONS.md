@@ -90,13 +90,13 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 * Worker sync (same backup volume) uploads pending `last-success` dumps on an interval (`BACKUP_OFFSITE_SYNC_INTERVAL_MS`).
 * Stamp: `/backups/last-offsite.json`; Monitoring shows last offsite age + **Push offsite** per file.
 * Provider-managed encryption at rest (bucket SSE/KMS) — client-side encrypt later if needed.
-* Azure Blob (`NF-007`) on Admin → **Storage** when **Entra ID** sign-in (`NF-012`) lands; stale-backup alerts (`NF-009`) still follow-on.
+* Azure Blob (`NF-007`) on Admin → **Storage** when **Entra ID** sign-in (`NF-012`) lands.
 
-### Ops-2 — App blob store
+### Ops-2 — App blob store (avatars) — **done** (S3 + local fallback)
 
-* Move avatars / future import documents & images / Doc Factory exports off local disk onto the same `BlobStore`.
-* Env shape (illustrative): `BLOB_PROVIDER=disabled|s3|azure_blob`, endpoint/account, container/bucket, prefix, credentials.
-* Document **DB + blob** paired transfer for cross-system moves.
+* Profile avatars use `BlobStore` when `BLOB_PROVIDER=s3` (keys `{prefix}/avatars/{userId}`); served via `/api/v1/avatars/:userId` (no public S3 URLs).
+* When provider is `disabled`, avatars stay on `AVATAR_UPLOAD_DIR` (Compose volume). Local file is used as read fallback and optional backfill when migrating to S3.
+* Imports / Doc Factory exports still later.
 
 ### Ops-3 — Admin maintenance UI
 
@@ -105,9 +105,8 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 ### Ops-4 — Observability & support
 
-* Log retention / rotation; admin log export (already deferred from M7).
-* Lightweight alerting (email or webhook): backup fail, migrate fail, disk pressure, API 5xx spike.
-* Redacted **support dump** (versions, health, recent errors — no secrets, no raw pastes).
+* **Light v1 (NF-009):** Admin → Monitoring **Download support dump** (`GET /api/v1/admin/monitoring/support-dump`) — redacted JSON (env label, schema, ready checks, backup ages, MCP error counts, pending attention, recent error audit ids/actions; **no** secrets or pastes). Stale-backup attention chip when `last-success` age exceeds `BACKUP_STALE_AFTER_HOURS` (default 36).
+* Follow-on: log retention / rotation; admin log export (M7 deferred); webhook/email alerts for backup fail, migrate fail, disk pressure, API 5xx spike.
 
 ---
 

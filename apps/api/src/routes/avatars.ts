@@ -38,7 +38,10 @@ export async function registerAvatarRoutes(app: FastifyInstance): Promise<void> 
       });
     }
 
-    const buffer = await readAvatarFile(app.env.AVATAR_UPLOAD_DIR, user.id);
+    const { store: blobStore } = await app.getBlobStore();
+    const buffer = await readAvatarFile(app.env.AVATAR_UPLOAD_DIR, user.id, {
+      blobStore,
+    });
     if (!buffer) {
       throw new AppError({
         code: 'AVATAR_NOT_FOUND',
@@ -83,7 +86,10 @@ export async function registerAvatarRoutes(app: FastifyInstance): Promise<void> 
       });
     }
 
-    await writeAvatarFile(app.env.AVATAR_UPLOAD_DIR, principal.userId, buffer);
+    await writeAvatarFile(app.env.AVATAR_UPLOAD_DIR, principal.userId, buffer, {
+      blobStore: (await app.getBlobStore()).store,
+      contentType,
+    });
 
     const [updated] = await app.database.db
       .update(users)
@@ -121,7 +127,9 @@ export async function registerAvatarRoutes(app: FastifyInstance): Promise<void> 
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
 
-    await deleteAvatarFile(app.env.AVATAR_UPLOAD_DIR, principal.userId);
+    await deleteAvatarFile(app.env.AVATAR_UPLOAD_DIR, principal.userId, {
+      blobStore: (await app.getBlobStore()).store,
+    });
 
     const [updated] = await app.database.db
       .update(users)

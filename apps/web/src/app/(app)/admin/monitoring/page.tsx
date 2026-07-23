@@ -20,7 +20,7 @@ const emptyPayload = (): MonitoringPayload => ({
     ready: false,
     checks: { postgres: 'error', redis: 'error' },
   },
-  attention: { pendingUsers: 0, pendingApiClients: 0 },
+  attention: { pendingUsers: 0, pendingApiClients: 0, staleBackup: false, staleBackupAfterHours: 36 },
   sessions: { active: 0 },
   mcp: {
     range: '24h',
@@ -28,6 +28,23 @@ const emptyPayload = (): MonitoringPayload => ({
     toolCallCount: 0,
     toolErrorCount: 0,
     topActions: [],
+  },
+  clients: { range: '24h', leaderboard: [] },
+  catalogue: {
+    range: '24h',
+    topRecords: [],
+    topProjects: [],
+    topSystems: [],
+  },
+  maintenance: {
+    embeddingProvider: 'disabled',
+    workspaces: [],
+    archived: {
+      workspaces: 0,
+      projects: 0,
+      systems: 0,
+      knowledgeRecords: 0,
+    },
   },
   backups: {
     dir: './backups',
@@ -46,6 +63,7 @@ const emptyPayload = (): MonitoringPayload => ({
     },
     lastOffsite: { stamp: null, ageSeconds: null },
     offsite: { enabled: false, provider: 'disabled', auto: true },
+    staleAfterHours: 36,
   },
 });
 

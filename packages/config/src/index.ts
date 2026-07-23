@@ -67,8 +67,14 @@ export const envSchema = z.object({
   SESSION_SECRET: z.string().min(32),
   SESSION_COOKIE_NAME: z.string().min(1).default('kh_session'),
   SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24),
-  BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
-  BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12).optional(),
+  BOOTSTRAP_ADMIN_EMAIL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().email().optional(),
+  ),
+  BOOTSTRAP_ADMIN_PASSWORD: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(12).optional(),
+  ),
   BOOTSTRAP_ADMIN_DISPLAY_NAME: z.string().min(1).default('Administrator'),
   DEFAULT_ORGANIZATION_NAME: z.string().min(1).default('Default Organization'),
   DEFAULT_ORGANIZATION_SLUG: z.string().min(1).default('default'),
@@ -122,6 +128,8 @@ export const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  /** Hours after last successful dump before Monitoring flags a stale backup (NF-009). */
+  BACKUP_STALE_AFTER_HOURS: z.coerce.number().int().min(1).max(168).default(36),
   /**
    * When true (default), successful dumps are uploaded to BlobStore when
    * BLOB_PROVIDER is not disabled.

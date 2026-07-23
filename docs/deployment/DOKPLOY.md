@@ -106,7 +106,7 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
 
 1. **Build** api, worker, web images.
 2. **Start** postgres + redis; wait until healthy.
-3. **Migrate** — Compose `migrate` one-shot runs automatically (`service_completed_successfully` before api/worker).  
+3. **Migrate** — Compose `migrate` one-shot runs automatically (`service_completed_successfully` before seed/api/worker).  
    Manual / Dokploy “Run command” on the api image:
 
    ```bash
@@ -114,26 +114,8 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
    ```
 
    Or from a checkout with deps: `DATABASE_URL=... ./infrastructure/scripts/migrate.sh`
-4. **Start** api, worker, web.
-5. **Optional seed** (once):
-
-   ```bash
-   DATABASE_URL=... BOOTSTRAP_ADMIN_EMAIL=... BOOTSTRAP_ADMIN_PASSWORD=... \
-     ./infrastructure/scripts/seed.sh
-   ```
-
-   Or Dokploy run on api image (cwd **`/app`**, env on the **same** command line):
-
-   ```bash
-   cd /app && BOOTSTRAP_ADMIN_EMAIL=admin@example.com BOOTSTRAP_ADMIN_PASSWORD='your-long-password' \
-     node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts
-   ```
-
-## Follow-ups
-
-* **NF-002** — automatic bootstrap admin via Compose one-shot `seed` after `migrate` when `BOOTSTRAP_ADMIN_*` secrets are set ([`NEXT_FEATURES.md`](../product/NEXT_FEATURES.md)). Until then, use the manual seed command above.
-* Admin central log export (after Dev is stable).
-* Production Dokploy cutover + immutable image tags.
+4. **Seed (NF-002)** — Compose `seed` one-shot after migrate. Creates default org; creates system admin when `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (min 12) are set. Idempotent if admin already exists; no-op when bootstrap vars are unset.
+5. **Start** api, worker, web.
 
 ## Smoke checklist
 

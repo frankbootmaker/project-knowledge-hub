@@ -8,6 +8,7 @@ import {
   users,
   type Database,
 } from '@project-knowledge-hub/database';
+import type { BlobStore } from '@project-knowledge-hub/blob-store';
 import { AppError } from '@project-knowledge-hub/domain';
 import { deleteAvatarFile } from './avatars.js';
 
@@ -58,6 +59,7 @@ export async function closeUserAccount(
   input: {
     userId: string;
     avatarUploadDir: string;
+    blobStore?: BlobStore;
   },
 ): Promise<typeof users.$inferSelect> {
   const [existing] = await database.db
@@ -91,7 +93,9 @@ export async function closeUserAccount(
     .set({ revokedAt: new Date() })
     .where(and(eq(sessions.userId, existing.id), isNull(sessions.revokedAt)));
 
-  await deleteAvatarFile(input.avatarUploadDir, existing.id);
+  await deleteAvatarFile(input.avatarUploadDir, existing.id, {
+    blobStore: input.blobStore,
+  });
 
   const [updated] = await database.db
     .update(users)
@@ -129,6 +133,7 @@ export async function purgeUserAccount(
     userId: string;
     avatarUploadDir: string;
     appEnv: string;
+    blobStore?: BlobStore;
   },
 ): Promise<{ id: string; email: string; displayName: string }> {
   if (!isHardUserDeleteAllowed(input.appEnv)) {
@@ -155,7 +160,9 @@ export async function purgeUserAccount(
   }
 
   await assertNotLastSystemAdmin(database, existing);
-  await deleteAvatarFile(input.avatarUploadDir, existing.id);
+  await deleteAvatarFile(input.avatarUploadDir, existing.id, {
+    blobStore: input.blobStore,
+  });
 
   // Clear / remove restrict FKs before deleting the user row.
   await database.db

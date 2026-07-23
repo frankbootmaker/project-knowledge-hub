@@ -31,10 +31,17 @@ import {
 } from '../lib/backup-offsite.js';
 import {
   getActiveSessionCount,
+  getArchivedEntityCounts,
+  getCatalogueUsageSummary,
+  getClientLeaderboard,
   getMcpActivitySummary,
   getPendingAttention,
+  getRecentErrorAuditEvents,
   getSchemaVersionLabel,
+  isBackupStale,
+  listActiveWorkspacesForMonitoring,
 } from '../lib/monitoring.js';
+import { enqueueWorkspaceEmbeddingReindex } from '../lib/embedding-jobs.js';
 
 const rangeSchema = z.enum(['1h', '24h', '7d']).default('24h');
 const retentionBodySchema = z.object({
@@ -97,22 +104,30 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       activeSessions,
       pending,
       mcp,
+      clients,
+      catalogue,
       lastSuccess,
       lastImport,
       lastOffsite,
       artifacts,
       retention,
+      archived,
+      workspaceOptions,
     ] = await Promise.all([
         collectDependencyChecks(app),
         getSchemaVersionLabel(app.database),
         getActiveSessionCount(app.database),
         getPendingAttention(app.database),
         getMcpActivitySummary(app.database, sinceForRange(range)),
+        getClientLeaderboard(app.database, sinceForRange(range)),
+        getCatalogueUsageSummary(app.database, sinceForRange(range)),
         readStamp(backupDir, 'last-success.json'),
         readStamp(backupDir, 'last-import.json'),
         readOffsiteStamp(backupDir),
         listDumpArtifacts(backupDir),
         readRetentionPolicy(backupDir, envRetentionDefaults(app.env)),
+        getArchivedEntityCounts(app.database),
+        listActiveWorkspacesForMonitoring(app.database),
       ]);
 
     const ready = checks.postgres === 'ok' && checks.redis === 'ok';
@@ -120,6 +135,9 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const totalBytes = artifacts.reduce((sum, item) => sum + item.sizeBytes, 0);
     const { store: blobStore, backupOffsite } = await app.getBlobStore();
     const offsiteEnabled = backupOffsite && blobStore.provider !== 'disabled';
+    const lastSuccessSummary = stampSummary(lastSuccess);
+    const staleAfterHours = app.env.BACKUP_STALE_AFTER_HOURS;
+    const staleBackup = isBackupStale(lastSuccessSummary.ageSeconds, staleAfterHours);
 
     return {
       overall,
@@ -135,17 +153,34 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         ready,
         checks,
       },
-      attention: pending,
+      attention: {
+        ...pending,
+        staleBackup,
+        staleBackupAfterHours: staleAfterHours,
+      },
       sessions: { active: activeSessions },
       mcp: {
         range,
         ...mcp,
       },
+      clients: {
+        range,
+        leaderboard: clients,
+      },
+      catalogue: {
+        range,
+        ...catalogue,
+      },
+      maintenance: {
+        embeddingProvider: app.env.EMBEDDING_PROVIDER,
+        workspaces: workspaceOptions,
+        archived,
+      },
       backups: {
         dir: backupDir,
         toolsHint:
           'Export/import use postgresql-client-16 on the API image (matches Dokploy Postgres 16). Locally, Docker Postgres is used as a fallback when clients are missing.',
-        lastSuccess: stampSummary(lastSuccess),
+        lastSuccess: lastSuccessSummary,
         lastImport: stampSummary(lastImport),
         lastOffsite: lastOffsite
           ? {
@@ -171,6 +206,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
           provider: blobStore.provider,
           auto: backupOffsite,
         },
+        staleAfterHours,
       },
     };
   });
@@ -529,5 +565,143 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       warning:
         'Import finished. API is restarting; restart worker (and web if needed) in Dokploy, then log in with users from the imported dump.',
     };
+  });
+
+  app.post('/api/v1/admin/monitoring/embeddings/reindex', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const body = z
+      .object({
+        workspaceId: z.string().uuid().optional(),
+        force: z.boolean().optional(),
+      })
+      .parse(request.body ?? {});
+
+    if (app.env.EMBEDDING_PROVIDER === 'disabled') {
+      return { enqueued: false as const, reason: 'provider_disabled' as const, jobs: [] };
+    }
+
+    const targets = body.workspaceId
+      ? [{ id: body.workspaceId }]
+      : await listActiveWorkspacesForMonitoring(app.database);
+
+    const jobs: Array<{ workspaceId: string; jobId: string }> = [];
+    for (const workspace of targets) {
+      const jobId = await enqueueWorkspaceEmbeddingReindex(app, workspace.id, {
+        force: body.force,
+      });
+      jobs.push({ workspaceId: workspace.id, jobId });
+    }
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'monitoring.embeddings_reindex',
+      entityType: 'embeddings',
+      entityId: body.workspaceId ?? 'all',
+      metadata: { jobCount: jobs.length, force: Boolean(body.force) },
+      ipAddress: request.ip,
+    });
+
+    return { enqueued: true as const, reason: null, jobs };
+  });
+
+  app.get('/api/v1/admin/monitoring/support-dump', async (request, reply) => {
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+
+    const backupDir = app.env.BACKUP_DIR;
+    const since24h = sinceForRange('24h');
+    const [
+      checks,
+      schemaVersion,
+      pending,
+      mcp,
+      lastSuccess,
+      lastImport,
+      lastOffsite,
+      artifacts,
+      recentErrors,
+    ] = await Promise.all([
+      collectDependencyChecks(app),
+      getSchemaVersionLabel(app.database),
+      getPendingAttention(app.database),
+      getMcpActivitySummary(app.database, since24h),
+      readStamp(backupDir, 'last-success.json'),
+      readStamp(backupDir, 'last-import.json'),
+      readOffsiteStamp(backupDir),
+      listDumpArtifacts(backupDir),
+      getRecentErrorAuditEvents(app.database, since24h),
+    ]);
+
+    const ready = checks.postgres === 'ok' && checks.redis === 'ok';
+    const lastSuccessSummary = stampSummary(lastSuccess);
+    const lastImportSummary = stampSummary(lastImport);
+    const staleAfterHours = app.env.BACKUP_STALE_AFTER_HOURS;
+    const staleBackup = isBackupStale(lastSuccessSummary.ageSeconds, staleAfterHours);
+    const { store: blobStore, backupOffsite } = await app.getBlobStore();
+
+    const dump = {
+      generatedAt: new Date().toISOString(),
+      app: {
+        env: app.env.APP_ENV,
+        schemaVersion,
+        embeddingProvider: app.env.EMBEDDING_PROVIDER,
+        blobProvider: blobStore.provider,
+      },
+      health: {
+        ready,
+        checks,
+      },
+      attention: {
+        ...pending,
+        staleBackup,
+        staleBackupAfterHours: staleAfterHours,
+      },
+      backups: {
+        lastSuccessAgeSeconds: lastSuccessSummary.ageSeconds,
+        lastImportAgeSeconds: lastImportSummary.ageSeconds,
+        lastOffsiteAgeSeconds: lastOffsite
+          ? stampSummary({
+              kind: lastOffsite.kind,
+              at: lastOffsite.at,
+              artifact: lastOffsite.artifact,
+              schemaVersion: lastOffsite.schemaVersion,
+              hostname: lastOffsite.hostname,
+            }).ageSeconds
+          : null,
+        artifactCount: artifacts.length,
+        totalBytes: artifacts.reduce((sum, item) => sum + item.sizeBytes, 0),
+        offsiteEnabled: Boolean(backupOffsite && blobStore.provider !== 'disabled'),
+      },
+      mcpLast24h: {
+        requestCount: mcp.requestCount,
+        toolCallCount: mcp.toolCallCount,
+        toolErrorCount: mcp.toolErrorCount,
+      },
+      recentAuditErrors: recentErrors,
+    };
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'monitoring.support_dump',
+      entityType: 'monitoring',
+      entityId: 'support-dump',
+      metadata: { byteLength: JSON.stringify(dump).length },
+      ipAddress: request.ip,
+    });
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    reply.header(
+      'Content-Disposition',
+      `attachment; filename="knowhub-support-${stamp}.json"`,
+    );
+    return dump;
   });
 }
