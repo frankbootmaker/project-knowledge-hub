@@ -1,12 +1,16 @@
 /**
- * Dev-only: purge integration-test clutter and seed a realistic Home Infrastructure demo.
+ * Dev-only: purge integration-test clutter and seed a realistic Home Infrastructure demo
+ * plus extra workspaces/users for membership (role) testing.
  *
- * Keeps: organization `default`, workspace `home-infrastructure`, admin@localhost.local
- * Removes: *@example.com users and non-default organizations (cascades their workspaces).
+ * Keeps: organization `default`, workspace `home-infrastructure` (+ demo workspaces below),
+ *        admin@localhost.local
+ * Removes: *@example.com / *@demo.local users and non-default organizations (cascades).
  *
  * Usage: pnpm --filter @project-knowledge-hub/database seed:demo
+ *    or: pnpm db:seed:demo
  */
-import { and, eq, ne, like, sql } from 'drizzle-orm';
+import { and, eq, ne, not, inArray, sql } from 'drizzle-orm';
+import { hashPassword } from '@project-knowledge-hub/auth';
 import { loadEnv } from '@project-knowledge-hub/config';
 import {
   createDatabase,
@@ -24,6 +28,91 @@ import {
 } from '@project-knowledge-hub/database';
 
 const DEMO_WORKSPACE_SLUG = 'home-infrastructure';
+const DEMO_PASSWORD = 'change-me-demo-pass';
+
+/** Extra workspaces kept across re-seeds (membership / role testing). */
+const MEMBERSHIP_DEMO_WORKSPACES = [
+  {
+    slug: 'client-alpha',
+    name: 'Client Alpha Delivery',
+    description: 'Mock client delivery workspace for role testing.',
+    color: 'ocean',
+  },
+  {
+    slug: 'ops-sandbox',
+    name: 'Ops Sandbox',
+    description: 'Sandbox for ops experiments and limited access.',
+    color: 'teal',
+  },
+  {
+    slug: 'research-lab',
+    name: 'Research Lab',
+    description: 'Research notes and experiments (readers + maintainers).',
+    color: 'violet',
+  },
+] as const;
+
+const KEEP_WORKSPACE_SLUGS = [
+  DEMO_WORKSPACE_SLUG,
+  ...MEMBERSHIP_DEMO_WORKSPACES.map((item) => item.slug),
+] as const;
+
+type DemoRole = 'workspace_admin' | 'maintainer' | 'reader';
+
+const MEMBERSHIP_DEMO_USERS: Array<{
+  email: string;
+  displayName: string;
+  fullName: string;
+  /** workspace slug → role */
+  roles: Record<string, DemoRole>;
+}> = [
+  {
+    email: 'alex.admin@demo.local',
+    displayName: 'Alex Admin',
+    fullName: 'Alex Rivera',
+    roles: {
+      'client-alpha': 'workspace_admin',
+      [DEMO_WORKSPACE_SLUG]: 'reader',
+    },
+  },
+  {
+    email: 'blair.maintainer@demo.local',
+    displayName: 'Blair Maintainer',
+    fullName: 'Blair Chen',
+    roles: {
+      'client-alpha': 'maintainer',
+      [DEMO_WORKSPACE_SLUG]: 'maintainer',
+      'ops-sandbox': 'reader',
+    },
+  },
+  {
+    email: 'casey.reader@demo.local',
+    displayName: 'Casey Reader',
+    fullName: 'Casey Okonkwo',
+    roles: {
+      'client-alpha': 'reader',
+    },
+  },
+  {
+    email: 'dana.multi@demo.local',
+    displayName: 'Dana Multi',
+    fullName: 'Dana Kovács',
+    roles: {
+      'ops-sandbox': 'workspace_admin',
+      'research-lab': 'maintainer',
+      [DEMO_WORKSPACE_SLUG]: 'reader',
+    },
+  },
+  {
+    email: 'eli.reader@demo.local',
+    displayName: 'Eli Reader',
+    fullName: 'Eli Novak',
+    roles: {
+      'ops-sandbox': 'reader',
+      'research-lab': 'reader',
+    },
+  },
+];
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -43,21 +132,23 @@ async function main(): Promise<void> {
       .returning({ slug: organizations.slug });
     console.log(`  deleted ${deletedOrgs.length} orgs`);
 
-    // Any leftover workspaces not under default (shouldn't remain)
+    // Any leftover workspaces not in the demo keep-list
     const leftoverWs = await database.db
       .delete(workspaces)
-      .where(ne(workspaces.slug, DEMO_WORKSPACE_SLUG))
+      .where(not(inArray(workspaces.slug, [...KEEP_WORKSPACE_SLUGS])))
       .returning({ slug: workspaces.slug });
     if (leftoverWs.length > 0) {
       console.log(`  deleted ${leftoverWs.length} leftover workspaces`);
     }
 
-    console.log('Removing *@example.com test users…');
+    console.log('Removing *@example.com / *@demo.local test users…');
     // Clear version/record authorship that might still reference them in default workspace
     const testUsers = await database.db
       .select({ id: users.id, email: users.email })
       .from(users)
-      .where(like(users.email, '%@example.com'));
+      .where(
+        sql`${users.email} LIKE '%@example.com' OR ${users.email} LIKE '%@demo.local'`,
+      );
 
     for (const user of testUsers) {
       await database.db
@@ -412,6 +503,98 @@ Prefer a tool-capable model; tiny local models often skip tools.
       });
     }
 
+    // --- Membership / role demo workspaces + users ---
+    console.log('Seeding membership demo workspaces and users…');
+    const passwordHash = await hashPassword(DEMO_PASSWORD);
+    const workspaceBySlug = new Map<string, string>([[workspace.slug, workspace.id]]);
+
+    for (const spec of MEMBERSHIP_DEMO_WORKSPACES) {
+      const [existing] = await database.db
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.slug, spec.slug))
+        .limit(1);
+      if (existing) {
+        await database.db
+          .update(workspaces)
+          .set({
+            name: spec.name,
+            description: spec.description,
+            color: spec.color,
+          })
+          .where(eq(workspaces.id, existing.id));
+        workspaceBySlug.set(spec.slug, existing.id);
+      } else {
+        const [created] = await database.db
+          .insert(workspaces)
+          .values({
+            organizationId: workspace.organizationId,
+            name: spec.name,
+            slug: spec.slug,
+            description: spec.description,
+            color: spec.color,
+          })
+          .returning();
+        if (!created) {
+          throw new Error(`Failed to create workspace ${spec.slug}`);
+        }
+        workspaceBySlug.set(spec.slug, created.id);
+      }
+
+      // Admin can manage every demo workspace
+      const wsId = workspaceBySlug.get(spec.slug)!;
+      const [adminOnWs] = await database.db
+        .select()
+        .from(memberships)
+        .where(
+          and(eq(memberships.userId, admin.id), eq(memberships.workspaceId, wsId)),
+        )
+        .limit(1);
+      if (!adminOnWs) {
+        await database.db.insert(memberships).values({
+          userId: admin.id,
+          workspaceId: wsId,
+          role: 'workspace_admin',
+        });
+      } else if (adminOnWs.role !== 'workspace_admin') {
+        await database.db
+          .update(memberships)
+          .set({ role: 'workspace_admin' })
+          .where(eq(memberships.id, adminOnWs.id));
+      }
+    }
+
+    for (const demoUser of MEMBERSHIP_DEMO_USERS) {
+      const email = demoUser.email.toLowerCase();
+      const [created] = await database.db
+        .insert(users)
+        .values({
+          email,
+          displayName: demoUser.displayName,
+          fullName: demoUser.fullName,
+          passwordHash,
+          status: 'active',
+          isSystemAdmin: false,
+        })
+        .returning();
+      if (!created) {
+        throw new Error(`Failed to create user ${email}`);
+      }
+
+      for (const [wsSlug, role] of Object.entries(demoUser.roles)) {
+        const wsId = workspaceBySlug.get(wsSlug);
+        if (!wsId) {
+          throw new Error(`Unknown workspace slug in demo roles: ${wsSlug}`);
+        }
+        await database.db.insert(memberships).values({
+          userId: created.id,
+          workspaceId: wsId,
+          role,
+        });
+      }
+      console.log(`  user ${email} → ${Object.keys(demoUser.roles).length} membership(s)`);
+    }
+
     // Final counts
     const [usersCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
@@ -422,13 +605,24 @@ Prefer a tool-capable model; tiny local models often skip tools.
     const [recCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(knowledgeRecords);
+    const [memCount] = await database.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(memberships);
 
     console.log('Done.');
     console.log(
-      `  users=${usersCount?.n ?? 0} workspaces=${wsCount?.n ?? 0} knowledge_records=${recCount?.n ?? 0}`,
+      `  users=${usersCount?.n ?? 0} workspaces=${wsCount?.n ?? 0} knowledge_records=${recCount?.n ?? 0} memberships=${memCount?.n ?? 0}`,
     );
-    console.log(`  Sign in: ${admin.email} / (BOOTSTRAP_ADMIN_PASSWORD)`);
-    console.log(`  Open: /workspaces/${DEMO_WORKSPACE_SLUG}`);
+    console.log(`  Sign in (admin): ${admin.email} / (BOOTSTRAP_ADMIN_PASSWORD)`);
+    console.log(`  Demo users password: ${DEMO_PASSWORD}`);
+    console.log('  Demo users:');
+    for (const demoUser of MEMBERSHIP_DEMO_USERS) {
+      const roleSummary = Object.entries(demoUser.roles)
+        .map(([slug, role]) => `${slug}:${role}`)
+        .join(', ');
+      console.log(`    ${demoUser.email} — ${roleSummary}`);
+    }
+    console.log(`  Open: /workspaces/${DEMO_WORKSPACE_SLUG} or Admin → Memberships`);
     console.log('  Try: Homelab Platform → linked systems + knowledge; long TOC on overview/runbook.');
   } finally {
     await database.close();

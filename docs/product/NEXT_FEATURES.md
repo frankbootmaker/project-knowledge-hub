@@ -10,19 +10,44 @@ Short backlog of product work **after** the current milestone track (see `ROADMA
 
 ---
 
+## Recommended execution order
+
+Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces twice.
+
+| Wave | Do | Skip / defer until |
+| --- | --- | --- |
+| **A — M7 closeout** | **NF-002** (Compose bootstrap seed) if still manual; Dokploy Dev smoke | **Done for Dev:** Dokploy deploy works; rebuild + retest on each push. Seed one-shot may still be optional. |
+| **B — Data safety** | **NF-005** Ops-0/1: schedule dump, retention, **export/import** (cross-instance replace), last-success stamp; optional local volume before offsite | Full blob product |
+| **C — Admin ops UI** | **NF-011** Mon-0: fold **Status → Monitoring**, MCP + sessions; show backup/import stamps from B; put **export/import triggers** here (absorbs most of **NF-008**) | Fancy charts |
+| **D — Object storage** | **NF-006** `BlobStore` + S3-compatible (offsite dumps + avatars); then **NF-007** Azure Blob as second provider; OneDrive/SharePoint last (export sink only) | Treat 006+007 as one port, staged providers |
+| **E — Ops polish** | **NF-009** alerts + log export + support dump; **NF-011** Mon-1+ usage panels; remaining purge/reindex knobs if not already on Monitoring | — |
+| **F — Product (parked)** | **NF-001** Doc Factory, **NF-004** ChatGPT MCP App, **NF-010** finer ACLs — only with module briefs and real user jobs | Do not cut in front of A–C |
+
+### Merge / optimize notes
+
+* **NF-003** — done; keep as historical row only.
+* **NF-008 ⊂ NF-011 (+ NF-005)** — do **not** ship a separate “Maintenance” top-level nav first. Monitoring health section owns: Status, backup age, export/import actions, later reindex/purge. NF-008 remains a checklist of actions folded into NF-011.
+* **NF-006 + NF-007** — one **`BlobStore` program**; implement `s3` first, `azure_blob` second, Graph OneDrive/SharePoint only when a library/export job exists. Do not dual-track two storage designs.
+* **NF-009** — overlaps Audit export and Monitoring; build **after** Mon-0 so alerts have a home (Monitoring), not a third ops page.
+* **NF-001 / NF-004 / NF-010** — stay parked; they do not unblock Prod packaging.
+
+---
+
 ## Backlog
 
 | ID | Feature | Status | Needs before build | Notes |
 | --- | --- | --- | --- | --- |
-| NF-001 | **Doc Factory** — standard documents (overview, management summary, progress summary, …) filled from workspace knowledge via connected AI (MCP), versioned in the hub, export PDF/DOCX | `parked` — awaiting precise module description | Module brief: package/module boundaries, UX entry points, template ownership, export scope | Early design spike: [`DOC_FACTORY.md`](DOC_FACTORY.md). Branch `feature/docfactory` holds spike notes + domain type stubs only. **Does not** displace M9. |
-| NF-002 | **Dokploy bootstrap admin seed** — Compose one-shot `seed` service (after `migrate`) that creates the default org + admin when `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` are set; no-op if admin already exists | `ready` — small ops follow-up | Wire into `compose.dokploy.yaml`; document secrets; avoid empty-env Zod failures | Removes manual `tsx` seed in Dokploy terminal. See [`docs/deployment/DOKPLOY.md`](../deployment/DOKPLOY.md) follow-ups. |
-| NF-003 | **User MCP setup wizard** — Account → AI connections guided create → test → schema copy for member workspaces | `done` | — | Shipped: `/account/ai-connections` + `POST /api/v1/me/api-clients` + `/api/v1/me/mcp/setup/*`. Pairing panel kept as secondary path. |
-| NF-004 | **ChatGPT MCP App** — register KnowHub as a Developer Mode / Workspace MCP app so tools work in normal chats (tools menu / `@`), separate from Custom GPT Actions | `parked` — awaiting module brief | ChatGPT-compatible MCP auth (prefer OAuth/OIDC + refresh tokens; Bearer may suffice for personal Dev Mode only); map ChatGPT identity → KnowHub user/scopes; tool safety (read vs write); workspace publish runbook | Does **not** replace Custom GPT Actions or `/ai-discover`. Until this ships, use the Custom GPT path — user FAQ: [`CHATGPT_CUSTOM_GPT_FAQ.md`](CHATGPT_CUSTOM_GPT_FAQ.md). |
-| NF-005 | **Ops backups** — scheduled Postgres dump, retention, restore drills; then offsite dump upload | `parked` — design captured | Schedule host (cron / worker), retention policy, encryption, alert on stale backup; Prod gate = restore drill | Builds on `backup-db.sh` / `restore-db.sh`. Plan: [`OPERATIONS.md`](../deployment/OPERATIONS.md) Ops-0/Ops-1. Required before calling M7 Prod backup complete. |
-| NF-006 | **BlobStore + S3-compatible storage** — shared object port for backups, avatars, future imports/exports | `parked` — awaiting implementation brief | `BlobStore` interface; provider `s3` (AWS/R2/B2/MinIO/Garage/…); env + prefixes `backups/` vs `app/` | Preferred default for self-host and non-Azure clouds. See [`OPERATIONS.md`](../deployment/OPERATIONS.md). |
-| NF-007 | **Microsoft cloud storage** — Azure Blob Storage for durable objects; OneDrive/SharePoint via Microsoft Graph for library/export jobs | `parked` — awaiting module brief | Azure auth (account key / SAS / Entra); Graph OAuth for OneDrive/SharePoint; map to same `BlobStore` (or export sink) jobs | Azure Blob = peer to S3 for backups/app blobs. OneDrive/SharePoint = optional user/org library or export destination — **not** sole DR store. See [`OPERATIONS.md`](../deployment/OPERATIONS.md). |
-| NF-008 | **Admin maintenance console** — ops panel: last backup, trigger backup, reindex, purge policy, queue/Redis/migrate version | `parked` — awaiting UX brief | Extend `/status` or Admin → Maintenance; system-admin only | Depends on NF-005 (and optionally NF-006) for backup actions. [`OPERATIONS.md`](../deployment/OPERATIONS.md) Ops-3. |
-| NF-009 | **Ops observability** — log retention/export, lightweight alerting, redacted support dump | `parked` — awaiting brief | Log export (M7 deferred), webhook/email alerts, support package without secrets/raw pastes | [`OPERATIONS.md`](../deployment/OPERATIONS.md) Ops-4. |
+| NF-001 | **Doc Factory** — standard documents (overview, management summary, progress summary, …) filled from workspace knowledge via connected AI (MCP), versioned in the hub, export PDF/DOCX | `parked` — awaiting precise module description | Module brief: package/module boundaries, UX entry points, template ownership, export scope | Early design spike: [`DOC_FACTORY.md`](DOC_FACTORY.md). Branch `feature/docfactory` holds spike notes + domain type stubs only. Wave **F**. |
+| NF-002 | **Dokploy bootstrap admin seed** — Compose one-shot `seed` service (after `migrate`) that creates the default org + admin when `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` are set; no-op if admin already exists | `ready` — small ops follow-up | Wire into `compose.dokploy.yaml`; document secrets; avoid empty-env Zod failures | Wave **A**. See [`DOKPLOY.md`](../deployment/DOKPLOY.md). |
+| NF-003 | **User MCP setup wizard** — Account → AI connections guided create → test → schema copy for member workspaces | `done` | — | Shipped. Historical row. |
+| NF-004 | **ChatGPT MCP App** — register KnowHub as a Developer Mode / Workspace MCP app so tools work in normal chats (tools menu / `@`), separate from Custom GPT Actions | `parked` — awaiting module brief | ChatGPT-compatible MCP auth (prefer OAuth/OIDC + refresh tokens; Bearer may suffice for personal Dev Mode only); map ChatGPT identity → KnowHub user/scopes; tool safety (read vs write); workspace publish runbook | Wave **F**. FAQ: [`CHATGPT_CUSTOM_GPT_FAQ.md`](CHATGPT_CUSTOM_GPT_FAQ.md). |
+| NF-005 | **Ops backups + DB export/import** — scheduled Postgres dump, retention, restore drills; **export** dump artifact; **import** into same or another KnowHub instance; then offsite upload | `parked` — design captured | Schedule host; retention; encryption; cross-instance replace-restore rules; schema-version checks; last-success stamp for Monitoring; Prod gate = restore/import drill | Wave **B**. [`OPERATIONS.md`](../deployment/OPERATIONS.md). Selective workspace transplant later. |
+| NF-006 | **BlobStore + S3-compatible storage** — shared object port for backups, avatars, future imports/exports | `parked` — awaiting implementation brief | `BlobStore` interface; provider `s3` (AWS/R2/B2/MinIO/Garage/…); env + prefixes `backups/` vs `app/` | Wave **D** (first provider). Same port as NF-007. |
+| NF-007 | **Microsoft cloud storage** — Azure Blob Storage for durable objects; OneDrive/SharePoint via Microsoft Graph for library/export jobs | `parked` — awaiting module brief | Azure auth (account key / SAS / Entra); Graph OAuth for OneDrive/SharePoint; map to same `BlobStore` (or export sink) jobs | Wave **D** after NF-006. Azure Blob before OneDrive. |
+| NF-008 | **Admin maintenance actions** — trigger export/import, reindex, purge policy (checklist) | `parked` — fold into NF-011 | Ship UI on **Monitoring** health/maintenance section, not a separate nav | Wave **C** with NF-011. Avoid duplicate Admin page. |
+| NF-009 | **Ops observability** — log retention/export, lightweight alerting, redacted support dump | `parked` — awaiting brief | Log export (M7 deferred), webhook/email alerts, support package without secrets/raw pastes | Wave **E**. [`OPERATIONS.md`](../deployment/OPERATIONS.md) Ops-4. |
+| NF-010 | **Finer-grained access** — optional project- and/or knowledge-record-level roles beyond workspace membership | `parked` — not needed yet | Module brief: inheritance vs explicit grants, UI for assign/revoke, MCP/API client scope mapping, audit events | Wave **F**. Workspace roles sufficient today. |
+| NF-011 | **Admin monitoring dashboard** — folds **Status** into Monitoring; MCP/sessions/catalogue; backup/import stamps; maintenance actions | `parked` — design captured | Port `/status` + redirect; aggregations API; absorb NF-008 actions | Wave **C**. [`ADMIN_MONITORING.md`](ADMIN_MONITORING.md). |
 
 ---
 
@@ -51,3 +76,31 @@ When ready, describe at least:
 * **Non-goals** (e.g. OneDrive as sole DR, multi-region active-active)
 
 Full ops phasing and restore drill: [`docs/deployment/OPERATIONS.md`](../deployment/OPERATIONS.md).
+
+---
+
+## Suggested module brief (for NF-010)
+
+When ready, describe at least:
+
+* **Triggering user jobs** (e.g. contractor limited to one project; classified / restricted knowledge)
+* **Grant model** — inherit from workspace vs explicit project/record ACLs; who can assign
+* **Surfaces** — Admin UI, Account “workspace roles” extension, MCP / API client scopes
+* **v1 scope** — project-level only vs record-level / sensitivity flags
+* **Non-goals** — replacing workspace membership as the default tenancy boundary
+
+---
+
+## Suggested module brief (for NF-011)
+
+When ready, describe at least:
+
+* **v1 panels** (health from Status + MCP / sessions / catalogue) and time ranges
+* **Status merge** — redirect `/status` → Monitoring; sidebar link rename
+* **Maintenance actions** absorbed from NF-008 (export/import triggers, later reindex/purge)
+* **Which audit actions are required** vs new instrumentation (`knowledge.view`, search, rate limits)
+* **API shape** (`/api/v1/admin/monitoring/…`) and retention
+* **Privacy** (no content dumps; IP handling)
+* **Non-goals** (not replacing Audit; no end-user analytics; no permanent separate Status or Maintenance nav)
+
+Design note: [`ADMIN_MONITORING.md`](ADMIN_MONITORING.md).

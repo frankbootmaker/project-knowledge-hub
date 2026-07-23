@@ -54,7 +54,7 @@ M8–M10 no longer block M7 packaging. Operator Dokploy click-deploy and Prod cu
 
 ### Next features (not PRD milestones)
 
-See `docs/product/NEXT_FEATURES.md`. Doc Factory (NF-001) is **parked** pending a precise module brief; early notes in `docs/product/DOC_FACTORY.md`. Ops / backup / blob storage backlog (**NF-005**–**NF-009**) is captured in `docs/deployment/OPERATIONS.md` (includes Azure Blob + OneDrive/SharePoint). Does not displace M9.
+See `docs/product/NEXT_FEATURES.md` (**execution waves A–F**). Doc Factory (NF-001) is **parked** pending a precise module brief; early notes in `docs/product/DOC_FACTORY.md`. Ops spine: **NF-002 → NF-005 → NF-011** (folds Status + NF-008 actions) **→ NF-006/007 → NF-009**. Finer ACLs **NF-010** and ChatGPT MCP App **NF-004** stay in wave F. Does not displace M9.
 
 ---
 

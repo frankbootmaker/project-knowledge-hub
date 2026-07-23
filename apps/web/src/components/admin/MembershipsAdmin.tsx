@@ -51,6 +51,39 @@ function matchesMembershipSearch(membership: PublicMembership, query: string): b
   return haystack.includes(query);
 }
 
+type MembershipUserGroup = {
+  userId: string;
+  displayName: string;
+  email: string;
+  memberships: PublicMembership[];
+};
+
+function groupMembershipsByUser(items: PublicMembership[]): MembershipUserGroup[] {
+  const byUser = new Map<string, MembershipUserGroup>();
+  for (const membership of items) {
+    const existing = byUser.get(membership.userId);
+    if (existing) {
+      existing.memberships.push(membership);
+      continue;
+    }
+    byUser.set(membership.userId, {
+      userId: membership.userId,
+      displayName: membership.user.displayName,
+      email: membership.user.email,
+      memberships: [membership],
+    });
+  }
+
+  return Array.from(byUser.values())
+    .map((group) => ({
+      ...group,
+      memberships: [...group.memberships].sort((a, b) =>
+        a.workspace.name.localeCompare(b.workspace.name),
+      ),
+    }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
 export function MembershipsAdmin({
   initialMemberships,
   users,
@@ -67,6 +100,8 @@ export function MembershipsAdmin({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  /** When set, create modal locks the user and only offers workspaces they are not already in. */
+  const [lockedUserId, setLockedUserId] = useState<string | null>(null);
   const [userId, setUserId] = useState(users[0]?.id ?? '');
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? '');
   const [role, setRole] = useState<(typeof ROLES)[number]>('reader');
@@ -81,12 +116,73 @@ export function MembershipsAdmin({
     });
   }, [initialMemberships, searchQuery, roleFilter]);
 
+  const groupedMemberships = useMemo(
+    () => groupMembershipsByUser(filteredMemberships),
+    [filteredMemberships],
+  );
+
+  const availableWorkspaces = useMemo(() => {
+    if (!lockedUserId) {
+      return workspaces;
+    }
+    const taken = new Set(
+      initialMemberships
+        .filter((membership) => membership.userId === lockedUserId)
+        .map((membership) => membership.workspaceId),
+    );
+    return workspaces.filter((workspace) => !taken.has(workspace.id));
+  }, [initialMemberships, lockedUserId, workspaces]);
+
+  const lockedUserLabel = useMemo(() => {
+    if (!lockedUserId) return '';
+    const fromUsers = users.find((user) => user.id === lockedUserId);
+    if (fromUsers) {
+      return `${fromUsers.displayName} (${fromUsers.email})`;
+    }
+    const fromMembership = initialMemberships.find(
+      (membership) => membership.userId === lockedUserId,
+    );
+    if (fromMembership) {
+      return `${fromMembership.user.displayName} (${fromMembership.user.email})`;
+    }
+    return lockedUserId;
+  }, [initialMemberships, lockedUserId, users]);
+
   function closeCreateModal() {
     setCreateOpen(false);
+    setLockedUserId(null);
     setError(null);
     setUserId(users[0]?.id ?? '');
     setWorkspaceId(workspaces[0]?.id ?? '');
     setRole('reader');
+  }
+
+  function openCreateModal() {
+    setError(null);
+    setLockedUserId(null);
+    setUserId(users[0]?.id ?? '');
+    setWorkspaceId(workspaces[0]?.id ?? '');
+    setRole('reader');
+    setCreateOpen(true);
+  }
+
+  function openAddWorkspaceForUser(targetUserId: string) {
+    const taken = new Set(
+      initialMemberships
+        .filter((membership) => membership.userId === targetUserId)
+        .map((membership) => membership.workspaceId),
+    );
+    const remaining = workspaces.filter((workspace) => !taken.has(workspace.id));
+    if (remaining.length === 0) {
+      pushToast(t('membershipNoWorkspacesLeft'), 'info');
+      return;
+    }
+    setError(null);
+    setLockedUserId(targetUserId);
+    setUserId(targetUserId);
+    setWorkspaceId(remaining[0]?.id ?? '');
+    setRole('reader');
+    setCreateOpen(true);
   }
 
   async function createMembership() {
@@ -201,13 +297,7 @@ export function MembershipsAdmin({
           <Button
             type="button"
             disabled={pending || users.length === 0 || workspaces.length === 0}
-            onClick={() => {
-              setError(null);
-              setUserId(users[0]?.id ?? '');
-              setWorkspaceId(workspaces[0]?.id ?? '');
-              setRole('reader');
-              setCreateOpen(true);
-            }}
+            onClick={openCreateModal}
           >
             {t('addMembership')}
           </Button>
@@ -217,7 +307,7 @@ export function MembershipsAdmin({
       <Modal
         open={createOpen}
         onClose={closeCreateModal}
-        title={t('addMembership')}
+        title={lockedUserId ? t('addUserToWorkspace') : t('addMembership')}
         footer={
           <>
             <Button
@@ -230,7 +320,7 @@ export function MembershipsAdmin({
             </Button>
             <Button
               type="button"
-              disabled={pending || !userId || !workspaceId}
+              disabled={pending || !userId || !workspaceId || availableWorkspaces.length === 0}
               onClick={() => void createMembership()}
             >
               {t('create')}
@@ -238,27 +328,42 @@ export function MembershipsAdmin({
           </>
         }
       >
-        <Field label={t('user')}>
-          <Select
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            data-modal-initial-focus
-          >
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.displayName} ({user.email})
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {lockedUserId ? (
+          <Field label={t('user')}>
+            <Input
+              value={lockedUserLabel}
+              readOnly
+              disabled
+              data-modal-initial-focus
+            />
+          </Field>
+        ) : (
+          <Field label={t('user')}>
+            <Select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              data-modal-initial-focus
+            >
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.displayName} ({user.email})
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label={t('workspace')}>
-          <Select value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
-            {workspaces.map((workspace) => (
-              <option key={workspace.id} value={workspace.id}>
-                {workspace.name}
-              </option>
-            ))}
-          </Select>
+          {availableWorkspaces.length === 0 ? (
+            <p className="m-0 text-sm text-ink-muted">{t('membershipNoWorkspacesLeft')}</p>
+          ) : (
+            <Select value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
+              {availableWorkspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </Field>
         <Field label={t('role')}>
           <Select
@@ -276,51 +381,87 @@ export function MembershipsAdmin({
       </Modal>
 
       <div className="grid gap-3">
-        {filteredMemberships.length === 0 ? (
+        {groupedMemberships.length === 0 ? (
           <p className="kh-muted">
             {initialMemberships.length === 0
               ? t('emptyMemberships')
               : t('emptyMembershipsFiltered')}
           </p>
         ) : (
-          filteredMemberships.map((membership) => (
-            <Panel
-              key={membership.id}
-              className="flex flex-wrap items-center justify-between gap-3"
-            >
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <strong>{membership.user.displayName}</strong>
-                  <Badge>{roleLabel(membership.role)}</Badge>
+          groupedMemberships.map((group) => {
+            const takenCount = initialMemberships.filter(
+              (membership) => membership.userId === group.userId,
+            ).length;
+            const canAddWorkspace = takenCount < workspaces.length;
+
+            return (
+              <Panel key={group.userId} className="grid gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <strong>{group.displayName}</strong>
+                      <Badge tone="neutral">
+                        {t('membershipWorkspaceCount', {
+                          count: group.memberships.length,
+                        })}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 mb-0 text-sm text-ink-muted">{group.email}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending || !canAddWorkspace}
+                    onClick={() => openAddWorkspaceForUser(group.userId)}
+                  >
+                    {t('addUserToWorkspace')}
+                  </Button>
                 </div>
-                <p className="mt-1 mb-0 text-sm text-ink-muted">
-                  {membership.user.email} · {membership.workspace.name}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  className="w-auto"
-                  value={membership.role}
-                  disabled={pending}
-                  onChange={(e) => void updateRole(membership.id, e.target.value)}
-                >
-                  {ROLES.map((value) => (
-                    <option key={value} value={value}>
-                      {roleLabel(value)}
-                    </option>
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {group.memberships.map((membership) => (
+                    <li
+                      key={membership.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-panel-solid px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="m-0 font-medium text-ink">
+                          {membership.workspace.name}
+                        </p>
+                        <p className="m-0 text-xs text-ink-muted">
+                          {membership.workspace.slug}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Select
+                          className="w-auto"
+                          value={membership.role}
+                          disabled={pending}
+                          aria-label={t('role')}
+                          onChange={(e) =>
+                            void updateRole(membership.id, e.target.value)
+                          }
+                        >
+                          {ROLES.map((value) => (
+                            <option key={value} value={value}>
+                              {roleLabel(value)}
+                            </option>
+                          ))}
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          disabled={pending}
+                          onClick={() => void removeMembership(membership.id)}
+                        >
+                          {t('remove')}
+                        </Button>
+                      </div>
+                    </li>
                   ))}
-                </Select>
-                <Button
-                  type="button"
-                  variant="danger"
-                  disabled={pending}
-                  onClick={() => void removeMembership(membership.id)}
-                >
-                  {t('remove')}
-                </Button>
-              </div>
-            </Panel>
-          ))
+                </ul>
+              </Panel>
+            );
+          })
         )}
       </div>
     </div>

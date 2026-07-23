@@ -171,7 +171,7 @@ export POSTGRES_PASSWORD=...
 
 Or with a reachable `DATABASE_URL` and local `pg_dump` / `pg_restore` clients.
 
-Future scheduled / offsite backups, blob providers (S3-compatible, Azure Blob, OneDrive/SharePoint), and admin maintenance tooling: [`OPERATIONS.md`](OPERATIONS.md) and backlog **NF-005**–**NF-009**.
+Future scheduled / offsite backups, **DB export/import** (incl. cross-instance), blob providers (S3-compatible, Azure Blob, OneDrive/SharePoint), and admin maintenance tooling: [`OPERATIONS.md`](OPERATIONS.md) and backlog **NF-005**–**NF-009**.
 
 ## Related
 
