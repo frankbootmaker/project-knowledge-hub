@@ -12,7 +12,6 @@ import { AppError, appLocaleSchema, passwordSchema } from '@project-knowledge-hu
 import {
   assertMutatingOrigin,
   clearSessionCookie,
-  requireAuthenticated,
   setSessionCookie,
 } from '../plugins/auth.js';
 import {
