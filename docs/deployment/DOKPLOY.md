@@ -182,7 +182,7 @@ CONFIRM_IMPORT=REPLACE WIPE_DATABASE=1 \
 # then migrate if needed; re-apply target WEB_URL / secrets; smoke login
 ```
 
-Copy dumps off the volume for transfer (Dokploy volume browser, `docker cp`, or future Monitoring download). Offsite object upload is **Ops-1** (after BlobStore). Full runbook: [`OPERATIONS.md`](OPERATIONS.md).
+Copy dumps off the volume for transfer (Dokploy volume browser, `docker cp`, or Monitoring download). **Offsite:** set `BLOB_PROVIDER=s3` (+ bucket/keys); Monitoring export and the worker sync upload to `{prefix}/backups/…`. Azure Blob is **NF-007**. Full runbook: [`OPERATIONS.md`](OPERATIONS.md).
 
 ## Related
 

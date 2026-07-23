@@ -71,6 +71,23 @@ export type MonitoringPayload = {
       autoRotate: boolean;
       source: 'file' | 'env';
     };
+    lastOffsite: {
+      stamp: {
+        kind: string;
+        at: string;
+        artifact: string;
+        schemaVersion: string;
+        hostname: string;
+        key: string;
+        provider: string;
+      } | null;
+      ageSeconds: number | null;
+    };
+    offsite: {
+      enabled: boolean;
+      provider: string;
+      auto: boolean;
+    };
   };
 };
 
@@ -316,6 +333,36 @@ export function MonitoringDashboard({
     }
   }
 
+  async function runOffsite(name: string) {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/admin/monitoring/backups/${encodeURIComponent(name)}/offsite`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        },
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+        key?: string;
+      };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? `HTTP ${response.status}`);
+      }
+      pushToast(t('monitoringOffsiteOk', { key: body.key ?? name }));
+      await refresh();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('monitoringOffsiteFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function runImport() {
     if (confirmPhrase !== 'REPLACE') {
       setError(t('monitoringImportConfirmHint'));
@@ -527,6 +574,23 @@ export function MonitoringDashboard({
             tone="neutral"
           />
           <StatusRow
+            label={t('monitoringLastOffsite')}
+            value={
+              data.backups.lastOffsite.stamp
+                ? `${formatAge(data.backups.lastOffsite.ageSeconds, t('monitoringNever'))} · ${data.backups.lastOffsite.stamp.provider} · ${data.backups.lastOffsite.stamp.key}`
+                : data.backups.offsite.enabled
+                  ? t('monitoringOffsitePending')
+                  : t('monitoringOffsiteDisabled')
+            }
+            tone={
+              data.backups.lastOffsite.stamp
+                ? 'success'
+                : data.backups.offsite.enabled
+                  ? 'warn'
+                  : 'neutral'
+            }
+          />
+          <StatusRow
             label={t('monitoringBackupDir')}
             value={data.backups.dir}
             tone="neutral"
@@ -658,6 +722,16 @@ export function MonitoringDashboard({
                     >
                       {t('monitoringDownload')}
                     </a>
+                    {data.backups.offsite.enabled ? (
+                      <button
+                        type="button"
+                        className="border-0 bg-transparent p-0 text-sm font-medium text-brand hover:underline"
+                        disabled={pending}
+                        onClick={() => void runOffsite(artifact.name)}
+                      >
+                        {t('monitoringPushOffsite')}
+                      </button>
+                    ) : null}
                     {deleteConfirm === artifact.name ? (
                       <>
                         <Button

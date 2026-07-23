@@ -13,6 +13,7 @@
 * `users.idp_source` and `users.idp_subject` are reserved for future OIDC / Entra / GitHub / Keycloak login
 * Local accounts keep both null and continue to use password / invite / reset flows
 * No IdP login or token exchange is implemented in this phase
+* **Planned:** Microsoft Entra ID as IdP (**NF-012**) unlocks Entra-auth **Azure Blob** on Admin → Storage (**NF-007**), not a separate storage product
 
 ## Auth email flows
 

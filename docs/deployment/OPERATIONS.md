@@ -82,12 +82,14 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 * **Restore / import drill** checklist below; run on Dev after deploy.
 * **NF-002** bootstrap seed remains optional for empty rebuilds (import may replace seed).
 
-### Ops-1 — Offsite dumps
+### Ops-1 — Offsite dumps — **done** (S3-compatible)
 
-* Upload dumps to object storage via `BlobStore` (`BACKUP_OFFSITE=s3|azure_blob|…`).
-* Encryption at rest (provider-managed KMS/SSE and/or client-side before upload).
-* Alert when last successful backup is older than N hours.
-* Offsite object becomes the **exchange format** for moving dumps between systems (download on target → import).
+* `BLOB_PROVIDER=s3` + bucket/credentials; objects at `{BLOB_KEY_PREFIX|APP_ENV}/backups/…`.
+* After API **Export now**, dump is uploaded when `BACKUP_OFFSITE=true` (default).
+* Worker sync (same backup volume) uploads pending `last-success` dumps on an interval (`BACKUP_OFFSITE_SYNC_INTERVAL_MS`).
+* Stamp: `/backups/last-offsite.json`; Monitoring shows last offsite age + **Push offsite** per file.
+* Provider-managed encryption at rest (bucket SSE/KMS) — client-side encrypt later if needed.
+* Azure Blob (`NF-007`) on Admin → **Storage** when **Entra ID** sign-in (`NF-012`) lands; stale-backup alerts (`NF-009`) still follow-on.
 
 ### Ops-2 — App blob store
 
@@ -123,7 +125,7 @@ Minimal interface (implementation later):
 | Provider | API | Primary use | Notes |
 | --- | --- | --- | --- |
 | **S3-compatible** | AWS S3 API | Backups + app blobs | Covers AWS S3, Cloudflare R2, Backblaze B2, **MinIO**, Garage, SeaweedFS, Ceph RGW. Preferred default for self-host Dev/Prod. |
-| **Azure Blob Storage** | Azure SDK / REST | Backups + app blobs | First-class for Azure / Microsoft-centric deployments; same product jobs as S3, different auth (account key, SAS, or Entra ID). |
+| **Azure Blob Storage** | Azure SDK / REST | Backups + app blobs | Same Admin → Storage UI as S3. **Ship with Entra IdP** (NF-012); account key / SAS only as escape hatch. |
 | **OneDrive / SharePoint** | Microsoft Graph | Optional **user/org library** sync or export | Folder/drive semantics, OAuth/Entra, quotas. Good for “save export to my OneDrive” or org document library; **awkward** as the only backup backend. Prefer writing durable backups to Azure Blob or S3, then optionally mirroring selected exports to OneDrive. |
 | Local / disabled | Filesystem | Dev only | Current avatar path; escape hatch when no bucket is configured. |
 

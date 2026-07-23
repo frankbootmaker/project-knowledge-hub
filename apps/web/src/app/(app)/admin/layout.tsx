@@ -15,6 +15,7 @@ const links = [
   { href: '/admin/api-clients', key: 'apiClients' as const },
   { href: '/admin/mcp-setup', key: 'mcpSetup' as const },
   { href: '/admin/email', key: 'email' as const },
+  { href: '/admin/storage', key: 'storage' as const },
   // Data lifecycle
   { href: '/admin/archive', key: 'archive' as const },
   // Operations

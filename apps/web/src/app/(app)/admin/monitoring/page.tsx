@@ -44,6 +44,8 @@ const emptyPayload = (): MonitoringPayload => ({
       autoRotate: true,
       source: 'env',
     },
+    lastOffsite: { stamp: null, ageSeconds: null },
+    offsite: { enabled: false, provider: 'disabled', auto: true },
   },
 });
 

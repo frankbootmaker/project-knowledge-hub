@@ -21,6 +21,16 @@ x-app-env: &app-env
   EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-disabled}
   SEARCH_HYBRID_ENABLED: ${SEARCH_HYBRID_ENABLED:-false}
   MAIL_DRIVER: ${MAIL_DRIVER:-console}
+  BLOB_PROVIDER: ${BLOB_PROVIDER:-disabled}
+  BLOB_S3_BUCKET: ${BLOB_S3_BUCKET:-}
+  BLOB_S3_REGION: ${BLOB_S3_REGION:-auto}
+  BLOB_S3_ENDPOINT: ${BLOB_S3_ENDPOINT:-}
+  BLOB_S3_ACCESS_KEY_ID: ${BLOB_S3_ACCESS_KEY_ID:-}
+  BLOB_S3_SECRET_ACCESS_KEY: ${BLOB_S3_SECRET_ACCESS_KEY:-}
+  BLOB_S3_FORCE_PATH_STYLE: ${BLOB_S3_FORCE_PATH_STYLE:-false}
+  BLOB_KEY_PREFIX: ${BLOB_KEY_PREFIX:-}
+  BACKUP_OFFSITE: ${BACKUP_OFFSITE:-true}
+  BACKUP_OFFSITE_SYNC_INTERVAL_MS: ${BACKUP_OFFSITE_SYNC_INTERVAL_MS:-300000}
 
 services:
   postgres:
@@ -131,6 +141,9 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
+      BACKUP_DIR: ${BACKUP_DIR:-/backups}
+    volumes:
+      - knowledge_hub_backups:/backups
     depends_on:
       postgres:
         condition: service_healthy

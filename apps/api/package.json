@@ -15,6 +15,7 @@
     "@fastify/multipart": "^10.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@project-knowledge-hub/auth": "workspace:*",
+    "@project-knowledge-hub/blob-store": "workspace:*",
     "@project-knowledge-hub/config": "workspace:*",
     "@project-knowledge-hub/conversation-import": "workspace:*",
     "@project-knowledge-hub/database": "workspace:*",

@@ -12,6 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@project-knowledge-hub/blob-store": "workspace:*",
     "@project-knowledge-hub/config": "workspace:*",
     "@project-knowledge-hub/database": "workspace:*",
     "@project-knowledge-hub/embeddings": "workspace:*",

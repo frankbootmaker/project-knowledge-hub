@@ -7,10 +7,16 @@ import Fastify, {
 import multipart from '@fastify/multipart';
 import { Redis } from 'ioredis';
 import { ZodError } from 'zod';
-import { loadEnv, type AppEnv } from '@project-knowledge-hub/config';
+import { loadEnv, blobStoreConfigFromEnv, type AppEnv } from '@project-knowledge-hub/config';
 import { createDatabase, type Database } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 import type { MailTransport } from '@project-knowledge-hub/mail';
+import {
+  createBlobStore,
+  type BlobStore,
+} from '@project-knowledge-hub/blob-store';
+import { registerBlobSettingsRoutes } from './routes/blob-settings.js';
+import { resolveBlobStore } from './lib/blob-settings.js';
 import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
@@ -47,6 +53,7 @@ export type ApiDependencies = {
   database: Database;
   redis: Redis;
   mail?: MailTransport;
+  blobStore?: BlobStore;
 };
 
 export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> {
@@ -80,10 +87,15 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
       return resolved.config;
     });
 
+  const blobStore =
+    deps.blobStore ?? createBlobStore(blobStoreConfigFromEnv(deps.env));
+
   app.decorate('env', deps.env);
   app.decorate('database', deps.database);
   app.decorate('redis', deps.redis);
   app.decorate('mail', mail);
+  app.decorate('blobStore', blobStore);
+  app.decorate('getBlobStore', async () => resolveBlobStore(app.database, app.env));
 
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;
@@ -176,6 +188,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerOrganizationRoutes(app);
   await registerUserRoutes(app);
   await registerMailSettingsRoutes(app);
+  await registerBlobSettingsRoutes(app);
   await registerMonitoringRoutes(app);
   await registerMembershipRoutes(app);
   await registerApiClientRoutes(app);
@@ -214,5 +227,11 @@ declare module 'fastify' {
     database: Database;
     redis: Redis;
     mail: MailTransport;
+    blobStore: BlobStore;
+    getBlobStore: () => Promise<{
+      store: BlobStore;
+      backupOffsite: boolean;
+      source: 'override' | 'env';
+    }>;
   }
 }

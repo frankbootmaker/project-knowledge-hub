@@ -1,7 +1,11 @@
 import { Worker } from 'bullmq';
 import { and, eq, isNull } from 'drizzle-orm';
 import { Redis } from 'ioredis';
-import { embeddingConfigFromEnv, loadEnv } from '@project-knowledge-hub/config';
+import {
+  embeddingConfigFromEnv,
+  loadEnv,
+} from '@project-knowledge-hub/config';
+import { syncPendingOffsiteDump } from '@project-knowledge-hub/blob-store';
 import {
   createDatabase,
   gitRepositoryConnections,
@@ -28,6 +32,7 @@ import {
   type GitSyncQueueJobData,
 } from '@project-knowledge-hub/jobs';
 import { createLogger } from '@project-knowledge-hub/observability';
+import { resolveWorkerBlobStore } from './resolve-blob.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -47,6 +52,7 @@ async function main(): Promise<void> {
   let shuttingDown = false;
   let gitWorker: Worker<GitSyncQueueJobData> | null = null;
   let embeddingWorker: Worker<EmbeddingReindexQueueJobData> | null = null;
+  let offsiteTimer: ReturnType<typeof setInterval> | null = null;
   const gitSyncQueue = createGitSyncQueue(env.REDIS_URL);
   const embeddingQueue = createEmbeddingReindexQueue(env.REDIS_URL);
   const embeddingConfig = embeddingConfigFromEnv(env);
@@ -60,6 +66,9 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'Shutting down worker');
 
     try {
+      if (offsiteTimer) {
+        clearInterval(offsiteTimer);
+      }
       if (gitWorker) {
         await gitWorker.close();
       }
@@ -237,6 +246,37 @@ async function main(): Promise<void> {
     );
   });
 
+  if (env.BACKUP_OFFSITE_SYNC_INTERVAL_MS > 0) {
+    const runOffsiteSync = async () => {
+      try {
+        const { store, backupOffsite } = await resolveWorkerBlobStore(
+          database,
+          env,
+        );
+        if (!backupOffsite || store.provider === 'disabled') {
+          return;
+        }
+        const result = await syncPendingOffsiteDump({
+          blobStore: store,
+          backupDir: env.BACKUP_DIR,
+          schemaVersion: 'worker',
+        });
+        if (result.uploaded) {
+          logger.info(
+            { key: result.stamp.key, artifact: result.stamp.artifact },
+            'Offsite backup upload completed',
+          );
+        }
+      } catch (error) {
+        logger.error({ err: error }, 'Offsite backup sync failed');
+      }
+    };
+    void runOffsiteSync();
+    offsiteTimer = setInterval(() => {
+      void runOffsiteSync();
+    }, env.BACKUP_OFFSITE_SYNC_INTERVAL_MS);
+  }
+
   logger.info(
     {
       appEnv: env.APP_ENV,
@@ -244,6 +284,7 @@ async function main(): Promise<void> {
       queues: [GIT_SYNC_QUEUE, EMBEDDING_REINDEX_QUEUE],
       gitSyncSafety: safetySchedule,
       embeddingProvider: embeddingConfig.provider,
+      backupOffsiteSyncMs: env.BACKUP_OFFSITE_SYNC_INTERVAL_MS,
       status: 'ready',
     },
     'Worker ready',

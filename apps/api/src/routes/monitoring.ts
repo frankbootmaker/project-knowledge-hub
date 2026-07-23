@@ -25,6 +25,11 @@ import {
   writeRetentionPolicy,
 } from '../lib/backup-retention.js';
 import {
+  readOffsiteStamp,
+  syncPendingOffsiteDump,
+  uploadDumpOffsiteOrThrow,
+} from '../lib/backup-offsite.js';
+import {
   getActiveSessionCount,
   getMcpActivitySummary,
   getPendingAttention,
@@ -86,8 +91,18 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const range = query.range ?? '24h';
     const backupDir = app.env.BACKUP_DIR;
 
-    const [checks, schemaVersion, activeSessions, pending, mcp, lastSuccess, lastImport, artifacts, retention] =
-      await Promise.all([
+    const [
+      checks,
+      schemaVersion,
+      activeSessions,
+      pending,
+      mcp,
+      lastSuccess,
+      lastImport,
+      lastOffsite,
+      artifacts,
+      retention,
+    ] = await Promise.all([
         collectDependencyChecks(app),
         getSchemaVersionLabel(app.database),
         getActiveSessionCount(app.database),
@@ -95,6 +110,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         getMcpActivitySummary(app.database, sinceForRange(range)),
         readStamp(backupDir, 'last-success.json'),
         readStamp(backupDir, 'last-import.json'),
+        readOffsiteStamp(backupDir),
         listDumpArtifacts(backupDir),
         readRetentionPolicy(backupDir, envRetentionDefaults(app.env)),
       ]);
@@ -102,6 +118,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const ready = checks.postgres === 'ok' && checks.redis === 'ok';
     const overall = ready ? 'healthy' : 'degraded';
     const totalBytes = artifacts.reduce((sum, item) => sum + item.sizeBytes, 0);
+    const { store: blobStore, backupOffsite } = await app.getBlobStore();
+    const offsiteEnabled = backupOffsite && blobStore.provider !== 'disabled';
 
     return {
       overall,
@@ -129,12 +147,29 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
           'Export/import use pg_dump/pg_restore on the API host (Dokploy api image includes postgresql-client). Locally, Docker Postgres is used as a fallback when clients are missing.',
         lastSuccess: stampSummary(lastSuccess),
         lastImport: stampSummary(lastImport),
+        lastOffsite: lastOffsite
+          ? {
+              stamp: lastOffsite,
+              ageSeconds: stampSummary({
+                kind: lastOffsite.kind,
+                at: lastOffsite.at,
+                artifact: lastOffsite.artifact,
+                schemaVersion: lastOffsite.schemaVersion,
+                hostname: lastOffsite.hostname,
+              }).ageSeconds,
+            }
+          : { stamp: null, ageSeconds: null },
         artifacts,
         totalBytes,
         maxUploadBytes: app.env.BACKUP_MAX_UPLOAD_BYTES,
         retention: {
           ...retention.policy,
           source: retention.source,
+        },
+        offsite: {
+          enabled: offsiteEnabled,
+          provider: blobStore.provider,
+          auto: backupOffsite,
         },
       },
     };
@@ -151,6 +186,18 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       databaseUrl: app.env.DATABASE_URL,
       schemaVersion,
     });
+
+    let offsite: { key: string; stamp: { at: string; key: string } } | null = null;
+    const { store: blobStore, backupOffsite } = await app.getBlobStore();
+    if (backupOffsite && blobStore.provider !== 'disabled') {
+      const uploaded = await uploadDumpOffsiteOrThrow({
+        blobStore,
+        backupDir: app.env.BACKUP_DIR,
+        name: result.artifact.name,
+        schemaVersion,
+      });
+      offsite = { key: uploaded.key, stamp: uploaded.stamp };
+    }
 
     const { policy } = await readRetentionPolicy(
       app.env.BACKUP_DIR,
@@ -173,11 +220,12 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         sizeBytes: result.artifact.sizeBytes,
         schemaVersion,
         rotation,
+        offsite,
       },
       ipAddress: request.ip,
     });
 
-    return { artifact: result.artifact, stamp: result.stamp, rotation };
+    return { artifact: result.artifact, stamp: result.stamp, rotation, offsite };
   });
 
   app.put('/api/v1/admin/monitoring/backups/retention', async (request) => {
@@ -237,6 +285,50 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     });
 
     return { retention: { ...policy }, rotation };
+  });
+
+  app.post('/api/v1/admin/monitoring/backups/:name/offsite', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ name: z.string().min(1).max(200) }).parse(request.params);
+    const schemaVersion = await getSchemaVersionLabel(app.database);
+    const { store: blobStore } = await app.getBlobStore();
+
+    const uploaded = await uploadDumpOffsiteOrThrow({
+      blobStore,
+      backupDir: app.env.BACKUP_DIR,
+      name: params.name,
+      schemaVersion,
+    });
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'backup.offsite',
+      entityType: 'database_backup',
+      entityId: params.name,
+      metadata: { key: uploaded.key, provider: uploaded.stamp.provider },
+      ipAddress: request.ip,
+    });
+
+    return { key: uploaded.key, stamp: uploaded.stamp };
+  });
+
+  app.post('/api/v1/admin/monitoring/backups/offsite-sync', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const schemaVersion = await getSchemaVersionLabel(app.database);
+    const { store: blobStore } = await app.getBlobStore();
+    const result = await syncPendingOffsiteDump({
+      blobStore,
+      backupDir: app.env.BACKUP_DIR,
+      schemaVersion,
+    });
+    return result;
   });
 
   app.get('/api/v1/admin/monitoring/backups/:name/download', async (request, reply) => {

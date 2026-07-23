@@ -122,6 +122,49 @@ export const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  /**
+   * When true (default), successful dumps are uploaded to BlobStore when
+   * BLOB_PROVIDER is not disabled.
+   */
+  BACKUP_OFFSITE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  /** Worker poll interval to push local dumps that are not yet offsite (0 = off). */
+  BACKUP_OFFSITE_SYNC_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(5 * 60 * 1000),
+  /** Object storage: disabled | s3 (Azure later). */
+  BLOB_PROVIDER: z.enum(['disabled', 's3']).default('disabled'),
+  BLOB_S3_BUCKET: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  BLOB_S3_REGION: z.string().min(1).default('auto'),
+  BLOB_S3_ENDPOINT: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
+  BLOB_S3_ACCESS_KEY_ID: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  BLOB_S3_SECRET_ACCESS_KEY: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  /** Required for MinIO / some S3-compatible endpoints. */
+  BLOB_S3_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  /** Key root, e.g. `staging` → objects at `staging/backups/…`. Defaults to APP_ENV. */
+  BLOB_KEY_PREFIX: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
   /** Milestone 10: embedding provider (disabled = FTS-only). */
   EMBEDDING_PROVIDER: z
     .enum(['disabled', 'ollama', 'openai_compatible'])
@@ -181,6 +224,18 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       'Invalid environment configuration: EMBEDDING_BASE_URL is required when EMBEDDING_PROVIDER=openai_compatible',
     );
   }
+  if (env.BLOB_PROVIDER === 's3') {
+    if (!env.BLOB_S3_BUCKET) {
+      throw new Error(
+        'Invalid environment configuration: BLOB_S3_BUCKET is required when BLOB_PROVIDER=s3',
+      );
+    }
+    if (!env.BLOB_S3_ACCESS_KEY_ID || !env.BLOB_S3_SECRET_ACCESS_KEY) {
+      throw new Error(
+        'Invalid environment configuration: BLOB_S3_ACCESS_KEY_ID and BLOB_S3_SECRET_ACCESS_KEY are required when BLOB_PROVIDER=s3',
+      );
+    }
+  }
   return env;
 }
 
@@ -192,6 +247,22 @@ export function embeddingConfigFromEnv(env: AppEnv) {
     apiKey: env.EMBEDDING_API_KEY,
     dimensions: env.EMBEDDING_DIMENSIONS,
     hybridEnabled: env.SEARCH_HYBRID_ENABLED && env.EMBEDDING_PROVIDER !== 'disabled',
+  };
+}
+
+export function blobStoreConfigFromEnv(env: AppEnv) {
+  if (env.BLOB_PROVIDER === 'disabled') {
+    return { provider: 'disabled' as const };
+  }
+  return {
+    provider: 's3' as const,
+    bucket: env.BLOB_S3_BUCKET!,
+    region: env.BLOB_S3_REGION,
+    endpoint: env.BLOB_S3_ENDPOINT,
+    accessKeyId: env.BLOB_S3_ACCESS_KEY_ID!,
+    secretAccessKey: env.BLOB_S3_SECRET_ACCESS_KEY!,
+    forcePathStyle: env.BLOB_S3_FORCE_PATH_STYLE,
+    keyPrefix: env.BLOB_KEY_PREFIX ?? env.APP_ENV,
   };
 }
 
