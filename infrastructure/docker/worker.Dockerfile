@@ -21,5 +21,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN useradd --system --uid 1001 knowledgehub
 COPY --from=build /app /app
-USER knowledgehub
+COPY infrastructure/docker/worker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+# Entrypoint chowns BACKUP_DIR then drops to knowledgehub (offsite stamp writes).
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "apps/worker/dist/index.js"]

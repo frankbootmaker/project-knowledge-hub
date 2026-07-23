@@ -26,8 +26,11 @@ RUN useradd --system --uid 1001 knowledgehub \
   && apt-get install -y --no-install-recommends curl postgresql-client \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app /app
-USER knowledgehub
+COPY infrastructure/docker/api-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+# Entrypoint runs as root briefly to chown BACKUP_DIR, then drops to knowledgehub.
 EXPOSE 3101
 HEALTHCHECK --interval=15s --timeout=5s --start-period=25s --retries=5 \
   CMD curl -fsS "http://127.0.0.1:${API_PORT:-3101}/health" || exit 1
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "apps/api/dist/index.js"]

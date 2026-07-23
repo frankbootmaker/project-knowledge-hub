@@ -79,6 +79,7 @@ echo "Wrote ${OUT} ($(wc -c <"$OUT" | tr -d ' ') bytes)"
 
 SCHEMA_VERSION="$(db_ops_schema_version)"
 db_ops_stamp_write "$STAMP_PATH" "backup" "$OUT" "$SCHEMA_VERSION"
+db_ops_fix_backup_perms "$BACKUP_DIR"
 
 # Convenience symlink for operators / future Monitoring (stable path).
 ln -sfn "$(basename "$OUT")" "${BACKUP_DIR}/latest.dump" 2>/dev/null \

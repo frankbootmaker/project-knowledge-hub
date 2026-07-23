@@ -11,6 +11,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/db-ops-common.sh
+source "${SCRIPT_DIR}/lib/db-ops-common.sh"
+
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 INTERVAL="${BACKUP_INTERVAL_SECONDS:-86400}"
 ENABLED="${BACKUP_ENABLED:-true}"
@@ -21,12 +24,13 @@ if [[ "$INTERVAL" -lt 60 ]]; then
   exit 1
 fi
 
-mkdir -p "$BACKUP_DIR"
+db_ops_fix_backup_perms "$BACKUP_DIR"
 
 run_once() {
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Starting scheduled backup…"
   BACKUP_DIR="$BACKUP_DIR" BACKUP_RUN_ROTATE=1 \
     "${SCRIPT_DIR}/backup-db.sh"
+  db_ops_fix_backup_perms "$BACKUP_DIR"
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Backup cycle done; sleeping ${INTERVAL}s"
 }
 

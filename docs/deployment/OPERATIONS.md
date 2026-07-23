@@ -76,6 +76,7 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 * Compose service `db-backup` (Dokploy) / optional local `compose.yaml` profile `backup`: loop `pg_dump -Fc` every `BACKUP_INTERVAL_SECONDS` (default 24h).
 * Retention via `rotate-backups.sh`: `BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` (defaults 7 / 4 / 3).
 * Dumps on named volume `knowledge_hub_backups` (path `/backups` in the sidecar).
+* Volume ownership: API/worker use uid **1001**; `db-backup` and container entrypoints chown `/backups` so Monitoring export/delete work.
 * **Export:** `export-db.sh` (= `backup-db.sh`); artifacts `knowledge-hub-*.dump`, symlink `latest.dump`.
 * **Import:** `import-db.sh` with `CONFIRM_IMPORT=REPLACE` (optional `WIPE_DATABASE=1`) → `pg_restore`; stamps for Monitoring (**NF-011**).
 * Stamps: `/backups/last-success.json` (backup), `/backups/last-import.json` (import) — `kind`, `at`, `artifact`, `schemaVersion` (drizzle migration max id).

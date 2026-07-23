@@ -297,11 +297,37 @@ export async function exportDatabaseDump(input: {
   databaseUrl: string;
   schemaVersion: string;
 }): Promise<{ artifact: BackupArtifact; stamp: BackupStamp }> {
-  await ensureBackupDir(input.backupDir);
+  try {
+    await ensureBackupDir(input.backupDir);
+  } catch (err) {
+    const code = errnoCode(err);
+    if (code === 'EACCES' || code === 'EPERM') {
+      throw new AppError({
+        code: 'BACKUP_PERMISSION_DENIED',
+        message:
+          'Cannot write BACKUP_DIR (permission denied). The backups volume must be writable by the API user (uid 1001).',
+        statusCode: 503,
+      });
+    }
+    throw err;
+  }
   const name = `knowledge-hub-${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')}.dump`;
   const outPath = path.join(input.backupDir, name);
 
-  await dumpToFile(outPath, input.databaseUrl);
+  try {
+    await dumpToFile(outPath, input.databaseUrl);
+  } catch (err) {
+    const code = errnoCode(err);
+    if (code === 'EACCES' || code === 'EPERM') {
+      throw new AppError({
+        code: 'BACKUP_PERMISSION_DENIED',
+        message:
+          'Cannot write dump under BACKUP_DIR (permission denied). The backups volume must be writable by the API user (uid 1001).',
+        statusCode: 503,
+      });
+    }
+    throw err;
+  }
 
   const stat = await fs.stat(outPath);
   if (stat.size <= 0) {
@@ -494,6 +520,14 @@ export function dumpFilePath(backupDir: string, name: string): string {
   return path.join(backupDir, assertSafeDumpName(name));
 }
 
+function errnoCode(err: unknown): string | undefined {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const code = (err as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
 export async function deleteDumpArtifact(
   backupDir: string,
   name: string,
@@ -502,12 +536,24 @@ export async function deleteDumpArtifact(
   const filePath = path.join(backupDir, safe);
   try {
     await fs.unlink(filePath);
-  } catch {
-    throw new AppError({
-      code: 'BACKUP_NOT_FOUND',
-      message: 'Dump artifact not found',
-      statusCode: 404,
-    });
+  } catch (err) {
+    const code = errnoCode(err);
+    if (code === 'ENOENT') {
+      throw new AppError({
+        code: 'BACKUP_NOT_FOUND',
+        message: 'Dump artifact not found',
+        statusCode: 404,
+      });
+    }
+    if (code === 'EACCES' || code === 'EPERM') {
+      throw new AppError({
+        code: 'BACKUP_PERMISSION_DENIED',
+        message:
+          'Cannot delete dump under BACKUP_DIR (permission denied). The backups volume must be writable by the API user (uid 1001).',
+        statusCode: 503,
+      });
+    }
+    throw err;
   }
 
   const latestPath = path.join(backupDir, 'latest.dump');

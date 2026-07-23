@@ -2,6 +2,21 @@
 # shellcheck shell=bash
 # Sourced by backup-db.sh, rotate-backups.sh, import-db.sh, backup-loop.sh
 
+# API/worker run as uid 1001 (knowledgehub). Sidecar dumps often run as root; keep the
+# shared volume owned by 1001 so Admin export/delete and stamp writes succeed.
+db_ops_fix_backup_perms() {
+  local dir="${1:-${BACKUP_DIR:-}}"
+  local uid="${BACKUP_UID:-1001}"
+  local gid="${BACKUP_GID:-1001}"
+  if [[ -z "$dir" ]]; then
+    return 0
+  fi
+  mkdir -p "$dir"
+  if [[ "$(id -u)" == "0" ]]; then
+    chown -R "${uid}:${gid}" "$dir" 2>/dev/null || true
+  fi
+}
+
 db_ops_json_str() {
   local s="${1:-}"
   s="${s//\\/\\\\}"

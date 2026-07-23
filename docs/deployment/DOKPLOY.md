@@ -155,6 +155,8 @@ Until admin log export exists, use the **Dokploy UI** (per-service container log
 
 **Ops-0 (NF-005):** Compose service `db-backup` writes `pg_dump -Fc` into volume `knowledge_hub_backups` (`/backups`), applies retention, and updates `last-success.json`. Disable with `BACKUP_ENABLED=false`.
 
+The API (and worker) run as uid **1001**. Sidecar dumps are chowned to that uid after each cycle, and the API/worker entrypoints fix volume ownership on start — otherwise Admin **Export** / **Delete** fail with permission errors (the volume is often created root-owned).
+
 Scripts:
 
 * `export-db.sh` / `backup-db.sh` — dump + stamp + rotate
