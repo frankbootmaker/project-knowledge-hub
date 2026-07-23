@@ -107,6 +107,21 @@ export const envSchema = z.object({
   /** Directory for profile avatar binaries (one file per user id). */
   AVATAR_UPLOAD_DIR: z.string().min(1).default('./data/avatars'),
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
+  /** Ops-0/NF-011: Postgres dump directory (Compose mounts volume here on api). */
+  BACKUP_DIR: z.string().min(1).default('./backups'),
+  /** Max dump upload size for Admin → Monitoring import (default 512 MiB). */
+  BACKUP_MAX_UPLOAD_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(512 * 1024 * 1024),
+  BACKUP_KEEP_DAILY: z.coerce.number().int().min(1).max(90).default(7),
+  BACKUP_KEEP_WEEKLY: z.coerce.number().int().min(0).max(52).default(4),
+  BACKUP_KEEP_MONTHLY: z.coerce.number().int().min(0).max(36).default(3),
+  BACKUP_AUTO_ROTATE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
   /** Milestone 10: embedding provider (disabled = FTS-only). */
   EMBEDDING_PROVIDER: z
     .enum(['disabled', 'ollama', 'openai_compatible'])

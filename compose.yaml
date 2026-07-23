@@ -57,6 +57,9 @@ services:
       WEB_URL: http://localhost:3100
       API_URL: http://localhost:3101
       LOG_LEVEL: info
+      BACKUP_DIR: /backups
+    volumes:
+      - knowledge_hub_dev_backups:/backups
     ports:
       - '127.0.0.1:3101:3101'
     depends_on:
@@ -144,11 +147,42 @@ services:
     networks:
       - knowledge_hub_dev_net
 
+  # Optional local Ops-0 scheduler: docker compose --profile backup up -d db-backup
+  db-backup:
+    profiles: ['backup']
+    image: pgvector/pgvector:pg16
+    container_name: knowledge-hub-dev-db-backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: knowledge_hub
+      POSTGRES_USER: knowledge_hub
+      POSTGRES_PASSWORD: knowledge_hub
+      BACKUP_DIR: /backups
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-3}
+      BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-1}
+    volumes:
+      - knowledge_hub_dev_backups:/backups
+      - ./infrastructure/scripts:/scripts:ro
+    entrypoint: ['/bin/bash', '/scripts/backup-loop.sh']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - knowledge_hub_dev_net
+
 volumes:
   knowledge_hub_dev_postgres_data:
     name: knowledge_hub_dev_postgres_data
   knowledge_hub_dev_redis_data:
     name: knowledge_hub_dev_redis_data
+  knowledge_hub_dev_backups:
+    name: knowledge_hub_dev_backups
 
 networks:
   knowledge_hub_dev_net:

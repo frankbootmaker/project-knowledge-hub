@@ -24,6 +24,7 @@ import { registerMailSettingsRoutes } from './routes/mail-settings.js';
 import { registerMcpRoutes } from './routes/mcp.js';
 import { registerMcpSetupRoutes } from './routes/mcp-setup.js';
 import { registerMembershipRoutes } from './routes/memberships.js';
+import { registerMonitoringRoutes } from './routes/monitoring.js';
 import { registerOrganizationRoutes } from './routes/organizations.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerReadyRoutes } from './routes/ready.js';
@@ -151,7 +152,8 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
 
   await app.register(multipart, {
     limits: {
-      fileSize: deps.env.AVATAR_MAX_BYTES,
+      // Allow large DB dump uploads; avatar routes still enforce AVATAR_MAX_BYTES.
+      fileSize: Math.max(deps.env.AVATAR_MAX_BYTES, deps.env.BACKUP_MAX_UPLOAD_BYTES),
       files: 1,
     },
   });
@@ -174,6 +176,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerOrganizationRoutes(app);
   await registerUserRoutes(app);
   await registerMailSettingsRoutes(app);
+  await registerMonitoringRoutes(app);
   await registerMembershipRoutes(app);
   await registerApiClientRoutes(app);
   await registerAiDiscoverRoutes(app);

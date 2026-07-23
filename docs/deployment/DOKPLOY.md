@@ -151,27 +151,38 @@ After deploy:
 
 Until admin log export exists, use the **Dokploy UI** (per-service container logs) for api, worker, and web.
 
-## Backup / restore (Dev)
+## Backup / export / import (Dev)
 
-Scripts (Dev-tested path; full DR certification can wait for Prod):
+**Ops-0 (NF-005):** Compose service `db-backup` writes `pg_dump -Fc` into volume `knowledge_hub_backups` (`/backups`), applies retention, and updates `last-success.json`. Disable with `BACKUP_ENABLED=false`.
 
-* `infrastructure/scripts/backup-db.sh` — `pg_dump` (`-Fc`)
-* `infrastructure/scripts/restore-db.sh` — `pg_restore`
+Scripts:
 
-Against the Compose postgres container:
+* `export-db.sh` / `backup-db.sh` — dump + stamp + rotate
+* `import-db.sh` — full replace (`CONFIRM_IMPORT=REPLACE`); optional `WIPE_DATABASE=1`
+* `restore-db.sh` — low-level `pg_restore`
+* `rotate-backups.sh` — 7d / 4w / 3m retention
+
+Manual export against the Compose postgres container:
 
 ```bash
 export POSTGRES_CONTAINER=<postgres-container-name>
 export POSTGRES_USER=knowledge_hub
 export POSTGRES_DB=knowledge_hub
 export POSTGRES_PASSWORD=...
-./infrastructure/scripts/backup-db.sh ./backups/dev.dump
-./infrastructure/scripts/restore-db.sh ./backups/dev.dump
+./infrastructure/scripts/export-db.sh
+# → ./backups/knowledge-hub-….dump + last-success.json
 ```
 
-Or with a reachable `DATABASE_URL` and local `pg_dump` / `pg_restore` clients.
+Cross-instance / DR import (target instance):
 
-Future scheduled / offsite backups, **DB export/import** (incl. cross-instance), blob providers (S3-compatible, Azure Blob, OneDrive/SharePoint), and admin maintenance tooling: [`OPERATIONS.md`](OPERATIONS.md) and backlog **NF-005**–**NF-009**.
+```bash
+CONFIRM_IMPORT=REPLACE WIPE_DATABASE=1 \
+  POSTGRES_CONTAINER=<target-postgres> POSTGRES_PASSWORD=... \
+  ./infrastructure/scripts/import-db.sh ./backups/latest.dump
+# then migrate if needed; re-apply target WEB_URL / secrets; smoke login
+```
+
+Copy dumps off the volume for transfer (Dokploy volume browser, `docker cp`, or future Monitoring download). Offsite object upload is **Ops-1** (after BlobStore). Full runbook: [`OPERATIONS.md`](OPERATIONS.md).
 
 ## Related
 

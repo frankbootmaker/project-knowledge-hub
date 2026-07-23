@@ -5,16 +5,21 @@ import { NavLink, Panel } from '../../../components/ui';
 import { requireSession } from '../../../lib/session';
 
 const links = [
+  // Home
   { href: '/admin', key: 'overview' as const, exact: true },
+  // Tenancy & access
   { href: '/admin/organizations', key: 'organizations' as const },
-  { href: '/admin/mcp-setup', key: 'mcpSetup' as const },
-  { href: '/admin/email', key: 'email' as const },
-  { href: '/admin/api-clients', key: 'apiClients' as const },
   { href: '/admin/users', key: 'users' as const },
   { href: '/admin/memberships', key: 'memberships' as const },
+  // Integrations & platform config
+  { href: '/admin/api-clients', key: 'apiClients' as const },
+  { href: '/admin/mcp-setup', key: 'mcpSetup' as const },
+  { href: '/admin/email', key: 'email' as const },
+  // Data lifecycle
   { href: '/admin/archive', key: 'archive' as const },
+  // Operations
+  { href: '/admin/monitoring', key: 'monitoring' as const },
   { href: '/admin/audit', key: 'audit' as const },
-  { href: '/status', key: 'status' as const },
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {

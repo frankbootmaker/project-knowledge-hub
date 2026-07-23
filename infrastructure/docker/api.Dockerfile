@@ -23,7 +23,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN useradd --system --uid 1001 knowledgehub \
   && apt-get update \
-  && apt-get install -y --no-install-recommends curl \
+  && apt-get install -y --no-install-recommends curl postgresql-client \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app /app
 USER knowledgehub

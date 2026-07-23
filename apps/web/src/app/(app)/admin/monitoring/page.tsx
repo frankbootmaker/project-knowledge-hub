@@ -1,0 +1,75 @@
+import { getTranslations } from 'next-intl/server';
+import {
+  MonitoringDashboard,
+  type MonitoringPayload,
+} from '../../../../components/admin/MonitoringDashboard';
+import { PageHeader } from '../../../../components/ui';
+import { apiFetch } from '../../../../lib/session';
+
+const emptyPayload = (): MonitoringPayload => ({
+  overall: 'degraded',
+  generatedAt: new Date().toISOString(),
+  app: {
+    env: process.env.APP_ENV ?? 'development',
+    apiUrl: process.env.API_URL ?? 'http://localhost:3101',
+    webUrl: process.env.WEB_URL ?? 'http://localhost:3100',
+    schemaVersion: 'unknown',
+  },
+  health: {
+    api: 'ok',
+    ready: false,
+    checks: { postgres: 'error', redis: 'error' },
+  },
+  attention: { pendingUsers: 0, pendingApiClients: 0 },
+  sessions: { active: 0 },
+  mcp: {
+    range: '24h',
+    requestCount: 0,
+    toolCallCount: 0,
+    toolErrorCount: 0,
+    topActions: [],
+  },
+  backups: {
+    dir: './backups',
+    toolsHint: '',
+    lastSuccess: { stamp: null, ageSeconds: null },
+    lastImport: { stamp: null, ageSeconds: null },
+    artifacts: [],
+    totalBytes: 0,
+    maxUploadBytes: 512 * 1024 * 1024,
+    retention: {
+      keepDaily: 7,
+      keepWeekly: 4,
+      keepMonthly: 3,
+      autoRotate: true,
+      source: 'env',
+    },
+  },
+});
+
+export default async function AdminMonitoringPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const t = await getTranslations('admin');
+  const params = await searchParams;
+  const rawRange = typeof params.range === 'string' ? params.range : '24h';
+  const range =
+    rawRange === '1h' || rawRange === '7d' || rawRange === '24h' ? rawRange : '24h';
+
+  const response = await apiFetch(`/api/v1/admin/monitoring?range=${range}`);
+  const payload: MonitoringPayload = response.ok
+    ? ((await response.json()) as MonitoringPayload)
+    : emptyPayload();
+
+  return (
+    <div>
+      <PageHeader
+        title={t('monitoring')}
+        description={t('monitoringBlurb')}
+      />
+      <MonitoringDashboard initial={payload} initialRange={range} />
+    </div>
+  );
+}

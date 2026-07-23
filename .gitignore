@@ -14,8 +14,13 @@ coverage
 .env.local
 .env.*.local
 
+# Local Postgres dumps (Ops-0 / NF-005) — may contain PII
+/backups/
+apps/api/backups/
+
 # Local uploads (avatars, etc.)
 /data/
+apps/api/data/
 
 # Logs / OS
 *.log

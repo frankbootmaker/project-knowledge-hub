@@ -1,18 +1,19 @@
-# Operations & maintenance (future)
+# Operations & maintenance
 
-**Status:** planning backlog (not scheduled)  
+**Status:** Ops-0 (scheduled local backup + export/import) **shipped**; Ops-1+ planning  
 **Related:** [`DOKPLOY.md`](DOKPLOY.md), [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md), [`NEXT_FEATURES.md`](../product/NEXT_FEATURES.md) (NF-005+)
 
-This note captures **operator maintenance** work beyond the M7 packaging slice: backups, blob/object storage, DB upkeep, and day-2 tooling. Manual helpers already exist (`infrastructure/scripts/backup-db.sh`, `restore-db.sh`, migrate/seed); the goal is to turn them into a **repeatable, off-host, drillable** ops story before Prod cutover.
+Operator maintenance beyond M7 packaging: backups, blob/object storage, DB upkeep, and day-2 tooling. **Ops-0** is live on Dokploy Compose (`db-backup` service + scripts). Offsite upload and Admin Monitoring UI follow in later waves.
 
 ## Current baseline
 
 | Capability | Today |
 | --- | --- |
-| Postgres dump / restore | Scripts (`pg_dump -Fc` / `pg_restore`); documented for Dev |
+| Postgres dump / restore | Scripts + Compose `db-backup` (`pg_dump -Fc` / `pg_restore`); retention + stamps |
+| Export / import | `export-db.sh` / `import-db.sh` (full replace; cross-instance OK) |
 | Migrate / seed | Compose migrate one-shot; optional bootstrap seed (**NF-002**) |
-| Health | API `GET /health`, `GET /ready`; web `/status` |
-| Persistence | Named Compose volumes (Postgres; local avatar/`data` paths) |
+| Health | API `GET /health`, `GET /ready`; web `/status` (→ Monitoring in **NF-011**) |
+| Persistence | Named Compose volumes (Postgres; `knowledge_hub_backups`; local avatar/`data`) |
 | Redis | Cache / queues — **not** a backup source of truth |
 | Secrets | Dokploy env (not included in DB dumps) |
 
@@ -70,15 +71,16 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 ## Phased delivery
 
-### Ops-0 — Scheduled local backup + export/import path (near-term)
+### Ops-0 — Scheduled local backup + export/import path — **done**
 
-* Cron or Compose/worker schedule: `pg_dump -Fc` on a cadence (e.g. daily).
-* Retention policy (example: 7 daily / 4 weekly / 3 monthly).
-* Store dumps on a dedicated volume **on the host** first.
-* **Export:** copy/download the dump artifact (script path + documented location; later Admin download).
-* **Import:** documented `pg_restore` into empty target (same or **other** instance) + migrate check + smoke; write last-success stamp for Monitoring (**NF-011**).
-* Written **restore / import drill** in this doc’s checklist (below) + tick on Dev Dokploy.
-* Land **NF-002** bootstrap seed so empty rebuilds are one-shot (import may replace seed).
+* Compose service `db-backup` (Dokploy) / optional local `compose.yaml` profile `backup`: loop `pg_dump -Fc` every `BACKUP_INTERVAL_SECONDS` (default 24h).
+* Retention via `rotate-backups.sh`: `BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` (defaults 7 / 4 / 3).
+* Dumps on named volume `knowledge_hub_backups` (path `/backups` in the sidecar).
+* **Export:** `export-db.sh` (= `backup-db.sh`); artifacts `knowledge-hub-*.dump`, symlink `latest.dump`.
+* **Import:** `import-db.sh` with `CONFIRM_IMPORT=REPLACE` (optional `WIPE_DATABASE=1`) → `pg_restore`; stamps for Monitoring (**NF-011**).
+* Stamps: `/backups/last-success.json` (backup), `/backups/last-import.json` (import) — `kind`, `at`, `artifact`, `schemaVersion` (drizzle migration max id).
+* **Restore / import drill** checklist below; run on Dev after deploy.
+* **NF-002** bootstrap seed remains optional for empty rebuilds (import may replace seed).
 
 ### Ops-1 — Offsite dumps
 
@@ -144,7 +146,7 @@ Minimal interface (implementation later):
 | Area | Intent |
 | --- | --- |
 | Scheduled jobs visibility | Backups, purge, git safety sync, embedding reindex — show last run / next run |
-| Admin status / ops panel | Backup age, DB migrate version, queue depth, Redis, optional disk |
+| Admin status / ops panel | **Admin → Monitoring** (health, backup age, export/import); Audit remains the event stream |
 | Log retention & export | Off-box or downloadable; Dokploy UI is interim |
 | Alerting | Failed backup, failed migrate, disk, error budget |
 | Release / rollback | Immutable image tags; last-known-good; forward-only migrations |
@@ -157,17 +159,49 @@ Minimal interface (implementation later):
 
 ---
 
+## Ops-0 runbook (scripts)
+
+| Job | Command |
+| --- | --- |
+| Manual export / backup | `POSTGRES_CONTAINER=… POSTGRES_PASSWORD=… ./infrastructure/scripts/export-db.sh` |
+| Or TCP (sidecar-style) | `POSTGRES_HOST=127.0.0.1 POSTGRES_PASSWORD=… BACKUP_DIR=./backups ./infrastructure/scripts/backup-db.sh` |
+| Retention only | `BACKUP_DIR=./backups ./infrastructure/scripts/rotate-backups.sh` |
+| Import (replace) | `CONFIRM_IMPORT=REPLACE WIPE_DATABASE=1 POSTGRES_CONTAINER=… ./infrastructure/scripts/import-db.sh ./backups/latest.dump` |
+| Low-level restore | `./infrastructure/scripts/restore-db.sh ./backups/foo.dump` (prefer `import-db.sh`) |
+
+Local optional scheduler:
+
+```bash
+docker compose --profile backup up -d db-backup
+```
+
+Dokploy: `db-backup` is always defined in `compose.dokploy.yaml`; set `BACKUP_ENABLED=false` to idle without dumping.
+
+### Env knobs
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BACKUP_ENABLED` | `true` | Sidecar dumps when true |
+| `BACKUP_INTERVAL_SECONDS` | `86400` | Seconds between dumps (≥ 60) |
+| `BACKUP_KEEP_DAILY` | `7` | Keep all dumps younger than N days |
+| `BACKUP_KEEP_WEEKLY` | `4` | Then keep ≤N one-per-ISO-week |
+| `BACKUP_KEEP_MONTHLY` | `3` | Then keep ≤N one-per-month; older deleted |
+| `BACKUP_RUN_ON_START` | `1` | Dump once when sidecar starts |
+| `BACKUP_DIR` | `./backups` or `/backups` | Artifact + stamp directory |
+
+---
+
 ## Restore / import drill (Dev → Prod gate)
 
 Use after any backup path change, and when validating **cross-instance** import:
 
-1. Take a fresh dump on the **source** (script or scheduled job) — this is the **export**.
-2. Stand up empty Postgres on the **target** (same or other KnowHub) — or restore into a disposable volume.
-3. **Import** with `pg_restore`; confirm migrate version (migrate forward if dump is older).
-4. Point API at that DB; re-apply target env secrets / `WEB_URL` (do not copy source secrets blindly).
+1. Take a fresh dump on the **source** (`export-db.sh` or wait for `db-backup`) — this is the **export**. Confirm `last-success.json`.
+2. Stand up empty Postgres on the **target** (same or other KnowHub) — or use `WIPE_DATABASE=1`.
+3. **Import:** `CONFIRM_IMPORT=REPLACE … ./infrastructure/scripts/import-db.sh <dump>`; confirm `schemaVersion` / run migrate if dump is older than the app.
+4. Point API at that DB; re-apply **target** env secrets / `WEB_URL` (do not copy source secrets blindly).
 5. Smoke: login, open a workspace, open a knowledge record, MCP preflight if enabled.
 6. If using blobs: confirm object store keys resolve (or accept missing avatars until blob sync).
-7. Record date + operator + source→target in deployment notes; do not call Prod backup “done” without this.
+7. Confirm `last-import.json`; record date + operator + source→target in deployment notes; do not call Prod backup “done” without this.
 
 ---
 

@@ -7,7 +7,6 @@ const publicPaths = [
   '/confirm-email',
   '/forgot-password',
   '/set-password',
-  '/status',
   '/ai-discover',
 ];
 

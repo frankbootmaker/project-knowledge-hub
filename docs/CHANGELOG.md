@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **NF-011 Mon-0:** Admin → **Monitoring** (health + ready checks, MCP/session strip, backup stamps) with export / download / import (`CONFIRM REPLACE`), **manual dump delete**, and **retention / auto-rotate** controls (`retention.json`). `/status` redirects here. API `GET/POST/PUT/DELETE /api/v1/admin/monitoring…`; api image includes `postgresql-client`; Dokploy api mounts `knowledge_hub_backups`.
+* **NF-005 Ops-0:** scheduled Postgres backups — Compose `db-backup` (Dokploy + local `--profile backup`), retention (7d/4w/3m), `export-db.sh` / `import-db.sh` (full replace + stamps), volume `knowledge_hub_backups`. Runbook in `OPERATIONS.md` / `DOKPLOY.md`.
 * Docs: next-features **execution waves A–F** (merge NF-008 into Monitoring/NF-011; BlobStore 006→007; Prod spine NF-002→005→011) in `NEXT_FEATURES.md`.
 * Docs: operations & maintenance backlog — scheduled/offsite DB backups, **export/import for cross-instance data moves**, `BlobStore` (S3-compatible + Azure Blob + optional OneDrive/SharePoint), admin maintenance console, observability (**NF-005**–**NF-009**) in `docs/deployment/OPERATIONS.md` / `NEXT_FEATURES.md`.
 * Backlog **NF-010**: finer-grained access (project / knowledge-record roles) parked; workspace-level roles remain the default (`NEXT_FEATURES.md`).

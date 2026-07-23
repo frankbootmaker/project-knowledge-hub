@@ -1,12 +1,12 @@
-# Admin monitoring dashboard (future)
+# Admin monitoring dashboard
 
-**Status:** planning backlog (**NF-011**)  
+**Status:** Mon-0 **shipped** (**NF-011**) — health + MCP/session strip + backup management  
 **Home:** Admin sidebar → **Monitoring** (absorbs today’s **Status**)  
-**Related:** existing Admin → Audit, `/status` (to redirect or embed), MCP audit actions (`mcp.request`, `mcp.tool_call`, `mcp.tool_error`), API `/health` + `/ready`
+**Related:** Admin → Audit, `/status` → redirects here, MCP audit actions (`mcp.request`, `mcp.tool_call`, `mcp.tool_error`), API `/health` + `/ready`, Ops-0 stamps (`BACKUP_DIR`)
 
 ## Why
 
-Operators need a **live picture** of how humans and AI clients use the hub—not only a raw audit trail. Audit stays the forensic log; Monitoring is aggregated, time-bounded, and glanceable. **Platform health** (today’s Status page) belongs at the top of the same screen so ops do not bounce between two admin links.
+Operators need a **live picture** of how humans and AI clients use the hub—not only a raw audit trail. Audit stays the forensic log; Monitoring is aggregated, time-bounded, and glanceable. **Platform health** (former Status page) belongs at the top of the same screen so ops do not bounce between two admin links.
 
 ## Placement
 
@@ -27,7 +27,7 @@ Lead the page with the current Status content so Monitoring is useful even when 
 * Overall health badge (ok / degraded)
 * API `/health` + `/ready` dependency rows (Postgres, Redis, …)
 * Queue / worker signals when exposed
-* Last backup age (when **NF-005** exists) and last successful **import** stamp when used for cross-instance moves
+* Last backup age (when **NF-005** Ops-0 stamps exist: volume `/backups/last-success.json`) and last successful **import** stamp (`last-import.json`) for cross-instance moves
 * Embedding reindex backlog (M10)
 * Optional migrate / app version labels
 
@@ -99,7 +99,7 @@ Reuse the existing Status UI patterns (colored `Badge`s, no left accent bars) as
 
 | Phase | Scope |
 | --- | --- |
-| **Mon-0** | Move Status into Admin → Monitoring + redirect `/status`; MCP volume/tools/errors + active session count from existing audit/sessions |
+| **Mon-0** | **Done:** Status → Admin → Monitoring + `/status` redirect; health (`/ready` checks); MCP volume/tools/errors + active sessions; **backup stamps + export/import/download** (`GET/POST /api/v1/admin/monitoring…`) |
 | **Mon-1** | Top records/projects/systems from mutations + MCP gets; client leaderboard |
-| **Mon-2** | `knowledge.view` / search telemetry; anomaly chips; backup/queue strip enrichment |
+| **Mon-2** | `knowledge.view` / search telemetry; anomaly chips; queue strip enrichment |
 | **Mon-3** | Rollup tables + longer history charts |
