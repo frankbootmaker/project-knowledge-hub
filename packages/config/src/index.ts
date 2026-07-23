@@ -113,6 +113,9 @@ export const envSchema = z.object({
   /** Directory for profile avatar binaries (one file per user id). */
   AVATAR_UPLOAD_DIR: z.string().min(1).default('./data/avatars'),
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
+  /** Workspace knowledge media (JPEG/PNG/WebP) when BlobStore is disabled. */
+  MEDIA_UPLOAD_DIR: z.string().min(1).default('./data/media'),
+  MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
   /** Ops-0/NF-011: Postgres dump directory (Compose mounts volume here on api). */
   BACKUP_DIR: z.string().min(1).default('./backups'),
   /** Max dump upload size for Admin → Monitoring import (default 512 MiB). */

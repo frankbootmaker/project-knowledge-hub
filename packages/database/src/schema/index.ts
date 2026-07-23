@@ -705,3 +705,34 @@ export const knowledgeRecordChunks = pgTable(
     index('knowledge_record_chunks_record_id_idx').on(table.knowledgeRecordId),
   ],
 );
+
+/** Workspace media library (JPEG/PNG/WebP) for Markdown embeds (NF-013). */
+export const workspaceMedia = pgTable(
+  'workspace_media',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    knowledgeRecordId: uuid('knowledge_record_id').references(
+      () => knowledgeRecords.id,
+      { onDelete: 'set null' },
+    ),
+    contentType: text('content_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    originalFilename: text('original_filename'),
+    altText: text('alt_text'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('workspace_media_workspace_id_idx').on(table.workspaceId),
+    index('workspace_media_record_id_idx').on(table.knowledgeRecordId),
+    index('workspace_media_created_at_idx').on(table.createdAt),
+  ],
+);

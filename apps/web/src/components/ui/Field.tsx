@@ -1,4 +1,10 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import {
+  forwardRef,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react';
 import { cn } from '../../lib/cn';
 
 export function Field({
@@ -25,12 +31,18 @@ export function Input({
   return <input className={cn('kh-input', className)} {...props} />;
 }
 
-export function Textarea({
-  className,
-  ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cn('kh-input min-h-28 resize-y', className)} {...props} />;
-}
+export const Textarea = forwardRef<
+  HTMLTextAreaElement,
+  TextareaHTMLAttributes<HTMLTextAreaElement>
+>(function Textarea({ className, ...props }, ref) {
+  return (
+    <textarea
+      ref={ref}
+      className={cn('kh-input min-h-28 resize-y', className)}
+      {...props}
+    />
+  );
+});
 
 export function Select({
   className,

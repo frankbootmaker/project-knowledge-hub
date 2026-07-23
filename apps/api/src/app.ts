@@ -20,6 +20,7 @@ import { resolveBlobStore } from './lib/blob-settings.js';
 import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
+import { registerWorkspaceMediaRoutes } from './routes/workspace-media.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAiDiscoverRoutes } from './routes/ai-discover.js';
 import { registerApiClientRoutes } from './routes/api-clients.js';
@@ -164,8 +165,12 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
 
   await app.register(multipart, {
     limits: {
-      // Allow large DB dump uploads; avatar routes still enforce AVATAR_MAX_BYTES.
-      fileSize: Math.max(deps.env.AVATAR_MAX_BYTES, deps.env.BACKUP_MAX_UPLOAD_BYTES),
+      // Allow large DB dump uploads; avatar/media routes enforce their own caps.
+      fileSize: Math.max(
+        deps.env.AVATAR_MAX_BYTES,
+        deps.env.MEDIA_MAX_BYTES,
+        deps.env.BACKUP_MAX_UPLOAD_BYTES,
+      ),
       files: 1,
     },
   });
@@ -177,6 +182,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerAuthRoutes(app);
   await registerMeRoutes(app);
   await registerAvatarRoutes(app);
+  await registerWorkspaceMediaRoutes(app);
   await registerWorkspaceRoutes(app);
   await registerProjectRoutes(app);
   await registerSystemRoutes(app);

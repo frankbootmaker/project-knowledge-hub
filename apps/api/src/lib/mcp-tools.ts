@@ -20,6 +20,13 @@ import {
 import { runSearch } from './search-service.js';
 import { writeAuditEvent } from './identity.js';
 import { createKnowledgeRecord, updateKnowledgeRecord } from './knowledge-records-service.js';
+import {
+  archiveWorkspaceMedia,
+  createWorkspaceMedia,
+  getWorkspaceMediaById,
+  listWorkspaceMedia,
+  toPublicMedia,
+} from './workspace-media.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -527,6 +534,106 @@ export function createMcpToolHandlers(
       };
     },
 
+    async uploadWorkspaceMedia(input) {
+      assertWriteWorkspaceAllowed(client, input.workspaceId);
+      const actingUserId = requireActingUserId(client);
+
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(input.contentBase64, 'base64');
+      } catch {
+        throw new AppError({
+          code: 'MEDIA_INVALID_BASE64',
+          message: 'contentBase64 is not valid base64',
+          statusCode: 400,
+        });
+      }
+      // Reject clearly truncated/empty payloads.
+      if (buffer.byteLength === 0) {
+        throw new AppError({
+          code: 'MEDIA_INVALID_BASE64',
+          message: 'Decoded media is empty',
+          statusCode: 400,
+        });
+      }
+
+      const { store: blobStore } = await app.getBlobStore();
+      const row = await createWorkspaceMedia(app.database, {
+        workspaceId: input.workspaceId,
+        knowledgeRecordId: input.knowledgeRecordId ?? null,
+        contentType: input.contentType,
+        buffer,
+        originalFilename: input.filename ?? null,
+        altText: input.alt ?? null,
+        createdBy: actingUserId,
+        uploadDir: app.env.MEDIA_UPLOAD_DIR,
+        maxBytes: app.env.MEDIA_MAX_BYTES,
+        blobStore,
+      });
+
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'media.upload',
+        entityType: 'workspace_media',
+        entityId: row.id,
+        metadata: {
+          workspaceId: input.workspaceId,
+          knowledgeRecordId: row.knowledgeRecordId,
+          contentType: row.contentType,
+          byteSize: row.byteSize,
+          via: 'mcp',
+        },
+        ipAddress: ipAddress ?? null,
+      });
+
+      return { media: toPublicMedia(row) };
+    },
+
+    async listWorkspaceMedia(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      const rows = await listWorkspaceMedia(app.database, {
+        workspaceId: input.workspaceId,
+        knowledgeRecordId: input.knowledgeRecordId,
+        limit: input.limit,
+      });
+      return { media: rows.map(toPublicMedia) };
+    },
+
+    async deleteWorkspaceMedia(input) {
+      const existing = await getWorkspaceMediaById(app.database, input.mediaId);
+      if (!existing) {
+        throw new AppError({
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media not found',
+          statusCode: 404,
+        });
+      }
+      assertWriteWorkspaceAllowed(client, existing.workspaceId);
+      requireActingUserId(client);
+
+      const { store: blobStore } = await app.getBlobStore();
+      const archived = await archiveWorkspaceMedia(app.database, {
+        mediaId: input.mediaId,
+        uploadDir: app.env.MEDIA_UPLOAD_DIR,
+        blobStore,
+      });
+
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'media.delete',
+        entityType: 'workspace_media',
+        entityId: archived.id,
+        metadata: { workspaceId: archived.workspaceId, via: 'mcp' },
+        ipAddress: ipAddress ?? null,
+      });
+
+      return { media: toPublicMedia(archived), mediaId: archived.id };
+    },
+
     async onToolCall(toolName, ok, context) {
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -543,6 +650,7 @@ export function createMcpToolHandlers(
           ...(context?.projectId ? { projectId: context.projectId } : {}),
           ...(context?.systemId ? { systemId: context.systemId } : {}),
           ...(context?.workspaceId ? { workspaceId: context.workspaceId } : {}),
+          ...(context?.mediaId ? { mediaId: context.mediaId } : {}),
         },
         ipAddress: ipAddress ?? null,
       });

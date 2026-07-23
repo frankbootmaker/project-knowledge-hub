@@ -148,6 +148,13 @@
       "when": 1784420700000,
       "tag": "0020_pgvector_embeddings",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784420900000,
+      "tag": "0021_workspace_media",
+      "breakpoints": true
     }
   ]
 }

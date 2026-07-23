@@ -92,11 +92,12 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 * Provider-managed encryption at rest (bucket SSE/KMS) — client-side encrypt later if needed.
 * Azure Blob (`NF-007`) on Admin → **Storage** when **Entra ID** sign-in (`NF-012`) lands.
 
-### Ops-2 — App blob store (avatars) — **done** (S3 + local fallback)
+### Ops-2 — App blob store (avatars + knowledge media) — **done** (S3 + local fallback)
 
 * Profile avatars use `BlobStore` when `BLOB_PROVIDER=s3` (keys `{prefix}/avatars/{userId}`); served via `/api/v1/avatars/:userId` (no public S3 URLs).
 * When provider is `disabled`, avatars stay on `AVATAR_UPLOAD_DIR` (Compose volume). Local file is used as read fallback and optional backfill when migrating to S3.
-* Imports / Doc Factory exports still later.
+* **Knowledge media (NF-013):** workspace library JPEG/PNG/WebP at `{prefix}/media/{workspaceId}/{mediaId}`; embed via `/api/v1/media/:mediaId` (auth). Local fallback `MEDIA_UPLOAD_DIR`. MCP `upload_workspace_media` returns a Markdown snippet.
+* Document/import file pipelines and Doc Factory exports still later.
 
 ### Ops-3 — Admin maintenance UI
 
@@ -118,7 +119,7 @@ Minimal interface (implementation later):
 
 * `put(key, body, contentType)` / `get(key)` / `delete(key)` / `list(prefix)`
 * Optional `presignGet` / `presignPut` for browser uploads
-* Key layout: `{env}/{purpose}/{…}` with purposes `backups`, `avatars`, `imports`, `exports`
+* Key layout: `{env}/{purpose}/{…}` with purposes `backups`, `avatars`, `media`, `imports`, `exports`
 
 ### Provider matrix
 

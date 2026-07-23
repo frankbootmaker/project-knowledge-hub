@@ -166,6 +166,20 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
         properties: {},
       },
     },
+    {
+      name: 'list_workspace_media',
+      description:
+        'List recent workspace media (JPEG/PNG/WebP) with urls and markdown snippets for embedding in knowledge records.',
+      body: {
+        type: 'object',
+        required: ['workspaceId'],
+        properties: {
+          workspaceId: uuidProp('Workspace id'),
+          knowledgeRecordId: uuidProp('Optional filter by linked knowledge record'),
+          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
+        },
+      },
+    },
   ];
 
   const write: ToolDef[] = [
@@ -230,6 +244,44 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
           language: { type: 'string', nullable: true, minLength: 2, maxLength: 16 },
           generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
           sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
+        },
+      },
+    },
+    {
+      name: 'upload_workspace_media',
+      description:
+        'Upload a JPEG/PNG/WebP image to the workspace media library. Returns mediaId, url, and markdownSnippet to paste into contentMarkdown. Requires knowledge:write.',
+      write: true,
+      body: {
+        type: 'object',
+        required: ['workspaceId', 'contentBase64', 'contentType'],
+        properties: {
+          workspaceId: uuidProp('Workspace id'),
+          contentBase64: stringProp('Base64-encoded image bytes (no data: URL prefix)', {
+            minLength: 1,
+            maxLength: 10_000_000,
+          }),
+          contentType: {
+            type: 'string',
+            enum: ['image/jpeg', 'image/png', 'image/webp'],
+            description: 'Image MIME type',
+          },
+          filename: stringProp('Optional original filename', { maxLength: 200 }),
+          alt: stringProp('Optional alt text for Markdown', { maxLength: 300 }),
+          knowledgeRecordId: uuidProp('Optional knowledge record to link'),
+        },
+      },
+    },
+    {
+      name: 'delete_workspace_media',
+      description:
+        'Soft-delete workspace media and remove stored bytes. Requires knowledge:write.',
+      write: true,
+      body: {
+        type: 'object',
+        required: ['mediaId'],
+        properties: {
+          mediaId: uuidProp('Media id'),
         },
       },
     },

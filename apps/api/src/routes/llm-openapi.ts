@@ -27,8 +27,11 @@ const TOOL_NAMES = [
   'get_knowledge_record',
   'get_record_provenance',
   'list_record_metadata',
+  'list_workspace_media',
   'create_knowledge_record',
   'update_knowledge_record',
+  'upload_workspace_media',
+  'delete_workspace_media',
 ] as const;
 
 type ToolName = (typeof TOOL_NAMES)[number];
@@ -45,8 +48,11 @@ const scopeByTool: Record<ToolName, McpScope> = {
   get_knowledge_record: 'knowledge:read',
   get_record_provenance: 'provenance:read',
   list_record_metadata: 'knowledge:read',
+  list_workspace_media: 'knowledge:read',
   create_knowledge_record: 'knowledge:write',
   update_knowledge_record: 'knowledge:write',
+  upload_workspace_media: 'knowledge:write',
+  delete_workspace_media: 'knowledge:write',
 };
 
 async function enforceRateLimit(app: FastifyInstance, clientId: string): Promise<void> {
@@ -267,6 +273,62 @@ async function invokeTool(
           typeof raw.generatedByModel === 'string' ? raw.generatedByModel : undefined,
         sourceTitle: typeof raw.sourceTitle === 'string' ? raw.sourceTitle : undefined,
       });
+    case 'list_workspace_media':
+      if (typeof raw.workspaceId !== 'string') {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'workspaceId is required',
+          statusCode: 400,
+        });
+      }
+      return handlers.listWorkspaceMedia({
+        workspaceId: raw.workspaceId,
+        knowledgeRecordId:
+          typeof raw.knowledgeRecordId === 'string' ? raw.knowledgeRecordId : undefined,
+        limit: typeof raw.limit === 'number' ? raw.limit : 20,
+      });
+    case 'upload_workspace_media': {
+      if (
+        typeof raw.workspaceId !== 'string' ||
+        typeof raw.contentBase64 !== 'string' ||
+        typeof raw.contentType !== 'string'
+      ) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'workspaceId, contentBase64, and contentType are required',
+          statusCode: 400,
+        });
+      }
+      if (
+        raw.contentType !== 'image/jpeg' &&
+        raw.contentType !== 'image/png' &&
+        raw.contentType !== 'image/webp'
+      ) {
+        throw new AppError({
+          code: 'MEDIA_TYPE_UNSUPPORTED',
+          message: 'contentType must be image/jpeg, image/png, or image/webp',
+          statusCode: 400,
+        });
+      }
+      return handlers.uploadWorkspaceMedia({
+        workspaceId: raw.workspaceId,
+        contentBase64: raw.contentBase64,
+        contentType: raw.contentType,
+        filename: typeof raw.filename === 'string' ? raw.filename : undefined,
+        alt: typeof raw.alt === 'string' ? raw.alt : undefined,
+        knowledgeRecordId:
+          typeof raw.knowledgeRecordId === 'string' ? raw.knowledgeRecordId : undefined,
+      });
+    }
+    case 'delete_workspace_media':
+      if (typeof raw.mediaId !== 'string') {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'mediaId is required',
+          statusCode: 400,
+        });
+      }
+      return handlers.deleteWorkspaceMedia({ mediaId: raw.mediaId });
     default: {
       const _exhaustive: never = toolName;
       throw new AppError({

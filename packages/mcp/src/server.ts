@@ -69,6 +69,20 @@ export type McpToolHandlers = {
     generatedByModel?: string;
     sourceTitle?: string;
   }) => Promise<unknown>;
+  uploadWorkspaceMedia: (input: {
+    workspaceId: string;
+    contentBase64: string;
+    contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+    filename?: string;
+    alt?: string;
+    knowledgeRecordId?: string;
+  }) => Promise<unknown>;
+  listWorkspaceMedia: (input: {
+    workspaceId: string;
+    knowledgeRecordId?: string;
+    limit: number;
+  }) => Promise<unknown>;
+  deleteWorkspaceMedia: (input: { mediaId: string }) => Promise<unknown>;
   onToolCall?: (
     toolName: string,
     ok: boolean,
@@ -81,6 +95,7 @@ export type McpToolCallContext = {
   projectId?: string;
   systemId?: string;
   workspaceId?: string;
+  mediaId?: string;
 };
 
 function requireScope(client: McpClientContext, scope: McpScope): void {
@@ -124,6 +139,10 @@ function extractToolContext(data: unknown): McpToolCallContext {
     if (typeof obj.projectId === 'string') ctx.projectId = obj.projectId;
     if (typeof obj.systemId === 'string') ctx.systemId = obj.systemId;
     if (typeof obj.recordId === 'string') ctx.recordId = obj.recordId;
+    if (typeof obj.mediaId === 'string') ctx.mediaId = obj.mediaId;
+    if (typeof obj.id === 'string' && 'markdownSnippet' in obj) {
+      ctx.mediaId = obj.id;
+    }
   };
 
   take(root);
@@ -132,12 +151,14 @@ function extractToolContext(data: unknown): McpToolCallContext {
     'project',
     'system',
     'record',
+    'media',
   ] as const) {
     const nested = root[key];
     if (nested && typeof nested === 'object') {
       take(nested as Record<string, unknown>);
     }
   }
+  if (typeof root.mediaId === 'string') ctx.mediaId = root.mediaId;
   return ctx;
 }
 
@@ -363,6 +384,58 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('update_knowledge_record', 'knowledge:write', () =>
         handlers.updateKnowledgeRecord(args),
+      )(),
+  );
+
+  server.tool(
+    'upload_workspace_media',
+    'Upload a JPEG/PNG/WebP image to the workspace media library. Returns mediaId, url, and markdownSnippet to embed in knowledge Markdown. Requires knowledge:write.',
+    {
+      workspaceId: z.string().uuid(),
+      contentBase64: z.string().min(1).max(10_000_000),
+      contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+      filename: z.string().min(1).max(200).optional(),
+      alt: z.string().max(300).optional(),
+      knowledgeRecordId: z.string().uuid().optional(),
+    },
+    async (args) =>
+      wrap(
+        'upload_workspace_media',
+        'knowledge:write',
+        () => handlers.uploadWorkspaceMedia(args),
+        {
+          workspaceId: args.workspaceId,
+          recordId: args.knowledgeRecordId,
+        },
+      )(),
+  );
+
+  server.tool(
+    'list_workspace_media',
+    'List recent workspace media (JPEG/PNG/WebP) with urls and markdown snippets. Requires knowledge:read.',
+    {
+      workspaceId: z.string().uuid(),
+      knowledgeRecordId: z.string().uuid().optional(),
+      limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).default(20),
+    },
+    async (args) =>
+      wrap(
+        'list_workspace_media',
+        'knowledge:read',
+        () => handlers.listWorkspaceMedia(args),
+        { workspaceId: args.workspaceId, recordId: args.knowledgeRecordId },
+      )(),
+  );
+
+  server.tool(
+    'delete_workspace_media',
+    'Soft-delete workspace media and remove stored bytes. Requires knowledge:write.',
+    {
+      mediaId: z.string().uuid(),
+    },
+    async (args) =>
+      wrap('delete_workspace_media', 'knowledge:write', () =>
+        handlers.deleteWorkspaceMedia(args),
       )(),
   );
 
