@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * Dokploy Monitoring backup **export** / **delete**: shared `knowledge_hub_backups` volume was root-owned by `db-backup` while api/worker run as uid 1001. Entrypoints chown `/backups` on start; sidecar re-chowns after each dump; clearer `BACKUP_PERMISSION_DENIED` errors.
+* Dokploy Monitoring **export**: API image used Debian `postgresql-client` 15 against Postgres 16 (`pg_dump` version mismatch). Install `postgresql-client-16` from PGDG; keep local dump if offsite upload fails.
 
 ### Changed
 

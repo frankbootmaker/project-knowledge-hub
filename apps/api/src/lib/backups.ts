@@ -153,6 +153,8 @@ function parseDatabaseUrl(databaseUrl: string): {
   user: string;
   password: string;
   database: string;
+  host: string;
+  port: string;
 } {
   try {
     const url = new URL(databaseUrl);
@@ -162,36 +164,61 @@ function parseDatabaseUrl(databaseUrl: string): {
       database: decodeURIComponent(
         (url.pathname || '/knowledge_hub').replace(/^\//, '') || 'knowledge_hub',
       ),
+      host: url.hostname || 'localhost',
+      port: url.port || '5432',
     };
   } catch {
-    return { user: 'knowledge_hub', password: '', database: 'knowledge_hub' };
+    return {
+      user: 'knowledge_hub',
+      password: '',
+      database: 'knowledge_hub',
+      host: 'localhost',
+      port: '5432',
+    };
   }
 }
 
-/** Prefer host pg_dump; fall back to docker exec into a running Postgres container. */
-async function dumpToFile(outPath: string, databaseUrl: string): Promise<void> {
-  if (await which('pg_dump')) {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(
-        'pg_dump',
-        [databaseUrl, '-Fc', '--no-owner', '--no-acl'],
-        { stdio: ['ignore', 'pipe', 'pipe'] },
-      );
-      const out = createWriteStream(outPath);
-      const stderrChunks: Buffer[] = [];
-      child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-      child.on('error', reject);
-      void pipeline(child.stdout, out).catch(reject);
-      child.on('close', (code) => {
+async function streamDumpCommand(
+  command: string,
+  args: string[],
+  outPath: string,
+  env?: NodeJS.ProcessEnv,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: { ...process.env, ...env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const out = createWriteStream(outPath);
+    const stderrChunks: Buffer[] = [];
+    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+    let settled = false;
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      void fs.unlink(outPath).catch(() => undefined);
+      reject(error);
+    };
+
+    child.on('error', (error) => fail(error));
+
+    const pipelineDone = pipeline(child.stdout, out).catch((error: Error) => {
+      fail(error);
+    });
+
+    child.on('close', (code) => {
+      void pipelineDone.finally(() => {
+        if (settled) return;
         if (code === 0) {
+          settled = true;
           resolve();
           return;
         }
-        void fs.unlink(outPath).catch(() => undefined);
-        reject(
+        fail(
           new AppError({
             code: 'BACKUP_EXPORT_FAILED',
-            message: `pg_dump failed (exit ${code}): ${Buffer.concat(stderrChunks)
+            message: `${command} failed (exit ${code}): ${Buffer.concat(stderrChunks)
               .toString('utf8')
               .trim()
               .slice(0, 500)}`,
@@ -200,6 +227,32 @@ async function dumpToFile(outPath: string, databaseUrl: string): Promise<void> {
         );
       });
     });
+  });
+}
+
+/** Prefer host pg_dump; fall back to docker exec into a running Postgres container. */
+async function dumpToFile(outPath: string, databaseUrl: string): Promise<void> {
+  const creds = parseDatabaseUrl(databaseUrl);
+
+  if (await which('pg_dump')) {
+    await streamDumpCommand(
+      'pg_dump',
+      [
+        '-h',
+        creds.host,
+        '-p',
+        creds.port,
+        '-U',
+        creds.user,
+        '-d',
+        creds.database,
+        '-Fc',
+        '--no-owner',
+        '--no-acl',
+      ],
+      outPath,
+      { PGPASSWORD: creds.password },
+    );
     return;
   }
 
@@ -247,49 +300,24 @@ async function dumpToFile(outPath: string, databaseUrl: string): Promise<void> {
     });
   }
 
-  const creds = parseDatabaseUrl(databaseUrl);
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      'docker',
-      [
-        'exec',
-        '-e',
-        `PGPASSWORD=${creds.password}`,
-        container,
-        'pg_dump',
-        '-U',
-        creds.user,
-        '-d',
-        creds.database,
-        '-Fc',
-        '--no-owner',
-        '--no-acl',
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    const out = createWriteStream(outPath);
-    const stderrChunks: Buffer[] = [];
-    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-    child.on('error', reject);
-    void pipeline(child.stdout, out).catch(reject);
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      void fs.unlink(outPath).catch(() => undefined);
-      reject(
-        new AppError({
-          code: 'BACKUP_EXPORT_FAILED',
-          message: `docker pg_dump failed (exit ${code}): ${Buffer.concat(stderrChunks)
-            .toString('utf8')
-            .trim()
-            .slice(0, 500)}`,
-          statusCode: 500,
-        }),
-      );
-    });
-  });
+  await streamDumpCommand(
+    'docker',
+    [
+      'exec',
+      '-e',
+      `PGPASSWORD=${creds.password}`,
+      container,
+      'pg_dump',
+      '-U',
+      creds.user,
+      '-d',
+      creds.database,
+      '-Fc',
+      '--no-owner',
+      '--no-acl',
+    ],
+    outPath,
+  );
 }
 
 export async function exportDatabaseDump(input: {
@@ -387,15 +415,26 @@ export async function importDatabaseDump(input: {
 
   const hasPgRestore = await which('pg_restore');
   if (hasPgRestore) {
-    const result = await runCommand('pg_restore', [
-      '-d',
-      input.databaseUrl,
-      '--clean',
-      '--if-exists',
-      '--no-owner',
-      '--no-acl',
-      resolved,
-    ]);
+    const creds = parseDatabaseUrl(input.databaseUrl);
+    const result = await runCommand(
+      'pg_restore',
+      [
+        '-h',
+        creds.host,
+        '-p',
+        creds.port,
+        '-U',
+        creds.user,
+        '-d',
+        creds.database,
+        '--clean',
+        '--if-exists',
+        '--no-owner',
+        '--no-acl',
+        resolved,
+      ],
+      { env: { PGPASSWORD: creds.password } },
+    );
     if (result.code !== 0 && result.code !== 1) {
       throw new AppError({
         code: 'BACKUP_IMPORT_FAILED',

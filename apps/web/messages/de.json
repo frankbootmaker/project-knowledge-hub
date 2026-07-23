@@ -1099,6 +1099,7 @@
     "monitoringBackupDir": "Backup-Verzeichnis",
     "monitoringExportNow": "Jetzt exportieren",
     "monitoringExportOk": "Exportiert {name}",
+    "monitoringExportOkOffsiteFailed": "Exportiert {name}, Offsite-Upload fehlgeschlagen: {error}",
     "monitoringExportFailed": "Export fehlgeschlagen",
     "monitoringImportOpen": "Dump importieren…",
     "monitoringImportTitle": "Datenbank-Dump importieren",

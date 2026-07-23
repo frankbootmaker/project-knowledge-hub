@@ -227,11 +227,21 @@ export function MonitoringDashboard({
       const body = (await response.json().catch(() => ({}))) as {
         error?: { message?: string };
         artifact?: { name: string };
+        offsiteError?: string | null;
       };
       if (!response.ok) {
         throw new Error(body.error?.message ?? `HTTP ${response.status}`);
       }
-      pushToast(t('monitoringExportOk', { name: body.artifact?.name ?? '' }));
+      if (body.offsiteError) {
+        pushToast(
+          t('monitoringExportOkOffsiteFailed', {
+            name: body.artifact?.name ?? '',
+            error: body.offsiteError,
+          }),
+        );
+      } else {
+        pushToast(t('monitoringExportOk', { name: body.artifact?.name ?? '' }));
+      }
       await refresh();
       router.refresh();
     } catch (err) {

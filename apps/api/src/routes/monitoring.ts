@@ -144,7 +144,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       backups: {
         dir: backupDir,
         toolsHint:
-          'Export/import use pg_dump/pg_restore on the API host (Dokploy api image includes postgresql-client). Locally, Docker Postgres is used as a fallback when clients are missing.',
+          'Export/import use postgresql-client-16 on the API image (matches Dokploy Postgres 16). Locally, Docker Postgres is used as a fallback when clients are missing.',
         lastSuccess: stampSummary(lastSuccess),
         lastImport: stampSummary(lastImport),
         lastOffsite: lastOffsite
@@ -188,15 +188,25 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     });
 
     let offsite: { key: string; stamp: { at: string; key: string } } | null = null;
+    let offsiteError: string | null = null;
     const { store: blobStore, backupOffsite } = await app.getBlobStore();
     if (backupOffsite && blobStore.provider !== 'disabled') {
-      const uploaded = await uploadDumpOffsiteOrThrow({
-        blobStore,
-        backupDir: app.env.BACKUP_DIR,
-        name: result.artifact.name,
-        schemaVersion,
-      });
-      offsite = { key: uploaded.key, stamp: uploaded.stamp };
+      try {
+        const uploaded = await uploadDumpOffsiteOrThrow({
+          blobStore,
+          backupDir: app.env.BACKUP_DIR,
+          name: result.artifact.name,
+          schemaVersion,
+        });
+        offsite = { key: uploaded.key, stamp: uploaded.stamp };
+      } catch (error) {
+        offsiteError =
+          error instanceof Error ? error.message : 'Offsite upload failed';
+        request.log.warn(
+          { err: error, artifact: result.artifact.name },
+          'Local dump succeeded; offsite upload failed',
+        );
+      }
     }
 
     const { policy } = await readRetentionPolicy(
@@ -221,11 +231,18 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         schemaVersion,
         rotation,
         offsite,
+        offsiteError,
       },
       ipAddress: request.ip,
     });
 
-    return { artifact: result.artifact, stamp: result.stamp, rotation, offsite };
+    return {
+      artifact: result.artifact,
+      stamp: result.stamp,
+      rotation,
+      offsite,
+      offsiteError,
+    };
   });
 
   app.put('/api/v1/admin/monitoring/backups/retention', async (request) => {

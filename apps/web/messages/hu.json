@@ -1099,6 +1099,7 @@
     "monitoringBackupDir": "Mentés könyvtár",
     "monitoringExportNow": "Export most",
     "monitoringExportOk": "Exportálva: {name}",
+    "monitoringExportOkOffsiteFailed": "Exportálva: {name}, de az offsite feltöltés sikertelen: {error}",
     "monitoringExportFailed": "Az export sikertelen",
     "monitoringImportOpen": "Mentés importálása…",
     "monitoringImportTitle": "Adatbázis-mentés importálása",
