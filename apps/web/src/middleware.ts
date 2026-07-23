@@ -39,12 +39,11 @@ export function middleware(request: NextRequest) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', pathname);
     response = NextResponse.redirect(loginUrl);
-  } else if (
-    (pathname === '/login' || pathname === '/register') &&
-    hasSession
-  ) {
-    response = NextResponse.redirect(new URL('/dashboard', request.url));
   } else {
+    // Do not redirect /login → /dashboard based only on cookie presence.
+    // After a DB import/restore, the browser may still hold a stale kh_session
+    // while the sessions table no longer matches — that caused a redirect loop
+    // and looked like the site was down.
     response = NextResponse.next();
   }
 

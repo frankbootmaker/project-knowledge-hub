@@ -176,7 +176,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/api/v1/auth/session', async (request) => {
-    const principal = requireAuthenticated(request);
+    if (!request.principal) {
+      return { user: null, memberships: [] };
+    }
+    const principal = request.principal;
     const [user] = await app.database.db
       .select({
         fullName: users.fullName,

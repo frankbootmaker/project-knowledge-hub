@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Dokploy Monitoring backup **export** / **delete**: shared `knowledge_hub_backups` volume was root-owned by `db-backup` while api/worker run as uid 1001. Entrypoints chown `/backups` on start; sidecar re-chowns after each dump; clearer `BACKUP_PERMISSION_DENIED` errors.
 * Dokploy Monitoring **export**: API image used Debian `postgresql-client` 15 against Postgres 16 (`pg_dump` version mismatch). Install `postgresql-client-16` from PGDG; keep local dump if offsite upload fails.
 * Live Monitoring **import**: terminate other DB sessions before `pg_restore --clean`, then restart the API process so pools recover (avoids “import OK” then unreachable stack).
+* Stale session cookie after DB import caused `/login` ↔ `/dashboard` redirect loop (middleware treated cookie presence as logged-in). Login no longer auto-bounces on cookie alone; `GET /auth/session` returns `{ user: null }` when unauthenticated.
 
 ### Changed
 

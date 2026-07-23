@@ -36,7 +36,12 @@ export async function getSession(): Promise<SessionPayload | null> {
     return null;
   }
 
-  return (await response.json()) as SessionPayload;
+  const payload = (await response.json()) as SessionPayload | { user: null };
+  if (!payload || !('user' in payload) || !payload.user) {
+    return null;
+  }
+
+  return payload as SessionPayload;
 }
 
 export async function requireSession(): Promise<SessionPayload> {

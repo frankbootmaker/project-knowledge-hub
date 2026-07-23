@@ -146,9 +146,10 @@ describe.skipIf(!hasIntegrationEnv)('Auth and workspace authorization', () => {
     await closeDatabase();
   });
 
-  it('rejects unauthenticated session access', async () => {
+  it('returns null user when unauthenticated', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/auth/session' });
-    expect(response.statusCode).toBe(401);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ user: null, memberships: [] });
   });
 
   it('allows administrator to create a workspace', async () => {
@@ -207,7 +208,8 @@ describe.skipIf(!hasIntegrationEnv)('Auth and workspace authorization', () => {
       url: '/api/v1/auth/session',
       headers: { cookie: readerCookie },
     });
-    expect(session.statusCode).toBe(401);
+    expect(session.statusCode).toBe(200);
+    expect(session.json()).toEqual({ user: null, memberships: [] });
   });
 });
 
