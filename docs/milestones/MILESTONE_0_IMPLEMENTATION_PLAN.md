@@ -3,7 +3,7 @@
 **Status:** Complete (validated)  
 **Date:** 2026-07-19  
 **Scope:** Repository and platform foundation only  
-**PRD reference:** `docs/project-knowledge-hub-prd.md` / `docs/product/PRD.md`
+**PRD reference:** `docs/product/PRD.md`
 
 ---
 
@@ -12,7 +12,7 @@
 | Check | Result |
 | --- | --- |
 | Repository path | `/home/frankbootmaker/projects/project-knowledge-hub` |
-| Existing content | Git repo + `docs/project-knowledge-hub-prd.md` only |
+| Existing content | Git repo + product PRD |
 | Node.js | Not installed initially; install Node.js 24 LTS via nvm |
 | pnpm | Enable via Corepack after Node install |
 | Docker / Compose | Docker 29.6.1, Compose v5.3.1 |
@@ -28,7 +28,7 @@
 2. Development Compose exposes Postgres/Redis on localhost only.
 3. Milestone 0 includes minimal schema for organization, workspace, user, membership, project, and system — no knowledge-record tables and no business CRUD APIs.
 4. Stub packages contain README-only placeholders (no fake APIs).
-5. Existing PRD paste remains at `docs/project-knowledge-hub-prd.md`; product docs also include `docs/product/PRD.md`.
+5. Canonical PRD lives at `docs/product/PRD.md` (`docs/project-knowledge-hub-prd.md` redirects there).
 
 ---
 
@@ -87,7 +87,7 @@
 
 ## Implementation sequence
 
-1. Create tracking docs (`CHANGELOG.md`, `MILESTONE_TRACKING.md`, this plan).
+1. Create tracking docs (`docs/CHANGELOG.md`, `docs/milestones/MILESTONE_TRACKING.md`, this plan).
 2. Scaffold monorepo root (`package.json`, `pnpm-workspace.yaml`, `turbo.json`, TS/ESLint/Prettier).
 3. Create package skeletons + implement `config`, `observability`, `database`, `domain`.
 4. Implement `apps/api` (`/health`, `/ready`, error handler, graceful shutdown).

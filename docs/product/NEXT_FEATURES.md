@@ -1,6 +1,6 @@
 # Next features
 
-Short backlog of product work **after** the current milestone track (see `ROADMAP.md` / `MILESTONE_TRACKING.md`). Items here are not scheduled until their module or scope is described clearly enough to implement.
+Short backlog of product work **after** the current milestone track (see `ROADMAP.md` / [`../milestones/MILESTONE_TRACKING.md`](../milestones/MILESTONE_TRACKING.md)). Items here are not scheduled until their module or scope is described clearly enough to implement.
 
 ## How to use
 

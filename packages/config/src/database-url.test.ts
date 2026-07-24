@@ -13,9 +13,11 @@ describe('resolveDatabaseUrl', () => {
     expect(url).toBe(
       `postgres://knowledge_hub:${encodeURIComponent('O*Ytq6&tdF3Ps51')}@postgres:5432/knowledge_hub`,
     );
-    // encodeURIComponent encodes `&` but leaves `*` unescaped (RFC 3986 "unreserved"-ish set).
+    // encodeURIComponent encodes `&`; `*` is left as-is.
     expect(url).toContain('%26');
-    expect(url).toContain('O*Ytq6');
+    expect(decodeURIComponent(url.split(':')[2].split('@')[0])).toBe(
+      'O*Ytq6&tdF3Ps51',
+    );
   });
   it('falls back to DATABASE_URL when POSTGRES_PASSWORD is unset', () => {
     expect(

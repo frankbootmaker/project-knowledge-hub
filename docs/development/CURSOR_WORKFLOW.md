@@ -15,7 +15,7 @@
 * Never run `docker compose down -v`, `docker system prune`, or `docker volume prune` unless explicitly instructed.
 * Never modify `/home/frankbootmaker/containers` or existing Open WebUI / Ollama / ComfyUI stacks.
 * Stop at the end of the requested milestone.
-* Update `docs/CHANGELOG.md` and `docs/MILESTONE_TRACKING.md` when delivering milestone work.
+* Update `docs/CHANGELOG.md` and `docs/milestones/MILESTONE_TRACKING.md` when delivering milestone work.
 
 ## Definition of done
 

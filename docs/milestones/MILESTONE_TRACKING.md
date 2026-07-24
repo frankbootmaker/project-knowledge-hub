@@ -186,4 +186,4 @@ See `docs/product/NEXT_FEATURES.md` (**execution waves A–F**). Doc Factory (NF
 
 ## Milestone 0 checklist
 
-See historical completion in git history / `docs/MILESTONE_0_IMPLEMENTATION_PLAN.md`. Marked `complete`.
+See historical completion in git history / `docs/milestones/MILESTONE_0_IMPLEMENTATION_PLAN.md`. Marked `complete`.

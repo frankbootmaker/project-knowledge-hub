@@ -11,6 +11,10 @@ describe('mapPathToRecord', () => {
   it('maps deployment guides', () => {
     expect(mapPathToRecord('docs/deployment/DOKPLOY.md').recordType).toBe('deployment-guide');
   });
+
+  it('maps milestone plans', () => {
+    expect(mapPathToRecord('docs/milestones/MILESTONE_TRACKING.md').recordType).toBe('plan');
+  });
 });
 
 describe('titleFromMarkdown', () => {

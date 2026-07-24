@@ -217,7 +217,8 @@ Copy dumps off the volume for transfer (Dokploy volume browser, `docker cp`, or 
 
 ## Related
 
+* **Agent handoff (backup / monitoring / local↔Dokploy DB transfer):** [`AGENT_BACKUP_MONITORING_HANDOFF.md`](AGENT_BACKUP_MONITORING_HANDOFF.md)
 * Operations & maintenance (future): [`OPERATIONS.md`](OPERATIONS.md)
 * Release flow: [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md)
-* Milestone plan: [`../MILESTONE_7_IMPLEMENTATION_PLAN.md`](../MILESTONE_7_IMPLEMENTATION_PLAN.md)
+* Milestone plan: [`../milestones/MILESTONE_7_IMPLEMENTATION_PLAN.md`](../milestones/MILESTONE_7_IMPLEMENTATION_PLAN.md)
 * Local Compose (host-published PG/Redis): [`DOCKER_COMPOSE.md`](DOCKER_COMPOSE.md)

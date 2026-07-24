@@ -44,7 +44,7 @@ export const DEFAULT_PATH_MAPPINGS: GitPathMapping[] = [
     tags: ['design', 'git'],
   },
   {
-    pattern: 'docs/MILESTONE_*.md',
+    pattern: 'docs/milestones/**',
     recordType: 'plan',
     tags: ['milestone', 'git'],
   },

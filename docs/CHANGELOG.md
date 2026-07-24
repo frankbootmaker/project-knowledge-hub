@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Docs layout: milestone plans → `docs/milestones/`; MCP Cursor setup → `docs/development/`; added `docs/README.md` index; root PRD paste redirects to `docs/product/PRD.md`.
 * Knowledge markdown viewer: collapsible TOC with section jumps that match sanitized heading ids; summary / links / source metadata collapsed behind **More details** (also in Manage → Details); record edit opens in ~90% Modal `xl`.
 * Project detail: list linked knowledge records (via `projectId`) alongside linked systems.
 * Docs: ChatGPT Custom GPT user FAQ (setup, best workflow, moving older chats into the hub; screenshot checklist) in `docs/product/CHATGPT_CUSTOM_GPT_FAQ.md`.
@@ -110,7 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Vitest unit and API integration tests.
 * GitHub Actions CI (install, lint, typecheck, test, build).
 * Product, architecture, development, deployment, security documentation and ADRs 001–012.
-* Tracking documents: `docs/CHANGELOG.md`, `docs/MILESTONE_TRACKING.md`, `docs/MILESTONE_0_IMPLEMENTATION_PLAN.md`.
+* Tracking documents: `docs/CHANGELOG.md`, `docs/milestones/MILESTONE_TRACKING.md`, `docs/milestones/MILESTONE_0_IMPLEMENTATION_PLAN.md`.
 
 ## [0.1.0] - TBD
 
