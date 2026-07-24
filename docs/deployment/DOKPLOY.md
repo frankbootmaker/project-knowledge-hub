@@ -107,10 +107,12 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
 
 1. **Build** api, worker, web images.
 2. **Start** postgres + redis; wait until healthy.
-3. **Migrate + seed** — Compose `migrate` one-shot runs migrate then seed in the **same** container (`service_completed_successfully` before api/worker). Combined on purpose: a separate `seed` service often received a different `POSTGRES_PASSWORD` from Dokploy env injection (migrate OK, seed `28P01`). Seed failure is **non-fatal** (logged as WARN) so a bootstrap hiccup cannot block api/worker after migrations succeed.  
+3. **Migrate + seed** — Compose `migrate` one-shot uses entrypoint `/migrate-and-seed.sh` on the api image (`service_completed_successfully` before api/worker). Combined on purpose: a separate `seed` service often received a different `POSTGRES_PASSWORD` from Dokploy env injection (migrate OK, seed `28P01`). Seed failure is **non-fatal** (logged as WARN) so a bootstrap hiccup cannot block api/worker after migrations succeed.  
    Manual / Dokploy “Run command” on the api image:
 
    ```bash
+   /migrate-and-seed.sh
+   # or:
    node node_modules/tsx/dist/cli.mjs packages/database/src/migrate.ts
    node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts
    ```
@@ -133,21 +135,34 @@ After deploy:
 
 ## Troubleshooting
 
+### Deploy fails: `migrate` exit 1 (api/web never start)
+
+The build log only shows Compose waiting on migrate. **Open the `migrate` service logs** (not the build log). The one-shot runs `/migrate-and-seed.sh` (preflight `psql` + migrate + non-fatal seed).
+
+| Pattern | Meaning | Fix |
+| --- | --- | --- |
+| Wipe + first deploy works; **next rebuild fails** | Existing volume: bad password **or** tables without a drizzle journal (often after a partial import) | Read migrate log; do **not** wipe as the routine fix |
+| `28P01` / password authentication failed | Env password ≠ volume role password | `ALTER USER … PASSWORD …` or restore original env; avoid `$` in passwords |
+| `already exists` / relation already exists | App schema present, `drizzle.__drizzle_migrations` missing/empty | Redeploy after this fix (migrate runs journal baseline first); or re-import / wipe once |
+| Seed WARN only | Non-fatal | Stack should still start if migrate succeeded |
+
+After Monitoring **import**, redeploy should succeed: import wipes schemas, restores the dump, then baselines the journal when needed so migrate is idempotent.
+
+Check:
+
+```bash
+docker logs <project>-migrate-1 --tail 40
+docker inspect <project>-migrate-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^POSTGRES_|^DATABASE_URL='
+```
+
 ### `password authentication failed for user "knowledge_hub"` (seed/migrate)
 
 Usually **not** a schema problem. Causes:
 
 1. **`POSTGRES_PASSWORD` in Dokploy ≠ password stored in the Postgres volume** (volume keeps the password from first init; changing the env alone does not update the role). Fix with `ALTER USER … PASSWORD …` or restore the original env value. Avoid `$` in the password — Compose interpolates `$…` in env/command strings. A **new** Dokploy Compose app can still hit this if volumes were pinned to global names (`knowledge_hub_postgres_data`) and the old volume was not removed — remove orphan volumes or use project-scoped volume names (current `compose.dokploy.yaml`).
 2. **Special characters in the password** (`&`, `#`, `@`, `*`, …) embedded into `DATABASE_URL` via Compose. Current images rebuild the URL from discrete `POSTGRES_PASSWORD` with percent-encoding. Redeploy after pulling that fix; keep using the same password in Dokploy.
-3. **Migrate OK but seed `28P01` (legacy separate seed service)** — fixed by running seed inside the `migrate` one-shot. If you still see a `seed` container, redeploy with `--remove-orphans` (Dokploy’s compose up already uses that). Keep one `POSTGRES_PASSWORD` for the whole Compose project; remove stale service-level `DATABASE_URL` overrides.
-
-Check:
-
-```bash
-docker logs knowledge-hub-*-migrate-1 --tail 40
-docker inspect knowledge-hub-*-migrate-1 \
-  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^POSTGRES_|^DATABASE_URL='
-```
+3. **Migrate OK but seed `28P01` (legacy separate seed service)** — fixed by running seed inside the `migrate` one-shot (`/migrate-and-seed.sh`). If you still see a `seed` container, redeploy with `--remove-orphans` (Dokploy’s compose up already uses that). Keep one `POSTGRES_PASSWORD` for the whole Compose project; remove stale service-level `DATABASE_URL` overrides.
 
 ## Logs
 

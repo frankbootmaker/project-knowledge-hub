@@ -88,6 +88,12 @@ services:
     image: knowledge-hub-api:dokploy
     pull_policy: never
     restart: 'no'
+    # Bypass api-entrypoint (backup chown) and disable api HEALTHCHECK (no :3101 here).
+    # Clear image CMD so it is not passed as args to the migrate script.
+    entrypoint: ['/migrate-and-seed.sh']
+    command: []
+    healthcheck:
+      disable: true
     environment:
       NODE_ENV: production
       APP_ENV: ${APP_ENV:-staging}
@@ -104,13 +110,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # $$ → $ for the shell (Compose would otherwise eat $seed_ec / $?).
-    command:
-      [
-        'sh',
-        '-c',
-        'set -e; node node_modules/tsx/dist/cli.mjs packages/database/src/migrate.ts; set +e; node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts; seed_ec=$$?; if [ "$$seed_ec" -ne 0 ]; then echo "WARN: seed failed (exit $$seed_ec, non-fatal); stack will still start" >&2; fi; exit 0',
-      ]
     networks:
       - default
       - dokploy-network

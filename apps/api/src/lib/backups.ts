@@ -2,6 +2,7 @@ import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
+import { ensureMigrationJournalAfterRestore } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 
 export type BackupStamp = {
@@ -665,6 +666,26 @@ export async function importDatabaseDump(input: {
       message:
         'pg_restore is not available. Install postgresql-client or use Docker Postgres.',
       statusCode: 503,
+    });
+  }
+
+  // Schema wipe + restore can leave tables without drizzle.__drizzle_migrations.
+  // Baseline so the next Dokploy migrate is a no-op (or only applies newer files).
+  try {
+    const journal = await ensureMigrationJournalAfterRestore();
+    if (journal.action === 'baselined') {
+      console.warn(
+        `Import: baselined drizzle journal through ${journal.throughTag} ` +
+          `(idx ${journal.throughIdx}, ${journal.inserted} row(s))`,
+      );
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message.slice(0, 400) : String(error);
+    throw new AppError({
+      code: 'BACKUP_IMPORT_FAILED',
+      message: `Restore finished but migration journal repair failed: ${message}`,
+      statusCode: 500,
     });
   }
 

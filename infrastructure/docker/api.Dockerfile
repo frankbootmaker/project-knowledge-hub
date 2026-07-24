@@ -35,8 +35,10 @@ RUN useradd --system --uid 1001 knowledgehub \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app /app
 COPY infrastructure/docker/api-entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY infrastructure/docker/migrate-and-seed.sh /migrate-and-seed.sh
+RUN chmod +x /entrypoint.sh /migrate-and-seed.sh
 # Entrypoint runs as root briefly to chown BACKUP_DIR, then drops to knowledgehub.
+# Migrate one-shot overrides entrypoint to /migrate-and-seed.sh (see compose.dokploy.yaml).
 EXPOSE 3101
 HEALTHCHECK --interval=15s --timeout=5s --start-period=25s --retries=5 \
   CMD curl -fsS "http://127.0.0.1:${API_PORT:-3101}/health" || exit 1

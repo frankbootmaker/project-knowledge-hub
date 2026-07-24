@@ -5,6 +5,10 @@ import * as schema from './schema/index.js';
 
 export * from './schema/index.js';
 export { resolveDatabaseUrl } from '@project-knowledge-hub/config';
+export {
+  ensureMigrationJournalAfterRestore,
+  type BaselineJournalResult,
+} from './baseline-journal.js';
 
 export type Database = ReturnType<typeof createDatabase>;
 

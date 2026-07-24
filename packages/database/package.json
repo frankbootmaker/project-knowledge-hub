@@ -23,6 +23,7 @@
     "test": "vitest run --passWithNoTests",
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
+    "baseline-journal": "tsx src/baseline-journal.ts",
     "seed": "tsx src/seed.ts",
     "seed:demo": "tsx src/seed-demo.ts",
     "studio": "drizzle-kit studio"

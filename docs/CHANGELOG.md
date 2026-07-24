@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Dokploy Monitoring **export**: API image used Debian `postgresql-client` 15 against Postgres 16 (`pg_dump` version mismatch). Install `postgresql-client-16` from PGDG; keep local dump if offsite upload fails.
 * Live Monitoring **import**: terminate other DB sessions before `pg_restore --clean`, then restart the API process so pools recover (avoids “import OK” then unreachable stack).
 * Live Monitoring / `import-db.sh` **import**: wipe `public` (+ `drizzle`) with `DROP SCHEMA … CASCADE` before restore so target-only tables (e.g. `workspace_media`) cannot block `--clean` DROP; fail hard on `cannot drop` / `already exists` restore errors.
+* Dokploy **migrate** one-shot: `/migrate-and-seed.sh` (preflight auth, clear hints); disable healthcheck on migrate; after import, baseline `drizzle.__drizzle_migrations` when tables exist without a journal so redeploy is idempotent.
 * Stale session cookie after DB import caused `/login` ↔ `/dashboard` redirect loop (middleware treated cookie presence as logged-in). Login no longer auto-bounces on cookie alone; `GET /auth/session` returns `{ user: null }` when unauthenticated.
 
 ### Changed

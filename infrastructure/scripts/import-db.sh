@@ -125,6 +125,29 @@ fi
 
 "${SCRIPT_DIR}/restore-db.sh" "$DUMP"
 
+# Repair drizzle journal when restore left tables without __drizzle_migrations rows.
+# Needs DATABASE_URL or POSTGRES_HOST (+ password) reachable from this host.
+if [[ -z "${SKIP_JOURNAL_BASELINE:-}" ]]; then
+  echo "Checking drizzle migration journal after restore…"
+  if [[ -z "${DATABASE_URL:-}" && -z "${POSTGRES_HOST:-}" ]]; then
+    echo "WARN: skip journal baseline (set DATABASE_URL or POSTGRES_HOST + POSTGRES_PASSWORD)." >&2
+  elif [[ -f "${ROOT_DIR}/node_modules/tsx/dist/cli.mjs" ]]; then
+    (
+      cd "$ROOT_DIR"
+      node node_modules/tsx/dist/cli.mjs packages/database/src/baseline-journal.ts \
+        || echo "WARN: journal baseline failed (non-fatal here); run migrate and check logs." >&2
+    )
+  elif command -v pnpm >/dev/null 2>&1; then
+    (
+      cd "$ROOT_DIR"
+      pnpm --filter @project-knowledge-hub/database baseline-journal \
+        || echo "WARN: journal baseline failed (non-fatal here); run migrate and check logs." >&2
+    )
+  else
+    echo "WARN: tsx/pnpm not available; skip journal baseline. Run migrate after import." >&2
+  fi
+fi
+
 SCHEMA_VERSION="$(db_ops_schema_version)"
 db_ops_stamp_write "$STAMP_PATH" "import" "$(cd "$(dirname "$DUMP")" && pwd)/$(basename "$DUMP")" "$SCHEMA_VERSION"
 
