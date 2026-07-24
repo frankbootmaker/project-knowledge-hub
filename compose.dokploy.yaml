@@ -78,6 +78,9 @@ services:
       - default
       - dokploy-network
 
+  # Migrate + seed in one one-shot so they share a single env block. A separate
+  # `seed` service repeatedly got a different POSTGRES_PASSWORD from Dokploy
+  # injection (migrate OK, seed 28P01). --remove-orphans drops the old seed container.
   migrate:
     # Reuse the image built by `api` (no build: here). Compose builds images first,
     # then starts migrate — so the tag exists before this one-shot runs. Avoids a
@@ -93,26 +96,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
       POSTGRES_HOST: postgres
       DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-knowledge_hub}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command:
-      [
-        'node',
-        'node_modules/tsx/dist/cli.mjs',
-        'packages/database/src/migrate.ts',
-      ]
-    networks:
-      - default
-      - dokploy-network
-
-  # NF-002: optional bootstrap org + admin when BOOTSTRAP_ADMIN_* are set (no-op otherwise).
-  seed:
-    image: knowledge-hub-api:dokploy
-    pull_policy: never
-    restart: 'no'
-    environment:
-      <<: *app-env
       DEFAULT_ORGANIZATION_NAME: ${DEFAULT_ORGANIZATION_NAME:-Default Organization}
       DEFAULT_ORGANIZATION_SLUG: ${DEFAULT_ORGANIZATION_SLUG:-default}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
@@ -121,13 +104,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     command:
       [
-        'node',
-        'node_modules/tsx/dist/cli.mjs',
-        'packages/database/src/seed.ts',
+        'sh',
+        '-c',
+        'node node_modules/tsx/dist/cli.mjs packages/database/src/migrate.ts && node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts',
       ]
     networks:
       - default
@@ -154,8 +135,6 @@ services:
       redis:
         condition: service_healthy
       migrate:
-        condition: service_completed_successfully
-      seed:
         condition: service_completed_successfully
     healthcheck:
       test:
@@ -190,8 +169,6 @@ services:
       redis:
         condition: service_healthy
       migrate:
-        condition: service_completed_successfully
-      seed:
         condition: service_completed_successfully
     networks:
       - default

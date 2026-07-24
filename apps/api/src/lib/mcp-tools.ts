@@ -28,6 +28,10 @@ import {
   toPublicMedia,
 } from './workspace-media.js';
 import { buildSupportDump } from './support-dump.js';
+import {
+  auditKnowledgeSearch,
+  auditKnowledgeView,
+} from './telemetry-audit.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -309,16 +313,31 @@ export function createMcpToolHandlers(
           ['verified', 'current'].includes(status),
         ),
       });
+      const filtered = result.results.filter((item) => {
+        try {
+          assertProjectAllowed(client, item.projectId);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      await auditKnowledgeSearch({
+        database: app.database,
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        workspaceId: input.workspaceId,
+        query: input.query,
+        mode: result.mode,
+        resultCount: filtered.length,
+        projectId,
+        systemId,
+        via: 'mcp',
+        ipAddress,
+      });
       return {
         ...result,
-        results: result.results.filter((item) => {
-          try {
-            assertProjectAllowed(client, item.projectId);
-            return true;
-          } catch {
-            return false;
-          }
-        }),
+        results: filtered,
       };
     },
 
@@ -338,6 +357,19 @@ export function createMcpToolHandlers(
       assertWorkspaceAllowed(client, record.workspaceId);
       assertProjectAllowed(client, record.projectId);
       const truncated = truncateContent(record.contentMarkdown);
+      await auditKnowledgeView({
+        database: app.database,
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        recordId: record.id,
+        workspaceId: record.workspaceId,
+        projectId: record.projectId,
+        systemId: record.systemId,
+        slug: record.slug,
+        via: 'mcp',
+        ipAddress,
+      });
       return {
         knowledgeRecord: {
           id: record.id,

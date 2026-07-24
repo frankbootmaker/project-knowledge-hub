@@ -62,7 +62,7 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | `EMBEDDING_PROVIDER` | runtime | Default `disabled` (FTS only) |
 | `MAIL_DRIVER` | runtime | `console` (default), `smtp`, or `resend` |
 | `SMTP_*` / `RESEND_API_KEY` / `MCP_PUBLIC_URL` | runtime | Set only when used — omit empty values |
-| `BOOTSTRAP_ADMIN_*` | seed only | Optional first admin |
+| `BOOTSTRAP_ADMIN_*` | migrate one-shot (seed step) | Optional first admin |
 
 **Warnings**
 
@@ -106,15 +106,16 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
 
 1. **Build** api, worker, web images.
 2. **Start** postgres + redis; wait until healthy.
-3. **Migrate** — Compose `migrate` one-shot runs automatically (`service_completed_successfully` before seed/api/worker).  
+3. **Migrate + seed** — Compose `migrate` one-shot runs migrate then seed in the **same** container (`service_completed_successfully` before api/worker). Combined on purpose: a separate `seed` service often received a different `POSTGRES_PASSWORD` from Dokploy env injection (migrate OK, seed `28P01`).  
    Manual / Dokploy “Run command” on the api image:
 
    ```bash
    node node_modules/tsx/dist/cli.mjs packages/database/src/migrate.ts
+   node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts
    ```
 
    Or from a checkout with deps: `DATABASE_URL=... ./infrastructure/scripts/migrate.sh`
-4. **Seed (NF-002)** — Compose `seed` one-shot after migrate. Creates default org; creates system admin when `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (min 12) are set. Idempotent if admin already exists; no-op when bootstrap vars are unset or invalid (warns and continues so redeploys are not blocked). Seed only needs `DATABASE_URL` + org/bootstrap vars — it does not run the full app env schema.
+4. **Seed (NF-002)** — Runs at the end of the migrate one-shot. Creates default org; creates system admin when `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (min 12) are set. Idempotent if admin already exists; no-op when bootstrap vars are unset or invalid (warns and continues so redeploys are not blocked).
 5. **Start** api, worker, web.
 
 ## Smoke checklist
@@ -137,13 +138,14 @@ Usually **not** a schema problem. Causes:
 
 1. **`POSTGRES_PASSWORD` in Dokploy ≠ password stored in the Postgres volume** (volume keeps the password from first init; changing the env alone does not update the role). Fix with `ALTER USER … PASSWORD …` or restore the original env value.
 2. **Special characters in the password** (`&`, `#`, `@`, `*`, …) embedded into `DATABASE_URL` via Compose. Current images rebuild the URL from discrete `POSTGRES_PASSWORD` with percent-encoding. Redeploy after pulling that fix; keep using the same password in Dokploy.
+3. **Migrate OK but seed `28P01` (legacy separate seed service)** — fixed by running seed inside the `migrate` one-shot. If you still see a `seed` container, redeploy with `--remove-orphans` (Dokploy’s compose up already uses that). Keep one `POSTGRES_PASSWORD` for the whole Compose project; remove stale service-level `DATABASE_URL` overrides.
 
 Check:
 
 ```bash
-docker logs knowledge-hub-*-migrate-1 --tail 20
-docker inspect knowledge-hub-*-seed-1 \
-  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E 'POSTGRES_|DATABASE_URL'
+docker logs knowledge-hub-*-migrate-1 --tail 40
+docker inspect knowledge-hub-*-migrate-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^POSTGRES_|^DATABASE_URL='
 ```
 
 ## Logs

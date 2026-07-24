@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Mon-2 telemetry:** `knowledge.view` / `knowledge.search` audits (session + MCP); Monitoring shows top viewed records and hashed search terms (no raw queries).
+* **M9 secret detection + auto-split:** import `content_warnings` (pattern counts only); acknowledge required for high-severity drafts; heuristic draft chunk suggestions from turns/headings.
 * **NF-014 external platform status:** `GET /api/v1/platform/status` + MCP/`get_platform_status` (opt-in scope `monitoring:read`) expose the redacted support-dump snapshot for external monitors.
 * **NF-009 stale-backup alerts:** worker poll (`BACKUP_STALE_ALERT_INTERVAL_MS`) emails system admins and optionally POSTs `ALERT_WEBHOOK_URL` when last-success is older than `BACKUP_STALE_AFTER_HOURS` (deduped stamp).
 * **M9 structured importers:** ChatGPT export, Open WebUI, and generic JSON conversation paste → Markdown draft preview (`chatgpt_export` / `open_webui` / `generic_json`).

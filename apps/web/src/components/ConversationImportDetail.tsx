@@ -28,12 +28,28 @@ type LinkedRecord = {
   createdAt: string;
 };
 
+type ContentWarning = {
+  code: string;
+  severity: 'info' | 'warning' | 'high';
+  count: number;
+  label: string;
+};
+
+type SuggestedChunk = {
+  id: string;
+  title: string;
+  contentMarkdown: string;
+  excerptNote: string;
+};
+
 type ConversationImport = {
   id: string;
   title: string;
   contentFormat: string;
   rawContent: string;
   draftMarkdownPreview?: string;
+  contentWarnings?: ContentWarning[];
+  suggestedChunks?: SuggestedChunk[];
   sourceProvider: string | null;
   generatedByModel: string | null;
   archivedAt: string | null;
@@ -60,8 +76,44 @@ export function ConversationImportDetail(props: {
       props.conversationImport.rawContent,
   );
   const [excerptNote, setExcerptNote] = useState('');
+  const [acknowledgeSecrets, setAcknowledgeSecrets] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  const warnings = props.conversationImport.contentWarnings ?? [];
+  const suggestedChunks = props.conversationImport.suggestedChunks ?? [];
+  const hasHigh = warnings.some((w) => w.severity === 'high');
+
+  async function createDraft(input: {
+    title: string;
+    contentMarkdown: string;
+    excerptNote: string | null;
+    acknowledgeSecrets: boolean;
+  }) {
+    const response = await fetch(
+      `/api/v1/conversation-imports/${props.conversationImport.id}/records`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: input.title,
+          recordType,
+          contentMarkdown: input.contentMarkdown,
+          excerptNote: input.excerptNote,
+          acknowledgeSecrets: input.acknowledgeSecrets || undefined,
+        }),
+      },
+    );
+    const payload = (await response.json()) as {
+      knowledgeRecord?: { slug: string };
+      error?: { message?: string; details?: { contentWarnings?: ContentWarning[] } };
+    };
+    if (!response.ok) {
+      throw new Error(payload.error?.message ?? t('failedCreateDraft'));
+    }
+    return payload.knowledgeRecord?.slug ?? '';
+  }
 
   async function onCreateDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,30 +122,13 @@ export function ConversationImportDetail(props: {
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/v1/conversation-imports/${props.conversationImport.id}/records`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title,
-            recordType,
-            contentMarkdown,
-            excerptNote: excerptNote || null,
-          }),
-        },
-      );
-      const payload = (await response.json()) as {
-        knowledgeRecord?: { slug: string };
-        error?: { message?: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? t('failedCreateDraft'));
-      }
-      router.push(
-        `/workspaces/${props.workspaceSlug}/records/${payload.knowledgeRecord?.slug ?? ''}`,
-      );
+      const slug = await createDraft({
+        title,
+        contentMarkdown,
+        excerptNote: excerptNote || null,
+        acknowledgeSecrets,
+      });
+      router.push(`/workspaces/${props.workspaceSlug}/records/${slug}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedCreateDraft'));
@@ -102,8 +137,55 @@ export function ConversationImportDetail(props: {
     }
   }
 
+  async function onCreateChunkDraft(chunk: SuggestedChunk) {
+    if (props.conversationImport.archivedAt) return;
+    setPending(true);
+    setError(null);
+    try {
+      const slug = await createDraft({
+        title: chunk.title,
+        contentMarkdown: chunk.contentMarkdown,
+        excerptNote: chunk.excerptNote,
+        acknowledgeSecrets,
+      });
+      router.push(`/workspaces/${props.workspaceSlug}/records/${slug}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedCreateDraft'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function applyChunk(chunk: SuggestedChunk) {
+    setTitle(chunk.title);
+    setContentMarkdown(chunk.contentMarkdown);
+    setExcerptNote(chunk.excerptNote);
+  }
+
   return (
     <div className="grid gap-8">
+      {warnings.length > 0 ? (
+        <Panel className="border-danger/40 bg-danger/5">
+          <h2 className="mt-0 mb-2 text-base font-semibold text-ink">
+            {t('secretWarningsTitle')}
+          </h2>
+          <p className="mt-0 mb-3 text-sm text-ink-muted">{t('secretWarningsHelp')}</p>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {warnings.map((warning) => (
+              <li key={warning.code} className="flex flex-wrap items-center gap-2 text-sm">
+                <Badge tone={warning.severity === 'high' ? 'danger' : 'neutral'}>
+                  {warning.severity}
+                </Badge>
+                <span>
+                  {warning.label} × {warning.count}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      ) : null}
+
       <Panel>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Badge tone="brand">{props.conversationImport.contentFormat}</Badge>
@@ -148,6 +230,48 @@ export function ConversationImportDetail(props: {
         </ul>
       </section>
 
+      {props.canMutate &&
+      !props.conversationImport.archivedAt &&
+      suggestedChunks.length > 0 ? (
+        <section>
+          <h2 className="mt-0 mb-2 text-lg font-semibold text-ink">
+            {t('autoSplitTitle')}
+          </h2>
+          <p className="mt-0 mb-3 text-sm text-ink-muted">{t('autoSplitHelp')}</p>
+          <ul className="m-0 grid list-none gap-3 p-0">
+            {suggestedChunks.map((chunk) => (
+              <ListCard key={chunk.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <strong className="text-sm text-ink">{chunk.title}</strong>
+                    <p className="mt-1 mb-0 line-clamp-3 whitespace-pre-wrap text-sm text-ink-muted">
+                      {chunk.contentMarkdown}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => applyChunk(chunk)}
+                    >
+                      {t('autoSplitUse')}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={pending || (hasHigh && !acknowledgeSecrets)}
+                      onClick={() => void onCreateChunkDraft(chunk)}
+                    >
+                      {t('autoSplitCreate')}
+                    </Button>
+                  </div>
+                </div>
+              </ListCard>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {props.canMutate && !props.conversationImport.archivedAt ? (
         <section>
           <h2 className="mt-0 mb-3 text-lg font-semibold text-ink">
@@ -191,8 +315,19 @@ export function ConversationImportDetail(props: {
                   placeholder={t('excerptNotePlaceholder')}
                 />
               </Field>
+              {hasHigh ? (
+                <label className="flex items-start gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={acknowledgeSecrets}
+                    onChange={(e) => setAcknowledgeSecrets(e.target.checked)}
+                    className="mt-1"
+                  />
+                  <span>{t('acknowledgeSecrets')}</span>
+                </label>
+              ) : null}
               {error ? <ErrorText>{error}</ErrorText> : null}
-              <Button type="submit" disabled={pending}>
+              <Button type="submit" disabled={pending || (hasHigh && !acknowledgeSecrets)}>
                 {pending ? t('creatingDraft') : t('createDraftButton')}
               </Button>
             </form>

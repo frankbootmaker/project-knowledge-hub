@@ -12,8 +12,11 @@ import {
   createConversationImportInputSchema,
   createDraftFromImportInputSchema,
   defaultSourceProviderForFormat,
+  detectContentSecrets,
+  hasHighSeverityWarnings,
   normalizeRawContent,
   resolveDraftMarkdown,
+  suggestDraftChunks,
   type ConversationContentFormat,
   type CreateConversationImportInput,
   type CreateDraftFromImportInput,
@@ -51,6 +54,14 @@ export function toPublicConversationImport(
     // Keep raw for broken/legacy rows; create-draft will validate again.
   }
 
+  const contentWarnings = row.contentWarnings ?? [];
+  const suggestedChunks = suggestDraftChunks({
+    title: row.title,
+    rawContent: row.rawContent,
+    contentFormat: row.contentFormat as ConversationContentFormat,
+    draftMarkdown: draftMarkdownPreview,
+  });
+
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -60,6 +71,8 @@ export function toPublicConversationImport(
     contentFormat: row.contentFormat,
     rawContent: options?.includeRaw === false ? undefined : row.rawContent,
     draftMarkdownPreview,
+    contentWarnings,
+    suggestedChunks,
     sourceProvider: row.sourceProvider,
     generatedByModel: row.generatedByModel,
     createdBy: row.createdBy,
@@ -146,6 +159,17 @@ export async function createConversationImport(
   await assertProjectInWorkspace(app.database, body.workspaceId, body.projectId);
   await assertSystemInWorkspace(app.database, body.workspaceId, body.systemId);
 
+  let scanText = rawContent;
+  try {
+    scanText = resolveDraftMarkdown({
+      rawContent,
+      contentFormat: body.contentFormat,
+    });
+  } catch {
+    // Scan raw paste when structured parse fails after assert (shouldn't).
+  }
+  const contentWarnings = detectContentSecrets(`${rawContent}\n${scanText}`);
+
   const now = new Date();
   const [created] = await app.database.db
     .insert(conversationImports)
@@ -156,6 +180,7 @@ export async function createConversationImport(
       title: body.title.trim(),
       contentFormat: body.contentFormat,
       rawContent,
+      contentWarnings,
       sourceProvider:
         body.sourceProvider ?? defaultSourceProviderForFormat(body.contentFormat),
       generatedByModel: body.generatedByModel ?? null,
@@ -367,7 +392,7 @@ export async function createDraftFromConversationImport(
   try {
     contentMarkdown = resolveDraftMarkdown({
       rawContent: row.rawContent,
-      contentFormat: row.contentFormat as 'plain_text' | 'markdown',
+      contentFormat: row.contentFormat as ConversationContentFormat,
       contentMarkdown: body.contentMarkdown,
     });
   } catch {
@@ -375,6 +400,17 @@ export async function createDraftFromConversationImport(
       code: 'VALIDATION_ERROR',
       message: 'Draft content is empty',
       statusCode: 400,
+    });
+  }
+
+  const draftWarnings = detectContentSecrets(contentMarkdown);
+  if (hasHighSeverityWarnings(draftWarnings) && !body.acknowledgeSecrets) {
+    throw new AppError({
+      code: 'IMPORT_SECRET_WARNING',
+      message:
+        'Draft content looks like it may contain secrets. Acknowledge to create the draft anyway.',
+      statusCode: 400,
+      details: { contentWarnings: draftWarnings },
     });
   }
 

@@ -617,6 +617,15 @@ export const conversationImports = pgTable(
     title: text('title').notNull(),
     contentFormat: text('content_format').notNull().default('markdown'),
     rawContent: text('raw_content').notNull(),
+    /** Secret-pattern warnings (counts/labels only; never matched secret text). */
+    contentWarnings: jsonb('content_warnings').$type<
+      Array<{
+        code: string;
+        severity: 'info' | 'warning' | 'high';
+        count: number;
+        label: string;
+      }>
+    >(),
     sourceProvider: text('source_provider'),
     generatedByModel: text('generated_by_model'),
     createdBy: uuid('created_by')
