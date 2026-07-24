@@ -9,6 +9,8 @@ import { workspaceAccentClassName } from '../../../../lib/workspace-colors';
 import { resolveWorkspaceStatus } from '../../../../lib/workspace-status';
 import { cn } from '../../../../lib/cn';
 
+export const dynamic = 'force-dynamic';
+
 type WorkspacePerson = {
   id: string;
   displayName: string;
@@ -34,6 +36,7 @@ type Project = {
   status: string;
   summary: string | null;
   tags: Array<{ name: string }>;
+  updatedAt: string;
 };
 
 type System = {
@@ -44,6 +47,7 @@ type System = {
   projectId: string | null;
   summary: string | null;
   tags: Array<{ name: string }>;
+  updatedAt: string;
 };
 
 type KnowledgeRecord = {
@@ -54,6 +58,7 @@ type KnowledgeRecord = {
   lifecycleStatus: string;
   summary: string | null;
   systemId: string | null;
+  updatedAt: string;
 };
 
 export default async function WorkspaceDetailPage({
@@ -187,6 +192,7 @@ export default async function WorkspaceDetailPage({
       />
 
       <WorkspaceCatalogueSections
+        key={workspace.id}
         workspaceSlug={workspace.slug}
         projects={projects}
         systems={systems}

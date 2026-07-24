@@ -15,9 +15,18 @@ import {
   Select,
 } from './ui';
 import { ImportTypePickerButton } from './ImportTypePickerButton';
+import { LocalDateTime } from './LocalDateTime';
 
 const DEFAULT_PAGE_SIZE = 5;
-const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
+/** Include a size below typical short lists so page-size changes are visible. */
+const PAGE_SIZE_OPTIONS = [3, 5, 10, 25] as const;
+type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
+type SortOption = 'az' | 'za' | 'oldest' | 'latest';
+const DEFAULT_SORT: SortOption = 'latest';
+
+function isPageSizeOption(value: number): value is PageSizeOption {
+  return (PAGE_SIZE_OPTIONS as readonly number[]).includes(value);
+}
 
 function FilterToggleIcon() {
   return (
@@ -45,6 +54,8 @@ export type CatalogueListItem = {
   secondaryBadge?: string;
   subtitle?: string | null;
   tagsLine?: string | null;
+  /** ISO timestamp shown like dashboard “recently updated”. */
+  updatedAt?: string | null;
   /** Lowercased haystack for search. */
   searchText: string;
   /** Value matched by the filter select (e.g. status / lifecycle). */
@@ -73,12 +84,14 @@ function CatalogueSection({
   canCreate: boolean;
 }) {
   const t = useTranslations('workspaces');
+  const tCommon = useTranslations('common');
   const controlsId = useId();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterValue, setFilterValue] = useState('all');
+  const [sortOrder, setSortOrder] = useState<SortOption>(DEFAULT_SORT);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
 
   const filterOptions = useMemo(() => {
     const values = [...new Set(items.map((item) => item.filterValue).filter(Boolean))];
@@ -88,7 +101,7 @@ function CatalogueSection({
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return items.filter((item) => {
+    const matched = items.filter((item) => {
       if (filterValue !== 'all' && item.filterValue !== filterValue) {
         return false;
       }
@@ -97,10 +110,23 @@ function CatalogueSection({
       }
       return item.searchText.includes(query);
     });
-  }, [items, searchQuery, filterValue]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
+    const sorted = [...matched];
+    sorted.sort((a, b) => {
+      if (sortOrder === 'az' || sortOrder === 'za') {
+        const cmp = a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+        return sortOrder === 'az' ? cmp : -cmp;
+      }
+      const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return sortOrder === 'oldest' ? aTime - bTime : bTime - aTime;
+    });
+    return sorted;
+  }, [items, searchQuery, filterValue, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize) || 1);
+  // Clamp for display/actions — no syncing effect (avoids remount/HMR races).
+  const currentPage = Math.min(Math.max(1, page), totalPages);
   const pageStart = (currentPage - 1) * pageSize;
   const pageItems = filtered.slice(pageStart, pageStart + pageSize);
   const rangeFrom = filtered.length === 0 ? 0 : pageStart + 1;
@@ -108,6 +134,7 @@ function CatalogueSection({
   const filtersActive =
     searchQuery.trim() !== '' ||
     filterValue !== 'all' ||
+    sortOrder !== DEFAULT_SORT ||
     pageSize !== DEFAULT_PAGE_SIZE;
 
   function updateSearch(value: string) {
@@ -120,8 +147,14 @@ function CatalogueSection({
     setPage(1);
   }
 
-  function updatePageSize(value: number) {
-    setPageSize(value);
+  function updateSort(value: SortOption) {
+    setSortOrder(value);
+    setPage(1);
+  }
+
+  function updatePageSize(raw: string) {
+    const parsed = Number(raw);
+    setPageSize(isPageSizeOption(parsed) ? parsed : DEFAULT_PAGE_SIZE);
     setPage(1);
   }
 
@@ -144,7 +177,10 @@ function CatalogueSection({
         }
         filters={
           filtersOpen ? (
-            <div id={controlsId} className="contents">
+            <div
+              id={controlsId}
+              className="flex shrink-0 flex-nowrap items-center gap-2"
+            >
               <Select
                 value={filterValue}
                 onChange={(e) => updateFilter(e.target.value)}
@@ -158,12 +194,22 @@ function CatalogueSection({
                 ))}
               </Select>
               <Select
+                value={sortOrder}
+                onChange={(e) => updateSort(e.target.value as SortOption)}
+                aria-label={t('sectionSort')}
+              >
+                <option value="az">{t('sectionSortAz')}</option>
+                <option value="za">{t('sectionSortZa')}</option>
+                <option value="oldest">{t('sectionSortOldest')}</option>
+                <option value="latest">{t('sectionSortLatest')}</option>
+              </Select>
+              <Select
                 value={String(pageSize)}
-                onChange={(e) => updatePageSize(Number(e.target.value))}
+                onChange={(e) => updatePageSize(e.target.value)}
                 aria-label={t('sectionPageSize')}
               >
                 {PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>
+                  <option key={size} value={String(size)}>
                     {t('sectionPageSizeOption', { count: size })}
                   </option>
                 ))}
@@ -205,21 +251,32 @@ function CatalogueSection({
       <ul className="m-0 grid list-none gap-3 p-0">
         {pageItems.map((item) => (
           <ListCard key={item.id}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link href={item.href} className="font-semibold no-underline">
-                {item.title}
-              </Link>
-              {item.primaryBadge ? (
-                <Badge tone="brand">{item.primaryBadge}</Badge>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={item.href} className="font-semibold no-underline">
+                    {item.title}
+                  </Link>
+                  {item.primaryBadge ? (
+                    <Badge tone="brand">{item.primaryBadge}</Badge>
+                  ) : null}
+                  {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
+                </div>
+                {item.subtitle ? (
+                  <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
+                ) : null}
+                {item.tagsLine ? (
+                  <p className="mt-2 mb-0 text-xs text-ink-muted">{item.tagsLine}</p>
+                ) : null}
+              </div>
+              {item.updatedAt ? (
+                <LocalDateTime
+                  className="shrink-0 text-xs text-ink-muted"
+                  value={item.updatedAt}
+                  prefix={tCommon('lastUpdated')}
+                />
               ) : null}
-              {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
             </div>
-            {item.subtitle ? (
-              <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
-            ) : null}
-            {item.tagsLine ? (
-              <p className="mt-2 mb-0 text-xs text-ink-muted">{item.tagsLine}</p>
-            ) : null}
           </ListCard>
         ))}
         {filtered.length === 0 ? (
@@ -247,7 +304,7 @@ function CatalogueSection({
                 type="button"
                 variant="secondary"
                 disabled={currentPage <= 1}
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                onClick={() => setPage(Math.max(1, currentPage - 1))}
               >
                 {t('sectionPrevPage')}
               </Button>
@@ -258,7 +315,7 @@ function CatalogueSection({
                 type="button"
                 variant="secondary"
                 disabled={currentPage >= totalPages}
-                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
               >
                 {t('sectionNextPage')}
               </Button>
@@ -277,6 +334,7 @@ export type WorkspaceCatalogueProject = {
   status: string;
   summary: string | null;
   tags: Array<{ name: string }>;
+  updatedAt: string;
 };
 
 export type WorkspaceCatalogueSystem = {
@@ -287,6 +345,7 @@ export type WorkspaceCatalogueSystem = {
   projectId: string | null;
   summary: string | null;
   tags: Array<{ name: string }>;
+  updatedAt: string;
 };
 
 export type WorkspaceCatalogueRecord = {
@@ -297,6 +356,7 @@ export type WorkspaceCatalogueRecord = {
   lifecycleStatus: string;
   summary: string | null;
   systemId: string | null;
+  updatedAt: string;
 };
 
 export function WorkspaceCatalogueSections({
@@ -321,6 +381,7 @@ export function WorkspaceCatalogueSections({
     href: `/workspaces/${workspaceSlug}/projects/${project.slug}`,
     primaryBadge: project.status,
     subtitle: project.summary,
+    updatedAt: project.updatedAt,
     tagsLine:
       project.tags.length > 0
         ? tCommon('tagsList', {
@@ -341,6 +402,7 @@ export function WorkspaceCatalogueSections({
     subtitle: `${system.projectId ? t('linkedToProject') : t('independent')}${
       system.summary ? ` — ${system.summary}` : ''
     }`,
+    updatedAt: system.updatedAt,
     tagsLine:
       system.tags.length > 0
         ? tCommon('tagsList', {
@@ -362,6 +424,7 @@ export function WorkspaceCatalogueSections({
     subtitle: record.systemId
       ? `${t('linkedToSystem')}${record.summary ? ` — ${record.summary}` : ''}`
       : record.summary,
+    updatedAt: record.updatedAt,
     searchText: [
       record.title,
       record.slug,

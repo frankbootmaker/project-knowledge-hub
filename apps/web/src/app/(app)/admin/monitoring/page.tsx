@@ -6,9 +6,10 @@ import {
 import { PageHeader } from '../../../../components/ui';
 import { apiFetch } from '../../../../lib/session';
 
-const emptyPayload = (): MonitoringPayload => ({
+const emptyPayload = (loadError: string): MonitoringPayload => ({
   overall: 'degraded',
   generatedAt: new Date().toISOString(),
+  loadError,
   app: {
     env: process.env.APP_ENV ?? 'development',
     apiUrl: process.env.API_URL ?? 'http://localhost:3101',
@@ -16,9 +17,9 @@ const emptyPayload = (): MonitoringPayload => ({
     schemaVersion: 'unknown',
   },
   health: {
-    api: 'ok',
+    api: 'unknown',
     ready: false,
-    checks: { postgres: 'error', redis: 'error' },
+    checks: { postgres: 'unknown', redis: 'unknown' },
   },
   attention: {
     pendingUsers: 0,
@@ -93,7 +94,9 @@ export default async function AdminMonitoringPage({
   const response = await apiFetch(`/api/v1/admin/monitoring?range=${range}`);
   const payload: MonitoringPayload = response.ok
     ? ((await response.json()) as MonitoringPayload)
-    : emptyPayload();
+    : emptyPayload(
+        `Monitoring API returned HTTP ${response.status}. Check web API_URL / NEXT_REWRITE_API_ORIGIN reaches the api service (Dokploy: http://api:3101).`,
+      );
 
   return (
     <div>

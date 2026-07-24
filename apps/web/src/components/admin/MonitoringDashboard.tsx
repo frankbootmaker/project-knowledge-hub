@@ -25,10 +25,15 @@ export type MonitoringPayload = {
     schemaVersion: string;
   };
   health: {
-    api: 'ok';
+    api: 'ok' | 'unknown';
     ready: boolean;
-    checks: { postgres: 'ok' | 'error'; redis: 'ok' | 'error' };
+    checks: {
+      postgres: 'ok' | 'error' | 'unknown';
+      redis: 'ok' | 'error' | 'unknown';
+    };
   };
+  /** Set when the web could not load monitoring from the API (not a real dep failure). */
+  loadError?: string | null;
   attention: {
     pendingUsers: number;
     pendingApiClients: number;
@@ -677,25 +682,56 @@ export function MonitoringDashboard({
       </div>
 
       {error ? <ErrorText>{error}</ErrorText> : null}
+      {data.loadError ? (
+        <Panel variant="inset" className="p-4">
+          <p className="m-0 text-sm font-medium text-ink">{t('monitoringLoadErrorTitle')}</p>
+          <p className="mt-1 mb-0 text-sm text-ink-muted">{data.loadError}</p>
+          <p className="mt-2 mb-0 text-xs text-ink-muted">{t('monitoringLoadErrorHint')}</p>
+        </Panel>
+      ) : null}
 
       <section id="health" className="grid scroll-mt-6 gap-3">
         <h2 className="m-0 text-lg font-semibold text-ink">{t('monitoringHealthTitle')}</h2>
         <Panel className="grid gap-0 divide-y divide-line overflow-hidden p-0">
-          <StatusRow label={t('monitoringApi')} value={t('monitoringOk')} tone="ok" />
+          <StatusRow
+            label={t('monitoringApi')}
+            value={data.health.api}
+            tone={data.health.api === 'ok' ? 'ok' : 'warn'}
+          />
           <StatusRow
             label={t('monitoringReady')}
-            value={data.health.ready ? t('monitoringOk') : t('monitoringDegraded')}
-            tone={data.health.ready ? 'ok' : 'error'}
+            value={
+              data.loadError
+                ? t('monitoringUnknown')
+                : data.health.ready
+                  ? t('monitoringOk')
+                  : t('monitoringDegraded')
+            }
+            tone={
+              data.loadError ? 'warn' : data.health.ready ? 'ok' : 'error'
+            }
           />
           <StatusRow
             label={t('monitoringPostgres')}
             value={data.health.checks.postgres}
-            tone={data.health.checks.postgres === 'ok' ? 'ok' : 'error'}
+            tone={
+              data.health.checks.postgres === 'ok'
+                ? 'ok'
+                : data.health.checks.postgres === 'unknown'
+                  ? 'warn'
+                  : 'error'
+            }
           />
           <StatusRow
             label={t('monitoringRedis')}
             value={data.health.checks.redis}
-            tone={data.health.checks.redis === 'ok' ? 'ok' : 'error'}
+            tone={
+              data.health.checks.redis === 'ok'
+                ? 'ok'
+                : data.health.checks.redis === 'unknown'
+                  ? 'warn'
+                  : 'error'
+            }
           />
           <StatusRow
             label={t('monitoringEnvironment')}
