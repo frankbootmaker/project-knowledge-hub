@@ -20,7 +20,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 | **B — Data safety** | **NF-005** Ops-0 **done** (schedule, retention, export/import, stamps, local volume). Ops-1 offsite after BlobStore | Full blob product |
 | **C — Admin ops UI** | **NF-011** Mon-0 + **Mon-1** done (client leaderboard + catalogue tops). Embedding reindex + archived counts on Monitoring | Fancy charts |
 | **D — Object storage** | **NF-006** BlobStore + **s3** + Admin → Storage + **Ops-2 avatars** done. **NF-013** knowledge media done. Imports/exports still later. **NF-007** Azure on same Storage page **with Entra IdP (NF-012)** | OneDrive/SharePoint |
-| **E — Ops polish** | **NF-009** light v1 done (support dump + stale-backup chip); full webhook/email alerts later | Log shipping |
+| **E — Ops polish** | **NF-009** light v1 done (support dump + stale-backup chip); **NF-014** external status REST/MCP; full webhook/email alerts later | Log shipping |
 | **F — Product (parked)** | **NF-001** Doc Factory, **NF-004** ChatGPT MCP App, **NF-010** finer ACLs — only with module briefs and real user jobs | Do not cut in front of A–C |
 
 ### Merge / optimize notes
@@ -29,6 +29,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 * **NF-008 ⊂ NF-011 (+ NF-005)** — do **not** ship a separate “Maintenance” top-level nav first. Monitoring health section owns: Status, backup age, export/import actions, later reindex/purge. NF-008 remains a checklist of actions folded into NF-011.
 * **NF-006 + NF-007** — one **`BlobStore` program** on Admin → **Storage**. `s3` is live; **`azure_blob` lands with Microsoft Entra ID as IdP** (prefer Entra-backed auth over long-lived account keys). Graph OneDrive/SharePoint only when a library/export job exists. Do not dual-track two storage designs.
 * **NF-009** — overlaps Audit export and Monitoring; build **after** Mon-0 so alerts have a home (Monitoring), not a third ops page.
+* **NF-014** — expose the redacted Monitoring / support-dump snapshot for external monitors (REST + MCP); prefer a scoped read-only API client over session cookies.
 * **NF-001 / NF-004 / NF-010** — stay parked; they do not unblock Prod packaging.
 
 ---
@@ -50,6 +51,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 | NF-011 | **Admin monitoring dashboard** — folds **Status** into Monitoring; MCP/sessions/catalogue; backup/import stamps; maintenance actions | `partial` — Mon-0 + **Mon-1** done (clients leaderboard + top records/projects/systems) | Mon-2 `knowledge.view` / search telemetry; Mon-3 rollups | Wave **C**. [`ADMIN_MONITORING.md`](ADMIN_MONITORING.md). |
 | NF-012 | **Microsoft Entra ID (OIDC) sign-in** — org IdP login alongside local passwords | `parked` — awaiting module brief | OIDC app registration; map Entra subject → `users.idp_source` / `idp_subject`; session + invite flows; unlocks Entra-auth **Azure Blob** on Storage (NF-007) | See [`SECURITY_MODEL.md`](../security/SECURITY_MODEL.md). Pair with NF-007. |
 | NF-013 | **Knowledge media** — workspace image library (JPEG/PNG/WebP) for Markdown embeds; optional link to a knowledge record; human editor insert + MCP upload | `done` | SVG later; Import-picker “images → draft record” still separate | BlobStore purpose `media`. Embed URL `/api/v1/media/:id`. MCP: `upload_workspace_media` / `list_workspace_media` / `delete_workspace_media`. |
+| NF-014 | **External platform status** — expose the redacted Monitoring / support-dump snapshot to external monitoring systems via REST and MCP | `parked` — idea captured | Auth model (scoped API client / read-only token); stable JSON contract; MCP tool name + rate limits; no secrets in payload | Wave **E**. Reuse shape of `GET /api/v1/admin/monitoring/support-dump`. Complements NF-009 alerts. |
 
 ---
 

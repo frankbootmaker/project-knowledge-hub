@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -93,6 +93,16 @@ export type MonitoringPayload = {
       } | null;
       ageSeconds: number | null;
     };
+    lastFailure: {
+      stamp: {
+        kind: string;
+        at: string;
+        artifact: string;
+        schemaVersion: string;
+        hostname: string;
+      } | null;
+      ageSeconds: number | null;
+    };
     artifacts: Array<{ name: string; sizeBytes: number; modifiedAt: string }>;
     totalBytes: number;
     maxUploadBytes: number;
@@ -101,6 +111,11 @@ export type MonitoringPayload = {
       keepWeekly: number;
       keepMonthly: number;
       autoRotate: boolean;
+      source: 'file' | 'env';
+    };
+    schedule: {
+      enabled: boolean;
+      intervalSeconds: number;
       source: 'file' | 'env';
     };
     lastOffsite: {
@@ -136,6 +151,48 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+const SCHEDULE_INTERVAL_PRESETS = [3600, 21600, 43200, 86400, 604800] as const;
+
+function nearestSchedulePreset(seconds: number): number {
+  let best: number = SCHEDULE_INTERVAL_PRESETS[3];
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (const preset of SCHEDULE_INTERVAL_PRESETS) {
+    const delta = Math.abs(preset - seconds);
+    if (delta < bestDelta) {
+      best = preset;
+      bestDelta = delta;
+    }
+  }
+  return best;
+}
+
+function scheduleIntervalLabel(
+  seconds: number,
+  labels: Record<(typeof SCHEDULE_INTERVAL_PRESETS)[number], string>,
+): string {
+  return labels[nearestSchedulePreset(seconds) as (typeof SCHEDULE_INTERVAL_PRESETS)[number]];
+}
+
+type BackupRunStatus = 'success' | 'failure' | 'notice';
+
+function resolveBackupRunStatus(input: {
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  staleBackup: boolean;
+}): BackupRunStatus {
+  const { lastSuccessAt, lastFailureAt, staleBackup } = input;
+  if (lastFailureAt && (!lastSuccessAt || lastFailureAt > lastSuccessAt)) {
+    return 'failure';
+  }
+  if (!lastSuccessAt) {
+    return 'notice';
+  }
+  if (staleBackup) {
+    return 'notice';
+  }
+  return 'success';
 }
 
 function environmentTone(appEnv: string): 'success' | 'warn' | 'brand' | 'neutral' {
@@ -209,7 +266,28 @@ export function MonitoringDashboard({
   const [keepWeekly, setKeepWeekly] = useState(String(initial.backups.retention.keepWeekly));
   const [keepMonthly, setKeepMonthly] = useState(String(initial.backups.retention.keepMonthly));
   const [autoRotate, setAutoRotate] = useState(initial.backups.retention.autoRotate);
+  const [scheduleEnabled, setScheduleEnabled] = useState(initial.backups.schedule.enabled);
+  const [scheduleInterval, setScheduleInterval] = useState(
+    String(nearestSchedulePreset(initial.backups.schedule.intervalSeconds)),
+  );
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  useEffect(() => {
+    const scrollToHash = () => {
+      const id = window.location.hash.replace(/^#/, '');
+      if (!id) {
+        return;
+      }
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    // Wait a tick so layout/SSR content is in place.
+    const timer = window.setTimeout(scrollToHash, 0);
+    window.addEventListener('hashchange', scrollToHash);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('hashchange', scrollToHash);
+    };
+  }, []);
 
   const overallOk = data.overall === 'healthy';
 
@@ -238,6 +316,10 @@ export function MonitoringDashboard({
       setKeepWeekly(String(payload.backups.retention.keepWeekly));
       setKeepMonthly(String(payload.backups.retention.keepMonthly));
       setAutoRotate(payload.backups.retention.autoRotate);
+      setScheduleEnabled(payload.backups.schedule.enabled);
+      setScheduleInterval(
+        String(nearestSchedulePreset(payload.backups.schedule.intervalSeconds)),
+      );
       if (!selectedArtifact && payload.backups.artifacts[0]) {
         setSelectedArtifact(payload.backups.artifacts[0].name);
       }
@@ -305,6 +387,35 @@ export function MonitoringDashboard({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('monitoringDeleteFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function saveSchedule() {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/admin/monitoring/backups/schedule', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: scheduleEnabled,
+          intervalSeconds: Number(scheduleInterval),
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? `HTTP ${response.status}`);
+      }
+      pushToast(t('monitoringScheduleSaved'));
+      await refresh();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('monitoringScheduleFailed'));
     } finally {
       setPending(false);
     }
@@ -567,7 +678,7 @@ export function MonitoringDashboard({
 
       {error ? <ErrorText>{error}</ErrorText> : null}
 
-      <section className="grid gap-3">
+      <section id="health" className="grid scroll-mt-6 gap-3">
         <h2 className="m-0 text-lg font-semibold text-ink">{t('monitoringHealthTitle')}</h2>
         <Panel className="grid gap-0 divide-y divide-line overflow-hidden p-0">
           <StatusRow label={t('monitoringApi')} value={t('monitoringOk')} tone="ok" />
@@ -601,7 +712,7 @@ export function MonitoringDashboard({
         </Panel>
       </section>
 
-      <section className="grid gap-3">
+      <section id="usage" className="grid scroll-mt-6 gap-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 className="m-0 text-lg font-semibold text-ink">{t('monitoringUsageTitle')}</h2>
           <Field label={t('monitoringRange')} className="min-w-[10rem]">
@@ -764,7 +875,7 @@ export function MonitoringDashboard({
         </Panel>
       </section>
 
-      <section className="grid gap-3">
+      <section id="maintenance" className="grid scroll-mt-6 gap-3">
         <h2 className="m-0 text-lg font-semibold text-ink">
           {t('monitoringMaintenanceTitle')}
         </h2>
@@ -830,7 +941,7 @@ export function MonitoringDashboard({
         </Panel>
       </section>
 
-      <section className="grid gap-3">
+      <section id="backups" className="grid scroll-mt-6 gap-3">
         <h2 className="m-0 text-lg font-semibold text-ink">{t('monitoringBackupsTitle')}</h2>
         <p className="m-0 text-sm text-ink-muted">{t('monitoringBackupsBlurb')}</p>
         <Panel className="grid gap-0 divide-y divide-line overflow-hidden p-0">
@@ -889,6 +1000,126 @@ export function MonitoringDashboard({
             {t('monitoringImportOpen')}
           </Button>
         </div>
+
+        <Panel className="grid gap-4 p-5">
+          <div>
+            <strong className="text-sm font-medium text-ink">
+              {t('monitoringScheduleTitle')}
+            </strong>
+            <p className="mt-1 mb-0 text-sm text-ink-muted">
+              {t('monitoringScheduleBlurb')}
+            </p>
+            <p className="mt-1 mb-0 text-xs text-ink-muted">
+              {t('monitoringScheduleSource', {
+                source: data.backups.schedule.source,
+              })}
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={scheduleEnabled}
+              disabled={pending}
+              onChange={(event) => setScheduleEnabled(event.target.checked)}
+            />
+            {t('monitoringScheduleEnabled')}
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+            <Field label={t('monitoringScheduleInterval')}>
+              <Select
+                value={scheduleInterval}
+                disabled={pending || !scheduleEnabled}
+                onChange={(event) => setScheduleInterval(event.target.value)}
+              >
+                <option value="3600">{t('monitoringSchedule1h')}</option>
+                <option value="21600">{t('monitoringSchedule6h')}</option>
+                <option value="43200">{t('monitoringSchedule12h')}</option>
+                <option value="86400">{t('monitoringSchedule24h')}</option>
+                <option value="604800">{t('monitoringSchedule7d')}</option>
+              </Select>
+            </Field>
+            <Panel variant="inset" className="grid gap-2 p-4 text-sm">
+              {(() => {
+                const saved = data.backups.schedule;
+                const lastSuccessAt = data.backups.lastSuccess.stamp?.at ?? null;
+                const lastFailureAt = data.backups.lastFailure.stamp?.at ?? null;
+                const runStatus = resolveBackupRunStatus({
+                  lastSuccessAt,
+                  lastFailureAt,
+                  staleBackup: data.attention.staleBackup,
+                });
+                const statusTone =
+                  runStatus === 'success'
+                    ? 'success'
+                    : runStatus === 'failure'
+                      ? 'danger'
+                      : 'warn';
+                const lastAt =
+                  runStatus === 'failure' && lastFailureAt
+                    ? lastFailureAt
+                    : lastSuccessAt;
+                const lastAge =
+                  runStatus === 'failure'
+                    ? data.backups.lastFailure.ageSeconds
+                    : data.backups.lastSuccess.ageSeconds;
+                return (
+                  <>
+                    <p className="m-0 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
+                      {t('monitoringScheduleStatusTitle')}
+                    </p>
+                    <p className="m-0 text-ink">
+                      {saved.enabled
+                        ? t('monitoringScheduleActiveOn', {
+                            interval: scheduleIntervalLabel(saved.intervalSeconds, {
+                              3600: t('monitoringSchedule1h'),
+                              21600: t('monitoringSchedule6h'),
+                              43200: t('monitoringSchedule12h'),
+                              86400: t('monitoringSchedule24h'),
+                              604800: t('monitoringSchedule7d'),
+                            }),
+                          })
+                        : t('monitoringScheduleActiveOff')}
+                    </p>
+                    <p className="m-0 text-ink-muted">
+                      {t('monitoringScheduleLastRun', {
+                        when: lastAt
+                          ? `${formatAge(lastAge, t('monitoringNever'))} · ${lastAt}`
+                          : t('monitoringNever'),
+                      })}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-ink-muted">{t('monitoringScheduleRunStatus')}</span>
+                      <Badge tone={statusTone}>
+                        {runStatus === 'success'
+                          ? t('monitoringScheduleStatusSuccess')
+                          : runStatus === 'failure'
+                            ? t('monitoringScheduleStatusFailure')
+                            : t('monitoringScheduleStatusNotice')}
+                      </Badge>
+                    </div>
+                    {runStatus === 'notice' && data.attention.staleBackup ? (
+                      <p className="m-0 text-xs text-ink-muted">
+                        {t('monitoringStaleBackup', {
+                          hours: data.attention.staleBackupAfterHours,
+                        })}
+                      </p>
+                    ) : null}
+                    {runStatus === 'notice' && !lastSuccessAt ? (
+                      <p className="m-0 text-xs text-ink-muted">
+                        {t('monitoringScheduleStatusNeverHint')}
+                      </p>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </Panel>
+          </div>
+          <div>
+            <Button type="button" disabled={pending} onClick={() => void saveSchedule()}>
+              {t('monitoringScheduleSave')}
+            </Button>
+          </div>
+        </Panel>
 
         <Panel className="grid gap-4 p-5">
           <div>

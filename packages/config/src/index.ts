@@ -131,6 +131,12 @@ export const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  /** Sidecar / Admin schedule defaults (overridable via BACKUP_DIR/schedule.json). */
+  BACKUP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  BACKUP_INTERVAL_SECONDS: z.coerce.number().int().min(60).default(86400),
   /** Hours after last successful dump before Monitoring flags a stale backup (NF-009). */
   BACKUP_STALE_AFTER_HOURS: z.coerce.number().int().min(1).max(168).default(36),
   /**

@@ -1,8 +1,11 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
-import { NavLink, Panel } from '../../../components/ui';
+import { AdminNav } from '../../../components/admin/AdminNav';
+import { Panel } from '../../../components/ui';
 import { requireSession } from '../../../lib/session';
+
+const MONITORING_HREF = '/admin/monitoring';
 
 const links = [
   // Home
@@ -19,8 +22,15 @@ const links = [
   // Data lifecycle
   { href: '/admin/archive', key: 'archive' as const },
   // Operations
-  { href: '/admin/monitoring', key: 'monitoring' as const },
+  { href: MONITORING_HREF, key: 'monitoring' as const },
   { href: '/admin/audit', key: 'audit' as const },
+];
+
+const monitoringSectionKeys = [
+  { hash: 'health', key: 'monitoringNavHealth' as const },
+  { hash: 'usage', key: 'monitoringNavUsage' as const },
+  { hash: 'maintenance', key: 'monitoringNavMaintenance' as const },
+  { hash: 'backups', key: 'monitoringNavBackups' as const },
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
@@ -38,18 +48,19 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <p className="mb-3 px-2 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
           {t('title')}
         </p>
-        <nav className="grid gap-1" aria-label={t('title')}>
-          {links.map((link) => (
-            <NavLink
-              key={link.href}
-              href={link.href}
-              tone="sidebar"
-              exact={link.exact}
-            >
-              {t(link.key)}
-            </NavLink>
-          ))}
-        </nav>
+        <AdminNav
+          ariaLabel={t('title')}
+          monitoringHref={MONITORING_HREF}
+          links={links.map((link) => ({
+            href: link.href,
+            label: t(link.key),
+            exact: link.exact,
+          }))}
+          monitoringSections={monitoringSectionKeys.map((section) => ({
+            hash: section.hash,
+            label: t(section.key),
+          }))}
+        />
       </Panel>
       <div className="min-w-0">{children}</div>
     </div>

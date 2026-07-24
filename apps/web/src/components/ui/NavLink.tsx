@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { ComponentProps, ReactNode } from 'react';
+import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 
 type Props = Omit<ComponentProps<typeof Link>, 'className'> & {
@@ -15,6 +15,14 @@ type Props = Omit<ComponentProps<typeof Link>, 'className'> & {
   exact?: boolean;
 };
 
+function splitHref(href: Props['href']): { path: string; hash: string } {
+  if (typeof href !== 'string') {
+    return { path: href.pathname || '', hash: href.hash?.replace(/^#/, '') ?? '' };
+  }
+  const [path = '', hash = ''] = href.split('#');
+  return { path: path.split('?')[0] ?? '', hash };
+}
+
 export function NavLink({
   href,
   className,
@@ -25,12 +33,25 @@ export function NavLink({
   ...props
 }: Props) {
   const pathname = usePathname();
-  const hrefPath = typeof href === 'string' ? href : href.pathname || '';
-  const active = exact
+  const { path: hrefPath, hash: hrefHash } = splitHref(href);
+  const [currentHash, setCurrentHash] = useState('');
+
+  useEffect(() => {
+    if (!hrefHash) {
+      return;
+    }
+    const sync = () => setCurrentHash(window.location.hash.replace(/^#/, ''));
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, [hrefHash, pathname]);
+
+  const pathActive = exact
     ? pathname === hrefPath
     : hrefPath === '/'
       ? pathname === '/'
       : pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+  const active = pathActive && (!hrefHash || currentHash === hrefHash);
 
   const base = tone === 'sidebar' ? 'kh-sidebar-link' : 'kh-nav-link';
   const activeBase =
