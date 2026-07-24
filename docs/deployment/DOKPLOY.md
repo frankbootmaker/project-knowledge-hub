@@ -2,7 +2,8 @@
 
 **Status:** Milestone 7 — Dev/UAT packaging (first slice)  
 **Compose entrypoint:** [`compose.dokploy.yaml`](../../compose.dokploy.yaml)  
-**Env template:** [`.env.dokploy.example`](../../.env.dokploy.example)
+**Env template:** [`.env.dokploy.example`](../../.env.dokploy.example)  
+**Git branch for Dev:** `feature/m7-dokploy` (ongoing M7 work). Promote Dev-proven slices to `master` via PR — see [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md).
 
 Production cutover, registry automation, and admin log export are **out of scope** for this slice.
 

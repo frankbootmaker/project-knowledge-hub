@@ -2,18 +2,22 @@
 
 ## Branching
 
-* `master` — integration / release branch
-* `feature/*`, `fix/*` — short-lived work branches
+* `master` — **stable** integration / release branch (promote only when Dev-proven)
+* `feature/m7-dokploy` — **Dokploy Dev** integration branch for Milestone 7 work
+* `feature/*`, `fix/*` — short-lived work branches (usually cut from `feature/m7-dokploy` during M7)
 
-## Flow (current)
+## Flow (current — M7)
 
 ```text
-feature branch → local validation → PR → CI → merge master
+work on feature/m7-dokploy (or PR into it)
+  → Dokploy Dev deploys from feature/m7-dokploy
+  → migrate → smoke validate on Dev
+  → when a slice is stable: PR feature/m7-dokploy → master
   → version tag (optional)
-  → Dokploy Dev/UAT deploy (M7)
-  → migrate → smoke validate
   → Prod Dokploy (later; not this slice)
 ```
+
+Keep Dev pinned to `feature/m7-dokploy`. Do not point the Dev app at `master` while M7 is active unless you intentionally want only the last promoted stable slice.
 
 ## Version tags
 
