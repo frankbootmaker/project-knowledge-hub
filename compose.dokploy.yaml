@@ -245,13 +245,13 @@ services:
       - default
       - dokploy-network
 
+# Project-scoped names (Compose prefixes with -p project). Do not pin global
+# `name:` — a second Dokploy app would reuse the old Postgres volume and hit
+# 28P01 when POSTGRES_PASSWORD differs from the first init.
 volumes:
   knowledge_hub_postgres_data:
-    name: knowledge_hub_postgres_data
   knowledge_hub_redis_data:
-    name: knowledge_hub_redis_data
   knowledge_hub_backups:
-    name: knowledge_hub_backups
 
 networks:
   dokploy-network:
