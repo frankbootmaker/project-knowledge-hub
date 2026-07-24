@@ -108,7 +108,7 @@ services:
       [
         'sh',
         '-c',
-        'node node_modules/tsx/dist/cli.mjs packages/database/src/migrate.ts && (node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts || { echo "WARN: seed failed (non-fatal); stack will still start" >&2; exit 0; })',
+        'set -e; node node_modules/tsx/dist/cli.mjs packages/database/src/migrate.ts; set +e; node node_modules/tsx/dist/cli.mjs packages/database/src/seed.ts; seed_ec=$?; if [ "$seed_ec" -ne 0 ]; then echo "WARN: seed failed (exit $seed_ec, non-fatal); stack will still start" >&2; fi; exit 0',
       ]
     networks:
       - default
