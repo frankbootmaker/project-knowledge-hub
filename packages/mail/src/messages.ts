@@ -35,6 +35,30 @@ export type MailMessages = {
     title: string;
     greeting: string;
     body: string;
+    membershipsIntro: string;
+    membershipLine: string;
+    roleWorkspaceAdmin: string;
+    roleMaintainer: string;
+    roleReader: string;
+    cta: string;
+  };
+  signupPendingApproval: {
+    subject: string;
+    title: string;
+    greeting: string;
+    body: string;
+    userLabel: string;
+    emailLabel: string;
+    cta: string;
+  };
+  signupPendingEscalation: {
+    subject: string;
+    title: string;
+    greeting: string;
+    body: string;
+    userLabel: string;
+    emailLabel: string;
+    pendingSinceLabel: string;
     cta: string;
   };
   passwordChanged: {
@@ -122,7 +146,7 @@ export const en: MailMessages = {
     greeting: 'Hi {name},',
     body: 'Thanks for signing up for Project Knowledge Hub. Confirm your email address to continue.',
     after:
-      'After confirmation, an administrator must approve your access before you can sign in.',
+      'After you confirm, an administrator must approve your account and assign workspace access and a role. Until then you cannot sign in.',
     cta: 'Confirm your email',
     ignore: 'If you did not create an account, you can ignore this email.',
   },
@@ -131,7 +155,31 @@ export const en: MailMessages = {
     title: 'Account approved',
     greeting: 'Hi {name},',
     body: 'An administrator has approved your account. You can sign in now.',
+    membershipsIntro: 'You have been assigned:',
+    membershipLine: '{workspace} — {role}',
+    roleWorkspaceAdmin: 'Workspace admin',
+    roleMaintainer: 'Maintainer',
+    roleReader: 'Reader',
     cta: 'Sign in',
+  },
+  signupPendingApproval: {
+    subject: 'Signup awaiting approval — Project Knowledge Hub',
+    title: 'Signup awaiting approval',
+    greeting: 'Hi {name},',
+    body: 'A new user confirmed their email and is waiting for administrator approval and workspace assignment.',
+    userLabel: 'Name: {user}',
+    emailLabel: 'Email: {email}',
+    cta: 'Review pending users',
+  },
+  signupPendingEscalation: {
+    subject: 'Signup still pending — Project Knowledge Hub',
+    title: 'Signup still pending',
+    greeting: 'Hi {name},',
+    body: 'A signup has been waiting for approval longer than the configured threshold. Please review and approve or reject.',
+    userLabel: 'Name: {user}',
+    emailLabel: 'Email: {email}',
+    pendingSinceLabel: 'Pending since: {since} ({age})',
+    cta: 'Review pending users',
   },
   passwordChanged: {
     subject: 'Your Project Knowledge Hub password was changed',
@@ -220,7 +268,7 @@ export const de: MailMessages = {
     greeting: 'Hallo {name},',
     body: 'Danke für Ihre Registrierung beim Project Knowledge Hub. Bestätigen Sie Ihre E-Mail-Adresse, um fortzufahren.',
     after:
-      'Nach der Bestätigung muss ein Administrator Ihren Zugang freigeben, bevor Sie sich anmelden können.',
+      'Nach der Bestätigung muss ein Administrator Ihr Konto freigeben und Workspace-Zugang sowie eine Rolle zuweisen. Bis dahin ist eine Anmeldung nicht möglich.',
     cta: 'E-Mail bestätigen',
     ignore: 'Wenn Sie kein Konto erstellt haben, können Sie diese E-Mail ignorieren.',
   },
@@ -229,7 +277,31 @@ export const de: MailMessages = {
     title: 'Konto freigegeben',
     greeting: 'Hallo {name},',
     body: 'Ein Administrator hat Ihr Konto freigegeben. Sie können sich jetzt anmelden.',
+    membershipsIntro: 'Ihnen wurde zugewiesen:',
+    membershipLine: '{workspace} — {role}',
+    roleWorkspaceAdmin: 'Workspace-Admin',
+    roleMaintainer: 'Maintainer',
+    roleReader: 'Leser',
     cta: 'Anmelden',
+  },
+  signupPendingApproval: {
+    subject: 'Registrierung wartet auf Freigabe — Project Knowledge Hub',
+    title: 'Registrierung wartet auf Freigabe',
+    greeting: 'Hallo {name},',
+    body: 'Ein neuer Benutzer hat seine E-Mail bestätigt und wartet auf Administrator-Freigabe sowie Workspace-Zuweisung.',
+    userLabel: 'Name: {user}',
+    emailLabel: 'E-Mail: {email}',
+    cta: 'Ausstehende Benutzer prüfen',
+  },
+  signupPendingEscalation: {
+    subject: 'Registrierung weiterhin ausstehend — Project Knowledge Hub',
+    title: 'Registrierung weiterhin ausstehend',
+    greeting: 'Hallo {name},',
+    body: 'Eine Registrierung wartet länger als der konfigurierte Schwellenwert auf Freigabe. Bitte prüfen und freigeben oder ablehnen.',
+    userLabel: 'Name: {user}',
+    emailLabel: 'E-Mail: {email}',
+    pendingSinceLabel: 'Ausstehend seit: {since} ({age})',
+    cta: 'Ausstehende Benutzer prüfen',
   },
   passwordChanged: {
     subject: 'Ihr Project Knowledge Hub-Passwort wurde geändert',
@@ -318,7 +390,7 @@ export const hu: MailMessages = {
     greeting: 'Szia {name}!',
     body: 'Köszönjük a Project Knowledge Hub regisztrációt. Erősítsd meg az e-mail címed a folytatáshoz.',
     after:
-      'A megerősítés után egy adminisztrátornak jóvá kell hagynia a hozzáférésedet, mielőtt bejelentkezhetnél.',
+      'A megerősítés után egy adminisztrátornak jóvá kell hagynia a fiókodat, és workspace-hozzáférést valamint szerepkört kell kiosztania. Addig nem tudsz bejelentkezni.',
     cta: 'E-mail megerősítése',
     ignore: 'Ha nem te hoztál létre fiókot, hagyd figyelmen kívül ezt az e-mailt.',
   },
@@ -327,7 +399,31 @@ export const hu: MailMessages = {
     title: 'Fiók jóváhagyva',
     greeting: 'Szia {name}!',
     body: 'Egy adminisztrátor jóváhagyta a fiókodat. Most már bejelentkezhetsz.',
+    membershipsIntro: 'A következő hozzárendeléseket kaptad:',
+    membershipLine: '{workspace} — {role}',
+    roleWorkspaceAdmin: 'Workspace admin',
+    roleMaintainer: 'Maintainer',
+    roleReader: 'Olvasó',
     cta: 'Bejelentkezés',
+  },
+  signupPendingApproval: {
+    subject: 'Regisztráció jóváhagyásra vár — Project Knowledge Hub',
+    title: 'Regisztráció jóváhagyásra vár',
+    greeting: 'Szia {name}!',
+    body: 'Egy új felhasználó megerősítette az e-mail címét, és adminisztrátori jóváhagyásra valamint workspace-hozzárendelésre vár.',
+    userLabel: 'Név: {user}',
+    emailLabel: 'E-mail: {email}',
+    cta: 'Függő felhasználók áttekintése',
+  },
+  signupPendingEscalation: {
+    subject: 'Regisztráció továbbra is függőben — Project Knowledge Hub',
+    title: 'Regisztráció továbbra is függőben',
+    greeting: 'Szia {name}!',
+    body: 'Egy regisztráció a beállított küszöbnél hosszabb ideje vár jóváhagyásra. Kérjük, tekintsd át, majd hagyd jóvá vagy utasítsd el.',
+    userLabel: 'Név: {user}',
+    emailLabel: 'E-mail: {email}',
+    pendingSinceLabel: 'Függőben: {since} ({age})',
+    cta: 'Függő felhasználók áttekintése',
   },
   passwordChanged: {
     subject: 'A Project Knowledge Hub jelszavad megváltozott',

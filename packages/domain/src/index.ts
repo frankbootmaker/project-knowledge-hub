@@ -116,6 +116,7 @@ export const EMAIL_NOTIFICATION_KEYS = [
   'aiConnectionPending',
   'aiConnectionApproved',
   'aiConnectionRejected',
+  'signupPendingApproval',
 ] as const;
 
 export type EmailNotificationKey = (typeof EMAIL_NOTIFICATION_KEYS)[number];
@@ -127,6 +128,8 @@ export const DEFAULT_EMAIL_NOTIFICATION_PREFS: EmailNotificationPrefs = {
   aiConnectionPending: true,
   aiConnectionApproved: true,
   aiConnectionRejected: true,
+  /** System admins only; opt-in “on duty” for signup approvals. */
+  signupPendingApproval: false,
 };
 
 export const emailNotificationPrefsSchema = z.object({
@@ -134,6 +137,7 @@ export const emailNotificationPrefsSchema = z.object({
   aiConnectionPending: z.boolean(),
   aiConnectionApproved: z.boolean(),
   aiConnectionRejected: z.boolean(),
+  signupPendingApproval: z.boolean(),
 });
 
 export const emailNotificationPrefsPatchSchema = z
@@ -142,6 +146,7 @@ export const emailNotificationPrefsPatchSchema = z
     aiConnectionPending: z.boolean().optional(),
     aiConnectionApproved: z.boolean().optional(),
     aiConnectionRejected: z.boolean().optional(),
+    signupPendingApproval: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one notification preference is required',

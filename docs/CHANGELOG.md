@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Signup approval emails:** clearer confirm-mail/admin-wait copy; approval mail lists assigned workspaces/roles; system-admin **on duty** pref (`signupPendingApproval`); immediate admin notify on email confirm (fallback: all admins); worker escalation after `SIGNUP_PENDING_ESCALATE_AFTER_HOURS` (4/12/24); Monitoring shows on-duty admins.
 * **NF-013 Knowledge media:** workspace JPEG/PNG/WebP library (`workspace_media`), BlobStore purpose `media`, editor **Insert image**, MCP `upload_workspace_media` / `list_workspace_media` / `delete_workspace_media`; Markdown embeds `/api/v1/media/:id`.
 * **Wave E (until IdP):** Compose **seed** one-shot (**NF-002**); Monitoring **Mon-1** client leaderboard + catalogue tops; **NF-008** embedding reindex + archived counts; **Ops-2** avatars via BlobStore with local fallback; **NF-009** light support dump + stale-backup chip (`BACKUP_STALE_AFTER_HOURS`).
 * **NF-006:** Admin → **Storage** for S3-compatible connection settings (override `BLOB_*` env, test connection); Monitoring offsite uses these settings with env fallback.

@@ -3,6 +3,8 @@ import {
   passwordResetEmail,
   emailConfirmEmail,
   accountApprovedEmail,
+  signupPendingApprovalEmail,
+  signupPendingEscalationEmail,
   passwordChangedEmail,
   accountClosedEmail,
   signupRejectedEmail,
@@ -12,6 +14,7 @@ import {
   setPasswordUrl,
   confirmEmailUrl,
   loginUrl,
+  adminUsersPendingUrl,
   aiConnectionsUrl,
   type MailSendResult,
   type MailTransport,
@@ -96,12 +99,68 @@ export async function sendAccountApprovedMail(
     webUrl: string;
     to: string;
     displayName: string;
+    memberships?: Array<{ workspaceName: string; role: string }>;
   } & LocaleInput,
 ): Promise<MailSendResult> {
   const content = accountApprovedEmail({
     locale: input.locale,
     displayName: input.displayName,
     loginUrl: loginUrl(input.webUrl),
+    memberships: input.memberships,
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendSignupPendingApprovalMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+    signupDisplayName: string;
+    signupEmail: string;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = signupPendingApprovalEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+    signupDisplayName: input.signupDisplayName,
+    signupEmail: input.signupEmail,
+    reviewUrl: adminUsersPendingUrl(input.webUrl),
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendSignupPendingEscalationMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+    signupDisplayName: string;
+    signupEmail: string;
+    pendingSince: string;
+    pendingAge: string;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = signupPendingEscalationEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+    signupDisplayName: input.signupDisplayName,
+    signupEmail: input.signupEmail,
+    pendingSince: input.pendingSince,
+    pendingAge: input.pendingAge,
+    reviewUrl: adminUsersPendingUrl(input.webUrl),
   });
   return mail.send({
     to: input.to,

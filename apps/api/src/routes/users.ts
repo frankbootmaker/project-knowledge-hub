@@ -407,7 +407,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const workspaceRows = await app.database.db
-      .select({ id: workspaces.id })
+      .select({ id: workspaces.id, name: workspaces.name })
       .from(workspaces)
       .where(and(inArray(workspaces.id, workspaceIds), isNull(workspaces.archivedAt)));
 
@@ -418,6 +418,8 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
         statusCode: 404,
       });
     }
+
+    const workspaceNameById = new Map(workspaceRows.map((row) => [row.id, row.name]));
 
     await app.database.db.transaction(async (tx) => {
       await tx.insert(memberships).values(
@@ -432,6 +434,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
         .update(users)
         .set({
           status: 'active',
+          signupPendingEscalatedAt: null,
           updatedAt: new Date(),
         })
         .where(eq(users.id, existing.id));
@@ -462,6 +465,10 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       to: existing.email,
       displayName: existing.displayName,
       locale: existing.preferredLocale,
+      memberships: body.memberships.map((item) => ({
+        workspaceName: workspaceNameById.get(item.workspaceId) ?? item.workspaceId,
+        role: item.role,
+      })),
     });
 
     return {
@@ -505,6 +512,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       .update(users)
       .set({
         status: 'disabled',
+        signupPendingEscalatedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(users.id, existing.id))

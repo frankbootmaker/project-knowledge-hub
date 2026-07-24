@@ -88,18 +88,108 @@ export function accountApprovedEmail(input: {
   locale?: string | null;
   displayName: string;
   loginUrl: string;
+  memberships?: Array<{ workspaceName: string; role: string }>;
 }): LinkMailContent {
   const locale = normalizeAppLocale(input.locale);
   const m = getMailMessages(locale).accountApproved;
   const name = displayNameOrFallback(input.displayName, locale);
   const greeting = interpolate(m.greeting, { name });
+
+  const roleLabel = (role: string): string => {
+    if (role === 'workspace_admin') return m.roleWorkspaceAdmin;
+    if (role === 'maintainer') return m.roleMaintainer;
+    if (role === 'reader') return m.roleReader;
+    return role;
+  };
+
+  const membershipLines = (input.memberships ?? []).map((item) =>
+    interpolate(m.membershipLine, {
+      workspace: item.workspaceName,
+      role: roleLabel(item.role),
+    }),
+  );
+
+  const membershipHtml =
+    membershipLines.length > 0
+      ? `${p(m.membershipsIntro)}<ul>${membershipLines
+          .map((line) => `<li>${line}</li>`)
+          .join('')}</ul>`
+      : '';
+
+  const textExtra =
+    membershipLines.length > 0
+      ? ['', m.membershipsIntro, ...membershipLines.map((line) => `• ${line}`)]
+      : [];
+
   return renderMailLayout({
     locale,
     subject: m.subject,
     title: m.title,
-    bodyHtml: `${p(greeting)}${p(m.body)}`,
+    bodyHtml: `${p(greeting)}${p(m.body)}${membershipHtml}`,
     cta: { label: m.cta, url: input.loginUrl },
-    textLines: [greeting, '', m.body, input.loginUrl],
+    textLines: [greeting, '', m.body, ...textExtra, '', input.loginUrl],
+  });
+}
+
+export function signupPendingApprovalEmail(input: {
+  locale?: string | null;
+  displayName: string;
+  signupDisplayName: string;
+  signupEmail: string;
+  reviewUrl: string;
+}): LinkMailContent {
+  const locale = normalizeAppLocale(input.locale);
+  const m = getMailMessages(locale).signupPendingApproval;
+  const name = displayNameOrFallback(input.displayName, locale);
+  const greeting = interpolate(m.greeting, { name });
+  const userLine = interpolate(m.userLabel, { user: input.signupDisplayName });
+  const emailLine = interpolate(m.emailLabel, { email: input.signupEmail });
+  return renderMailLayout({
+    locale,
+    subject: m.subject,
+    title: m.title,
+    bodyHtml: `${p(greeting)}${p(m.body)}${p(userLine)}${p(emailLine)}`,
+    cta: { label: m.cta, url: input.reviewUrl },
+    textLines: [greeting, '', m.body, '', userLine, emailLine, '', input.reviewUrl],
+  });
+}
+
+export function signupPendingEscalationEmail(input: {
+  locale?: string | null;
+  displayName: string;
+  signupDisplayName: string;
+  signupEmail: string;
+  pendingSince: string;
+  pendingAge: string;
+  reviewUrl: string;
+}): LinkMailContent {
+  const locale = normalizeAppLocale(input.locale);
+  const m = getMailMessages(locale).signupPendingEscalation;
+  const name = displayNameOrFallback(input.displayName, locale);
+  const greeting = interpolate(m.greeting, { name });
+  const userLine = interpolate(m.userLabel, { user: input.signupDisplayName });
+  const emailLine = interpolate(m.emailLabel, { email: input.signupEmail });
+  const sinceLine = interpolate(m.pendingSinceLabel, {
+    since: input.pendingSince,
+    age: input.pendingAge,
+  });
+  return renderMailLayout({
+    locale,
+    subject: m.subject,
+    title: m.title,
+    bodyHtml: `${p(greeting)}${p(m.body)}${p(userLine)}${p(emailLine)}${p(sinceLine)}`,
+    cta: { label: m.cta, url: input.reviewUrl },
+    textLines: [
+      greeting,
+      '',
+      m.body,
+      '',
+      userLine,
+      emailLine,
+      sinceLine,
+      '',
+      input.reviewUrl,
+    ],
   });
 }
 
@@ -282,6 +372,13 @@ export function confirmEmailUrl(webUrl: string, token: string): string {
 export function loginUrl(webUrl: string): string {
   const base = webUrl.replace(/\/$/, '');
   return new URL('/login', `${base}/`).toString();
+}
+
+export function adminUsersPendingUrl(webUrl: string): string {
+  const base = webUrl.replace(/\/$/, '');
+  const url = new URL('/admin/users', `${base}/`);
+  url.searchParams.set('status', 'pending_approval');
+  return url.toString();
 }
 
 export function aiConnectionsUrl(webUrl: string): string {

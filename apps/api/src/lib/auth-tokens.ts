@@ -184,7 +184,7 @@ export async function consumeAuthTokenAndSetPassword(
 export async function consumeEmailConfirmToken(
   database: Database,
   rawToken: string,
-): Promise<{ userId: string; email: string }> {
+): Promise<{ userId: string; email: string; displayName: string }> {
   const tokenHash = hashAuthToken(rawToken);
   const [row] = await database.db
     .select()
@@ -254,5 +254,5 @@ export async function consumeEmailConfirmToken(
       ),
     );
 
-  return { userId: user.id, email: user.email };
+  return { userId: user.id, email: user.email, displayName: user.displayName };
 }

@@ -6,17 +6,25 @@ import { useTranslations } from 'next-intl';
 import type { EmailNotificationPrefs } from '@project-knowledge-hub/domain';
 import { ErrorText, Panel, Switch, useToast } from './ui';
 
-const TOGGLE_KEYS = [
+const BASE_TOGGLE_KEYS = [
   'passwordChanged',
   'aiConnectionPending',
   'aiConnectionApproved',
   'aiConnectionRejected',
 ] as const;
 
+const ADMIN_TOGGLE_KEYS = ['signupPendingApproval'] as const;
+
+type ToggleKey =
+  | (typeof BASE_TOGGLE_KEYS)[number]
+  | (typeof ADMIN_TOGGLE_KEYS)[number];
+
 export function NotificationPrefsForm({
   initialPrefs,
+  isSystemAdmin = false,
 }: {
   initialPrefs: EmailNotificationPrefs;
+  isSystemAdmin?: boolean;
 }) {
   const t = useTranslations('account');
   const router = useRouter();
@@ -25,10 +33,11 @@ export function NotificationPrefsForm({
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function updatePref(
-    key: (typeof TOGGLE_KEYS)[number],
-    checked: boolean,
-  ) {
+  const toggleKeys: ToggleKey[] = isSystemAdmin
+    ? [...BASE_TOGGLE_KEYS, ...ADMIN_TOGGLE_KEYS]
+    : [...BASE_TOGGLE_KEYS];
+
+  async function updatePref(key: ToggleKey, checked: boolean) {
     const previous = prefs;
     const next = { ...prefs, [key]: checked };
     setPrefs(next);
@@ -71,8 +80,11 @@ export function NotificationPrefsForm({
     <div className="grid gap-6">
       <Panel className="grid gap-4">
         <p className="m-0 text-sm text-ink-muted">{t('notificationsBlurb')}</p>
-        {TOGGLE_KEYS.map((key) => (
-          <div key={key} className="grid gap-1 border-t border-line pt-3 first:border-t-0 first:pt-0">
+        {toggleKeys.map((key) => (
+          <div
+            key={key}
+            className="grid gap-1 border-t border-line pt-3 first:border-t-0 first:pt-0"
+          >
             <Switch
               id={`notify-${key}`}
               checked={prefs[key]}

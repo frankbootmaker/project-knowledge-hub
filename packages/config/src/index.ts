@@ -134,6 +134,23 @@ export const envSchema = z.object({
   /** Hours after last successful dump before Monitoring flags a stale backup (NF-009). */
   BACKUP_STALE_AFTER_HOURS: z.coerce.number().int().min(1).max(168).default(36),
   /**
+   * When a signup stays pending_approval longer than this, email all system admins once.
+   * Allowed: 4, 12, or 24.
+   */
+  SIGNUP_PENDING_ESCALATE_AFTER_HOURS: z.coerce
+    .number()
+    .int()
+    .refine((value) => value === 4 || value === 12 || value === 24, {
+      message: 'SIGNUP_PENDING_ESCALATE_AFTER_HOURS must be 4, 12, or 24',
+    })
+    .default(4),
+  /** Worker poll for signup escalation (0 = disabled). Default 15 minutes. */
+  SIGNUP_PENDING_ESCALATE_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(15 * 60 * 1000),
+  /**
    * When true (default), successful dumps are uploaded to BlobStore when
    * BLOB_PROVIDER is not disabled.
    */

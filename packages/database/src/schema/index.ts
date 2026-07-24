@@ -98,6 +98,11 @@ export const users = pgTable(
       .$type<Record<string, boolean>>()
       .notNull()
       .default({}),
+    /** Set when signup-pending escalation mail was sent to all admins (once). */
+    signupPendingEscalatedAt: timestamp('signup_pending_escalated_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
     ...timestamps,
   },
   (table) => [

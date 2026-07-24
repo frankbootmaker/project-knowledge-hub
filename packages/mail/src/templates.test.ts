@@ -3,6 +3,7 @@ import {
   inviteEmail,
   passwordResetEmail,
   emailConfirmEmail,
+  accountApprovedEmail,
   passwordChangedEmail,
   accountClosedEmail,
   aiConnectionPendingEmail,
@@ -65,6 +66,21 @@ describe('mail templates', () => {
     });
     expect(mail.subject).toMatch(/confirm/i);
     expect(mail.text).toContain('Confirm your email address');
+    expect(mail.text).toMatch(/workspace/i);
+  });
+
+  it('lists memberships in account approved mail', () => {
+    const mail = accountApprovedEmail({
+      displayName: 'Ada',
+      loginUrl: 'http://localhost:3100/login',
+      memberships: [
+        { workspaceName: 'Demo', role: 'maintainer' },
+        { workspaceName: 'Ops', role: 'reader' },
+      ],
+    });
+    expect(mail.html).toContain('Demo');
+    expect(mail.html).toContain('Ops');
+    expect(mail.text).toContain('Maintainer');
   });
 
   it('renders password-changed and account-closed notices', () => {

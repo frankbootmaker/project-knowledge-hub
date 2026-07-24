@@ -20,7 +20,13 @@ const emptyPayload = (): MonitoringPayload => ({
     ready: false,
     checks: { postgres: 'error', redis: 'error' },
   },
-  attention: { pendingUsers: 0, pendingApiClients: 0, staleBackup: false, staleBackupAfterHours: 36 },
+  attention: {
+    pendingUsers: 0,
+    pendingApiClients: 0,
+    staleBackup: false,
+    staleBackupAfterHours: 36,
+    onDutyAdmins: [],
+  },
   sessions: { active: 0 },
   mcp: {
     range: '24h',

@@ -33,6 +33,8 @@ import {
 } from '@project-knowledge-hub/jobs';
 import { createLogger } from '@project-knowledge-hub/observability';
 import { resolveWorkerBlobStore } from './resolve-blob.js';
+import { resolveWorkerMailConfig } from './resolve-mail.js';
+import { escalateStaleSignupApprovals } from './signup-pending-escalate.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -53,6 +55,7 @@ async function main(): Promise<void> {
   let gitWorker: Worker<GitSyncQueueJobData> | null = null;
   let embeddingWorker: Worker<EmbeddingReindexQueueJobData> | null = null;
   let offsiteTimer: ReturnType<typeof setInterval> | null = null;
+  let signupEscalateTimer: ReturnType<typeof setInterval> | null = null;
   const gitSyncQueue = createGitSyncQueue(env.REDIS_URL);
   const embeddingQueue = createEmbeddingReindexQueue(env.REDIS_URL);
   const embeddingConfig = embeddingConfigFromEnv(env);
@@ -68,6 +71,9 @@ async function main(): Promise<void> {
     try {
       if (offsiteTimer) {
         clearInterval(offsiteTimer);
+      }
+      if (signupEscalateTimer) {
+        clearInterval(signupEscalateTimer);
       }
       if (gitWorker) {
         await gitWorker.close();
@@ -277,6 +283,32 @@ async function main(): Promise<void> {
     }, env.BACKUP_OFFSITE_SYNC_INTERVAL_MS);
   }
 
+  if (env.SIGNUP_PENDING_ESCALATE_INTERVAL_MS > 0) {
+    const runSignupEscalate = async () => {
+      try {
+        const mailConfig = await resolveWorkerMailConfig(database, env);
+        const result = await escalateStaleSignupApprovals({
+          database,
+          mailConfig,
+          webUrl: env.WEB_URL,
+          escalateAfterHours: env.SIGNUP_PENDING_ESCALATE_AFTER_HOURS,
+        });
+        if (result.escalated > 0) {
+          logger.info(
+            { escalated: result.escalated },
+            'Signup pending escalation mailed',
+          );
+        }
+      } catch (error) {
+        logger.error({ err: error }, 'Signup pending escalation failed');
+      }
+    };
+    void runSignupEscalate();
+    signupEscalateTimer = setInterval(() => {
+      void runSignupEscalate();
+    }, env.SIGNUP_PENDING_ESCALATE_INTERVAL_MS);
+  }
+
   logger.info(
     {
       appEnv: env.APP_ENV,
@@ -285,6 +317,8 @@ async function main(): Promise<void> {
       gitSyncSafety: safetySchedule,
       embeddingProvider: embeddingConfig.provider,
       backupOffsiteSyncMs: env.BACKUP_OFFSITE_SYNC_INTERVAL_MS,
+      signupPendingEscalateMs: env.SIGNUP_PENDING_ESCALATE_INTERVAL_MS,
+      signupPendingEscalateAfterHours: env.SIGNUP_PENDING_ESCALATE_AFTER_HOURS,
       status: 'ready',
     },
     'Worker ready',

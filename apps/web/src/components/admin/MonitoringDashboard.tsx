@@ -34,6 +34,7 @@ export type MonitoringPayload = {
     pendingApiClients: number;
     staleBackup: boolean;
     staleBackupAfterHours: number;
+    onDutyAdmins: Array<{ id: string; displayName: string; email: string }>;
   };
   sessions: { active: number };
   mcp: {
@@ -667,6 +668,22 @@ export function MonitoringDashboard({
                     hours: data.attention.staleBackupAfterHours,
                   })
                 : t('monitoringBackupFresh')}
+            </Badge>
+            <Badge
+              tone={
+                data.attention.onDutyAdmins.length === 0 &&
+                data.attention.pendingUsers > 0
+                  ? 'warn'
+                  : 'neutral'
+              }
+            >
+              {data.attention.onDutyAdmins.length === 0
+                ? t('monitoringOnDutyNone')
+                : t('monitoringOnDuty', {
+                    names: data.attention.onDutyAdmins
+                      .map((admin) => admin.displayName)
+                      .join(', '),
+                  })}
             </Badge>
           </div>
           {data.mcp.topActions.length > 0 ? (

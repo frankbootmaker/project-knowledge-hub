@@ -184,6 +184,9 @@ importers:
       '@project-knowledge-hub/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@project-knowledge-hub/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@project-knowledge-hub/observability':
         specifier: workspace:*
         version: link:../../packages/observability

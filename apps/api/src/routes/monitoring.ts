@@ -42,6 +42,7 @@ import {
   listActiveWorkspacesForMonitoring,
 } from '../lib/monitoring.js';
 import { enqueueWorkspaceEmbeddingReindex } from '../lib/embedding-jobs.js';
+import { listOnDutyAdmins } from '../lib/signup-pending-notify.js';
 
 const rangeSchema = z.enum(['1h', '24h', '7d']).default('24h');
 const retentionBodySchema = z.object({
@@ -113,6 +114,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       retention,
       archived,
       workspaceOptions,
+      onDutyAdmins,
     ] = await Promise.all([
         collectDependencyChecks(app),
         getSchemaVersionLabel(app.database),
@@ -128,6 +130,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         readRetentionPolicy(backupDir, envRetentionDefaults(app.env)),
         getArchivedEntityCounts(app.database),
         listActiveWorkspacesForMonitoring(app.database),
+        listOnDutyAdmins(app.database),
       ]);
 
     const ready = checks.postgres === 'ok' && checks.redis === 'ok';
@@ -157,6 +160,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         ...pending,
         staleBackup,
         staleBackupAfterHours: staleAfterHours,
+        onDutyAdmins,
       },
       sessions: { active: activeSessions },
       mcp: {
