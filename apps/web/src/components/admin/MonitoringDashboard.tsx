@@ -62,8 +62,17 @@ export type MonitoringPayload = {
   catalogue: {
     range: string;
     topRecords: Array<{ entityId: string; label: string | null; count: number }>;
+    topViewedRecords?: Array<{ entityId: string; label: string | null; count: number }>;
     topProjects: Array<{ entityId: string; label: string | null; count: number }>;
     topSystems: Array<{ entityId: string; label: string | null; count: number }>;
+    search?: {
+      searchCount: number;
+      topQueryHashes: Array<{
+        queryHash: string;
+        queryLength: number | null;
+        count: number;
+      }>;
+    };
   };
   maintenance: {
     embeddingProvider: string;
@@ -893,6 +902,11 @@ export function MonitoringDashboard({
           </div>
           <div className="grid gap-4 px-5 py-4">
             <CatalogueTopList
+              title={t('monitoringTopViewed')}
+              empty={t('monitoringCatalogueEmpty')}
+              rows={data.catalogue.topViewedRecords ?? []}
+            />
+            <CatalogueTopList
               title={t('monitoringTopRecords')}
               empty={t('monitoringCatalogueEmpty')}
               rows={data.catalogue.topRecords}
@@ -907,6 +921,36 @@ export function MonitoringDashboard({
               empty={t('monitoringCatalogueEmpty')}
               rows={data.catalogue.topSystems}
             />
+            <div>
+              <p className="m-0 mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                {t('monitoringSearchTitle')}
+              </p>
+              <p className="m-0 mb-2 text-sm text-ink">
+                {t('monitoringSearchCount', {
+                  count: data.catalogue.search?.searchCount ?? 0,
+                })}
+              </p>
+              {(data.catalogue.search?.topQueryHashes?.length ?? 0) === 0 ? (
+                <p className="m-0 text-sm text-ink-muted">{t('monitoringCatalogueEmpty')}</p>
+              ) : (
+                <ul className="m-0 grid list-none gap-1 p-0">
+                  {(data.catalogue.search?.topQueryHashes ?? []).map((row) => (
+                    <li
+                      key={row.queryHash}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span className="min-w-0 truncate font-mono text-xs text-ink-muted">
+                        {row.queryHash.slice(0, 12)}…
+                        {row.queryLength != null
+                          ? ` (${t('monitoringSearchQueryLen', { length: row.queryLength })})`
+                          : ''}
+                      </span>
+                      <span className="shrink-0 text-ink-muted">{row.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </Panel>
       </section>

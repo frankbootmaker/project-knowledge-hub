@@ -20,3 +20,13 @@ export {
   type ParsedConversation,
   type ParsedTurn,
 } from './parsers.js';
+export {
+  detectContentSecrets,
+  hasHighSeverityWarnings,
+  type ContentWarning,
+  type ContentWarningSeverity,
+} from './secrets.js';
+export {
+  suggestDraftChunks,
+  type SuggestedDraftChunk,
+} from './suggest-chunks.js';

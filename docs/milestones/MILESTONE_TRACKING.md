@@ -90,7 +90,9 @@ See `docs/product/NEXT_FEATURES.md` (**execution waves A–F**). Doc Factory (NF
 - [x] Workspace Imports UI (list / new / detail + create draft) + i18n en/de/hu
 - [x] Integration + package unit tests
 - [x] ChatGPT / Open WebUI / generic JSON importers (paste JSON → Markdown drafts)
-- [ ] Later: auto-split, secret detection (deferred)
+- [x] Secret detection warnings + acknowledge on draft create
+- [x] Heuristic auto-split suggestions (turns / headings; no LLM)
+- [ ] Later: LLM-assisted split / classification (deferred)
 
 ## Milestone 8 checklist
 

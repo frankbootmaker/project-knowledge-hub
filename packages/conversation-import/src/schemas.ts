@@ -46,6 +46,8 @@ export const createDraftFromImportInputSchema = z.object({
   /** Override import defaults when creating the draft. */
   projectId: z.string().uuid().nullable().optional(),
   systemId: z.string().uuid().nullable().optional(),
+  /** Required when draft body still contains high-severity secret warnings. */
+  acknowledgeSecrets: z.boolean().optional(),
 });
 
 export type CreateDraftFromImportInput = z.infer<typeof createDraftFromImportInputSchema>;

@@ -115,6 +115,14 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const range = query.range ?? '24h';
     const backupDir = app.env.BACKUP_DIR;
 
+    const emptyCatalogue = {
+      topRecords: [],
+      topViewedRecords: [],
+      topProjects: [],
+      topSystems: [],
+      search: { searchCount: 0, topQueryHashes: [] },
+    };
+
     const [
       checks,
       schemaVersion,
@@ -139,8 +147,14 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         getActiveSessionCount(app.database),
         getPendingAttention(app.database),
         getMcpActivitySummary(app.database, sinceForRange(range)),
-        getClientLeaderboard(app.database, sinceForRange(range)),
-        getCatalogueUsageSummary(app.database, sinceForRange(range)),
+        getClientLeaderboard(app.database, sinceForRange(range)).catch((error) => {
+          app.log.error({ err: error }, 'Monitoring client leaderboard failed');
+          return [];
+        }),
+        getCatalogueUsageSummary(app.database, sinceForRange(range)).catch((error) => {
+          app.log.error({ err: error }, 'Monitoring catalogue summary failed');
+          return emptyCatalogue;
+        }),
         readStamp(backupDir, 'last-success.json'),
         readStamp(backupDir, 'last-import.json'),
         readStamp(backupDir, 'last-failure.json'),
@@ -156,8 +170,19 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const ready = checks.postgres === 'ok' && checks.redis === 'ok';
     const overall = ready ? 'healthy' : 'degraded';
     const totalBytes = artifacts.reduce((sum, item) => sum + item.sizeBytes, 0);
-    const { store: blobStore, backupOffsite } = await app.getBlobStore();
-    const offsiteEnabled = backupOffsite && blobStore.provider !== 'disabled';
+    let blobProvider: string = 'disabled';
+    let backupOffsite = false;
+    let offsiteEnabled = false;
+    try {
+      const resolved = await app.getBlobStore();
+      blobProvider = resolved.store.provider;
+      backupOffsite = Boolean(resolved.backupOffsite);
+      offsiteEnabled = Boolean(
+        resolved.backupOffsite && resolved.store.provider !== 'disabled',
+      );
+    } catch (error) {
+      app.log.error({ err: error }, 'Monitoring blob store resolve failed');
+    }
     const lastSuccessSummary = stampSummary(lastSuccess);
     const staleAfterHours = app.env.BACKUP_STALE_AFTER_HOURS;
     const staleBackup = isBackupStale(lastSuccessSummary.ageSeconds, staleAfterHours);
@@ -232,7 +257,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         },
         offsite: {
           enabled: offsiteEnabled,
-          provider: blobStore.provider,
+          provider: blobProvider,
           auto: backupOffsite,
         },
         staleAfterHours,

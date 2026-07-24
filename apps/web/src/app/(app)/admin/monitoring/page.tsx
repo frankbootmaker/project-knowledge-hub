@@ -92,11 +92,20 @@ export default async function AdminMonitoringPage({
     rawRange === '1h' || rawRange === '7d' || rawRange === '24h' ? rawRange : '24h';
 
   const response = await apiFetch(`/api/v1/admin/monitoring?range=${range}`);
-  const payload: MonitoringPayload = response.ok
-    ? ((await response.json()) as MonitoringPayload)
-    : emptyPayload(
-        `Monitoring API returned HTTP ${response.status}. Check web API_URL / NEXT_REWRITE_API_ORIGIN reaches the api service (Dokploy: http://api:3101).`,
-      );
+  let payload: MonitoringPayload;
+  if (response.ok) {
+    payload = (await response.json()) as MonitoringPayload;
+  } else {
+    const body = (await response.json().catch(() => null)) as {
+      error?: { message?: string; code?: string };
+    } | null;
+    const detail = body?.error?.message
+      ? ` ${body.error.code ? `[${body.error.code}] ` : ''}${body.error.message}`
+      : '';
+    payload = emptyPayload(
+      `Monitoring API returned HTTP ${response.status}.${detail} Check web API_URL / NEXT_REWRITE_API_ORIGIN reaches the api service (Dokploy: http://api:3101).`,
+    );
+  }
 
   return (
     <div>

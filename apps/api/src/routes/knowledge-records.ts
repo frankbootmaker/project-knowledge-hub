@@ -34,6 +34,10 @@ import {
   updateKnowledgeRecord,
   updateRecordInputSchema,
 } from '../lib/knowledge-records-service.js';
+import {
+  auditKnowledgeView,
+  resolveWorkspaceOrganizationId,
+} from '../lib/telemetry-audit.js';
 
 const restoreSchema = z.object({
   changeMessage: z.string().max(500).optional(),
@@ -125,6 +129,24 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     const tagMap = await getKnowledgeRecordTags(app.database, [record.id]);
     const source = await loadPrimarySource(app.database, record.id);
     const rendered = await renderMarkdown(record.contentMarkdown);
+
+    const organizationId = await resolveWorkspaceOrganizationId(
+      app.database,
+      record.workspaceId,
+    );
+    await auditKnowledgeView({
+      database: app.database,
+      organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      recordId: record.id,
+      workspaceId: record.workspaceId,
+      projectId: record.projectId,
+      systemId: record.systemId,
+      slug: record.slug,
+      via: 'session',
+      ipAddress: request.ip,
+    });
 
     return {
       knowledgeRecord: toPublicRecord(record, tagMap.get(record.id) ?? [], source, {

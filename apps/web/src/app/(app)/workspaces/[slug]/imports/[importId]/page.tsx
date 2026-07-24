@@ -15,6 +15,18 @@ type ConversationImport = {
   contentFormat: string;
   rawContent: string;
   draftMarkdownPreview?: string;
+  contentWarnings?: Array<{
+    code: string;
+    severity: 'info' | 'warning' | 'high';
+    count: number;
+    label: string;
+  }>;
+  suggestedChunks?: Array<{
+    id: string;
+    title: string;
+    contentMarkdown: string;
+    excerptNote: string;
+  }>;
   sourceProvider: string | null;
   generatedByModel: string | null;
   archivedAt: string | null;

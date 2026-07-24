@@ -124,41 +124,72 @@ export type MonitoringCatalogueHit = {
   count: number;
 };
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+/** drizzle execute() may return a row array or `{ rows: [...] }` depending on driver. */
+function rowsFromExecute<T>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  if (
+    result &&
+    typeof result === 'object' &&
+    Array.isArray((result as { rows?: unknown }).rows)
+  ) {
+    return (result as { rows: T[] }).rows;
+  }
+  return [];
+}
+
+function uuidEntityIds(
+  items: Array<{ entityId: string; count: number }>,
+): Array<{ entityId: string; count: number }> {
+  return items.filter((item) => isUuid(item.entityId));
+}
+
 export async function getClientLeaderboard(
   database: Database,
   since: Date,
   limit = 10,
 ): Promise<MonitoringLeaderboardClient[]> {
-  const rows = (await database.db.execute(sql`
-    SELECT
-      actor_id AS "actorId",
-      COUNT(*)::int AS "requestCount",
-      COUNT(*) FILTER (WHERE action = 'mcp.tool_call')::int AS "toolCallCount",
-      COUNT(*) FILTER (WHERE action = 'mcp.tool_error')::int AS "toolErrorCount"
-    FROM audit_events
-    WHERE created_at >= ${since.toISOString()}
-      AND actor_type = 'api_client'
-      AND action LIKE 'mcp.%'
-      AND actor_id IS NOT NULL
-    GROUP BY actor_id
-    ORDER BY COUNT(*) DESC
-    LIMIT ${limit}
-  `)) as unknown as Array<{
+  const rows = rowsFromExecute<{
     actorId: string;
     requestCount: number;
     toolCallCount: number;
     toolErrorCount: number;
-  }>;
+  }>(
+    await database.db.execute(sql`
+      SELECT
+        actor_id AS "actorId",
+        COUNT(*)::int AS "requestCount",
+        COUNT(*) FILTER (WHERE action = 'mcp.tool_call')::int AS "toolCallCount",
+        COUNT(*) FILTER (WHERE action = 'mcp.tool_error')::int AS "toolErrorCount"
+      FROM audit_events
+      WHERE created_at >= ${since.toISOString()}
+        AND actor_type = 'api_client'
+        AND action LIKE 'mcp.%'
+        AND actor_id IS NOT NULL
+      GROUP BY actor_id
+      ORDER BY COUNT(*) DESC
+      LIMIT ${limit}
+    `),
+  );
 
   if (rows.length === 0) {
     return [];
   }
 
-  const ids = rows.map((row) => row.actorId);
-  const clients = await database.db
-    .select({ id: apiClients.id, name: apiClients.name })
-    .from(apiClients)
-    .where(inArray(apiClients.id, ids));
+  // actor_id is text; only UUID values can join api_clients.id (uuid column).
+  const ids = rows.map((row) => row.actorId).filter(isUuid);
+  const clients = ids.length
+    ? await database.db
+        .select({ id: apiClients.id, name: apiClients.name })
+        .from(apiClients)
+        .where(inArray(apiClients.id, ids))
+    : [];
   const nameById = new Map(clients.map((c) => [c.id, c.name]));
 
   return rows.map((row) => ({
@@ -176,21 +207,25 @@ async function topEntityIdsFromActions(
   actionPrefix: string,
   limit: number,
 ): Promise<Array<{ entityId: string; count: number }>> {
-  const rows = (await database.db.execute(sql`
-    SELECT entity_id AS "entityId", COUNT(*)::int AS count
-    FROM audit_events
-    WHERE created_at >= ${since.toISOString()}
-      AND action LIKE ${`${actionPrefix}%`}
-      AND entity_id IS NOT NULL
-      AND entity_id <> ''
-    GROUP BY entity_id
-    ORDER BY COUNT(*) DESC
-    LIMIT ${limit}
-  `)) as unknown as Array<{ entityId: string; count: number }>;
-  return rows.map((row) => ({
-    entityId: row.entityId,
-    count: Number(row.count),
-  }));
+  const rows = rowsFromExecute<{ entityId: string; count: number }>(
+    await database.db.execute(sql`
+      SELECT entity_id AS "entityId", COUNT(*)::int AS count
+      FROM audit_events
+      WHERE created_at >= ${since.toISOString()}
+        AND action LIKE ${`${actionPrefix}%`}
+        AND entity_id IS NOT NULL
+        AND entity_id <> ''
+      GROUP BY entity_id
+      ORDER BY COUNT(*) DESC
+      LIMIT ${limit}
+    `),
+  );
+  return uuidEntityIds(
+    rows.map((row) => ({
+      entityId: row.entityId,
+      count: Number(row.count),
+    })),
+  );
 }
 
 async function topIdsFromMcpMetadata(
@@ -207,20 +242,24 @@ async function topIdsFromMcpMetadata(
         ? sql`metadata_json->>'projectId'`
         : sql`metadata_json->>'systemId'`;
 
-  const rows = (await database.db.execute(sql`
-    SELECT ${entityExpr} AS "entityId", COUNT(*)::int AS count
-    FROM audit_events
-    WHERE created_at >= ${since.toISOString()}
-      AND action IN ('mcp.tool_call', 'mcp.tool_error')
-      AND metadata_json ? ${metaKey}
-      AND COALESCE(${entityExpr}, '') <> ''
-    GROUP BY 1
-    ORDER BY COUNT(*) DESC
-    LIMIT ${limit}
-  `)) as unknown as Array<{ entityId: string | null; count: number }>;
-  return rows
-    .filter((row): row is { entityId: string; count: number } => Boolean(row.entityId))
-    .map((row) => ({ entityId: row.entityId, count: Number(row.count) }));
+  const rows = rowsFromExecute<{ entityId: string | null; count: number }>(
+    await database.db.execute(sql`
+      SELECT ${entityExpr} AS "entityId", COUNT(*)::int AS count
+      FROM audit_events
+      WHERE created_at >= ${since.toISOString()}
+        AND action IN ('mcp.tool_call', 'mcp.tool_error')
+        AND metadata_json ? ${metaKey}
+        AND COALESCE(${entityExpr}, '') <> ''
+      GROUP BY 1
+      ORDER BY COUNT(*) DESC
+      LIMIT ${limit}
+    `),
+  );
+  return uuidEntityIds(
+    rows
+      .filter((row): row is { entityId: string; count: number } => Boolean(row.entityId))
+      .map((row) => ({ entityId: row.entityId, count: Number(row.count) })),
+  );
 }
 
 function mergeTopCounts(
@@ -238,16 +277,110 @@ function mergeTopCounts(
     .slice(0, limit);
 }
 
+async function topViewedRecordIds(
+  database: Database,
+  since: Date,
+  limit: number,
+): Promise<Array<{ entityId: string; count: number }>> {
+  const rows = await database.db
+    .select({
+      entityId: auditEvents.entityId,
+      value: count(),
+    })
+    .from(auditEvents)
+    .where(
+      and(
+        gte(auditEvents.createdAt, since),
+        eq(auditEvents.action, 'knowledge.view'),
+        isNotNull(auditEvents.entityId),
+      ),
+    )
+    .groupBy(auditEvents.entityId)
+    .orderBy(desc(count()))
+    .limit(limit);
+
+  return rows
+    .filter((row): row is { entityId: string; value: number } => Boolean(row.entityId))
+    .map((row) => ({ entityId: row.entityId, count: Number(row.value) }));
+}
+
+export async function getSearchTelemetrySummary(
+  database: Database,
+  since: Date,
+  limit = 8,
+): Promise<{
+  searchCount: number;
+  topQueryHashes: Array<{ queryHash: string; queryLength: number | null; count: number }>;
+}> {
+  const [totalRow] = await database.db
+    .select({ value: count() })
+    .from(auditEvents)
+    .where(
+      and(gte(auditEvents.createdAt, since), eq(auditEvents.action, 'knowledge.search')),
+    );
+
+  const rows = rowsFromExecute<{
+    queryHash: string | null;
+    queryLength: number | null;
+    count: number;
+  }>(
+    await database.db.execute(sql`
+      SELECT
+        metadata_json->>'queryHash' AS "queryHash",
+        CASE
+          WHEN (metadata_json->>'queryLength') ~ '^[0-9]+$'
+          THEN (metadata_json->>'queryLength')::int
+          ELSE NULL
+        END AS "queryLength",
+        COUNT(*)::int AS count
+      FROM audit_events
+      WHERE created_at >= ${since.toISOString()}
+        AND action = 'knowledge.search'
+        AND COALESCE(metadata_json->>'queryHash', '') <> ''
+      GROUP BY 1, 2
+      ORDER BY COUNT(*) DESC
+      LIMIT ${limit}
+    `),
+  );
+
+  return {
+    searchCount: Number(totalRow?.value ?? 0),
+    topQueryHashes: rows
+      .filter((row): row is { queryHash: string; queryLength: number | null; count: number } =>
+        Boolean(row.queryHash),
+      )
+      .map((row) => ({
+        queryHash: row.queryHash,
+        queryLength: row.queryLength,
+        count: Number(row.count),
+      })),
+  };
+}
+
 export async function getCatalogueUsageSummary(
   database: Database,
   since: Date,
   limit = 8,
 ): Promise<{
   topRecords: MonitoringCatalogueHit[];
+  topViewedRecords: MonitoringCatalogueHit[];
   topProjects: MonitoringCatalogueHit[];
   topSystems: MonitoringCatalogueHit[];
+  search: {
+    searchCount: number;
+    topQueryHashes: Array<{ queryHash: string; queryLength: number | null; count: number }>;
+  };
 }> {
-  const [recordMutations, recordMcp, projectMutations, projectMcp, systemMutations, systemMcp] =
+  const [
+    recordMutations,
+    recordMcp,
+    projectMutations,
+    projectMcp,
+    systemMutations,
+    systemMcp,
+    viewed,
+    search,
+  ] =
     await Promise.all([
       topEntityIdsFromActions(database, since, 'knowledge_record.', limit * 2),
       topIdsFromMcpMetadata(database, since, 'recordId', limit * 2),
@@ -255,14 +388,23 @@ export async function getCatalogueUsageSummary(
       topIdsFromMcpMetadata(database, since, 'projectId', limit * 2),
       topEntityIdsFromActions(database, since, 'system.', limit * 2),
       topIdsFromMcpMetadata(database, since, 'systemId', limit * 2),
+      topViewedRecordIds(database, since, limit),
+      getSearchTelemetrySummary(database, since, limit),
     ]);
 
-  const topRecordIds = mergeTopCounts(recordMutations, recordMcp, limit);
-  const topProjectIds = mergeTopCounts(projectMutations, projectMcp, limit);
-  const topSystemIds = mergeTopCounts(systemMutations, systemMcp, limit);
+  const topRecordIds = uuidEntityIds(mergeTopCounts(recordMutations, recordMcp, limit));
+  const topProjectIds = uuidEntityIds(mergeTopCounts(projectMutations, projectMcp, limit));
+  const topSystemIds = uuidEntityIds(mergeTopCounts(systemMutations, systemMcp, limit));
+  const viewedSafe = uuidEntityIds(viewed);
+  const labelIds = [
+    ...new Set([
+      ...topRecordIds.map((r) => r.entityId),
+      ...viewedSafe.map((r) => r.entityId),
+    ]),
+  ];
 
   const [recordRows, projectRows, systemRows] = await Promise.all([
-    topRecordIds.length
+    labelIds.length
       ? database.db
           .select({
             id: knowledgeRecords.id,
@@ -270,12 +412,7 @@ export async function getCatalogueUsageSummary(
             slug: knowledgeRecords.slug,
           })
           .from(knowledgeRecords)
-          .where(
-            inArray(
-              knowledgeRecords.id,
-              topRecordIds.map((r) => r.entityId),
-            ),
-          )
+          .where(inArray(knowledgeRecords.id, labelIds))
       : Promise.resolve([]),
     topProjectIds.length
       ? database.db
@@ -317,6 +454,11 @@ export async function getCatalogueUsageSummary(
       label: recordLabel.get(row.entityId) ?? null,
       count: row.count,
     })),
+    topViewedRecords: viewedSafe.map((row) => ({
+      entityId: row.entityId,
+      label: recordLabel.get(row.entityId) ?? null,
+      count: row.count,
+    })),
     topProjects: topProjectIds.map((row) => ({
       entityId: row.entityId,
       label: projectLabel.get(row.entityId) ?? null,
@@ -327,6 +469,7 @@ export async function getCatalogueUsageSummary(
       label: systemLabel.get(row.entityId) ?? null,
       count: row.count,
     })),
+    search,
   };
 }
 

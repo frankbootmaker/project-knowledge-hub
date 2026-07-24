@@ -101,5 +101,5 @@ Reuse the existing Status UI patterns (colored `Badge`s, no left accent bars) as
 | --- | --- |
 | **Mon-0** | **Done:** Status → Admin → Monitoring + `/status` redirect; health (`/ready` checks); MCP volume/tools/errors + active sessions; **backup stamps + export/import/download** (`GET/POST /api/v1/admin/monitoring…`) |
 | **Mon-1** | **Done:** client leaderboard; top records/projects/systems (mutation audits + MCP metadata ids); embedding reindex + archived counts on Monitoring |
-| **Mon-2** | `knowledge.view` / search telemetry; anomaly chips; queue strip enrichment |
+| **Mon-2** | **Done (first slice):** `knowledge.view` + `knowledge.search` audits; Monitoring top viewed + hashed search terms. Later: anomaly chips; queue strip enrichment |
 | **Mon-3** | Rollup tables + longer history charts |
