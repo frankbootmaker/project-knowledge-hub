@@ -107,7 +107,7 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
 
 1. **Build** api, worker, web images.
 2. **Start** postgres + redis; wait until healthy.
-3. **Migrate + seed** — Compose `migrate` one-shot runs migrate then seed in the **same** container (`service_completed_successfully` before api/worker). Combined on purpose: a separate `seed` service often received a different `POSTGRES_PASSWORD` from Dokploy env injection (migrate OK, seed `28P01`).  
+3. **Migrate + seed** — Compose `migrate` one-shot runs migrate then seed in the **same** container (`service_completed_successfully` before api/worker). Combined on purpose: a separate `seed` service often received a different `POSTGRES_PASSWORD` from Dokploy env injection (migrate OK, seed `28P01`). Seed failure is **non-fatal** (logged as WARN) so a bootstrap hiccup cannot block api/worker after migrations succeed.  
    Manual / Dokploy “Run command” on the api image:
 
    ```bash
