@@ -72,3 +72,40 @@ db_ops_schema_version() {
   fi
   echo "${out:-unknown}"
 }
+
+# Read Admin → Monitoring schedule.json (if present) into SCHEDULE_ENABLED / SCHEDULE_INTERVAL.
+# Falls back to env BACKUP_ENABLED / BACKUP_INTERVAL_SECONDS when the file is missing.
+# Sets: SCHEDULE_ENABLED (true|false), SCHEDULE_INTERVAL (seconds >= 60), SCHEDULE_SOURCE (file|env)
+db_ops_load_schedule() {
+  local backup_dir="${1:-${BACKUP_DIR:-/backups}}"
+  local file="${backup_dir}/schedule.json"
+  local enabled="${BACKUP_ENABLED:-true}"
+  local interval="${BACKUP_INTERVAL_SECONDS:-86400}"
+  local source="env"
+
+  if [[ -f "$file" ]]; then
+    local raw
+    raw="$(tr -d '\n' <"$file" 2>/dev/null || true)"
+    if [[ -n "$raw" ]]; then
+      local parsed_enabled parsed_interval
+      parsed_enabled="$(printf '%s' "$raw" | sed -n 's/.*"enabled"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' | head -n1)"
+      parsed_interval="$(printf '%s' "$raw" | sed -n 's/.*"intervalSeconds"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n1)"
+      if [[ "$parsed_enabled" == "true" || "$parsed_enabled" == "false" ]]; then
+        enabled="$parsed_enabled"
+        source="file"
+      fi
+      if [[ -n "$parsed_interval" ]]; then
+        interval="$parsed_interval"
+        source="file"
+      fi
+    fi
+  fi
+
+  if [[ "$interval" -lt 60 ]]; then
+    interval=60
+  fi
+
+  SCHEDULE_ENABLED="$enabled"
+  SCHEDULE_INTERVAL="$interval"
+  SCHEDULE_SOURCE="$source"
+}

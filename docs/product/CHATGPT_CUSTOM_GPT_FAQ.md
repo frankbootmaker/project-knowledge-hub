@@ -15,7 +15,7 @@ Audience: members who want to search the hub and save summaries/drafts from Chat
 3. In ChatGPT: create a Custom GPT → **Actions** → import schema → Bearer auth with the token.
 4. Always open **that GPT** to talk to KnowHub (sidebar / GPTs list), not a default chat + `@`.
 
-Technical reference: [`MCP_CURSOR_SETUP.md`](../MCP_CURSOR_SETUP.md) §3.1.
+Technical reference: [`MCP_CURSOR_SETUP.md`](../development/MCP_CURSOR_SETUP.md) §3.1.
 
 ---
 
@@ -139,6 +139,6 @@ More connection tips: Account/Admin wizard **Connection troubleshooting** panel.
 
 ## Related
 
-* Setup reference: [`../MCP_CURSOR_SETUP.md`](../MCP_CURSOR_SETUP.md)
+* Setup reference: [`../development/MCP_CURSOR_SETUP.md`](../development/MCP_CURSOR_SETUP.md)
 * Architecture: [`../architecture/MCP_ARCHITECTURE.md`](../architecture/MCP_ARCHITECTURE.md)
 * Future normal-chat MCP App: backlog **NF-004** in [`NEXT_FEATURES.md`](NEXT_FEATURES.md)

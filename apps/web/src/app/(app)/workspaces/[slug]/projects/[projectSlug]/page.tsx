@@ -12,6 +12,8 @@ import {
 } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
+export const dynamic = 'force-dynamic';
+
 type Workspace = { id: string; slug: string; name: string };
 type Project = {
   id: string;
@@ -38,6 +40,7 @@ type KnowledgeRecordSummary = {
   slug: string;
   recordType: string;
   lifecycleStatus: string;
+  updatedAt: string;
 };
 
 export default async function ProjectDetailPage({
@@ -180,15 +183,25 @@ export default async function ProjectDetailPage({
         <ul className="m-0 grid list-none gap-3 p-0">
           {knowledgeRecords.map((record) => (
             <ListCard key={record.id}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/workspaces/${workspace.slug}/records/${record.slug}`}
-                  className="font-semibold no-underline"
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/workspaces/${workspace.slug}/records/${record.slug}`}
+                      className="font-semibold no-underline"
+                    >
+                      {record.title}
+                    </Link>
+                    <Badge tone="brand">{record.recordType}</Badge>
+                    <Badge>{record.lifecycleStatus}</Badge>
+                  </div>
+                </div>
+                <time
+                  className="shrink-0 text-xs text-ink-muted"
+                  dateTime={record.updatedAt}
                 >
-                  {record.title}
-                </Link>
-                <Badge tone="brand">{record.recordType}</Badge>
-                <Badge>{record.lifecycleStatus}</Badge>
+                  {tCommon('lastUpdated')}: {new Date(record.updatedAt).toLocaleString()}
+                </time>
               </div>
             </ListCard>
           ))}

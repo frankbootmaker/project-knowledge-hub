@@ -22,7 +22,10 @@ export default async function AccountNotificationsPage() {
   }
 
   const { user } = (await response.json()) as {
-    user: { emailNotificationPrefs: EmailNotificationPrefs };
+    user: {
+      emailNotificationPrefs: EmailNotificationPrefs;
+      isSystemAdmin?: boolean;
+    };
   };
 
   return (
@@ -31,7 +34,10 @@ export default async function AccountNotificationsPage() {
         title={t('notifications')}
         description={t('notificationsSubtitle')}
       />
-      <NotificationPrefsForm initialPrefs={user.emailNotificationPrefs} />
+      <NotificationPrefsForm
+        initialPrefs={user.emailNotificationPrefs}
+        isSystemAdmin={Boolean(user.isSystemAdmin)}
+      />
     </div>
   );
 }

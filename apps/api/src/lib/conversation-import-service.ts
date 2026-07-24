@@ -8,10 +8,13 @@ import {
 } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 import {
+  assertImportContentParsable,
   createConversationImportInputSchema,
   createDraftFromImportInputSchema,
+  defaultSourceProviderForFormat,
   normalizeRawContent,
   resolveDraftMarkdown,
+  type ConversationContentFormat,
   type CreateConversationImportInput,
   type CreateDraftFromImportInput,
 } from '@project-knowledge-hub/conversation-import';
@@ -38,6 +41,16 @@ export function toPublicConversationImport(
   }> = [],
   options?: { includeRaw?: boolean },
 ) {
+  let draftMarkdownPreview = row.rawContent;
+  try {
+    draftMarkdownPreview = resolveDraftMarkdown({
+      rawContent: row.rawContent,
+      contentFormat: row.contentFormat as ConversationContentFormat,
+    });
+  } catch {
+    // Keep raw for broken/legacy rows; create-draft will validate again.
+  }
+
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -46,6 +59,7 @@ export function toPublicConversationImport(
     title: row.title,
     contentFormat: row.contentFormat,
     rawContent: options?.includeRaw === false ? undefined : row.rawContent,
+    draftMarkdownPreview,
     sourceProvider: row.sourceProvider,
     generatedByModel: row.generatedByModel,
     createdBy: row.createdBy,
@@ -102,6 +116,19 @@ export async function createConversationImport(
     });
   }
 
+  try {
+    assertImportContentParsable({
+      rawContent,
+      contentFormat: body.contentFormat,
+    });
+  } catch (error) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: error instanceof Error ? error.message : 'Invalid import content',
+      statusCode: 400,
+    });
+  }
+
   const [workspace] = await app.database.db
     .select()
     .from(workspaces)
@@ -129,7 +156,8 @@ export async function createConversationImport(
       title: body.title.trim(),
       contentFormat: body.contentFormat,
       rawContent,
-      sourceProvider: body.sourceProvider ?? null,
+      sourceProvider:
+        body.sourceProvider ?? defaultSourceProviderForFormat(body.contentFormat),
       generatedByModel: body.generatedByModel ?? null,
       createdBy: actor.userId,
       updatedAt: now,

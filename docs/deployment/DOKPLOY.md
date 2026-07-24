@@ -114,7 +114,7 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
    ```
 
    Or from a checkout with deps: `DATABASE_URL=... ./infrastructure/scripts/migrate.sh`
-4. **Seed (NF-002)** — Compose `seed` one-shot after migrate. Creates default org; creates system admin when `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (min 12) are set. Idempotent if admin already exists; no-op when bootstrap vars are unset.
+4. **Seed (NF-002)** — Compose `seed` one-shot after migrate. Creates default org; creates system admin when `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (min 12) are set. Idempotent if admin already exists; no-op when bootstrap vars are unset or invalid (warns and continues so redeploys are not blocked). Seed only needs `DATABASE_URL` + org/bootstrap vars — it does not run the full app env schema.
 5. **Start** api, worker, web.
 
 ## Smoke checklist
@@ -129,13 +129,30 @@ After deploy:
 * [ ] Restart stack; Postgres data persists (named volume)
 * [ ] Worker is running (git sync / embedding queues idle is OK)
 
+## Troubleshooting
+
+### `password authentication failed for user "knowledge_hub"` (seed/migrate)
+
+Usually **not** a schema problem. Causes:
+
+1. **`POSTGRES_PASSWORD` in Dokploy ≠ password stored in the Postgres volume** (volume keeps the password from first init; changing the env alone does not update the role). Fix with `ALTER USER … PASSWORD …` or restore the original env value.
+2. **Special characters in the password** (`&`, `#`, `@`, `*`, …) embedded into `DATABASE_URL` via Compose. Current images rebuild the URL from discrete `POSTGRES_PASSWORD` with percent-encoding. Redeploy after pulling that fix; keep using the same password in Dokploy.
+
+Check:
+
+```bash
+docker logs knowledge-hub-*-migrate-1 --tail 20
+docker inspect knowledge-hub-*-seed-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E 'POSTGRES_|DATABASE_URL'
+```
+
 ## Logs
 
 Until admin log export exists, use the **Dokploy UI** (per-service container logs) for api, worker, and web.
 
 ## Backup / export / import (Dev)
 
-**Ops-0 (NF-005):** Compose service `db-backup` writes `pg_dump -Fc` into volume `knowledge_hub_backups` (`/backups`), applies retention, and updates `last-success.json`. Disable with `BACKUP_ENABLED=false`.
+**Ops-0 (NF-005):** Compose service `db-backup` writes `pg_dump -Fc` into volume `knowledge_hub_backups` (`/backups`), applies retention, and updates `last-success.json`. Disable with `BACKUP_ENABLED=false`, or Admin → Monitoring → schedule (`/backups/schedule.json`).
 
 The API (and worker) run as uid **1001**. Sidecar dumps are chowned to that uid after each cycle, and the API/worker entrypoints fix volume ownership on start — otherwise Admin **Export** / **Delete** fail with permission errors (the volume is often created root-owned). The API image installs **postgresql-client-16** (PGDG) so `pg_dump` matches Compose Postgres 16.
 
@@ -200,7 +217,8 @@ Copy dumps off the volume for transfer (Dokploy volume browser, `docker cp`, or 
 
 ## Related
 
+* **Agent handoff (backup / monitoring / local↔Dokploy DB transfer):** [`AGENT_BACKUP_MONITORING_HANDOFF.md`](AGENT_BACKUP_MONITORING_HANDOFF.md)
 * Operations & maintenance (future): [`OPERATIONS.md`](OPERATIONS.md)
 * Release flow: [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md)
-* Milestone plan: [`../MILESTONE_7_IMPLEMENTATION_PLAN.md`](../MILESTONE_7_IMPLEMENTATION_PLAN.md)
+* Milestone plan: [`../milestones/MILESTONE_7_IMPLEMENTATION_PLAN.md`](../milestones/MILESTONE_7_IMPLEMENTATION_PLAN.md)
 * Local Compose (host-published PG/Redis): [`DOCKER_COMPOSE.md`](DOCKER_COMPOSE.md)

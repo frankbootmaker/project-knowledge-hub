@@ -38,7 +38,7 @@ export async function ensureBackupDir(backupDir: string): Promise<void> {
 
 export async function readStamp(
   backupDir: string,
-  fileName: 'last-success.json' | 'last-import.json',
+  fileName: 'last-success.json' | 'last-import.json' | 'last-failure.json',
 ): Promise<BackupStamp | null> {
   const stampPath = path.join(backupDir, fileName);
   try {
@@ -60,7 +60,7 @@ export async function readStamp(
 
 export async function writeStamp(
   backupDir: string,
-  fileName: 'last-success.json' | 'last-import.json',
+  fileName: 'last-success.json' | 'last-import.json' | 'last-failure.json',
   stamp: BackupStamp,
 ): Promise<void> {
   await ensureBackupDir(backupDir);

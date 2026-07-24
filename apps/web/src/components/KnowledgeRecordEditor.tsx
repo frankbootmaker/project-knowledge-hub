@@ -1,7 +1,7 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -25,6 +25,16 @@ import {
 } from './ui';
 
 type Option = { id: string; name: string; slug: string };
+
+type MediaItem = {
+  id: string;
+  url: string;
+  markdownSnippet: string;
+  altText: string | null;
+  originalFilename: string | null;
+  knowledgeRecordId: string | null;
+  createdAt: string;
+};
 
 export type KnowledgeRecordEditorInitial = {
   id: string;
@@ -101,7 +111,105 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const markdownRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [, startTransition] = useTransition();
+
+  async function refreshMedia() {
+    try {
+      const qs = new URLSearchParams({ limit: '20' });
+      const response = await fetch(
+        `/api/v1/workspaces/${props.workspaceId}/media?${qs.toString()}`,
+        { credentials: 'include', cache: 'no-store' },
+      );
+      if (!response.ok) return;
+      const body = (await response.json()) as { media?: MediaItem[] };
+      setMediaItems(body.media ?? []);
+    } catch {
+      // Non-blocking for editor
+    }
+  }
+
+  useEffect(() => {
+    void refreshMedia();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load on workspace change
+  }, [props.workspaceId]);
+
+  function insertMarkdownSnippet(snippet: string) {
+    const el = markdownRef.current;
+    if (!el) {
+      setContentMarkdown((prev) => `${prev.trimEnd()}\n\n${snippet}\n`);
+      return;
+    }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const next =
+      contentMarkdown.slice(0, start) + snippet + contentMarkdown.slice(end);
+    setContentMarkdown(next);
+    requestAnimationFrame(() => {
+      const pos = start + snippet.length;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  async function uploadMediaFile(file: File) {
+    setMediaBusy(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      if (props.initial?.id) {
+        form.append('knowledgeRecordId', props.initial.id);
+      }
+      form.append('alt', file.name.replace(/\.[^.]+$/, '') || 'image');
+      const response = await fetch(`/api/v1/workspaces/${props.workspaceId}/media`, {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        media?: MediaItem;
+        error?: { message?: string };
+      };
+      if (!response.ok || !body.media) {
+        throw new Error(body.error?.message ?? t('mediaUploadFailed'));
+      }
+      insertMarkdownSnippet(body.media.markdownSnippet);
+      await refreshMedia();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('mediaUploadFailed'));
+    } finally {
+      setMediaBusy(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }
+
+  async function deleteMedia(mediaId: string) {
+    setMediaBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/media/${mediaId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? t('mediaDeleteFailed'));
+      }
+      await refreshMedia();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('mediaDeleteFailed'));
+    } finally {
+      setMediaBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -358,14 +466,77 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Field label={t('markdown')}>
+        <div className="grid gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="kh-label m-0">
+              <span>{t('markdown')}</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void uploadMediaFile(file);
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending || mediaBusy || gitManaged}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {mediaBusy ? t('mediaUploading') : t('mediaInsert')}
+              </Button>
+            </div>
+          </div>
           <Textarea
+            ref={markdownRef}
             value={contentMarkdown}
             onChange={(e) => setContentMarkdown(e.target.value)}
             rows={textareaRows}
             className={`${previewMinClass} font-mono text-sm`}
           />
-        </Field>
+          {mediaItems.length > 0 ? (
+            <Panel className="p-3">
+              <p className="m-0 mb-2 text-xs font-semibold tracking-[0.08em] text-ink-muted uppercase">
+                {t('mediaRecent')}
+              </p>
+              <ul className="m-0 grid list-none gap-2 p-0">
+                {mediaItems.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  >
+                    <span className="min-w-0 truncate text-ink">
+                      {item.originalFilename ?? item.altText ?? item.id}
+                    </span>
+                    <span className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending || mediaBusy || gitManaged}
+                        onClick={() => insertMarkdownSnippet(item.markdownSnippet)}
+                      >
+                        {t('mediaInsertExisting')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending || mediaBusy || gitManaged}
+                        onClick={() => void deleteMedia(item.id)}
+                      >
+                        {t('mediaDelete')}
+                      </Button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          ) : null}
+        </div>
         <div>
           <p className="kh-label mb-2">
             <span>{t('safePreview')}</span>

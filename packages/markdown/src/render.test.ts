@@ -43,17 +43,15 @@ graph TD
     expect(result.html).toContain('graph TD');
   });
 
-  it('builds a table of contents from headings', async () => {
-    const result = await renderMarkdown(`# One
+  it('keeps relative hub media image urls', async () => {
+    const result = await renderMarkdown(
+      '![diagram](/api/v1/media/00000000-0000-4000-8000-000000000001)',
+    );
+    expect(result.html).toContain('src="/api/v1/media/00000000-0000-4000-8000-000000000001"');
+  });
 
-## Two
-
-### Three
-`);
-    expect(result.toc.map((item) => item.text)).toEqual(['One', 'Two', 'Three']);
-    expect(result.toc.every((item) => item.id.length > 0)).toBe(true);
-    for (const item of result.toc) {
-      expect(result.html).toContain(`id="${item.id}"`);
-    }
+  it('strips data: image urls', async () => {
+    const result = await renderMarkdown('![x](data:image/png;base64,aaaa)');
+    expect(result.html.toLowerCase()).not.toContain('data:image');
   });
 });

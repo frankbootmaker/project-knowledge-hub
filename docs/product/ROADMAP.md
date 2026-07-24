@@ -1,6 +1,6 @@
 # Roadmap
 
-Aligned with the PRD development milestones. **Authoritative status:** `docs/MILESTONE_TRACKING.md`.
+Aligned with the PRD development milestones. **Authoritative status:** `docs/milestones/MILESTONE_TRACKING.md`.
 
 ## Execution order (post–localhost MVP)
 
@@ -43,4 +43,4 @@ Kubernetes, microservices, OpenSearch/Elasticsearch, Neo4j, GraphQL, dedicated v
 
 ## Tracking
 
-Update `docs/MILESTONE_TRACKING.md` and `docs/CHANGELOG.md` when milestone status changes.
+Update `docs/milestones/MILESTONE_TRACKING.md` and `docs/CHANGELOG.md` when milestone status changes.

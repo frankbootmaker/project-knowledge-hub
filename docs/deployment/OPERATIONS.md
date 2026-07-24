@@ -73,8 +73,8 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 ### Ops-0 — Scheduled local backup + export/import path — **done**
 
-* Compose service `db-backup` (Dokploy) / optional local `compose.yaml` profile `backup`: loop `pg_dump -Fc` every `BACKUP_INTERVAL_SECONDS` (default 24h).
-* Retention via `rotate-backups.sh`: `BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` (defaults 7 / 4 / 3).
+* Compose service `db-backup` (Dokploy) / optional local `compose.yaml` profile `backup`: loop `pg_dump -Fc` on an interval (default `BACKUP_INTERVAL_SECONDS=86400`). Admin → Monitoring can override enable/interval via `BACKUP_DIR/schedule.json` (sidecar re-reads each cycle).
+* Retention via `rotate-backups.sh` / Admin `retention.json`: `BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` (defaults 7 / 4 / 3).
 * Dumps on named volume `knowledge_hub_backups` (path `/backups` in the sidecar).
 * Volume ownership: API/worker use uid **1001**; `db-backup` and container entrypoints chown `/backups` so Monitoring export/delete work.
 * **Export:** `export-db.sh` (= `backup-db.sh`); artifacts `knowledge-hub-*.dump`, symlink `latest.dump`.
@@ -92,11 +92,12 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 * Provider-managed encryption at rest (bucket SSE/KMS) — client-side encrypt later if needed.
 * Azure Blob (`NF-007`) on Admin → **Storage** when **Entra ID** sign-in (`NF-012`) lands.
 
-### Ops-2 — App blob store (avatars) — **done** (S3 + local fallback)
+### Ops-2 — App blob store (avatars + knowledge media) — **done** (S3 + local fallback)
 
 * Profile avatars use `BlobStore` when `BLOB_PROVIDER=s3` (keys `{prefix}/avatars/{userId}`); served via `/api/v1/avatars/:userId` (no public S3 URLs).
 * When provider is `disabled`, avatars stay on `AVATAR_UPLOAD_DIR` (Compose volume). Local file is used as read fallback and optional backfill when migrating to S3.
-* Imports / Doc Factory exports still later.
+* **Knowledge media (NF-013):** workspace library JPEG/PNG/WebP at `{prefix}/media/{workspaceId}/{mediaId}`; embed via `/api/v1/media/:mediaId` (auth). Local fallback `MEDIA_UPLOAD_DIR`. MCP `upload_workspace_media` returns a Markdown snippet.
+* Document/import file pipelines and Doc Factory exports still later.
 
 ### Ops-3 — Admin maintenance UI
 
@@ -105,7 +106,8 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 ### Ops-4 — Observability & support
 
-* **Light v1 (NF-009):** Admin → Monitoring **Download support dump** (`GET /api/v1/admin/monitoring/support-dump`) — redacted JSON (env label, schema, ready checks, backup ages, MCP error counts, pending attention, recent error audit ids/actions; **no** secrets or pastes). Stale-backup attention chip when `last-success` age exceeds `BACKUP_STALE_AFTER_HOURS` (default 36).
+* **NF-009:** Admin → Monitoring **Download support dump** (`GET /api/v1/admin/monitoring/support-dump`) — redacted JSON (env label, schema, ready checks, backup ages, MCP error counts, pending attention, recent error audit ids/actions; **no** secrets or pastes). Stale-backup attention chip when `last-success` age exceeds `BACKUP_STALE_AFTER_HOURS` (default 36). Worker emails system admins (and optional `ALERT_WEBHOOK_URL` JSON POST) on a `BACKUP_STALE_ALERT_INTERVAL_MS` poll (default 15m; `0` disables), deduped via `BACKUP_DIR/last-stale-alert.json`.
+* **NF-014:** External monitors can poll the same redacted snapshot via Bearer API client with opt-in scope `monitoring:read`: `GET /api/v1/platform/status` and MCP tool `get_platform_status` (also LLM OpenAPI twin). Not included in default MCP scopes.
 * Follow-on: log retention / rotation; admin log export (M7 deferred); webhook/email alerts for backup fail, migrate fail, disk pressure, API 5xx spike.
 
 ---
@@ -118,7 +120,7 @@ Minimal interface (implementation later):
 
 * `put(key, body, contentType)` / `get(key)` / `delete(key)` / `list(prefix)`
 * Optional `presignGet` / `presignPut` for browser uploads
-* Key layout: `{env}/{purpose}/{…}` with purposes `backups`, `avatars`, `imports`, `exports`
+* Key layout: `{env}/{purpose}/{…}` with purposes `backups`, `avatars`, `media`, `imports`, `exports`
 
 ### Provider matrix
 
@@ -183,8 +185,8 @@ Dokploy: `db-backup` is always defined in `compose.dokploy.yaml`; set `BACKUP_EN
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `BACKUP_ENABLED` | `true` | Sidecar dumps when true |
-| `BACKUP_INTERVAL_SECONDS` | `86400` | Seconds between dumps (≥ 60) |
+| `BACKUP_ENABLED` | `true` | Sidecar dumps when true; Admin can toggle via Monitoring (`schedule.json`) |
+| `BACKUP_INTERVAL_SECONDS` | `86400` | Seconds between dumps (≥ 60); Admin presets override via `schedule.json` |
 | `BACKUP_KEEP_DAILY` | `7` | Keep all dumps younger than N days |
 | `BACKUP_KEEP_WEEKLY` | `4` | Then keep ≤N one-per-ISO-week |
 | `BACKUP_KEEP_MONTHLY` | `3` | Then keep ≤N one-per-month; older deleted |

@@ -18,6 +18,19 @@ describe('conversation-import schemas', () => {
     expect(parsed.rawContent).toContain('World');
   });
 
+  it('accepts structured content formats', () => {
+    const parsed = createConversationImportInputSchema.parse({
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      title: 'ChatGPT dump',
+      contentFormat: 'chatgpt_export',
+      rawContent: JSON.stringify({
+        title: 't',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+    expect(parsed.contentFormat).toBe('chatgpt_export');
+  });
+
   it('defaults draft record type to conversation-summary', () => {
     const parsed = createDraftFromImportInputSchema.parse({
       title: 'Summary',
@@ -40,5 +53,17 @@ describe('conversation-import schemas', () => {
         contentFormat: 'plain_text',
       }),
     ).toBe('full body');
+    expect(
+      resolveDraftMarkdown({
+        rawContent: JSON.stringify({
+          title: 'JSON chat',
+          messages: [
+            { role: 'user', content: 'ping' },
+            { role: 'assistant', content: 'pong' },
+          ],
+        }),
+        contentFormat: 'generic_json',
+      }),
+    ).toContain('## User');
   });
 });

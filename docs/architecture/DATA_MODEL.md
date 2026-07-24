@@ -30,6 +30,13 @@ Unique: (`organization_id`, `slug`)
 * `status` — `active` | `disabled` | `invited` | `pending_email` | `pending_approval` (self-signup: email confirm then admin approve)  
 Unique: `email`
 
+### `workspace_media`
+
+`id`, `workspace_id`, `knowledge_record_id` (nullable), `content_type`, `byte_size`, `original_filename`, `alt_text`, `created_by`, `archived_at`, `created_at`
+
+* Workspace image library (JPEG/PNG/WebP) for Markdown embeds; bytes in BlobStore `media/{workspaceId}/{mediaId}` or `MEDIA_UPLOAD_DIR`
+* Optional `knowledge_record_id` link; embed URL `/api/v1/media/{id}` (workspace view required)
+
 ### `memberships`
 
 `id`, `user_id`, `workspace_id`, `role`, `created_at`  

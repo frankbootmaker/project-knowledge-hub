@@ -136,7 +136,7 @@ export async function getClientLeaderboard(
       COUNT(*) FILTER (WHERE action = 'mcp.tool_call')::int AS "toolCallCount",
       COUNT(*) FILTER (WHERE action = 'mcp.tool_error')::int AS "toolErrorCount"
     FROM audit_events
-    WHERE created_at >= ${since}
+    WHERE created_at >= ${since.toISOString()}
       AND actor_type = 'api_client'
       AND action LIKE 'mcp.%'
       AND actor_id IS NOT NULL
@@ -179,7 +179,7 @@ async function topEntityIdsFromActions(
   const rows = (await database.db.execute(sql`
     SELECT entity_id AS "entityId", COUNT(*)::int AS count
     FROM audit_events
-    WHERE created_at >= ${since}
+    WHERE created_at >= ${since.toISOString()}
       AND action LIKE ${`${actionPrefix}%`}
       AND entity_id IS NOT NULL
       AND entity_id <> ''
@@ -199,14 +199,22 @@ async function topIdsFromMcpMetadata(
   metaKey: 'recordId' | 'projectId' | 'systemId',
   limit: number,
 ): Promise<Array<{ entityId: string; count: number }>> {
+  // Literal keys only — parameterized ->> / GROUP BY slots are not equal in Postgres.
+  const entityExpr =
+    metaKey === 'recordId'
+      ? sql`metadata_json->>'recordId'`
+      : metaKey === 'projectId'
+        ? sql`metadata_json->>'projectId'`
+        : sql`metadata_json->>'systemId'`;
+
   const rows = (await database.db.execute(sql`
-    SELECT metadata_json->>${metaKey} AS "entityId", COUNT(*)::int AS count
+    SELECT ${entityExpr} AS "entityId", COUNT(*)::int AS count
     FROM audit_events
-    WHERE created_at >= ${since}
+    WHERE created_at >= ${since.toISOString()}
       AND action IN ('mcp.tool_call', 'mcp.tool_error')
       AND metadata_json ? ${metaKey}
-      AND COALESCE(metadata_json->>${metaKey}, '') <> ''
-    GROUP BY metadata_json->>${metaKey}
+      AND COALESCE(${entityExpr}, '') <> ''
+    GROUP BY 1
     ORDER BY COUNT(*) DESC
     LIMIT ${limit}
   `)) as unknown as Array<{ entityId: string | null; count: number }>;

@@ -14,6 +14,9 @@ export {
   passwordResetEmail,
   emailConfirmEmail,
   accountApprovedEmail,
+  signupPendingApprovalEmail,
+  signupPendingEscalationEmail,
+  backupStaleAlertEmail,
   passwordChangedEmail,
   accountClosedEmail,
   signupRejectedEmail,
@@ -24,6 +27,8 @@ export {
   setPasswordUrl,
   confirmEmailUrl,
   loginUrl,
+  adminUsersPendingUrl,
+  adminMonitoringUrl,
   aiConnectionsUrl,
   mailSettingsUrl,
 } from './templates.js';

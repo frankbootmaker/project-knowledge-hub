@@ -63,18 +63,20 @@ docker compose -p knowledge-hub-dev -f compose.yaml -f compose.production.yaml -
 ```text
 apps/          web, api, worker
 packages/      shared libraries (and README stubs for later milestones)
-docs/          product, architecture, ADRs, development, deployment, security
+docs/          product, milestones, architecture, ADRs, development, deployment, security
 infrastructure/docker, compose helpers, scripts
 tests/         integration / e2e / fixtures
 ```
 
 ## Documentation
 
+Index: [`docs/README.md`](docs/README.md)
+
 * Product overview: `docs/product/PRODUCT_OVERVIEW.md`
 * PRD: `docs/product/PRD.md`
 * Roadmap: `docs/product/ROADMAP.md`
 * Local development: `docs/development/LOCAL_DEVELOPMENT.md`
-* Milestone tracking: `docs/MILESTONE_TRACKING.md`
+* Milestone tracking: `docs/milestones/MILESTONE_TRACKING.md`
 * Changelog: `docs/CHANGELOG.md`
 
 ## Safety rules (Strix Halo)

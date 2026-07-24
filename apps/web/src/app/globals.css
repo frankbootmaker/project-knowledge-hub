@@ -68,19 +68,23 @@
   }
 
   .kh-function-header {
-    @apply mb-4 flex flex-wrap items-center justify-between gap-3;
+    @apply mb-4 flex flex-nowrap items-center justify-between gap-2;
   }
 
   .kh-function-header-controls {
-    @apply flex min-w-0 flex-1 flex-wrap items-center gap-2;
+    @apply flex min-w-0 flex-1 flex-nowrap items-center gap-2;
   }
 
-  .kh-function-header-controls .kh-input {
-    @apply w-auto min-w-[12rem] max-w-xs flex-1;
+  .kh-function-header-controls input.kh-input {
+    @apply w-auto min-w-[10rem] flex-1 shrink basis-0;
+  }
+
+  .kh-function-header-controls select.kh-input {
+    @apply w-auto max-w-[11rem] shrink-0;
   }
 
   .kh-function-header-actions {
-    @apply ml-auto flex flex-wrap items-center justify-end gap-2;
+    @apply ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-2;
   }
 
   .kh-panel {

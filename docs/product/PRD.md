@@ -1260,7 +1260,7 @@ Automated secret detection will be implemented later, but the data model should 
 
 # 16. Development Milestones
 
-Milestone **IDs** (M0–M10) stay stable for cross-references. **Execution order** after the localhost MVP (M0–M6) is intentionally: **M8 → M9 → M7 → M10**, so Dokploy packaging is last and staged Dev/UAT → Prod. See `docs/MILESTONE_TRACKING.md` and `docs/product/ROADMAP.md`.
+Milestone **IDs** (M0–M10) stay stable for cross-references. **Execution order** after the localhost MVP (M0–M6) is intentionally: **M8 → M9 → M7 → M10**, so Dokploy packaging is last and staged Dev/UAT → Prod. See `docs/milestones/MILESTONE_TRACKING.md` and `docs/product/ROADMAP.md`.
 
 # Milestone 0: Repository and platform foundation
 

@@ -1,7 +1,17 @@
 import { z } from 'zod';
 import { recordTypeSchema } from '@project-knowledge-hub/domain';
+import {
+  isStructuredContentFormat,
+  parseStructuredConversation,
+} from './parsers.js';
 
-export const CONVERSATION_CONTENT_FORMATS = ['plain_text', 'markdown'] as const;
+export const CONVERSATION_CONTENT_FORMATS = [
+  'plain_text',
+  'markdown',
+  'chatgpt_export',
+  'open_webui',
+  'generic_json',
+] as const;
 export type ConversationContentFormat = (typeof CONVERSATION_CONTENT_FORMATS)[number];
 
 export const conversationContentFormatSchema = z.enum(CONVERSATION_CONTENT_FORMATS);
@@ -26,7 +36,7 @@ export type CreateConversationImportInput = z.infer<
 export const createDraftFromImportInputSchema = z.object({
   title: z.string().min(1).max(300),
   recordType: recordTypeSchema.default('conversation-summary'),
-  /** When omitted, uses the full raw import body. */
+  /** When omitted, uses the full raw import body (parsed to Markdown for structured formats). */
   contentMarkdown: z.string().min(1).max(RAW_CONTENT_MAX).optional(),
   summary: z.string().max(1000).optional(),
   slug: z.string().min(1).max(96).optional(),
@@ -46,8 +56,20 @@ export function normalizeRawContent(raw: string): string {
 }
 
 /**
+ * Validate structured formats at create time; no-op for plain/markdown.
+ * Throws Error with a user-facing message on failure.
+ */
+export function assertImportContentParsable(input: {
+  rawContent: string;
+  contentFormat: ConversationContentFormat;
+}): void {
+  if (!isStructuredContentFormat(input.contentFormat)) return;
+  parseStructuredConversation(input.contentFormat, input.rawContent);
+}
+
+/**
  * Resolve draft Markdown body from an import.
- * Plain-text imports are stored as-is (valid Markdown paragraphs).
+ * Structured JSON formats are converted to role-headed Markdown.
  */
 export function resolveDraftMarkdown(input: {
   rawContent: string;
@@ -65,5 +87,23 @@ export function resolveDraftMarkdown(input: {
   if (!full) {
     throw new Error('Import raw content is empty');
   }
+  if (isStructuredContentFormat(input.contentFormat)) {
+    return parseStructuredConversation(input.contentFormat, full).markdown;
+  }
   return full;
+}
+
+export function defaultSourceProviderForFormat(
+  format: ConversationContentFormat,
+): string | null {
+  switch (format) {
+    case 'chatgpt_export':
+      return 'ChatGPT';
+    case 'open_webui':
+      return 'Open WebUI';
+    case 'generic_json':
+      return 'JSON';
+    default:
+      return null;
+  }
 }

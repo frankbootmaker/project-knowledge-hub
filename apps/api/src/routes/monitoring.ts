@@ -25,6 +25,12 @@ import {
   writeRetentionPolicy,
 } from '../lib/backup-retention.js';
 import {
+  SCHEDULE_INTERVAL_PRESETS,
+  envScheduleDefaults,
+  readSchedulePolicy,
+  writeSchedulePolicy,
+} from '../lib/backup-schedule.js';
+import {
   readOffsiteStamp,
   syncPendingOffsiteDump,
   uploadDumpOffsiteOrThrow,
@@ -36,12 +42,13 @@ import {
   getClientLeaderboard,
   getMcpActivitySummary,
   getPendingAttention,
-  getRecentErrorAuditEvents,
   getSchemaVersionLabel,
   isBackupStale,
   listActiveWorkspacesForMonitoring,
 } from '../lib/monitoring.js';
 import { enqueueWorkspaceEmbeddingReindex } from '../lib/embedding-jobs.js';
+import { listOnDutyAdmins } from '../lib/signup-pending-notify.js';
+import { buildSupportDump } from '../lib/support-dump.js';
 
 const rangeSchema = z.enum(['1h', '24h', '7d']).default('24h');
 const retentionBodySchema = z.object({
@@ -50,6 +57,16 @@ const retentionBodySchema = z.object({
   keepMonthly: z.coerce.number().int().min(0).max(36),
   autoRotate: z.boolean(),
   runNow: z.boolean().optional(),
+});
+const scheduleBodySchema = z.object({
+  enabled: z.boolean(),
+  intervalSeconds: z.coerce
+    .number()
+    .int()
+    .refine(
+      (value) => (SCHEDULE_INTERVAL_PRESETS as readonly number[]).includes(value),
+      { message: 'intervalSeconds must be a supported preset' },
+    ),
 });
 
 function sinceForRange(range: '1h' | '24h' | '7d'): Date {
@@ -108,11 +125,14 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       catalogue,
       lastSuccess,
       lastImport,
+      lastFailure,
       lastOffsite,
       artifacts,
       retention,
+      schedule,
       archived,
       workspaceOptions,
+      onDutyAdmins,
     ] = await Promise.all([
         collectDependencyChecks(app),
         getSchemaVersionLabel(app.database),
@@ -123,11 +143,14 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         getCatalogueUsageSummary(app.database, sinceForRange(range)),
         readStamp(backupDir, 'last-success.json'),
         readStamp(backupDir, 'last-import.json'),
+        readStamp(backupDir, 'last-failure.json'),
         readOffsiteStamp(backupDir),
         listDumpArtifacts(backupDir),
         readRetentionPolicy(backupDir, envRetentionDefaults(app.env)),
+        readSchedulePolicy(backupDir, envScheduleDefaults(app.env)),
         getArchivedEntityCounts(app.database),
         listActiveWorkspacesForMonitoring(app.database),
+        listOnDutyAdmins(app.database),
       ]);
 
     const ready = checks.postgres === 'ok' && checks.redis === 'ok';
@@ -157,6 +180,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         ...pending,
         staleBackup,
         staleBackupAfterHours: staleAfterHours,
+        onDutyAdmins,
       },
       sessions: { active: activeSessions },
       mcp: {
@@ -182,6 +206,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
           'Export/import use postgresql-client-16 on the API image (matches Dokploy Postgres 16). Locally, Docker Postgres is used as a fallback when clients are missing.',
         lastSuccess: lastSuccessSummary,
         lastImport: stampSummary(lastImport),
+        lastFailure: stampSummary(lastFailure),
         lastOffsite: lastOffsite
           ? {
               stamp: lastOffsite,
@@ -200,6 +225,10 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         retention: {
           ...retention.policy,
           source: retention.source,
+        },
+        schedule: {
+          ...schedule.policy,
+          source: schedule.source,
         },
         offsite: {
           enabled: offsiteEnabled,
@@ -312,6 +341,32 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     });
 
     return { retention: { ...policy, source: 'file' as const }, rotation };
+  });
+
+  app.put('/api/v1/admin/monitoring/backups/schedule', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const body = scheduleBodySchema.parse(request.body);
+
+    const policy = await writeSchedulePolicy(app.env.BACKUP_DIR, {
+      enabled: body.enabled,
+      intervalSeconds: body.intervalSeconds,
+    });
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'backup.schedule_update',
+      entityType: 'database_backup',
+      entityId: 'schedule',
+      metadata: { ...policy },
+      ipAddress: request.ip,
+    });
+
+    return { schedule: { ...policy, source: 'file' as const } };
   });
 
   app.post('/api/v1/admin/monitoring/backups/rotate', async (request) => {
@@ -613,77 +668,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const principal = requireAuthenticated(request);
     requireSystemAdmin(principal);
 
-    const backupDir = app.env.BACKUP_DIR;
-    const since24h = sinceForRange('24h');
-    const [
-      checks,
-      schemaVersion,
-      pending,
-      mcp,
-      lastSuccess,
-      lastImport,
-      lastOffsite,
-      artifacts,
-      recentErrors,
-    ] = await Promise.all([
-      collectDependencyChecks(app),
-      getSchemaVersionLabel(app.database),
-      getPendingAttention(app.database),
-      getMcpActivitySummary(app.database, since24h),
-      readStamp(backupDir, 'last-success.json'),
-      readStamp(backupDir, 'last-import.json'),
-      readOffsiteStamp(backupDir),
-      listDumpArtifacts(backupDir),
-      getRecentErrorAuditEvents(app.database, since24h),
-    ]);
-
-    const ready = checks.postgres === 'ok' && checks.redis === 'ok';
-    const lastSuccessSummary = stampSummary(lastSuccess);
-    const lastImportSummary = stampSummary(lastImport);
-    const staleAfterHours = app.env.BACKUP_STALE_AFTER_HOURS;
-    const staleBackup = isBackupStale(lastSuccessSummary.ageSeconds, staleAfterHours);
-    const { store: blobStore, backupOffsite } = await app.getBlobStore();
-
-    const dump = {
-      generatedAt: new Date().toISOString(),
-      app: {
-        env: app.env.APP_ENV,
-        schemaVersion,
-        embeddingProvider: app.env.EMBEDDING_PROVIDER,
-        blobProvider: blobStore.provider,
-      },
-      health: {
-        ready,
-        checks,
-      },
-      attention: {
-        ...pending,
-        staleBackup,
-        staleBackupAfterHours: staleAfterHours,
-      },
-      backups: {
-        lastSuccessAgeSeconds: lastSuccessSummary.ageSeconds,
-        lastImportAgeSeconds: lastImportSummary.ageSeconds,
-        lastOffsiteAgeSeconds: lastOffsite
-          ? stampSummary({
-              kind: lastOffsite.kind,
-              at: lastOffsite.at,
-              artifact: lastOffsite.artifact,
-              schemaVersion: lastOffsite.schemaVersion,
-              hostname: lastOffsite.hostname,
-            }).ageSeconds
-          : null,
-        artifactCount: artifacts.length,
-        totalBytes: artifacts.reduce((sum, item) => sum + item.sizeBytes, 0),
-        offsiteEnabled: Boolean(backupOffsite && blobStore.provider !== 'disabled'),
-      },
-      mcpLast24h: {
-        requestCount: mcp.requestCount,
-        toolCallCount: mcp.toolCallCount,
-        toolErrorCount: mcp.toolErrorCount,
-      },
-      recentAuditErrors: recentErrors,
-    };
+    const dump = await buildSupportDump(app);
 
     const organization = await getDefaultOrganization(app.database);
     await writeAuditEvent(app.database, {

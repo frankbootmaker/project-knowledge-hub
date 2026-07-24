@@ -2,7 +2,7 @@ export const BLOB_PROVIDERS = ['disabled', 's3'] as const;
 
 export type BlobProviderName = (typeof BLOB_PROVIDERS)[number];
 
-export type BlobPurpose = 'backups' | 'avatars' | 'imports' | 'exports';
+export type BlobPurpose = 'backups' | 'avatars' | 'imports' | 'exports' | 'media';
 
 export type BlobObject = {
   key: string;

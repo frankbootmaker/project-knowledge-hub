@@ -21,6 +21,13 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '../..'),
   poweredByHeader: false,
+  // Soft navigations must not serve stale RSC payloads for catalogue lists.
+  experimental: {
+    staleTimes: {
+      dynamic: 0,
+      static: 30,
+    },
+  },
   transpilePackages: [
     '@project-knowledge-hub/markdown',
     '@project-knowledge-hub/mcp',

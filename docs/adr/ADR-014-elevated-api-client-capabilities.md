@@ -94,5 +94,5 @@ When scopes include `catalogue:write` (or higher):
 2. Proposal persistence + TTL + one-time commit
 3. Wire MCP + `/api/v1/llm/tools/:toolName` with the same scope map
 4. Reuse existing project/system service permission semantics via allowlist + acting user attribution
-5. Update `docs/architecture/MCP_ARCHITECTURE.md`, `docs/MCP_CURSOR_SETUP.md`, and admin copy
+5. Update `docs/architecture/MCP_ARCHITECTURE.md`, `docs/development/MCP_CURSOR_SETUP.md`, and admin copy
 6. Follow-up ADRs or changelog entries when Tier C/D/E ship

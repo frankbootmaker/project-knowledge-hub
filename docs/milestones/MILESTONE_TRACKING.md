@@ -89,7 +89,8 @@ See `docs/product/NEXT_FEATURES.md` (**execution waves A–F**). Doc Factory (NF
 - [x] Raw imports excluded from MCP/search (separate table)
 - [x] Workspace Imports UI (list / new / detail + create draft) + i18n en/de/hu
 - [x] Integration + package unit tests
-- [ ] Later: ChatGPT / Open WebUI / JSON importers, auto-split, secret detection (deferred)
+- [x] ChatGPT / Open WebUI / generic JSON importers (paste JSON → Markdown drafts)
+- [ ] Later: auto-split, secret detection (deferred)
 
 ## Milestone 8 checklist
 
@@ -186,4 +187,4 @@ See `docs/product/NEXT_FEATURES.md` (**execution waves A–F**). Doc Factory (NF
 
 ## Milestone 0 checklist
 
-See historical completion in git history / `docs/MILESTONE_0_IMPLEMENTATION_PLAN.md`. Marked `complete`.
+See historical completion in git history / `docs/milestones/MILESTONE_0_IMPLEMENTATION_PLAN.md`. Marked `complete`.

@@ -27,6 +27,7 @@ import {
 import { writeAuditEvent } from '../lib/identity.js';
 import { avatarUrlForUser } from '../lib/public-user.js';
 import { MemoryRateLimiter } from '../lib/rate-limit.js';
+import { notifyAdminsOfSignupPendingApproval } from '../lib/signup-pending-notify.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -317,10 +318,36 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       ipAddress: request.ip,
     });
 
+    try {
+      const notify = await notifyAdminsOfSignupPendingApproval({
+        database: app.database,
+        mail: app.mail,
+        webUrl: app.env.WEB_URL,
+        signup: {
+          displayName: result.displayName,
+          email: result.email,
+        },
+      });
+      await writeAuditEvent(app.database, {
+        actorType: 'system',
+        actorId: null,
+        action: 'auth.signup_pending_notify',
+        entityType: 'user',
+        entityId: result.userId,
+        metadata: {
+          recipientCount: notify.recipientCount,
+          usedFallback: notify.usedFallback,
+        },
+        ipAddress: request.ip,
+      });
+    } catch (error) {
+      request.log.warn({ err: error }, 'Signup pending admin notify failed');
+    }
+
     return {
       status: 'ok',
       message:
-        'Email confirmed. An administrator must approve your access before you can sign in.',
+        'Email confirmed. An administrator must approve your access and assign a workspace role before you can sign in.',
       email: result.email,
     };
   });

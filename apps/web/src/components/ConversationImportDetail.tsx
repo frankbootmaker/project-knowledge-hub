@@ -33,6 +33,7 @@ type ConversationImport = {
   title: string;
   contentFormat: string;
   rawContent: string;
+  draftMarkdownPreview?: string;
   sourceProvider: string | null;
   generatedByModel: string | null;
   archivedAt: string | null;
@@ -55,7 +56,8 @@ export function ConversationImportDetail(props: {
   );
   const [recordType, setRecordType] = useState('conversation-summary');
   const [contentMarkdown, setContentMarkdown] = useState(
-    props.conversationImport.rawContent,
+    props.conversationImport.draftMarkdownPreview ??
+      props.conversationImport.rawContent,
   );
   const [excerptNote, setExcerptNote] = useState('');
   const [error, setError] = useState<string | null>(null);

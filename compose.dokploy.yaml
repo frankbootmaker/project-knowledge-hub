@@ -13,6 +13,13 @@ x-app-env: &app-env
   NODE_ENV: production
   APP_ENV: ${APP_ENV:-staging}
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  # Discrete Postgres vars — apps rebuild DATABASE_URL with encodeURIComponent so
+  # passwords containing &, #, @, * do not break auth (Compose string concat is unsafe).
+  POSTGRES_USER: ${POSTGRES_USER:-knowledge_hub}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+  POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
+  POSTGRES_HOST: postgres
+  # Legacy fallback URL (password not encoded). Prefer POSTGRES_* above.
   DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-knowledge_hub}
   REDIS_URL: redis://redis:6379
   WEB_URL: ${WEB_URL:?WEB_URL is required}
@@ -81,6 +88,10 @@ services:
     environment:
       NODE_ENV: production
       APP_ENV: ${APP_ENV:-staging}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge_hub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
+      POSTGRES_HOST: postgres
       DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-knowledge_hub}
     depends_on:
       postgres:

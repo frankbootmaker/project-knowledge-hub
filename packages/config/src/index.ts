@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { resolveDatabaseUrl } from './database-url.js';
+
+export { resolveDatabaseUrl } from './database-url.js';
 
 /** Load a dotenv file into process.env without overriding existing values. */
 export function loadDotEnvFile(filePath: string): void {
@@ -86,15 +89,27 @@ export const envSchema = z.object({
     .default(24 * 60 * 60 * 1000),
   MAIL_DRIVER: z.enum(['console', 'smtp', 'resend']).default('console'),
   MAIL_FROM: z.string().min(1).default('Project Knowledge Hub <noreply@localhost.local>'),
-  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_HOST: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SECURE: z
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
-  RESEND_API_KEY: z.string().optional(),
+  SMTP_USER: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional(),
+  ),
+  SMTP_PASS: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional(),
+  ),
+  RESEND_API_KEY: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional(),
+  ),
   AUTH_PASSWORD_RESET_TTL_SECONDS: z.coerce
     .number()
     .int()
@@ -113,6 +128,9 @@ export const envSchema = z.object({
   /** Directory for profile avatar binaries (one file per user id). */
   AVATAR_UPLOAD_DIR: z.string().min(1).default('./data/avatars'),
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
+  /** Workspace knowledge media (JPEG/PNG/WebP) when BlobStore is disabled. */
+  MEDIA_UPLOAD_DIR: z.string().min(1).default('./data/media'),
+  MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
   /** Ops-0/NF-011: Postgres dump directory (Compose mounts volume here on api). */
   BACKUP_DIR: z.string().min(1).default('./backups'),
   /** Max dump upload size for Admin → Monitoring import (default 512 MiB). */
@@ -128,8 +146,48 @@ export const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  /** Sidecar / Admin schedule defaults (overridable via BACKUP_DIR/schedule.json). */
+  BACKUP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  BACKUP_INTERVAL_SECONDS: z.coerce.number().int().min(60).default(86400),
   /** Hours after last successful dump before Monitoring flags a stale backup (NF-009). */
   BACKUP_STALE_AFTER_HOURS: z.coerce.number().int().min(1).max(168).default(36),
+  /**
+   * Worker poll for stale-backup email/webhook alerts (0 = disabled).
+   * Default 15 minutes. Deduped via BACKUP_DIR/last-stale-alert.json.
+   */
+  BACKUP_STALE_ALERT_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(15 * 60 * 1000),
+  /**
+   * Optional outbound webhook URL for ops alerts (JSON POST). Empty = email only.
+   * Used for stale-backup alerts (NF-009).
+   */
+  ALERT_WEBHOOK_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
+  /**
+   * When a signup stays pending_approval longer than this, email all system admins once.
+   * Allowed: 4, 12, or 24.
+   */
+  SIGNUP_PENDING_ESCALATE_AFTER_HOURS: z.coerce
+    .number()
+    .int()
+    .refine((value) => value === 4 || value === 12 || value === 24, {
+      message: 'SIGNUP_PENDING_ESCALATE_AFTER_HOURS must be 4, 12, or 24',
+    })
+    .default(4),
+  /** Worker poll for signup escalation (0 = disabled). Default 15 minutes. */
+  SIGNUP_PENDING_ESCALATE_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(15 * 60 * 1000),
   /**
    * When true (default), successful dumps are uploaded to BlobStore when
    * BLOB_PROVIDER is not disabled.
@@ -201,7 +259,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   if (source === process.env) {
     loadNearestDotEnv();
   }
-  const parsed = envSchema.safeParse(source);
+  // Rebuild DATABASE_URL from discrete POSTGRES_* so special characters in the
+  // password are percent-encoded (Compose string concat is not safe).
+  const effectiveSource =
+    typeof source.POSTGRES_PASSWORD === 'string' &&
+    source.POSTGRES_PASSWORD.length > 0
+      ? { ...source, DATABASE_URL: resolveDatabaseUrl(source) }
+      : source;
+  const parsed = envSchema.safeParse(effectiveSource);
   if (!parsed.success) {
     const details = parsed.error.issues
       .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
