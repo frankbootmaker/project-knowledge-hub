@@ -47,7 +47,7 @@ Treat “backup” as a **portable Postgres custom-format dump** (`pg_dump -Fc`)
 ### Format and tooling
 
 * **Canonical artifact:** `pg_dump -Fc` (already used by `backup-db.sh`).
-* **Import:** `pg_restore` into a target database (prefer **empty** DB or dedicated restore volume; document replace-vs-merge — v1 is **replace/full restore**, not merge).
+* **Import:** full replace — Monitoring UI and `import-db.sh` wipe `public` (+ `drizzle`) with `DROP SCHEMA … CASCADE` before `pg_restore --clean`, so target-only tables (e.g. newer migrations) cannot block DROP. Prefer empty DB / `WIPE_DATABASE=1` for nuclear resets; v1 is **replace**, not merge.
 * **Admin UI (later, with NF-008):** “Download export” / “Upload import” with strong confirmations (typed phrase), progress, and post-import migrate check.
 * **CLI remains the Ops-0 path:** scripts + Dokploy run/SSH until the UI exists.
 
@@ -78,7 +78,7 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 * Dumps on named volume `knowledge_hub_backups` (path `/backups` in the sidecar).
 * Volume ownership: API/worker use uid **1001**; `db-backup` and container entrypoints chown `/backups` so Monitoring export/delete work.
 * **Export:** `export-db.sh` (= `backup-db.sh`); artifacts `knowledge-hub-*.dump`, symlink `latest.dump`.
-* **Import:** `import-db.sh` with `CONFIRM_IMPORT=REPLACE` (optional `WIPE_DATABASE=1`) → `pg_restore`; stamps for Monitoring (**NF-011**).
+* **Import:** `import-db.sh` with `CONFIRM_IMPORT=REPLACE` → schema wipe (default) → `pg_restore`; optional `WIPE_DATABASE=1` (recreate DB) or `SKIP_SCHEMA_WIPE=1`; stamps for Monitoring (**NF-011**).
 * Stamps: `/backups/last-success.json` (backup), `/backups/last-import.json` (import) — `kind`, `at`, `artifact`, `schemaVersion` (drizzle migration max id).
 * **Restore / import drill** checklist below; run on Dev after deploy.
 * **NF-002** bootstrap seed remains optional for empty rebuilds (import may replace seed).
@@ -170,7 +170,7 @@ Minimal interface (implementation later):
 | Manual export / backup | `POSTGRES_CONTAINER=… POSTGRES_PASSWORD=… ./infrastructure/scripts/export-db.sh` |
 | Or TCP (sidecar-style) | `POSTGRES_HOST=127.0.0.1 POSTGRES_PASSWORD=… BACKUP_DIR=./backups ./infrastructure/scripts/backup-db.sh` |
 | Retention only | `BACKUP_DIR=./backups ./infrastructure/scripts/rotate-backups.sh` |
-| Import (replace) | `CONFIRM_IMPORT=REPLACE WIPE_DATABASE=1 POSTGRES_CONTAINER=… ./infrastructure/scripts/import-db.sh ./backups/latest.dump` |
+| Import (replace) | `CONFIRM_IMPORT=REPLACE POSTGRES_CONTAINER=… ./infrastructure/scripts/import-db.sh ./backups/latest.dump` (schema wipe default; add `WIPE_DATABASE=1` to recreate DB) |
 | Low-level restore | `./infrastructure/scripts/restore-db.sh ./backups/foo.dump` (prefer `import-db.sh`) |
 
 Local optional scheduler:
@@ -200,8 +200,8 @@ Dokploy: `db-backup` is always defined in `compose.dokploy.yaml`; set `BACKUP_EN
 Use after any backup path change, and when validating **cross-instance** import:
 
 1. Take a fresh dump on the **source** (`export-db.sh` or wait for `db-backup`) — this is the **export**. Confirm `last-success.json`.
-2. Stand up empty Postgres on the **target** (same or other KnowHub) — or use `WIPE_DATABASE=1`.
-3. **Import:** `CONFIRM_IMPORT=REPLACE … ./infrastructure/scripts/import-db.sh <dump>`; confirm `schemaVersion` / run migrate if dump is older than the app.
+2. Stand up empty Postgres on the **target** (same or other KnowHub) — or rely on import’s schema wipe / `WIPE_DATABASE=1`.
+3. **Import:** Monitoring (confirm `REPLACE`) or `CONFIRM_IMPORT=REPLACE … ./infrastructure/scripts/import-db.sh <dump>`; confirm `schemaVersion` / run migrate if dump is older than the app.
 4. Point API at that DB; re-apply **target** env secrets / `WEB_URL` (do not copy source secrets blindly).
 5. Smoke: login, open a workspace, open a knowledge record, MCP preflight if enabled.
 6. If using blobs: confirm object store keys resolve (or accept missing avatars until blob sync).

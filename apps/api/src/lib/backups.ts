@@ -178,11 +178,12 @@ function parseDatabaseUrl(databaseUrl: string): {
   }
 }
 
-/** Kick other backends so pg_restore --clean can DROP/replace objects. */
-export async function terminateOtherDbSessions(databaseUrl: string): Promise<void> {
+async function runPsqlOnDatabase(
+  databaseUrl: string,
+  sql: string,
+  failureMessage: string,
+): Promise<void> {
   const creds = parseDatabaseUrl(databaseUrl);
-  const sql =
-    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid();";
 
   if (await which('psql')) {
     const result = await runCommand(
@@ -206,14 +207,13 @@ export async function terminateOtherDbSessions(databaseUrl: string): Promise<voi
     if (result.code !== 0) {
       throw new AppError({
         code: 'BACKUP_IMPORT_FAILED',
-        message: `Could not terminate DB sessions before import: ${result.stderr.slice(0, 400)}`,
+        message: `${failureMessage}: ${result.stderr.slice(0, 400)}`,
         statusCode: 500,
       });
     }
     return;
   }
 
-  // Best-effort when psql is missing (local docker fallback path).
   if (await which('docker')) {
     const container = process.env.POSTGRES_CONTAINER;
     if (container) {
@@ -238,12 +238,76 @@ export async function terminateOtherDbSessions(databaseUrl: string): Promise<voi
       if (result.code !== 0) {
         throw new AppError({
           code: 'BACKUP_IMPORT_FAILED',
-          message: `Could not terminate DB sessions before import: ${result.stderr.slice(0, 400)}`,
+          message: `${failureMessage}: ${result.stderr.slice(0, 400)}`,
           statusCode: 500,
         });
       }
+      return;
     }
   }
+
+  throw new AppError({
+    code: 'BACKUP_TOOLS_MISSING',
+    message: `${failureMessage}: psql is not available on the API image`,
+    statusCode: 503,
+  });
+}
+
+/** Kick other backends so schema wipe / pg_restore can replace objects. */
+export async function terminateOtherDbSessions(databaseUrl: string): Promise<void> {
+  const sql =
+    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid();";
+  await runPsqlOnDatabase(
+    databaseUrl,
+    sql,
+    'Could not terminate DB sessions before import',
+  );
+}
+
+/**
+ * Full-replace prep: drop app schemas so pg_restore --clean is not blocked by
+ * tables that exist only on the target (e.g. workspace_media FKs when the dump
+ * is older). Recreate empty public; dump restores extensions/objects.
+ */
+export async function wipeDatabaseSchemasForImport(
+  databaseUrl: string,
+): Promise<void> {
+  const creds = parseDatabaseUrl(databaseUrl);
+  const owner = quoteIdent(creds.user);
+  const sql = `
+SELECT pg_terminate_backend(pid)
+  FROM pg_stat_activity
+  WHERE datname = current_database() AND pid <> pg_backend_pid();
+DROP SCHEMA IF EXISTS drizzle CASCADE;
+DROP SCHEMA IF EXISTS public CASCADE;
+CREATE SCHEMA public AUTHORIZATION ${owner};
+GRANT ALL ON SCHEMA public TO ${owner};
+GRANT ALL ON SCHEMA public TO public;
+COMMENT ON SCHEMA public IS 'standard public schema';
+`;
+  await runPsqlOnDatabase(
+    databaseUrl,
+    sql,
+    'Could not wipe schemas before import',
+  );
+}
+
+/** Quote a Postgres identifier (simple unquoted-safe names only). */
+function quoteIdent(ident: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(ident)) {
+    throw new AppError({
+      code: 'BACKUP_IMPORT_FAILED',
+      message: `Refusing schema wipe with unsafe database role name: ${ident}`,
+      statusCode: 500,
+    });
+  }
+  return `"${ident}"`;
+}
+
+function isHardPgRestoreFailure(stderr: string): boolean {
+  return /cannot drop table|already exists|multiple primary keys|fatal|could not|permission denied/i.test(
+    stderr,
+  );
 }
 
 async function streamDumpCommand(
@@ -481,9 +545,9 @@ export async function importDatabaseDump(input: {
     });
   }
 
-  // Live API/worker pools hold locks; --clean DROP fails → partial DB + exit 1
-  // (treated as soft success) which leaves the stack unhealthy.
-  await terminateOtherDbSessions(input.databaseUrl);
+  // Live API/worker pools hold locks; target may also have newer tables (e.g.
+  // workspace_media) that block pg_restore --clean DROP without CASCADE.
+  await wipeDatabaseSchemasForImport(input.databaseUrl);
 
   const hasPgRestore = await which('pg_restore');
   if (hasPgRestore) {
@@ -514,16 +578,13 @@ export async function importDatabaseDump(input: {
         statusCode: 500,
       });
     }
-    if (result.code === 1 && /fatal|could not|ERROR:/i.test(result.stderr)) {
-      // Exit 1 is often benign (missing roles); surface hard errors when present.
+    if (result.code === 1 && isHardPgRestoreFailure(result.stderr)) {
       const snippet = result.stderr.slice(0, 500);
-      if (/being accessed by other users|is already in use/i.test(result.stderr)) {
-        throw new AppError({
-          code: 'BACKUP_IMPORT_FAILED',
-          message: `pg_restore could not replace objects (sessions still active): ${snippet}`,
-          statusCode: 500,
-        });
-      }
+      throw new AppError({
+        code: 'BACKUP_IMPORT_FAILED',
+        message: `pg_restore reported a hard error: ${snippet}`,
+        statusCode: 500,
+      });
     }
   } else if (await which('docker')) {
     const dumpBuffer = await fs.readFile(resolved);
@@ -584,17 +645,15 @@ export async function importDatabaseDump(input: {
       child.stdin.write(dumpBuffer);
       child.stdin.end();
       child.on('close', (code) => {
-        if (code === 0 || code === 1) {
+        const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+        if (code === 0 || (code === 1 && !isHardPgRestoreFailure(stderr))) {
           resolve();
           return;
         }
         reject(
           new AppError({
             code: 'BACKUP_IMPORT_FAILED',
-            message: `docker pg_restore failed (exit ${code}): ${Buffer.concat(stderrChunks)
-              .toString('utf8')
-              .trim()
-              .slice(0, 500)}`,
+            message: `docker pg_restore failed (exit ${code}): ${stderr.slice(0, 500)}`,
             statusCode: 500,
           }),
         );

@@ -162,7 +162,7 @@ The API (and worker) run as uid **1001**. Sidecar dumps are chowned to that uid 
 Scripts:
 
 * `export-db.sh` / `backup-db.sh` — dump + stamp + rotate
-* `import-db.sh` — full replace (`CONFIRM_IMPORT=REPLACE`); optional `WIPE_DATABASE=1`
+* `import-db.sh` — full replace (`CONFIRM_IMPORT=REPLACE`); schema wipe by default; optional `WIPE_DATABASE=1`
 * `restore-db.sh` — low-level `pg_restore`
 * `rotate-backups.sh` — 7d / 4w / 3m retention
 
