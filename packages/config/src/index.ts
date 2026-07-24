@@ -86,15 +86,27 @@ export const envSchema = z.object({
     .default(24 * 60 * 60 * 1000),
   MAIL_DRIVER: z.enum(['console', 'smtp', 'resend']).default('console'),
   MAIL_FROM: z.string().min(1).default('Project Knowledge Hub <noreply@localhost.local>'),
-  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_HOST: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SECURE: z
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
-  RESEND_API_KEY: z.string().optional(),
+  SMTP_USER: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional(),
+  ),
+  SMTP_PASS: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional(),
+  ),
+  RESEND_API_KEY: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().optional(),
+  ),
   AUTH_PASSWORD_RESET_TTL_SECONDS: z.coerce
     .number()
     .int()

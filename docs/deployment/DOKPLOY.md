@@ -114,7 +114,7 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
    ```
 
    Or from a checkout with deps: `DATABASE_URL=... ./infrastructure/scripts/migrate.sh`
-4. **Seed (NF-002)** — Compose `seed` one-shot after migrate. Creates default org; creates system admin when `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (min 12) are set. Idempotent if admin already exists; no-op when bootstrap vars are unset.
+4. **Seed (NF-002)** — Compose `seed` one-shot after migrate. Creates default org; creates system admin when `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (min 12) are set. Idempotent if admin already exists; no-op when bootstrap vars are unset or invalid (warns and continues so redeploys are not blocked). Seed only needs `DATABASE_URL` + org/bootstrap vars — it does not run the full app env schema.
 5. **Start** api, worker, web.
 
 ## Smoke checklist
@@ -128,6 +128,17 @@ After deploy:
 * [ ] MCP over HTTPS: `https://<domain>/mcp` (or configured `MCP_PUBLIC_URL`)
 * [ ] Restart stack; Postgres data persists (named volume)
 * [ ] Worker is running (git sync / embedding queues idle is OK)
+
+## Troubleshooting
+
+### `service "seed" didn't complete successfully: exit 1`
+
+Images usually built fine; api/web never start because they wait on seed.
+
+1. Open Dokploy logs for the **seed** one-shot (not web). Look for `Seed failed` / `Invalid environment` / bootstrap warnings.
+2. Common causes (older builds): full `loadEnv()` rejecting empty optional vars (`SMTP_HOST=`), or `BOOTSTRAP_ADMIN_PASSWORD` shorter than 12 characters.
+3. Fix: unset empty optional mail/SMTP keys, or set a ≥12-char bootstrap password (or clear both `BOOTSTRAP_ADMIN_*` if you already have an admin). Redeploy after pulling a seed build that skips invalid bootstrap instead of exiting.
+4. Confirm with seed log lines like `Organization '…' already exists` and `Administrator '…' already exists` (exit 0).
 
 ## Logs
 
