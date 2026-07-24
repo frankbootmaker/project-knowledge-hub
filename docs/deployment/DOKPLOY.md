@@ -137,7 +137,7 @@ After deploy:
 
 Usually **not** a schema problem. Causes:
 
-1. **`POSTGRES_PASSWORD` in Dokploy ≠ password stored in the Postgres volume** (volume keeps the password from first init; changing the env alone does not update the role). Fix with `ALTER USER … PASSWORD …` or restore the original env value.
+1. **`POSTGRES_PASSWORD` in Dokploy ≠ password stored in the Postgres volume** (volume keeps the password from first init; changing the env alone does not update the role). Fix with `ALTER USER … PASSWORD …` or restore the original env value. Avoid `$` in the password — Compose interpolates `$…` in env/command strings.
 2. **Special characters in the password** (`&`, `#`, `@`, `*`, …) embedded into `DATABASE_URL` via Compose. Current images rebuild the URL from discrete `POSTGRES_PASSWORD` with percent-encoding. Redeploy after pulling that fix; keep using the same password in Dokploy.
 3. **Migrate OK but seed `28P01` (legacy separate seed service)** — fixed by running seed inside the `migrate` one-shot. If you still see a `seed` container, redeploy with `--remove-orphans` (Dokploy’s compose up already uses that). Keep one `POSTGRES_PASSWORD` for the whole Compose project; remove stale service-level `DATABASE_URL` overrides.
 
