@@ -27,6 +27,7 @@ import {
   listWorkspaceMedia,
   toPublicMedia,
 } from './workspace-media.js';
+import { buildSupportDump } from './support-dump.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -632,6 +633,21 @@ export function createMcpToolHandlers(
       });
 
       return { media: toPublicMedia(archived), mediaId: archived.id };
+    },
+
+    async getPlatformStatus() {
+      const dump = await buildSupportDump(app);
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'platform.status',
+        entityType: 'monitoring',
+        entityId: 'platform-status',
+        metadata: { via: 'mcp', byteLength: JSON.stringify(dump).length },
+        ipAddress: ipAddress ?? null,
+      });
+      return dump;
     },
 
     async onToolCall(toolName, ok, context) {

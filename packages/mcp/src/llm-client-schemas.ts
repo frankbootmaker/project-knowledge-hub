@@ -180,6 +180,15 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
         },
       },
     },
+    {
+      name: 'get_platform_status',
+      description:
+        'Redacted platform health snapshot (ready checks, backup ages, MCP error counts). Requires monitoring:read. No secrets or content.',
+      body: {
+        type: 'object',
+        properties: {},
+      },
+    },
   ];
 
   const write: ToolDef[] = [

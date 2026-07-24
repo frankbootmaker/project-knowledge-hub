@@ -32,6 +32,7 @@ import { registerMcpRoutes } from './routes/mcp.js';
 import { registerMcpSetupRoutes } from './routes/mcp-setup.js';
 import { registerMembershipRoutes } from './routes/memberships.js';
 import { registerMonitoringRoutes } from './routes/monitoring.js';
+import { registerPlatformStatusRoutes } from './routes/platform-status.js';
 import { registerOrganizationRoutes } from './routes/organizations.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerReadyRoutes } from './routes/ready.js';
@@ -196,6 +197,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerMailSettingsRoutes(app);
   await registerBlobSettingsRoutes(app);
   await registerMonitoringRoutes(app);
+  await registerPlatformStatusRoutes(app);
   await registerMembershipRoutes(app);
   await registerApiClientRoutes(app);
   await registerAiDiscoverRoutes(app);

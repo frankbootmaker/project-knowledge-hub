@@ -10,6 +10,9 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `get_record_provenance`
 * `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints
 * `list_workspace_media` — recent workspace images with Markdown snippets
+* `get_platform_status` — redacted health/backup snapshot (requires opt-in `monitoring:read`; not in default scopes)
+
+Also available as REST: `GET /api/v1/platform/status` with the same scope.
 
 ## Tools (write, opt-in)
 

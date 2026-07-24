@@ -83,6 +83,8 @@ export type McpToolHandlers = {
     limit: number;
   }) => Promise<unknown>;
   deleteWorkspaceMedia: (input: { mediaId: string }) => Promise<unknown>;
+  /** NF-014 — redacted platform health snapshot (requires monitoring:read). */
+  getPlatformStatus: () => Promise<unknown>;
   onToolCall?: (
     toolName: string,
     ok: boolean,
@@ -436,6 +438,16 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('delete_workspace_media', 'knowledge:write', () =>
         handlers.deleteWorkspaceMedia(args),
+      )(),
+  );
+
+  server.tool(
+    'get_platform_status',
+    'Redacted platform health snapshot (ready checks, backup ages, MCP error counts). Requires monitoring:read. No secrets or content.',
+    {},
+    async () =>
+      wrap('get_platform_status', 'monitoring:read', () =>
+        handlers.getPlatformStatus(),
       )(),
   );
 

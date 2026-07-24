@@ -15,9 +15,9 @@ describe('resolveDatabaseUrl', () => {
     );
     // encodeURIComponent encodes `&`; `*` is left as-is.
     expect(url).toContain('%26');
-    expect(decodeURIComponent(url.split(':')[2].split('@')[0])).toBe(
-      'O*Ytq6&tdF3Ps51',
-    );
+    const encodedPassword = url.split(':')[2]?.split('@')[0];
+    expect(encodedPassword).toBeDefined();
+    expect(decodeURIComponent(encodedPassword!)).toBe('O*Ytq6&tdF3Ps51');
   });
   it('falls back to DATABASE_URL when POSTGRES_PASSWORD is unset', () => {
     expect(

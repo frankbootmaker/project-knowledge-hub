@@ -106,7 +106,8 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 ### Ops-4 — Observability & support
 
-* **Light v1 (NF-009):** Admin → Monitoring **Download support dump** (`GET /api/v1/admin/monitoring/support-dump`) — redacted JSON (env label, schema, ready checks, backup ages, MCP error counts, pending attention, recent error audit ids/actions; **no** secrets or pastes). Stale-backup attention chip when `last-success` age exceeds `BACKUP_STALE_AFTER_HOURS` (default 36).
+* **NF-009:** Admin → Monitoring **Download support dump** (`GET /api/v1/admin/monitoring/support-dump`) — redacted JSON (env label, schema, ready checks, backup ages, MCP error counts, pending attention, recent error audit ids/actions; **no** secrets or pastes). Stale-backup attention chip when `last-success` age exceeds `BACKUP_STALE_AFTER_HOURS` (default 36). Worker emails system admins (and optional `ALERT_WEBHOOK_URL` JSON POST) on a `BACKUP_STALE_ALERT_INTERVAL_MS` poll (default 15m; `0` disables), deduped via `BACKUP_DIR/last-stale-alert.json`.
+* **NF-014:** External monitors can poll the same redacted snapshot via Bearer API client with opt-in scope `monitoring:read`: `GET /api/v1/platform/status` and MCP tool `get_platform_status` (also LLM OpenAPI twin). Not included in default MCP scopes.
 * Follow-on: log retention / rotation; admin log export (M7 deferred); webhook/email alerts for backup fail, migrate fail, disk pressure, API 5xx spike.
 
 ---

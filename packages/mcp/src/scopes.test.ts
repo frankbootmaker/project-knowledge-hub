@@ -6,8 +6,10 @@ describe('mcp scopes and limits', () => {
   it('includes default read scopes without write', () => {
     expect(DEFAULT_MCP_SCOPES).toContain('knowledge:search');
     expect(DEFAULT_MCP_SCOPES).not.toContain('knowledge:write');
+    expect(DEFAULT_MCP_SCOPES).not.toContain('monitoring:read');
     expect(hasMcpScope(DEFAULT_MCP_SCOPES, 'projects:read')).toBe(true);
     expect(hasMcpScope(['projects:read'], 'knowledge:read')).toBe(false);
+    expect(hasMcpScope(['monitoring:read'], 'monitoring:read')).toBe(true);
     expect(hasMcpScope(['knowledge:write'], 'knowledge:write')).toBe(true);
   });
 

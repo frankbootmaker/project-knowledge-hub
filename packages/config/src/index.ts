@@ -155,6 +155,23 @@ export const envSchema = z.object({
   /** Hours after last successful dump before Monitoring flags a stale backup (NF-009). */
   BACKUP_STALE_AFTER_HOURS: z.coerce.number().int().min(1).max(168).default(36),
   /**
+   * Worker poll for stale-backup email/webhook alerts (0 = disabled).
+   * Default 15 minutes. Deduped via BACKUP_DIR/last-stale-alert.json.
+   */
+  BACKUP_STALE_ALERT_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(15 * 60 * 1000),
+  /**
+   * Optional outbound webhook URL for ops alerts (JSON POST). Empty = email only.
+   * Used for stale-backup alerts (NF-009).
+   */
+  ALERT_WEBHOOK_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
+  /**
    * When a signup stays pending_approval longer than this, email all system admins once.
    * Allowed: 4, 12, or 24.
    */

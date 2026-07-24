@@ -28,6 +28,7 @@ const TOOL_NAMES = [
   'get_record_provenance',
   'list_record_metadata',
   'list_workspace_media',
+  'get_platform_status',
   'create_knowledge_record',
   'update_knowledge_record',
   'upload_workspace_media',
@@ -49,6 +50,7 @@ const scopeByTool: Record<ToolName, McpScope> = {
   get_record_provenance: 'provenance:read',
   list_record_metadata: 'knowledge:read',
   list_workspace_media: 'knowledge:read',
+  get_platform_status: 'monitoring:read',
   create_knowledge_record: 'knowledge:write',
   update_knowledge_record: 'knowledge:write',
   upload_workspace_media: 'knowledge:write',
@@ -197,6 +199,8 @@ async function invokeTool(
       return handlers.getRecordProvenance({ recordId: raw.recordId });
     case 'list_record_metadata':
       return handlers.listRecordMetadata();
+    case 'get_platform_status':
+      return handlers.getPlatformStatus();
     case 'create_knowledge_record':
       if (
         typeof raw.workspaceId !== 'string' ||

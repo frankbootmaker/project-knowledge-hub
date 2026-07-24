@@ -27,9 +27,9 @@ export function ConversationImportForm(props: {
   const tCommon = useTranslations('common');
 
   const [title, setTitle] = useState('');
-  const [contentFormat, setContentFormat] = useState<'markdown' | 'plain_text'>(
-    'markdown',
-  );
+  const [contentFormat, setContentFormat] = useState<
+    'markdown' | 'plain_text' | 'chatgpt_export' | 'open_webui' | 'generic_json'
+  >('markdown');
   const [rawContent, setRawContent] = useState('');
   const [projectId, setProjectId] = useState('');
   const [systemId, setSystemId] = useState('');
@@ -92,20 +92,42 @@ export function ConversationImportForm(props: {
           <Select
             value={contentFormat}
             onChange={(e) =>
-              setContentFormat(e.target.value as 'markdown' | 'plain_text')
+              setContentFormat(
+                e.target.value as
+                  | 'markdown'
+                  | 'plain_text'
+                  | 'chatgpt_export'
+                  | 'open_webui'
+                  | 'generic_json',
+              )
             }
           >
             <option value="markdown">{t('formatMarkdown')}</option>
             <option value="plain_text">{t('formatPlainText')}</option>
+            <option value="chatgpt_export">{t('formatChatgpt')}</option>
+            <option value="open_webui">{t('formatOpenWebui')}</option>
+            <option value="generic_json">{t('formatGenericJson')}</option>
           </Select>
         </Field>
         <Field label={t('rawContent')}>
+          {(contentFormat === 'chatgpt_export' ||
+            contentFormat === 'open_webui' ||
+            contentFormat === 'generic_json') && (
+            <p className="m-0 mb-2 text-sm text-ink-muted">{t('rawContentJsonHint')}</p>
+          )}
           <Textarea
             value={rawContent}
             onChange={(e) => setRawContent(e.target.value)}
             rows={16}
             required
             className="font-mono text-sm"
+            placeholder={
+              contentFormat === 'chatgpt_export' ||
+              contentFormat === 'open_webui' ||
+              contentFormat === 'generic_json'
+                ? t('rawContentJsonPlaceholder')
+                : undefined
+            }
           />
         </Field>
         <Field label={t('projectOptional')}>

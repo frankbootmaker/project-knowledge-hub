@@ -61,6 +61,15 @@ export type MailMessages = {
     pendingSinceLabel: string;
     cta: string;
   };
+  backupStaleAlert: {
+    subject: string;
+    title: string;
+    greeting: string;
+    body: string;
+    ageLabel: string;
+    thresholdLabel: string;
+    cta: string;
+  };
   passwordChanged: {
     subject: string;
     title: string;
@@ -180,6 +189,15 @@ export const en: MailMessages = {
     emailLabel: 'Email: {email}',
     pendingSinceLabel: 'Pending since: {since} ({age})',
     cta: 'Review pending users',
+  },
+  backupStaleAlert: {
+    subject: 'Database backup is stale — Project Knowledge Hub',
+    title: 'Stale database backup',
+    greeting: 'Hi {name},',
+    body: 'The last successful database dump is older than the configured threshold. Check Admin → Monitoring and the backup sidecar.',
+    ageLabel: 'Last success age: {age}',
+    thresholdLabel: 'Stale after: {hours} hours',
+    cta: 'Open Monitoring',
   },
   passwordChanged: {
     subject: 'Your Project Knowledge Hub password was changed',
@@ -303,6 +321,15 @@ export const de: MailMessages = {
     pendingSinceLabel: 'Ausstehend seit: {since} ({age})',
     cta: 'Ausstehende Benutzer prüfen',
   },
+  backupStaleAlert: {
+    subject: 'Datenbank-Backup ist veraltet — Project Knowledge Hub',
+    title: 'Veraltetes Datenbank-Backup',
+    greeting: 'Hallo {name},',
+    body: 'Der letzte erfolgreiche Datenbank-Dump ist älter als der konfigurierte Schwellenwert. Prüfen Sie Admin → Monitoring und den Backup-Sidecar.',
+    ageLabel: 'Alter des letzten Erfolgs: {age}',
+    thresholdLabel: 'Veraltet nach: {hours} Stunden',
+    cta: 'Monitoring öffnen',
+  },
   passwordChanged: {
     subject: 'Ihr Project Knowledge Hub-Passwort wurde geändert',
     title: 'Passwort geändert',
@@ -424,6 +451,15 @@ export const hu: MailMessages = {
     emailLabel: 'E-mail: {email}',
     pendingSinceLabel: 'Függőben: {since} ({age})',
     cta: 'Függő felhasználók áttekintése',
+  },
+  backupStaleAlert: {
+    subject: 'Az adatbázis-mentés elavult — Project Knowledge Hub',
+    title: 'Elavult adatbázis-mentés',
+    greeting: 'Szia {name}!',
+    body: 'Az utolsó sikeres adatbázis-dump régebbi, mint a beállított küszöb. Nézd meg az Admin → Monitoring oldalt és a backup sidecar-t.',
+    ageLabel: 'Utolsó siker kora: {age}',
+    thresholdLabel: 'Elavult ennyi óra után: {hours}',
+    cta: 'Monitoring megnyitása',
   },
   passwordChanged: {
     subject: 'A Project Knowledge Hub jelszavad megváltozott',

@@ -35,6 +35,7 @@ import { createLogger } from '@project-knowledge-hub/observability';
 import { resolveWorkerBlobStore } from './resolve-blob.js';
 import { resolveWorkerMailConfig } from './resolve-mail.js';
 import { escalateStaleSignupApprovals } from './signup-pending-escalate.js';
+import { alertIfBackupStale } from './backup-stale-alert.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -56,6 +57,7 @@ async function main(): Promise<void> {
   let embeddingWorker: Worker<EmbeddingReindexQueueJobData> | null = null;
   let offsiteTimer: ReturnType<typeof setInterval> | null = null;
   let signupEscalateTimer: ReturnType<typeof setInterval> | null = null;
+  let backupStaleAlertTimer: ReturnType<typeof setInterval> | null = null;
   const gitSyncQueue = createGitSyncQueue(env.REDIS_URL);
   const embeddingQueue = createEmbeddingReindexQueue(env.REDIS_URL);
   const embeddingConfig = embeddingConfigFromEnv(env);
@@ -74,6 +76,9 @@ async function main(): Promise<void> {
       }
       if (signupEscalateTimer) {
         clearInterval(signupEscalateTimer);
+      }
+      if (backupStaleAlertTimer) {
+        clearInterval(backupStaleAlertTimer);
       }
       if (gitWorker) {
         await gitWorker.close();
@@ -309,6 +314,31 @@ async function main(): Promise<void> {
     }, env.SIGNUP_PENDING_ESCALATE_INTERVAL_MS);
   }
 
+  if (env.BACKUP_STALE_ALERT_INTERVAL_MS > 0) {
+    const runBackupStaleAlert = async () => {
+      try {
+        const mailConfig = await resolveWorkerMailConfig(database, env);
+        const result = await alertIfBackupStale({
+          database,
+          mailConfig,
+          webUrl: env.WEB_URL,
+          backupDir: env.BACKUP_DIR,
+          staleAfterHours: env.BACKUP_STALE_AFTER_HOURS,
+          webhookUrl: env.ALERT_WEBHOOK_URL,
+        });
+        if (result.alerted) {
+          logger.info({ reason: result.reason }, 'Stale backup alert sent');
+        }
+      } catch (error) {
+        logger.error({ err: error }, 'Stale backup alert failed');
+      }
+    };
+    void runBackupStaleAlert();
+    backupStaleAlertTimer = setInterval(() => {
+      void runBackupStaleAlert();
+    }, env.BACKUP_STALE_ALERT_INTERVAL_MS);
+  }
+
   logger.info(
     {
       appEnv: env.APP_ENV,
@@ -319,6 +349,8 @@ async function main(): Promise<void> {
       backupOffsiteSyncMs: env.BACKUP_OFFSITE_SYNC_INTERVAL_MS,
       signupPendingEscalateMs: env.SIGNUP_PENDING_ESCALATE_INTERVAL_MS,
       signupPendingEscalateAfterHours: env.SIGNUP_PENDING_ESCALATE_AFTER_HOURS,
+      backupStaleAlertMs: env.BACKUP_STALE_ALERT_INTERVAL_MS,
+      backupStaleAfterHours: env.BACKUP_STALE_AFTER_HOURS,
       status: 'ready',
     },
     'Worker ready',

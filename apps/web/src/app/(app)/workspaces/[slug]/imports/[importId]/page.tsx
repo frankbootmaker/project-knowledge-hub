@@ -14,6 +14,7 @@ type ConversationImport = {
   title: string;
   contentFormat: string;
   rawContent: string;
+  draftMarkdownPreview?: string;
   sourceProvider: string | null;
   generatedByModel: string | null;
   archivedAt: string | null;

@@ -23,6 +23,7 @@ const MCP_SCOPES = [
   'knowledge:search',
   'provenance:read',
   'knowledge:write',
+  'monitoring:read',
 ] as const;
 
 export type PublicApiClient = {

@@ -193,6 +193,40 @@ export function signupPendingEscalationEmail(input: {
   });
 }
 
+export function backupStaleAlertEmail(input: {
+  locale?: string | null;
+  displayName: string;
+  ageLabel: string;
+  staleAfterHours: number;
+  monitoringUrl: string;
+}): LinkMailContent {
+  const locale = normalizeAppLocale(input.locale);
+  const m = getMailMessages(locale).backupStaleAlert;
+  const name = displayNameOrFallback(input.displayName, locale);
+  const greeting = interpolate(m.greeting, { name });
+  const ageLine = interpolate(m.ageLabel, { age: input.ageLabel });
+  const thresholdLine = interpolate(m.thresholdLabel, {
+    hours: String(input.staleAfterHours),
+  });
+  return renderMailLayout({
+    locale,
+    subject: m.subject,
+    title: m.title,
+    bodyHtml: `${p(greeting)}${p(m.body)}${p(ageLine)}${p(thresholdLine)}`,
+    cta: { label: m.cta, url: input.monitoringUrl },
+    textLines: [
+      greeting,
+      '',
+      m.body,
+      '',
+      ageLine,
+      thresholdLine,
+      '',
+      input.monitoringUrl,
+    ],
+  });
+}
+
 export function passwordChangedEmail(input: {
   locale?: string | null;
   displayName: string;
@@ -379,6 +413,11 @@ export function adminUsersPendingUrl(webUrl: string): string {
   const url = new URL('/admin/users', `${base}/`);
   url.searchParams.set('status', 'pending_approval');
   return url.toString();
+}
+
+export function adminMonitoringUrl(webUrl: string): string {
+  const base = webUrl.replace(/\/$/, '');
+  return new URL('/admin/monitoring', `${base}/`).toString();
 }
 
 export function aiConnectionsUrl(webUrl: string): string {

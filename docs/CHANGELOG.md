@@ -31,8 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **NF-014 external platform status:** `GET /api/v1/platform/status` + MCP/`get_platform_status` (opt-in scope `monitoring:read`) expose the redacted support-dump snapshot for external monitors.
+* **NF-009 stale-backup alerts:** worker poll (`BACKUP_STALE_ALERT_INTERVAL_MS`) emails system admins and optionally POSTs `ALERT_WEBHOOK_URL` when last-success is older than `BACKUP_STALE_AFTER_HOURS` (deduped stamp).
+* **M9 structured importers:** ChatGPT export, Open WebUI, and generic JSON conversation paste → Markdown draft preview (`chatgpt_export` / `open_webui` / `generic_json`).
 * **Automated backup schedule (admin):** Monitoring → Backups controls enable + interval presets (`1h`/`6h`/`12h`/`24h`/`7d`) via `BACKUP_DIR/schedule.json`; `db-backup` sidecar re-reads each cycle (env `BACKUP_ENABLED` / `BACKUP_INTERVAL_SECONDS` remain defaults).
-* Backlog **NF-014**: external platform status via REST + MCP (redacted Monitoring / support-dump snapshot for outside monitors) in `NEXT_FEATURES.md`.
 * **Signup approval emails:** clearer confirm-mail/admin-wait copy; approval mail lists assigned workspaces/roles; system-admin **on duty** pref (`signupPendingApproval`); immediate admin notify on email confirm (fallback: all admins); worker escalation after `SIGNUP_PENDING_ESCALATE_AFTER_HOURS` (4/12/24); Monitoring shows on-duty admins.
 * **NF-013 Knowledge media:** workspace JPEG/PNG/WebP library (`workspace_media`), BlobStore purpose `media`, editor **Insert image**, MCP `upload_workspace_media` / `list_workspace_media` / `delete_workspace_media`; Markdown embeds `/api/v1/media/:id`.
 * **Wave E (until IdP):** Compose **seed** one-shot (**NF-002**); Monitoring **Mon-1** client leaderboard + catalogue tops; **NF-008** embedding reindex + archived counts; **Ops-2** avatars via BlobStore with local fallback; **NF-009** light support dump + stale-backup chip (`BACKUP_STALE_AFTER_HOURS`).

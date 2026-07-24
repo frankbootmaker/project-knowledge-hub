@@ -5,6 +5,8 @@ export const MCP_SCOPES = [
   'knowledge:search',
   'provenance:read',
   'knowledge:write',
+  /** Redacted platform health / backup ages (NF-014). Opt-in; not in DEFAULT_MCP_SCOPES. */
+  'monitoring:read',
 ] as const;
 
 export type McpScope = (typeof MCP_SCOPES)[number];
