@@ -1,6 +1,10 @@
 import { eq } from 'drizzle-orm';
 import { hashPassword } from '@project-knowledge-hub/auth';
-import { createDatabase, organizations, users } from '@project-knowledge-hub/database';
+import {
+  createDatabaseFromEnv,
+  organizations,
+  users,
+} from '@project-knowledge-hub/database';
 
 /**
  * Dokploy one-shot: create default org + optional bootstrap admin.
@@ -8,18 +12,12 @@ import { createDatabase, organizations, users } from '@project-knowledge-hub/dat
  * redeploys because of unrelated empty optional env vars (SMTP_*, etc.).
  */
 function readBootstrapConfig(): {
-  databaseUrl: string;
   organizationName: string;
   organizationSlug: string;
   adminEmail: string | undefined;
   adminPassword: string | undefined;
   adminDisplayName: string;
 } {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required to run seed');
-  }
-
   const organizationName =
     process.env.DEFAULT_ORGANIZATION_NAME?.trim() || 'Default Organization';
   const organizationSlug =
@@ -61,7 +59,6 @@ function readBootstrapConfig(): {
   }
 
   return {
-    databaseUrl,
     organizationName,
     organizationSlug,
     adminEmail,
@@ -72,7 +69,7 @@ function readBootstrapConfig(): {
 
 async function main(): Promise<void> {
   const config = readBootstrapConfig();
-  const database = createDatabase(config.databaseUrl);
+  const database = createDatabaseFromEnv();
 
   try {
     const [existingOrg] = await database.db

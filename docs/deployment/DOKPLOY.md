@@ -131,14 +131,20 @@ After deploy:
 
 ## Troubleshooting
 
-### `service "seed" didn't complete successfully: exit 1`
+### `password authentication failed for user "knowledge_hub"` (seed/migrate)
 
-Images usually built fine; api/web never start because they wait on seed.
+Usually **not** a schema problem. Causes:
 
-1. Open Dokploy logs for the **seed** one-shot (not web). Look for `Seed failed` / `Invalid environment` / bootstrap warnings.
-2. Common causes (older builds): full `loadEnv()` rejecting empty optional vars (`SMTP_HOST=`), or `BOOTSTRAP_ADMIN_PASSWORD` shorter than 12 characters.
-3. Fix: unset empty optional mail/SMTP keys, or set a ≥12-char bootstrap password (or clear both `BOOTSTRAP_ADMIN_*` if you already have an admin). Redeploy after pulling a seed build that skips invalid bootstrap instead of exiting.
-4. Confirm with seed log lines like `Organization '…' already exists` and `Administrator '…' already exists` (exit 0).
+1. **`POSTGRES_PASSWORD` in Dokploy ≠ password stored in the Postgres volume** (volume keeps the password from first init; changing the env alone does not update the role). Fix with `ALTER USER … PASSWORD …` or restore the original env value.
+2. **Special characters in the password** (`&`, `#`, `@`, `*`, …) embedded into `DATABASE_URL` via Compose. Current images rebuild the URL from discrete `POSTGRES_PASSWORD` with percent-encoding. Redeploy after pulling that fix; keep using the same password in Dokploy.
+
+Check:
+
+```bash
+docker logs knowledge-hub-*-migrate-1 --tail 20
+docker inspect knowledge-hub-*-seed-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E 'POSTGRES_|DATABASE_URL'
+```
 
 ## Logs
 

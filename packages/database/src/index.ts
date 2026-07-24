@@ -1,8 +1,10 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { resolveDatabaseUrl } from '@project-knowledge-hub/config';
 import * as schema from './schema/index.js';
 
 export * from './schema/index.js';
+export { resolveDatabaseUrl } from '@project-knowledge-hub/config';
 
 export type Database = ReturnType<typeof createDatabase>;
 
@@ -25,4 +27,11 @@ export function createDatabase(connectionString: string) {
       await client.end({ timeout: 5 });
     },
   };
+}
+
+/** Create a client using POSTGRES_* (encoded) when set, else DATABASE_URL. */
+export function createDatabaseFromEnv(
+  source: NodeJS.ProcessEnv = process.env,
+) {
+  return createDatabase(resolveDatabaseUrl(source));
 }

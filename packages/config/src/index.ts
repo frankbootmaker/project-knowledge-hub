@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { resolveDatabaseUrl } from './database-url.js';
+
+export { resolveDatabaseUrl } from './database-url.js';
 
 /** Load a dotenv file into process.env without overriding existing values. */
 export function loadDotEnvFile(filePath: string): void {
@@ -239,7 +242,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   if (source === process.env) {
     loadNearestDotEnv();
   }
-  const parsed = envSchema.safeParse(source);
+  // Rebuild DATABASE_URL from discrete POSTGRES_* so special characters in the
+  // password are percent-encoded (Compose string concat is not safe).
+  const effectiveSource =
+    typeof source.POSTGRES_PASSWORD === 'string' &&
+    source.POSTGRES_PASSWORD.length > 0
+      ? { ...source, DATABASE_URL: resolveDatabaseUrl(source) }
+      : source;
+  const parsed = envSchema.safeParse(effectiveSource);
   if (!parsed.success) {
     const details = parsed.error.issues
       .map((issue) => `${issue.path.join('.')}: ${issue.message}`)

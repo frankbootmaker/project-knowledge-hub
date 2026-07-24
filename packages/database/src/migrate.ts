@@ -3,11 +3,9 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveDatabaseUrl } from '@project-knowledge-hub/config';
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run migrations');
-}
+const databaseUrl = resolveDatabaseUrl();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.join(__dirname, 'migrations');
