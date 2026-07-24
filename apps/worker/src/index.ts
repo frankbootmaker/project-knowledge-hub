@@ -35,7 +35,8 @@ import { createLogger } from '@project-knowledge-hub/observability';
 import { resolveWorkerBlobStore } from './resolve-blob.js';
 import { resolveWorkerMailConfig } from './resolve-mail.js';
 import { escalateStaleSignupApprovals } from './signup-pending-escalate.js';
-import { alertIfBackupStale } from './backup-stale-alert.js';
+import { purgeExpiredAuditEvents } from './audit-retention.js';
+import { runOpsAlerts } from './ops-alerts.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -58,6 +59,7 @@ async function main(): Promise<void> {
   let offsiteTimer: ReturnType<typeof setInterval> | null = null;
   let signupEscalateTimer: ReturnType<typeof setInterval> | null = null;
   let backupStaleAlertTimer: ReturnType<typeof setInterval> | null = null;
+  let auditRetentionTimer: ReturnType<typeof setInterval> | null = null;
   const gitSyncQueue = createGitSyncQueue(env.REDIS_URL);
   const embeddingQueue = createEmbeddingReindexQueue(env.REDIS_URL);
   const embeddingConfig = embeddingConfigFromEnv(env);
@@ -79,6 +81,9 @@ async function main(): Promise<void> {
       }
       if (backupStaleAlertTimer) {
         clearInterval(backupStaleAlertTimer);
+      }
+      if (auditRetentionTimer) {
+        clearInterval(auditRetentionTimer);
       }
       if (gitWorker) {
         await gitWorker.close();
@@ -315,28 +320,63 @@ async function main(): Promise<void> {
   }
 
   if (env.BACKUP_STALE_ALERT_INTERVAL_MS > 0) {
-    const runBackupStaleAlert = async () => {
+    const runOpsAlertPoll = async () => {
       try {
         const mailConfig = await resolveWorkerMailConfig(database, env);
-        const result = await alertIfBackupStale({
+        const results = await runOpsAlerts({
           database,
           mailConfig,
           webUrl: env.WEB_URL,
           backupDir: env.BACKUP_DIR,
           staleAfterHours: env.BACKUP_STALE_AFTER_HOURS,
           webhookUrl: env.ALERT_WEBHOOK_URL,
+          errorSpikeThreshold: env.ALERT_ERROR_SPIKE_THRESHOLD,
+          errorSpikeWindowMinutes: env.ALERT_ERROR_SPIKE_WINDOW_MINUTES,
+          diskFreeRatioMin: env.ALERT_DISK_FREE_RATIO_MIN,
         });
-        if (result.alerted) {
-          logger.info({ reason: result.reason }, 'Stale backup alert sent');
+        for (const result of results) {
+          if (result.alerted) {
+            logger.info(
+              { type: result.type, reason: result.reason },
+              'Ops alert sent',
+            );
+          }
         }
       } catch (error) {
-        logger.error({ err: error }, 'Stale backup alert failed');
+        logger.error({ err: error }, 'Ops alert poll failed');
       }
     };
-    void runBackupStaleAlert();
+    void runOpsAlertPoll();
     backupStaleAlertTimer = setInterval(() => {
-      void runBackupStaleAlert();
+      void runOpsAlertPoll();
     }, env.BACKUP_STALE_ALERT_INTERVAL_MS);
+  }
+
+  if (env.AUDIT_RETENTION_DAYS > 0 && env.AUDIT_RETENTION_INTERVAL_MS > 0) {
+    const runAuditRetention = async () => {
+      try {
+        const result = await purgeExpiredAuditEvents({
+          database,
+          retentionDays: env.AUDIT_RETENTION_DAYS,
+        });
+        if (result.deleted > 0) {
+          logger.info(
+            {
+              deleted: result.deleted,
+              cutoff: result.cutoff,
+              retentionDays: env.AUDIT_RETENTION_DAYS,
+            },
+            'Purged expired audit events',
+          );
+        }
+      } catch (error) {
+        logger.error({ err: error }, 'Audit retention purge failed');
+      }
+    };
+    void runAuditRetention();
+    auditRetentionTimer = setInterval(() => {
+      void runAuditRetention();
+    }, env.AUDIT_RETENTION_INTERVAL_MS);
   }
 
   logger.info(
@@ -349,8 +389,9 @@ async function main(): Promise<void> {
       backupOffsiteSyncMs: env.BACKUP_OFFSITE_SYNC_INTERVAL_MS,
       signupPendingEscalateMs: env.SIGNUP_PENDING_ESCALATE_INTERVAL_MS,
       signupPendingEscalateAfterHours: env.SIGNUP_PENDING_ESCALATE_AFTER_HOURS,
-      backupStaleAlertMs: env.BACKUP_STALE_ALERT_INTERVAL_MS,
+      opsAlertMs: env.BACKUP_STALE_ALERT_INTERVAL_MS,
       backupStaleAfterHours: env.BACKUP_STALE_AFTER_HOURS,
+      auditRetentionDays: env.AUDIT_RETENTION_DAYS,
       status: 'ready',
     },
     'Worker ready',

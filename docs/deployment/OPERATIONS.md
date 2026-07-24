@@ -106,9 +106,9 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 ### Ops-4 — Observability & support
 
-* **NF-009:** Admin → Monitoring **Download support dump** (`GET /api/v1/admin/monitoring/support-dump`) — redacted JSON (env label, schema, ready checks, backup ages, MCP error counts, pending attention, recent error audit ids/actions; **no** secrets or pastes). Stale-backup attention chip when `last-success` age exceeds `BACKUP_STALE_AFTER_HOURS` (default 36). Worker emails system admins (and optional `ALERT_WEBHOOK_URL` JSON POST) on a `BACKUP_STALE_ALERT_INTERVAL_MS` poll (default 15m; `0` disables), deduped via `BACKUP_DIR/last-stale-alert.json`.
+* **NF-009:** Admin → Monitoring **Download support dump** (`GET /api/v1/admin/monitoring/support-dump`) — redacted JSON (env label, schema, ready checks, backup ages, MCP error counts, pending attention, recent error audit ids/actions; **no** secrets or pastes). **Export ops log** (`GET /api/v1/admin/monitoring/ops-log-export?days=7`) bundles the support dump plus up to 5,000 error-like audit rows (ids/actions only). Stale-backup attention chip when `last-success` age exceeds `BACKUP_STALE_AFTER_HOURS` (default 36). Worker ops-alert poll (`BACKUP_STALE_ALERT_INTERVAL_MS`, default 15m; `0` disables) emails system admins and optionally POSTs `ALERT_WEBHOOK_URL` for: **backup.stale**, **backup.fail** (`last-failure.json` newer than last-success), **api.error_spike** (`ALERT_ERROR_SPIKE_*`), **disk.low** (`ALERT_DISK_FREE_RATIO_MIN` on `BACKUP_DIR`). Deduped via `BACKUP_DIR/ops-alerts-state.json`. Audit retention purge: `AUDIT_RETENTION_DAYS` (default 90; `0` disables) on `AUDIT_RETENTION_INTERVAL_MS`.
 * **NF-014:** External monitors can poll the same redacted snapshot via Bearer API client with opt-in scope `monitoring:read`: `GET /api/v1/platform/status` and MCP tool `get_platform_status` (also LLM OpenAPI twin). Not included in default MCP scopes.
-* Follow-on: log retention / rotation; admin log export (M7 deferred); webhook/email alerts for backup fail, migrate fail, disk pressure, API 5xx spike.
+* Out of scope / later: container log shipping to an external aggregator; migrate-fail alerts (one-shot has no durable stamp).
 
 ---
 
@@ -227,5 +227,5 @@ See [`NEXT_FEATURES.md`](../product/NEXT_FEATURES.md):
 * **NF-006** — `BlobStore` + S3-compatible provider  
 * **NF-007** — Azure Blob Storage + OneDrive/SharePoint (Graph) providers  
 * **NF-008** — Admin maintenance / ops console (trigger export, upload import)  
-* **NF-009** — Log export, alerting, support dump  
+* **NF-009** — Ops log export, alerting, support dump, audit retention  
 * **NF-011** — Admin monitoring (last backup / last import stamps)  

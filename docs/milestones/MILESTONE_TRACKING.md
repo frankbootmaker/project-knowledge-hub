@@ -66,7 +66,9 @@ See `docs/product/NEXT_FEATURES.md` (**execution waves A–F**). Doc Factory (NF
 - [x] Scripts: migrate / seed / backup-db / restore-db
 - [x] Operator docs (`DOKPLOY.md`, `RELEASE_PROCESS.md`, M7 plan, tracking/roadmap/changelog)
 - [ ] Operator: attach domain + smoke deploy on Dokploy (manual)
-- [ ] Later: Prod Dokploy + registry CI; admin log export; Compose bootstrap seed one-shot (**NF-002**) (deferred)
+- [ ] Later: Prod Dokploy + registry CI
+- [x] Admin ops log export + richer NF-009 alerts / audit retention (on `feature/m7-dokploy`)
+- [x] Compose bootstrap seed (**NF-002**) — runs inside migrate one-shot
 
 ## Milestone 10 checklist
 

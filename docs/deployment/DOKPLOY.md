@@ -5,7 +5,7 @@
 **Env template:** [`.env.dokploy.example`](../../.env.dokploy.example)  
 **Git branch for Dev:** `feature/m7-dokploy` (ongoing M7 work). Promote Dev-proven slices to `master` via PR — see [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md).
 
-Production cutover, registry automation, and admin log export are **out of scope** for this slice.
+Production cutover and registry automation are **out of scope** for this slice. Admin ops log export lives on Monitoring (`ops-log-export`); raw container stdout remains in the Dokploy UI.
 
 ## Architecture
 
@@ -151,7 +151,7 @@ docker inspect knowledge-hub-*-migrate-1 \
 
 ## Logs
 
-Until admin log export exists, use the **Dokploy UI** (per-service container logs) for api, worker, and web.
+Use **Admin → Monitoring → Export ops log** for a redacted support + error-audit JSON package. For raw container stdout (api/worker/web), use the **Dokploy UI** per-service logs.
 
 ## Backup / export / import (Dev)
 

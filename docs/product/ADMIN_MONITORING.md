@@ -1,6 +1,6 @@
 # Admin monitoring dashboard
 
-**Status:** Mon-0 + **Mon-1** shipped (**NF-011**); maintenance strip (**NF-008**); support dump / stale backup + worker alerts (**NF-009**); external status REST/MCP (**NF-014**, scope `monitoring:read`)  
+**Status:** Mon-0 + **Mon-1** shipped (**NF-011**); maintenance strip (**NF-008**); support dump / ops log export / retention / richer worker alerts (**NF-009**); external status REST/MCP (**NF-014**, scope `monitoring:read`)  
 **Home:** Admin sidebar → **Monitoring** (absorbs today’s **Status**)  
 **Related:** Admin → Audit, `/status` → redirects here, MCP audit actions (`mcp.request`, `mcp.tool_call`, `mcp.tool_error`), API `/health` + `/ready`, Ops-0 stamps (`BACKUP_DIR`)
 

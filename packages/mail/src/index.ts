@@ -17,6 +17,7 @@ export {
   signupPendingApprovalEmail,
   signupPendingEscalationEmail,
   backupStaleAlertEmail,
+  opsAlertEmail,
   passwordChangedEmail,
   accountClosedEmail,
   signupRejectedEmail,
@@ -32,5 +33,10 @@ export {
   aiConnectionsUrl,
   mailSettingsUrl,
 } from './templates.js';
-export { renderMailLayout, MAIL_COLORS } from './layout.js';
+export {
+  renderMailLayout,
+  MAIL_COLORS,
+  interpolate,
+  normalizeAppLocale,
+} from './layout.js';
 export { getMailMessages } from './messages.js';

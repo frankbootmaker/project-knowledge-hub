@@ -227,6 +227,39 @@ export function backupStaleAlertEmail(input: {
   });
 }
 
+export function opsAlertEmail(input: {
+  locale?: string | null;
+  displayName: string;
+  subject: string;
+  title: string;
+  body: string;
+  detailLines?: string[];
+  monitoringUrl: string;
+}): LinkMailContent {
+  const locale = normalizeAppLocale(input.locale);
+  const shared = getMailMessages(locale).opsAlert;
+  const name = displayNameOrFallback(input.displayName, locale);
+  const greeting = interpolate(shared.greeting, { name });
+  const details = input.detailLines ?? [];
+  const detailsHtml = details.map((line) => p(line)).join('');
+  return renderMailLayout({
+    locale,
+    subject: input.subject,
+    title: input.title,
+    bodyHtml: `${p(greeting)}${p(input.body)}${detailsHtml}`,
+    cta: { label: shared.cta, url: input.monitoringUrl },
+    textLines: [
+      greeting,
+      '',
+      input.body,
+      '',
+      ...details,
+      '',
+      input.monitoringUrl,
+    ],
+  });
+}
+
 export function passwordChangedEmail(input: {
   locale?: string | null;
   displayName: string;

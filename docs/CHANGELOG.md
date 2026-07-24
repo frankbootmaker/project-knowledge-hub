@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **NF-009 closeout:** Monitoring **Export ops log** (`GET /api/v1/admin/monitoring/ops-log-export`); audit retention purge (`AUDIT_RETENTION_DAYS`); worker alerts for backup fail, error-like audit spikes, and backup-volume disk pressure (plus existing stale backup) via email/`ALERT_WEBHOOK_URL`, deduped in `ops-alerts-state.json`.
 * **Mon-2 telemetry:** `knowledge.view` / `knowledge.search` audits (session + MCP); Monitoring shows top viewed records and hashed search terms (no raw queries).
 * **M9 secret detection + auto-split:** import `content_warnings` (pattern counts only); acknowledge required for high-severity drafts; heuristic draft chunk suggestions from turns/headings.
 * **NF-014 external platform status:** `GET /api/v1/platform/status` + MCP/`get_platform_status` (opt-in scope `monitoring:read`) expose the redacted support-dump snapshot for external monitors.

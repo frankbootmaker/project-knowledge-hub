@@ -634,11 +634,16 @@ export function MonitoringDashboard({
     }
   }
 
-  async function downloadSupportDump() {
+  async function downloadJsonAttachment(
+    path: string,
+    fallbackName: string,
+    okMessage: string,
+    failMessage: string,
+  ) {
     setPending(true);
     setError(null);
     try {
-      const response = await fetch('/api/v1/admin/monitoring/support-dump', {
+      const response = await fetch(path, {
         credentials: 'include',
         cache: 'no-store',
       });
@@ -651,19 +656,37 @@ export function MonitoringDashboard({
       const blob = await response.blob();
       const disposition = response.headers.get('Content-Disposition') ?? '';
       const match = /filename="([^"]+)"/.exec(disposition);
-      const filename = match?.[1] ?? `knowhub-support-${Date.now()}.json`;
+      const filename = match?.[1] ?? fallbackName;
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = filename;
       anchor.click();
       URL.revokeObjectURL(url);
-      pushToast(t('monitoringSupportDumpOk'));
+      pushToast(okMessage);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('monitoringSupportDumpFailed'));
+      setError(err instanceof Error ? err.message : failMessage);
     } finally {
       setPending(false);
     }
+  }
+
+  async function downloadSupportDump() {
+    await downloadJsonAttachment(
+      '/api/v1/admin/monitoring/support-dump',
+      `knowhub-support-${Date.now()}.json`,
+      t('monitoringSupportDumpOk'),
+      t('monitoringSupportDumpFailed'),
+    );
+  }
+
+  async function downloadOpsLogExport() {
+    await downloadJsonAttachment(
+      '/api/v1/admin/monitoring/ops-log-export?days=7',
+      `knowhub-ops-log-7d-${Date.now()}.json`,
+      t('monitoringOpsLogExportOk'),
+      t('monitoringOpsLogExportFailed'),
+    );
   }
 
   return (
@@ -687,6 +710,14 @@ export function MonitoringDashboard({
           onClick={() => void downloadSupportDump()}
         >
           {t('monitoringSupportDump')}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={pending}
+          onClick={() => void downloadOpsLogExport()}
+        >
+          {t('monitoringOpsLogExport')}
         </Button>
       </div>
 

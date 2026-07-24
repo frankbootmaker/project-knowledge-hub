@@ -520,6 +520,12 @@ export async function listActiveWorkspacesForMonitoring(
     .limit(200);
 }
 
+const ERROR_AUDIT_ACTION_SQL = sql`(
+  ${auditEvents.action} ILIKE '%error%'
+  OR ${auditEvents.action} ILIKE '%fail%'
+  OR ${auditEvents.action} = 'mcp.tool_error'
+)`;
+
 /** Recent audit rows that look like failures (ids/actions only — no metadata). */
 export async function getRecentErrorAuditEvents(
   database: Database,
@@ -543,16 +549,7 @@ export async function getRecentErrorAuditEvents(
       createdAt: auditEvents.createdAt,
     })
     .from(auditEvents)
-    .where(
-      and(
-        gte(auditEvents.createdAt, since),
-        sql`(
-          ${auditEvents.action} ILIKE '%error%'
-          OR ${auditEvents.action} ILIKE '%fail%'
-          OR ${auditEvents.action} = 'mcp.tool_error'
-        )`,
-      ),
-    )
+    .where(and(gte(auditEvents.createdAt, since), ERROR_AUDIT_ACTION_SQL))
     .orderBy(desc(auditEvents.createdAt))
     .limit(limit);
 
@@ -563,6 +560,18 @@ export async function getRecentErrorAuditEvents(
     entityId: row.entityId,
     createdAt: row.createdAt.toISOString(),
   }));
+}
+
+/** Count error-like audit events since `since` (for Monitoring ops export). */
+export async function countErrorAuditEvents(
+  database: Database,
+  since: Date,
+): Promise<number> {
+  const [row] = await database.db
+    .select({ value: count() })
+    .from(auditEvents)
+    .where(and(gte(auditEvents.createdAt, since), ERROR_AUDIT_ACTION_SQL));
+  return Number(row?.value ?? 0);
 }
 
 export function isBackupStale(

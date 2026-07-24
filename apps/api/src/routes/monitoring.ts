@@ -36,12 +36,14 @@ import {
   uploadDumpOffsiteOrThrow,
 } from '../lib/backup-offsite.js';
 import {
+  countErrorAuditEvents,
   getActiveSessionCount,
   getArchivedEntityCounts,
   getCatalogueUsageSummary,
   getClientLeaderboard,
   getMcpActivitySummary,
   getPendingAttention,
+  getRecentErrorAuditEvents,
   getSchemaVersionLabel,
   isBackupStale,
   listActiveWorkspacesForMonitoring,
@@ -51,6 +53,10 @@ import { listOnDutyAdmins } from '../lib/signup-pending-notify.js';
 import { buildSupportDump } from '../lib/support-dump.js';
 
 const rangeSchema = z.enum(['1h', '24h', '7d']).default('24h');
+const opsLogExportQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(7),
+});
+const OPS_LOG_EXPORT_MAX_ROWS = 5_000;
 const retentionBodySchema = z.object({
   keepDaily: z.coerce.number().int().min(1).max(90),
   keepWeekly: z.coerce.number().int().min(0).max(52),
@@ -713,5 +719,71 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       `attachment; filename="knowhub-support-${stamp}.json"`,
     );
     return dump;
+  });
+
+  /**
+   * NF-009 — downloadable ops log package (support dump + error-like audits).
+   * Not container stdout; use Dokploy for raw process logs. Full audit CSV/JSON
+   * remains on Admin → Audit.
+   */
+  app.get('/api/v1/admin/monitoring/ops-log-export', async (request, reply) => {
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const query = opsLogExportQuerySchema.parse(request.query);
+    const since = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000);
+
+    const [support, totalMatching, auditErrors] = await Promise.all([
+      buildSupportDump(app),
+      countErrorAuditEvents(app.database, since),
+      getRecentErrorAuditEvents(
+        app.database,
+        since,
+        OPS_LOG_EXPORT_MAX_ROWS,
+      ),
+    ]);
+
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      kind: 'knowhub-ops-log-export' as const,
+      window: {
+        days: query.days,
+        since: since.toISOString(),
+      },
+      retention: {
+        auditRetentionDays: app.env.AUDIT_RETENTION_DAYS,
+      },
+      support,
+      auditErrors: {
+        totalMatching,
+        exportedCount: auditErrors.length,
+        truncated: totalMatching > auditErrors.length,
+        maxRows: OPS_LOG_EXPORT_MAX_ROWS,
+        events: auditErrors,
+      },
+    };
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'monitoring.ops_log_export',
+      entityType: 'monitoring',
+      entityId: 'ops-log-export',
+      metadata: {
+        days: query.days,
+        exportedCount: auditErrors.length,
+        totalMatching,
+        truncated: totalMatching > auditErrors.length,
+      },
+      ipAddress: request.ip,
+    });
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    reply.header(
+      'Content-Disposition',
+      `attachment; filename="knowhub-ops-log-${query.days}d-${stamp}.json"`,
+    );
+    return payload;
   });
 }

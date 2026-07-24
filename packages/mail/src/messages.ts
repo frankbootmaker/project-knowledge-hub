@@ -70,6 +70,29 @@ export type MailMessages = {
     thresholdLabel: string;
     cta: string;
   };
+  /** Generic NF-009 ops alerts (backup fail, error spike, disk). */
+  opsAlert: {
+    greeting: string;
+    cta: string;
+  };
+  opsAlertBackupFail: {
+    subject: string;
+    title: string;
+    body: string;
+    failureAtLabel: string;
+  };
+  opsAlertErrorSpike: {
+    subject: string;
+    title: string;
+    body: string;
+    countLabel: string;
+  };
+  opsAlertDiskLow: {
+    subject: string;
+    title: string;
+    body: string;
+    freeLabel: string;
+  };
   passwordChanged: {
     subject: string;
     title: string;
@@ -198,6 +221,28 @@ export const en: MailMessages = {
     ageLabel: 'Last success age: {age}',
     thresholdLabel: 'Stale after: {hours} hours',
     cta: 'Open Monitoring',
+  },
+  opsAlert: {
+    greeting: 'Hi {name},',
+    cta: 'Open Monitoring',
+  },
+  opsAlertBackupFail: {
+    subject: 'Database backup failed — Project Knowledge Hub',
+    title: 'Database backup failed',
+    body: 'The backup sidecar recorded a failed dump. Check Admin → Monitoring and the db-backup logs.',
+    failureAtLabel: 'Failure stamp: {at}',
+  },
+  opsAlertErrorSpike: {
+    subject: 'Elevated error rate — Project Knowledge Hub',
+    title: 'Elevated error rate',
+    body: 'Recent audit events look like failures above the configured threshold. Review Admin → Monitoring and Audit.',
+    countLabel: '{count} error-like events in the last {minutes} minutes (threshold {threshold})',
+  },
+  opsAlertDiskLow: {
+    subject: 'Backup volume disk space low — Project Knowledge Hub',
+    title: 'Backup volume disk space low',
+    body: 'Free space on the backup volume is below the configured minimum. Free space or adjust retention.',
+    freeLabel: 'Free: {free} of {total} ({percent}%)',
   },
   passwordChanged: {
     subject: 'Your Project Knowledge Hub password was changed',
@@ -330,6 +375,29 @@ export const de: MailMessages = {
     thresholdLabel: 'Veraltet nach: {hours} Stunden',
     cta: 'Monitoring öffnen',
   },
+  opsAlert: {
+    greeting: 'Hallo {name},',
+    cta: 'Monitoring öffnen',
+  },
+  opsAlertBackupFail: {
+    subject: 'Datenbank-Backup fehlgeschlagen — Project Knowledge Hub',
+    title: 'Datenbank-Backup fehlgeschlagen',
+    body: 'Der Backup-Sidecar hat einen fehlgeschlagenen Dump gemeldet. Prüfen Sie Admin → Monitoring und die db-backup-Logs.',
+    failureAtLabel: 'Fehler-Zeitstempel: {at}',
+  },
+  opsAlertErrorSpike: {
+    subject: 'Erhöhte Fehlerrate — Project Knowledge Hub',
+    title: 'Erhöhte Fehlerrate',
+    body: 'In den letzten Audit-Ereignissen liegen fehlerähnliche Einträge über dem Schwellenwert. Prüfen Sie Admin → Monitoring und Audit.',
+    countLabel:
+      '{count} fehlerähnliche Ereignisse in den letzten {minutes} Minuten (Schwelle {threshold})',
+  },
+  opsAlertDiskLow: {
+    subject: 'Wenig Speicher auf dem Backup-Volume — Project Knowledge Hub',
+    title: 'Wenig Speicher auf dem Backup-Volume',
+    body: 'Der freie Speicher auf dem Backup-Volume liegt unter dem Minimum. Speicher freigeben oder Retention anpassen.',
+    freeLabel: 'Frei: {free} von {total} ({percent}%)',
+  },
   passwordChanged: {
     subject: 'Ihr Project Knowledge Hub-Passwort wurde geändert',
     title: 'Passwort geändert',
@@ -460,6 +528,29 @@ export const hu: MailMessages = {
     ageLabel: 'Utolsó siker kora: {age}',
     thresholdLabel: 'Elavult ennyi óra után: {hours}',
     cta: 'Monitoring megnyitása',
+  },
+  opsAlert: {
+    greeting: 'Szia {name}!',
+    cta: 'Monitoring megnyitása',
+  },
+  opsAlertBackupFail: {
+    subject: 'Az adatbázis-mentés sikertelen — Project Knowledge Hub',
+    title: 'Az adatbázis-mentés sikertelen',
+    body: 'A backup sidecar sikertelen dumpot rögzített. Nézd meg az Admin → Monitoring oldalt és a db-backup naplókat.',
+    failureAtLabel: 'Hibabélyegző: {at}',
+  },
+  opsAlertErrorSpike: {
+    subject: 'Megemelkedett hibaszám — Project Knowledge Hub',
+    title: 'Megemelkedett hibaszám',
+    body: 'A közelmúltbeli audit események között a hibaszerű bejegyzések száma meghaladja a küszöböt. Nézd meg az Admin → Monitoring és Audit oldalakat.',
+    countLabel:
+      '{count} hibaszerű esemény az utolsó {minutes} percben (küszöb {threshold})',
+  },
+  opsAlertDiskLow: {
+    subject: 'Keves a szabad hely a mentési köteten — Project Knowledge Hub',
+    title: 'Keves a szabad hely a mentési köteten',
+    body: 'A mentési kötet szabad helye a beállított minimum alatt van. Szabadíts fel helyet, vagy módosítsd a megőrzést.',
+    freeLabel: 'Szabad: {free} / {total} ({percent}%)',
   },
   passwordChanged: {
     subject: 'A Project Knowledge Hub jelszavad megváltozott',
