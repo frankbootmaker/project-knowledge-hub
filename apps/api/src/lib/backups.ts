@@ -2,6 +2,7 @@ import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
+import { resolveDatabaseUrl } from '@project-knowledge-hub/config';
 import { ensureMigrationJournalAfterRestore } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 
@@ -179,12 +180,52 @@ function parseDatabaseUrl(databaseUrl: string): {
   }
 }
 
+/**
+ * Credentials for pg_dump / pg_restore / psql.
+ * Prefer discrete POSTGRES_* (same as migrate) so Compose-mangled DATABASE_URL
+ * or URL round-trip quirks cannot produce a wrong PGPASSWORD.
+ */
+function resolveToolDbCreds(fallbackDatabaseUrl: string): {
+  user: string;
+  password: string;
+  database: string;
+  host: string;
+  port: string;
+  connectionString: string;
+} {
+  const discretePassword = process.env.POSTGRES_PASSWORD;
+  if (typeof discretePassword === 'string' && discretePassword.length > 0) {
+    return {
+      user: process.env.POSTGRES_USER?.trim() || 'knowledge_hub',
+      password: discretePassword,
+      database: process.env.POSTGRES_DB?.trim() || 'knowledge_hub',
+      host: process.env.POSTGRES_HOST?.trim() || 'postgres',
+      port: process.env.POSTGRES_PORT?.trim() || '5432',
+      connectionString: resolveDatabaseUrl(process.env),
+    };
+  }
+  const connectionString = fallbackDatabaseUrl;
+  return { ...parseDatabaseUrl(connectionString), connectionString };
+}
+
+function pgAuthFailureMessage(stderr: string, tool: string): string | null {
+  if (!/28P01|password authentication failed/i.test(stderr)) {
+    return null;
+  }
+  return (
+    `${tool} could not authenticate to Postgres (28P01). ` +
+    'POSTGRES_PASSWORD in Dokploy must match the role password stored in the ' +
+    'Postgres volume (set at first init). Fix with ALTER USER … PASSWORD … or ' +
+    'wipe the volume; avoid $ in passwords (Compose interpolates).'
+  );
+}
+
 async function runPsqlOnDatabase(
   databaseUrl: string,
   sql: string,
   failureMessage: string,
 ): Promise<void> {
-  const creds = parseDatabaseUrl(databaseUrl);
+  const creds = resolveToolDbCreds(databaseUrl);
 
   if (await which('psql')) {
     const result = await runCommand(
@@ -206,9 +247,11 @@ async function runPsqlOnDatabase(
       { env: { PGPASSWORD: creds.password } },
     );
     if (result.code !== 0) {
+      const authHint = pgAuthFailureMessage(result.stderr, 'psql');
       throw new AppError({
         code: 'BACKUP_IMPORT_FAILED',
-        message: `${failureMessage}: ${result.stderr.slice(0, 400)}`,
+        message:
+          authHint ?? `${failureMessage}: ${result.stderr.slice(0, 400)}`,
         statusCode: 500,
       });
     }
@@ -237,9 +280,11 @@ async function runPsqlOnDatabase(
         ],
       );
       if (result.code !== 0) {
+        const authHint = pgAuthFailureMessage(result.stderr, 'psql');
         throw new AppError({
           code: 'BACKUP_IMPORT_FAILED',
-          message: `${failureMessage}: ${result.stderr.slice(0, 400)}`,
+          message:
+            authHint ?? `${failureMessage}: ${result.stderr.slice(0, 400)}`,
           statusCode: 500,
         });
       }
@@ -273,7 +318,7 @@ export async function terminateOtherDbSessions(databaseUrl: string): Promise<voi
 export async function wipeDatabaseSchemasForImport(
   databaseUrl: string,
 ): Promise<void> {
-  const creds = parseDatabaseUrl(databaseUrl);
+  const creds = resolveToolDbCreds(databaseUrl);
   const owner = quoteIdent(creds.user);
   const sql = `
 SELECT pg_terminate_backend(pid)
@@ -365,7 +410,7 @@ async function streamDumpCommand(
 
 /** Prefer host pg_dump; fall back to docker exec into a running Postgres container. */
 async function dumpToFile(outPath: string, databaseUrl: string): Promise<void> {
-  const creds = parseDatabaseUrl(databaseUrl);
+  const creds = resolveToolDbCreds(databaseUrl);
 
   if (await which('pg_dump')) {
     await streamDumpCommand(
@@ -552,7 +597,7 @@ export async function importDatabaseDump(input: {
 
   const hasPgRestore = await which('pg_restore');
   if (hasPgRestore) {
-    const creds = parseDatabaseUrl(input.databaseUrl);
+    const creds = resolveToolDbCreds(input.databaseUrl);
     const result = await runCommand(
       'pg_restore',
       [
@@ -573,23 +618,27 @@ export async function importDatabaseDump(input: {
       { env: { PGPASSWORD: creds.password } },
     );
     if (result.code !== 0 && result.code !== 1) {
+      const authHint = pgAuthFailureMessage(result.stderr, 'pg_restore');
       throw new AppError({
         code: 'BACKUP_IMPORT_FAILED',
-        message: `pg_restore failed (exit ${result.code}): ${result.stderr.slice(0, 500)}`,
+        message:
+          authHint ??
+          `pg_restore failed (exit ${result.code}): ${result.stderr.slice(0, 500)}`,
         statusCode: 500,
       });
     }
     if (result.code === 1 && isHardPgRestoreFailure(result.stderr)) {
+      const authHint = pgAuthFailureMessage(result.stderr, 'pg_restore');
       const snippet = result.stderr.slice(0, 500);
       throw new AppError({
         code: 'BACKUP_IMPORT_FAILED',
-        message: `pg_restore reported a hard error: ${snippet}`,
+        message: authHint ?? `pg_restore reported a hard error: ${snippet}`,
         statusCode: 500,
       });
     }
   } else if (await which('docker')) {
     const dumpBuffer = await fs.readFile(resolved);
-    const creds = parseDatabaseUrl(input.databaseUrl);
+    const creds = resolveToolDbCreds(input.databaseUrl);
     const container =
       process.env.POSTGRES_CONTAINER ||
       (await (async () => {
