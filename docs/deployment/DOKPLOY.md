@@ -137,13 +137,26 @@ Usually **not** a schema problem. Causes:
 
 1. **`POSTGRES_PASSWORD` in Dokploy ≠ password stored in the Postgres volume** (volume keeps the password from first init; changing the env alone does not update the role). Fix with `ALTER USER … PASSWORD …` or restore the original env value.
 2. **Special characters in the password** (`&`, `#`, `@`, `*`, …) embedded into `DATABASE_URL` via Compose. Current images rebuild the URL from discrete `POSTGRES_PASSWORD` with percent-encoding. Redeploy after pulling that fix; keep using the same password in Dokploy.
+3. **Migrate OK but seed `28P01`** — the two containers received **different** credentials. Common on Dokploy when a service-level or project-level `DATABASE_URL` / `POSTGRES_PASSWORD` override hits `seed` (or other `*app-env` services) but not `migrate`. Compare env (below), remove stale overrides, keep one `POSTGRES_PASSWORD` for the whole Compose project.
 
 Check:
 
 ```bash
 docker logs knowledge-hub-*-migrate-1 --tail 20
+docker logs knowledge-hub-*-seed-1 --tail 20
+
+# Passwords must match (compare lengths / checksums — do not paste secrets into chat)
+docker inspect knowledge-hub-*-migrate-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^POSTGRES_|^DATABASE_URL='
 docker inspect knowledge-hub-*-seed-1 \
-  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E 'POSTGRES_|DATABASE_URL'
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^POSTGRES_|^DATABASE_URL='
+
+docker inspect knowledge-hub-*-migrate-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | grep '^POSTGRES_PASSWORD=' | sha256sum
+docker inspect knowledge-hub-*-seed-1 \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | grep '^POSTGRES_PASSWORD=' | sha256sum
 ```
 
 ## Logs
