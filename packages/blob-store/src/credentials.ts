@@ -1,14 +1,30 @@
 /**
- * Strip characters that break HTTP Authorization headers (quotes, CR/LF)
- * and accidental whitespace from Dokploy / .env paste.
+ * Strip characters that break HTTP Authorization headers and accidental
+ * Dokploy / .env paste noise (quotes, CR/LF, NBSP, non-ASCII controls).
+ * Keeps printable ASCII only (AWS keys/secrets are ASCII).
  */
 export function sanitizeS3Credential(value: string): string {
-  let next = value.replace(/[\r\n\0]/g, '').trim();
+  let next = value
+    .replace(/[\u0000-\u001F\u007F\u00A0\u200B-\u200D\uFEFF]/g, '')
+    .trim();
   if (
     (next.startsWith('"') && next.endsWith('"') && next.length >= 2) ||
-    (next.startsWith("'") && next.endsWith("'") && next.length >= 2)
+    (next.startsWith("'") && next.endsWith("'") && next.length >= 2) ||
+    (next.startsWith('“') && next.endsWith('”') && next.length >= 2) ||
+    (next.startsWith('‘') && next.endsWith('’') && next.length >= 2)
   ) {
     next = next.slice(1, -1).trim();
   }
+  // Drop any remaining non-printable-ASCII (Node rejects these in headers).
+  next = next.replace(/[^\x21-\x7E]/g, '');
   return next;
+}
+
+export function isBlobCredentialHeaderError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes('authorization') ||
+    error.message.includes('Invalid character') ||
+    (error as { code?: string }).code === 'ERR_INVALID_CHAR'
+  );
 }

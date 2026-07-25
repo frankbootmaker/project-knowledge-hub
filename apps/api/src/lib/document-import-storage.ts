@@ -65,8 +65,12 @@ export async function readImportOriginal(input: {
 }): Promise<Buffer | null> {
   const store = input.blobStore;
   if (store && store.provider !== 'disabled') {
-    const fromBlob = await store.get(input.blobKey);
-    if (fromBlob) return fromBlob;
+    try {
+      const fromBlob = await store.get(input.blobKey);
+      if (fromBlob) return fromBlob;
+    } catch {
+      // Fall through to local file (broken S3 credentials, etc.).
+    }
   }
   try {
     return await readFile(

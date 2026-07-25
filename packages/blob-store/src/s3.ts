@@ -5,7 +5,10 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { sanitizeS3Credential } from './credentials.js';
+import {
+  isBlobCredentialHeaderError,
+  sanitizeS3Credential,
+} from './credentials.js';
 import type { BlobObject, BlobPutInput, BlobStore, BlobStoreConfig } from './types.js';
 
 function asBuffer(body: unknown): Buffer | null {
@@ -80,6 +83,8 @@ export function createS3BlobStore(
       } catch (error) {
         const name = error instanceof Error ? error.name : '';
         if (name === 'NoSuchKey' || name === 'NotFound') return null;
+        // Bad credentials must not block local-disk fallbacks (Dokploy paste).
+        if (isBlobCredentialHeaderError(error)) return null;
         throw error;
       }
     },

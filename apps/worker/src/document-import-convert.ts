@@ -31,8 +31,12 @@ async function readOriginal(input: {
   blobKey: string;
 }): Promise<Buffer | null> {
   if (input.blobStore.provider !== 'disabled') {
-    const fromBlob = await input.blobStore.get(input.blobKey);
-    if (fromBlob) return fromBlob;
+    try {
+      const fromBlob = await input.blobStore.get(input.blobKey);
+      if (fromBlob) return fromBlob;
+    } catch {
+      // Fall through to local shared volume (broken S3 credentials, etc.).
+    }
   }
   try {
     return await readFile(
@@ -57,6 +61,7 @@ async function storeMedia(input: {
   originalFilename: string;
   createdBy: string;
   altText?: string;
+  warnings?: string[];
 }): Promise<string | null> {
   let contentType = input.contentType.toLowerCase();
   if (contentType === 'image/jpg') contentType = 'image/jpeg';
@@ -72,13 +77,7 @@ async function storeMedia(input: {
 
   const mediaId = randomUUID();
   const key = blobObjectKey('media', `${input.workspaceId}/${mediaId}`);
-  if (input.blobStore.provider !== 'disabled') {
-    await input.blobStore.put({
-      key,
-      body: input.buffer,
-      contentType,
-    });
-  }
+  // Local first so convert succeeds when S3 credentials are invalid.
   const filePath = path.join(
     path.resolve(input.env.MEDIA_UPLOAD_DIR),
     input.workspaceId,
@@ -86,6 +85,22 @@ async function storeMedia(input: {
   );
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, input.buffer);
+
+  if (input.blobStore.provider !== 'disabled') {
+    try {
+      await input.blobStore.put({
+        key,
+        body: input.buffer,
+        contentType,
+      });
+    } catch (error) {
+      const detail =
+        error instanceof Error ? error.message : 'unknown object-store error';
+      input.warnings?.push(
+        `Object storage put failed for media; using local file (${detail})`,
+      );
+    }
+  }
 
   await input.database.db.insert(workspaceMedia).values({
     id: mediaId,
@@ -194,6 +209,7 @@ export async function processDocumentImportConvert(input: {
         originalFilename: image.filename,
         createdBy: row.createdBy,
         altText: path.parse(image.filename).name,
+        warnings,
       });
       if (!mediaId) {
         warnings.push(`Skipped non-storeable image: ${image.filename}`);
