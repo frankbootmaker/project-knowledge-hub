@@ -97,6 +97,49 @@ SQL
   fi
 }
 
+abort_unchanged() {
+  echo "$1 — database left unchanged." >&2
+  exit 1
+}
+
+preflight() {
+  # Nothing destructive until the archive parses and the credentials work,
+  # otherwise a bad dump or a 28P01 leaves the target wiped and empty.
+  local user="${POSTGRES_USER:-knowledge_hub}"
+  local db="${POSTGRES_DB:-knowledge_hub}"
+
+  echo "Preflight: reading dump header…"
+  if [[ -n "${POSTGRES_CONTAINER:-}" ]]; then
+    docker exec -i "$POSTGRES_CONTAINER" pg_restore --list - <"$DUMP" >/dev/null \
+      || abort_unchanged "Dump is not a readable pg_dump -Fc archive"
+  else
+    pg_restore --list "$DUMP" >/dev/null \
+      || abort_unchanged "Dump is not a readable pg_dump -Fc archive"
+  fi
+
+  local auth_hint
+  auth_hint="Database credentials rejected. On 28P01 the POSTGRES_PASSWORD does not match the role password stored in the Postgres volume (fix with ALTER USER … PASSWORD …)"
+
+  echo "Preflight: checking database credentials…"
+  if [[ -n "${POSTGRES_CONTAINER:-}" ]]; then
+    docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "$POSTGRES_CONTAINER" \
+      psql -U "$user" -d "$db" -v ON_ERROR_STOP=1 -c 'SELECT 1;' >/dev/null \
+      || abort_unchanged "$auth_hint"
+  elif [[ -n "${POSTGRES_HOST:-}" ]]; then
+    PGPASSWORD="${POSTGRES_PASSWORD:-}" psql \
+      -h "$POSTGRES_HOST" -p "${POSTGRES_PORT:-5432}" -U "$user" -d "$db" \
+      -v ON_ERROR_STOP=1 -c 'SELECT 1;' >/dev/null \
+      || abort_unchanged "$auth_hint"
+  elif [[ -n "${DATABASE_URL:-}" ]]; then
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'SELECT 1;' >/dev/null \
+      || abort_unchanged "$auth_hint"
+  else
+    abort_unchanged "Preflight requires POSTGRES_CONTAINER, POSTGRES_HOST, or DATABASE_URL"
+  fi
+}
+
+preflight
+
 if [[ "${WIPE_DATABASE:-0}" == "1" ]]; then
   wipe_database
 elif [[ -z "${SKIP_SCHEMA_WIPE:-}" ]]; then

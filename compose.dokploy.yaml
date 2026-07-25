@@ -5,9 +5,12 @@
 #
 # Browser → web only. Next rewrites /api/v1 and /mcp to the internal API (API_URL at image build).
 #
-# Networking: use the Compose default network for app traffic, and attach every service to
-# external `dokploy-network` so Traefik domain routing on `web` does not isolate it from `api`
+# Networking: app traffic runs on the project-scoped Compose default network. Only `web` and
+# `api` also join external `dokploy-network`, because Traefik domain routing needs them there
 # (Dokploy domain injection historically drops custom-only networks on the published service).
+# Never put postgres/redis/worker/db-backup on `dokploy-network`: it is shared by every Dokploy
+# app, service names become duplicate DNS aliases, and a second deploy of this same stack then
+# resolves `postgres` to the other app's database (intermittent 28P01 with an unchanged password).
 
 x-app-env: &app-env
   NODE_ENV: production
@@ -59,9 +62,11 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+    # Internal only. On the shared `dokploy-network` every Dokploy app running
+    # this stack registers the same `postgres` alias, so api/migrate could
+    # resolve *another* app's database and fail with 28P01 against its password.
     networks:
       - default
-      - dokploy-network
 
   redis:
     image: redis:7-alpine
@@ -74,9 +79,10 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+    # Internal only — see postgres (a shared `redis` alias crosses sessions and
+    # queues between apps).
     networks:
       - default
-      - dokploy-network
 
   # Migrate + seed in one one-shot so they share a single env block. A separate
   # `seed` service repeatedly got a different POSTGRES_PASSWORD from Dokploy
@@ -112,7 +118,6 @@ services:
         condition: service_healthy
     networks:
       - default
-      - dokploy-network
 
   api:
     image: knowledge-hub-api:dokploy
@@ -172,7 +177,6 @@ services:
         condition: service_completed_successfully
     networks:
       - default
-      - dokploy-network
 
   web:
     image: knowledge-hub-web:dokploy
@@ -242,7 +246,6 @@ services:
         condition: service_healthy
     networks:
       - default
-      - dokploy-network
 
 # Project-scoped names (Compose prefixes with -p project). Do not pin global
 # `name:` — a second Dokploy app would reuse the old Postgres volume and hit

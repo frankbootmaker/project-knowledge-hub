@@ -208,6 +208,30 @@ function resolveToolDbCreds(fallbackDatabaseUrl: string): {
   return { ...parseDatabaseUrl(connectionString), connectionString };
 }
 
+/** Name of a running Postgres container, for hosts without postgresql-client. */
+async function findPostgresContainer(): Promise<string | null> {
+  if (process.env.POSTGRES_CONTAINER) {
+    return process.env.POSTGRES_CONTAINER;
+  }
+  const listed = await new Promise<string>((resolve, reject) => {
+    const child = spawn('docker', ['ps', '--format', '{{.Names}}'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const chunks: Buffer[] = [];
+    child.stdout.on('data', (c: Buffer) => chunks.push(c));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve(code === 0 ? Buffer.concat(chunks).toString('utf8') : '');
+    });
+  });
+  const names = listed.split('\n').map((n) => n.trim()).filter(Boolean);
+  return (
+    names.find((n) => n.includes('postgres') && n.includes('knowledge')) ||
+    names.find((n) => n.includes('postgres')) ||
+    null
+  );
+}
+
 function pgAuthFailureMessage(stderr: string, tool: string): string | null {
   if (!/28P01|password authentication failed/i.test(stderr)) {
     return null;
@@ -259,7 +283,7 @@ async function runPsqlOnDatabase(
   }
 
   if (await which('docker')) {
-    const container = process.env.POSTGRES_CONTAINER;
+    const container = await findPostgresContainer();
     if (container) {
       const result = await runCommand(
         'docker',
@@ -356,6 +380,65 @@ function isHardPgRestoreFailure(stderr: string): boolean {
   );
 }
 
+type RestoreMode =
+  | { kind: 'host' }
+  | { kind: 'docker'; container: string };
+
+/** Decide how the restore will run *before* anything destructive happens. */
+async function resolveRestoreMode(): Promise<RestoreMode> {
+  if (await which('pg_restore')) {
+    return { kind: 'host' };
+  }
+  if (await which('docker')) {
+    const container = await findPostgresContainer();
+    if (container) {
+      return { kind: 'docker', container };
+    }
+  }
+  throw new AppError({
+    code: 'BACKUP_TOOLS_MISSING',
+    message:
+      'pg_restore is not available and no Postgres container was found. Install postgresql-client or set POSTGRES_CONTAINER.',
+    statusCode: 503,
+  });
+}
+
+/**
+ * Import preflight: the dump must be a readable custom-format archive and the
+ * credentials must work. Checked before the schema wipe so a bad password or a
+ * truncated upload leaves the existing database untouched.
+ */
+async function assertImportPreflight(input: {
+  mode: RestoreMode;
+  dumpPath: string;
+  databaseUrl: string;
+}): Promise<void> {
+  const listResult =
+    input.mode.kind === 'host'
+      ? await runCommand('pg_restore', ['--list', input.dumpPath])
+      : await runCommand(
+          'docker',
+          ['exec', '-i', input.mode.container, 'pg_restore', '--list'],
+          { stdin: await fs.readFile(input.dumpPath) },
+        );
+  if (listResult.code !== 0) {
+    throw new AppError({
+      code: 'BACKUP_IMPORT_FAILED',
+      message: `Dump is not a readable pg_dump -Fc archive; database left unchanged: ${listResult.stderr.slice(
+        0,
+        400,
+      )}`,
+      statusCode: 400,
+    });
+  }
+
+  await runPsqlOnDatabase(
+    input.databaseUrl,
+    'SELECT 1;',
+    'Import preflight failed; database left unchanged',
+  );
+}
+
 async function streamDumpCommand(
   command: string,
   args: string[],
@@ -443,32 +526,7 @@ async function dumpToFile(outPath: string, databaseUrl: string): Promise<void> {
     });
   }
 
-  const container =
-    process.env.POSTGRES_CONTAINER ||
-    (await (async () => {
-      const listed = await new Promise<string>((resolve, reject) => {
-        const child = spawn('docker', ['ps', '--format', '{{.Names}}'], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        const chunks: Buffer[] = [];
-        child.stdout.on('data', (c: Buffer) => chunks.push(c));
-        child.on('error', reject);
-        child.on('close', (code) => {
-          if (code !== 0) {
-            resolve('');
-            return;
-          }
-          resolve(Buffer.concat(chunks).toString('utf8'));
-        });
-      });
-      const names = listed.split('\n').map((n) => n.trim()).filter(Boolean);
-      return (
-        names.find((n) => n.includes('postgres') && n.includes('knowledge')) ||
-        names.find((n) => n.includes('postgres')) ||
-        null
-      );
-    })());
-
+  const container = await findPostgresContainer();
   if (!container) {
     throw new AppError({
       code: 'BACKUP_TOOLS_MISSING',
@@ -591,12 +649,18 @@ export async function importDatabaseDump(input: {
     });
   }
 
+  const mode = await resolveRestoreMode();
+  await assertImportPreflight({
+    mode,
+    dumpPath: resolved,
+    databaseUrl: input.databaseUrl,
+  });
+
   // Live API/worker pools hold locks; target may also have newer tables (e.g.
   // workspace_media) that block pg_restore --clean DROP without CASCADE.
   await wipeDatabaseSchemasForImport(input.databaseUrl);
 
-  const hasPgRestore = await which('pg_restore');
-  if (hasPgRestore) {
+  if (mode.kind === 'host') {
     const creds = resolveToolDbCreds(input.databaseUrl);
     const result = await runCommand(
       'pg_restore',
@@ -636,38 +700,10 @@ export async function importDatabaseDump(input: {
         statusCode: 500,
       });
     }
-  } else if (await which('docker')) {
+  } else {
     const dumpBuffer = await fs.readFile(resolved);
     const creds = resolveToolDbCreds(input.databaseUrl);
-    const container =
-      process.env.POSTGRES_CONTAINER ||
-      (await (async () => {
-        const listed = await new Promise<string>((resolve, reject) => {
-          const child = spawn('docker', ['ps', '--format', '{{.Names}}'], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-          const chunks: Buffer[] = [];
-          child.stdout.on('data', (c: Buffer) => chunks.push(c));
-          child.on('error', reject);
-          child.on('close', (code) => {
-            resolve(code === 0 ? Buffer.concat(chunks).toString('utf8') : '');
-          });
-        });
-        const names = listed.split('\n').map((n) => n.trim()).filter(Boolean);
-        return (
-          names.find((n) => n.includes('postgres') && n.includes('knowledge')) ||
-          names.find((n) => n.includes('postgres')) ||
-          null
-        );
-      })());
-    if (!container) {
-      throw new AppError({
-        code: 'BACKUP_TOOLS_MISSING',
-        message:
-          'pg_restore missing and no Postgres container found. Set POSTGRES_CONTAINER or install postgresql-client.',
-        statusCode: 503,
-      });
-    }
+    const container = mode.container;
     await new Promise<void>((resolve, reject) => {
       const child = spawn(
         'docker',
@@ -708,13 +744,6 @@ export async function importDatabaseDump(input: {
           }),
         );
       });
-    });
-  } else {
-    throw new AppError({
-      code: 'BACKUP_TOOLS_MISSING',
-      message:
-        'pg_restore is not available. Install postgresql-client or use Docker Postgres.',
-      statusCode: 503,
     });
   }
 

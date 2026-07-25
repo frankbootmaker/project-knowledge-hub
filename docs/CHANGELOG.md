@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Live Monitoring / `import-db.sh` **import**: wipe `public` (+ `drizzle`) with `DROP SCHEMA … CASCADE` before restore so target-only tables (e.g. `workspace_media`) cannot block `--clean` DROP; fail hard on `cannot drop` / `already exists` restore errors.
 * Dokploy **migrate** one-shot: `/migrate-and-seed.sh` (preflight auth, clear hints); disable healthcheck on migrate; after import, baseline `drizzle.__drizzle_migrations` when tables exist without a journal so redeploy is idempotent.
 * Monitoring **import/export**: `pg_dump`/`pg_restore`/`psql` use discrete `POSTGRES_PASSWORD` (same as migrate) instead of parsing Compose `DATABASE_URL`, avoiding false `28P01` on passwords with special characters.
+* Dokploy **intermittent `28P01`** with an unchanged password: `postgres`, `redis`, `worker`, `migrate` and `db-backup` no longer join the shared external `dokploy-network`. Two apps deploying this stack registered duplicate `postgres`/`redis`/`api` DNS aliases there, so migrate/api could resolve another app's database (and Redis) and be rejected by its password.
+* Live Monitoring / `import-db.sh` **import** no longer wipes first and fails second: preflight checks restore tooling, dump readability (`pg_restore --list`) and credentials (`SELECT 1`) before any `DROP SCHEMA`, so a `28P01` or truncated upload leaves the database unchanged instead of empty.
 * Stale session cookie after DB import caused `/login` ↔ `/dashboard` redirect loop (middleware treated cookie presence as logged-in). Login no longer auto-bounces on cookie alone; `GET /auth/session` returns `{ user: null }` when unauthenticated.
 
 ### Changed
