@@ -412,7 +412,8 @@ async def convert(
     if not data:
         raise HTTPException(status_code=400, detail="empty file")
 
-    content_type = (file.content_type or _guess_content_type(file.filename)).lower()
+    raw_ct = (file.content_type or _guess_content_type(file.filename) or "").lower()
+    content_type = raw_ct.split(";", 1)[0].strip() or "application/octet-stream"
     suffix = Path(file.filename).suffix or ""
 
     warnings: list[str] = []
@@ -422,6 +423,17 @@ async def convert(
 
         images, extract_warnings = _extract_images(path, content_type, file.filename)
         warnings.extend(extract_warnings)
+
+        # Image lane must always expose the original bytes as attachment:0 even
+        # when Content-Type is wrong/missing (proxy/browser quirks).
+        if lane == "image" and not images:
+            images = [
+                _image_entry(
+                    file.filename or f"upload{suffix or '.bin'}",
+                    data,
+                    content_type if content_type in IMAGE_CONTENT_TYPES else None,
+                )
+            ]
 
         try:
             md = _build_markitdown(ocr_engine, ocr_lang)

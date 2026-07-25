@@ -21,7 +21,52 @@ import {
   titleFromImport,
 } from '@project-knowledge-hub/document-import';
 
-const STOREABLE_MEDIA = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const STOREABLE_MEDIA = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+function normalizeImageContentType(
+  declared: string,
+  filename: string,
+  buffer: Buffer,
+): string | null {
+  let contentType = declared.toLowerCase().split(';')[0]?.trim() ?? '';
+  if (contentType === 'image/jpg') contentType = 'image/jpeg';
+  if (STOREABLE_MEDIA.has(contentType)) return contentType;
+
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    return 'image/jpeg';
+  }
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (buffer.length >= 6 && buffer.toString('ascii', 0, 3) === 'GIF') {
+    return 'image/gif';
+  }
+
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.gif') return 'image/gif';
+  return null;
+}
 
 async function readOriginal(input: {
   env: AppEnv;
@@ -62,16 +107,25 @@ async function storeMedia(input: {
   createdBy: string;
   altText?: string;
   warnings?: string[];
+  /** Override MEDIA_MAX_BYTES (document imports may be larger than library uploads). */
+  maxBytes?: number;
 }): Promise<string | null> {
-  let contentType = input.contentType.toLowerCase();
-  if (contentType === 'image/jpg') contentType = 'image/jpeg';
-  if (!STOREABLE_MEDIA.has(contentType)) {
+  const contentType = normalizeImageContentType(
+    input.contentType,
+    input.originalFilename,
+    input.buffer,
+  );
+  if (!contentType) {
+    input.warnings?.push(
+      `Skipped non-storeable image type (${input.contentType || 'unknown'}): ${input.originalFilename}`,
+    );
     return null;
   }
-  if (
-    input.buffer.byteLength === 0 ||
-    input.buffer.byteLength > input.env.MEDIA_MAX_BYTES
-  ) {
+  const maxBytes = input.maxBytes ?? input.env.MEDIA_MAX_BYTES;
+  if (input.buffer.byteLength === 0 || input.buffer.byteLength > maxBytes) {
+    input.warnings?.push(
+      `Skipped image over size limit (${input.buffer.byteLength} > ${maxBytes}): ${input.originalFilename}`,
+    );
     return null;
   }
 
@@ -196,23 +250,22 @@ export async function processDocumentImportConvert(input: {
 
     for (let i = 0; i < converted.images.length; i += 1) {
       const image = converted.images[i]!;
-      let contentType = image.contentType.toLowerCase();
-      if (contentType === 'image/jpg') contentType = 'image/jpeg';
       const bytes = Buffer.from(image.dataBase64, 'base64');
       const mediaId = await storeMedia({
         env: input.env,
         database: input.database,
         blobStore: input.blobStore,
         workspaceId: row.workspaceId,
-        contentType,
+        contentType: image.contentType,
         buffer: bytes,
         originalFilename: image.filename,
         createdBy: row.createdBy,
         altText: path.parse(image.filename).name,
         warnings,
+        // Sidecar may re-encode the same upload; allow import-sized media.
+        maxBytes: input.env.DOCUMENT_IMPORT_MAX_BYTES,
       });
       if (!mediaId) {
-        warnings.push(`Skipped non-storeable image: ${image.filename}`);
         continue;
       }
       mediaByIndex.set(i, { id: mediaId, filename: image.filename });
@@ -223,8 +276,45 @@ export async function processDocumentImportConvert(input: {
       });
     }
 
+    // Image lane: always attach the original upload when the sidecar omitted or
+    // oversized base64 attachments (common for multi‑MB phone photos on Dokploy).
+    let markdownSource = converted.markdown;
+    if (row.lane === 'image' && !mediaByIndex.has(0)) {
+      const mediaId = await storeMedia({
+        env: input.env,
+        database: input.database,
+        blobStore: input.blobStore,
+        workspaceId: row.workspaceId,
+        contentType: row.contentType,
+        buffer,
+        originalFilename: row.originalFilename,
+        createdBy: row.createdBy,
+        altText: path.parse(row.originalFilename).name,
+        warnings,
+        maxBytes: input.env.DOCUMENT_IMPORT_MAX_BYTES,
+      });
+      if (mediaId) {
+        mediaByIndex.set(0, {
+          id: mediaId,
+          filename: row.originalFilename,
+        });
+        await input.database.db.insert(documentImportMedia).values({
+          importId: row.id,
+          workspaceMediaId: mediaId,
+          attachmentIndex: 0,
+        });
+        if (
+          !markdownSource.includes('attachment:0') &&
+          !markdownSource.includes('/api/v1/media/')
+        ) {
+          const alt = path.parse(row.originalFilename).name || 'image';
+          markdownSource = `![${alt}](attachment:0)\n\n${markdownSource}`;
+        }
+      }
+    }
+
     const markdown = sanitizePgText(
-      rewriteAttachmentPlaceholders(converted.markdown, mediaByIndex),
+      rewriteAttachmentPlaceholders(markdownSource, mediaByIndex),
     );
     const contentWarnings = detectContentSecrets(markdown);
     const title = sanitizePgText(

@@ -13,7 +13,12 @@ import {
 } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 
-const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
 
 export function isAllowedMediaContentType(value: string): boolean {
   return ALLOWED_TYPES.has(value);
