@@ -538,12 +538,12 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
       preferredPath:
         'begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload',
       workflow: [
-        'DEFAULT for all LLM/MCP/ChatGPT clients: begin_workspace_media_upload → append_workspace_media_upload (~8000-char raw base64 chunks, max 12000) → finalize_workspace_media_upload. Do not use upload_workspace_media.',
-        'Avoid upload_workspace_media from LLM clients — single-shot base64 often fails or is truncated; it remains only for tiny files or non-LLM integrations.',
-        'finalize (or upload) returns media.markdownSnippet — paste into contentMarkdown, or set knowledgeRecordId + insertIntoRecord=true on begin to append automatically.',
+        'DEFAULT for ChatGPT/OpenAPI and preferred for MCP: begin_workspace_media_upload → append_workspace_media_upload (~8000-char raw base64 chunks, max 12000) → finalize_workspace_media_upload.',
+        'ChatGPT Actions OpenAPI omits upload_workspace_media (single-shot fails on large base64). Native MCP may still offer it for tiny files.',
+        'finalize returns media.markdownSnippet — paste into contentMarkdown, or set knowledgeRecordId + insertIntoRecord=true on begin to append automatically into the .md body.',
         'Optional knowledgeRecordId links the asset to a record; get_knowledge_record returns linked media[].',
         'Requires knowledge:write, actingUserId, and a non-empty workspace allowlist.',
-        'ChatGPT Custom GPT Actions: after hub upgrades, re-import GET /api/v1/llm/openapi.json so begin/append/finalize appear under Available actions.',
+        'ChatGPT Custom GPT Actions: after hub upgrades, re-import GET /api/v1/llm/openapi.json so begin/append/finalize appear (and upload_workspace_media disappears if it was listed before).',
       ],
     },
     guidance: [

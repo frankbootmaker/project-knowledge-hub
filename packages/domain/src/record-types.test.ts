@@ -56,7 +56,10 @@ describe('record types catalog', () => {
     expect(meta.workspaceMedia.tools).toContain('upload_workspace_media');
     expect(meta.workspaceMedia.tools).toContain('begin_workspace_media_upload');
     expect(meta.workspaceMedia.preferredPath).toContain('begin_workspace_media_upload');
-    expect(meta.workspaceMedia.workflow[0]).toMatch(/Do not use upload_workspace_media/);
+    expect(meta.workspaceMedia.workflow[0]).toMatch(/begin_workspace_media_upload/);
+    expect(meta.workspaceMedia.workflow.some((line) => line.includes('omits upload_workspace_media'))).toBe(
+      true,
+    );
     expect(meta.workspaceMedia.contentTypes).toContain('image/png');
     expect(
       meta.guidance.some((line) => line.includes('finalize_workspace_media_upload')),

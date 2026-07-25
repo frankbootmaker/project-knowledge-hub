@@ -1090,7 +1090,7 @@
     "statusInvited": "meghívott",
     "writeScopeHint": "A knowledge:write hatókörhöz megbízott felhasználó és legalább egy munkaterület-engedélyezés szükséges.",
     "forbidden": "Rendszergazdai hozzáférés szükséges.",
-    "monitoring": "Monitorozás",
+    "monitoring": "Felügyelet",
     "monitoringNavHealth": "Állapot",
     "monitoringNavUsage": "Használat",
     "monitoringNavMaintenance": "Karbantartás",

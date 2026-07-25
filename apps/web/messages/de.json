@@ -1090,7 +1090,7 @@
     "statusInvited": "eingeladen",
     "writeScopeHint": "knowledge:write erfordert einen ausführenden Benutzer und mindestens einen erlaubten Arbeitsbereich.",
     "forbidden": "Administratorzugriff erforderlich.",
-    "monitoring": "Monitoring",
+    "monitoring": "Überwachung",
     "monitoringNavHealth": "Zustand",
     "monitoringNavUsage": "Nutzung",
     "monitoringNavMaintenance": "Wartung",
