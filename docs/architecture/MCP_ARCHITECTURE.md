@@ -46,7 +46,7 @@ This pairing protocol is **optional / advanced** — mainstream clients (Cursor,
 
 Default (read): `projects:read`, `systems:read`, `knowledge:read`, `knowledge:search`, `provenance:read`
 
-Opt-in write: `knowledge:write` — draft create/update only; requires non-empty `allowedWorkspaceIds` and `actingUserId`
+Opt-in write: `knowledge:write` — draft create/update knowledge records **and** workspace media upload/delete; requires non-empty `allowedWorkspaceIds` and `actingUserId`. Images: `upload_workspace_media` → embed `media.markdownSnippet` (never `data:` URIs); optional `insertIntoRecord` appends into a linked record.
 
 Elevated catalogue (planned): `catalogue:write` — propose/confirm create/update for projects and systems in allowlisted workspaces. See [ADR-014](../adr/ADR-014-elevated-api-client-capabilities.md). Higher tiers (`workspace:write`, archive, `org:admin`) are deferred.
 

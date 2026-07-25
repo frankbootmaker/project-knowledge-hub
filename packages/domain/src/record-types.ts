@@ -418,6 +418,12 @@ export type KnowledgeRecordMetadata = {
     optionalFields: string[];
     fields: KnowledgeRecordFieldGuide[];
   };
+  workspaceMedia: {
+    tools: string[];
+    contentTypes: string[];
+    markdownPattern: string;
+    workflow: string[];
+  };
   guidance: string[];
 };
 
@@ -494,8 +500,9 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
         sourceProvider: 'mcp',
         notes: [
           'Call list_record_metadata before create_knowledge_record to pick recordType.',
-          'MCP cannot set lifecycleStatus or sourceOfTruthMode; humans verify/mark-current.',
+          'MCP cannot set lifecycleStatus or sourceOfTruthMode; humans approve/mark-current.',
           'Prefer specific planning types (business-idea, vision, plan, initiative) over other.',
+          'Do not embed data:image/...;base64 URIs in Markdown — use upload_workspace_media.',
         ],
       },
     },
@@ -515,10 +522,26 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
       ],
       fields: CREATE_FIELDS.filter((field) => field.appliesTo.includes('update')),
     },
+    workspaceMedia: {
+      tools: [
+        'upload_workspace_media',
+        'list_workspace_media',
+        'delete_workspace_media',
+      ],
+      contentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      markdownPattern: '![alt text](/api/v1/media/{mediaId})',
+      workflow: [
+        'Call upload_workspace_media with workspaceId, contentType, and raw contentBase64 (no data: prefix).',
+        'Response includes media.markdownSnippet — paste it into contentMarkdown via create/update, or pass knowledgeRecordId + insertIntoRecord=true to append automatically.',
+        'Optional knowledgeRecordId links the asset to a record; get_knowledge_record returns linked media[].',
+        'Requires knowledge:write, actingUserId, and a non-empty workspace allowlist.',
+      ],
+    },
     guidance: [
       'Use this hub as a ledger across planning, delivery, operations, and vision.',
       'Pick the most specific recordType; use note for unstructured working notes.',
       'Attach projectId/systemId when the record is scoped to catalogue entities.',
+      'For charts/screenshots: upload_workspace_media then embed media.markdownSnippet — never data: URIs.',
     ],
   };
 }

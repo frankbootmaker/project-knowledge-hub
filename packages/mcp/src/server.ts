@@ -72,10 +72,12 @@ export type McpToolHandlers = {
   uploadWorkspaceMedia: (input: {
     workspaceId: string;
     contentBase64: string;
-    contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+    contentType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
     filename?: string;
     alt?: string;
     knowledgeRecordId?: string;
+    /** When true with knowledgeRecordId, append markdownSnippet into the record body. */
+    insertIntoRecord?: boolean;
   }) => Promise<unknown>;
   listWorkspaceMedia: (input: {
     workspaceId: string;
@@ -304,7 +306,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including truncated markdown content',
+    'Retrieve a knowledge record including truncated markdown content and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs.',
     { recordId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -330,7 +332,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_record_metadata',
-    'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, and MCP write constraints. Call before create_knowledge_record.',
+    'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, MCP write constraints, and the workspace media (image embed) workflow. Call before create_knowledge_record.',
     {},
     async () =>
       wrap('list_record_metadata', 'knowledge:read', () => handlers.listRecordMetadata())(),
@@ -338,7 +340,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_knowledge_record',
-    'Create a draft knowledge record (requires knowledge:write; humans must verify/mark-current). Prefer list_record_metadata first to choose recordType.',
+    'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: upload_workspace_media first, then include the returned markdownSnippet in contentMarkdown — do not use data:image base64 URIs.',
     {
       workspaceId: z.string().uuid(),
       title: z.string().min(1).max(300),
@@ -368,7 +370,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_knowledge_record',
-    'Update a knowledge record as draft (requires knowledge:write and a changeMessage)',
+    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). To add images, call upload_workspace_media (optionally with insertIntoRecord=true) and paste media.markdownSnippet into contentMarkdown — do not use data:image URIs.',
     {
       recordId: z.string().uuid(),
       changeMessage: z.string().min(1).max(500),
@@ -391,14 +393,20 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'upload_workspace_media',
-    'Upload a JPEG/PNG/WebP image to the workspace media library. Returns mediaId, url, and markdownSnippet to embed in knowledge Markdown. Requires knowledge:write.',
+    'Store an image in durable workspace media and return { media: { id, url, markdownSnippet } }. Paste markdownSnippet into knowledge Markdown (or set insertIntoRecord=true with knowledgeRecordId to append it automatically). contentBase64 must be raw base64 without a data: prefix. Types: JPEG/PNG/WebP/GIF. Requires knowledge:write.',
     {
       workspaceId: z.string().uuid(),
       contentBase64: z.string().min(1).max(10_000_000),
-      contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+      contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
       filename: z.string().min(1).max(200).optional(),
       alt: z.string().max(300).optional(),
       knowledgeRecordId: z.string().uuid().optional(),
+      insertIntoRecord: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true, requires knowledgeRecordId and appends media.markdownSnippet to that record as a new draft version',
+        ),
     },
     async (args) =>
       wrap(
@@ -414,7 +422,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspace_media',
-    'List recent workspace media (JPEG/PNG/WebP) with urls and markdown snippets. Requires knowledge:read.',
+    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls and markdown snippets for embedding. Requires knowledge:read.',
     {
       workspaceId: z.string().uuid(),
       knowledgeRecordId: z.string().uuid().optional(),

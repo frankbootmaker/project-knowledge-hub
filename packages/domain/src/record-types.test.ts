@@ -53,5 +53,10 @@ describe('record types catalog', () => {
       'ai_generated_draft',
     );
     expect(meta.recordTypes.some((entry) => entry.value === 'vision')).toBe(true);
+    expect(meta.workspaceMedia.tools).toContain('upload_workspace_media');
+    expect(meta.workspaceMedia.contentTypes).toContain('image/png');
+    expect(meta.guidance.some((line) => line.includes('upload_workspace_media'))).toBe(
+      true,
+    );
   });
 });

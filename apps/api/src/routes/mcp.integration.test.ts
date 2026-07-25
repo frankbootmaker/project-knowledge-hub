@@ -248,6 +248,8 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(names).toContain('list_record_metadata');
     expect(names).toContain('create_knowledge_record');
     expect(names).toContain('update_knowledge_record');
+    expect(names).toContain('upload_workspace_media');
+    expect(names).toContain('list_workspace_media');
 
     const search = await mcpCall(app!, readToken, 3, 'tools/call', {
       name: 'search_knowledge',
@@ -378,5 +380,76 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     };
     expect(body.result?.isError).toBe(true);
     expect(body.result?.content?.[0]?.text ?? '').toMatch(/not allowed|Workspace/i);
+  });
+
+  it('uploads workspace media and can insert markdown into a record', async () => {
+    const create = await mcpCall(app!, writeToken, 40, 'tools/call', {
+      name: 'create_knowledge_record',
+      arguments: {
+        workspaceId,
+        title: 'Media embed draft',
+        recordType: 'note',
+        contentMarkdown: '# Chart draft\n',
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const createBody = create.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(createBody.result?.isError).toBeFalsy();
+    const created = JSON.parse(createBody.result?.content?.[0]?.text ?? '{}') as {
+      knowledgeRecord?: { id: string };
+    };
+    const recordId = created.knowledgeRecord?.id;
+    expect(recordId).toBeTruthy();
+
+    // 1x1 PNG
+    const pngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    const upload = await mcpCall(app!, writeToken, 41, 'tools/call', {
+      name: 'upload_workspace_media',
+      arguments: {
+        workspaceId,
+        contentBase64: pngBase64,
+        contentType: 'image/png',
+        filename: 'pixel.png',
+        alt: 'Tiny chart',
+        knowledgeRecordId: recordId,
+        insertIntoRecord: true,
+      },
+    });
+    expect(upload.statusCode).toBe(200);
+    const uploadBody = upload.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(uploadBody.result?.isError).toBeFalsy();
+    const uploaded = JSON.parse(uploadBody.result?.content?.[0]?.text ?? '{}') as {
+      media?: { id: string; markdownSnippet: string; url: string };
+      insertedIntoRecord?: boolean;
+    };
+    expect(uploaded.media?.id).toBeTruthy();
+    expect(uploaded.media?.markdownSnippet).toContain('/api/v1/media/');
+    expect(uploaded.insertedIntoRecord).toBe(true);
+
+    const get = await mcpCall(app!, writeToken, 42, 'tools/call', {
+      name: 'get_knowledge_record',
+      arguments: { recordId },
+    });
+    expect(get.statusCode).toBe(200);
+    const getBody = get.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(getBody.result?.isError).toBeFalsy();
+    const detail = JSON.parse(getBody.result?.content?.[0]?.text ?? '{}') as {
+      knowledgeRecord?: {
+        contentMarkdown: string;
+        media?: Array<{ id: string; markdownSnippet: string }>;
+      };
+    };
+    expect(detail.knowledgeRecord?.contentMarkdown).toContain(uploaded.media!.url);
+    expect(detail.knowledgeRecord?.media?.some((m) => m.id === uploaded.media!.id)).toBe(
+      true,
+    );
   });
 });

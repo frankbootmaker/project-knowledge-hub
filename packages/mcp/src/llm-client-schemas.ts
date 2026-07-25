@@ -141,7 +141,8 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     },
     {
       name: 'get_knowledge_record',
-      description: 'Retrieve a knowledge record including truncated markdown content',
+      description:
+        'Retrieve a knowledge record including truncated markdown content and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}).',
       body: {
         type: 'object',
         required: ['recordId'],
@@ -160,7 +161,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'list_record_metadata',
       description:
-        'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, and MCP write constraints. Call before create_knowledge_record.',
+        'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, MCP write constraints, and the workspace media (image embed) workflow. Call before create_knowledge_record.',
       body: {
         type: 'object',
         properties: {},
@@ -169,7 +170,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'list_workspace_media',
       description:
-        'List recent workspace media (JPEG/PNG/WebP) with urls and markdown snippets for embedding in knowledge records.',
+        'List recent workspace media (JPEG/PNG/WebP/GIF) with urls and markdown snippets for embedding in knowledge records.',
       body: {
         type: 'object',
         required: ['workspaceId'],
@@ -195,7 +196,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'create_knowledge_record',
       description:
-        'Create a draft knowledge record (requires knowledge:write; humans must verify/mark-current). Prefer list_record_metadata first to choose recordType.',
+        'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: upload_workspace_media then include media.markdownSnippet in contentMarkdown — never data:image URIs.',
       write: true,
       body: {
         type: 'object',
@@ -227,7 +228,8 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     },
     {
       name: 'update_knowledge_record',
-      description: 'Update a knowledge record as draft (requires knowledge:write and a changeMessage)',
+      description:
+        'Update a knowledge record as draft (requires knowledge:write and a changeMessage). For images use upload_workspace_media (optionally insertIntoRecord=true) and paste media.markdownSnippet — never data:image URIs.',
       write: true,
       body: {
         type: 'object',
@@ -259,7 +261,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'upload_workspace_media',
       description:
-        'Upload a JPEG/PNG/WebP image to the workspace media library. Returns mediaId, url, and markdownSnippet to paste into contentMarkdown. Requires knowledge:write.',
+        'Store an image in durable workspace media and return { media: { id, url, markdownSnippet } }. Paste markdownSnippet into knowledge Markdown, or set insertIntoRecord=true with knowledgeRecordId to append it automatically. Raw base64 only (no data: prefix). Types: JPEG/PNG/WebP/GIF. Requires knowledge:write.',
       write: true,
       body: {
         type: 'object',
@@ -272,12 +274,17 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
           }),
           contentType: {
             type: 'string',
-            enum: ['image/jpeg', 'image/png', 'image/webp'],
+            enum: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
             description: 'Image MIME type',
           },
           filename: stringProp('Optional original filename', { maxLength: 200 }),
           alt: stringProp('Optional alt text for Markdown', { maxLength: 300 }),
           knowledgeRecordId: uuidProp('Optional knowledge record to link'),
+          insertIntoRecord: {
+            type: 'boolean',
+            description:
+              'When true, requires knowledgeRecordId and appends media.markdownSnippet to that record as a draft version',
+          },
         },
       },
     },

@@ -375,6 +375,11 @@ export function createMcpToolHandlers(
         ipAddress,
       });
       const reviewedByUser = await resolveReviewedByUser(app.database, record);
+      const mediaRows = await listWorkspaceMedia(app.database, {
+        workspaceId: record.workspaceId,
+        knowledgeRecordId: record.id,
+        limit: 50,
+      });
       return {
         knowledgeRecord: {
           id: record.id,
@@ -395,6 +400,7 @@ export function createMcpToolHandlers(
           reviewedBy: record.reviewedBy,
           reviewedByUser,
           updatedAt: record.updatedAt.toISOString(),
+          media: mediaRows.map(toPublicMedia),
         },
       };
     },
@@ -579,6 +585,14 @@ export function createMcpToolHandlers(
       assertWriteWorkspaceAllowed(client, input.workspaceId);
       const actingUserId = requireActingUserId(client);
 
+      if (input.insertIntoRecord && !input.knowledgeRecordId) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'insertIntoRecord requires knowledgeRecordId',
+          statusCode: 400,
+        });
+      }
+
       let buffer: Buffer;
       try {
         buffer = Buffer.from(input.contentBase64, 'base64');
@@ -611,6 +625,7 @@ export function createMcpToolHandlers(
         maxBytes: app.env.MEDIA_MAX_BYTES,
         blobStore,
       });
+      const media = toPublicMedia(row);
 
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -624,12 +639,87 @@ export function createMcpToolHandlers(
           knowledgeRecordId: row.knowledgeRecordId,
           contentType: row.contentType,
           byteSize: row.byteSize,
+          insertIntoRecord: Boolean(input.insertIntoRecord),
           via: 'mcp',
         },
         ipAddress: ipAddress ?? null,
       });
 
-      return { media: toPublicMedia(row) };
+      if (!input.insertIntoRecord || !input.knowledgeRecordId) {
+        return {
+          media,
+          insertedIntoRecord: false,
+          hint: 'Paste media.markdownSnippet into create_knowledge_record or update_knowledge_record contentMarkdown. Or re-call with insertIntoRecord=true and knowledgeRecordId.',
+        };
+      }
+
+      const [existing] = await app.database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(
+          and(
+            eq(knowledgeRecords.id, input.knowledgeRecordId),
+            isNull(knowledgeRecords.archivedAt),
+          ),
+        )
+        .limit(1);
+      if (!existing) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found for insertIntoRecord',
+          statusCode: 404,
+        });
+      }
+      if (existing.workspaceId !== input.workspaceId) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'knowledgeRecordId is not in the given workspace',
+          statusCode: 400,
+        });
+      }
+
+      const alreadyEmbedded = existing.contentMarkdown.includes(media.url);
+      const nextContent = alreadyEmbedded
+        ? existing.contentMarkdown
+        : `${existing.contentMarkdown.replace(/\s*$/, '')}\n\n${media.markdownSnippet}\n`;
+
+      const updated = alreadyEmbedded
+        ? null
+        : await updateKnowledgeRecord(
+            app,
+            existing.id,
+            {
+              contentMarkdown: nextContent,
+              changeMessage: `Embed media ${media.id}`,
+              lifecycleStatus: 'draft',
+              sourceOfTruthMode: 'ai_generated_draft',
+            },
+            {
+              actorType: 'api_client',
+              actorId: client.id,
+              userId: actingUserId,
+            },
+            ipAddress,
+          );
+
+      return {
+        media,
+        insertedIntoRecord: !alreadyEmbedded,
+        alreadyEmbedded,
+        knowledgeRecord: updated
+          ? {
+              id: updated.knowledgeRecord.id,
+              slug: updated.knowledgeRecord.slug,
+              currentVersionNumber: updated.knowledgeRecord.currentVersionNumber,
+              lifecycleStatus: updated.knowledgeRecord.lifecycleStatus,
+            }
+          : {
+              id: existing.id,
+              slug: existing.slug,
+              currentVersionNumber: existing.currentVersionNumber,
+              lifecycleStatus: existing.lifecycleStatus,
+            },
+      };
     },
 
     async listWorkspaceMedia(input) {
