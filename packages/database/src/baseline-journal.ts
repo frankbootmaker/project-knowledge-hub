@@ -7,7 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
-import { resolveDatabaseUrl } from '@project-knowledge-hub/config';
+import {
+  loadNearestDotEnv,
+  resolveDatabaseUrl,
+} from '@project-knowledge-hub/config';
 import { resolveMigrationsFolder } from './migrations-path.js';
 
 type JournalEntry = {
@@ -27,6 +30,10 @@ export type BaselineJournalResult =
 
 /** Newest-first probes: first match wins as the highest applied migration idx. */
 const SENTINELS: { idx: number; sql: string }[] = [
+  {
+    idx: 24,
+    sql: `SELECT (to_regclass('public.document_imports') IS NOT NULL) AS ok`,
+  },
   {
     idx: 23,
     sql: `SELECT EXISTS (
@@ -107,6 +114,9 @@ function hashMigrationSql(folder: string, tag: string): string {
 export async function ensureMigrationJournalAfterRestore(
   source: NodeJS.ProcessEnv = process.env,
 ): Promise<BaselineJournalResult> {
+  if (source === process.env) {
+    loadNearestDotEnv();
+  }
   const databaseUrl = resolveDatabaseUrl(source);
   const folder = resolveMigrationsFolder();
   const entries = readJournal(folder);

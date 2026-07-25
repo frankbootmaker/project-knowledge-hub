@@ -28,6 +28,13 @@ describe('record types catalog', () => {
     }
   });
 
+  it('includes invoice', () => {
+    expect(recordTypeSchema.parse('invoice')).toBe('invoice');
+    expect(RECORD_TYPE_CATALOG.some((entry) => entry.value === 'invoice')).toBe(
+      true,
+    );
+  });
+
   it('keeps catalog values aligned with the enum', () => {
     expect(RECORD_TYPE_CATALOG.map((entry) => entry.value).sort()).toEqual(
       [...RECORD_TYPES].sort(),

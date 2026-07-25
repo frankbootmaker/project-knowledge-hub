@@ -54,8 +54,8 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | --- | --- | --- |
 | `WEB_URL` | runtime | Public HTTPS origin |
 | (web rewrite target) | **build** (web) | Hardcoded `http://api:3101` — do not override with localhost |
-| `POSTGRES_*` | runtime | Compose builds `DATABASE_URL` as `postgres://…@postgres:5432/…` |
-| (Redis) | runtime | Fixed `redis://redis:6379` on the Compose network |
+| `POSTGRES_*` | runtime | Compose builds `DATABASE_URL` via host `kh-postgres` |
+| (Redis) | runtime | Fixed `redis://kh-redis:6379` on the Compose network |
 | `SESSION_SECRET` | runtime | Long random secret |
 | `APP_ENV` | runtime | Use `staging` for Dev/UAT |
 | `NODE_ENV` | runtime | Always `production` in containers |
@@ -64,6 +64,8 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | `MAIL_DRIVER` | runtime | `console` (default), `smtp`, or `resend` |
 | `SMTP_*` / `RESEND_API_KEY` / `MCP_PUBLIC_URL` | runtime | Set only when used — omit empty values |
 | `BOOTSTRAP_ADMIN_*` | migrate one-shot (seed step) | Optional first admin |
+| `MARKITDOWN_URL` | runtime | Default `http://kh-markitdown:8080` (document/image import) |
+| `VISION_LLM_*` | runtime + `kh-markitdown` | Optional OpenAI-compatible vision for import captions |
 
 **Warnings**
 
@@ -81,7 +83,7 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 4. Point a domain at the **web** service (port **3100**); enable HTTPS.
 5. Set `WEB_URL` to that HTTPS origin. Do not expose Postgres or Redis.
 
-**Networking:** `compose.dokploy.yaml` attaches every service to Compose `default` **and** external `dokploy-network`. That keeps `web` → `api:3101` rewrites working after Dokploy injects Traefik on `web`. If `/api/v1/*` returns a plain-text `Internal Server Error` while `/login` works, `web` cannot reach `api`. Redeploy after pulling this compose, or on the Dokploy host temporarily:
+**Networking:** Only `web` and `api` join external `dokploy-network` (Traefik). Postgres/Redis/worker/db-backup/`kh-markitdown` stay on the project `default` network with unique hostnames (`kh-postgres`, `kh-redis`, `kh-markitdown`). If `/api/v1/*` returns a plain-text `Internal Server Error` while `/login` works, `web` cannot reach `api`. Redeploy after pulling this compose, or on the Dokploy host temporarily:
 
 ```bash
 # Inspect which networks each container has, then bridge them, e.g.:

@@ -17,17 +17,20 @@ import {
 } from '@project-knowledge-hub/embeddings';
 import { syncGitRepositoryConnection } from '@project-knowledge-hub/git-connectors';
 import {
+  createDocumentImportConvertQueue,
   createEmbeddingReindexQueue,
   createGitSyncQueue,
   enqueueEmbeddingReindexJob,
   enqueueGitSyncJob,
   ensureGitSyncSafetySchedule,
+  DOCUMENT_IMPORT_CONVERT_QUEUE,
   EMBEDDING_REINDEX_QUEUE,
   GIT_SYNC_JOB,
   GIT_SYNC_QUEUE,
   GIT_SYNC_SAFETY_JOB,
   isEmbeddingWorkspaceReindexJob,
   isGitSyncSafetyJob,
+  type DocumentImportConvertJobPayload,
   type EmbeddingReindexQueueJobData,
   type GitSyncQueueJobData,
 } from '@project-knowledge-hub/jobs';
@@ -37,6 +40,7 @@ import { resolveWorkerMailConfig } from './resolve-mail.js';
 import { escalateStaleSignupApprovals } from './signup-pending-escalate.js';
 import { purgeExpiredAuditEvents } from './audit-retention.js';
 import { runOpsAlerts } from './ops-alerts.js';
+import { processDocumentImportConvert } from './document-import-convert.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -56,12 +60,15 @@ async function main(): Promise<void> {
   let shuttingDown = false;
   let gitWorker: Worker<GitSyncQueueJobData> | null = null;
   let embeddingWorker: Worker<EmbeddingReindexQueueJobData> | null = null;
+  let documentImportWorker: Worker<DocumentImportConvertJobPayload> | null =
+    null;
   let offsiteTimer: ReturnType<typeof setInterval> | null = null;
   let signupEscalateTimer: ReturnType<typeof setInterval> | null = null;
   let backupStaleAlertTimer: ReturnType<typeof setInterval> | null = null;
   let auditRetentionTimer: ReturnType<typeof setInterval> | null = null;
   const gitSyncQueue = createGitSyncQueue(env.REDIS_URL);
   const embeddingQueue = createEmbeddingReindexQueue(env.REDIS_URL);
+  const documentImportQueue = createDocumentImportConvertQueue(env.REDIS_URL);
   const embeddingConfig = embeddingConfigFromEnv(env);
   const embeddingProvider = createEmbeddingProvider(embeddingConfig);
 
@@ -91,8 +98,12 @@ async function main(): Promise<void> {
       if (embeddingWorker) {
         await embeddingWorker.close();
       }
+      if (documentImportWorker) {
+        await documentImportWorker.close();
+      }
       await gitSyncQueue.close();
       await embeddingQueue.close();
+      await documentImportQueue.close();
       await redis.quit();
       await database.close();
       logger.info('Worker shutdown complete');
@@ -259,6 +270,36 @@ async function main(): Promise<void> {
             : undefined,
       },
       'Embedding reindex job failed',
+    );
+  });
+
+  documentImportWorker = new Worker<DocumentImportConvertJobPayload>(
+    DOCUMENT_IMPORT_CONVERT_QUEUE,
+    async (job) => {
+      const { store: blobStore } = await resolveWorkerBlobStore(database, env);
+      await processDocumentImportConvert({
+        env,
+        database,
+        blobStore,
+        importId: job.data.importId,
+        log: logger,
+      });
+      return { importId: job.data.importId };
+    },
+    {
+      connection: { url: env.REDIS_URL, maxRetriesPerRequest: null },
+      concurrency: 1,
+    },
+  );
+
+  documentImportWorker.on('failed', (job, error) => {
+    logger.error(
+      {
+        jobId: job?.id,
+        err: error,
+        importId: job?.data?.importId,
+      },
+      'Document import convert job failed',
     );
   });
 

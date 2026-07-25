@@ -50,6 +50,39 @@ export function loadNearestDotEnv(startDir = process.cwd()): void {
   }
 }
 
+/**
+ * Nearest monorepo root (pnpm-workspace.yaml). Used so relative data dirs like
+ * `./data/imports` resolve the same for api/worker regardless of package cwd.
+ */
+export function findWorkspaceRoot(startDir = process.cwd()): string {
+  let current = path.resolve(startDir);
+  for (let i = 0; i < 8; i += 1) {
+    if (
+      existsSync(path.join(current, 'pnpm-workspace.yaml')) ||
+      existsSync(path.join(current, 'pnpm-workspace.yml'))
+    ) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  return path.resolve(startDir);
+}
+
+/** Absolute paths stay as-is; relative paths resolve against the workspace root. */
+export function resolveWorkspaceDataDir(
+  dir: string,
+  workspaceRoot = findWorkspaceRoot(),
+): string {
+  if (path.isAbsolute(dir)) {
+    return dir;
+  }
+  return path.resolve(workspaceRoot, dir);
+}
+
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   APP_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
@@ -130,6 +163,8 @@ export const envSchema = z.object({
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
   /** Workspace knowledge media (JPEG/PNG/WebP) when BlobStore is disabled. */
   MEDIA_UPLOAD_DIR: z.string().min(1).default('./data/media'),
+  /** Original files for document/image import (local fallback when BlobStore disabled). */
+  DOCUMENT_IMPORT_DIR: z.string().min(1).default('./data/imports'),
   MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
   /** Ops-0/NF-011: Postgres dump directory (Compose mounts volume here on api). */
   BACKUP_DIR: z.string().min(1).default('./backups'),
@@ -274,6 +309,27 @@ export const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  /** MarkItDown convert sidecar base URL (empty = document import disabled). */
+  MARKITDOWN_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
+  MARKITDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+  DOCUMENT_IMPORT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(26_214_400),
+  /** OpenAI-compatible vision LLM for MarkItDown image descriptions (optional). */
+  VISION_LLM_BASE_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
+  VISION_LLM_API_KEY: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  VISION_LLM_MODEL: z.string().min(1).default('gpt-4o-mini'),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -296,7 +352,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       .join('; ');
     throw new Error(`Invalid environment configuration: ${details}`);
   }
-  const env = parsed.data;
+  let env = parsed.data;
   if (env.MAIL_DRIVER === 'smtp' && !env.SMTP_HOST) {
     throw new Error('Invalid environment configuration: SMTP_HOST is required when MAIL_DRIVER=smtp');
   }
@@ -307,10 +363,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   }
   if (env.EMBEDDING_PROVIDER === 'ollama' && !env.EMBEDDING_BASE_URL) {
     // Default local Ollama endpoint when unset
-    return {
-      ...env,
-      EMBEDDING_BASE_URL: 'http://127.0.0.1:11434',
-    };
+    env = { ...env, EMBEDDING_BASE_URL: 'http://127.0.0.1:11434' };
   }
   if (
     env.EMBEDDING_PROVIDER === 'openai_compatible' &&
@@ -332,7 +385,19 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       );
     }
   }
-  return env;
+
+  // Relative upload/backup dirs must be shared across api + worker (pnpm package cwd differs).
+  const workspaceRoot = findWorkspaceRoot();
+  return {
+    ...env,
+    AVATAR_UPLOAD_DIR: resolveWorkspaceDataDir(env.AVATAR_UPLOAD_DIR, workspaceRoot),
+    MEDIA_UPLOAD_DIR: resolveWorkspaceDataDir(env.MEDIA_UPLOAD_DIR, workspaceRoot),
+    DOCUMENT_IMPORT_DIR: resolveWorkspaceDataDir(
+      env.DOCUMENT_IMPORT_DIR,
+      workspaceRoot,
+    ),
+    BACKUP_DIR: resolveWorkspaceDataDir(env.BACKUP_DIR, workspaceRoot),
+  };
 }
 
 export function embeddingConfigFromEnv(env: AppEnv) {

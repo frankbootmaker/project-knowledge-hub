@@ -1,5 +1,6 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadEnv } from './index.js';
+import { findWorkspaceRoot, loadEnv, resolveWorkspaceDataDir } from './index.js';
 
 describe('loadEnv', () => {
   it('parses required configuration', () => {
@@ -21,6 +22,24 @@ describe('loadEnv', () => {
     expect(env.SESSION_COOKIE_NAME).toBe('kh_session');
     expect(env.MAIL_DRIVER).toBe('console');
     expect(env.AUTH_PASSWORD_RESET_TTL_SECONDS).toBe(3600);
+    expect(path.isAbsolute(env.DOCUMENT_IMPORT_DIR)).toBe(true);
+    expect(env.DOCUMENT_IMPORT_DIR).toBe(
+      path.join(findWorkspaceRoot(), 'data', 'imports'),
+    );
+  });
+
+  it('keeps absolute data dirs unchanged', () => {
+    const env = loadEnv({
+      NODE_ENV: 'test',
+      APP_ENV: 'test',
+      WEB_URL: 'http://localhost:3100',
+      API_URL: 'http://localhost:3101',
+      DATABASE_URL: 'postgres://knowledge_hub:knowledge_hub@127.0.0.1:5432/knowledge_hub',
+      REDIS_URL: 'redis://127.0.0.1:6379',
+      SESSION_SECRET: 'test-session-secret-at-least-32-chars',
+      DOCUMENT_IMPORT_DIR: '/var/lib/kh/imports',
+    });
+    expect(env.DOCUMENT_IMPORT_DIR).toBe('/var/lib/kh/imports');
   });
 
   it('rejects missing database url', () => {
@@ -32,5 +51,14 @@ describe('loadEnv', () => {
         SESSION_SECRET: 'test-session-secret-at-least-32-chars',
       }),
     ).toThrow(/Invalid environment configuration/);
+  });
+});
+
+describe('resolveWorkspaceDataDir', () => {
+  it('resolves relative paths against workspace root', () => {
+    const root = '/tmp/kh-root';
+    expect(resolveWorkspaceDataDir('./data/imports', root)).toBe(
+      path.join(root, 'data', 'imports'),
+    );
   });
 });

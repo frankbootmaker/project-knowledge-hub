@@ -34,6 +34,7 @@ export const RECORD_TYPES = [
   'vision',
   'plan',
   'initiative',
+  'invoice',
   'note',
   'other',
 ] as const;
@@ -233,6 +234,13 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
     category: 'planning',
     label: 'Initiative',
     description: 'Multi-workstream initiative linking plans, delivery, and ops.',
+  },
+  {
+    value: 'invoice',
+    category: 'operations',
+    label: 'Invoice',
+    description:
+      'Vendor or customer invoice: amounts, dates, parties, and payment references.',
   },
   {
     value: 'note',

@@ -58,6 +58,7 @@ services:
       API_URL: http://localhost:3101
       LOG_LEVEL: info
       BACKUP_DIR: /backups
+      MARKITDOWN_URL: ${MARKITDOWN_URL:-http://kh-markitdown:8080}
     volumes:
       - knowledge_hub_dev_backups:/backups
     ports:
@@ -101,6 +102,7 @@ services:
       WEB_PORT: 3100
       API_PORT: 3101
       LOG_LEVEL: info
+      MARKITDOWN_URL: ${MARKITDOWN_URL:-http://kh-markitdown:8080}
     depends_on:
       redis:
         condition: service_healthy
@@ -144,6 +146,37 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    networks:
+      - knowledge_hub_dev_net
+
+  # Document/image → Markdown (MarkItDown). Used by api/worker document-import jobs.
+  # docker compose --profile markitdown up -d kh-markitdown
+  # Or with full stack: docker compose --profile full --profile markitdown up -d
+  kh-markitdown:
+    profiles: ['markitdown', 'full']
+    build:
+      context: ./infrastructure/markitdown
+      dockerfile: Dockerfile
+    container_name: knowledge-hub-dev-kh-markitdown
+    restart: unless-stopped
+    environment:
+      VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
+      VISION_LLM_API_KEY: ${VISION_LLM_API_KEY:-}
+      VISION_LLM_MODEL: ${VISION_LLM_MODEL:-gpt-4o-mini}
+    ports:
+      - '127.0.0.1:8088:8080'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'curl',
+          '-fsS',
+          'http://127.0.0.1:8080/health',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
     networks:
       - knowledge_hub_dev_net
 

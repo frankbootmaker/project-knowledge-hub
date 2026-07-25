@@ -17,6 +17,7 @@ coverage
 # Local Postgres dumps (Ops-0 / NF-005) — may contain PII
 /backups/
 apps/api/backups/
+apps/worker/backups/
 
 # Local uploads (avatars, etc.)
 /data/

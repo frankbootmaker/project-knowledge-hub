@@ -7,8 +7,8 @@ import { Button, Modal } from './ui';
 
 const IMPORT_TYPES = [
   { id: 'paste_chat', available: true },
-  { id: 'documents', available: false },
-  { id: 'images', available: false },
+  { id: 'documents', available: true },
+  { id: 'images', available: true },
 ] as const;
 
 type ImportTypeId = (typeof IMPORT_TYPES)[number]['id'];
@@ -37,6 +37,18 @@ export function ImportTypePickerButton({
     setOpen(false);
     if (typeId === 'paste_chat') {
       router.push(`/workspaces/${workspaceSlug}/imports/new`);
+      return;
+    }
+    if (typeId === 'documents') {
+      router.push(
+        `/workspaces/${workspaceSlug}/document-imports/new?lane=document`,
+      );
+      return;
+    }
+    if (typeId === 'images') {
+      router.push(
+        `/workspaces/${workspaceSlug}/document-imports/new?lane=image`,
+      );
     }
   }
 

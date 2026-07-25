@@ -720,6 +720,77 @@ export const knowledgeRecordChunks = pgTable(
   ],
 );
 
+/** Document/image file imports converted via MarkItDown (inbound; not MCP/FTS). */
+export const documentImports = pgTable(
+  'document_imports',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, {
+      onDelete: 'set null',
+    }),
+    systemId: uuid('system_id').references(() => systems.id, {
+      onDelete: 'set null',
+    }),
+    title: text('title').notNull(),
+    /** `document` | `image` */
+    lane: text('lane').notNull(),
+    /** `pending` | `converting` | `ready` | `failed` */
+    status: text('status').notNull().default('pending'),
+    originalFilename: text('original_filename').notNull(),
+    contentType: text('content_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    blobKey: text('blob_key').notNull(),
+    convertedMarkdown: text('converted_markdown'),
+    contentWarnings: jsonb('content_warnings').$type<
+      Array<{
+        code: string;
+        severity: 'info' | 'warning' | 'high';
+        count: number;
+        label: string;
+      }>
+    >(),
+    conversionError: text('conversion_error'),
+    conversionWarnings: jsonb('conversion_warnings').$type<string[]>(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('document_imports_workspace_id_idx').on(table.workspaceId),
+    index('document_imports_status_idx').on(table.status),
+  ],
+);
+
+/** Links draft knowledge records created from a document import. */
+export const documentImportRecords = pgTable(
+  'document_import_records',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    importId: uuid('import_id')
+      .notNull()
+      .references(() => documentImports.id, { onDelete: 'cascade' }),
+    knowledgeRecordId: uuid('knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    excerptNote: text('excerpt_note'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('document_import_records_pair_uidx').on(
+      table.importId,
+      table.knowledgeRecordId,
+    ),
+    index('document_import_records_import_id_idx').on(table.importId),
+  ],
+);
+
 /** Workspace media library (JPEG/PNG/WebP) for Markdown embeds (NF-013). */
 export const workspaceMedia = pgTable(
   'workspace_media',
@@ -748,5 +819,33 @@ export const workspaceMedia = pgTable(
     index('workspace_media_workspace_id_idx').on(table.workspaceId),
     index('workspace_media_record_id_idx').on(table.knowledgeRecordId),
     index('workspace_media_created_at_idx').on(table.createdAt),
+  ],
+);
+
+/** Images extracted during conversion and stored as workspace_media. */
+export const documentImportMedia = pgTable(
+  'document_import_media',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    importId: uuid('import_id')
+      .notNull()
+      .references(() => documentImports.id, { onDelete: 'cascade' }),
+    workspaceMediaId: uuid('workspace_media_id')
+      .notNull()
+      .references(() => workspaceMedia.id, { onDelete: 'cascade' }),
+    attachmentIndex: integer('attachment_index').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('document_import_media_pair_uidx').on(
+      table.importId,
+      table.workspaceMediaId,
+    ),
+    uniqueIndex('document_import_media_attachment_uidx').on(
+      table.importId,
+      table.attachmentIndex,
+    ),
   ],
 );

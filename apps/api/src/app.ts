@@ -42,6 +42,7 @@ import { registerSystemRoutes } from './routes/systems.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerMeRoutes } from './routes/me.js';
 import { registerConversationImportRoutes } from './routes/conversation-imports.js';
+import { registerDocumentImportRoutes } from './routes/document-imports.js';
 import { registerEmbeddingRoutes } from './routes/embeddings.js';
 import { registerGitConnectionRoutes } from './routes/git-connections.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
@@ -189,6 +190,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerSystemRoutes(app);
   await registerKnowledgeRecordRoutes(app);
   await registerConversationImportRoutes(app);
+  await registerDocumentImportRoutes(app);
   await registerSearchRoutes(app);
   await registerEmbeddingRoutes(app);
   await registerGitConnectionRoutes(app);

@@ -90,6 +90,7 @@ See `docs/product/NEXT_FEATURES.md` (**execution waves A–F**). Doc Factory (NF
 - [x] Draft provenance (`conversation` / `imported_snapshot` / sourceReference = import id)
 - [x] Raw imports excluded from MCP/search (separate table)
 - [x] Workspace Imports UI (list / new / detail + create draft) + i18n en/de/hu
+- [x] Document/image import via MarkItDown (NF-015) — `kh-markitdown` sidecar, draft records, media rewrite (2026-07-25)
 - [x] Integration + package unit tests
 - [x] ChatGPT / Open WebUI / generic JSON importers (paste JSON → Markdown drafts)
 - [x] Secret detection warnings + acknowledge on draft create

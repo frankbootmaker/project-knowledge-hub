@@ -56,6 +56,9 @@ importers:
       '@project-knowledge-hub/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@project-knowledge-hub/document-import':
+        specifier: workspace:*
+        version: link:../../packages/document-import
       '@project-knowledge-hub/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -175,6 +178,9 @@ importers:
       '@project-knowledge-hub/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@project-knowledge-hub/document-import':
+        specifier: workspace:*
+        version: link:../../packages/document-import
       '@project-knowledge-hub/embeddings':
         specifier: workspace:*
         version: link:../../packages/embeddings
@@ -291,6 +297,25 @@ importers:
       tsx:
         specifier: ^4.20.3
         version: 4.23.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)
+
+  packages/document-import:
+    dependencies:
+      '@project-knowledge-hub/conversation-import':
+        specifier: workspace:*
+        version: link:../conversation-import
+      '@project-knowledge-hub/domain':
+        specifier: workspace:*
+        version: link:../domain
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

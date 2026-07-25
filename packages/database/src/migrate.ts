@@ -1,8 +1,13 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import { resolveDatabaseUrl } from '@project-knowledge-hub/config';
+import {
+  loadNearestDotEnv,
+  resolveDatabaseUrl,
+} from '@project-knowledge-hub/config';
 import { resolveMigrationsFolder } from './migrations-path.js';
+
+loadNearestDotEnv();
 
 function operatorHint(error: unknown): string {
   const text =

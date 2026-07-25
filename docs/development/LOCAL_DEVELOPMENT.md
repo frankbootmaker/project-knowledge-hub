@@ -38,8 +38,25 @@ After seeding, sign in at http://localhost:3100/login with the bootstrap admin c
 | API | `3101` |
 | PostgreSQL | `127.0.0.1:5432` |
 | Redis | `127.0.0.1:6379` |
+| MarkItDown (`kh-markitdown`) | `127.0.0.1:8088` |
 
 Browser calls to `/api/v1/*` are rewritten by Next.js to the API, so session cookies stay on the web origin.
+
+## Document / image import (MarkItDown)
+
+Conversion needs the sidecar + a running **worker** (BullMQ job):
+
+```bash
+docker compose -p knowledge-hub-dev --profile markitdown up -d --build kh-markitdown
+# .env must include:
+# MARKITDOWN_URL=http://127.0.0.1:8088
+pnpm db:migrate   # applies 0024_document_imports
+pnpm dev          # api + web + worker
+```
+
+Smoke: `curl -fsS http://127.0.0.1:8088/health` → `{"status":"ok",...}`. Then workspace → **New import** → Documents or Images.
+
+Optional vision captions: set `VISION_LLM_BASE_URL`, `VISION_LLM_API_KEY`, `VISION_LLM_MODEL` in `.env` **and** pass them into the sidecar (Compose already forwards those vars).
 
 ## Compose project name
 

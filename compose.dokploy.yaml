@@ -44,6 +44,12 @@ x-app-env: &app-env
   BLOB_KEY_PREFIX: ${BLOB_KEY_PREFIX:-}
   BACKUP_OFFSITE: ${BACKUP_OFFSITE:-true}
   BACKUP_OFFSITE_SYNC_INTERVAL_MS: ${BACKUP_OFFSITE_SYNC_INTERVAL_MS:-300000}
+  MARKITDOWN_URL: ${MARKITDOWN_URL:-http://kh-markitdown:8080}
+  MARKITDOWN_TIMEOUT_MS: ${MARKITDOWN_TIMEOUT_MS:-120000}
+  DOCUMENT_IMPORT_MAX_BYTES: ${DOCUMENT_IMPORT_MAX_BYTES:-26214400}
+  VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
+  VISION_LLM_API_KEY: ${VISION_LLM_API_KEY:-}
+  VISION_LLM_MODEL: ${VISION_LLM_MODEL:-gpt-4o-mini}
 
 services:
   # Unique service DNS names (not `postgres`/`redis`) so api on dokploy-network cannot
@@ -143,6 +149,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      kh-markitdown:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -177,6 +185,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      kh-markitdown:
+        condition: service_started
     networks:
       - default
 
@@ -220,6 +230,20 @@ services:
     networks:
       - default
       - dokploy-network
+
+  # Document/image → Markdown (Microsoft MarkItDown). Project network only.
+  kh-markitdown:
+    build:
+      context: ./infrastructure/markitdown
+      dockerfile: Dockerfile
+    image: knowledge-hub-markitdown:dokploy
+    restart: unless-stopped
+    environment:
+      VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
+      VISION_LLM_API_KEY: ${VISION_LLM_API_KEY:-}
+      VISION_LLM_MODEL: ${VISION_LLM_MODEL:-gpt-4o-mini}
+    networks:
+      - default
 
   # Ops-0 (NF-005): scheduled pg_dump -Fc onto a named volume + retention + last-success stamp.
   # Disable with BACKUP_ENABLED=false. Offsite upload is Ops-1 (after BlobStore).

@@ -19,6 +19,7 @@
     "@project-knowledge-hub/config": "workspace:*",
     "@project-knowledge-hub/conversation-import": "workspace:*",
     "@project-knowledge-hub/database": "workspace:*",
+    "@project-knowledge-hub/document-import": "workspace:*",
     "@project-knowledge-hub/domain": "workspace:*",
     "@project-knowledge-hub/embeddings": "workspace:*",
     "@project-knowledge-hub/git-connectors": "workspace:*",

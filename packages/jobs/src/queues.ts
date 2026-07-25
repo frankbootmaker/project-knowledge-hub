@@ -45,3 +45,10 @@ export function isEmbeddingWorkspaceReindexJob(
 ): data is EmbeddingReindexWorkspaceJobPayload {
   return 'kind' in data && data.kind === 'workspace';
 }
+
+export const DOCUMENT_IMPORT_CONVERT_QUEUE = 'document-import-convert';
+export const DOCUMENT_IMPORT_CONVERT_JOB = 'convert';
+
+export type DocumentImportConvertJobPayload = {
+  importId: string;
+};

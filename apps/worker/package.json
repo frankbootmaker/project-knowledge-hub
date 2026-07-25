@@ -15,6 +15,7 @@
     "@project-knowledge-hub/blob-store": "workspace:*",
     "@project-knowledge-hub/config": "workspace:*",
     "@project-knowledge-hub/database": "workspace:*",
+    "@project-knowledge-hub/document-import": "workspace:*",
     "@project-knowledge-hub/embeddings": "workspace:*",
     "@project-knowledge-hub/git-connectors": "workspace:*",
     "@project-knowledge-hub/jobs": "workspace:*",
