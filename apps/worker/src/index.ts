@@ -424,7 +424,11 @@ async function main(): Promise<void> {
     {
       appEnv: env.APP_ENV,
       redis: 'connected',
-      queues: [GIT_SYNC_QUEUE, EMBEDDING_REINDEX_QUEUE],
+      queues: [
+        GIT_SYNC_QUEUE,
+        EMBEDDING_REINDEX_QUEUE,
+        DOCUMENT_IMPORT_CONVERT_QUEUE,
+      ],
       gitSyncSafety: safetySchedule,
       embeddingProvider: embeddingConfig.provider,
       backupOffsiteSyncMs: env.BACKUP_OFFSITE_SYNC_INTERVAL_MS,

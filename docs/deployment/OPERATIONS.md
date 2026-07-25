@@ -13,7 +13,7 @@ Operator maintenance beyond M7 packaging: backups, blob/object storage, DB upkee
 | Export / import | `export-db.sh` / `import-db.sh` (full replace; cross-instance OK) |
 | Migrate / seed | Compose migrate one-shot; optional bootstrap seed (**NF-002**) |
 | Health | API `GET /health`, `GET /ready`; web `/status` (→ Monitoring in **NF-011**) |
-| Persistence | Named Compose volumes (Postgres; `knowledge_hub_backups`; local avatar/`data`) |
+| Persistence | Named Compose volumes (Postgres; `knowledge_hub_backups`; `knowledge_hub_data` for local avatars/media/imports) |
 | Redis | Cache / queues — **not** a backup source of truth |
 | Secrets | Dokploy env (not included in DB dumps) |
 

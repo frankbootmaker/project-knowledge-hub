@@ -47,6 +47,7 @@ type DocumentImport = {
   title: string;
   lane: string;
   status: string;
+  ocrEngine?: string;
   originalFilename: string;
   contentType: string;
   byteSize: number;
@@ -171,6 +172,11 @@ export function DocumentImportDetail(props: {
             {t(`status_${doc.status}`)}
           </Badge>
           <Badge tone="neutral">{doc.lane}</Badge>
+          {doc.ocrEngine === 'none' ||
+          doc.ocrEngine === 'vision' ||
+          doc.ocrEngine === 'tesseract' ? (
+            <Badge tone="neutral">{t(`ocrEngine_${doc.ocrEngine}`)}</Badge>
+          ) : null}
         </div>
         <p className="mt-2 mb-0 text-sm text-ink-muted">
           {doc.originalFilename} · {Math.round(doc.byteSize / 1024)} KB ·{' '}

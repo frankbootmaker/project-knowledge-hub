@@ -739,6 +739,8 @@ export const documentImports = pgTable(
     lane: text('lane').notNull(),
     /** `pending` | `converting` | `ready` | `failed` */
     status: text('status').notNull().default('pending'),
+    /** `none` | `vision` | `tesseract` — OCR path used during convert */
+    ocrEngine: text('ocr_engine').notNull().default('none'),
     originalFilename: text('original_filename').notNull(),
     contentType: text('content_type').notNull(),
     byteSize: integer('byte_size').notNull(),

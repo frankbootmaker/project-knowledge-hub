@@ -9,11 +9,13 @@ import {
   createDraftFromDocumentImportInputSchema,
   detectContentSecrets,
   documentImportLaneSchema,
+  documentImportOcrEngineSchema,
   hasHighSeverityWarnings,
   isAllowedUpload,
   titleFromImport,
   type CreateDraftFromDocumentImportInput,
   type DocumentImportLane,
+  type DocumentImportOcrEngine,
 } from '@project-knowledge-hub/document-import';
 import {
   documentImportMedia,
@@ -106,6 +108,7 @@ export function toPublicDocumentImport(
     title: row.title,
     lane: row.lane,
     status: row.status,
+    ocrEngine: row.ocrEngine,
     originalFilename: row.originalFilename,
     contentType: row.contentType,
     byteSize: row.byteSize,
@@ -178,6 +181,7 @@ export async function createDocumentImport(
     projectId?: string | null;
     systemId?: string | null;
     lane: DocumentImportLane;
+    ocrEngine?: DocumentImportOcrEngine;
     filename: string;
     contentType: string;
     buffer: Buffer;
@@ -196,6 +200,17 @@ export async function createDocumentImport(
   }
 
   const lane = documentImportLaneSchema.parse(input.lane);
+  const ocrEngine = documentImportOcrEngineSchema.parse(
+    input.ocrEngine ?? app.env.DOCUMENT_IMPORT_OCR_ENGINE,
+  );
+  if (ocrEngine === 'vision' && !app.env.VISION_LLM_BASE_URL) {
+    throw new AppError({
+      code: 'DOCUMENT_IMPORT_OCR_UNAVAILABLE',
+      message:
+        'Vision OCR requires VISION_LLM_BASE_URL (OpenAI-compatible, e.g. Ollama /v1).',
+      statusCode: 400,
+    });
+  }
   if (
     !isAllowedUpload({
       lane,
@@ -255,6 +270,7 @@ export async function createDocumentImport(
       systemId: input.systemId ?? null,
       title,
       lane,
+      ocrEngine,
       status: 'pending',
       originalFilename: input.filename,
       contentType: input.contentType,
@@ -301,6 +317,7 @@ export async function createDocumentImport(
     entityId: importId,
     metadata: {
       lane,
+      ocrEngine,
       filename: input.filename,
       byteSize: input.buffer.byteLength,
     },

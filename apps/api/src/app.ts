@@ -167,10 +167,11 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
 
   await app.register(multipart, {
     limits: {
-      // Allow large DB dump uploads; avatar/media routes enforce their own caps.
+      // Allow large DB dump uploads; avatar/media/import routes enforce their own caps.
       fileSize: Math.max(
         deps.env.AVATAR_MAX_BYTES,
         deps.env.MEDIA_MAX_BYTES,
+        deps.env.DOCUMENT_IMPORT_MAX_BYTES,
         deps.env.BACKUP_MAX_UPLOAD_BYTES,
       ),
       files: 1,

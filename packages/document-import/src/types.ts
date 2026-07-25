@@ -12,8 +12,14 @@ export const DOCUMENT_IMPORT_STATUSES = [
 ] as const;
 export type DocumentImportStatus = (typeof DOCUMENT_IMPORT_STATUSES)[number];
 
+/** OCR path for MarkItDown convert (per-import or DOCUMENT_IMPORT_OCR_ENGINE default). */
+export const DOCUMENT_IMPORT_OCR_ENGINES = ['none', 'vision', 'tesseract'] as const;
+export type DocumentImportOcrEngine =
+  (typeof DOCUMENT_IMPORT_OCR_ENGINES)[number];
+
 export const documentImportLaneSchema = z.enum(DOCUMENT_IMPORT_LANES);
 export const documentImportStatusSchema = z.enum(DOCUMENT_IMPORT_STATUSES);
+export const documentImportOcrEngineSchema = z.enum(DOCUMENT_IMPORT_OCR_ENGINES);
 
 /** Allowed MIME types for the documents lane. */
 export const DOCUMENT_MIME_TYPES = [

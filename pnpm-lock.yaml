@@ -117,6 +117,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@project-knowledge-hub/document-import':
+        specifier: workspace:*
+        version: link:../../packages/document-import
       '@project-knowledge-hub/domain':
         specifier: workspace:*
         version: link:../../packages/domain

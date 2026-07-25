@@ -42,14 +42,23 @@ x-app-env: &app-env
   BLOB_S3_SECRET_ACCESS_KEY: ${BLOB_S3_SECRET_ACCESS_KEY:-}
   BLOB_S3_FORCE_PATH_STYLE: ${BLOB_S3_FORCE_PATH_STYLE:-false}
   BLOB_KEY_PREFIX: ${BLOB_KEY_PREFIX:-}
+  # Local filesystem fallbacks when BLOB_PROVIDER=disabled. Absolute paths on the
+  # shared knowledge_hub_data volume so api + worker see the same bytes (imports,
+  # media, avatars). Relative ./data/* under /app is not writable as uid 1001.
+  DATA_DIR: ${DATA_DIR:-/data}
+  AVATAR_UPLOAD_DIR: ${AVATAR_UPLOAD_DIR:-/data/avatars}
+  MEDIA_UPLOAD_DIR: ${MEDIA_UPLOAD_DIR:-/data/media}
+  DOCUMENT_IMPORT_DIR: ${DOCUMENT_IMPORT_DIR:-/data/imports}
   BACKUP_OFFSITE: ${BACKUP_OFFSITE:-true}
   BACKUP_OFFSITE_SYNC_INTERVAL_MS: ${BACKUP_OFFSITE_SYNC_INTERVAL_MS:-300000}
   MARKITDOWN_URL: ${MARKITDOWN_URL:-http://kh-markitdown:8080}
   MARKITDOWN_TIMEOUT_MS: ${MARKITDOWN_TIMEOUT_MS:-120000}
   DOCUMENT_IMPORT_MAX_BYTES: ${DOCUMENT_IMPORT_MAX_BYTES:-26214400}
+  DOCUMENT_IMPORT_OCR_ENGINE: ${DOCUMENT_IMPORT_OCR_ENGINE:-none}
   VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
   VISION_LLM_API_KEY: ${VISION_LLM_API_KEY:-}
   VISION_LLM_MODEL: ${VISION_LLM_MODEL:-gpt-4o-mini}
+  TESSERACT_LANG: ${TESSERACT_LANG:-eng}
 
 services:
   # Unique service DNS names (not `postgres`/`redis`) so api on dokploy-network cannot
@@ -142,6 +151,7 @@ services:
       BACKUP_MAX_UPLOAD_BYTES: ${BACKUP_MAX_UPLOAD_BYTES:-536870912}
     volumes:
       - knowledge_hub_backups:/backups
+      - knowledge_hub_data:/data
     depends_on:
       kh-postgres:
         condition: service_healthy
@@ -178,6 +188,7 @@ services:
       BACKUP_DIR: ${BACKUP_DIR:-/backups}
     volumes:
       - knowledge_hub_backups:/backups
+      - knowledge_hub_data:/data
     depends_on:
       kh-postgres:
         condition: service_healthy
@@ -209,6 +220,9 @@ services:
       WEB_URL: ${WEB_URL:?WEB_URL is required}
       # SSR → api over Compose DNS (must not be localhost).
       API_URL: http://api:3101
+      # Import form defaults / OCR option availability (SSR only).
+      DOCUMENT_IMPORT_OCR_ENGINE: ${DOCUMENT_IMPORT_OCR_ENGINE:-none}
+      VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
     # Traefik (Dokploy Domains) reaches the container port; avoid publishing to the host.
     expose:
       - '3100'
@@ -242,6 +256,7 @@ services:
       VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
       VISION_LLM_API_KEY: ${VISION_LLM_API_KEY:-}
       VISION_LLM_MODEL: ${VISION_LLM_MODEL:-gpt-4o-mini}
+      TESSERACT_LANG: ${TESSERACT_LANG:-eng}
     networks:
       - default
 
@@ -280,6 +295,7 @@ volumes:
   knowledge_hub_postgres_data:
   knowledge_hub_redis_data:
   knowledge_hub_backups:
+  knowledge_hub_data:
 
 networks:
   dokploy-network:

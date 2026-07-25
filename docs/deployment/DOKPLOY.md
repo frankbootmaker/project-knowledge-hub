@@ -196,6 +196,8 @@ Use **Admin → Monitoring → Export ops log** for a redacted support + error-a
 
 The API (and worker) run as uid **1001**. Sidecar dumps are chowned to that uid after each cycle, and the API/worker entrypoints fix volume ownership on start — otherwise Admin **Export** / **Delete** fail with permission errors (the volume is often created root-owned). The API image installs **postgresql-client-16** (PGDG) so `pg_dump` matches Compose Postgres 16.
 
+When `BLOB_PROVIDER=disabled`, avatars, knowledge media, and document-import originals use named volume `knowledge_hub_data` mounted at `/data` on **api and worker** (paths `/data/avatars`, `/data/media`, `/data/imports`). Without that shared mount, uploads fail with EACCES under `/app` and the worker cannot read originals written by the API.
+
 Scripts:
 
 * `export-db.sh` / `backup-db.sh` — dump + stamp + rotate

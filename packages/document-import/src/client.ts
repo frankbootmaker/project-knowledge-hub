@@ -1,3 +1,5 @@
+import type { DocumentImportOcrEngine } from './types.js';
+
 export type MarkItDownImage = {
   filename: string;
   contentType: string;
@@ -10,6 +12,14 @@ export type MarkItDownConvertResult = {
   images: MarkItDownImage[];
   warnings: string[];
   visionUsed?: boolean;
+  ocrEngine?: DocumentImportOcrEngine;
+};
+
+export type MarkItDownHealth = {
+  ok: boolean;
+  vision: boolean;
+  tesseract: boolean;
+  engines: DocumentImportOcrEngine[];
 };
 
 export async function convertWithMarkItDown(input: {
@@ -19,6 +29,7 @@ export async function convertWithMarkItDown(input: {
   contentType: string;
   buffer: Buffer;
   lane: 'document' | 'image';
+  ocrEngine?: DocumentImportOcrEngine;
 }): Promise<MarkItDownConvertResult> {
   const base = input.baseUrl.replace(/\/+$/, '');
   const form = new FormData();
@@ -28,6 +39,7 @@ export async function convertWithMarkItDown(input: {
     input.filename,
   );
   form.set('lane', input.lane);
+  form.set('ocrEngine', input.ocrEngine ?? 'none');
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), input.timeoutMs);
@@ -44,6 +56,7 @@ export async function convertWithMarkItDown(input: {
       images?: MarkItDownImage[];
       warnings?: string[];
       visionUsed?: boolean;
+      ocrEngine?: DocumentImportOcrEngine;
     };
     if (!response.ok) {
       throw new Error(
@@ -59,19 +72,39 @@ export async function convertWithMarkItDown(input: {
       images: Array.isArray(body.images) ? body.images : [],
       warnings: Array.isArray(body.warnings) ? body.warnings : [],
       visionUsed: body.visionUsed,
+      ocrEngine: body.ocrEngine,
     };
   } finally {
     clearTimeout(timer);
   }
 }
 
-export async function markitdownHealth(baseUrl: string): Promise<boolean> {
+export async function markitdownHealth(
+  baseUrl: string,
+): Promise<MarkItDownHealth> {
   try {
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/health`, {
       signal: AbortSignal.timeout(5000),
     });
-    return response.ok;
+    if (!response.ok) {
+      return { ok: false, vision: false, tesseract: false, engines: ['none'] };
+    }
+    const body = (await response.json().catch(() => ({}))) as {
+      vision?: boolean;
+      tesseract?: boolean;
+      engines?: string[];
+    };
+    const engines = (Array.isArray(body.engines) ? body.engines : ['none']).filter(
+      (value): value is DocumentImportOcrEngine =>
+        value === 'none' || value === 'vision' || value === 'tesseract',
+    );
+    return {
+      ok: true,
+      vision: Boolean(body.vision),
+      tesseract: Boolean(body.tesseract),
+      engines: engines.length > 0 ? engines : ['none'],
+    };
   } catch {
-    return false;
+    return { ok: false, vision: false, tesseract: false, engines: ['none'] };
   }
 }

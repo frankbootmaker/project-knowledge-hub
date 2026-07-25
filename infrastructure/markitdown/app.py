@@ -1,4 +1,4 @@
-"""HTTP convert sidecar wrapping Microsoft MarkItDown + image extraction."""
+"""HTTP convert sidecar wrapping Microsoft MarkItDown + selectable OCR."""
 
 from __future__ import annotations
 
@@ -6,15 +6,19 @@ import base64
 import io
 import mimetypes
 import os
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
-app = FastAPI(title="kh-markitdown", version="0.1.0")
+app = FastAPI(title="kh-markitdown", version="0.2.0")
+
+OcrEngine = Literal["none", "vision", "tesseract"]
+OCR_ENGINES: tuple[OcrEngine, ...] = ("none", "vision", "tesseract")
 
 IMAGE_CONTENT_TYPES = {
     "image/jpeg",
@@ -26,25 +30,63 @@ IMAGE_CONTENT_TYPES = {
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
+VISION_OCR_PROMPT = (
+    "Extract all readable text from this image exactly. "
+    "Preserve tables, amounts, dates, invoice numbers, and line breaks. "
+    "Do not invent missing text. Return plain text only."
+)
 
-def _vision_enabled() -> bool:
-    return bool(os.environ.get("VISION_LLM_API_KEY") and os.environ.get("VISION_LLM_BASE_URL"))
+
+def _vision_configured() -> bool:
+    return bool(os.environ.get("VISION_LLM_BASE_URL"))
 
 
-def _build_markitdown() -> Any:
+def _tesseract_available() -> bool:
+    return shutil.which("tesseract") is not None
+
+
+def _tesseract_lang() -> str:
+    return os.environ.get("TESSERACT_LANG") or "eng"
+
+
+def _normalize_engine(value: str | None) -> OcrEngine:
+    engine = (value or "none").strip().lower()
+    if engine not in OCR_ENGINES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ocrEngine must be one of: {', '.join(OCR_ENGINES)}",
+        )
+    return engine  # type: ignore[return-value]
+
+
+def _build_markitdown(ocr_engine: OcrEngine) -> Any:
     from markitdown import MarkItDown
 
-    if not _vision_enabled():
+    if ocr_engine != "vision":
         return MarkItDown(enable_plugins=False)
+
+    if not _vision_configured():
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "ocrEngine=vision requires VISION_LLM_BASE_URL "
+                "(OpenAI-compatible endpoint, e.g. Ollama http://host:11434/v1)"
+            ),
+        )
 
     from openai import OpenAI
 
-    client = OpenAI(
-        api_key=os.environ["VISION_LLM_API_KEY"],
-        base_url=os.environ["VISION_LLM_BASE_URL"].rstrip("/"),
-    )
+    base_url = os.environ["VISION_LLM_BASE_URL"].rstrip("/")
+    # Ollama and many local gateways accept any non-empty key.
+    api_key = os.environ.get("VISION_LLM_API_KEY") or "ollama"
     model = os.environ.get("VISION_LLM_MODEL") or "gpt-4o-mini"
-    return MarkItDown(enable_plugins=False, llm_client=client, llm_model=model)
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    return MarkItDown(
+        enable_plugins=True,
+        llm_client=client,
+        llm_model=model,
+        llm_prompt=VISION_OCR_PROMPT,
+    )
 
 
 def _guess_content_type(filename: str, fallback: str = "application/octet-stream") -> str:
@@ -131,7 +173,6 @@ def _extract_images_pdf(path: Path) -> list[dict[str, str]]:
                     elif "JPXDecode" in filt:
                         ext, ct = ".jp2", "image/jp2"
                     elif "FlateDecode" in filt:
-                        # Often raw; try PNG via Pillow when possible.
                         try:
                             from PIL import Image
 
@@ -196,12 +237,122 @@ def _title_hint(filename: str, markdown: str) -> str:
     return stem[:200] or "Imported document"
 
 
+def _ocr_pil_image(img: Any) -> str:
+    import pytesseract
+
+    text = pytesseract.image_to_string(img, lang=_tesseract_lang())
+    return (text or "").strip()
+
+
+def _ocr_image_bytes(data: bytes) -> str:
+    from PIL import Image
+
+    with Image.open(io.BytesIO(data)) as img:
+        return _ocr_pil_image(img.convert("RGB"))
+
+
+def _ocr_pdf_pages(path: Path, warnings: list[str]) -> list[str]:
+    pages: list[str] = []
+    try:
+        import pypdfium2 as pdfium
+    except Exception as exc:  # noqa: BLE001
+        warnings.append(f"pypdfium2 unavailable for PDF OCR: {exc}")
+        return pages
+
+    try:
+        pdf = pdfium.PdfDocument(str(path))
+        for index in range(len(pdf)):
+            page = pdf[index]
+            bitmap = page.render(scale=2.0)
+            pil = bitmap.to_pil()
+            text = _ocr_pil_image(pil)
+            if text:
+                pages.append(text)
+            page.close()
+        pdf.close()
+    except Exception as exc:  # noqa: BLE001
+        warnings.append(f"tesseract PDF page OCR failed: {exc}")
+    return pages
+
+
+def _apply_tesseract_ocr(
+    *,
+    path: Path,
+    content_type: str,
+    filename: str,
+    lane: str,
+    markdown: str,
+    images: list[dict[str, str]],
+    warnings: list[str],
+) -> str:
+    if not _tesseract_available():
+        raise HTTPException(
+            status_code=422,
+            detail="ocrEngine=tesseract requires the tesseract binary in kh-markitdown",
+        )
+
+    blocks: list[str] = []
+    suffix = path.suffix.lower()
+    is_image = content_type in IMAGE_CONTENT_TYPES or suffix in IMAGE_EXTENSIONS
+    is_pdf = suffix == ".pdf" or content_type == "application/pdf"
+
+    if is_image:
+        try:
+            text = _ocr_image_bytes(path.read_bytes())
+            if text:
+                blocks.append(text)
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"tesseract image OCR failed: {exc}")
+    else:
+        for img in images:
+            try:
+                data = base64.b64decode(img["dataBase64"])
+                text = _ocr_image_bytes(data)
+                if text:
+                    blocks.append(f"### {img['filename']}\n\n{text}")
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"tesseract OCR failed for {img.get('filename')}: {exc}")
+
+        # Scanned PDFs often have no embedded XObject images — render pages.
+        if is_pdf and (not blocks or len(markdown.strip()) < 80):
+            page_texts = _ocr_pdf_pages(path, warnings)
+            if page_texts:
+                blocks = [
+                    f"### Page {i + 1}\n\n{text}" for i, text in enumerate(page_texts)
+                ]
+
+    if not blocks:
+        warnings.append("tesseract returned no text")
+        return markdown
+
+    ocr_section = "## OCR text\n\n" + "\n\n".join(blocks)
+    if lane == "image":
+        stem = Path(filename).stem
+        embed = f"![{stem}](attachment:0)\n\n" if images else ""
+        return f"{embed}{ocr_section}\n"
+
+    base = markdown.strip()
+    if base:
+        return f"{base}\n\n{ocr_section}\n"
+    return f"# {Path(filename).stem}\n\n{ocr_section}\n"
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
+    vision = _vision_configured()
+    tesseract = _tesseract_available()
+    engines: list[str] = ["none"]
+    if vision:
+        engines.append("vision")
+    if tesseract:
+        engines.append("tesseract")
     return {
         "status": "ok",
         "service": "kh-markitdown",
-        "vision": _vision_enabled(),
+        "vision": vision,
+        "tesseract": tesseract,
+        "engines": engines,
+        "tesseractLang": _tesseract_lang(),
     }
 
 
@@ -209,10 +360,12 @@ def health() -> dict[str, Any]:
 async def convert(
     file: UploadFile = File(...),
     lane: str = Form(default="document"),
+    ocrEngine: str = Form(default="none"),
 ) -> JSONResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="filename required")
 
+    ocr_engine = _normalize_engine(ocrEngine)
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty file")
@@ -229,11 +382,28 @@ async def convert(
         warnings.extend(extract_warnings)
 
         try:
-            md = _build_markitdown()
+            md = _build_markitdown(ocr_engine)
             result = md.convert(str(path))
-            markdown = (getattr(result, "markdown", None) or getattr(result, "text_content", None) or "").strip()
+            markdown = (
+                getattr(result, "markdown", None)
+                or getattr(result, "text_content", None)
+                or ""
+            ).strip()
+        except HTTPException:
+            raise
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=422, detail=f"conversion failed: {exc}") from exc
+
+        if ocr_engine == "tesseract":
+            markdown = _apply_tesseract_ocr(
+                path=path,
+                content_type=content_type,
+                filename=file.filename,
+                lane=lane,
+                markdown=markdown,
+                images=images,
+                warnings=warnings,
+            )
 
         if not markdown:
             if lane == "image" and images:
@@ -261,6 +431,7 @@ async def convert(
             "titleHint": _title_hint(file.filename, markdown),
             "images": images,
             "warnings": warnings,
-            "visionUsed": _vision_enabled(),
+            "visionUsed": ocr_engine == "vision",
+            "ocrEngine": ocr_engine,
         }
         return JSONResponse(payload)

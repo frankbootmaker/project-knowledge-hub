@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   createDraftFromDocumentImportInputSchema,
   documentImportLaneSchema,
+  documentImportOcrEngineSchema,
 } from '@project-knowledge-hub/document-import';
 import { AppError } from '@project-knowledge-hub/domain';
 import {
@@ -71,6 +72,7 @@ export async function registerDocumentImportRoutes(
     let projectId: string | null | undefined;
     let systemId: string | null | undefined;
     let lane = 'document';
+    let ocrEngine: string | undefined;
     let title: string | undefined;
     let fileBuffer: Buffer | undefined;
     let filename = 'upload.bin';
@@ -95,6 +97,7 @@ export async function registerDocumentImportRoutes(
           systemId = value.trim() ? value : null;
         }
         if (part.fieldname === 'lane') lane = value;
+        if (part.fieldname === 'ocrEngine') ocrEngine = value;
         if (part.fieldname === 'title') title = value;
       }
     }
@@ -109,6 +112,9 @@ export async function registerDocumentImportRoutes(
 
     z.string().uuid().parse(workspaceId);
     const parsedLane = documentImportLaneSchema.parse(lane);
+    const parsedOcrEngine = ocrEngine
+      ? documentImportOcrEngineSchema.parse(ocrEngine)
+      : undefined;
     requireWorkspaceMaintainer(principal, workspaceId);
 
     const documentImport = await createDocumentImport(
@@ -118,6 +124,7 @@ export async function registerDocumentImportRoutes(
         projectId,
         systemId,
         lane: parsedLane,
+        ocrEngine: parsedOcrEngine,
         filename,
         contentType: fileContentType,
         buffer: fileBuffer,

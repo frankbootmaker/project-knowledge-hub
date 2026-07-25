@@ -5,6 +5,10 @@ import { useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
+  DOCUMENT_IMPORT_OCR_ENGINES,
+  type DocumentImportOcrEngine,
+} from '@project-knowledge-hub/document-import';
+import {
   Button,
   ErrorText,
   Field,
@@ -27,6 +31,8 @@ export function DocumentImportForm(props: {
   lane: 'document' | 'image';
   projects: Option[];
   systems: Option[];
+  defaultOcrEngine?: DocumentImportOcrEngine;
+  visionConfigured?: boolean;
 }) {
   const router = useRouter();
   const t = useTranslations('documentImports');
@@ -37,6 +43,9 @@ export function DocumentImportForm(props: {
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState('');
   const [systemId, setSystemId] = useState('');
+  const [ocrEngine, setOcrEngine] = useState<DocumentImportOcrEngine>(
+    props.defaultOcrEngine ?? 'none',
+  );
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +113,7 @@ export function DocumentImportForm(props: {
       const form = new FormData();
       form.set('workspaceId', props.workspaceId);
       form.set('lane', props.lane);
+      form.set('ocrEngine', ocrEngine);
       if (title.trim()) form.set('title', title.trim());
       if (projectId) form.set('projectId', projectId);
       if (systemId) form.set('systemId', systemId);
@@ -139,7 +149,7 @@ export function DocumentImportForm(props: {
 
   return (
     <Panel>
-      <form className="grid gap-4" onSubmit={onSubmit}>
+      <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
         <p className="m-0 text-sm text-ink-muted">
           {props.lane === 'image' ? t('imageHelp') : t('documentHelp')}
         </p>
@@ -150,7 +160,7 @@ export function DocumentImportForm(props: {
             placeholder={t('titlePlaceholder')}
           />
         </Field>
-        <Field label={t('file')}>
+        <Field label={t('file')} className="min-w-0">
           <input
             ref={fileInputRef}
             id={inputId}
@@ -172,24 +182,45 @@ export function DocumentImportForm(props: {
             onDragLeave={onDragLeave}
             onDrop={onDrop}
             className={[
-              'flex min-h-44 cursor-pointer flex-col items-center justify-center gap-2',
-              'rounded-lg border-2 border-dashed px-6 py-10 text-center transition',
+              'flex min-h-44 w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-2',
+              'overflow-hidden rounded-lg border-2 border-dashed px-4 py-10 text-center transition sm:px-6',
               dragActive
                 ? 'border-brand bg-brand-soft/60'
                 : 'border-line-strong bg-panel-solid/60 hover:border-brand hover:bg-brand-soft/40',
             ].join(' ')}
           >
-            <p className="m-0 text-base font-medium text-ink">
+            <p className="m-0 max-w-full text-base font-medium text-ink">
               {dragActive ? t('dropzoneActive') : t('dropzoneTitle')}
             </p>
-            <p className="m-0 text-sm text-ink-muted">{t('dropzoneHint')}</p>
+            <p className="m-0 max-w-full text-sm text-ink-muted">{t('dropzoneHint')}</p>
             {file ? (
-              <p className="m-0 mt-2 max-w-full truncate rounded-md bg-panel-solid px-3 py-1.5 text-sm text-ink">
-                {file.name}
+              <p className="m-0 mt-2 w-full min-w-0 max-w-full break-words rounded-md bg-panel-solid px-3 py-1.5 text-sm text-ink">
+                <span className="block break-all [overflow-wrap:anywhere]">{file.name}</span>
                 <span className="text-ink-muted"> · {formatBytes(file.size)}</span>
               </p>
             ) : null}
           </div>
+        </Field>
+        <Field label={t('ocrEngine')}>
+          <Select
+            value={ocrEngine}
+            onChange={(e) =>
+              setOcrEngine(e.target.value as DocumentImportOcrEngine)
+            }
+          >
+            {DOCUMENT_IMPORT_OCR_ENGINES.map((engine) => (
+              <option
+                key={engine}
+                value={engine}
+                disabled={
+                  engine === 'vision' && props.visionConfigured === false
+                }
+              >
+                {t(`ocrEngine_${engine}`)}
+              </option>
+            ))}
+          </Select>
+          <p className="m-0 mt-1 text-sm text-ink-muted">{t('ocrEngineHelp')}</p>
         </Field>
         <Field label={tCommon('project')}>
           <Select

@@ -163,6 +163,10 @@ export async function processDocumentImportConvert(input: {
       contentType: row.contentType,
       buffer,
       lane: row.lane === 'image' ? 'image' : 'document',
+      ocrEngine:
+        row.ocrEngine === 'vision' || row.ocrEngine === 'tesseract'
+          ? row.ocrEngine
+          : 'none',
     });
 
     const mediaByIndex = new Map<

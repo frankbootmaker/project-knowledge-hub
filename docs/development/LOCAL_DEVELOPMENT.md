@@ -56,7 +56,13 @@ pnpm dev          # api + web + worker
 
 Smoke: `curl -fsS http://127.0.0.1:8088/health` → `{"status":"ok",...}`. Then workspace → **New import** → Documents or Images.
 
-Optional vision captions: set `VISION_LLM_BASE_URL`, `VISION_LLM_API_KEY`, `VISION_LLM_MODEL` in `.env` **and** pass them into the sidecar (Compose already forwards those vars).
+OCR engines (per upload, or `DOCUMENT_IMPORT_OCR_ENGINE` default):
+
+* `none` — text extract only
+* `vision` — set `VISION_LLM_*` (OpenAI or Ollama `/v1` + vision model); Compose forwards into `kh-markitdown`
+* `tesseract` — local OCR in the sidecar (`TESSERACT_LANG`, default `eng`)
+
+Smoke OCR: `curl -fsS http://127.0.0.1:8088/health` → includes `"tesseract": true` and `"vision": true|false`.
 
 ## Compose project name
 

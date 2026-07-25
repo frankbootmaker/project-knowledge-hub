@@ -163,6 +163,7 @@ services:
       VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
       VISION_LLM_API_KEY: ${VISION_LLM_API_KEY:-}
       VISION_LLM_MODEL: ${VISION_LLM_MODEL:-gpt-4o-mini}
+      TESSERACT_LANG: ${TESSERACT_LANG:-eng}
     ports:
       - '127.0.0.1:8088:8080'
     healthcheck:

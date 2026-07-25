@@ -31,20 +31,34 @@ Trust boundary (same as conversation imports):
 | `MARKITDOWN_URL` | Sidecar base URL (e.g. `http://kh-markitdown:8080`). Empty = feature disabled. |
 | `MARKITDOWN_TIMEOUT_MS` | Convert timeout (default 120000). |
 | `DOCUMENT_IMPORT_MAX_BYTES` | Upload size limit (default 25 MiB). |
-| `DOCUMENT_IMPORT_DIR` | Local original storage when BlobStore is disabled. Relative paths resolve from the monorepo root (shared by API + worker). |
-| `VISION_LLM_BASE_URL` / `VISION_LLM_API_KEY` / `VISION_LLM_MODEL` | Optional OpenAI-compatible vision for image captions (set on **api/worker and** `kh-markitdown`). |
+| `DOCUMENT_IMPORT_DIR` | Local original storage when BlobStore is disabled. Relative paths resolve from the monorepo root (shared by API + worker). On Dokploy, use the absolute `/data/imports` path on the shared `knowledge_hub_data` volume (set by `compose.dokploy.yaml`). |
+| `DOCUMENT_IMPORT_OCR_ENGINE` | Default OCR when the client omits `ocrEngine`: `none` \| `vision` \| `tesseract`. |
+| `VISION_LLM_BASE_URL` / `VISION_LLM_API_KEY` / `VISION_LLM_MODEL` | OpenAI-compatible vision for `ocrEngine=vision` (set on **api/worker/web and** `kh-markitdown`). Ollama example: `http://host:11434/v1` + key `ollama` + a vision model. |
+| `TESSERACT_LANG` | Tesseract `-l` value for `ocrEngine=tesseract` (default `eng`; sidecar also ships `deu` / `hun`). |
 
 Local: `docker compose --profile markitdown up -d kh-markitdown` (or include with `--profile full`).
 
 Dokploy: service is in `compose.dokploy.yaml` on the **project network only** (name `kh-markitdown`, never a generic alias on `dokploy-network`).
 
+## OCR engines
+
+Selected per upload in the Import UI (or via default env):
+
+| Engine | Behavior |
+| --- | --- |
+| `none` | Native MarkItDown text extract only (no LLM, no Tesseract). |
+| `vision` | `markitdown-ocr` + OpenAI-compatible vision model (Ollama or OpenAI). Best for photos / scanned PDFs when a vision model is available. |
+| `tesseract` | Local Tesseract OCR on images and scanned PDF pages (no LLM). |
+
+Health: `GET {MARKITDOWN_URL}/health` reports `vision`, `tesseract`, and available `engines`.
+
 ## UI entry
 
-Workspace → **New import** → Documents or Images → upload → wait for status `ready` → **Create draft**.
+Workspace → **New import** → Documents or Images → choose OCR engine → upload → wait for status `ready` → **Create draft**.
 
 ## Out of scope (this slice)
 
-- Azure Document Intelligence / markitdown-ocr plugins beyond OpenAI-compatible vision
+- Azure Document Intelligence / Content Understanding
 - Audio / YouTube / ZIP batch UI
 - Merging with conversation-import package
 - Doc Factory outbound templates

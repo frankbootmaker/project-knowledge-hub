@@ -1,9 +1,18 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import type { DocumentImportOcrEngine } from '@project-knowledge-hub/document-import';
 import { DocumentImportForm } from '../../../../../../components/DocumentImportForm';
 import { Page, PageHeader } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
+
+function defaultOcrEngine(): DocumentImportOcrEngine {
+  const value = process.env.DOCUMENT_IMPORT_OCR_ENGINE;
+  if (value === 'vision' || value === 'tesseract' || value === 'none') {
+    return value;
+  }
+  return 'none';
+}
 
 type Workspace = { id: string; name: string; slug: string };
 type Option = { id: string; name: string; slug: string };
@@ -72,6 +81,8 @@ export default async function NewDocumentImportPage({
         lane={lane}
         projects={projects}
         systems={systems}
+        defaultOcrEngine={defaultOcrEngine()}
+        visionConfigured={Boolean(process.env.VISION_LLM_BASE_URL)}
       />
     </Page>
   );

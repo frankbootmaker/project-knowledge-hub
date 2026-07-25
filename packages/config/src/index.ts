@@ -320,7 +320,14 @@ export const envSchema = z.object({
     .int()
     .positive()
     .default(26_214_400),
-  /** OpenAI-compatible vision LLM for MarkItDown image descriptions (optional). */
+  /**
+   * Default OCR engine for document/image import when the client omits ocrEngine.
+   * `vision` needs VISION_LLM_*; `tesseract` needs the sidecar binary.
+   */
+  DOCUMENT_IMPORT_OCR_ENGINE: z
+    .enum(['none', 'vision', 'tesseract'])
+    .default('none'),
+  /** OpenAI-compatible vision LLM for MarkItDown OCR / captions (optional). */
   VISION_LLM_BASE_URL: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().url().optional(),
@@ -330,6 +337,8 @@ export const envSchema = z.object({
     z.string().min(1).optional(),
   ),
   VISION_LLM_MODEL: z.string().min(1).default('gpt-4o-mini'),
+  /** Tesseract `-l` languages (e.g. eng, eng+deu+hun). Used by kh-markitdown. */
+  TESSERACT_LANG: z.string().min(1).default('eng'),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
