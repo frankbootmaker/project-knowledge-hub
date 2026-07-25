@@ -77,6 +77,13 @@ export async function getMcpActivitySummary(
   toolCallCount: number;
   toolErrorCount: number;
   topActions: Array<{ action: string; count: number }>;
+  /** Per-tool breakdown (entity_id = tool name on mcp./llm. tool audits). */
+  topTools: Array<{
+    toolName: string;
+    via: 'mcp' | 'llm' | 'mixed';
+    callCount: number;
+    errorCount: number;
+  }>;
 }> {
   const agentWhere = agentAuditWhere(since);
 
@@ -122,6 +129,44 @@ export async function getMcpActivitySummary(
     .orderBy(desc(count()))
     .limit(8);
 
+  const toolRows = rowsFromExecute<{
+    toolName: string;
+    mcpCalls: number;
+    llmCalls: number;
+    mcpErrors: number;
+    llmErrors: number;
+  }>(
+    await database.db.execute(sql`
+      SELECT
+        entity_id AS "toolName",
+        COUNT(*) FILTER (WHERE action = 'mcp.tool_call')::int AS "mcpCalls",
+        COUNT(*) FILTER (WHERE action = 'llm.tool_call')::int AS "llmCalls",
+        COUNT(*) FILTER (WHERE action = 'mcp.tool_error')::int AS "mcpErrors",
+        COUNT(*) FILTER (WHERE action = 'llm.tool_error')::int AS "llmErrors"
+      FROM audit_events
+      WHERE created_at >= ${since.toISOString()}
+        AND action IN (
+          'mcp.tool_call',
+          'mcp.tool_error',
+          'llm.tool_call',
+          'llm.tool_error'
+        )
+        AND entity_id IS NOT NULL
+        AND entity_id <> ''
+      GROUP BY entity_id
+      ORDER BY
+        (
+          COUNT(*) FILTER (
+            WHERE action IN ('mcp.tool_call', 'llm.tool_call')
+          )
+          + COUNT(*) FILTER (
+            WHERE action IN ('mcp.tool_error', 'llm.tool_error')
+          )
+        ) DESC
+      LIMIT 12
+    `),
+  );
+
   return {
     requestCount: Number(totalRow?.value ?? 0),
     toolCallCount: Number(toolCalls?.value ?? 0),
@@ -130,6 +175,18 @@ export async function getMcpActivitySummary(
       action: row.action,
       count: Number(row.value),
     })),
+    topTools: toolRows.map((row) => {
+      const mcp = Number(row.mcpCalls) + Number(row.mcpErrors);
+      const llm = Number(row.llmCalls) + Number(row.llmErrors);
+      const via: 'mcp' | 'llm' | 'mixed' =
+        mcp > 0 && llm > 0 ? 'mixed' : llm > 0 ? 'llm' : 'mcp';
+      return {
+        toolName: row.toolName,
+        via,
+        callCount: Number(row.mcpCalls) + Number(row.llmCalls),
+        errorCount: Number(row.mcpErrors) + Number(row.llmErrors),
+      };
+    }),
   };
 }
 

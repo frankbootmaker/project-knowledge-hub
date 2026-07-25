@@ -1136,6 +1136,8 @@
     "monitoringOpsLogExportOk": "Ops napló export letöltve.",
     "monitoringOpsLogExportFailed": "Az ops napló export sikertelen",
     "monitoringMcpEmpty": "Nincs MCP vagy ChatGPT Actions (llm.*) audit esemény ebben az időszakban. A Custom GPT OpenAPI Actions-t használ, nem a /mcp-t.",
+    "monitoringTopTools": "Top eszközök",
+    "monitoringToolCountsWithErrors": "{calls} · {errors} hiba",
     "monitoringClientsTitle": "API-kliens rangsor",
     "monitoringClientsEmpty": "Nincs MCP kliens forgalom ebben az időszakban.",
     "monitoringClientCounts": "{requests} kérés · {calls} tool · {errors} hiba",

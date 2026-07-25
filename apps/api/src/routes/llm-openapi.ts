@@ -450,9 +450,13 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
                 : undefined,
           projectId: typeof body.projectId === 'string' ? body.projectId : undefined,
           systemId: typeof body.systemId === 'string' ? body.systemId : undefined,
+          uploadId: typeof body.uploadId === 'string' ? body.uploadId : undefined,
           // Avoid logging multi‑MB base64 payloads in audit metadata.
           contentBase64Chars:
             typeof body.contentBase64 === 'string' ? body.contentBase64.length : undefined,
+          chunkBase64Chars:
+            typeof body.chunkBase64 === 'string' ? body.chunkBase64.length : undefined,
+          chunkIndex: typeof body.index === 'number' ? body.index : undefined,
           contentType: typeof body.contentType === 'string' ? body.contentType : undefined,
           insertIntoRecord:
             typeof body.insertIntoRecord === 'boolean' ? body.insertIntoRecord : undefined,
@@ -484,8 +488,11 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
               : typeof body.knowledgeRecordId === 'string'
                 ? body.knowledgeRecordId
                 : undefined,
+          uploadId: typeof body.uploadId === 'string' ? body.uploadId : undefined,
           contentBase64Chars:
             typeof body.contentBase64 === 'string' ? body.contentBase64.length : undefined,
+          chunkBase64Chars:
+            typeof body.chunkBase64 === 'string' ? body.chunkBase64.length : undefined,
           message: error instanceof Error ? error.message : 'Tool failed',
         },
         ipAddress: request.ip,

@@ -48,6 +48,12 @@ export type MonitoringPayload = {
     toolCallCount: number;
     toolErrorCount: number;
     topActions: Array<{ action: string; count: number }>;
+    topTools?: Array<{
+      toolName: string;
+      via: 'mcp' | 'llm' | 'mixed';
+      callCount: number;
+      errorCount: number;
+    }>;
   };
   clients: {
     range: string;
@@ -873,6 +879,35 @@ export function MonitoringDashboard({
                   })}
             </Badge>
           </div>
+          {(data.mcp.topTools?.length ?? 0) > 0 ? (
+            <>
+              <p className="mt-4 mb-2 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
+                {t('monitoringTopTools')}
+              </p>
+              <ul className="mt-0 mb-0 grid gap-1 pl-0 list-none">
+                {(data.mcp.topTools ?? []).map((row) => (
+                  <li
+                    key={`${row.via}:${row.toolName}`}
+                    className="flex justify-between gap-3 text-sm text-ink-muted"
+                  >
+                    <span className="truncate font-mono text-ink">
+                      <span className="text-ink-muted">{row.via}</span>
+                      {' · '}
+                      {row.toolName}
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {row.errorCount > 0
+                        ? t('monitoringToolCountsWithErrors', {
+                            calls: row.callCount,
+                            errors: row.errorCount,
+                          })
+                        : row.callCount}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
           {data.mcp.topActions.length > 0 ? (
             <ul className="mt-4 mb-0 grid gap-1 pl-0 list-none">
               {data.mcp.topActions.map((row) => (

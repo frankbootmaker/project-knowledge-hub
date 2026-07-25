@@ -1136,6 +1136,8 @@
     "monitoringOpsLogExportOk": "Ops log export downloaded.",
     "monitoringOpsLogExportFailed": "Ops log export failed",
     "monitoringMcpEmpty": "No MCP or ChatGPT Actions (llm.*) audit events in this range. ChatGPT Custom GPT uses OpenAPI Actions, not /mcp.",
+    "monitoringTopTools": "Top tools",
+    "monitoringToolCountsWithErrors": "{calls} · {errors} err",
     "monitoringClientsTitle": "API client leaderboard",
     "monitoringClientsEmpty": "No MCP client traffic in this range.",
     "monitoringClientCounts": "{requests} req · {calls} tools · {errors} err",
