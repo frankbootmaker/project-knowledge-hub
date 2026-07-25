@@ -1135,7 +1135,7 @@
     "monitoringOpsLogExport": "Ops-Log exportieren (7T)",
     "monitoringOpsLogExportOk": "Ops-Log-Export heruntergeladen.",
     "monitoringOpsLogExportFailed": "Ops-Log-Export fehlgeschlagen",
-    "monitoringMcpEmpty": "Keine MCP-Audit-Ereignisse in diesem Zeitraum.",
+    "monitoringMcpEmpty": "Keine MCP- oder ChatGPT-Actions-(llm.*)-Audit-Ereignisse in diesem Zeitraum. Custom GPT nutzt OpenAPI Actions, nicht /mcp.",
     "monitoringClientsTitle": "API-Client-Rangliste",
     "monitoringClientsEmpty": "Kein MCP-Client-Traffic in diesem Zeitraum.",
     "monitoringClientCounts": "{requests} Anfr. · {calls} Tools · {errors} Fehler",

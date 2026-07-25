@@ -79,6 +79,21 @@ export type McpToolHandlers = {
     /** When true with knowledgeRecordId, append markdownSnippet into the record body. */
     insertIntoRecord?: boolean;
   }) => Promise<unknown>;
+  /** ChatGPT Actions: start a Redis-backed chunked base64 upload (prefer over single-shot). */
+  beginWorkspaceMediaUpload: (input: {
+    workspaceId: string;
+    contentType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+    filename?: string;
+    alt?: string;
+    knowledgeRecordId?: string;
+    insertIntoRecord?: boolean;
+  }) => Promise<unknown>;
+  appendWorkspaceMediaUpload: (input: {
+    uploadId: string;
+    chunkBase64: string;
+    index?: number;
+  }) => Promise<unknown>;
+  finalizeWorkspaceMediaUpload: (input: { uploadId: string }) => Promise<unknown>;
   listWorkspaceMedia: (input: {
     workspaceId: string;
     knowledgeRecordId?: string;
@@ -332,15 +347,74 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_record_metadata',
-    'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, MCP write constraints, and the workspace media (image embed) workflow. Call before create_knowledge_record.',
+    'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, MCP write constraints, and the workspace media workflow. Call before create_knowledge_record. For images/charts see workspaceMedia.workflow: ALWAYS use begin → append → finalize (never single-shot upload_workspace_media from LLM/Actions clients).',
     {},
     async () =>
       wrap('list_record_metadata', 'knowledge:read', () => handlers.listRecordMetadata())(),
   );
 
   server.tool(
+    'begin_workspace_media_upload',
+    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. Requires knowledge:write.',
+    {
+      workspaceId: z.string().uuid(),
+      contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
+      filename: z.string().min(1).max(200).optional(),
+      alt: z.string().max(300).optional(),
+      knowledgeRecordId: z.string().uuid().optional(),
+      insertIntoRecord: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true, requires knowledgeRecordId; finalize appends media.markdownSnippet to that record',
+        ),
+    },
+    async (args) =>
+      wrap(
+        'begin_workspace_media_upload',
+        'knowledge:write',
+        () => handlers.beginWorkspaceMediaUpload(args),
+        {
+          workspaceId: args.workspaceId,
+          recordId: args.knowledgeRecordId,
+        },
+      )(),
+  );
+
+  server.tool(
+    'append_workspace_media_upload',
+    'Step 2 of image upload (after begin_workspace_media_upload): append one raw base64 chunk (no data: prefix). Use ~recommendedChunkChars (8000); max 12000. Repeat until the full base64 string is sent, then call finalize_workspace_media_upload. Requires knowledge:write.',
+    {
+      uploadId: z.string().uuid(),
+      chunkBase64: z.string().min(1).max(12_000),
+      index: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe('Optional 0-based index; must equal the next expected chunk index'),
+    },
+    async (args) =>
+      wrap('append_workspace_media_upload', 'knowledge:write', () =>
+        handlers.appendWorkspaceMediaUpload(args),
+      )(),
+  );
+
+  server.tool(
+    'finalize_workspace_media_upload',
+    'Step 3 of image upload: assemble all chunks, store media, return media.markdownSnippet. Honors insertIntoRecord from begin. Do not call upload_workspace_media instead. Requires knowledge:write.',
+    {
+      uploadId: z.string().uuid(),
+    },
+    async (args) =>
+      wrap('finalize_workspace_media_upload', 'knowledge:write', () =>
+        handlers.finalizeWorkspaceMediaUpload(args),
+      )(),
+  );
+
+  server.tool(
     'upload_workspace_media',
-    'REQUIRED for images/charts: store PNG/JPEG/WebP/GIF in workspace media and return media.markdownSnippet (![alt](/api/v1/media/{id})). Pass insertIntoRecord=true with knowledgeRecordId to append into a draft automatically. contentBase64 = raw base64 only (no data: prefix). Requires knowledge:write.',
+    'AVOID for LLM/MCP/ChatGPT clients — single-shot upload often fails when base64 is large. Use begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload instead. Kept only for tiny files or non-LLM integrations. contentBase64 = raw base64 (no data: prefix). Requires knowledge:write.',
     {
       workspaceId: z.string().uuid(),
       contentBase64: z.string().min(1).max(10_000_000),
@@ -369,7 +443,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_knowledge_record',
-    'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: upload_workspace_media first, then include the returned markdownSnippet in contentMarkdown — do not use data:image base64 URIs.',
+    'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images/charts: begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload, then paste media.markdownSnippet (or insertIntoRecord on begin). Never use upload_workspace_media or data:image URIs.',
     {
       workspaceId: z.string().uuid(),
       title: z.string().min(1).max(300),
@@ -399,7 +473,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_knowledge_record',
-    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). To add images, call upload_workspace_media (optionally with insertIntoRecord=true) and paste media.markdownSnippet into contentMarkdown — do not use data:image URIs.',
+    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs.',
     {
       recordId: z.string().uuid(),
       changeMessage: z.string().min(1).max(500),

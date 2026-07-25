@@ -31,6 +31,9 @@ const TOOL_NAMES = [
   'get_platform_status',
   'create_knowledge_record',
   'update_knowledge_record',
+  'begin_workspace_media_upload',
+  'append_workspace_media_upload',
+  'finalize_workspace_media_upload',
   'upload_workspace_media',
   'delete_workspace_media',
 ] as const;
@@ -53,6 +56,9 @@ const scopeByTool: Record<ToolName, McpScope> = {
   get_platform_status: 'monitoring:read',
   create_knowledge_record: 'knowledge:write',
   update_knowledge_record: 'knowledge:write',
+  begin_workspace_media_upload: 'knowledge:write',
+  append_workspace_media_upload: 'knowledge:write',
+  finalize_workspace_media_upload: 'knowledge:write',
   upload_workspace_media: 'knowledge:write',
   delete_workspace_media: 'knowledge:write',
 };
@@ -291,6 +297,61 @@ async function invokeTool(
           typeof raw.knowledgeRecordId === 'string' ? raw.knowledgeRecordId : undefined,
         limit: typeof raw.limit === 'number' ? raw.limit : 20,
       });
+    case 'begin_workspace_media_upload': {
+      if (typeof raw.workspaceId !== 'string' || typeof raw.contentType !== 'string') {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'workspaceId and contentType are required',
+          statusCode: 400,
+        });
+      }
+      if (
+        raw.contentType !== 'image/jpeg' &&
+        raw.contentType !== 'image/png' &&
+        raw.contentType !== 'image/webp' &&
+        raw.contentType !== 'image/gif'
+      ) {
+        throw new AppError({
+          code: 'MEDIA_TYPE_UNSUPPORTED',
+          message: 'contentType must be image/jpeg, image/png, image/webp, or image/gif',
+          statusCode: 400,
+        });
+      }
+      return handlers.beginWorkspaceMediaUpload({
+        workspaceId: raw.workspaceId,
+        contentType: raw.contentType,
+        filename: typeof raw.filename === 'string' ? raw.filename : undefined,
+        alt: typeof raw.alt === 'string' ? raw.alt : undefined,
+        knowledgeRecordId:
+          typeof raw.knowledgeRecordId === 'string' ? raw.knowledgeRecordId : undefined,
+        insertIntoRecord:
+          typeof raw.insertIntoRecord === 'boolean' ? raw.insertIntoRecord : undefined,
+      });
+    }
+    case 'append_workspace_media_upload': {
+      if (typeof raw.uploadId !== 'string' || typeof raw.chunkBase64 !== 'string') {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'uploadId and chunkBase64 are required',
+          statusCode: 400,
+        });
+      }
+      return handlers.appendWorkspaceMediaUpload({
+        uploadId: raw.uploadId,
+        chunkBase64: raw.chunkBase64,
+        index: typeof raw.index === 'number' ? raw.index : undefined,
+      });
+    }
+    case 'finalize_workspace_media_upload': {
+      if (typeof raw.uploadId !== 'string') {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'uploadId is required',
+          statusCode: 400,
+        });
+      }
+      return handlers.finalizeWorkspaceMediaUpload({ uploadId: raw.uploadId });
+    }
     case 'upload_workspace_media': {
       if (
         typeof raw.workspaceId !== 'string' ||

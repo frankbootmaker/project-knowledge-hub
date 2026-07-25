@@ -25,11 +25,17 @@ import {
   updateKnowledgeRecord,
 } from './knowledge-records-service.js';
 import {
+  appendMediaUploadChunk,
+  beginMediaUploadSession,
+  takeMediaUploadSession,
+} from './media-upload-session.js';
+import {
   archiveWorkspaceMedia,
   createWorkspaceMedia,
   getWorkspaceMediaById,
   listWorkspaceMedia,
   toPublicMedia,
+  type PublicWorkspaceMedia,
 } from './workspace-media.js';
 import { buildSupportDump } from './support-dump.js';
 import {
@@ -76,6 +82,81 @@ function requireActingUserId(client: McpClientContext): string {
     });
   }
   return client.actingUserId;
+}
+
+async function embedMediaIntoRecord(
+  app: FastifyInstance,
+  client: McpClientContext,
+  actingUserId: string,
+  media: PublicWorkspaceMedia,
+  knowledgeRecordId: string,
+  workspaceId: string,
+  ipAddress?: string | null,
+) {
+  const [existing] = await app.database.db
+    .select()
+    .from(knowledgeRecords)
+    .where(
+      and(eq(knowledgeRecords.id, knowledgeRecordId), isNull(knowledgeRecords.archivedAt)),
+    )
+    .limit(1);
+  if (!existing) {
+    throw new AppError({
+      code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+      message: 'Knowledge record not found for insertIntoRecord',
+      statusCode: 404,
+    });
+  }
+  if (existing.workspaceId !== workspaceId) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'knowledgeRecordId is not in the given workspace',
+      statusCode: 400,
+    });
+  }
+
+  const alreadyEmbedded = existing.contentMarkdown.includes(media.url);
+  const nextContent = alreadyEmbedded
+    ? existing.contentMarkdown
+    : `${existing.contentMarkdown.replace(/\s*$/, '')}\n\n${media.markdownSnippet}\n`;
+
+  const updated = alreadyEmbedded
+    ? null
+    : await updateKnowledgeRecord(
+        app,
+        existing.id,
+        {
+          contentMarkdown: nextContent,
+          changeMessage: `Embed media ${media.id}`,
+          lifecycleStatus: 'draft',
+          sourceOfTruthMode: 'ai_generated_draft',
+        },
+        {
+          actorType: 'api_client',
+          actorId: client.id,
+          userId: actingUserId,
+        },
+        ipAddress,
+      );
+
+  return {
+    media,
+    insertedIntoRecord: !alreadyEmbedded,
+    alreadyEmbedded,
+    knowledgeRecord: updated
+      ? {
+          id: updated.knowledgeRecord.id,
+          slug: updated.knowledgeRecord.slug,
+          currentVersionNumber: updated.knowledgeRecord.currentVersionNumber,
+          lifecycleStatus: updated.knowledgeRecord.lifecycleStatus,
+        }
+      : {
+          id: existing.id,
+          slug: existing.slug,
+          currentVersionNumber: existing.currentVersionNumber,
+          lifecycleStatus: existing.lifecycleStatus,
+        },
+  };
 }
 
 function assertProjectAllowed(client: McpClientContext, projectId: string | null): void {
@@ -603,7 +684,6 @@ export function createMcpToolHandlers(
           statusCode: 400,
         });
       }
-      // Reject clearly truncated/empty payloads.
       if (buffer.byteLength === 0) {
         throw new AppError({
           code: 'MEDIA_INVALID_BASE64',
@@ -649,76 +729,152 @@ export function createMcpToolHandlers(
         return {
           media,
           insertedIntoRecord: false,
-          hint: 'Paste media.markdownSnippet into create_knowledge_record or update_knowledge_record contentMarkdown. Or re-call with insertIntoRecord=true and knowledgeRecordId.',
+          hint: 'Paste media.markdownSnippet into create_knowledge_record or update_knowledge_record contentMarkdown. Or re-call with insertIntoRecord=true and knowledgeRecordId. ChatGPT Actions: prefer begin/append/finalize_workspace_media_upload for large base64.',
         };
       }
 
-      const [existing] = await app.database.db
-        .select()
-        .from(knowledgeRecords)
-        .where(
-          and(
-            eq(knowledgeRecords.id, input.knowledgeRecordId),
-            isNull(knowledgeRecords.archivedAt),
-          ),
-        )
-        .limit(1);
-      if (!existing) {
-        throw new AppError({
-          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
-          message: 'Knowledge record not found for insertIntoRecord',
-          statusCode: 404,
-        });
-      }
-      if (existing.workspaceId !== input.workspaceId) {
+      return embedMediaIntoRecord(
+        app,
+        client,
+        actingUserId,
+        media,
+        input.knowledgeRecordId,
+        input.workspaceId,
+        ipAddress,
+      );
+    },
+
+    async beginWorkspaceMediaUpload(input) {
+      assertWriteWorkspaceAllowed(client, input.workspaceId);
+      requireActingUserId(client);
+
+      if (input.insertIntoRecord && !input.knowledgeRecordId) {
         throw new AppError({
           code: 'VALIDATION_ERROR',
-          message: 'knowledgeRecordId is not in the given workspace',
+          message: 'insertIntoRecord requires knowledgeRecordId',
           statusCode: 400,
         });
       }
 
-      const alreadyEmbedded = existing.contentMarkdown.includes(media.url);
-      const nextContent = alreadyEmbedded
-        ? existing.contentMarkdown
-        : `${existing.contentMarkdown.replace(/\s*$/, '')}\n\n${media.markdownSnippet}\n`;
-
-      const updated = alreadyEmbedded
-        ? null
-        : await updateKnowledgeRecord(
-            app,
-            existing.id,
-            {
-              contentMarkdown: nextContent,
-              changeMessage: `Embed media ${media.id}`,
-              lifecycleStatus: 'draft',
-              sourceOfTruthMode: 'ai_generated_draft',
-            },
-            {
-              actorType: 'api_client',
-              actorId: client.id,
-              userId: actingUserId,
-            },
-            ipAddress,
-          );
+      const started = await beginMediaUploadSession(app.redis, {
+        clientId: client.id,
+        workspaceId: input.workspaceId,
+        contentType: input.contentType,
+        filename: input.filename ?? null,
+        alt: input.alt ?? null,
+        knowledgeRecordId: input.knowledgeRecordId ?? null,
+        insertIntoRecord: input.insertIntoRecord,
+      });
 
       return {
+        ...started,
+        hint: `ChatGPT: split the raw base64 into ~${started.recommendedChunkChars}-char chunks (max ${started.maxChunkChars}). Call append_workspace_media_upload for each chunk, then finalize_workspace_media_upload.`,
+      };
+    },
+
+    async appendWorkspaceMediaUpload(input) {
+      requireActingUserId(client);
+      return appendMediaUploadChunk(app.redis, {
+        uploadId: input.uploadId,
+        clientId: client.id,
+        chunkBase64: input.chunkBase64,
+        index: input.index,
+      });
+    },
+
+    async finalizeWorkspaceMediaUpload(input) {
+      const actingUserId = requireActingUserId(client);
+      const session = await takeMediaUploadSession(
+        app.redis,
+        input.uploadId,
+        client.id,
+      );
+      assertWriteWorkspaceAllowed(client, session.workspaceId);
+
+      if (session.chunks.length === 0) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'No chunks uploaded; call append_workspace_media_upload first',
+          statusCode: 400,
+        });
+      }
+
+      const contentBase64 = session.chunks.join('');
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(contentBase64, 'base64');
+      } catch {
+        throw new AppError({
+          code: 'MEDIA_INVALID_BASE64',
+          message: 'Assembled contentBase64 is not valid base64',
+          statusCode: 400,
+        });
+      }
+      if (buffer.byteLength === 0) {
+        throw new AppError({
+          code: 'MEDIA_INVALID_BASE64',
+          message: 'Decoded media is empty',
+          statusCode: 400,
+        });
+      }
+
+      const { store: blobStore } = await app.getBlobStore();
+      const row = await createWorkspaceMedia(app.database, {
+        workspaceId: session.workspaceId,
+        knowledgeRecordId: session.knowledgeRecordId,
+        contentType: session.contentType,
+        buffer,
+        originalFilename: session.filename,
+        altText: session.alt,
+        createdBy: actingUserId,
+        uploadDir: app.env.MEDIA_UPLOAD_DIR,
+        maxBytes: app.env.MEDIA_MAX_BYTES,
+        blobStore,
+      });
+      const media = toPublicMedia(row);
+
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'media.upload',
+        entityType: 'workspace_media',
+        entityId: row.id,
+        metadata: {
+          workspaceId: session.workspaceId,
+          knowledgeRecordId: row.knowledgeRecordId,
+          contentType: row.contentType,
+          byteSize: row.byteSize,
+          insertIntoRecord: session.insertIntoRecord,
+          chunkCount: session.chunks.length,
+          via: 'mcp_chunked',
+        },
+        ipAddress: ipAddress ?? null,
+      });
+
+      if (!session.insertIntoRecord || !session.knowledgeRecordId) {
+        return {
+          media,
+          insertedIntoRecord: false,
+          chunkCount: session.chunks.length,
+          totalBase64Chars: session.totalBase64Chars,
+          hint: 'Paste media.markdownSnippet into create/update, or begin again with insertIntoRecord=true and knowledgeRecordId.',
+        };
+      }
+
+      const embedded = await embedMediaIntoRecord(
+        app,
+        client,
+        actingUserId,
         media,
-        insertedIntoRecord: !alreadyEmbedded,
-        alreadyEmbedded,
-        knowledgeRecord: updated
-          ? {
-              id: updated.knowledgeRecord.id,
-              slug: updated.knowledgeRecord.slug,
-              currentVersionNumber: updated.knowledgeRecord.currentVersionNumber,
-              lifecycleStatus: updated.knowledgeRecord.lifecycleStatus,
-            }
-          : {
-              id: existing.id,
-              slug: existing.slug,
-              currentVersionNumber: existing.currentVersionNumber,
-              lifecycleStatus: existing.lifecycleStatus,
-            },
+        session.knowledgeRecordId,
+        session.workspaceId,
+        ipAddress,
+      );
+      return {
+        ...embedded,
+        chunkCount: session.chunks.length,
+        totalBase64Chars: session.totalBase64Chars,
       };
     },
 

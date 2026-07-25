@@ -422,6 +422,8 @@ export type KnowledgeRecordMetadata = {
     tools: string[];
     contentTypes: string[];
     markdownPattern: string;
+    /** begin → append → finalize; LLM clients must follow this, not upload_workspace_media. */
+    preferredPath: string;
     workflow: string[];
   };
   guidance: string[];
@@ -502,7 +504,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
           'Call list_record_metadata before create_knowledge_record to pick recordType.',
           'MCP cannot set lifecycleStatus or sourceOfTruthMode; humans approve/mark-current.',
           'Prefer specific planning types (business-idea, vision, plan, initiative) over other.',
-          'Do not embed data:image/...;base64 URIs in Markdown — use upload_workspace_media.',
+          'Do not embed data:image/...;base64 URIs in Markdown — use begin → append → finalize_workspace_media_upload (never upload_workspace_media from LLM clients).',
         ],
       },
     },
@@ -524,25 +526,31 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
     },
     workspaceMedia: {
       tools: [
+        'begin_workspace_media_upload',
+        'append_workspace_media_upload',
+        'finalize_workspace_media_upload',
         'upload_workspace_media',
         'list_workspace_media',
         'delete_workspace_media',
       ],
       contentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
       markdownPattern: '![alt text](/api/v1/media/{mediaId})',
+      preferredPath:
+        'begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload',
       workflow: [
-        'Call upload_workspace_media with workspaceId, contentType, and raw contentBase64 (no data: prefix).',
-        'Response includes media.markdownSnippet — paste it into contentMarkdown via create/update, or pass knowledgeRecordId + insertIntoRecord=true to append automatically.',
+        'DEFAULT for all LLM/MCP/ChatGPT clients: begin_workspace_media_upload → append_workspace_media_upload (~8000-char raw base64 chunks, max 12000) → finalize_workspace_media_upload. Do not use upload_workspace_media.',
+        'Avoid upload_workspace_media from LLM clients — single-shot base64 often fails or is truncated; it remains only for tiny files or non-LLM integrations.',
+        'finalize (or upload) returns media.markdownSnippet — paste into contentMarkdown, or set knowledgeRecordId + insertIntoRecord=true on begin to append automatically.',
         'Optional knowledgeRecordId links the asset to a record; get_knowledge_record returns linked media[].',
         'Requires knowledge:write, actingUserId, and a non-empty workspace allowlist.',
-        'ChatGPT Custom GPT Actions: if upload_workspace_media is missing from Available actions, re-import GET /api/v1/llm/openapi.json (Actions schema is static until re-imported).',
+        'ChatGPT Custom GPT Actions: after hub upgrades, re-import GET /api/v1/llm/openapi.json so begin/append/finalize appear under Available actions.',
       ],
     },
     guidance: [
       'Use this hub as a ledger across planning, delivery, operations, and vision.',
       'Pick the most specific recordType; use note for unstructured working notes.',
       'Attach projectId/systemId when the record is scoped to catalogue entities.',
-      'For charts/screenshots: upload_workspace_media then embed media.markdownSnippet — never data: URIs.',
+      'For charts/screenshots: begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload, then embed media.markdownSnippet — never upload_workspace_media or data: URIs.',
     ],
   };
 }

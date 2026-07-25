@@ -54,9 +54,12 @@ describe('record types catalog', () => {
     );
     expect(meta.recordTypes.some((entry) => entry.value === 'vision')).toBe(true);
     expect(meta.workspaceMedia.tools).toContain('upload_workspace_media');
+    expect(meta.workspaceMedia.tools).toContain('begin_workspace_media_upload');
+    expect(meta.workspaceMedia.preferredPath).toContain('begin_workspace_media_upload');
+    expect(meta.workspaceMedia.workflow[0]).toMatch(/Do not use upload_workspace_media/);
     expect(meta.workspaceMedia.contentTypes).toContain('image/png');
-    expect(meta.guidance.some((line) => line.includes('upload_workspace_media'))).toBe(
-      true,
-    );
+    expect(
+      meta.guidance.some((line) => line.includes('finalize_workspace_media_upload')),
+    ).toBe(true);
   });
 });

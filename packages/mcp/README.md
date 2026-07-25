@@ -21,7 +21,8 @@ workspace allowlist, and `actingUserId`:
 
 * `create_knowledge_record` — always creates a **draft** with `ai_generated_draft` provenance
 * `update_knowledge_record` — updates as **draft**; requires `changeMessage`
-* `upload_workspace_media` — JPEG/PNG/WebP/GIF base64 upload; returns `media.markdownSnippet` for embeds; optional `insertIntoRecord` appends the snippet into a linked record
+* `begin_workspace_media_upload` / `append_workspace_media_upload` / `finalize_workspace_media_upload` — Redis-backed chunked base64 upload (**preferred for ChatGPT Actions**; ~8 KB chunks)
+* `upload_workspace_media` — single-shot JPEG/PNG/WebP/GIF base64 upload; returns `media.markdownSnippet`; optional `insertIntoRecord`
 * `delete_workspace_media` — soft-delete media + remove bytes
 
 Approve / mark-current remain human/session-API only.
@@ -30,8 +31,9 @@ Approve / mark-current remain human/session-API only.
 
 Do **not** put `data:image/...;base64,...` URIs in `contentMarkdown`. Instead:
 
-1. Call `upload_workspace_media` with `workspaceId`, `contentType`, and raw `contentBase64` (no `data:` prefix).
-2. Either paste `media.markdownSnippet` (e.g. `![chart](/api/v1/media/{id})`) into `create_knowledge_record` / `update_knowledge_record`, **or** pass `knowledgeRecordId` + `insertIntoRecord: true` to append it automatically.
-3. `get_knowledge_record` returns linked `media[]` metadata for that record.
+1. **ChatGPT Actions:** `begin_workspace_media_upload` → split raw base64 into ~8000-char chunks → `append_workspace_media_upload` each → `finalize_workspace_media_upload`.
+2. **Single-shot (small files):** `upload_workspace_media` with `workspaceId`, `contentType`, and raw `contentBase64` (no `data:` prefix).
+3. Either paste `media.markdownSnippet` (e.g. `![chart](/api/v1/media/{id})`) into `create_knowledge_record` / `update_knowledge_record`, **or** pass `knowledgeRecordId` + `insertIntoRecord: true` on begin/upload to append it automatically.
+4. `get_knowledge_record` returns linked `media[]` metadata for that record.
 
 Mounted by the API at `POST|GET|DELETE /mcp` with bearer API client tokens.

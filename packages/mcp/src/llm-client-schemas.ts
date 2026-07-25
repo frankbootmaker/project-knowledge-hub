@@ -194,9 +194,73 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
 
   const write: ToolDef[] = [
     {
+      name: 'begin_workspace_media_upload',
+      description:
+        'REQUIRED default for ChatGPT/LLM image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each chunk, then finalize_workspace_media_upload. Requires knowledge:write.',
+      write: true,
+      body: {
+        type: 'object',
+        required: ['workspaceId', 'contentType'],
+        properties: {
+          workspaceId: uuidProp('Workspace id'),
+          contentType: {
+            type: 'string',
+            enum: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+            description: 'Image MIME type',
+          },
+          filename: stringProp('Optional original filename', { maxLength: 200 }),
+          alt: stringProp('Optional alt text for Markdown', { maxLength: 300 }),
+          knowledgeRecordId: uuidProp('Optional knowledge record to link'),
+          insertIntoRecord: {
+            type: 'boolean',
+            description:
+              'When true, requires knowledgeRecordId; finalize appends media.markdownSnippet to that record',
+          },
+        },
+      },
+    },
+    {
+      name: 'append_workspace_media_upload',
+      description:
+        'Step 2 of image upload (after begin): append one raw base64 chunk (no data: prefix). Use ~8000 characters per call; max 12000. Repeat until the full base64 is sent, then finalize_workspace_media_upload. Requires knowledge:write.',
+      write: true,
+      body: {
+        type: 'object',
+        required: ['uploadId', 'chunkBase64'],
+        properties: {
+          uploadId: uuidProp('Upload session id from begin_workspace_media_upload'),
+          chunkBase64: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 12_000,
+            description:
+              'One raw base64 fragment (no data: URL prefix). Prefer ~8000 chars; max 12000.',
+          },
+          index: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Optional 0-based index; must equal the next expected chunk index',
+          },
+        },
+      },
+    },
+    {
+      name: 'finalize_workspace_media_upload',
+      description:
+        'Step 3 of image upload: assemble chunks, store media, return media.markdownSnippet. Honors insertIntoRecord from begin. Do not use upload_workspace_media instead. Requires knowledge:write.',
+      write: true,
+      body: {
+        type: 'object',
+        required: ['uploadId'],
+        properties: {
+          uploadId: uuidProp('Upload session id from begin_workspace_media_upload'),
+        },
+      },
+    },
+    {
       name: 'upload_workspace_media',
       description:
-        'REQUIRED for images/charts: store PNG/JPEG/WebP/GIF in workspace media and return media.markdownSnippet (![alt](/api/v1/media/{id})). Pass insertIntoRecord=true with knowledgeRecordId to append into a draft automatically. contentBase64 = raw base64 only (no data: prefix). Requires knowledge:write.',
+        'AVOID for ChatGPT/LLM clients — single-shot base64 often fails when large. Use begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload instead. Kept only for tiny files or non-LLM integrations. Requires knowledge:write.',
       write: true,
       body: {
         type: 'object',
@@ -208,7 +272,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
             type: 'string',
             minLength: 1,
             description:
-              'Raw base64 image bytes (no data: URL prefix). Decoded size must stay under MEDIA_MAX_BYTES (default 5 MiB).',
+              'Raw base64 image bytes (no data: URL prefix). Decoded size must stay under MEDIA_MAX_BYTES (default 5 MiB). Prefer chunked upload tools when this string is large.',
           },
           contentType: {
             type: 'string',
@@ -229,7 +293,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'create_knowledge_record',
       description:
-        'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: upload_workspace_media then include media.markdownSnippet in contentMarkdown — never data:image URIs.',
+        'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: begin → append → finalize_workspace_media_upload (never upload_workspace_media), then include media.markdownSnippet — never data:image URIs.',
       write: true,
       body: {
         type: 'object',
@@ -262,7 +326,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'update_knowledge_record',
       description:
-        'Update a knowledge record as draft (requires knowledge:write and a changeMessage). For images use upload_workspace_media (optionally insertIntoRecord=true) and paste media.markdownSnippet — never data:image URIs.',
+        'Update a knowledge record as draft (requires knowledge:write and a changeMessage). For images: begin → append → finalize_workspace_media_upload (never upload_workspace_media); optional insertIntoRecord on begin — never data:image URIs.',
       write: true,
       body: {
         type: 'object',
@@ -399,8 +463,9 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
       description:
         'OpenAPI facade over Project Knowledge Hub knowledge tools for ChatGPT Actions, ' +
         'Gemini / OpenAPI clients, and OpenWebUI. Authenticate with the API client bearer token. ' +
-        'Write tools (require knowledge:write): upload_workspace_media (images/charts — use this ' +
-        'before embedding), create_knowledge_record, update_knowledge_record, delete_workspace_media. ' +
+        'Write tools (require knowledge:write): begin/append/finalize_workspace_media_upload ' +
+        '(preferred for ChatGPT image/chart base64), upload_workspace_media (small single-shot), ' +
+        'create_knowledge_record, update_knowledge_record, delete_workspace_media. ' +
         'Re-import this schema in ChatGPT Actions after hub upgrades so new operations appear.',
     },
     servers: [{ url: apiBase }],

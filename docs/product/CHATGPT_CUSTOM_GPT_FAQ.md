@@ -69,11 +69,11 @@ Requires ChatGPT Plus / Team / Enterprise (Custom GPTs + Actions).
    ```
 
 5. **Authentication:** API Key → auth type **Bearer** → paste the hub token (**no** `Bearer ` prefix).
-6. Confirm **Available actions** includes `upload_workspace_media` (plus create/update). If it is missing after a hub upgrade, click **Import from URL** again on the same OpenAPI URL — ChatGPT does **not** auto-refresh Actions when the hub adds tools.
+6. Confirm **Available actions** includes `begin_workspace_media_upload`, `append_workspace_media_upload`, and `finalize_workspace_media_upload` (plus create/update). If they are missing after a hub upgrade, click **Import from URL** again on the same OpenAPI URL — ChatGPT does **not** auto-refresh Actions when the hub adds tools.
 7. Optional instructions, for example:
    - Prefer searching Knowledge Hub before answering from memory.
    - When asked to save work, create/update **draft** knowledge records in the configured workspace.
-   - For charts/images: call `upload_workspace_media` (raw base64, never `data:` URIs), then embed `media.markdownSnippet`, or use `insertIntoRecord=true`.
+   - For charts/images: use **chunked** upload — `begin_workspace_media_upload` → `append_workspace_media_upload` (~8000-char raw base64 chunks) → `finalize_workspace_media_upload`. Never put `data:` URIs in Markdown. Prefer `insertIntoRecord=true` with a `knowledgeRecordId` on begin.
    - Ask which project/system to attach when unclear.
 8. **Save** / **Update**.
 
@@ -100,9 +100,9 @@ Requires ChatGPT Plus / Team / Enterprise (Custom GPTs + Actions).
 - “Search knowledge for &lt;topic&gt; and summarize what we already decided.”
 - “Create a draft knowledge record titled … with this body … in workspace …”
 - “Update draft record &lt;id&gt; with the revised summary below.”
-- “Upload this PNG into workspace …, link it to draft record … with insertIntoRecord, alt ‘…’.”
+- “Upload this PNG into workspace … with the chunked media tools, link it to draft record … with insertIntoRecord, alt ‘…’.”
 
-**Image uploads are often slow in ChatGPT Actions:** the model must base64-encode the file and POST a large JSON body through OpenAI to your API. Prefer a compressed **JPEG/WebP under ~500 KB** (charts rarely need multi‑MB PNGs). Hub API body limit is sized for `MEDIA_MAX_BYTES` (default 5 MiB decoded).
+**Image uploads via ChatGPT Actions:** Code Interpreter can build a PNG and base64-encode it, but a single Actions call often cannot carry ~65 KB+ of base64. Prefer **chunked upload** (`begin` → `append` ~8000 chars → `finalize`). Still compress when possible (JPEG/WebP). Hub API body limit is sized for `MEDIA_MAX_BYTES` (default 5 MiB decoded).
 
 ---
 
