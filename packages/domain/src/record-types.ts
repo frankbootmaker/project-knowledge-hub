@@ -535,6 +535,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
         'Response includes media.markdownSnippet — paste it into contentMarkdown via create/update, or pass knowledgeRecordId + insertIntoRecord=true to append automatically.',
         'Optional knowledgeRecordId links the asset to a record; get_knowledge_record returns linked media[].',
         'Requires knowledge:write, actingUserId, and a non-empty workspace allowlist.',
+        'ChatGPT Custom GPT Actions: if upload_workspace_media is missing from Available actions, re-import GET /api/v1/llm/openapi.json (Actions schema is static until re-imported).',
       ],
     },
     guidance: [

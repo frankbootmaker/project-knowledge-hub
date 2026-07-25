@@ -339,6 +339,35 @@ export function createKnowledgeHubMcpServer(
   );
 
   server.tool(
+    'upload_workspace_media',
+    'REQUIRED for images/charts: store PNG/JPEG/WebP/GIF in workspace media and return media.markdownSnippet (![alt](/api/v1/media/{id})). Pass insertIntoRecord=true with knowledgeRecordId to append into a draft automatically. contentBase64 = raw base64 only (no data: prefix). Requires knowledge:write.',
+    {
+      workspaceId: z.string().uuid(),
+      contentBase64: z.string().min(1).max(10_000_000),
+      contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
+      filename: z.string().min(1).max(200).optional(),
+      alt: z.string().max(300).optional(),
+      knowledgeRecordId: z.string().uuid().optional(),
+      insertIntoRecord: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true, requires knowledgeRecordId and appends media.markdownSnippet to that record as a new draft version',
+        ),
+    },
+    async (args) =>
+      wrap(
+        'upload_workspace_media',
+        'knowledge:write',
+        () => handlers.uploadWorkspaceMedia(args),
+        {
+          workspaceId: args.workspaceId,
+          recordId: args.knowledgeRecordId,
+        },
+      )(),
+  );
+
+  server.tool(
     'create_knowledge_record',
     'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: upload_workspace_media first, then include the returned markdownSnippet in contentMarkdown — do not use data:image base64 URIs.',
     {
@@ -388,35 +417,6 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('update_knowledge_record', 'knowledge:write', () =>
         handlers.updateKnowledgeRecord(args),
-      )(),
-  );
-
-  server.tool(
-    'upload_workspace_media',
-    'Store an image in durable workspace media and return { media: { id, url, markdownSnippet } }. Paste markdownSnippet into knowledge Markdown (or set insertIntoRecord=true with knowledgeRecordId to append it automatically). contentBase64 must be raw base64 without a data: prefix. Types: JPEG/PNG/WebP/GIF. Requires knowledge:write.',
-    {
-      workspaceId: z.string().uuid(),
-      contentBase64: z.string().min(1).max(10_000_000),
-      contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
-      filename: z.string().min(1).max(200).optional(),
-      alt: z.string().max(300).optional(),
-      knowledgeRecordId: z.string().uuid().optional(),
-      insertIntoRecord: z
-        .boolean()
-        .optional()
-        .describe(
-          'When true, requires knowledgeRecordId and appends media.markdownSnippet to that record as a new draft version',
-        ),
-    },
-    async (args) =>
-      wrap(
-        'upload_workspace_media',
-        'knowledge:write',
-        () => handlers.uploadWorkspaceMedia(args),
-        {
-          workspaceId: args.workspaceId,
-          recordId: args.knowledgeRecordId,
-        },
       )(),
   );
 

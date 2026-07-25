@@ -69,11 +69,13 @@ Requires ChatGPT Plus / Team / Enterprise (Custom GPTs + Actions).
    ```
 
 5. **Authentication:** API Key → auth type **Bearer** → paste the hub token (**no** `Bearer ` prefix).
-6. Optional instructions, for example:
+6. Confirm **Available actions** includes `upload_workspace_media` (plus create/update). If it is missing after a hub upgrade, click **Import from URL** again on the same OpenAPI URL — ChatGPT does **not** auto-refresh Actions when the hub adds tools.
+7. Optional instructions, for example:
    - Prefer searching Knowledge Hub before answering from memory.
    - When asked to save work, create/update **draft** knowledge records in the configured workspace.
+   - For charts/images: call `upload_workspace_media` (raw base64, never `data:` URIs), then embed `media.markdownSnippet`, or use `insertIntoRecord=true`.
    - Ask which project/system to attach when unclear.
-7. **Save** / **Update**.
+8. **Save** / **Update**.
 
 ![Create GPT Actions](images/chatgpt-faq/03-chatgpt-create-gpt-actions.png)
 
@@ -98,6 +100,7 @@ Requires ChatGPT Plus / Team / Enterprise (Custom GPTs + Actions).
 - “Search knowledge for &lt;topic&gt; and summarize what we already decided.”
 - “Create a draft knowledge record titled … with this body … in workspace …”
 - “Update draft record &lt;id&gt; with the revised summary below.”
+- “Upload this PNG into workspace …, link it to draft record … with insertIntoRecord, alt ‘…’.”
 
 ---
 

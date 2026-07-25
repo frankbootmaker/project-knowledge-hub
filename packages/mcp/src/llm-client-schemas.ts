@@ -194,6 +194,39 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
 
   const write: ToolDef[] = [
     {
+      name: 'upload_workspace_media',
+      description:
+        'REQUIRED for images/charts: store PNG/JPEG/WebP/GIF in workspace media and return media.markdownSnippet (![alt](/api/v1/media/{id})). Pass insertIntoRecord=true with knowledgeRecordId to append into a draft automatically. contentBase64 = raw base64 only (no data: prefix). Requires knowledge:write.',
+      write: true,
+      body: {
+        type: 'object',
+        required: ['workspaceId', 'contentBase64', 'contentType'],
+        properties: {
+          workspaceId: uuidProp('Workspace id'),
+          // Omit huge maxLength — ChatGPT Actions may drop operations that declare multi‑MB string limits.
+          contentBase64: {
+            type: 'string',
+            minLength: 1,
+            description:
+              'Raw base64 image bytes (no data: URL prefix). Decoded size must stay under MEDIA_MAX_BYTES (default 5 MiB).',
+          },
+          contentType: {
+            type: 'string',
+            enum: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+            description: 'Image MIME type',
+          },
+          filename: stringProp('Optional original filename', { maxLength: 200 }),
+          alt: stringProp('Optional alt text for Markdown', { maxLength: 300 }),
+          knowledgeRecordId: uuidProp('Optional knowledge record to link'),
+          insertIntoRecord: {
+            type: 'boolean',
+            description:
+              'When true, requires knowledgeRecordId and appends media.markdownSnippet to that record as a draft version',
+          },
+        },
+      },
+    },
+    {
       name: 'create_knowledge_record',
       description:
         'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: upload_workspace_media then include media.markdownSnippet in contentMarkdown — never data:image URIs.',
@@ -255,36 +288,6 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
           language: { type: 'string', nullable: true, minLength: 2, maxLength: 16 },
           generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
           sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
-        },
-      },
-    },
-    {
-      name: 'upload_workspace_media',
-      description:
-        'Store an image in durable workspace media and return { media: { id, url, markdownSnippet } }. Paste markdownSnippet into knowledge Markdown, or set insertIntoRecord=true with knowledgeRecordId to append it automatically. Raw base64 only (no data: prefix). Types: JPEG/PNG/WebP/GIF. Requires knowledge:write.',
-      write: true,
-      body: {
-        type: 'object',
-        required: ['workspaceId', 'contentBase64', 'contentType'],
-        properties: {
-          workspaceId: uuidProp('Workspace id'),
-          contentBase64: stringProp('Base64-encoded image bytes (no data: URL prefix)', {
-            minLength: 1,
-            maxLength: 10_000_000,
-          }),
-          contentType: {
-            type: 'string',
-            enum: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-            description: 'Image MIME type',
-          },
-          filename: stringProp('Optional original filename', { maxLength: 200 }),
-          alt: stringProp('Optional alt text for Markdown', { maxLength: 300 }),
-          knowledgeRecordId: uuidProp('Optional knowledge record to link'),
-          insertIntoRecord: {
-            type: 'boolean',
-            description:
-              'When true, requires knowledgeRecordId and appends media.markdownSnippet to that record as a draft version',
-          },
         },
       },
     },
@@ -395,7 +398,10 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
       version: '0.1.0',
       description:
         'OpenAPI facade over Project Knowledge Hub knowledge tools for ChatGPT Actions, ' +
-        'Gemini / OpenAPI clients, and OpenWebUI. Authenticate with the API client bearer token.',
+        'Gemini / OpenAPI clients, and OpenWebUI. Authenticate with the API client bearer token. ' +
+        'Write tools (require knowledge:write): upload_workspace_media (images/charts — use this ' +
+        'before embedding), create_knowledge_record, update_knowledge_record, delete_workspace_media. ' +
+        'Re-import this schema in ChatGPT Actions after hub upgrades so new operations appear.',
     },
     servers: [{ url: apiBase }],
     components: {
