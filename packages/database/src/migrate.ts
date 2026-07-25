@@ -1,9 +1,8 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { resolveDatabaseUrl } from '@project-knowledge-hub/config';
+import { resolveMigrationsFolder } from './migrations-path.js';
 
 function operatorHint(error: unknown): string {
   const text =
@@ -34,9 +33,7 @@ function operatorHint(error: unknown): string {
 }
 
 const databaseUrl = resolveDatabaseUrl();
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const migrationsFolder = path.join(__dirname, 'migrations');
+const migrationsFolder = resolveMigrationsFolder();
 
 const client = postgres(databaseUrl, { max: 1 });
 const db = drizzle(client);

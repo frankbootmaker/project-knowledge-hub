@@ -644,12 +644,15 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         });
     }, 750);
 
+    const restartHint =
+      'Import finished. API is restarting; restart worker (and web if needed) in Dokploy, then log in with users from the imported dump.';
     return {
       artifact: artifactName,
       stamp: result.stamp,
       restartRequired: true,
-      warning:
-        'Import finished. API is restarting; restart worker (and web if needed) in Dokploy, then log in with users from the imported dump.',
+      warning: result.journalWarning
+        ? `${restartHint} ${result.journalWarning}`
+        : restartHint,
     };
   });
 

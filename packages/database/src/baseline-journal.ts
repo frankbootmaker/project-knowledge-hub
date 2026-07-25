@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { resolveDatabaseUrl } from '@project-knowledge-hub/config';
+import { resolveMigrationsFolder } from './migrations-path.js';
 
 type JournalEntry = {
   idx: number;
@@ -92,11 +93,6 @@ const SENTINELS: { idx: number; sql: string }[] = [
   },
 ];
 
-function migrationsFolderPath(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.join(here, 'migrations');
-}
-
 function readJournal(folder: string): JournalEntry[] {
   const raw = fs.readFileSync(path.join(folder, 'meta/_journal.json'), 'utf8');
   const parsed = JSON.parse(raw) as JournalFile;
@@ -112,7 +108,7 @@ export async function ensureMigrationJournalAfterRestore(
   source: NodeJS.ProcessEnv = process.env,
 ): Promise<BaselineJournalResult> {
   const databaseUrl = resolveDatabaseUrl(source);
-  const folder = migrationsFolderPath();
+  const folder = resolveMigrationsFolder();
   const entries = readJournal(folder);
   const client = postgres(databaseUrl, { max: 1 });
 

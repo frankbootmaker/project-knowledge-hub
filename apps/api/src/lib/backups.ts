@@ -638,7 +638,7 @@ export async function importDatabaseDump(input: {
   databaseUrl: string;
   dumpPath: string;
   schemaVersion: string;
-}): Promise<{ stamp: BackupStamp }> {
+}): Promise<{ stamp: BackupStamp; journalWarning?: string }> {
   const resolved = path.resolve(input.dumpPath);
   const backupRoot = path.resolve(input.backupDir);
   if (!resolved.startsWith(backupRoot + path.sep) && resolved !== backupRoot) {
@@ -749,6 +749,8 @@ export async function importDatabaseDump(input: {
 
   // Schema wipe + restore can leave tables without drizzle.__drizzle_migrations.
   // Baseline so the next Dokploy migrate is a no-op (or only applies newer files).
+  // Never fail the import after a successful restore — surface a warning instead.
+  let journalWarning: string | undefined;
   try {
     const journal = await ensureMigrationJournalAfterRestore();
     if (journal.action === 'baselined') {
@@ -760,11 +762,10 @@ export async function importDatabaseDump(input: {
   } catch (error) {
     const message =
       error instanceof Error ? error.message.slice(0, 400) : String(error);
-    throw new AppError({
-      code: 'BACKUP_IMPORT_FAILED',
-      message: `Restore finished but migration journal repair failed: ${message}`,
-      statusCode: 500,
-    });
+    journalWarning =
+      `Restore finished, but migration journal repair failed (${message}). ` +
+      'Redeploy so migrate can baseline, or run baseline-journal manually.';
+    console.error(`Import: ${journalWarning}`);
   }
 
   const stamp: BackupStamp = {
@@ -775,7 +776,7 @@ export async function importDatabaseDump(input: {
     hostname: process.env.HOSTNAME ?? 'api',
   };
   await writeStamp(input.backupDir, 'last-import.json', stamp);
-  return { stamp };
+  return { stamp, journalWarning };
 }
 
 export async function saveUploadedDump(
