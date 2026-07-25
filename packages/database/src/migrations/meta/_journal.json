@@ -183,6 +183,13 @@
       "when": 1784421700000,
       "tag": "0025_document_import_ocr_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784421900000,
+      "tag": "0026_document_import_ocr_lang",
+      "breakpoints": true
     }
   ]
 }

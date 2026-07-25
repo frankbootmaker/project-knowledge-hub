@@ -48,6 +48,7 @@ type DocumentImport = {
   lane: string;
   status: string;
   ocrEngine?: string;
+  ocrLang?: string;
   originalFilename: string;
   contentType: string;
   byteSize: number;
@@ -176,6 +177,11 @@ export function DocumentImportDetail(props: {
           doc.ocrEngine === 'vision' ||
           doc.ocrEngine === 'tesseract' ? (
             <Badge tone="neutral">{t(`ocrEngine_${doc.ocrEngine}`)}</Badge>
+          ) : null}
+          {doc.ocrLang === 'eng' ||
+          doc.ocrLang === 'deu' ||
+          doc.ocrLang === 'hun' ? (
+            <Badge tone="neutral">{t(`ocrLang_${doc.ocrLang}`)}</Badge>
           ) : null}
         </div>
         <p className="mt-2 mb-0 text-sm text-ink-muted">

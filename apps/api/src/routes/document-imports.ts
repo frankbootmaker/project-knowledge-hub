@@ -4,6 +4,7 @@ import {
   createDraftFromDocumentImportInputSchema,
   documentImportLaneSchema,
   documentImportOcrEngineSchema,
+  documentImportOcrLangSchema,
 } from '@project-knowledge-hub/document-import';
 import { AppError } from '@project-knowledge-hub/domain';
 import {
@@ -73,6 +74,7 @@ export async function registerDocumentImportRoutes(
     let systemId: string | null | undefined;
     let lane = 'document';
     let ocrEngine: string | undefined;
+    let ocrLang: string | undefined;
     let title: string | undefined;
     let fileBuffer: Buffer | undefined;
     let filename = 'upload.bin';
@@ -98,6 +100,7 @@ export async function registerDocumentImportRoutes(
         }
         if (part.fieldname === 'lane') lane = value;
         if (part.fieldname === 'ocrEngine') ocrEngine = value;
+        if (part.fieldname === 'ocrLang') ocrLang = value;
         if (part.fieldname === 'title') title = value;
       }
     }
@@ -115,6 +118,9 @@ export async function registerDocumentImportRoutes(
     const parsedOcrEngine = ocrEngine
       ? documentImportOcrEngineSchema.parse(ocrEngine)
       : undefined;
+    const parsedOcrLang = ocrLang
+      ? documentImportOcrLangSchema.parse(ocrLang)
+      : undefined;
     requireWorkspaceMaintainer(principal, workspaceId);
 
     const documentImport = await createDocumentImport(
@@ -125,6 +131,7 @@ export async function registerDocumentImportRoutes(
         systemId,
         lane: parsedLane,
         ocrEngine: parsedOcrEngine,
+        ocrLang: parsedOcrLang,
         filename,
         contentType: fileContentType,
         buffer: fileBuffer,

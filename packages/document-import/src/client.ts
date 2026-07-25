@@ -1,4 +1,7 @@
-import type { DocumentImportOcrEngine } from './types.js';
+import type {
+  DocumentImportOcrEngine,
+  DocumentImportOcrLang,
+} from './types.js';
 
 export type MarkItDownImage = {
   filename: string;
@@ -13,6 +16,7 @@ export type MarkItDownConvertResult = {
   warnings: string[];
   visionUsed?: boolean;
   ocrEngine?: DocumentImportOcrEngine;
+  ocrLang?: DocumentImportOcrLang;
 };
 
 export type MarkItDownHealth = {
@@ -20,6 +24,7 @@ export type MarkItDownHealth = {
   vision: boolean;
   tesseract: boolean;
   engines: DocumentImportOcrEngine[];
+  tesseractLangs?: DocumentImportOcrLang[];
 };
 
 export async function convertWithMarkItDown(input: {
@@ -30,6 +35,7 @@ export async function convertWithMarkItDown(input: {
   buffer: Buffer;
   lane: 'document' | 'image';
   ocrEngine?: DocumentImportOcrEngine;
+  ocrLang?: DocumentImportOcrLang;
 }): Promise<MarkItDownConvertResult> {
   const base = input.baseUrl.replace(/\/+$/, '');
   const form = new FormData();
@@ -40,6 +46,7 @@ export async function convertWithMarkItDown(input: {
   );
   form.set('lane', input.lane);
   form.set('ocrEngine', input.ocrEngine ?? 'none');
+  if (input.ocrLang) form.set('ocrLang', input.ocrLang);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), input.timeoutMs);
@@ -57,6 +64,7 @@ export async function convertWithMarkItDown(input: {
       warnings?: string[];
       visionUsed?: boolean;
       ocrEngine?: DocumentImportOcrEngine;
+      ocrLang?: DocumentImportOcrLang;
     };
     if (!response.ok) {
       throw new Error(
@@ -73,6 +81,7 @@ export async function convertWithMarkItDown(input: {
       warnings: Array.isArray(body.warnings) ? body.warnings : [],
       visionUsed: body.visionUsed,
       ocrEngine: body.ocrEngine,
+      ocrLang: body.ocrLang,
     };
   } finally {
     clearTimeout(timer);

@@ -20,6 +20,15 @@ app = FastAPI(title="kh-markitdown", version="0.2.0")
 OcrEngine = Literal["none", "vision", "tesseract"]
 OCR_ENGINES: tuple[OcrEngine, ...] = ("none", "vision", "tesseract")
 
+# Primary packs aligned with UI locales (en/de/hu). Sidecar Dockerfile installs all three.
+OcrLang = Literal["eng", "deu", "hun"]
+OCR_LANGS: tuple[OcrLang, ...] = ("eng", "deu", "hun")
+OCR_LANG_LABELS: dict[OcrLang, str] = {
+    "eng": "English",
+    "deu": "German",
+    "hun": "Hungarian",
+}
+
 IMAGE_CONTENT_TYPES = {
     "image/jpeg",
     "image/jpg",
@@ -45,8 +54,28 @@ def _tesseract_available() -> bool:
     return shutil.which("tesseract") is not None
 
 
-def _tesseract_lang() -> str:
+def _default_tesseract_lang() -> str:
     return os.environ.get("TESSERACT_LANG") or "eng"
+
+
+def _normalize_ocr_lang(value: str | None) -> OcrLang:
+    raw = (value or "").strip().lower()
+    if not raw:
+        primary = (_default_tesseract_lang().split("+")[0] or "eng").strip().lower()
+        raw = primary
+    if raw not in OCR_LANGS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ocrLang must be one of: {', '.join(OCR_LANGS)}",
+        )
+    return raw  # type: ignore[return-value]
+
+
+def _tesseract_lang_pack(primary: OcrLang) -> str:
+    """Build Tesseract `-l` value; add eng as secondary for non-English primaries."""
+    if primary == "eng":
+        return "eng"
+    return f"{primary}+eng"
 
 
 def _normalize_engine(value: str | None) -> OcrEngine:
@@ -59,7 +88,15 @@ def _normalize_engine(value: str | None) -> OcrEngine:
     return engine  # type: ignore[return-value]
 
 
-def _build_markitdown(ocr_engine: OcrEngine) -> Any:
+def _vision_prompt(ocr_lang: OcrLang) -> str:
+    label = OCR_LANG_LABELS[ocr_lang]
+    return (
+        f"{VISION_OCR_PROMPT} "
+        f"The document language is primarily {label}; preserve that language in the output."
+    )
+
+
+def _build_markitdown(ocr_engine: OcrEngine, ocr_lang: OcrLang) -> Any:
     from markitdown import MarkItDown
 
     if ocr_engine != "vision":
@@ -85,7 +122,7 @@ def _build_markitdown(ocr_engine: OcrEngine) -> Any:
         enable_plugins=True,
         llm_client=client,
         llm_model=model,
-        llm_prompt=VISION_OCR_PROMPT,
+        llm_prompt=_vision_prompt(ocr_lang),
     )
 
 
@@ -237,21 +274,21 @@ def _title_hint(filename: str, markdown: str) -> str:
     return stem[:200] or "Imported document"
 
 
-def _ocr_pil_image(img: Any) -> str:
+def _ocr_pil_image(img: Any, lang_pack: str) -> str:
     import pytesseract
 
-    text = pytesseract.image_to_string(img, lang=_tesseract_lang())
+    text = pytesseract.image_to_string(img, lang=lang_pack)
     return (text or "").strip()
 
 
-def _ocr_image_bytes(data: bytes) -> str:
+def _ocr_image_bytes(data: bytes, lang_pack: str) -> str:
     from PIL import Image
 
     with Image.open(io.BytesIO(data)) as img:
-        return _ocr_pil_image(img.convert("RGB"))
+        return _ocr_pil_image(img.convert("RGB"), lang_pack)
 
 
-def _ocr_pdf_pages(path: Path, warnings: list[str]) -> list[str]:
+def _ocr_pdf_pages(path: Path, warnings: list[str], lang_pack: str) -> list[str]:
     pages: list[str] = []
     try:
         import pypdfium2 as pdfium
@@ -265,7 +302,7 @@ def _ocr_pdf_pages(path: Path, warnings: list[str]) -> list[str]:
             page = pdf[index]
             bitmap = page.render(scale=2.0)
             pil = bitmap.to_pil()
-            text = _ocr_pil_image(pil)
+            text = _ocr_pil_image(pil, lang_pack)
             if text:
                 pages.append(text)
             page.close()
@@ -284,6 +321,7 @@ def _apply_tesseract_ocr(
     markdown: str,
     images: list[dict[str, str]],
     warnings: list[str],
+    ocr_lang: OcrLang,
 ) -> str:
     if not _tesseract_available():
         raise HTTPException(
@@ -291,6 +329,7 @@ def _apply_tesseract_ocr(
             detail="ocrEngine=tesseract requires the tesseract binary in kh-markitdown",
         )
 
+    lang_pack = _tesseract_lang_pack(ocr_lang)
     blocks: list[str] = []
     suffix = path.suffix.lower()
     is_image = content_type in IMAGE_CONTENT_TYPES or suffix in IMAGE_EXTENSIONS
@@ -298,7 +337,7 @@ def _apply_tesseract_ocr(
 
     if is_image:
         try:
-            text = _ocr_image_bytes(path.read_bytes())
+            text = _ocr_image_bytes(path.read_bytes(), lang_pack)
             if text:
                 blocks.append(text)
         except Exception as exc:  # noqa: BLE001
@@ -307,7 +346,7 @@ def _apply_tesseract_ocr(
         for img in images:
             try:
                 data = base64.b64decode(img["dataBase64"])
-                text = _ocr_image_bytes(data)
+                text = _ocr_image_bytes(data, lang_pack)
                 if text:
                     blocks.append(f"### {img['filename']}\n\n{text}")
             except Exception as exc:  # noqa: BLE001
@@ -315,7 +354,7 @@ def _apply_tesseract_ocr(
 
         # Scanned PDFs often have no embedded XObject images — render pages.
         if is_pdf and (not blocks or len(markdown.strip()) < 80):
-            page_texts = _ocr_pdf_pages(path, warnings)
+            page_texts = _ocr_pdf_pages(path, warnings, lang_pack)
             if page_texts:
                 blocks = [
                     f"### Page {i + 1}\n\n{text}" for i, text in enumerate(page_texts)
@@ -352,7 +391,8 @@ def health() -> dict[str, Any]:
         "vision": vision,
         "tesseract": tesseract,
         "engines": engines,
-        "tesseractLang": _tesseract_lang(),
+        "tesseractLangs": list(OCR_LANGS),
+        "tesseractLang": _default_tesseract_lang(),
     }
 
 
@@ -361,11 +401,13 @@ async def convert(
     file: UploadFile = File(...),
     lane: str = Form(default="document"),
     ocrEngine: str = Form(default="none"),
+    ocrLang: str = Form(default=""),
 ) -> JSONResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="filename required")
 
     ocr_engine = _normalize_engine(ocrEngine)
+    ocr_lang = _normalize_ocr_lang(ocrLang)
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty file")
@@ -382,7 +424,7 @@ async def convert(
         warnings.extend(extract_warnings)
 
         try:
-            md = _build_markitdown(ocr_engine)
+            md = _build_markitdown(ocr_engine, ocr_lang)
             result = md.convert(str(path))
             markdown = (
                 getattr(result, "markdown", None)
@@ -403,6 +445,7 @@ async def convert(
                 markdown=markdown,
                 images=images,
                 warnings=warnings,
+                ocr_lang=ocr_lang,
             )
 
         if not markdown:
@@ -433,5 +476,7 @@ async def convert(
             "warnings": warnings,
             "visionUsed": ocr_engine == "vision",
             "ocrEngine": ocr_engine,
+            "ocrLang": ocr_lang,
+            "tesseractLangPack": _tesseract_lang_pack(ocr_lang),
         }
         return JSONResponse(payload)

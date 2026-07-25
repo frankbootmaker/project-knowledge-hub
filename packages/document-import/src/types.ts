@@ -17,9 +17,31 @@ export const DOCUMENT_IMPORT_OCR_ENGINES = ['none', 'vision', 'tesseract'] as co
 export type DocumentImportOcrEngine =
   (typeof DOCUMENT_IMPORT_OCR_ENGINES)[number];
 
+/**
+ * Tesseract language packs shipped with kh-markitdown (aligned with UI locales).
+ * Values are Tesseract `-l` codes, not BCP-47.
+ */
+export const DOCUMENT_IMPORT_OCR_LANGS = ['eng', 'deu', 'hun'] as const;
+export type DocumentImportOcrLang = (typeof DOCUMENT_IMPORT_OCR_LANGS)[number];
+
+/** UI locale (en | de | hu) → Tesseract language code. */
+export const UI_LOCALE_TO_OCR_LANG: Record<string, DocumentImportOcrLang> = {
+  en: 'eng',
+  de: 'deu',
+  hu: 'hun',
+};
+
+export function ocrLangFromUiLocale(
+  locale: string | null | undefined,
+): DocumentImportOcrLang {
+  const key = (locale ?? 'en').trim().toLowerCase().slice(0, 2);
+  return UI_LOCALE_TO_OCR_LANG[key] ?? 'eng';
+}
+
 export const documentImportLaneSchema = z.enum(DOCUMENT_IMPORT_LANES);
 export const documentImportStatusSchema = z.enum(DOCUMENT_IMPORT_STATUSES);
 export const documentImportOcrEngineSchema = z.enum(DOCUMENT_IMPORT_OCR_ENGINES);
+export const documentImportOcrLangSchema = z.enum(DOCUMENT_IMPORT_OCR_LANGS);
 
 /** Allowed MIME types for the documents lane. */
 export const DOCUMENT_MIME_TYPES = [

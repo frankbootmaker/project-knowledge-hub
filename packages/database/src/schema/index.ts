@@ -741,6 +741,8 @@ export const documentImports = pgTable(
     status: text('status').notNull().default('pending'),
     /** `none` | `vision` | `tesseract` — OCR path used during convert */
     ocrEngine: text('ocr_engine').notNull().default('none'),
+    /** Tesseract `-l` primary language: `eng` | `deu` | `hun` (from UI locale). */
+    ocrLang: text('ocr_lang').notNull().default('eng'),
     originalFilename: text('original_filename').notNull(),
     contentType: text('content_type').notNull(),
     byteSize: integer('byte_size').notNull(),

@@ -1,12 +1,15 @@
 'use client';
 
 import type { DragEvent, FormEvent, KeyboardEvent } from 'react';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   DOCUMENT_IMPORT_OCR_ENGINES,
+  DOCUMENT_IMPORT_OCR_LANGS,
+  ocrLangFromUiLocale,
   type DocumentImportOcrEngine,
+  type DocumentImportOcrLang,
 } from '@project-knowledge-hub/document-import';
 import {
   Button,
@@ -35,6 +38,7 @@ export function DocumentImportForm(props: {
   visionConfigured?: boolean;
 }) {
   const router = useRouter();
+  const locale = useLocale();
   const t = useTranslations('documentImports');
   const tCommon = useTranslations('common');
   const inputId = useId();
@@ -46,6 +50,12 @@ export function DocumentImportForm(props: {
   const [ocrEngine, setOcrEngine] = useState<DocumentImportOcrEngine>(
     props.defaultOcrEngine ?? 'none',
   );
+  const [ocrLang, setOcrLang] = useState<DocumentImportOcrLang>(() =>
+    ocrLangFromUiLocale(locale),
+  );
+  useEffect(() => {
+    setOcrLang(ocrLangFromUiLocale(locale));
+  }, [locale]);
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +124,7 @@ export function DocumentImportForm(props: {
       form.set('workspaceId', props.workspaceId);
       form.set('lane', props.lane);
       form.set('ocrEngine', ocrEngine);
+      form.set('ocrLang', ocrLang);
       if (title.trim()) form.set('title', title.trim());
       if (projectId) form.set('projectId', projectId);
       if (systemId) form.set('systemId', systemId);
@@ -222,6 +233,23 @@ export function DocumentImportForm(props: {
           </Select>
           <p className="m-0 mt-1 text-sm text-ink-muted">{t('ocrEngineHelp')}</p>
         </Field>
+        {ocrEngine === 'tesseract' || ocrEngine === 'vision' ? (
+          <Field label={t('ocrLang')}>
+            <Select
+              value={ocrLang}
+              onChange={(e) =>
+                setOcrLang(e.target.value as DocumentImportOcrLang)
+              }
+            >
+              {DOCUMENT_IMPORT_OCR_LANGS.map((lang) => (
+                <option key={lang} value={lang}>
+                  {t(`ocrLang_${lang}`)}
+                </option>
+              ))}
+            </Select>
+            <p className="m-0 mt-1 text-sm text-ink-muted">{t('ocrLangHelp')}</p>
+          </Field>
+        ) : null}
         <Field label={tCommon('project')}>
           <Select
             value={projectId}

@@ -10,12 +10,14 @@ import {
   detectContentSecrets,
   documentImportLaneSchema,
   documentImportOcrEngineSchema,
+  documentImportOcrLangSchema,
   hasHighSeverityWarnings,
   isAllowedUpload,
   titleFromImport,
   type CreateDraftFromDocumentImportInput,
   type DocumentImportLane,
   type DocumentImportOcrEngine,
+  type DocumentImportOcrLang,
 } from '@project-knowledge-hub/document-import';
 import {
   documentImportMedia,
@@ -109,6 +111,7 @@ export function toPublicDocumentImport(
     lane: row.lane,
     status: row.status,
     ocrEngine: row.ocrEngine,
+    ocrLang: row.ocrLang,
     originalFilename: row.originalFilename,
     contentType: row.contentType,
     byteSize: row.byteSize,
@@ -182,6 +185,7 @@ export async function createDocumentImport(
     systemId?: string | null;
     lane: DocumentImportLane;
     ocrEngine?: DocumentImportOcrEngine;
+    ocrLang?: DocumentImportOcrLang;
     filename: string;
     contentType: string;
     buffer: Buffer;
@@ -202,6 +206,12 @@ export async function createDocumentImport(
   const lane = documentImportLaneSchema.parse(input.lane);
   const ocrEngine = documentImportOcrEngineSchema.parse(
     input.ocrEngine ?? app.env.DOCUMENT_IMPORT_OCR_ENGINE,
+  );
+  const fallbackLang = documentImportOcrLangSchema.safeParse(
+    app.env.TESSERACT_LANG.split('+')[0]?.trim() || 'eng',
+  );
+  const ocrLang = documentImportOcrLangSchema.parse(
+    input.ocrLang ?? (fallbackLang.success ? fallbackLang.data : 'eng'),
   );
   if (ocrEngine === 'vision' && !app.env.VISION_LLM_BASE_URL) {
     throw new AppError({
@@ -271,6 +281,7 @@ export async function createDocumentImport(
       title,
       lane,
       ocrEngine,
+      ocrLang,
       status: 'pending',
       originalFilename: input.filename,
       contentType: input.contentType,
@@ -318,6 +329,7 @@ export async function createDocumentImport(
     metadata: {
       lane,
       ocrEngine,
+      ocrLang,
       filename: input.filename,
       byteSize: input.buffer.byteLength,
     },

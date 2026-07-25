@@ -167,6 +167,10 @@ export async function processDocumentImportConvert(input: {
         row.ocrEngine === 'vision' || row.ocrEngine === 'tesseract'
           ? row.ocrEngine
           : 'none',
+      ocrLang:
+        row.ocrLang === 'deu' || row.ocrLang === 'hun' || row.ocrLang === 'eng'
+          ? row.ocrLang
+          : 'eng',
     });
 
     const mediaByIndex = new Map<

@@ -34,7 +34,7 @@ Trust boundary (same as conversation imports):
 | `DOCUMENT_IMPORT_DIR` | Local original storage when BlobStore is disabled. Relative paths resolve from the monorepo root (shared by API + worker). On Dokploy, use the absolute `/data/imports` path on the shared `knowledge_hub_data` volume (set by `compose.dokploy.yaml`). |
 | `DOCUMENT_IMPORT_OCR_ENGINE` | Default OCR when the client omits `ocrEngine`: `none` \| `vision` \| `tesseract`. |
 | `VISION_LLM_BASE_URL` / `VISION_LLM_API_KEY` / `VISION_LLM_MODEL` | OpenAI-compatible vision for `ocrEngine=vision` (set on **api/worker/web and** `kh-markitdown`). Ollama example: `http://host:11434/v1` + key `ollama` + a vision model. |
-| `TESSERACT_LANG` | Tesseract `-l` value for `ocrEngine=tesseract` (default `eng`; sidecar also ships `deu` / `hun`). |
+| `TESSERACT_LANG` | Fallback Tesseract primary language when the client omits `ocrLang` (`eng` \| `deu` \| `hun`). The import form defaults from the UI locale (`en`→`eng`, `de`→`deu`, `hu`→`hun`). Non-English runs use `{lang}+eng`. |
 
 Local: `docker compose --profile markitdown up -d kh-markitdown` (or include with `--profile full`).
 

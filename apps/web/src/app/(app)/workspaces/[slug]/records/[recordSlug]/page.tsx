@@ -140,7 +140,42 @@ export default async function KnowledgeRecordDetailPage({
         }
         title={record.title}
         description={`${record.slug} · ${record.recordType}`}
-        actions={
+      />
+
+      {record.lifecycleStatus === 'superseded' ? (
+        <p className="mb-4 rounded-md border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
+          {t('supersededWarning')}
+        </p>
+      ) : null}
+
+      <KnowledgeRecordMoreDetails
+        leading={
+          <>
+            <Badge tone={lifecycleTone(record.lifecycleStatus)}>
+              {record.lifecycleStatus}
+            </Badge>
+            <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
+            {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
+            <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
+            {canMutate && !isArchived && !gitManaged ? (
+              <RecordLifecycleActions
+                recordId={record.id}
+                lifecycleStatus={record.lifecycleStatus}
+              />
+            ) : null}
+            {gitManaged && record.source?.sourceUri ? (
+              <a
+                href={record.source.sourceUri}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
+              >
+                {t('viewOnGitHub')}
+              </a>
+            ) : null}
+          </>
+        }
+        trailing={
           <KnowledgeRecordDetailActions
             workspaceSlug={workspace.slug}
             workspaceId={workspace.id}
@@ -181,41 +216,6 @@ export default async function KnowledgeRecordDetailPage({
             canMutate={canMutate}
             canPurge={canPurge}
           />
-        }
-      />
-
-      {record.lifecycleStatus === 'superseded' ? (
-        <p className="mb-4 rounded-md border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
-          {t('supersededWarning')}
-        </p>
-      ) : null}
-
-      <KnowledgeRecordMoreDetails
-        leading={
-          <>
-            <Badge tone={lifecycleTone(record.lifecycleStatus)}>
-              {record.lifecycleStatus}
-            </Badge>
-            <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
-            {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
-            <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
-            {canMutate && !isArchived && !gitManaged ? (
-              <RecordLifecycleActions
-                recordId={record.id}
-                lifecycleStatus={record.lifecycleStatus}
-              />
-            ) : null}
-            {gitManaged && record.source?.sourceUri ? (
-              <a
-                href={record.source.sourceUri}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
-              >
-                {t('viewOnGitHub')}
-              </a>
-            ) : null}
-          </>
         }
         summary={<p className="m-0">{record.summary || tCommon('noSummary')}</p>}
         links={

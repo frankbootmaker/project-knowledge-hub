@@ -4,8 +4,10 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { cn } from '../../lib/cn';
 import { headerControlSquareClassName } from '../header-control';
@@ -41,6 +43,11 @@ export function Modal({
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  // Portals need a mounted document; avoid SSR mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -98,11 +105,13 @@ export function Modal({
     };
   }, [open]);
 
-  if (!open) {
+  if (!open || !mounted) {
     return null;
   }
 
-  return (
+  // Render on document.body so fixed positioning is not trapped by ancestors
+  // with backdrop-filter / transform (e.g. .kh-panel).
+  return createPortal(
     <div className="kh-modal">
       <button
         type="button"
@@ -162,6 +171,7 @@ export function Modal({
         <div className="kh-modal-body">{children}</div>
         {footer ? <div className="kh-modal-footer">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

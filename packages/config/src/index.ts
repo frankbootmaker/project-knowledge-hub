@@ -337,7 +337,10 @@ export const envSchema = z.object({
     z.string().min(1).optional(),
   ),
   VISION_LLM_MODEL: z.string().min(1).default('gpt-4o-mini'),
-  /** Tesseract `-l` languages (e.g. eng, eng+deu+hun). Used by kh-markitdown. */
+  /**
+   * Fallback Tesseract primary language when the client omits ocrLang.
+   * Per-import language is usually set from the UI locale (eng | deu | hun).
+   */
   TESSERACT_LANG: z.string().min(1).default('eng'),
 });
 

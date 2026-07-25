@@ -10,12 +10,15 @@ import { Panel } from './ui';
  */
 export function KnowledgeRecordMoreDetails({
   leading,
+  trailing,
   summary,
   links,
   sourceRows,
 }: {
-  /** Status badges / actions on the same row, to the right of the disclosure. */
+  /** Status badges / lifecycle actions on the same row, after the disclosure. */
   leading?: ReactNode;
+  /** Right-aligned actions (e.g. Manage menu) on the toolbar row. */
+  trailing?: ReactNode;
   summary: ReactNode;
   links?: ReactNode;
   sourceRows: Array<{ label: string; value: ReactNode }>;
@@ -36,6 +39,11 @@ export function KnowledgeRecordMoreDetails({
         </button>
         {leading ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2">{leading}</div>
+        ) : null}
+        {trailing ? (
+          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+            {trailing}
+          </div>
         ) : null}
       </div>
       {open ? (
