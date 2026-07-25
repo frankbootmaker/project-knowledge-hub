@@ -12,6 +12,14 @@ export const knowledgeSanitizeSchema: SanitizeOptions = {
     pre: [...(defaultSchema.attributes?.pre ?? []), ['className'], ['class']],
     span: [...(defaultSchema.attributes?.span ?? []), ['className'], ['class']],
     a: [...(defaultSchema.attributes?.a ?? []), ['className'], ['class'], ['target'], ['rel']],
+    img: [
+      ...(defaultSchema.attributes?.img ?? []),
+      ['src'],
+      ['alt'],
+      ['title'],
+      ['className'],
+      ['class'],
+    ],
     h1: [...(defaultSchema.attributes?.h1 ?? []), ['id']],
     h2: [...(defaultSchema.attributes?.h2 ?? []), ['id']],
     h3: [...(defaultSchema.attributes?.h3 ?? []), ['id']],
@@ -22,5 +30,7 @@ export const knowledgeSanitizeSchema: SanitizeOptions = {
   protocols: {
     ...defaultSchema.protocols,
     href: [...(defaultSchema.protocols?.href ?? []), 'http', 'https', 'mailto'],
+    // Relative hub media paths (`/api/v1/media/:id`) have no protocol.
+    src: [...(defaultSchema.protocols?.src ?? []), 'http', 'https'],
   },
 };

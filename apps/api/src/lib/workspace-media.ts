@@ -87,22 +87,22 @@ export async function writeMediaBytes(
   buffer: Buffer,
   options?: { blobStore?: BlobStore; contentType?: string },
 ): Promise<void> {
-  const store = options?.blobStore;
-  if (store && store.provider !== 'disabled') {
-    await store.put({
-      key: mediaBlobKey(workspaceId, mediaId),
-      body: buffer,
-      contentType: options?.contentType,
-    });
-    await ensureMediaParentDir(uploadDir, workspaceId);
-    await writeFile(mediaFilePath(uploadDir, workspaceId, mediaId), buffer).catch(
-      () => undefined,
-    );
-    return;
-  }
-
+  // Local first so shared volumes work when S3 credentials are invalid.
   await ensureMediaParentDir(uploadDir, workspaceId);
   await writeFile(mediaFilePath(uploadDir, workspaceId, mediaId), buffer);
+
+  const store = options?.blobStore;
+  if (store && store.provider !== 'disabled') {
+    try {
+      await store.put({
+        key: mediaBlobKey(workspaceId, mediaId),
+        body: buffer,
+        contentType: options?.contentType,
+      });
+    } catch {
+      // Local file already persisted for api/worker shared volume.
+    }
+  }
 }
 
 export async function readMediaBytes(
@@ -113,8 +113,12 @@ export async function readMediaBytes(
 ): Promise<Buffer | null> {
   const store = options?.blobStore;
   if (store && store.provider !== 'disabled') {
-    const fromBlob = await store.get(mediaBlobKey(workspaceId, mediaId));
-    if (fromBlob) return fromBlob;
+    try {
+      const fromBlob = await store.get(mediaBlobKey(workspaceId, mediaId));
+      if (fromBlob) return fromBlob;
+    } catch {
+      // Fall through to local (broken S3 credentials, etc.).
+    }
     const local = await readLocalMedia(uploadDir, workspaceId, mediaId);
     if (local) {
       await store

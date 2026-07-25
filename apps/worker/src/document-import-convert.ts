@@ -188,7 +188,23 @@ export async function processDocumentImportConvert(input: {
   }
 
   if (row.status === 'ready' && row.convertedMarkdown) {
-    return;
+    // Re-run image-lane converts that finished without a stored attachment
+    // (older builds / oversized sidecar base64 skips).
+    if (row.lane === 'image') {
+      const existingMedia = await input.database.db
+        .select({ id: documentImportMedia.workspaceMediaId })
+        .from(documentImportMedia)
+        .where(eq(documentImportMedia.importId, row.id))
+        .limit(1);
+      if (
+        existingMedia.length > 0 &&
+        row.convertedMarkdown.includes('/api/v1/media/')
+      ) {
+        return;
+      }
+    } else {
+      return;
+    }
   }
 
   if (!input.env.MARKITDOWN_URL) {
@@ -247,39 +263,11 @@ export async function processDocumentImportConvert(input: {
       { id: string; filename?: string | null }
     >();
     const warnings = [...(converted.warnings ?? [])];
-
-    for (let i = 0; i < converted.images.length; i += 1) {
-      const image = converted.images[i]!;
-      const bytes = Buffer.from(image.dataBase64, 'base64');
-      const mediaId = await storeMedia({
-        env: input.env,
-        database: input.database,
-        blobStore: input.blobStore,
-        workspaceId: row.workspaceId,
-        contentType: image.contentType,
-        buffer: bytes,
-        originalFilename: image.filename,
-        createdBy: row.createdBy,
-        altText: path.parse(image.filename).name,
-        warnings,
-        // Sidecar may re-encode the same upload; allow import-sized media.
-        maxBytes: input.env.DOCUMENT_IMPORT_MAX_BYTES,
-      });
-      if (!mediaId) {
-        continue;
-      }
-      mediaByIndex.set(i, { id: mediaId, filename: image.filename });
-      await input.database.db.insert(documentImportMedia).values({
-        importId: row.id,
-        workspaceMediaId: mediaId,
-        attachmentIndex: i,
-      });
-    }
-
-    // Image lane: always attach the original upload when the sidecar omitted or
-    // oversized base64 attachments (common for multi‑MB phone photos on Dokploy).
     let markdownSource = converted.markdown;
-    if (row.lane === 'image' && !mediaByIndex.has(0)) {
+
+    if (row.lane === 'image') {
+      // Always persist the original upload for image lane. Sidecar base64 in the
+      // convert JSON is unreliable for multi‑MB photos (timeouts / omitted images).
       const mediaId = await storeMedia({
         env: input.env,
         database: input.database,
@@ -293,23 +281,52 @@ export async function processDocumentImportConvert(input: {
         warnings,
         maxBytes: input.env.DOCUMENT_IMPORT_MAX_BYTES,
       });
-      if (mediaId) {
-        mediaByIndex.set(0, {
-          id: mediaId,
-          filename: row.originalFilename,
+      if (!mediaId) {
+        throw new Error(
+          'Could not store original image as workspace media (type or size rejected)',
+        );
+      }
+      mediaByIndex.set(0, {
+        id: mediaId,
+        filename: row.originalFilename,
+      });
+      await input.database.db.insert(documentImportMedia).values({
+        importId: row.id,
+        workspaceMediaId: mediaId,
+        attachmentIndex: 0,
+      });
+      const alt = path.parse(row.originalFilename).name || 'image';
+      const url = `/api/v1/media/${mediaId}`;
+      markdownSource = markdownSource
+        .replace(/!\[[^\]]*\]\(attachment:0\)\s*/g, '')
+        .replace(/!\[[^\]]*\]\(\/api\/v1\/media\/[0-9a-f-]+\)\s*/gi, '');
+      markdownSource = `![${alt}](${url})\n\n${markdownSource}`.trim() + '\n';
+    } else {
+      for (let i = 0; i < converted.images.length; i += 1) {
+        const image = converted.images[i]!;
+        const bytes = Buffer.from(image.dataBase64, 'base64');
+        const mediaId = await storeMedia({
+          env: input.env,
+          database: input.database,
+          blobStore: input.blobStore,
+          workspaceId: row.workspaceId,
+          contentType: image.contentType,
+          buffer: bytes,
+          originalFilename: image.filename,
+          createdBy: row.createdBy,
+          altText: path.parse(image.filename).name,
+          warnings,
+          maxBytes: input.env.DOCUMENT_IMPORT_MAX_BYTES,
         });
+        if (!mediaId) {
+          continue;
+        }
+        mediaByIndex.set(i, { id: mediaId, filename: image.filename });
         await input.database.db.insert(documentImportMedia).values({
           importId: row.id,
           workspaceMediaId: mediaId,
-          attachmentIndex: 0,
+          attachmentIndex: i,
         });
-        if (
-          !markdownSource.includes('attachment:0') &&
-          !markdownSource.includes('/api/v1/media/')
-        ) {
-          const alt = path.parse(row.originalFilename).name || 'image';
-          markdownSource = `![${alt}](attachment:0)\n\n${markdownSource}`;
-        }
       }
     }
 

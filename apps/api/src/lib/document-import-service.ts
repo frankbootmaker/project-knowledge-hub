@@ -170,10 +170,48 @@ export async function getDocumentImport(app: FastifyInstance, importId: string) 
       statusCode: 404,
     });
   }
+
+  const media = await loadMediaLinks(app, row.id);
+  // Heal image-lane imports that completed OCR without embedding the original
+  // (pre-fix builds). Re-queue convert once when the detail page is opened.
+  if (
+    row.lane === 'image' &&
+    row.status === 'ready' &&
+    row.convertedMarkdown &&
+    (media.length === 0 || !row.convertedMarkdown.includes('/api/v1/media/'))
+  ) {
+    await app.database.db
+      .update(documentImports)
+      .set({
+        status: 'pending',
+        conversionError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(documentImports.id, row.id));
+    const queue = createDocumentImportConvertQueue(app.env.REDIS_URL);
+    try {
+      await enqueueDocumentImportConvertJob(queue, { importId: row.id });
+    } finally {
+      await queue.close();
+    }
+    const [fresh] = await app.database.db
+      .select()
+      .from(documentImports)
+      .where(eq(documentImports.id, importId))
+      .limit(1);
+    if (fresh) {
+      return toPublicDocumentImport(
+        fresh,
+        await loadLinkedRecords(app, fresh.id),
+        await loadMediaLinks(app, fresh.id),
+      );
+    }
+  }
+
   return toPublicDocumentImport(
     row,
     await loadLinkedRecords(app, row.id),
-    await loadMediaLinks(app, row.id),
+    media,
   );
 }
 
