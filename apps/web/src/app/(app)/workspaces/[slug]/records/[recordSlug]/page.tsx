@@ -286,8 +286,12 @@ export default async function KnowledgeRecordDetailPage({
         ]}
       />
 
-      <Panel>
-        <MarkdownDocument html={record.contentHtml ?? ''} toc={record.toc ?? []} />
+      <Panel className="min-w-0 overflow-hidden">
+        <MarkdownDocument
+          html={record.contentHtml ?? ''}
+          toc={record.toc ?? []}
+          title={record.title}
+        />
       </Panel>
     </Page>
   );

@@ -20,10 +20,15 @@ type Props = {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  /** Wider sheet for denser forms (e.g. API client scopes). `xl` ≈ 90vw editor. */
-  size?: 'md' | 'lg' | 'xl';
+  /**
+   * Wider sheet for denser forms (e.g. API client scopes).
+   * `xl` ≈ 90vw; `full` ≈ viewport for wide markdown / spreadsheet viewers.
+   */
+  size?: 'md' | 'lg' | 'xl' | 'full';
   /** When false, backdrop click does not close (Esc still does). Default true. */
   closeOnBackdrop?: boolean;
+  /** Extra class for the scrollable body (e.g. both-axis overflow for wide tables). */
+  bodyClassName?: string;
 };
 
 export function Modal({
@@ -35,6 +40,7 @@ export function Modal({
   footer,
   size = 'md',
   closeOnBackdrop = true,
+  bodyClassName,
 }: Props) {
   const t = useTranslations('common');
   const titleId = useId();
@@ -133,6 +139,7 @@ export function Modal({
           'kh-modal-panel',
           size === 'lg' && 'kh-modal-panel-lg',
           size === 'xl' && 'kh-modal-panel-xl',
+          size === 'full' && 'kh-modal-panel-full',
         )}
       >
         <div className="kh-modal-header">
@@ -168,7 +175,7 @@ export function Modal({
             </svg>
           </Button>
         </div>
-        <div className="kh-modal-body">{children}</div>
+        <div className={cn('kh-modal-body', bodyClassName)}>{children}</div>
         {footer ? <div className="kh-modal-footer">{footer}</div> : null}
       </div>
     </div>,

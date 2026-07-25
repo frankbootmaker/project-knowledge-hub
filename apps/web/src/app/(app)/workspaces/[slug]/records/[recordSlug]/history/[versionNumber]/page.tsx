@@ -135,8 +135,12 @@ export default async function KnowledgeVersionDetailPage({
         </p>
       ) : null}
 
-      <Panel>
-        <MarkdownDocument html={version.contentHtml ?? ''} toc={version.toc ?? []} />
+      <Panel className="min-w-0 overflow-hidden">
+        <MarkdownDocument
+          html={version.contentHtml ?? ''}
+          toc={version.toc ?? []}
+          title={version.title}
+        />
       </Panel>
     </Page>
   );

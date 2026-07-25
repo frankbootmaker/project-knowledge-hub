@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import base64
 import io
+import math
 import mimetypes
 import os
+import re
 import shutil
 import tempfile
 import zipfile
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -274,6 +277,173 @@ def _title_hint(filename: str, markdown: str) -> str:
     return stem[:200] or "Imported document"
 
 
+_SPREADSHEET_EXTENSIONS = {".xlsx", ".xls", ".xlsm"}
+_SPREADSHEET_MIME_HINTS = (
+    "spreadsheetml",
+    "ms-excel",
+    "application/vnd.ms-excel",
+)
+
+# Match floats / scientific notation that pandas dumps into Markdown tables.
+_NUMERIC_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9_])"
+    r"([+-]?(?:\d+\.\d+|\d+\.|\.\d+|\d+)(?:[eE][+-]?\d+)?)"
+    r"(?![A-Za-z0-9_/%])"
+)
+
+
+def _is_spreadsheet(filename: str | None, content_type: str) -> bool:
+    name = (filename or "").lower()
+    suffix = Path(name).suffix.lower()
+    if suffix in _SPREADSHEET_EXTENSIONS:
+        return True
+    ct = (content_type or "").lower()
+    return any(hint in ct for hint in _SPREADSHEET_MIME_HINTS)
+
+
+def _format_spreadsheet_number(value: float) -> str:
+    """Human-readable spreadsheet numbers (no scientific notation / float noise)."""
+    if not math.isfinite(value):
+        return ""
+    if abs(value - round(value)) < 1e-9 and abs(value) < 1e15:
+        return str(int(round(value)))
+    # Keep up to 6 decimals; strip trailing zeros (money-like cells stay readable).
+    text = f"{value:.6f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _format_spreadsheet_cell(value: Any) -> str:
+    import pandas as pd
+
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+
+    if isinstance(value, bool):
+        return "true" if value else "false"
+
+    if isinstance(value, (datetime, date)) or isinstance(value, pd.Timestamp):
+        ts = pd.Timestamp(value)
+        if (
+            ts.hour == 0
+            and ts.minute == 0
+            and ts.second == 0
+            and ts.microsecond == 0
+        ):
+            return ts.strftime("%Y-%m-%d")
+        return ts.strftime("%Y-%m-%d %H:%M:%S")
+
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+
+    if isinstance(value, float):
+        return _format_spreadsheet_number(value)
+
+    # Excel sometimes surfaces numbers as Decimal / numpy scalars.
+    if hasattr(value, "item"):
+        try:
+            return _format_spreadsheet_cell(value.item())
+        except Exception:  # noqa: BLE001
+            pass
+
+    text = str(value).strip()
+    if text.lower() in {"nan", "nat", "none", "<na>"}:
+        return ""
+    # Escape pipes for GFM tables.
+    return text.replace("|", "\\|").replace("\n", " ").replace("\r", "")
+
+
+def _dataframe_to_gfm(df: Any) -> str:
+    if df is None or df.empty:
+        return "_(Empty sheet.)_\n"
+
+    columns = [_format_spreadsheet_cell(col) or " " for col in df.columns.tolist()]
+    # Deduplicate blank / Unnamed headers for readability.
+    cleaned_cols: list[str] = []
+    for index, col in enumerate(columns):
+        label = col
+        if not label.strip() or label.lower().startswith("unnamed"):
+            label = f"Column {index + 1}"
+        cleaned_cols.append(label)
+
+    lines = [
+        "| " + " | ".join(cleaned_cols) + " |",
+        "| " + " | ".join("---" for _ in cleaned_cols) + " |",
+    ]
+    for row in df.itertuples(index=False, name=None):
+        cells = [_format_spreadsheet_cell(cell) for cell in row]
+        # Pad / trim if pandas row length drifts.
+        if len(cells) < len(cleaned_cols):
+            cells.extend([""] * (len(cleaned_cols) - len(cells)))
+        elif len(cells) > len(cleaned_cols):
+            cells = cells[: len(cleaned_cols)]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def _convert_spreadsheet_markdown(path: Path) -> str:
+    """Convert Excel with readable numbers (MarkItDown/pandas default uses sci notation)."""
+    import pandas as pd
+
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".xls":
+            sheets = pd.read_excel(path, sheet_name=None, engine="xlrd")
+        else:
+            sheets = pd.read_excel(path, sheet_name=None, engine="openpyxl")
+    except Exception:
+        # Fall back to pandas engine guessing when xlrd/openpyxl path fails.
+        sheets = pd.read_excel(path, sheet_name=None)
+
+    if not sheets:
+        return "_(No sheets found.)_\n"
+
+    parts: list[str] = []
+    for sheet_name, frame in sheets.items():
+        title = str(sheet_name).strip() or "Sheet"
+        parts.append(f"## {title}\n")
+        parts.append(_dataframe_to_gfm(frame))
+        parts.append("")
+    return "\n".join(parts).strip() + "\n"
+
+
+def _prettify_markdown_numbers(markdown: str) -> str:
+    """Rewrite scientific notation / noisy floats left in Markdown table cells."""
+
+    def repl(match: re.Match[str]) -> str:
+        token = match.group(1)
+        # Leave pure integers and simple dates alone (YYYY-MM-DD matched elsewhere).
+        if re.fullmatch(r"[+-]?\d+", token):
+            return token
+        if "e" not in token.lower() and "." not in token:
+            return token
+        try:
+            value = float(token)
+        except ValueError:
+            return token
+        if not math.isfinite(value):
+            return ""
+        # Only rewrite when scientific notation or long float tails appear.
+        if "e" in token.lower() or ("." in token and len(token.split(".", 1)[1]) > 4):
+            return _format_spreadsheet_number(value)
+        return token
+
+    # Operate line-by-line on table rows to avoid rewriting prose unexpectedly.
+    out_lines: list[str] = []
+    for line in markdown.splitlines():
+        if "|" in line:
+            cleaned = line.replace(" NaN ", "  ").replace("| NaN |", "|  |")
+            cleaned = re.sub(r"\bNaN\b", "", cleaned)
+            out_lines.append(_NUMERIC_TOKEN_RE.sub(repl, cleaned))
+        else:
+            out_lines.append(line)
+    return "\n".join(out_lines)
+
+
 def _ocr_pil_image(img: Any, lang_pack: str) -> str:
     import pytesseract
 
@@ -436,17 +606,24 @@ async def convert(
             ]
 
         try:
-            md = _build_markitdown(ocr_engine, ocr_lang)
-            result = md.convert(str(path))
-            markdown = (
-                getattr(result, "markdown", None)
-                or getattr(result, "text_content", None)
-                or ""
-            ).strip()
+            if _is_spreadsheet(file.filename, content_type):
+                # Custom path: MarkItDown/pandas default dumps floats as 3.52e+06.
+                markdown = _convert_spreadsheet_markdown(path).strip()
+            else:
+                md = _build_markitdown(ocr_engine, ocr_lang)
+                result = md.convert(str(path))
+                markdown = (
+                    getattr(result, "markdown", None)
+                    or getattr(result, "text_content", None)
+                    or ""
+                ).strip()
         except HTTPException:
             raise
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=422, detail=f"conversion failed: {exc}") from exc
+
+        if markdown and ("|" in markdown):
+            markdown = _prettify_markdown_numbers(markdown)
 
         if ocr_engine == "tesseract":
             markdown = _apply_tesseract_ocr(

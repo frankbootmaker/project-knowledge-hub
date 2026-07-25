@@ -380,6 +380,14 @@
     @apply max-h-none;
   }
 
+  .kh-modal-panel-full {
+    @apply h-[min(96dvh,96rem)] max-h-[96dvh] w-[min(96vw,96rem)] max-w-[min(96vw,96rem)];
+  }
+
+  .kh-modal-panel-full .kh-modal-body {
+    @apply min-h-0 max-h-none flex-1 overflow-auto;
+  }
+
   .kh-modal-header {
     @apply flex items-start justify-between gap-3 border-b border-line px-4 py-3;
   }
@@ -435,7 +443,7 @@
 }
 
 .knowledge-markdown {
-  @apply leading-relaxed;
+  @apply max-w-full min-w-0 leading-relaxed;
 }
 
 .knowledge-markdown :is(h1, h2, h3, h4, h5, h6) {
@@ -444,6 +452,28 @@
 
 .knowledge-markdown pre {
   @apply overflow-x-auto rounded-md bg-ink/5 px-4 py-3;
+}
+
+/* Wide spreadsheet-style tables from Excel→Markdown imports. */
+.knowledge-markdown-table-scroll {
+  @apply my-4 max-w-full overflow-x-auto rounded-md border border-line;
+}
+
+.knowledge-markdown table {
+  @apply w-max min-w-full border-collapse text-sm;
+}
+
+.knowledge-markdown th,
+.knowledge-markdown td {
+  @apply border border-line px-2.5 py-1.5 align-top whitespace-nowrap;
+}
+
+.knowledge-markdown th {
+  @apply bg-neutral-soft font-semibold text-ink;
+}
+
+.knowledge-markdown tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--kh-ink) 3%, transparent);
 }
 
 .dark .knowledge-markdown pre {
