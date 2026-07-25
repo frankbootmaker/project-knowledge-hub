@@ -104,11 +104,15 @@ function MarkdownBody({
     };
   }, [html, ref]);
 
+  // React 19 re-applies dangerouslySetInnerHTML when the `{ __html }` object
+  // identity changes, which wipes Mermaid SVGs (and table wrappers) on TOC toggle.
+  const markup = useMemo(() => ({ __html: html }), [html]);
+
   return (
     <article
       ref={ref}
       className={cn('knowledge-markdown leading-relaxed break-words', className)}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={markup}
     />
   );
 }
