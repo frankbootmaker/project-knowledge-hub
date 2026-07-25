@@ -1119,7 +1119,7 @@
     "monitoringRange24h": "Elmúlt 24 óra",
     "monitoringRange7d": "Elmúlt 7 nap",
     "monitoringActiveSessions": "Aktív munkamenetek",
-    "monitoringMcpRequests": "MCP események",
+    "monitoringMcpRequests": "Agent események",
     "monitoringMcpToolCalls": "Eszközhívások",
     "monitoringMcpErrors": "Eszközhibák",
     "monitoringAttention": "Figyelem",

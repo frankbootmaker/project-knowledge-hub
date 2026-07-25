@@ -1,4 +1,16 @@
-import { and, count, desc, eq, gte, inArray, isNotNull, isNull, like, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  or,
+  sql,
+} from 'drizzle-orm';
 import {
   apiClients,
   auditEvents,
@@ -49,6 +61,14 @@ export async function getPendingAttention(database: Database): Promise<{
   };
 }
 
+/** MCP Streamable HTTP (`mcp.*`) + ChatGPT/OpenAPI Actions (`llm.*`). */
+function agentAuditWhere(since: Date) {
+  return and(
+    gte(auditEvents.createdAt, since),
+    or(like(auditEvents.action, 'mcp.%'), like(auditEvents.action, 'llm.%')),
+  );
+}
+
 export async function getMcpActivitySummary(
   database: Database,
   since: Date,
@@ -58,15 +78,12 @@ export async function getMcpActivitySummary(
   toolErrorCount: number;
   topActions: Array<{ action: string; count: number }>;
 }> {
-  const mcpWhere = and(
-    gte(auditEvents.createdAt, since),
-    like(auditEvents.action, 'mcp.%'),
-  );
+  const agentWhere = agentAuditWhere(since);
 
   const [totalRow] = await database.db
     .select({ value: count() })
     .from(auditEvents)
-    .where(mcpWhere);
+    .where(agentWhere);
 
   const [toolCalls] = await database.db
     .select({ value: count() })
@@ -74,7 +91,10 @@ export async function getMcpActivitySummary(
     .where(
       and(
         gte(auditEvents.createdAt, since),
-        eq(auditEvents.action, 'mcp.tool_call'),
+        or(
+          eq(auditEvents.action, 'mcp.tool_call'),
+          eq(auditEvents.action, 'llm.tool_call'),
+        ),
       ),
     );
 
@@ -84,7 +104,10 @@ export async function getMcpActivitySummary(
     .where(
       and(
         gte(auditEvents.createdAt, since),
-        eq(auditEvents.action, 'mcp.tool_error'),
+        or(
+          eq(auditEvents.action, 'mcp.tool_error'),
+          eq(auditEvents.action, 'llm.tool_error'),
+        ),
       ),
     );
 
@@ -94,7 +117,7 @@ export async function getMcpActivitySummary(
       value: count(),
     })
     .from(auditEvents)
-    .where(mcpWhere)
+    .where(agentWhere)
     .groupBy(auditEvents.action)
     .orderBy(desc(count()))
     .limit(8);
@@ -165,12 +188,16 @@ export async function getClientLeaderboard(
       SELECT
         actor_id AS "actorId",
         COUNT(*)::int AS "requestCount",
-        COUNT(*) FILTER (WHERE action = 'mcp.tool_call')::int AS "toolCallCount",
-        COUNT(*) FILTER (WHERE action = 'mcp.tool_error')::int AS "toolErrorCount"
+        COUNT(*) FILTER (
+          WHERE action IN ('mcp.tool_call', 'llm.tool_call')
+        )::int AS "toolCallCount",
+        COUNT(*) FILTER (
+          WHERE action IN ('mcp.tool_error', 'llm.tool_error')
+        )::int AS "toolErrorCount"
       FROM audit_events
       WHERE created_at >= ${since.toISOString()}
         AND actor_type = 'api_client'
-        AND action LIKE 'mcp.%'
+        AND (action LIKE 'mcp.%' OR action LIKE 'llm.%')
         AND actor_id IS NOT NULL
       GROUP BY actor_id
       ORDER BY COUNT(*) DESC
@@ -247,7 +274,12 @@ async function topIdsFromMcpMetadata(
       SELECT ${entityExpr} AS "entityId", COUNT(*)::int AS count
       FROM audit_events
       WHERE created_at >= ${since.toISOString()}
-        AND action IN ('mcp.tool_call', 'mcp.tool_error')
+        AND action IN (
+          'mcp.tool_call',
+          'mcp.tool_error',
+          'llm.tool_call',
+          'llm.tool_error'
+        )
         AND metadata_json ? ${metaKey}
         AND COALESCE(${entityExpr}, '') <> ''
       GROUP BY 1
@@ -523,7 +555,7 @@ export async function listActiveWorkspacesForMonitoring(
 const ERROR_AUDIT_ACTION_SQL = sql`(
   ${auditEvents.action} ILIKE '%error%'
   OR ${auditEvents.action} ILIKE '%fail%'
-  OR ${auditEvents.action} = 'mcp.tool_error'
+  OR ${auditEvents.action} IN ('mcp.tool_error', 'llm.tool_error')
 )`;
 
 /** Recent audit rows that look like failures (ids/actions only — no metadata). */

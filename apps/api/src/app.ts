@@ -60,7 +60,15 @@ export type ApiDependencies = {
 };
 
 export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> {
+  // Default Fastify bodyLimit is 1 MiB — too small for ChatGPT Actions /
+  // MCP base64 image uploads (MEDIA_MAX_BYTES decoded ≈ ×4/3 on the wire).
+  const jsonBodyLimit = Math.max(
+    10 * 1024 * 1024,
+    Math.ceil(deps.env.MEDIA_MAX_BYTES * 1.4) + 1024 * 1024,
+  );
+
   const app = Fastify({
+    bodyLimit: jsonBodyLimit,
     logger: {
       level: deps.env.LOG_LEVEL,
       timestamp: () => `,"time":"${new Date().toISOString()}"`,

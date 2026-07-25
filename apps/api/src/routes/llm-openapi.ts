@@ -306,11 +306,12 @@ async function invokeTool(
       if (
         raw.contentType !== 'image/jpeg' &&
         raw.contentType !== 'image/png' &&
-        raw.contentType !== 'image/webp'
+        raw.contentType !== 'image/webp' &&
+        raw.contentType !== 'image/gif'
       ) {
         throw new AppError({
           code: 'MEDIA_TYPE_UNSUPPORTED',
-          message: 'contentType must be image/jpeg, image/png, or image/webp',
+          message: 'contentType must be image/jpeg, image/png, image/webp, or image/gif',
           statusCode: 400,
         });
       }
@@ -322,6 +323,8 @@ async function invokeTool(
         alt: typeof raw.alt === 'string' ? raw.alt : undefined,
         knowledgeRecordId:
           typeof raw.knowledgeRecordId === 'string' ? raw.knowledgeRecordId : undefined,
+        insertIntoRecord:
+          typeof raw.insertIntoRecord === 'boolean' ? raw.insertIntoRecord : undefined,
       });
     }
     case 'delete_workspace_media':
@@ -361,6 +364,10 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
 
     try {
       const result = await invokeTool(handlers, client.context, params.toolName, request.body);
+      const body =
+        request.body && typeof request.body === 'object' && !Array.isArray(request.body)
+          ? (request.body as Record<string, unknown>)
+          : {};
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -368,11 +375,35 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
         action: 'llm.tool_call',
         entityType: 'llm_tool',
         entityId: params.toolName,
-        metadata: { clientName: client.name, toolName: params.toolName, ok: true },
+        metadata: {
+          clientName: client.name,
+          toolName: params.toolName,
+          ok: true,
+          via: 'openapi',
+          workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : undefined,
+          recordId:
+            typeof body.recordId === 'string'
+              ? body.recordId
+              : typeof body.knowledgeRecordId === 'string'
+                ? body.knowledgeRecordId
+                : undefined,
+          projectId: typeof body.projectId === 'string' ? body.projectId : undefined,
+          systemId: typeof body.systemId === 'string' ? body.systemId : undefined,
+          // Avoid logging multi‑MB base64 payloads in audit metadata.
+          contentBase64Chars:
+            typeof body.contentBase64 === 'string' ? body.contentBase64.length : undefined,
+          contentType: typeof body.contentType === 'string' ? body.contentType : undefined,
+          insertIntoRecord:
+            typeof body.insertIntoRecord === 'boolean' ? body.insertIntoRecord : undefined,
+        },
         ipAddress: request.ip,
       });
       return result;
     } catch (error) {
+      const body =
+        request.body && typeof request.body === 'object' && !Array.isArray(request.body)
+          ? (request.body as Record<string, unknown>)
+          : {};
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -384,6 +415,16 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
           clientName: client.name,
           toolName: params.toolName,
           ok: false,
+          via: 'openapi',
+          workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : undefined,
+          recordId:
+            typeof body.recordId === 'string'
+              ? body.recordId
+              : typeof body.knowledgeRecordId === 'string'
+                ? body.knowledgeRecordId
+                : undefined,
+          contentBase64Chars:
+            typeof body.contentBase64 === 'string' ? body.contentBase64.length : undefined,
           message: error instanceof Error ? error.message : 'Tool failed',
         },
         ipAddress: request.ip,

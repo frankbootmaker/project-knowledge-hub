@@ -102,6 +102,8 @@ Requires ChatGPT Plus / Team / Enterprise (Custom GPTs + Actions).
 - “Update draft record &lt;id&gt; with the revised summary below.”
 - “Upload this PNG into workspace …, link it to draft record … with insertIntoRecord, alt ‘…’.”
 
+**Image uploads are often slow in ChatGPT Actions:** the model must base64-encode the file and POST a large JSON body through OpenAI to your API. Prefer a compressed **JPEG/WebP under ~500 KB** (charts rarely need multi‑MB PNGs). Hub API body limit is sized for `MEDIA_MAX_BYTES` (default 5 MiB decoded).
+
 ---
 
 ## 4. Move earlier ChatGPT content into Knowledge Hub

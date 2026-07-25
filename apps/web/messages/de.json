@@ -1119,7 +1119,7 @@
     "monitoringRange24h": "Letzte 24 Stunden",
     "monitoringRange7d": "Letzte 7 Tage",
     "monitoringActiveSessions": "Aktive Sitzungen",
-    "monitoringMcpRequests": "MCP-Ereignisse",
+    "monitoringMcpRequests": "Agent-Ereignisse",
     "monitoringMcpToolCalls": "Tool-Aufrufe",
     "monitoringMcpErrors": "Tool-Fehler",
     "monitoringAttention": "Aufmerksamkeit",
