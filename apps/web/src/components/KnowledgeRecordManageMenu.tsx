@@ -9,7 +9,7 @@ import {
   ManageMenuItem,
   ManageMenuLink,
 } from './manage-menu-shared';
-import { Button, Modal } from './ui';
+import { Button, Modal, lifecycleLabel } from './ui';
 
 export type RecordManageDetails = {
   id: string;
@@ -28,6 +28,11 @@ export type RecordManageDetails = {
   systemName?: string | null;
   verifiedAt?: string | null;
   reviewedBy?: string | null;
+  reviewedByUser?: {
+    id: string;
+    displayName: string;
+    email: string;
+  } | null;
   lastValidatedAt?: string | null;
   source?: {
     sourceType: string;
@@ -153,7 +158,7 @@ export function KnowledgeRecordManageMenu(props: {
               <ManageDetailRow label={t('recordType')} value={props.record.recordType} />
               <ManageDetailRow
                 label={t('lifecycleStatus')}
-                value={props.record.lifecycleStatus}
+                value={lifecycleLabel(props.record.lifecycleStatus, t)}
               />
               <ManageDetailRow
                 label={t('sourceOfTruth')}
@@ -209,7 +214,13 @@ export function KnowledgeRecordManageMenu(props: {
               />
               <ManageDetailRow
                 label={t('reviewedBy')}
-                value={props.record.reviewedBy ?? tCommon('emDash')}
+                value={
+                  props.record.reviewedByUser
+                    ? props.record.reviewedByUser.email
+                      ? `${props.record.reviewedByUser.displayName} (${props.record.reviewedByUser.email})`
+                      : props.record.reviewedByUser.displayName
+                    : (props.record.reviewedBy ?? tCommon('emDash'))
+                }
               />
               <ManageDetailRow
                 label={t('lastValidated')}

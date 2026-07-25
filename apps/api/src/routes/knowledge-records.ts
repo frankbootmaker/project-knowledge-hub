@@ -27,12 +27,16 @@ import {
 } from '../lib/knowledge-versions.js';
 import { getKnowledgeRecordTags } from '../lib/tags.js';
 import {
+  approvedByFromMetadata,
   createKnowledgeRecord,
   createRecordInputSchema,
+  loadApproverSnapshot,
   loadPrimarySource,
+  resolveReviewedByUser,
   toPublicRecord,
   updateKnowledgeRecord,
   updateRecordInputSchema,
+  withApprovedByMetadata,
 } from '../lib/knowledge-records-service.js';
 import {
   auditKnowledgeView,
@@ -129,6 +133,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     const tagMap = await getKnowledgeRecordTags(app.database, [record.id]);
     const source = await loadPrimarySource(app.database, record.id);
     const rendered = await renderMarkdown(record.contentMarkdown);
+    const reviewedByUser = await resolveReviewedByUser(app.database, record);
 
     const organizationId = await resolveWorkspaceOrganizationId(
       app.database,
@@ -154,6 +159,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         includeToc: true,
         html: rendered.html,
         toc: rendered.toc,
+        reviewedByUser,
       }),
     };
   });
@@ -398,6 +404,8 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
 
     requireWorkspaceMaintainer(principal, record.workspaceId);
     const now = new Date();
+    const approver = await loadApproverSnapshot(app.database, principal.userId);
+    const metadataJson = withApprovedByMetadata(record.metadataJson, approver, now);
 
     const [updated] = await app.database.db
       .update(knowledgeRecords)
@@ -405,6 +413,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         lifecycleStatus: 'verified',
         reviewedBy: principal.userId,
         verifiedAt: now,
+        metadataJson,
         updatedAt: now,
       })
       .where(eq(knowledgeRecords.id, record.id))
@@ -424,6 +433,12 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       .where(eq(workspaces.id, record.workspaceId))
       .limit(1);
 
+    const reviewedByUser = {
+      id: approver.userId,
+      displayName: approver.displayName,
+      email: approver.email,
+    };
+
     await writeAuditEvent(app.database, {
       organizationId: workspace?.organizationId ?? null,
       actorType: 'user',
@@ -431,6 +446,13 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       action: 'knowledge_record.verify',
       entityType: 'knowledge_record',
       entityId: updated.id,
+      metadata: {
+        approvedBy: {
+          userId: approver.userId,
+          displayName: approver.displayName,
+          email: approver.email,
+        },
+      },
       ipAddress: request.ip,
     });
 
@@ -443,6 +465,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         includeToc: true,
         html: rendered.html,
         toc: rendered.toc,
+        reviewedByUser,
       }),
     };
   });
@@ -470,6 +493,23 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
 
     const superseded = await supersedeOtherCurrentInSeries(app.database, record);
     const now = new Date();
+    const hasApproverSnapshot = approvedByFromMetadata(record.metadataJson) != null;
+    const needsApproverSnapshot =
+      !record.reviewedBy || !record.verifiedAt || !hasApproverSnapshot;
+    const approver = needsApproverSnapshot
+      ? await loadApproverSnapshot(
+          app.database,
+          record.reviewedBy ?? principal.userId,
+        )
+      : null;
+    const metadataJson =
+      approver != null
+        ? withApprovedByMetadata(
+            record.metadataJson,
+            approver,
+            record.verifiedAt ?? now,
+          )
+        : record.metadataJson;
 
     const [updated] = await app.database.db
       .update(knowledgeRecords)
@@ -481,6 +521,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
             : record.supersedesRecordId,
         reviewedBy: record.reviewedBy ?? principal.userId,
         verifiedAt: record.verifiedAt ?? now,
+        metadataJson,
         updatedAt: now,
       })
       .where(eq(knowledgeRecords.id, record.id))
@@ -500,6 +541,8 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       .where(eq(workspaces.id, record.workspaceId))
       .limit(1);
 
+    const reviewedByUser = await resolveReviewedByUser(app.database, updated);
+
     await writeAuditEvent(app.database, {
       organizationId: workspace?.organizationId ?? null,
       actorType: 'user',
@@ -507,7 +550,18 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       action: 'knowledge_record.mark_current',
       entityType: 'knowledge_record',
       entityId: updated.id,
-      metadata: { superseded },
+      metadata: {
+        superseded,
+        ...(reviewedByUser
+          ? {
+              approvedBy: {
+                userId: reviewedByUser.id,
+                displayName: reviewedByUser.displayName,
+                email: reviewedByUser.email,
+              },
+            }
+          : {}),
+      },
       ipAddress: request.ip,
     });
 
@@ -520,6 +574,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         includeToc: true,
         html: rendered.html,
         toc: rendered.toc,
+        reviewedByUser,
       }),
       superseded,
     };

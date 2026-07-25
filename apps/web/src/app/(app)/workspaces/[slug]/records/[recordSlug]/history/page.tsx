@@ -7,6 +7,7 @@ import {
   ListCard,
   Page,
   PageHeader,
+  lifecycleLabel,
   lifecycleTone,
 } from '../../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../../lib/session';
@@ -104,7 +105,7 @@ export default async function KnowledgeRecordHistoryPage({
         title={t('versionHistory')}
         description={t('currentVersion', {
           version: versionsPayload.currentVersionNumber,
-          status: record.lifecycleStatus,
+          status: lifecycleLabel(record.lifecycleStatus, t),
         })}
       />
 
@@ -124,7 +125,7 @@ export default async function KnowledgeRecordHistoryPage({
                       <Badge tone="warn">{t('historical')}</Badge>
                     )}
                     <Badge tone={lifecycleTone(version.lifecycleStatus)}>
-                      {version.lifecycleStatus}
+                      {lifecycleLabel(version.lifecycleStatus, t)}
                     </Badge>
                   </div>
                   <p className="mt-2 mb-0 text-ink">{version.title}</p>

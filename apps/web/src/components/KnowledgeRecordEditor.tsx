@@ -363,7 +363,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
           >
             {LIFECYCLE_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {t(`lifecycleLabels.${status}`)}
               </option>
             ))}
           </Select>

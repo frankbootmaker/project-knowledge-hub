@@ -13,6 +13,7 @@ import {
   Panel,
   SectionHeader,
   Select,
+  lifecycleLabel,
   lifecycleTone,
 } from '../../../components/ui';
 import { apiFetch, requireSession } from '../../../lib/session';
@@ -247,7 +248,7 @@ export default async function SearchPage({
                       </p>
                     </div>
                     <Badge tone={lifecycleTone(result.lifecycleStatus)}>
-                      {result.lifecycleStatus}
+                      {lifecycleLabel(result.lifecycleStatus, tRecords)}
                     </Badge>
                   </div>
                   {result.excerpt ? (

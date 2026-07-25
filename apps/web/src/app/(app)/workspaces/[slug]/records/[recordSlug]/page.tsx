@@ -10,6 +10,7 @@ import {
   Page,
   PageHeader,
   Panel,
+  lifecycleLabel,
   lifecycleTone,
 } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
@@ -35,6 +36,11 @@ type KnowledgeRecord = {
   tags: Array<{ name: string }>;
   verifiedAt: string | null;
   reviewedBy: string | null;
+  reviewedByUser: {
+    id: string;
+    displayName: string;
+    email: string;
+  } | null;
   lastValidatedAt: string | null;
   createdBy: string;
   updatedAt: string;
@@ -152,7 +158,7 @@ export default async function KnowledgeRecordDetailPage({
         leading={
           <>
             <Badge tone={lifecycleTone(record.lifecycleStatus)}>
-              {record.lifecycleStatus}
+              {lifecycleLabel(record.lifecycleStatus, t)}
             </Badge>
             <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
             {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
@@ -195,6 +201,7 @@ export default async function KnowledgeRecordDetailPage({
               systemName: system?.name ?? null,
               verifiedAt: record.verifiedAt,
               reviewedBy: record.reviewedBy,
+              reviewedByUser: record.reviewedByUser,
               lastValidatedAt: record.lastValidatedAt,
               source: record.source,
             }}
@@ -266,7 +273,14 @@ export default async function KnowledgeRecordDetailPage({
           },
           { label: t('model'), value: record.source?.generatedByModel ?? dash },
           { label: t('verifiedAt'), value: record.verifiedAt ?? dash },
-          { label: t('reviewedBy'), value: record.reviewedBy ?? dash },
+          {
+            label: t('reviewedBy'),
+            value: record.reviewedByUser
+              ? record.reviewedByUser.email
+                ? `${record.reviewedByUser.displayName} (${record.reviewedByUser.email})`
+                : record.reviewedByUser.displayName
+              : (record.reviewedBy ?? dash),
+          },
           { label: t('lastValidated'), value: record.lastValidatedAt ?? dash },
           { label: tCommon('updated'), value: record.updatedAt },
         ]}

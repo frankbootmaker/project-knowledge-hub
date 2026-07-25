@@ -6,6 +6,7 @@ import {
   knowledgeSources,
   projects,
   systems,
+  users,
   workspaces,
   type Database,
 } from '@project-knowledge-hub/database';
@@ -90,6 +91,111 @@ export type KnowledgeActor = {
   userId: string;
 };
 
+/** Denormalized approver snapshot kept in metadata for audit durability. */
+export type ApproverSnapshot = {
+  userId: string;
+  displayName: string;
+  email: string;
+};
+
+export type ReviewedByUser = {
+  id: string;
+  displayName: string;
+  email: string;
+};
+
+export function withApprovedByMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  approver: ApproverSnapshot,
+  approvedAt: Date,
+): Record<string, unknown> {
+  return {
+    ...(metadata ?? {}),
+    approvedBy: {
+      userId: approver.userId,
+      displayName: approver.displayName,
+      email: approver.email,
+      approvedAt: approvedAt.toISOString(),
+    },
+  };
+}
+
+export function clearApprovedByMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!metadata) {
+    return null;
+  }
+  const { approvedBy: _removed, ...rest } = metadata;
+  return Object.keys(rest).length > 0 ? rest : null;
+}
+
+export function approvedByFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): ReviewedByUser | null {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+  const raw = metadata.approvedBy;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const snap = raw as Record<string, unknown>;
+  const id = typeof snap.userId === 'string' ? snap.userId : null;
+  const displayName = typeof snap.displayName === 'string' ? snap.displayName : null;
+  const email = typeof snap.email === 'string' ? snap.email : null;
+  if (!id || !displayName) {
+    return null;
+  }
+  return { id, displayName, email: email ?? '' };
+}
+
+export async function loadApproverSnapshot(
+  database: Database,
+  userId: string,
+): Promise<ApproverSnapshot> {
+  const [user] = await database.db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      email: users.email,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  return {
+    userId,
+    displayName: user?.displayName ?? 'Unknown user',
+    email: user?.email ?? '',
+  };
+}
+
+export async function resolveReviewedByUser(
+  database: Database,
+  record: Pick<RecordRow, 'reviewedBy' | 'metadataJson'>,
+): Promise<ReviewedByUser | null> {
+  if (record.reviewedBy) {
+    const [user] = await database.db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        email: users.email,
+      })
+      .from(users)
+      .where(eq(users.id, record.reviewedBy))
+      .limit(1);
+    if (user) {
+      return {
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+      };
+    }
+  }
+  return approvedByFromMetadata(record.metadataJson);
+}
+
 export function toPublicSource(source: SourceRow | null) {
   if (!source) {
     return null;
@@ -118,6 +224,7 @@ export function toPublicRecord(
     /** Prefer fresh HTML from the same render pass as `toc` when provided. */
     html?: string;
     toc?: Array<{ id: string; text: string; depth: number }>;
+    reviewedByUser?: ReviewedByUser | null;
   },
 ) {
   return {
@@ -142,6 +249,10 @@ export function toPublicRecord(
     supersedesRecordId: record.supersedesRecordId,
     createdBy: record.createdBy,
     reviewedBy: record.reviewedBy,
+    reviewedByUser:
+      options?.reviewedByUser !== undefined
+        ? options.reviewedByUser
+        : approvedByFromMetadata(record.metadataJson),
     verifiedAt: record.verifiedAt?.toISOString() ?? null,
     lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
     tags: tagList,
@@ -309,6 +420,15 @@ export async function createKnowledgeRecord(
   const rendered = await renderMarkdown(contentMarkdown);
   const lifecycleStatus = body.lifecycleStatus ?? 'draft';
   const now = new Date();
+  let metadataJson = body.metadata ?? null;
+  let reviewedBy: string | null = null;
+  let verifiedAt: Date | null = null;
+  if (lifecycleStatus === 'verified') {
+    const approver = await loadApproverSnapshot(app.database, actor.userId);
+    metadataJson = withApprovedByMetadata(metadataJson, approver, now);
+    reviewedBy = actor.userId;
+    verifiedAt = now;
+  }
 
   const [created] = await app.database.db
     .insert(knowledgeRecords)
@@ -325,11 +445,11 @@ export async function createKnowledgeRecord(
       contentMarkdown,
       contentHtmlCache: rendered.html,
       language: body.language ?? 'en',
-      metadataJson: body.metadata ?? null,
+      metadataJson,
       currentVersionNumber: 1,
       createdBy: actor.userId,
-      reviewedBy: lifecycleStatus === 'verified' ? actor.userId : null,
-      verifiedAt: lifecycleStatus === 'verified' ? now : null,
+      reviewedBy,
+      verifiedAt,
       updatedAt: now,
     })
     .returning();
@@ -407,12 +527,15 @@ export async function createKnowledgeRecord(
   const { maybeEnqueueEmbeddingReindex } = await import('./embedding-jobs.js');
   await maybeEnqueueEmbeddingReindex(app, finalRecord.id).catch(() => undefined);
 
+  const reviewedByUser = await resolveReviewedByUser(app.database, finalRecord);
+
   return {
     knowledgeRecord: toPublicRecord(finalRecord, tagList, source, {
       includeHtml: true,
       includeToc: true,
       html: rendered.html,
       toc: rendered.toc,
+      reviewedByUser,
     }),
     rendered,
   };
@@ -475,7 +598,7 @@ export async function updateKnowledgeRecord(
   const nextRecordType = body.recordType ?? record.recordType;
   const nextContent =
     body.contentMarkdown === undefined ? record.contentMarkdown : body.contentMarkdown;
-  const nextMetadata = body.metadata === undefined ? record.metadataJson : body.metadata;
+  let nextMetadata = body.metadata === undefined ? record.metadataJson : body.metadata;
   const rendered = await renderMarkdown(nextContent);
   const lifecycleStatus = body.lifecycleStatus ?? record.lifecycleStatus;
   const now = new Date();
@@ -483,8 +606,10 @@ export async function updateKnowledgeRecord(
   let reviewedBy = record.reviewedBy;
   let verifiedAt = record.verifiedAt;
   if (body.lifecycleStatus === 'verified' && record.lifecycleStatus !== 'verified') {
+    const approver = await loadApproverSnapshot(app.database, actor.userId);
     reviewedBy = actor.userId;
     verifiedAt = now;
+    nextMetadata = withApprovedByMetadata(nextMetadata, approver, now);
   }
   if (
     body.lifecycleStatus &&
@@ -492,6 +617,7 @@ export async function updateKnowledgeRecord(
   ) {
     reviewedBy = null;
     verifiedAt = null;
+    nextMetadata = clearApprovedByMetadata(nextMetadata);
   }
 
   const shouldVersion = contentFieldsChanged(record, {
@@ -596,6 +722,8 @@ export async function updateKnowledgeRecord(
 
   const source = await replaceSource(app.database, finalRecord.id, body.source);
 
+  const reviewedByUser = await resolveReviewedByUser(app.database, finalRecord);
+
   await writeAuditEvent(app.database, {
     organizationId: workspace?.organizationId ?? null,
     actorType: actor.actorType,
@@ -608,6 +736,15 @@ export async function updateKnowledgeRecord(
       versionNumber: finalRecord.currentVersionNumber,
       versioned: shouldVersion,
       fields: Object.keys(body),
+      ...(body.lifecycleStatus === 'verified' && reviewedByUser
+        ? {
+            approvedBy: {
+              userId: reviewedByUser.id,
+              displayName: reviewedByUser.displayName,
+              email: reviewedByUser.email,
+            },
+          }
+        : {}),
     },
     ipAddress: ipAddress ?? null,
   });
@@ -623,6 +760,7 @@ export async function updateKnowledgeRecord(
       includeToc: true,
       html: rendered.html,
       toc: rendered.toc,
+      reviewedByUser,
     }),
     rendered,
     shouldVersion,

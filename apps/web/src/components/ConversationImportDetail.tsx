@@ -16,6 +16,7 @@ import {
   Panel,
   Select,
   Textarea,
+  lifecycleLabel,
 } from './ui';
 
 type LinkedRecord = {
@@ -217,7 +218,7 @@ export function ConversationImportDetail(props: {
                   {record.title}
                 </Link>
                 <Badge tone="brand">{record.recordType}</Badge>
-                <Badge>{record.lifecycleStatus}</Badge>
+                <Badge>{lifecycleLabel(record.lifecycleStatus, tRecords)}</Badge>
               </div>
               {record.excerptNote ? (
                 <p className="mt-2 mb-0 text-sm text-ink-muted">{record.excerptNote}</p>

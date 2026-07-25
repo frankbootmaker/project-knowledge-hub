@@ -43,3 +43,21 @@ export function lifecycleTone(status: string): Tone {
   if (status === 'draft') return 'neutral';
   return 'brand';
 }
+
+/** Display label for a lifecycle status; maps API value `verified` → Approve wording. */
+export function lifecycleLabel(
+  status: string,
+  t: (key: string) => string,
+): string {
+  const known = [
+    'draft',
+    'review_required',
+    'verified',
+    'current',
+    'superseded',
+    'deprecated',
+    'archived',
+  ];
+  if (!known.includes(status)) return status;
+  return t(`lifecycleLabels.${status}`);
+}

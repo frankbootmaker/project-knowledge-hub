@@ -59,6 +59,8 @@ export type CatalogueListItem = {
   searchText: string;
   /** Value matched by the filter select (e.g. status / lifecycle). */
   filterValue: string;
+  /** Optional display label for filterValue in the select (defaults to filterValue). */
+  filterLabel?: string;
 };
 
 export function CatalogueSection({
@@ -95,9 +97,12 @@ export function CatalogueSection({
   const [pageSize, setPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
 
   const filterOptions = useMemo(() => {
-    const values = [...new Set(items.map((item) => item.filterValue).filter(Boolean))];
-    values.sort((a, b) => a.localeCompare(b));
-    return values;
+    const labels = new Map<string, string>();
+    for (const item of items) {
+      if (!item.filterValue || labels.has(item.filterValue)) continue;
+      labels.set(item.filterValue, item.filterLabel ?? item.filterValue);
+    }
+    return [...labels.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [items]);
 
   const filtered = useMemo(() => {
@@ -188,9 +193,9 @@ export function CatalogueSection({
                 aria-label={filterLabel}
               >
                 <option value="all">{filterAllLabel}</option>
-                {filterOptions.map((value) => (
+                {filterOptions.map(([value, label]) => (
                   <option key={value} value={value}>
-                    {value}
+                    {label}
                   </option>
                 ))}
               </Select>

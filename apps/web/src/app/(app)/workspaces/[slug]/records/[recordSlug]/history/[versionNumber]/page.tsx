@@ -8,6 +8,7 @@ import {
   Page,
   PageHeader,
   Panel,
+  lifecycleLabel,
   lifecycleTone,
 } from '../../../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../../../lib/session';
@@ -105,7 +106,7 @@ export default async function KnowledgeVersionDetailPage({
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
             <Badge tone={lifecycleTone(version.lifecycleStatus)}>
-              {version.lifecycleStatus}
+              {lifecycleLabel(version.lifecycleStatus, t)}
             </Badge>
             <span>{version.createdAt}</span>
           </span>

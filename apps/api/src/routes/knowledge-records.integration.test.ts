@@ -190,10 +190,17 @@ describe.skipIf(!hasIntegrationEnv)('Knowledge records', () => {
     });
     expect(verifyResponse.statusCode).toBe(200);
     const verified = verifyResponse.json() as {
-      knowledgeRecord: { lifecycleStatus: string; verifiedAt: string | null };
+      knowledgeRecord: {
+        lifecycleStatus: string;
+        verifiedAt: string | null;
+        reviewedByUser: { displayName: string; email: string } | null;
+        metadata: { approvedBy?: { displayName?: string; email?: string } } | null;
+      };
     };
     expect(verified.knowledgeRecord.lifecycleStatus).toBe('verified');
     expect(verified.knowledgeRecord.verifiedAt).toBeTruthy();
+    expect(verified.knowledgeRecord.reviewedByUser?.displayName).toBeTruthy();
+    expect(verified.knowledgeRecord.metadata?.approvedBy?.displayName).toBeTruthy();
   });
 
   it('blocks reader mutations and allows reader views', async () => {

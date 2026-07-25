@@ -1,4 +1,4 @@
-export { Badge, lifecycleTone } from './Badge';
+export { Badge, lifecycleLabel, lifecycleTone } from './Badge';
 export { Button } from './Button';
 export { buttonClassName, type ButtonVariant } from './buttonStyles';
 export { ErrorText, Field, Input, Select, Textarea } from './Field';

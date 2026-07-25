@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { LinkButton, SectionHeader } from './ui';
+import { LinkButton, SectionHeader, lifecycleLabel } from './ui';
 import { ImportTypePickerButton } from './ImportTypePickerButton';
 import {
   CatalogueSection,
@@ -57,6 +57,7 @@ export function WorkspaceCatalogueSections({
 }) {
   const t = useTranslations('workspaces');
   const tCommon = useTranslations('common');
+  const tRecords = useTranslations('records');
 
   const projectItems: CatalogueListItem[] = projects.map((project) => ({
     id: project.id,
@@ -98,27 +99,32 @@ export function WorkspaceCatalogueSections({
     filterValue: system.status,
   }));
 
-  const recordItems: CatalogueListItem[] = records.map((record) => ({
-    id: record.id,
-    title: record.title,
-    href: `/workspaces/${workspaceSlug}/records/${record.slug}`,
-    primaryBadge: record.recordType,
-    secondaryBadge: record.lifecycleStatus,
-    subtitle: record.systemId
-      ? `${t('linkedToSystem')}${record.summary ? ` — ${record.summary}` : ''}`
-      : record.summary,
-    updatedAt: record.updatedAt,
-    searchText: [
-      record.title,
-      record.slug,
-      record.recordType,
-      record.lifecycleStatus,
-      record.summary ?? '',
-    ]
-      .join(' ')
-      .toLowerCase(),
-    filterValue: record.lifecycleStatus,
-  }));
+  const recordItems: CatalogueListItem[] = records.map((record) => {
+    const statusLabel = lifecycleLabel(record.lifecycleStatus, tRecords);
+    return {
+      id: record.id,
+      title: record.title,
+      href: `/workspaces/${workspaceSlug}/records/${record.slug}`,
+      primaryBadge: record.recordType,
+      secondaryBadge: statusLabel,
+      subtitle: record.systemId
+        ? `${t('linkedToSystem')}${record.summary ? ` — ${record.summary}` : ''}`
+        : record.summary,
+      updatedAt: record.updatedAt,
+      searchText: [
+        record.title,
+        record.slug,
+        record.recordType,
+        record.lifecycleStatus,
+        statusLabel,
+        record.summary ?? '',
+      ]
+        .join(' ')
+        .toLowerCase(),
+      filterValue: record.lifecycleStatus,
+      filterLabel: statusLabel,
+    };
+  });
 
   return (
     <>

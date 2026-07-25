@@ -19,7 +19,11 @@ import {
 } from '@project-knowledge-hub/mcp';
 import { runSearch } from './search-service.js';
 import { writeAuditEvent } from './identity.js';
-import { createKnowledgeRecord, updateKnowledgeRecord } from './knowledge-records-service.js';
+import {
+  createKnowledgeRecord,
+  resolveReviewedByUser,
+  updateKnowledgeRecord,
+} from './knowledge-records-service.js';
 import {
   archiveWorkspaceMedia,
   createWorkspaceMedia,
@@ -370,6 +374,7 @@ export function createMcpToolHandlers(
         via: 'mcp',
         ipAddress,
       });
+      const reviewedByUser = await resolveReviewedByUser(app.database, record);
       return {
         knowledgeRecord: {
           id: record.id,
@@ -388,6 +393,7 @@ export function createMcpToolHandlers(
           verifiedAt: record.verifiedAt?.toISOString() ?? null,
           lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
           reviewedBy: record.reviewedBy,
+          reviewedByUser,
           updatedAt: record.updatedAt.toISOString(),
         },
       };
@@ -416,6 +422,7 @@ export function createMcpToolHandlers(
         .select()
         .from(knowledgeSources)
         .where(eq(knowledgeSources.knowledgeRecordId, record.id));
+      const reviewedByUser = await resolveReviewedByUser(app.database, record);
       return {
         recordId: record.id,
         title: record.title,
@@ -423,6 +430,7 @@ export function createMcpToolHandlers(
         sourceOfTruthMode: record.sourceOfTruthMode,
         createdBy: record.createdBy,
         reviewedBy: record.reviewedBy,
+        reviewedByUser,
         verifiedAt: record.verifiedAt?.toISOString() ?? null,
         lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
         sources: sources.map((source) => ({

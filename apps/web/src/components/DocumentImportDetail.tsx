@@ -16,6 +16,7 @@ import {
   Panel,
   Select,
   Textarea,
+  lifecycleLabel,
 } from './ui';
 
 type LinkedRecord = {
@@ -247,7 +248,7 @@ export function DocumentImportDetail(props: {
                   {r.title}
                 </Link>
                 <p className="m-0 mt-1 text-sm text-ink-muted">
-                  {r.recordType} · {r.lifecycleStatus}
+                  {r.recordType} · {lifecycleLabel(r.lifecycleStatus, tRecords)}
                 </p>
               </ListCard>
             ))}

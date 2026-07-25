@@ -5,6 +5,7 @@ import {
   CatalogueSection,
   type CatalogueListItem,
 } from './CatalogueSection';
+import { lifecycleLabel } from './ui';
 
 export type ProjectLinkedSystem = {
   id: string;
@@ -40,6 +41,7 @@ export function ProjectLinkedSections({
   const t = useTranslations('projects');
   const tWorkspaces = useTranslations('workspaces');
   const tCommon = useTranslations('common');
+  const tRecords = useTranslations('records');
 
   const systemItems: CatalogueListItem[] = systems.map((system) => ({
     id: system.id,
@@ -65,25 +67,30 @@ export function ProjectLinkedSections({
     filterValue: system.status,
   }));
 
-  const recordItems: CatalogueListItem[] = records.map((record) => ({
-    id: record.id,
-    title: record.title,
-    href: `/workspaces/${workspaceSlug}/records/${record.slug}`,
-    primaryBadge: record.recordType,
-    secondaryBadge: record.lifecycleStatus,
-    subtitle: record.summary,
-    updatedAt: record.updatedAt,
-    searchText: [
-      record.title,
-      record.slug,
-      record.recordType,
-      record.lifecycleStatus,
-      record.summary ?? '',
-    ]
-      .join(' ')
-      .toLowerCase(),
-    filterValue: record.lifecycleStatus,
-  }));
+  const recordItems: CatalogueListItem[] = records.map((record) => {
+    const statusLabel = lifecycleLabel(record.lifecycleStatus, tRecords);
+    return {
+      id: record.id,
+      title: record.title,
+      href: `/workspaces/${workspaceSlug}/records/${record.slug}`,
+      primaryBadge: record.recordType,
+      secondaryBadge: statusLabel,
+      subtitle: record.summary,
+      updatedAt: record.updatedAt,
+      searchText: [
+        record.title,
+        record.slug,
+        record.recordType,
+        record.lifecycleStatus,
+        statusLabel,
+        record.summary ?? '',
+      ]
+        .join(' ')
+        .toLowerCase(),
+      filterValue: record.lifecycleStatus,
+      filterLabel: statusLabel,
+    };
+  });
 
   return (
     <>
