@@ -142,6 +142,7 @@ The build log only shows Compose waiting on migrate. **Open the `migrate` servic
 | Pattern | Meaning | Fix |
 | --- | --- | --- |
 | `28P01` that comes and goes without any password change | **Two Dokploy apps run this stack** and both put `postgres` on the shared `dokploy-network`; DNS round-robins, so migrate authenticates against the *other* app's database | Delete/stop the stale app and redeploy with a compose where only `web`/`api` join `dokploy-network` |
+| Migrate/seed OK, **login** fails with `28P01` | `api` is on `dokploy-network` and still used hostname `postgres`, which resolved another app’s DB (e.g. amae) | Redeploy compose that uses `kh-postgres` / `kh-redis`; or temporarily `docker network disconnect dokploy-network …-api-1` |
 | Wipe + first deploy works; **next rebuild fails** | Existing volume: bad password **or** tables without a drizzle journal (often after a partial import) | Read migrate log; do **not** wipe as the routine fix |
 | `28P01` / password authentication failed | Env password ≠ volume role password | `ALTER USER … PASSWORD …` or restore original env; avoid `$` in passwords |
 | `already exists` / relation already exists | App schema present, `drizzle.__drizzle_migrations` missing/empty | Redeploy after this fix (migrate runs journal baseline first); or re-import / wipe once |
@@ -168,9 +169,10 @@ docker inspect <project>-migrate-1 \
 docker volume ls | grep knowledge_hub_postgres_data
 ls /etc/dokploy/compose | grep knowledge
 
-# Does `postgres` resolve to exactly one address, and is it this app's container?
-docker exec <project>-api-1 getent hosts postgres
-docker inspect <project>-postgres-1 \
+# Does `kh-postgres` resolve to exactly one address, and is it this app's container?
+# (Generic `postgres` on dokploy-network may still point at another app — ignore it.)
+docker exec <project>-api-1 getent hosts kh-postgres
+docker inspect <project>-kh-postgres-1 \
   --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}'
 ```
 
