@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { sanitizeS3Credential } from './credentials.js';
 import type { BlobObject, BlobPutInput, BlobStore, BlobStoreConfig } from './types.js';
 
 function asBuffer(body: unknown): Buffer | null {
@@ -26,13 +27,15 @@ async function streamToBuffer(body: {
 export function createS3BlobStore(
   config: Extract<BlobStoreConfig, { provider: 's3' }>,
 ): BlobStore {
+  const accessKeyId = sanitizeS3Credential(config.accessKeyId);
+  const secretAccessKey = sanitizeS3Credential(config.secretAccessKey);
   const client = new S3Client({
     region: config.region,
     endpoint: config.endpoint,
     forcePathStyle: config.forcePathStyle,
     credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
+      accessKeyId,
+      secretAccessKey,
     },
   });
 

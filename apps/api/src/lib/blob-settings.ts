@@ -6,6 +6,7 @@ import {
 import { platformSettings, type Database } from '@project-knowledge-hub/database';
 import {
   createBlobStore,
+  sanitizeS3Credential,
   type BlobProviderName,
   type BlobStore,
   type BlobStoreConfig,
@@ -99,9 +100,13 @@ export async function resolveBlobStoreConfig(
   }
 
   const bucket = stored.s3Bucket?.trim() || env.BLOB_S3_BUCKET;
-  const accessKeyId = stored.s3AccessKeyId?.trim() || env.BLOB_S3_ACCESS_KEY_ID;
-  const secretAccessKey =
+  const rawKey = stored.s3AccessKeyId?.trim() || env.BLOB_S3_ACCESS_KEY_ID;
+  const rawSecret =
     stored.s3SecretAccessKey?.trim() || env.BLOB_S3_SECRET_ACCESS_KEY;
+  const accessKeyId = rawKey ? sanitizeS3Credential(rawKey) : undefined;
+  const secretAccessKey = rawSecret
+    ? sanitizeS3Credential(rawSecret)
+    : undefined;
   if (!bucket || !accessKeyId || !secretAccessKey) {
     throw new AppError({
       code: 'BLOB_CONFIG_INCOMPLETE',

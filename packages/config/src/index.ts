@@ -271,14 +271,17 @@ export const envSchema = z.object({
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().url().optional(),
   ),
-  BLOB_S3_ACCESS_KEY_ID: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z.string().min(1).optional(),
-  ),
-  BLOB_S3_SECRET_ACCESS_KEY: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z.string().min(1).optional(),
-  ),
+  BLOB_S3_ACCESS_KEY_ID: z.preprocess((value) => {
+    if (typeof value !== 'string') return undefined;
+    // Strip quotes/CRLF from Dokploy paste so AWS Authorization headers stay valid.
+    const cleaned = value.replace(/[\r\n\0]/g, '').trim().replace(/^['"]|['"]$/g, '');
+    return cleaned === '' ? undefined : cleaned;
+  }, z.string().min(1).optional()),
+  BLOB_S3_SECRET_ACCESS_KEY: z.preprocess((value) => {
+    if (typeof value !== 'string') return undefined;
+    const cleaned = value.replace(/[\r\n\0]/g, '').trim().replace(/^['"]|['"]$/g, '');
+    return cleaned === '' ? undefined : cleaned;
+  }, z.string().min(1).optional()),
   /** Required for MinIO / some S3-compatible endpoints. */
   BLOB_S3_FORCE_PATH_STYLE: z
     .enum(['true', 'false'])

@@ -262,34 +262,63 @@ export async function createDocumentImport(
     titleFromImport({ originalFilename: input.filename });
 
   const { store: blobStore } = await app.getBlobStore();
-  const blobKey = await writeImportOriginal({
-    uploadDir: app.env.DOCUMENT_IMPORT_DIR,
-    workspaceId: input.workspaceId,
-    importId,
-    buffer: input.buffer,
-    contentType: input.contentType,
-    blobStore,
-  });
-
-  const [row] = await app.database.db
-    .insert(documentImports)
-    .values({
-      id: importId,
+  let blobKey: string;
+  try {
+    blobKey = await writeImportOriginal({
+      uploadDir: app.env.DOCUMENT_IMPORT_DIR,
       workspaceId: input.workspaceId,
-      projectId: input.projectId ?? null,
-      systemId: input.systemId ?? null,
-      title,
-      lane,
-      ocrEngine,
-      ocrLang,
-      status: 'pending',
-      originalFilename: input.filename,
+      importId,
+      buffer: input.buffer,
       contentType: input.contentType,
-      byteSize: input.buffer.byteLength,
+      blobStore,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'write failed';
+    throw new AppError({
+      code: 'DOCUMENT_IMPORT_STORAGE_FAILED',
+      message: `Could not store upload (${detail}). On Dokploy, ensure DOCUMENT_IMPORT_DIR=/data/imports is writable.`,
+      statusCode: 500,
+    });
+  }
+
+  let row: ImportRow | undefined;
+  try {
+    [row] = await app.database.db
+      .insert(documentImports)
+      .values({
+        id: importId,
+        workspaceId: input.workspaceId,
+        projectId: input.projectId ?? null,
+        systemId: input.systemId ?? null,
+        title,
+        lane,
+        ocrEngine,
+        ocrLang,
+        status: 'pending',
+        originalFilename: input.filename,
+        contentType: input.contentType,
+        byteSize: input.buffer.byteLength,
+        blobKey,
+        createdBy: actor.userId ?? actor.actorId,
+      })
+      .returning();
+  } catch (error) {
+    await deleteImportOriginal({
+      uploadDir: app.env.DOCUMENT_IMPORT_DIR,
+      workspaceId: input.workspaceId,
+      importId,
       blobKey,
-      createdBy: actor.userId ?? actor.actorId,
-    })
-    .returning();
+      blobStore,
+    });
+    const detail = error instanceof Error ? error.message : 'insert failed';
+    throw new AppError({
+      code: 'DOCUMENT_IMPORT_CREATE_FAILED',
+      message: detail.includes('ocr_lang')
+        ? 'Database is missing document_imports.ocr_lang — run migrations (0026).'
+        : `Failed to create document import (${detail})`,
+      statusCode: 500,
+    });
+  }
 
   if (!row) {
     await deleteImportOriginal({

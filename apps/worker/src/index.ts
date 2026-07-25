@@ -325,7 +325,14 @@ async function main(): Promise<void> {
           );
         }
       } catch (error) {
-        logger.error({ err: error }, 'Offsite backup sync failed');
+        const message =
+          error instanceof Error ? error.message : String(error);
+        logger.error(
+          { err: error },
+          message.includes('authorization') || message.includes('Invalid character')
+            ? 'Offsite backup sync failed — S3 access key/secret likely has quotes or newlines; fix Admin → Storage or env, or set BACKUP_OFFSITE=false'
+            : 'Offsite backup sync failed',
+        );
       }
     };
     void runOffsiteSync();

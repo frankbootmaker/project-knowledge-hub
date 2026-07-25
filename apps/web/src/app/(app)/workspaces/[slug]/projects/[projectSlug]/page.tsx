@@ -1,14 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
 import {
   Badge,
-  ListCard,
   Page,
   PageHeader,
   Panel,
-  SectionHeader,
 } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
@@ -33,6 +32,9 @@ type System = {
   slug: string;
   status: string;
   projectId: string | null;
+  summary: string | null;
+  tags: Array<{ name: string }>;
+  updatedAt: string;
 };
 type KnowledgeRecordSummary = {
   id: string;
@@ -40,6 +42,7 @@ type KnowledgeRecordSummary = {
   slug: string;
   recordType: string;
   lifecycleStatus: string;
+  summary: string | null;
   updatedAt: string;
 };
 
@@ -156,60 +159,12 @@ export default async function ProjectDetailPage({
         ) : null}
       </Panel>
 
-      <section>
-        <SectionHeader title={t('linkedSystems')} />
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {systems.map((system) => (
-            <ListCard key={system.id}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
-                  className="font-semibold no-underline"
-                >
-                  {system.name}
-                </Link>
-                <Badge>{system.status}</Badge>
-              </div>
-            </ListCard>
-          ))}
-          {systems.length === 0 ? (
-            <li className="kh-muted list-none">{t('noLinkedSystems')}</li>
-          ) : null}
-        </ul>
-      </section>
-
-      <section className="mt-8">
-        <SectionHeader title={t('linkedKnowledge')} />
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {knowledgeRecords.map((record) => (
-            <ListCard key={record.id}>
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/workspaces/${workspace.slug}/records/${record.slug}`}
-                      className="font-semibold no-underline"
-                    >
-                      {record.title}
-                    </Link>
-                    <Badge tone="brand">{record.recordType}</Badge>
-                    <Badge>{record.lifecycleStatus}</Badge>
-                  </div>
-                </div>
-                <time
-                  className="shrink-0 text-xs text-ink-muted"
-                  dateTime={record.updatedAt}
-                >
-                  {tCommon('lastUpdated')}: {new Date(record.updatedAt).toLocaleString()}
-                </time>
-              </div>
-            </ListCard>
-          ))}
-          {knowledgeRecords.length === 0 ? (
-            <li className="kh-muted list-none">{t('noLinkedKnowledge')}</li>
-          ) : null}
-        </ul>
-      </section>
+      <ProjectLinkedSections
+        workspaceSlug={workspace.slug}
+        systems={systems}
+        records={knowledgeRecords}
+        canMutate={canMutate && !isArchived}
+      />
     </Page>
   );
 }

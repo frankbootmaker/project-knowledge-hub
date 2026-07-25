@@ -3,6 +3,7 @@ export {
   parseBlobProviderName,
   blobObjectKey,
 } from './factory.js';
+export { sanitizeS3Credential } from './credentials.js';
 export { createDisabledBlobStore } from './disabled.js';
 export { createS3BlobStore } from './s3.js';
 export {

@@ -26,14 +26,7 @@ export async function writeImportOriginal(input: {
   blobStore?: BlobStore;
 }): Promise<string> {
   const key = importBlobKey(input.workspaceId, input.importId);
-  const store = input.blobStore;
-  if (store && store.provider !== 'disabled') {
-    await store.put({
-      key,
-      body: input.buffer,
-      contentType: input.contentType,
-    });
-  }
+  // Local first so api+worker shared volume can serve convert even if S3 fails.
   const filePath = importFilePath(
     input.uploadDir,
     input.workspaceId,
@@ -41,6 +34,25 @@ export async function writeImportOriginal(input: {
   );
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, input.buffer);
+
+  const store = input.blobStore;
+  if (store && store.provider !== 'disabled') {
+    try {
+      await store.put({
+        key,
+        body: input.buffer,
+        contentType: input.contentType,
+      });
+    } catch (error) {
+      // Shared DOCUMENT_IMPORT_DIR already has the bytes for the worker. Do not
+      // fail the import when S3 credentials are invalid (common Dokploy paste).
+      const detail =
+        error instanceof Error ? error.message : 'unknown object-store error';
+      console.error(
+        `[document-import] blob put failed for ${key}; using local file: ${detail}`,
+      );
+    }
+  }
   return key;
 }
 

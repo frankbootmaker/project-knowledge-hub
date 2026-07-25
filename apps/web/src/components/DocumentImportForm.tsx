@@ -277,7 +277,17 @@ export function DocumentImportForm(props: {
           </Select>
         </Field>
         {error ? <ErrorText>{error}</ErrorText> : null}
-        <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() =>
+              router.push(`/workspaces/${props.workspaceSlug}`)
+            }
+          >
+            {tCommon('cancel')}
+          </Button>
           <Button type="submit" disabled={pending}>
             {pending ? t('uploading') : t('upload')}
           </Button>
