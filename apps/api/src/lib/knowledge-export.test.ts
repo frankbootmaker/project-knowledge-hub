@@ -124,10 +124,32 @@ describe('knowledge-export', () => {
     expect(grid?.getCell('B1').numFmt).toBe('#,##0 "Ft"');
   });
 
-  it('builds a PDFKit fallback PDF', async () => {
+  it('builds a laid-out PDF without Chromium', async () => {
     const pdf = await buildKnowledgeRecordPdfWithPdfkit(sample);
     expect(pdf.byteLength).toBeGreaterThan(500);
     expect(pdf.subarray(0, 4).toString('utf8')).toBe('%PDF');
+
+    const raw = pdf.toString('latin1');
+    expect(raw).toContain('MediaBox [0 0 595.28 841.89]');
+    // Table cells are drawn, so the Markdown pipe syntax never reaches the page.
+    expect(raw).not.toContain('| Year | Amount |');
+  });
+
+  it('turns to landscape for spreadsheet-wide tables', async () => {
+    const headers = Array.from({ length: 14 }, (_, index) => `Metric ${index + 1}`);
+    const row = Array.from({ length: 14 }, (_, index) => `1 250 00${index}`);
+    const pdf = await buildKnowledgeRecordPdfWithPdfkit({
+      ...sample,
+      contentMarkdown: [
+        '## Wide',
+        '',
+        `| ${headers.join(' | ')} |`,
+        `| ${headers.map(() => '---').join(' | ')} |`,
+        `| ${row.join(' | ')} |`,
+      ].join('\n'),
+    });
+
+    expect(pdf.toString('latin1')).toContain('MediaBox [0 0 841.89 595.28]');
   });
 
   it(

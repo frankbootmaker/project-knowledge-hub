@@ -1,5 +1,4 @@
 import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
 import puppeteer, { type Browser } from 'puppeteer';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import htmlToDocxImport from '@turbodocx/html-to-docx';
@@ -9,6 +8,7 @@ import {
   type MarkdownBlock,
   type MarkdownTable,
 } from './markdown-blocks.js';
+import { renderStructuredPdf } from './pdf-document.js';
 
 export type KnowledgeExportFormat = 'pdf' | 'docx' | 'md' | 'xlsx';
 
@@ -173,18 +173,20 @@ const EXPORT_CSS = `
     padding: 8px 0;
   }
   .knowledge-markdown pre.mermaid svg { max-width: 100%; height: auto; }
+  /* Fixed layout keeps wide spreadsheet tables inside the printed page box. */
   .knowledge-markdown table {
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
-    font-size: 0.92em;
+    font-size: 0.82em;
     margin: 1em 0;
   }
   .knowledge-markdown th,
   .knowledge-markdown td {
     border: 1px solid #ccc;
-    padding: 6px 10px;
+    padding: 4px 6px;
     vertical-align: top;
+    overflow-wrap: anywhere;
   }
   .knowledge-markdown th {
     background: #f3f3f3;
@@ -332,10 +334,23 @@ function parseCookieHeader(
     .filter((c): c is { name: string; value: string; url: string } => Boolean(c));
 }
 
+/** Wide spreadsheet-style tables only stay legible on landscape pages. */
+function widestTableColumnCount(markdown: string): number {
+  return parseMarkdownBlocks(markdown).reduce((widest, block) => {
+    if (block.kind !== 'table') return widest;
+    const columns = block.table.rows.reduce(
+      (max, row) => Math.max(max, row.length),
+      block.table.headers.length,
+    );
+    return Math.max(widest, columns);
+  }, 0);
+}
+
 async function buildKnowledgeRecordPdfWithPuppeteer(
   input: KnowledgeExportInput,
 ): Promise<Buffer> {
   const html = await buildExportHtmlDocument(input);
+  const landscape = widestTableColumnCount(input.contentMarkdown) > 8;
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
@@ -358,6 +373,7 @@ async function buildKnowledgeRecordPdfWithPuppeteer(
 
     const pdf = await page.pdf({
       format: 'A4',
+      landscape,
       printBackground: true,
       margin: { top: '14mm', right: '12mm', bottom: '14mm', left: '12mm' },
       displayHeaderFooter: true,
@@ -380,83 +396,12 @@ export function buildKnowledgeRecordPdfWithPdfkit(
   input: KnowledgeExportInput,
 ): Promise<Buffer> {
   const exportedAt = input.exportedAt ?? new Date();
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({
-      size: 'A4',
-      margins: { top: 56, bottom: 56, left: 56, right: 56 },
-      info: {
-        Title: input.title,
-        Author: 'Project Knowledge Hub',
-        Subject: `${input.recordType} · ${input.slug}`,
-        CreationDate: exportedAt,
-      },
-    });
-
-    const chunks: Buffer[] = [];
-    doc.on('data', (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-    doc.on('end', () => {
-      resolve(Buffer.concat(chunks));
-    });
-    doc.on('error', reject);
-
-    doc.font('Helvetica-Bold').fontSize(18).text(input.title, { paragraphGap: 6 });
-    doc
-      .font('Helvetica')
-      .fontSize(9)
-      .fillColor('#444444')
-      .text(`${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`)
-      .text(`Exported ${exportedAt.toISOString()}`);
-    if (input.summary?.trim()) {
-      doc.moveDown(0.4);
-      doc.font('Helvetica-Oblique').text(input.summary.trim());
-    }
-    doc.moveDown(0.6);
-    doc
-      .strokeColor('#cccccc')
-      .moveTo(doc.page.margins.left, doc.y)
-      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
-      .stroke();
-    doc.moveDown(0.8);
-    doc.fillColor('#111111');
-
-    const lines = input.contentMarkdown.replace(/\r\n/g, '\n').split('\n');
-    for (const line of lines) {
-      if (/^#{1,6}\s+/.test(line)) {
-        const level = line.match(/^#+/)?.[0].length ?? 1;
-        const text = line.replace(/^#{1,6}\s+/, '');
-        const size = level === 1 ? 14 : level === 2 ? 12 : 11;
-        doc.moveDown(0.35);
-        doc.font('Helvetica-Bold').fontSize(size).text(text, { paragraphGap: 4 });
-        continue;
-      }
-      if (/^[-*]\s+/.test(line)) {
-        doc
-          .font('Helvetica')
-          .fontSize(10)
-          .text(`• ${line.replace(/^[-*]\s+/, '')}`, { indent: 12, paragraphGap: 2 });
-        continue;
-      }
-      if (/^\|.+\|$/.test(line.trim())) {
-        doc.font('Courier').fontSize(8.5).text(line.trim(), { paragraphGap: 1 });
-        continue;
-      }
-      if (/^```/.test(line)) {
-        doc.font('Courier').fontSize(8.5).fillColor('#333333').text(line, {
-          paragraphGap: 1,
-        });
-        doc.fillColor('#111111');
-        continue;
-      }
-      if (!line.trim()) {
-        doc.moveDown(0.35);
-        continue;
-      }
-      doc.font('Helvetica').fontSize(10).text(line, { paragraphGap: 3 });
-    }
-
-    doc.end();
+  return renderStructuredPdf({
+    title: input.title,
+    metaLine: `${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`,
+    summary: input.summary,
+    footerNote: `Exported ${exportedAt.toISOString()}`,
+    blocks: parseMarkdownBlocks(input.contentMarkdown),
   });
 }
 
