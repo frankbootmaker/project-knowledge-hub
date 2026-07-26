@@ -32,6 +32,8 @@ const nextConfig: NextConfig = {
     '@project-knowledge-hub/markdown',
     '@project-knowledge-hub/mcp',
   ],
+  // Keep Mermaid (and its d3 deps) out of the RSC/server graph — dynamic client import only.
+  serverExternalPackages: ['mermaid', 'cytoscape', 'cytoscape-fcose', 'cose-base'],
   turbopack: {
     resolveAlias: {
       '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
@@ -41,6 +43,9 @@ const nextConfig: NextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
+      // Webpack sometimes fails named ESM re-exports from d3-path (mermaid → d3-shape).
+      'd3-path': path.resolve(__dirname, '../../node_modules/d3-path/src/index.js'),
+      'd3-shape': path.resolve(__dirname, '../../node_modules/d3-shape/src/index.js'),
     };
     return config;
   },
