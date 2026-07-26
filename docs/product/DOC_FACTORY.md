@@ -341,9 +341,9 @@ Authorization: same Admin gate as Monitoring / Storage. Audit `doc_factory.style
 | **D – Export + Blank** | PDF/DOCX export endpoint; Blank style; record Export UI |
 | **E – Style packs + Admin manager** | BlobStore assets; Admin → Templates; style picker on export |
 | **F – Polish** | Locale-aware templates, audit events, i18n, pack versioning |
-| **G – Forge** | Multi-source content forge into content templates + preferred style |
+| **G – Forge + optional hub LLM** | Multi-source forge → Markdown draft; org OpenAI-compatible provider; optional auto-export with style pack (no auto-Approve) |
 
-Suggested first implementation slice after design approval: **A + B** or **A + C**, then **D** (Blank export) before rich style packs (**E**).
+Suggested first implementation slice after design approval: **A + B** or **A + C**, then **D** (Blank export) before rich style packs (**E**). Hub LLM forge (**G**) only after export works and org secrets/config patterns exist.
 
 ---
 
@@ -355,7 +355,7 @@ Suggested first implementation slice after design approval: **A + B** or **A + C
 
 ## Success criteria
 
-* Package boundaries are clear: content templates vs style packs vs forge.  
+* Package boundaries are clear: content templates vs style packs vs forge vs generation modes.  
 * Admin Templates + user Export + Document factory surfaces are defined.  
-* Markdown remains SoT; export/styles are derived.  
+* Markdown remains SoT; export/styles are derived; hub LLM (if enabled) never skips the draft.  
 * Next implementation PR can start at Phase A without reopening architecture forks.
