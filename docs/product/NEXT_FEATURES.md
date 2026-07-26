@@ -21,7 +21,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 | **C — Admin ops UI** | **NF-011** Mon-0 + **Mon-1** done (client leaderboard + catalogue tops). Embedding reindex + archived counts on Monitoring | Fancy charts |
 | **D — Object storage** | **NF-006** BlobStore + **s3** + Admin → Storage + **Ops-2 avatars** done. **NF-013** knowledge media done. Imports/exports still later. **NF-007** Azure on same Storage page **with Entra IdP (NF-012)** | OneDrive/SharePoint |
 | **E — Ops polish** | **NF-009** support dump + ops log export + retention + richer alerts; **NF-014** external status REST/MCP (`monitoring:read`) | Log shipping to external aggregator |
-| **F — Product (parked)** | **NF-001** Doc Factory, **NF-004** ChatGPT MCP App, **NF-010** finer ACLs — only with module briefs and real user jobs | Do not cut in front of A–C |
+| **F — Product (parked)** | **NF-001** Doc Factory (content + style packs + export; see brief), **NF-004** ChatGPT MCP App, **NF-010** finer ACLs — only with real user jobs | Do not cut in front of A–C |
 
 ### Merge / optimize notes
 
@@ -38,7 +38,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 
 | ID | Feature | Status | Needs before build | Notes |
 | --- | --- | --- | --- | --- |
-| NF-001 | **Doc Factory** — standard documents (overview, management summary, progress summary, …) filled from workspace knowledge via connected AI (MCP), versioned in the hub, export PDF/DOCX | `parked` — awaiting precise module description | Module brief: package/module boundaries, UX entry points, template ownership, export scope | Early design spike: [`DOC_FACTORY.md`](DOC_FACTORY.md). Branch `feature/docfactory` holds spike notes + domain type stubs only. Wave **F**. |
+| NF-001 | **Doc Factory** — content templates + style packs + Admin template manager; AI/MCP-filled Markdown drafts; export PDF/DOCX (Blank or selected style); later forge multi-source packs for technical/legal/audit | `parked` — module brief expanded | Implementation starts at Phase A (content templates) then Blank export before rich style packs | Brief: [`DOC_FACTORY.md`](DOC_FACTORY.md). Wave **F**. |
 | NF-002 | **Dokploy bootstrap admin seed** — Compose one-shot `seed` service (after `migrate`) that creates the default org + admin when `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` are set; no-op if admin already exists | `done` | — | Wave **A**. [`DOKPLOY.md`](../deployment/DOKPLOY.md). |
 | NF-003 | **User MCP setup wizard** — Account → AI connections guided create → test → schema copy for member workspaces | `done` | — | Shipped. Historical row. |
 | NF-004 | **ChatGPT MCP App** — register KnowHub as a Developer Mode / Workspace MCP app so tools work in normal chats (tools menu / `@`), separate from Custom GPT Actions | `parked` — awaiting module brief | ChatGPT-compatible MCP auth (prefer OAuth/OIDC + refresh tokens; Bearer may suffice for personal Dev Mode only); map ChatGPT identity → KnowHub user/scopes; tool safety (read vs write); workspace publish runbook | Wave **F**. FAQ: [`CHATGPT_CUSTOM_GPT_FAQ.md`](CHATGPT_CUSTOM_GPT_FAQ.md). |
@@ -58,15 +58,14 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 
 ## Suggested module brief (for NF-001)
 
-When ready, describe at least:
+When ready to implement, follow [`DOC_FACTORY.md`](DOC_FACTORY.md). At minimum confirm:
 
-* **Module name and home** (e.g. new package vs `apps/api` lib + web routes)
-* **User jobs** (who creates/regenerates/exports; when)
-* **Boundaries** with knowledge records, MCP, and any future LLM path
-* **v1 templates and scope model** (workspace / project / system)
-* **Out of scope** for the first slice
+* **Surfaces** — Admin → Templates (style packs; later content templates); Workspace → Document factory; Record → Export (style or Blank)
+* **Boundaries** — Markdown SoT; style packs presentation-only; no hub LLM in v1; hybrid MCP fill
+* **v1 slice** — Phase A–D (content templates + Blank export) before rich style packs / forge
+* **Out of scope** — Word WYSIWYG editor; PPTX; auto-approve AI drafts
 
-Until that brief exists, treat Doc Factory as backlog only — no UI, export pipeline, or MCP tools beyond what the spike already documented.
+Until implementation starts, treat Doc Factory as backlog only — no UI, export pipeline, or new MCP tools beyond what the spike already documented.
 
 ---
 
