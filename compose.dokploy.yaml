@@ -149,6 +149,9 @@ services:
       DEFAULT_ORGANIZATION_SLUG: ${DEFAULT_ORGANIZATION_SLUG:-default}
       BACKUP_DIR: ${BACKUP_DIR:-/backups}
       BACKUP_MAX_UPLOAD_BYTES: ${BACKUP_MAX_UPLOAD_BYTES:-536870912}
+      # System Chromium in api image (knowledge PDF export via Puppeteer)
+      PUPPETEER_EXECUTABLE_PATH: ${PUPPETEER_EXECUTABLE_PATH:-/usr/bin/chromium}
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
     volumes:
       - knowledge_hub_backups:/backups
       - knowledge_hub_data:/data

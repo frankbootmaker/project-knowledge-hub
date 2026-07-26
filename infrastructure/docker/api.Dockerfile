@@ -9,6 +9,8 @@ ENV PATH=$PNPM_HOME:$PATH
 FROM base AS build
 # Keep install in non-production so TypeScript/tsx/dev tooling remain available.
 ENV NODE_ENV=development
+# Use system Chromium in the runtime image — skip Puppeteer's download during build.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc ./
 COPY apps ./apps
 COPY packages ./packages
@@ -21,6 +23,8 @@ RUN pnpm exec turbo run build --filter=@project-knowledge-hub/api... --concurren
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 # Postgres is pg16 (pgvector image). Debian bookworm's default client is 15 and
 # pg_dump refuses a major-version mismatch — install matching client from PGDG.
 RUN useradd --system --uid 1001 knowledgehub \
@@ -31,8 +35,33 @@ RUN useradd --system --uid 1001 knowledgehub \
   && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
     > /etc/apt/sources.list.d/pgdg.list \
   && apt-get update \
-  && apt-get install -y --no-install-recommends curl postgresql-client-16 \
-  && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends \
+    curl \
+    postgresql-client-16 \
+    # Chromium runtime libs for Puppeteer (knowledge record PDF export)
+    chromium \
+    fonts-liberation \
+    fonts-noto-core \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-6 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    xdg-utils \
+  && rm -rf /var/lib/apt/lists/* \
+  && ln -sf /usr/bin/chromium /usr/bin/chromium-browser || true
 COPY --from=build /app /app
 COPY infrastructure/docker/api-entrypoint.sh /entrypoint.sh
 COPY infrastructure/docker/migrate-and-seed.sh /migrate-and-seed.sh

@@ -1,0 +1,843 @@
+import ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
+import puppeteer, { type Browser } from 'puppeteer';
+import { renderMarkdown } from '@project-knowledge-hub/markdown';
+import htmlToDocxImport from '@turbodocx/html-to-docx';
+import {
+  coerceSpreadsheetValue,
+  parseMarkdownBlocks,
+  type MarkdownBlock,
+  type MarkdownTable,
+} from './markdown-blocks.js';
+
+export type KnowledgeExportFormat = 'pdf' | 'docx' | 'md' | 'xlsx';
+
+export type KnowledgeExportInput = {
+  title: string;
+  slug: string;
+  summary: string | null;
+  recordType: string;
+  lifecycleStatus: string;
+  contentMarkdown: string;
+  exportedAt?: Date;
+  /** Absolute origin for resolving /api/v1/media/... links (e.g. WEB_URL). */
+  webUrl?: string;
+  /** Session cookie header so Puppeteer can load private media in PDF. */
+  cookieHeader?: string | null;
+};
+
+type HtmlToDocxFn = (
+  html: string,
+  headerHTML: string | null,
+  documentOptions?: Record<string, unknown>,
+) => Promise<Buffer | ArrayBuffer | Uint8Array | Blob>;
+
+function resolveHtmlToDocx(): HtmlToDocxFn {
+  let candidate: unknown = htmlToDocxImport;
+  // CJS/ESM interop can nest `default` one or two levels under tsx/Node.
+  for (let i = 0; i < 3; i += 1) {
+    if (typeof candidate === 'function') {
+      return candidate as HtmlToDocxFn;
+    }
+    if (
+      candidate &&
+      typeof candidate === 'object' &&
+      'default' in (candidate as object)
+    ) {
+      candidate = (candidate as { default: unknown }).default;
+      continue;
+    }
+    break;
+  }
+  throw new Error('@turbodocx/html-to-docx export is not a function');
+}
+
+const HTMLtoDOCX = resolveHtmlToDocx();
+
+function sanitizeFilenamePart(value: string): string {
+  return (
+    value
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80) || 'record'
+  );
+}
+
+export function knowledgeExportFilename(
+  slug: string,
+  format: KnowledgeExportFormat,
+): string {
+  const base = sanitizeFilenamePart(slug);
+  if (format === 'md') return `${base}.md`;
+  if (format === 'pdf') return `${base}.pdf`;
+  if (format === 'xlsx') return `${base}.xlsx`;
+  return `${base}.docx`;
+}
+
+export function knowledgeExportContentType(format: KnowledgeExportFormat): string {
+  if (format === 'md') return 'text/markdown; charset=utf-8';
+  if (format === 'pdf') return 'application/pdf';
+  if (format === 'xlsx') {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Print stylesheet approximating the hub knowledge-markdown viewer. */
+const EXPORT_CSS = `
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.55;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  .doc-shell { max-width: 720px; margin: 0 auto; padding: 12px 8px 32px; }
+  .doc-meta {
+    font-size: 9.5pt;
+    color: #555;
+    margin: 0 0 8px;
+  }
+  .doc-summary {
+    font-size: 10.5pt;
+    color: #333;
+    font-style: italic;
+    margin: 0 0 16px;
+  }
+  .doc-rule {
+    border: 0;
+    border-top: 1px solid #ddd;
+    margin: 0 0 20px;
+  }
+  .knowledge-markdown h1,
+  .knowledge-markdown h2,
+  .knowledge-markdown h3,
+  .knowledge-markdown h4 {
+    margin: 1.25em 0 0.4em;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    color: #111;
+  }
+  .knowledge-markdown h1 { font-size: 1.55rem; }
+  .knowledge-markdown h2 { font-size: 1.3rem; }
+  .knowledge-markdown h3 { font-size: 1.12rem; }
+  .knowledge-markdown h4 { font-size: 1.02rem; }
+  .knowledge-markdown p { margin: 0.75em 0; }
+  .knowledge-markdown ul,
+  .knowledge-markdown ol { margin: 0.75em 0; padding-left: 1.4em; }
+  .knowledge-markdown ul { list-style: disc; }
+  .knowledge-markdown ol { list-style: decimal; }
+  .knowledge-markdown li { margin: 0.25em 0; }
+  .knowledge-markdown blockquote {
+    margin: 0.9em 0;
+    padding: 0.2em 0 0.2em 0.9em;
+    border-left: 3px solid #ccc;
+    color: #333;
+  }
+  .knowledge-markdown a { color: #0b5cab; text-decoration: underline; }
+  .knowledge-markdown code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+  }
+  .knowledge-markdown :not(pre) > code {
+    background: rgba(0,0,0,0.05);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  .knowledge-markdown pre {
+    margin: 0.9em 0;
+    padding: 12px 14px;
+    overflow-x: auto;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.05);
+    font-size: 0.85em;
+    line-height: 1.45;
+  }
+  .knowledge-markdown pre code { background: transparent; padding: 0; }
+  .knowledge-markdown pre.mermaid {
+    background: transparent;
+    text-align: center;
+    padding: 8px 0;
+  }
+  .knowledge-markdown pre.mermaid svg { max-width: 100%; height: auto; }
+  .knowledge-markdown table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92em;
+    margin: 1em 0;
+  }
+  .knowledge-markdown th,
+  .knowledge-markdown td {
+    border: 1px solid #ccc;
+    padding: 6px 10px;
+    vertical-align: top;
+  }
+  .knowledge-markdown th {
+    background: #f3f3f3;
+    font-weight: 650;
+  }
+  .knowledge-markdown tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
+  .knowledge-markdown img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0.75em 0;
+  }
+  .knowledge-markdown hr {
+    border: 0;
+    border-top: 1px solid #ddd;
+    margin: 1.4em 0;
+  }
+  @page { margin: 16mm 14mm; }
+`;
+
+function absolutizeMediaUrls(html: string, webUrl: string): string {
+  const base = webUrl.replace(/\/$/, '');
+  return html
+    .replace(/(src|href)=(["'])(\/api\/v1\/[^"']+)\2/g, (_m, attr, q, path) => {
+      return `${attr}=${q}${base}${path}${q}`;
+    })
+    .replace(/(src|href)=(["'])(\/media\/[^"']+)\2/g, (_m, attr, q, path) => {
+      return `${attr}=${q}${base}${path}${q}`;
+    });
+}
+
+export async function buildExportHtmlDocument(
+  input: KnowledgeExportInput,
+): Promise<string> {
+  const exportedAt = input.exportedAt ?? new Date();
+  const rendered = await renderMarkdown(input.contentMarkdown);
+  let bodyHtml = rendered.html;
+  if (input.webUrl) {
+    bodyHtml = absolutizeMediaUrls(bodyHtml, input.webUrl);
+  }
+
+  const summary = input.summary?.trim()
+    ? `<p class="doc-summary">${escapeHtml(input.summary.trim())}</p>`
+    : '';
+  const baseHref = input.webUrl
+    ? `<base href="${escapeHtml(input.webUrl.replace(/\/$/, ''))}/" />`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  ${baseHref}
+  <title>${escapeHtml(input.title)}</title>
+  <style>${EXPORT_CSS}</style>
+</head>
+<body>
+  <div class="doc-shell">
+    <h1 style="margin:0 0 0.35em;font-size:1.7rem;letter-spacing:-0.015em;">${escapeHtml(input.title)}</h1>
+    <p class="doc-meta">${escapeHtml(input.recordType)} · ${escapeHtml(input.lifecycleStatus)} · ${escapeHtml(input.slug)}</p>
+    ${summary}
+    <p class="doc-meta">Exported ${escapeHtml(exportedAt.toISOString())}</p>
+    <hr class="doc-rule" />
+    <article class="knowledge-markdown">
+      ${bodyHtml}
+    </article>
+  </div>
+  <script type="module">
+    const blocks = document.querySelectorAll('pre.mermaid');
+    if (blocks.length > 0) {
+      const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'neutral' });
+      await mermaid.run({ nodes: Array.from(blocks) });
+    }
+    document.documentElement.dataset.exportReady = '1';
+  </script>
+</body>
+</html>`;
+}
+
+export function buildKnowledgeMarkdownExport(input: KnowledgeExportInput): string {
+  const exportedAt = (input.exportedAt ?? new Date()).toISOString();
+  const summary = input.summary?.trim()
+    ? `\nsummary: ${JSON.stringify(input.summary.trim())}`
+    : '';
+  return (
+    `---\n` +
+    `title: ${JSON.stringify(input.title)}\n` +
+    `slug: ${JSON.stringify(input.slug)}\n` +
+    `recordType: ${JSON.stringify(input.recordType)}\n` +
+    `lifecycleStatus: ${JSON.stringify(input.lifecycleStatus)}\n` +
+    `exportedAt: ${JSON.stringify(exportedAt)}${summary}\n` +
+    `---\n\n` +
+    `# ${input.title}\n\n` +
+    `${input.contentMarkdown.replace(/^\s+/, '')}`
+  );
+}
+
+let browserPromise: Promise<Browser> | null = null;
+
+async function getBrowser(): Promise<Browser> {
+  if (!browserPromise) {
+    const executablePath =
+      process.env.PUPPETEER_EXECUTABLE_PATH ||
+      process.env.CHROMIUM_PATH ||
+      undefined;
+    browserPromise = puppeteer
+      .launch({
+        headless: true,
+        executablePath,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--font-render-hinting=medium',
+        ],
+      })
+      .catch((error) => {
+        browserPromise = null;
+        throw error;
+      });
+  }
+  return browserPromise;
+}
+
+function parseCookieHeader(
+  cookieHeader: string,
+  webUrl: string,
+): Array<{ name: string; value: string; url: string }> {
+  const url = webUrl.replace(/\/$/, '');
+  return cookieHeader
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const eq = part.indexOf('=');
+      if (eq <= 0) return null;
+      return {
+        name: part.slice(0, eq).trim(),
+        value: part.slice(eq + 1).trim(),
+        url,
+      };
+    })
+    .filter((c): c is { name: string; value: string; url: string } => Boolean(c));
+}
+
+async function buildKnowledgeRecordPdfWithPuppeteer(
+  input: KnowledgeExportInput,
+): Promise<Buffer> {
+  const html = await buildExportHtmlDocument(input);
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setViewport({ width: 900, height: 1200, deviceScaleFactor: 2 });
+    if (input.webUrl && input.cookieHeader) {
+      const cookies = parseCookieHeader(input.cookieHeader, input.webUrl);
+      if (cookies.length > 0) {
+        await page.setCookie(...cookies);
+      }
+    }
+    await page.setContent(html, {
+      waitUntil: 'load',
+      timeout: 60_000,
+    });
+    await page.waitForFunction(
+      'document.documentElement.dataset.exportReady === "1"',
+      { timeout: 45_000 },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '14mm', right: '12mm', bottom: '14mm', left: '12mm' },
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: `
+        <div style="font-size:8px;width:100%;padding:0 12mm;color:#666;display:flex;justify-content:space-between;">
+          <span>${escapeHtml(input.title).slice(0, 80)}</span>
+          <span class="pageNumber"></span>/<span class="totalPages"></span>
+        </div>
+      `,
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await page.close();
+  }
+}
+
+/** Reliable PDF when Chromium/Puppeteer is unavailable (local/dev). */
+export function buildKnowledgeRecordPdfWithPdfkit(
+  input: KnowledgeExportInput,
+): Promise<Buffer> {
+  const exportedAt = input.exportedAt ?? new Date();
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 56, bottom: 56, left: 56, right: 56 },
+      info: {
+        Title: input.title,
+        Author: 'Project Knowledge Hub',
+        Subject: `${input.recordType} · ${input.slug}`,
+        CreationDate: exportedAt,
+      },
+    });
+
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+    doc.on('end', () => {
+      resolve(Buffer.concat(chunks));
+    });
+    doc.on('error', reject);
+
+    doc.font('Helvetica-Bold').fontSize(18).text(input.title, { paragraphGap: 6 });
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor('#444444')
+      .text(`${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`)
+      .text(`Exported ${exportedAt.toISOString()}`);
+    if (input.summary?.trim()) {
+      doc.moveDown(0.4);
+      doc.font('Helvetica-Oblique').text(input.summary.trim());
+    }
+    doc.moveDown(0.6);
+    doc
+      .strokeColor('#cccccc')
+      .moveTo(doc.page.margins.left, doc.y)
+      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+      .stroke();
+    doc.moveDown(0.8);
+    doc.fillColor('#111111');
+
+    const lines = input.contentMarkdown.replace(/\r\n/g, '\n').split('\n');
+    for (const line of lines) {
+      if (/^#{1,6}\s+/.test(line)) {
+        const level = line.match(/^#+/)?.[0].length ?? 1;
+        const text = line.replace(/^#{1,6}\s+/, '');
+        const size = level === 1 ? 14 : level === 2 ? 12 : 11;
+        doc.moveDown(0.35);
+        doc.font('Helvetica-Bold').fontSize(size).text(text, { paragraphGap: 4 });
+        continue;
+      }
+      if (/^[-*]\s+/.test(line)) {
+        doc
+          .font('Helvetica')
+          .fontSize(10)
+          .text(`• ${line.replace(/^[-*]\s+/, '')}`, { indent: 12, paragraphGap: 2 });
+        continue;
+      }
+      if (/^\|.+\|$/.test(line.trim())) {
+        doc.font('Courier').fontSize(8.5).text(line.trim(), { paragraphGap: 1 });
+        continue;
+      }
+      if (/^```/.test(line)) {
+        doc.font('Courier').fontSize(8.5).fillColor('#333333').text(line, {
+          paragraphGap: 1,
+        });
+        doc.fillColor('#111111');
+        continue;
+      }
+      if (!line.trim()) {
+        doc.moveDown(0.35);
+        continue;
+      }
+      doc.font('Helvetica').fontSize(10).text(line, { paragraphGap: 3 });
+    }
+
+    doc.end();
+  });
+}
+
+export async function buildKnowledgeRecordPdf(
+  input: KnowledgeExportInput,
+): Promise<Buffer> {
+  try {
+    return await buildKnowledgeRecordPdfWithPuppeteer(input);
+  } catch {
+    // Local hosts often lack Chromium shared libraries; still return a PDF file.
+    return buildKnowledgeRecordPdfWithPdfkit(input);
+  }
+}
+
+export async function buildKnowledgeRecordDocx(
+  input: KnowledgeExportInput,
+): Promise<Buffer> {
+  const exportedAt = input.exportedAt ?? new Date();
+  const rendered = await renderMarkdown(input.contentMarkdown);
+  let bodyHtml = rendered.html;
+  if (input.webUrl) {
+    bodyHtml = absolutizeMediaUrls(bodyHtml, input.webUrl);
+  }
+
+  // Mermaid stays as preformatted source in DOCX (Word cannot run mermaid).
+  bodyHtml = bodyHtml.replace(
+    /<pre class="mermaid">([\s\S]*?)<\/pre>/g,
+    (_m, src: string) =>
+      `<pre><code>Mermaid diagram:\n${src.replace(/<\/?code>/g, '')}</code></pre>`,
+  );
+
+  const summary = input.summary?.trim()
+    ? `<p><em>${escapeHtml(input.summary.trim())}</em></p>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html>
+<body>
+  <h1>${escapeHtml(input.title)}</h1>
+  <p><em>${escapeHtml(input.recordType)} · ${escapeHtml(input.lifecycleStatus)} · ${escapeHtml(input.slug)}</em></p>
+  ${summary}
+  <p><small>Exported ${escapeHtml(exportedAt.toISOString())}</small></p>
+  <hr />
+  ${bodyHtml}
+</body>
+</html>`;
+
+  const result = await HTMLtoDOCX(html, null, {
+    title: input.title,
+    margins: { top: 720, right: 720, bottom: 720, left: 720 },
+  });
+
+  if (Buffer.isBuffer(result)) {
+    return result;
+  }
+  if (result instanceof ArrayBuffer) {
+    return Buffer.from(result);
+  }
+  if (result instanceof Uint8Array) {
+    return Buffer.from(result);
+  }
+  const ab = await (result as Blob).arrayBuffer();
+  return Buffer.from(ab);
+}
+
+const DOC_SPAN_COLUMNS = 10;
+const DOC_COLUMN_WIDTH = 15;
+const DOC_CHARS_PER_LINE = 145;
+const HEADING_FONT_SIZES: Record<number, number> = {
+  1: 16,
+  2: 13,
+  3: 12,
+  4: 11,
+  5: 11,
+  6: 11,
+};
+
+const TABLE_BORDER: Partial<ExcelJS.Borders> = {
+  top: { style: 'thin', color: { argb: 'FFD4D8DD' } },
+  left: { style: 'thin', color: { argb: 'FFD4D8DD' } },
+  bottom: { style: 'thin', color: { argb: 'FFD4D8DD' } },
+  right: { style: 'thin', color: { argb: 'FFD4D8DD' } },
+};
+
+function estimateRowHeight(text: string, charsPerLine = DOC_CHARS_PER_LINE): number {
+  const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+  return Math.min(lines * 14 + 3, 320);
+}
+
+/** Add a text row that spans the prose width of the sheet. */
+function addSpanningRow(
+  sheet: ExcelJS.Worksheet,
+  text: string,
+  style: {
+    bold?: boolean;
+    italic?: boolean;
+    size?: number;
+    color?: string;
+    monospace?: boolean;
+    fill?: string;
+    indent?: number;
+    wrap?: boolean;
+  } = {},
+): ExcelJS.Row {
+  const row = sheet.addRow([text]);
+  sheet.mergeCells(row.number, 1, row.number, DOC_SPAN_COLUMNS);
+  const cell = row.getCell(1);
+  cell.font = {
+    name: style.monospace ? 'Consolas' : 'Calibri',
+    size: style.size ?? (style.monospace ? 9 : 11),
+    bold: style.bold ?? false,
+    italic: style.italic ?? false,
+    color: { argb: style.color ?? 'FF1A1A1A' },
+  };
+  cell.alignment = {
+    vertical: 'top',
+    wrapText: style.wrap ?? true,
+    indent: style.indent ?? 0,
+  };
+  if (style.fill) {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: style.fill } };
+  }
+  row.height = style.wrap === false ? 15 : estimateRowHeight(text);
+  return row;
+}
+
+function addBlankRow(sheet: ExcelJS.Worksheet): void {
+  sheet.addRow([]).height = 6;
+}
+
+type ColumnWidths = Map<number, number>;
+
+function trackColumnWidth(widths: ColumnWidths, column: number, text: string): void {
+  const current = widths.get(column) ?? 0;
+  widths.set(column, Math.max(current, text.length));
+}
+
+function applyColumnWidths(
+  sheet: ExcelJS.Worksheet,
+  widths: ColumnWidths,
+  fallback: number | null,
+): void {
+  const maxColumn = Math.max(
+    fallback === null ? 0 : DOC_SPAN_COLUMNS,
+    ...[0, ...widths.keys()],
+  );
+  for (let column = 1; column <= maxColumn; column += 1) {
+    const measured = widths.get(column);
+    sheet.getColumn(column).width =
+      measured === undefined
+        ? (fallback ?? DOC_COLUMN_WIDTH)
+        : Math.min(Math.max(measured + 3, 12), 48);
+  }
+}
+
+/** Converters emit "Column 7" for spreadsheet grids without real headers. */
+const PLACEHOLDER_HEADER_PATTERN = /^column\s*\d+$/i;
+
+function writeDataRow(
+  sheet: ExcelJS.Worksheet,
+  cells: string[],
+  columnCount: number,
+  widths: ColumnWidths,
+): ExcelJS.Row {
+  const row = sheet.addRow([]);
+  for (let offset = 0; offset < columnCount; offset += 1) {
+    const source = cells[offset] ?? '';
+    const coerced = coerceSpreadsheetValue(source);
+    const cell = row.getCell(offset + 1);
+    cell.value = coerced.value;
+    if (coerced.numFmt) {
+      cell.numFmt = coerced.numFmt;
+    }
+    cell.font = { name: 'Calibri', size: 11 };
+    cell.alignment =
+      typeof coerced.value === 'string'
+        ? { vertical: 'top', wrapText: true }
+        : { vertical: 'top', horizontal: 'right' };
+    cell.border = TABLE_BORDER;
+    trackColumnWidth(widths, offset + 1, source);
+  }
+  return row;
+}
+
+/** Write a Markdown table as a real spreadsheet range with typed cells. */
+function writeTableRange(
+  sheet: ExcelJS.Worksheet,
+  table: MarkdownTable,
+  widths: ColumnWidths,
+): { headerRow: number | null; lastRow: number; columnCount: number } {
+  const headers = table.headers.map((header) =>
+    PLACEHOLDER_HEADER_PATTERN.test(header) ? '' : header,
+  );
+  const hasHeader = headers.some((header) => header.length > 0);
+  const columnCount = table.rows.reduce(
+    (max, row) => Math.max(max, row.length),
+    headers.length,
+  );
+
+  let headerRowNumber: number | null = null;
+  // A header row of placeholders only ("Column 1", …) carries no data, so the
+  // grid starts directly with its body rows.
+  let lastRow = sheet.rowCount;
+
+  if (hasHeader) {
+    const headerRow = sheet.addRow(headers);
+    headerRow.height = 18;
+    for (let offset = 0; offset < columnCount; offset += 1) {
+      const header = headers[offset] ?? '';
+      const cell = headerRow.getCell(offset + 1);
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1A1A1A' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF1F4' } };
+      cell.alignment = { vertical: 'middle', wrapText: true };
+      cell.border = TABLE_BORDER;
+      trackColumnWidth(widths, offset + 1, header);
+    }
+    headerRowNumber = headerRow.number;
+    lastRow = headerRow.number;
+  }
+
+  for (const row of table.rows) {
+    lastRow = writeDataRow(sheet, row, columnCount, widths).number;
+  }
+
+  return { headerRow: headerRowNumber, lastRow, columnCount };
+}
+
+function uniqueSheetName(workbook: ExcelJS.Workbook, desired: string): string {
+  const base = desired.replace(/[\\/*?:[\]]/g, '-').trim().slice(0, 31) || 'Table';
+  let candidate = base;
+  let suffix = 2;
+  while (workbook.getWorksheet(candidate)) {
+    const trimmed = base.slice(0, 31 - String(suffix).length - 1);
+    candidate = `${trimmed} ${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function writeDocumentSheet(
+  sheet: ExcelJS.Worksheet,
+  input: KnowledgeExportInput,
+  exportedAt: Date,
+  blocks: MarkdownBlock[],
+): void {
+  const widths: ColumnWidths = new Map();
+
+  addSpanningRow(sheet, input.title, { bold: true, size: 18 });
+  addSpanningRow(
+    sheet,
+    `${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`,
+    { size: 9.5, color: 'FF666666', wrap: false },
+  );
+  if (input.summary?.trim()) {
+    addSpanningRow(sheet, input.summary.trim(), { italic: true, color: 'FF444444' });
+  }
+  addSpanningRow(sheet, `Exported ${exportedAt.toISOString()}`, {
+    size: 9.5,
+    color: 'FF666666',
+    wrap: false,
+  });
+  addBlankRow(sheet);
+
+  for (const block of blocks) {
+    switch (block.kind) {
+      case 'heading': {
+        addBlankRow(sheet);
+        addSpanningRow(sheet, block.text, {
+          bold: true,
+          size: HEADING_FONT_SIZES[block.level] ?? 11,
+        });
+        break;
+      }
+      case 'paragraph': {
+        addSpanningRow(sheet, block.text);
+        break;
+      }
+      case 'list': {
+        for (const item of block.items) {
+          addSpanningRow(sheet, `${item.marker} ${item.text}`, {
+            indent: 1 + item.depth * 2,
+          });
+        }
+        break;
+      }
+      case 'quote': {
+        addSpanningRow(sheet, block.text, {
+          italic: true,
+          color: 'FF555555',
+          indent: 2,
+        });
+        break;
+      }
+      case 'code': {
+        const label = block.language === 'mermaid' ? 'Mermaid diagram' : block.language;
+        if (label) {
+          addSpanningRow(sheet, label, { size: 9, color: 'FF666666', wrap: false });
+        }
+        for (const line of block.lines) {
+          addSpanningRow(sheet, line, {
+            monospace: true,
+            fill: 'FFF5F6F7',
+            wrap: false,
+          });
+        }
+        addBlankRow(sheet);
+        break;
+      }
+      case 'table': {
+        addBlankRow(sheet);
+        writeTableRange(sheet, block.table, widths);
+        addBlankRow(sheet);
+        break;
+      }
+      case 'rule': {
+        addBlankRow(sheet);
+        break;
+      }
+    }
+  }
+
+  applyColumnWidths(sheet, widths, DOC_COLUMN_WIDTH);
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+}
+
+function writeTableSheet(sheet: ExcelJS.Worksheet, table: MarkdownTable): void {
+  const widths: ColumnWidths = new Map();
+  const { headerRow, lastRow, columnCount } = writeTableRange(sheet, table, widths);
+  applyColumnWidths(sheet, widths, null);
+  if (headerRow === null) {
+    return;
+  }
+  sheet.views = [{ state: 'frozen', ySplit: headerRow }];
+  if (lastRow > headerRow) {
+    sheet.autoFilter = {
+      from: { row: headerRow, column: 1 },
+      to: { row: lastRow, column: columnCount },
+    };
+  }
+}
+
+export async function buildKnowledgeRecordXlsx(
+  input: KnowledgeExportInput,
+): Promise<Buffer> {
+  const exportedAt = input.exportedAt ?? new Date();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Project Knowledge Hub';
+  workbook.created = exportedAt;
+  workbook.modified = exportedAt;
+
+  const blocks = parseMarkdownBlocks(input.contentMarkdown);
+  writeDocumentSheet(workbook.addWorksheet('Document'), input, exportedAt, blocks);
+
+  const tables = blocks
+    .filter((block): block is Extract<MarkdownBlock, { kind: 'table' }> =>
+      block.kind === 'table',
+    )
+    .map((block) => block.table);
+
+  tables.forEach((table, index) => {
+    const name = uniqueSheetName(workbook, table.caption ?? `Table ${index + 1}`);
+    writeTableSheet(workbook.addWorksheet(name), table);
+  });
+
+  const meta = workbook.addWorksheet('Record');
+  meta.columns = [
+    { header: 'Field', key: 'field', width: 22 },
+    { header: 'Value', key: 'value', width: 80 },
+  ];
+  meta.getRow(1).font = { bold: true };
+  meta.addRows([
+    { field: 'Title', value: input.title },
+    { field: 'Slug', value: input.slug },
+    { field: 'Record type', value: input.recordType },
+    { field: 'Lifecycle', value: input.lifecycleStatus },
+    { field: 'Summary', value: input.summary?.trim() || '' },
+    { field: 'Exported at', value: exportedAt.toISOString() },
+    { field: 'Tables', value: tables.length },
+  ]);
+  meta.getColumn(2).alignment = { vertical: 'top', wrapText: true };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}

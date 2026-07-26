@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { downloadAuthenticatedExport } from '../lib/download-export';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
 import {
@@ -9,7 +10,7 @@ import {
   ManageMenuItem,
   ManageMenuLink,
 } from './manage-menu-shared';
-import { Button, Modal, lifecycleLabel } from './ui';
+import { Button, Modal, lifecycleLabel, useToast } from './ui';
 
 export type RecordManageDetails = {
   id: string;
@@ -44,7 +45,8 @@ export type RecordManageDetails = {
   } | null;
 };
 
-type Section = 'menu' | 'details' | 'archive' | 'delete';
+type Section = 'menu' | 'details' | 'export' | 'archive' | 'delete';
+type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'md';
 
 export function KnowledgeRecordManageMenu(props: {
   workspaceSlug: string;
@@ -57,8 +59,10 @@ export function KnowledgeRecordManageMenu(props: {
   const t = useTranslations('records');
   const tCommon = useTranslations('common');
   const tArchive = useTranslations('archive');
+  const { pushToast } = useToast();
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<Section>('menu');
+  const [exportPending, setExportPending] = useState(false);
 
   const archived = Boolean(props.record.archivedAt);
   const gitManaged = props.record.sourceOfTruthMode === 'git_managed';
@@ -74,12 +78,27 @@ export function KnowledgeRecordManageMenu(props: {
   function sectionTitle(): string {
     if (section === 'menu') return t('manageTitle');
     if (section === 'details') return t('manageDetails');
+    if (section === 'export') return t('manageExport');
     if (section === 'delete') return t('manageDelete');
     return archived ? t('manageRestore') : t('manageArchive');
   }
 
-  if (!props.canMutate && !props.canPurge) {
-    return null;
+  async function exportRecord(format: ExportFormat) {
+    setExportPending(true);
+    try {
+      await downloadAuthenticatedExport(
+        `/api/v1/knowledge-records/${props.record.id}/export?format=${format}`,
+        `${props.record.slug}.${format}`,
+      );
+      pushToast(t('exportOk', { format: format.toUpperCase() }));
+      close();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : t('exportFailed');
+      pushToast(message, 'danger');
+    } finally {
+      setExportPending(false);
+    }
   }
 
   return (
@@ -101,6 +120,11 @@ export function KnowledgeRecordManageMenu(props: {
               title={t('manageDetails')}
               hint={t('manageDetailsHint')}
               onClick={() => setSection('details')}
+            />
+            <ManageMenuItem
+              title={t('manageExport')}
+              hint={t('manageExportHint')}
+              onClick={() => setSection('export')}
             />
             {props.canMutate && !archived && !gitManaged ? (
               props.onEdit ? (
@@ -143,6 +167,45 @@ export function KnowledgeRecordManageMenu(props: {
                 onClick={() => setSection('delete')}
               />
             ) : null}
+          </ul>
+        ) : null}
+
+        {section === 'export' ? (
+          <ul className="m-0 grid list-none gap-2 p-0">
+            <ManageMenuItem
+              title={t('exportPdf')}
+              hint={t('exportPdfHint')}
+              disabled={exportPending}
+              onClick={() => void exportRecord('pdf')}
+            />
+            <ManageMenuItem
+              title={t('exportDocx')}
+              hint={t('exportDocxHint')}
+              disabled={exportPending}
+              onClick={() => void exportRecord('docx')}
+            />
+            <ManageMenuItem
+              title={t('exportXlsx')}
+              hint={t('exportXlsxHint')}
+              disabled={exportPending}
+              onClick={() => void exportRecord('xlsx')}
+            />
+            <ManageMenuItem
+              title={t('exportMarkdown')}
+              hint={t('exportMarkdownHint')}
+              disabled={exportPending}
+              onClick={() => void exportRecord('md')}
+            />
+            <li>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={exportPending}
+                onClick={() => setSection('menu')}
+              >
+                {tCommon('back')}
+              </Button>
+            </li>
           </ul>
         ) : null}
 

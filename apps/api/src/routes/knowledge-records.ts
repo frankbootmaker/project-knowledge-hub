@@ -42,10 +42,11 @@ import {
   auditKnowledgeView,
   resolveWorkspaceOrganizationId,
 } from '../lib/telemetry-audit.js';
-
 const restoreSchema = z.object({
   changeMessage: z.string().max(500).optional(),
 });
+
+const exportFormatSchema = z.enum(['pdf', 'docx', 'md', 'xlsx']);
 
 export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/knowledge-records', async (request) => {
@@ -162,6 +163,98 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         reviewedByUser,
       }),
     };
+  });
+
+  app.get('/api/v1/knowledge-records/:recordId/export', async (request, reply) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    const query = z.object({ format: exportFormatSchema }).parse(request.query);
+    const format = query.format;
+
+    const [record] = await app.database.db
+      .select()
+      .from(knowledgeRecords)
+      .where(eq(knowledgeRecords.id, params.recordId))
+      .limit(1);
+
+    if (!record) {
+      throw new AppError({
+        code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+        message: 'Knowledge record not found',
+        statusCode: 404,
+      });
+    }
+
+    requireWorkspaceView(principal, record.workspaceId);
+
+    // Lazy-load so Puppeteer/DOCX deps do not block API boot / tsx watch reloads.
+    const {
+      buildKnowledgeMarkdownExport,
+      buildKnowledgeRecordDocx,
+      buildKnowledgeRecordPdf,
+      buildKnowledgeRecordXlsx,
+      knowledgeExportContentType,
+      knowledgeExportFilename,
+    } = await import('../lib/knowledge-export.js');
+
+    const exportedAt = new Date();
+    const exportInput = {
+      title: record.title,
+      slug: record.slug,
+      summary: record.summary,
+      recordType: record.recordType,
+      lifecycleStatus: record.lifecycleStatus,
+      contentMarkdown: record.contentMarkdown,
+      exportedAt,
+      webUrl: app.env.WEB_URL,
+      cookieHeader:
+        typeof request.headers.cookie === 'string' ? request.headers.cookie : null,
+    };
+
+    let body: Buffer | string;
+    try {
+      if (format === 'md') {
+        body = buildKnowledgeMarkdownExport(exportInput);
+      } else if (format === 'pdf') {
+        body = await buildKnowledgeRecordPdf(exportInput);
+      } else if (format === 'xlsx') {
+        body = await buildKnowledgeRecordXlsx(exportInput);
+      } else {
+        body = await buildKnowledgeRecordDocx(exportInput);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Export failed';
+      throw new AppError({
+        code: 'KNOWLEDGE_EXPORT_FAILED',
+        message: `Export failed: ${message}`,
+        statusCode: 502,
+      });
+    }
+
+    const organizationId = await resolveWorkspaceOrganizationId(
+      app.database,
+      record.workspaceId,
+    );
+    await writeAuditEvent(app.database, {
+      organizationId,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'knowledge.export',
+      entityType: 'knowledge_record',
+      entityId: record.id,
+      metadata: {
+        format,
+        slug: record.slug,
+        workspaceId: record.workspaceId,
+      },
+      ipAddress: request.ip,
+    });
+
+    const filename = knowledgeExportFilename(record.slug, format);
+    return reply
+      .header('Content-Type', knowledgeExportContentType(format))
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .send(body);
   });
 
   app.patch('/api/v1/knowledge-records/:recordId', async (request) => {
