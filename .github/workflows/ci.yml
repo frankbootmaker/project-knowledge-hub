@@ -67,6 +67,10 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # migrate.ts imports @project-knowledge-hub/config which resolves to dist/.
+      - name: Build packages
+        run: pnpm exec turbo run build --filter="./packages/*"
+
       - name: Migrate
         run: pnpm db:migrate
 
@@ -79,5 +83,5 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build
+      - name: Build apps
         run: pnpm build
