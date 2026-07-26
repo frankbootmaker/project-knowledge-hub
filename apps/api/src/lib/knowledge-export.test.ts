@@ -80,7 +80,12 @@ describe('knowledge-export', () => {
     expect(docx[1]).toBe(0x4b);
 
     const xml = await readDocumentXml(docx);
+    // A malformed declaration makes Word refuse the whole document.
+    expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')).toBe(
+      true,
+    );
     expect(xml).toContain('w:orient="portrait"');
+    expect(xml).toContain('<w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>');
     expect(xml).toContain('<w:tblBorders>');
     expect(xml).toContain('w:fill="F1F3F5"');
     expect(xml).toContain('<w:tblHeader/>');
@@ -88,7 +93,7 @@ describe('knowledge-export', () => {
     expect(xml).toContain('<w:numPr>');
     expect(xml).toContain('w:ascii="Consolas"');
     // Word rejects fractional measurements as corrupt content.
-    expect(xml).not.toMatch(/\s[\w:]+="\d+\.\d+"/);
+    expect(xml).not.toMatch(/\sw:\w+="\d+\.\d+"/);
     expect(xml).not.toContain('| Year | Amount |');
   });
 

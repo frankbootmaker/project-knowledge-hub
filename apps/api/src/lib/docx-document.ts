@@ -325,22 +325,93 @@ export function buildDocxDocumentOptions(input: {
 const HEADER_ROW_MARKER = `w:fill="${VIEWER.headerFill.slice(1)}"`;
 
 /**
- * Repairs and enriches the OOXML that html-to-docx emits.
- *
- * Two of its outputs are invalid for Word: page width divided by the column
- * count keeps its fraction, and a `<w:tblGrid>` is written per row group
- * although a table may only declare one. Header rows are also tagged here so
- * long tables repeat their headings on every page, like the viewer's sticky
- * header.
+ * Child sequences of the ECMA-376 property types. Word validates the order of
+ * these elements, and html-to-docx emits them in the order the CSS was read.
  */
-export function normalizeDocumentXml(xml: string): string {
-  const rounded = xml.replace(
-    /(\s[\w:]+=")(\d+\.\d+)(")/g,
-    (_match, prefix: string, value: string, suffix: string) =>
-      `${prefix}${Math.round(Number(value))}${suffix}`,
-  );
+const PROPERTY_CHILD_ORDER: Record<string, string[]> = {
+  pPr: [
+    'pStyle', 'keepNext', 'keepLines', 'pageBreakBefore', 'framePr', 'widowControl',
+    'numPr', 'suppressLineNumbers', 'pBdr', 'shd', 'tabs', 'suppressAutoHyphens',
+    'kinsoku', 'wordWrap', 'overflowPunct', 'topLinePunct', 'autoSpaceDE', 'autoSpaceDN',
+    'bidi', 'adjustRightInd', 'snapToGrid', 'spacing', 'ind', 'contextualSpacing',
+    'mirrorIndents', 'suppressOverlap', 'jc', 'textDirection', 'textAlignment',
+    'textboxTightWrap', 'outlineLvl', 'divId', 'cnfStyle', 'rPr', 'sectPr', 'pPrChange',
+  ],
+  rPr: [
+    'rStyle', 'rFonts', 'b', 'bCs', 'i', 'iCs', 'caps', 'smallCaps', 'strike', 'dstrike',
+    'outline', 'shadow', 'emboss', 'imprint', 'noProof', 'snapToGrid', 'vanish',
+    'webHidden', 'color', 'spacing', 'w', 'kern', 'position', 'sz', 'szCs', 'highlight',
+    'u', 'effect', 'bdr', 'shd', 'fitText', 'vertAlign', 'rtl', 'cs', 'em', 'lang',
+    'eastAsianLayout', 'specVanish', 'oMath', 'rPrChange',
+  ],
+  tblPr: [
+    'tblStyle', 'tblpPr', 'tblOverlap', 'bidiVisual', 'tblStyleRowBandSize',
+    'tblStyleColBandSize', 'tblW', 'jc', 'tblCellSpacing', 'tblInd', 'tblBorders', 'shd',
+    'tblLayout', 'tblCellMar', 'tblLook', 'tblCaption', 'tblDescription', 'tblPrChange',
+  ],
+  trPr: [
+    'cnfStyle', 'divId', 'gridBefore', 'gridAfter', 'wBefore', 'wAfter', 'cantSplit',
+    'trHeight', 'tblHeader', 'tblCellSpacing', 'jc', 'hidden', 'ins', 'del', 'trPrChange',
+  ],
+  tcPr: [
+    'cnfStyle', 'tcW', 'gridSpan', 'hMerge', 'vMerge', 'tcBorders', 'shd', 'noWrap',
+    'tcMar', 'textDirection', 'tcFitText', 'vAlign', 'hideMark', 'cellIns', 'cellDel',
+    'cellMerge', 'tcPrChange',
+  ],
+  sectPr: [
+    'headerReference', 'footerReference', 'footnotePr', 'endnotePr', 'type', 'pgSz',
+    'pgMar', 'paperSrc', 'pgBorders', 'lnNumType', 'pgNumType', 'cols', 'formProt',
+    'vAlign', 'noEndnote', 'titlePg', 'textDirection', 'bidi', 'rtlGutter', 'docGrid',
+    'printerSettings', 'sectPrChange',
+  ],
+};
 
-  return rounded.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (table) => {
+/** Splits the children of a property element, keeping each subtree intact. */
+function splitChildElements(xml: string): Array<{ name: string; markup: string }> {
+  const children: Array<{ name: string; markup: string }> = [];
+  const tag = /<w:([\w]+)((?:"[^"]*"|[^>"])*?)(\/?)>/g;
+  let match = tag.exec(xml);
+  while (match) {
+    const [opening, name, , selfClosing] = match;
+    if (selfClosing) {
+      children.push({ name: name!, markup: opening });
+      match = tag.exec(xml);
+      continue;
+    }
+    const closing = `</w:${name}>`;
+    const end = xml.indexOf(closing, tag.lastIndex);
+    if (end < 0) {
+      return [];
+    }
+    children.push({ name: name!, markup: xml.slice(match.index, end + closing.length) });
+    tag.lastIndex = end + closing.length;
+    match = tag.exec(xml);
+  }
+  return children;
+}
+
+function orderPropertyChildren(xml: string): string {
+  let ordered = xml;
+  for (const [property, order] of Object.entries(PROPERTY_CHILD_ORDER)) {
+    const pattern = new RegExp(`<w:${property}>([\\s\\S]*?)</w:${property}>`, 'g');
+    ordered = ordered.replace(pattern, (match, inner: string) => {
+      const children = splitChildElements(inner);
+      if (children.length < 2) {
+        return match;
+      }
+      const rank = (name: string) => {
+        const index = order.indexOf(name);
+        return index < 0 ? order.length : index;
+      };
+      const sorted = [...children].sort((a, b) => rank(a.name) - rank(b.name));
+      return `<w:${property}>${sorted.map((child) => child.markup).join('')}</w:${property}>`;
+    });
+  }
+  return ordered;
+}
+
+function markRepeatingHeaderRows(xml: string): string {
+  return xml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (table) => {
     let keptGrid = false;
     const singleGrid = table.replace(/<w:tblGrid>[\s\S]*?<\/w:tblGrid>/g, (grid) => {
       if (keptGrid) {
@@ -359,6 +430,27 @@ export function normalizeDocumentXml(xml: string): string {
       : firstRow.replace('<w:tr>', '<w:tr><w:trPr><w:tblHeader/></w:trPr>');
     return singleGrid.replace(firstRow, repeating);
   });
+}
+
+/**
+ * Repairs and enriches the OOXML that html-to-docx emits.
+ *
+ * Three of its outputs make Word reject the file: page width divided by the
+ * column count keeps its fraction, a `<w:tblGrid>` is written per row group
+ * although a table may only declare one, and property children come out in CSS
+ * order rather than the schema sequence. Header rows are also tagged here so
+ * long tables repeat their headings on every page, like the viewer's sticky
+ * header.
+ */
+export function normalizeDocumentXml(xml: string): string {
+  // Scoped to the `w:` namespace so the XML declaration keeps its 1.0 version.
+  const rounded = xml.replace(
+    /(\sw:\w+=")(\d+\.\d+)(")/g,
+    (_match, prefix: string, value: string, suffix: string) =>
+      `${prefix}${Math.round(Number(value))}${suffix}`,
+  );
+
+  return orderPropertyChildren(markRepeatingHeaderRows(rounded));
 }
 
 const CONTENT_TYPES_PART = '[Content_Types].xml';

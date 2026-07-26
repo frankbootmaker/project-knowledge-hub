@@ -105,6 +105,31 @@ describe('normalizeDocumentXml', () => {
     expect(xml).not.toMatch(/\d\.\d/);
   });
 
+  it('leaves the XML declaration intact', () => {
+    const xml = normalizeDocumentXml(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document/>',
+    );
+
+    expect(xml).toContain('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+  });
+
+  it('sorts property children into the schema sequence', () => {
+    const xml = normalizeDocumentXml(
+      '<w:pPr><w:jc w:val="both"/><w:ind w:left="284"/><w:spacing w:line="240"/></w:pPr>' +
+        '<w:tcPr><w:tcBorders><w:top/></w:tcBorders><w:vAlign w:val="top"/>' +
+        '<w:shd w:val="clear"/></w:tcPr>' +
+        '<w:sectPr><w:pgSz w:w="10"/><w:footerReference r:id="rId7"/></w:sectPr>',
+    );
+
+    expect(xml).toContain(
+      '<w:pPr><w:spacing w:line="240"/><w:ind w:left="284"/><w:jc w:val="both"/></w:pPr>',
+    );
+    expect(xml).toContain(
+      '<w:tcBorders><w:top/></w:tcBorders><w:shd w:val="clear"/><w:vAlign w:val="top"/>',
+    );
+    expect(xml).toContain('<w:sectPr><w:footerReference r:id="rId7"/><w:pgSz w:w="10"/>');
+  });
+
   it('keeps a single table grid, as the Word schema allows only one', () => {
     const xml = normalizeDocumentXml(
       '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="10"/></w:tblGrid>' +
@@ -124,7 +149,7 @@ describe('normalizeDocumentXml', () => {
     );
 
     expect(xml.match(/<w:tblHeader\/>/g)).toHaveLength(1);
-    expect(xml).toContain('<w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>');
+    expect(xml).toContain('<w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>');
   });
 
   it('leaves tables without a styled header row alone', () => {
