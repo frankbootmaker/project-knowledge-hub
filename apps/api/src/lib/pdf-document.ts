@@ -187,6 +187,31 @@ const MIN_COLUMN_WIDTH = 16;
 const MIN_EMPTY_COLUMN_WIDTH = 9;
 const SQUEEZE_TOLERANCE = 1.3;
 
+/**
+ * An XYZ bookmark destination. pdfkit subtracts `top` and `left` from the page
+ * box, so both are offsets measured from the page's top-left corner.
+ */
+type OutlineDestination = {
+  expanded: boolean;
+  fit: boolean;
+  zoom: number;
+  top: number;
+  left: number;
+};
+
+/** pdfkit's typings only expose `expanded`, but it accepts a full destination. */
+function addOutlineChild(
+  parent: PDFKit.PDFOutline,
+  title: string,
+  destination: OutlineDestination,
+): PDFKit.PDFOutline {
+  const addItem = parent.addItem as (
+    title: string,
+    options: OutlineDestination,
+  ) => PDFKit.PDFOutline;
+  return addItem.call(parent, title, destination);
+}
+
 /** Row labels live in the first column, so repeat it on continuation pages. */
 function tableHasKeyColumn(plan: TablePlan): boolean {
   if (plan.columns.length <= 6) return false;
@@ -314,6 +339,29 @@ export function renderStructuredPdf(input: PdfRenderInput): Promise<Buffer> {
       if (doc.y + needed > bottomLimit()) {
         addPage();
       }
+    };
+
+    /** Open bookmark ancestors, innermost last. */
+    const outlineStack: Array<{ level: number; item: PDFKit.PDFOutline }> = [];
+
+    /** Bookmarks the cursor's current position; call it just before drawing. */
+    const bookmarkHeading = (text: string, level: number) => {
+      const title = text.trim();
+      if (!title) {
+        return;
+      }
+      while ((outlineStack.at(-1)?.level ?? 0) >= level) {
+        outlineStack.pop();
+      }
+      const parent = outlineStack.at(-1)?.item ?? doc.outline;
+      const item = addOutlineChild(parent, title, {
+        expanded: false,
+        fit: false,
+        zoom: 0,
+        top: Math.max(doc.y - 8, 0),
+        left: doc.page.width - doc.page.margins.left,
+      });
+      outlineStack.push({ level, item });
     };
 
     const writeText = (
@@ -451,6 +499,9 @@ export function renderStructuredPdf(input: PdfRenderInput): Promise<Buffer> {
           const size = HEADING_SIZES[block.level] ?? BODY_SIZE;
           ensureSpace(size * 3.2);
           doc.moveDown(block.level <= 2 ? 0.5 : 0.3);
+          // Settle the cursor on its final page before the bookmark records it.
+          ensureSpace(size * 1.4);
+          bookmarkHeading(block.text, block.level);
           writeText(block.text, { font: fonts.bold, size, gap: 3 });
           break;
         }

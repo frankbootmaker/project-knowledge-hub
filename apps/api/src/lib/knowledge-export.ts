@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import puppeteer, { type Browser } from 'puppeteer';
+import puppeteer, { type Browser, type PDFOptions } from 'puppeteer';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import htmlToDocxImport from '@turbodocx/html-to-docx';
 import {
@@ -384,7 +384,7 @@ async function buildKnowledgeRecordPdfWithPuppeteer(
     );
     await new Promise((resolve) => setTimeout(resolve, 250));
 
-    const pdf = await page.pdf({
+    const pdfOptions: PDFOptions = {
       format: 'A4',
       landscape,
       printBackground: true,
@@ -397,7 +397,13 @@ async function buildKnowledgeRecordPdfWithPuppeteer(
           <span class="pageNumber"></span>/<span class="totalPages"></span>
         </div>
       `,
-    });
+    };
+
+    // Chrome derives the bookmark tree from the tagged heading structure.
+    // Builds that predate the flag reject it, and a flat PDF beats no PDF.
+    const pdf = await page
+      .pdf({ ...pdfOptions, tagged: true, outline: true })
+      .catch(() => page.pdf(pdfOptions));
     return Buffer.from(pdf);
   } finally {
     await page.close();

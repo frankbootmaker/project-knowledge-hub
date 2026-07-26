@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fitColumnWidths, splitTableColumns } from './pdf-document.js';
+import { fitColumnWidths, renderStructuredPdf, splitTableColumns } from './pdf-document.js';
+import { parseMarkdownBlocks } from './markdown-blocks.js';
 
 describe('splitTableColumns', () => {
   it('keeps a fitting table in a single chunk', () => {
@@ -45,5 +46,32 @@ describe('fitColumnWidths', () => {
     expect(widths[0]).toBeCloseTo(9, 1);
     expect(widths[1]).toBeLessThan(300);
     expect(widths[1]).toBeGreaterThanOrEqual(16);
+  });
+});
+
+describe('renderStructuredPdf bookmarks', () => {
+  const render = (markdown: string) =>
+    renderStructuredPdf({
+      title: 'Quarterly Report',
+      metaLine: 'note · draft · quarterly-report',
+      summary: null,
+      footerNote: 'Exported 2026-01-01T00:00:00.000Z',
+      blocks: parseMarkdownBlocks(markdown),
+    });
+
+  it('nests headings into a document outline', async () => {
+    const pdf = await render('# Overview\n\nIntro.\n\n## Figures\n\nDetail.\n');
+    const raw = pdf.toString('latin1');
+
+    expect(raw).toContain('/Outlines');
+    expect(raw).toContain('/UseOutlines');
+    expect(raw).toContain('(Overview)');
+    expect(raw).toContain('(Figures)');
+  });
+
+  it('omits the outline when the document has no headings', async () => {
+    const pdf = await render('Just a paragraph with no headings.\n');
+
+    expect(pdf.toString('latin1')).not.toContain('/Outlines');
   });
 });
