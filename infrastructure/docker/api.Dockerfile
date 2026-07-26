@@ -1,32 +1,34 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.7-labs
 
 FROM node:24-bookworm-slim AS base
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.12.4 --activate
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+ENV PNPM_STORE_DIR=/pnpm/store
 
 FROM base AS build
 # Keep install in non-production so TypeScript/tsx/dev tooling remain available.
 ENV NODE_ENV=development
 # Use system Chromium in the runtime image — skip Puppeteer's download during build.
 ENV PUPPETEER_SKIP_DOWNLOAD=true
+# Manifests only — source changes must not bust the install layer.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc ./
+COPY --parents apps/*/package.json packages/*/package.json ./
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=shared \
+  pnpm install --frozen-lockfile
 COPY apps ./apps
 COPY packages ./packages
 COPY turbo.json tsconfig.base.json ./
-RUN pnpm install --frozen-lockfile || pnpm install
 ENV NODE_ENV=production
 # Limit parallel package compiles — three images (api/web/worker) already build at once.
-RUN pnpm exec turbo run build --filter=@project-knowledge-hub/api... --concurrency=1
+# Turbo local cache persists across rebuilds when the BuildKit cache volume is kept.
+RUN --mount=type=cache,id=turbo-cache-api,target=/app/.turbo \
+  pnpm exec turbo run build --filter=@project-knowledge-hub/api... --concurrency=1
 
-FROM node:24-bookworm-slim AS runtime
+# Heavy apt packages (Chromium + pg client) change rarely — keep ahead of app COPY.
+FROM node:24-bookworm-slim AS runtime-apt
 WORKDIR /app
-ENV NODE_ENV=production
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-# Postgres is pg16 (pgvector image). Debian bookworm's default client is 15 and
-# pg_dump refuses a major-version mismatch — install matching client from PGDG.
 RUN useradd --system --uid 1001 knowledgehub \
   && apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
@@ -62,6 +64,11 @@ RUN useradd --system --uid 1001 knowledgehub \
     xdg-utils \
   && rm -rf /var/lib/apt/lists/* \
   && ln -sf /usr/bin/chromium /usr/bin/chromium-browser || true
+
+FROM runtime-apt AS runtime
+ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 COPY --from=build /app /app
 COPY infrastructure/docker/api-entrypoint.sh /entrypoint.sh
 COPY infrastructure/docker/migrate-and-seed.sh /migrate-and-seed.sh

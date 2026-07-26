@@ -1,10 +1,11 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.7-labs
 
 FROM node:24-bookworm-slim AS base
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.12.4 --activate
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+ENV PNPM_STORE_DIR=/pnpm/store
 
 FROM base AS build
 # Dedicated build-arg name so Dokploy/Compose env API_URL=http://localhost:3101 cannot
@@ -13,13 +14,17 @@ ARG NEXT_REWRITE_API_ORIGIN=http://api:3101
 ENV NEXT_REWRITE_API_ORIGIN=$NEXT_REWRITE_API_ORIGIN
 ENV API_URL=$NEXT_REWRITE_API_ORIGIN
 ENV NODE_ENV=development
+# Manifests only — source changes must not bust the install layer.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc ./
+COPY --parents apps/*/package.json packages/*/package.json ./
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=shared \
+  pnpm install --frozen-lockfile
 COPY apps ./apps
 COPY packages ./packages
 COPY turbo.json tsconfig.base.json ./
-RUN pnpm install --frozen-lockfile || pnpm install
 ENV NODE_ENV=production
-RUN case "$NEXT_REWRITE_API_ORIGIN" in \
+RUN --mount=type=cache,id=turbo-cache-web,target=/app/.turbo \
+  case "$NEXT_REWRITE_API_ORIGIN" in \
       http://localhost:*|http://127.0.0.1:*) \
         echo "ERROR: NEXT_REWRITE_API_ORIGIN must be the Compose service URL (e.g. http://api:3101), not localhost: $NEXT_REWRITE_API_ORIGIN" >&2; \
         exit 1 ;; \

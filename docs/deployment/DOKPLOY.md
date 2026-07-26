@@ -105,6 +105,15 @@ docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
 
    Or temporarily stop other heavy containers, free RAM (`free -h`), then Redeploy. If the queue is stuck after an OOM, clear it in Dokploy Settings and/or restart the Dokploy service.
 
+**Slow deploys (cold vs warm):** first build after a prune is heavy (Chromium + ffmpeg/tesseract apt, triple `pnpm install`, Next compile). Dockerfiles are layered so **later deploys stay warm**:
+
+1. **Manifest-first install** — only `package.json` / lockfile are copied before `pnpm install`, so app source edits do not re-download 791 packages.
+2. **Shared BuildKit `pnpm-store` cache** — api/web/worker reuse the same download store across parallel builds.
+3. **Per-image Turbo cache mounts** — package `tsc` / Next outputs reuse across redeploys when BuildKit cache is intact.
+4. **Chromium apt in its own stage** — code-only api rebuilds skip the ~2–3 min Chromium install when that layer is still cached.
+
+Do **not** prune Docker build cache on the Dokploy host between routine deploys (`docker builder prune`) if you care about speed. Dependency bumps (`pnpm-lock.yaml`) still force a fresh install layer; that is expected.
+
 ## Deploy order
 
 1. **Build** api, worker, web images.
