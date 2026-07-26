@@ -3,6 +3,18 @@ import puppeteer, { type Browser } from 'puppeteer';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import htmlToDocxImport from '@turbodocx/html-to-docx';
 import {
+  buildDocxDocumentHtml,
+  buildDocxDocumentOptions,
+  buildDocxFooterHtml,
+  decodeHtmlEntities,
+  finalizeDocxPackage,
+  inlineImageDataUris,
+  mermaidFallbackHtml,
+  mermaidImageHtml,
+  replaceMermaidBlocks,
+  type DocxImage,
+} from './docx-document.js';
+import {
   coerceSpreadsheetValue,
   parseMarkdownBlocks,
   type MarkdownBlock,
@@ -30,6 +42,7 @@ type HtmlToDocxFn = (
   html: string,
   headerHTML: string | null,
   documentOptions?: Record<string, unknown>,
+  footerHTML?: string | null,
 ) => Promise<Buffer | ArrayBuffer | Uint8Array | Blob>;
 
 function resolveHtmlToDocx(): HtmlToDocxFn {
@@ -416,55 +429,130 @@ export async function buildKnowledgeRecordPdf(
   }
 }
 
+/** Rasterizes mermaid sources so Word shows diagrams instead of their source. */
+async function renderMermaidImages(
+  sources: string[],
+  maxWidthPx: number,
+): Promise<Array<DocxImage | null>> {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setViewport({ width: 1200, height: 900, deviceScaleFactor: 2 });
+    const blocks = sources
+      .map(
+        (source, index) =>
+          `<pre class="mermaid" id="mermaid-${index}">${escapeHtml(source)}</pre>`,
+      )
+      .join('\n');
+    await page.setContent(
+      `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>
+        body { margin: 0; background: #fff; font-family: "Segoe UI", Arial, sans-serif; }
+        pre.mermaid { display: inline-block; margin: 0 0 24px; padding: 8px; background: #fff; }
+      </style></head><body>${blocks}
+      <script type="module">
+        const nodes = Array.from(document.querySelectorAll('pre.mermaid'));
+        const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'neutral' });
+        await mermaid.run({ nodes });
+        document.documentElement.dataset.exportReady = '1';
+      </script></body></html>`,
+      { waitUntil: 'load', timeout: 45_000 },
+    );
+    await page.waitForFunction('document.documentElement.dataset.exportReady === "1"', {
+      timeout: 30_000,
+    });
+
+    const images: Array<DocxImage | null> = [];
+    for (let index = 0; index < sources.length; index += 1) {
+      const element = await page.$(`#mermaid-${index}`);
+      const box = await element?.boundingBox();
+      if (!element || !box || box.width < 1 || box.height < 1) {
+        images.push(null);
+        continue;
+      }
+      const shot = await element.screenshot({ type: 'png', encoding: 'base64' });
+      const scale = Math.min(1, maxWidthPx / box.width);
+      images.push({
+        dataUri: `data:image/png;base64,${shot}`,
+        width: box.width * scale,
+        height: box.height * scale,
+      });
+    }
+    return images;
+  } finally {
+    await page.close();
+  }
+}
+
+async function embedMermaidDiagrams(
+  bodyHtml: string,
+  maxWidthPx: number,
+): Promise<string> {
+  const sources: string[] = [];
+  replaceMermaidBlocks(bodyHtml, (source) => {
+    sources.push(decodeHtmlEntities(source));
+    return '';
+  });
+  if (sources.length === 0) {
+    return bodyHtml;
+  }
+
+  let images: Array<DocxImage | null> = [];
+  try {
+    images = await renderMermaidImages(sources, maxWidthPx);
+  } catch {
+    // No Chromium here; the diagram source stays readable as a code block.
+  }
+
+  return replaceMermaidBlocks(bodyHtml, (source, index) => {
+    const image = images[index];
+    return image ? mermaidImageHtml(image) : mermaidFallbackHtml(source);
+  });
+}
+
 export async function buildKnowledgeRecordDocx(
   input: KnowledgeExportInput,
 ): Promise<Buffer> {
   const exportedAt = input.exportedAt ?? new Date();
   const rendered = await renderMarkdown(input.contentMarkdown);
+  const landscape = widestTableColumnCount(input.contentMarkdown) > 8;
+  const contentWidthPx = landscape ? 900 : 620;
+
   let bodyHtml = rendered.html;
   if (input.webUrl) {
     bodyHtml = absolutizeMediaUrls(bodyHtml, input.webUrl);
   }
+  bodyHtml = await embedMermaidDiagrams(bodyHtml, contentWidthPx);
+  bodyHtml = await inlineImageDataUris(bodyHtml, { cookieHeader: input.cookieHeader });
 
-  // Mermaid stays as preformatted source in DOCX (Word cannot run mermaid).
-  bodyHtml = bodyHtml.replace(
-    /<pre class="mermaid">([\s\S]*?)<\/pre>/g,
-    (_m, src: string) =>
-      `<pre><code>Mermaid diagram:\n${src.replace(/<\/?code>/g, '')}</code></pre>`,
-  );
-
-  const summary = input.summary?.trim()
-    ? `<p><em>${escapeHtml(input.summary.trim())}</em></p>`
-    : '';
-
-  const html = `<!DOCTYPE html>
-<html>
-<body>
-  <h1>${escapeHtml(input.title)}</h1>
-  <p><em>${escapeHtml(input.recordType)} · ${escapeHtml(input.lifecycleStatus)} · ${escapeHtml(input.slug)}</em></p>
-  ${summary}
-  <p><small>Exported ${escapeHtml(exportedAt.toISOString())}</small></p>
-  <hr />
-  ${bodyHtml}
-</body>
-</html>`;
-
-  const result = await HTMLtoDOCX(html, null, {
+  const html = buildDocxDocumentHtml({
     title: input.title,
-    margins: { top: 720, right: 720, bottom: 720, left: 720 },
+    metaLine: `${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`,
+    summary: input.summary,
+    exportedNote: `Exported ${exportedAt.toISOString()}`,
+    bodyHtml,
   });
 
+  const result = await HTMLtoDOCX(
+    html,
+    null,
+    buildDocxDocumentOptions({ title: input.title, landscape }),
+    buildDocxFooterHtml(input.title),
+  );
+
+  return finalizeDocxPackage(await toBuffer(result));
+}
+
+async function toBuffer(
+  result: Buffer | ArrayBuffer | Uint8Array | Blob,
+): Promise<Buffer> {
   if (Buffer.isBuffer(result)) {
     return result;
   }
-  if (result instanceof ArrayBuffer) {
-    return Buffer.from(result);
+  if (result instanceof ArrayBuffer || result instanceof Uint8Array) {
+    return Buffer.from(result as ArrayBuffer);
   }
-  if (result instanceof Uint8Array) {
-    return Buffer.from(result);
-  }
-  const ab = await (result as Blob).arrayBuffer();
-  return Buffer.from(ab);
+  return Buffer.from(await result.arrayBuffer());
 }
 
 const DOC_SPAN_COLUMNS = 10;

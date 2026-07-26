@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   buildExportHtmlDocument,
@@ -42,6 +43,11 @@ const sample = {
   webUrl: 'https://knowhub.example.com',
 };
 
+async function readDocumentXml(docx: Buffer): Promise<string> {
+  const archive = await JSZip.loadAsync(docx);
+  return archive.file('word/document.xml')?.async('string') ?? '';
+}
+
 describe('knowledge-export', () => {
   it('builds a safe filename', () => {
     expect(knowledgeExportFilename('Annual Dividend!', 'pdf')).toBe(
@@ -67,11 +73,39 @@ describe('knowledge-export', () => {
     expect(html).toMatch(/language-ts|hljs/);
   });
 
-  it('builds a non-empty DOCX from rendered HTML', async () => {
+  it('builds a formatted DOCX that mirrors the rendered markdown', async () => {
     const docx = await buildKnowledgeRecordDocx(sample);
     expect(docx.byteLength).toBeGreaterThan(1000);
     expect(docx[0]).toBe(0x50);
     expect(docx[1]).toBe(0x4b);
+
+    const xml = await readDocumentXml(docx);
+    expect(xml).toContain('w:orient="portrait"');
+    expect(xml).toContain('<w:tblBorders>');
+    expect(xml).toContain('w:fill="F1F3F5"');
+    expect(xml).toContain('<w:tblHeader/>');
+    expect(xml).toContain('Heading1');
+    expect(xml).toContain('<w:numPr>');
+    expect(xml).toContain('w:ascii="Consolas"');
+    // Word rejects fractional measurements as corrupt content.
+    expect(xml).not.toMatch(/\s[\w:]+="\d+\.\d+"/);
+    expect(xml).not.toContain('| Year | Amount |');
+  });
+
+  it('turns the DOCX landscape for spreadsheet-wide tables', async () => {
+    const headers = Array.from({ length: 14 }, (_, index) => `Metric ${index + 1}`);
+    const docx = await buildKnowledgeRecordDocx({
+      ...sample,
+      contentMarkdown: [
+        '## Wide',
+        '',
+        `| ${headers.join(' | ')} |`,
+        `| ${headers.map(() => '---').join(' | ')} |`,
+        `| ${headers.map((_, index) => `1 250 00${index}`).join(' | ')} |`,
+      ].join('\n'),
+    });
+
+    expect(await readDocumentXml(docx)).toContain('w:orient="landscape"');
   });
 
   it('builds a structured XLSX workbook with typed table cells', async () => {
