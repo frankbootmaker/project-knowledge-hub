@@ -42,14 +42,17 @@ export async function resolveWorkerMailConfig(
       smtp:
         stored.driver === 'smtp'
           ? {
-              host: stored.smtpHost?.trim() || '',
+              host: stored.smtpHost?.trim() || env.SMTP_HOST || '',
               port: stored.smtpPort ?? env.SMTP_PORT,
               secure: stored.smtpSecure ?? false,
-              user: stored.smtpUser,
-              pass: stored.smtpPass,
+              user: stored.smtpUser?.trim() || env.SMTP_USER || undefined,
+              pass: stored.smtpPass?.trim() || env.SMTP_PASS || undefined,
             }
           : undefined,
-      resendApiKey: stored.driver === 'resend' ? stored.resendApiKey : undefined,
+      resendApiKey:
+        stored.driver === 'resend'
+          ? stored.resendApiKey?.trim() || env.RESEND_API_KEY || undefined
+          : undefined,
     };
   } catch {
     return mailConfigFromEnv(env);

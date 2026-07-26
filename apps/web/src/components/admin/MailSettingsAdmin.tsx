@@ -277,17 +277,20 @@ export function MailSettingsAdmin({
               />
             </Field>
             {hasSmtpPass ? (
-              <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={clearSmtpPass}
-                  onChange={(e) => {
-                    setClearSmtpPass(e.target.checked);
-                    if (e.target.checked) setSmtpPass('');
-                  }}
-                />
-                {t('mailClearSmtpPass')}
-              </label>
+              <div className="grid gap-2 sm:col-span-2">
+                <p className="m-0 text-sm text-brand">{t('mailSecretStored')}</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={clearSmtpPass}
+                    onChange={(e) => {
+                      setClearSmtpPass(e.target.checked);
+                      if (e.target.checked) setSmtpPass('');
+                    }}
+                  />
+                  {t('mailClearSmtpPass')}
+                </label>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -310,17 +313,20 @@ export function MailSettingsAdmin({
               />
             </Field>
             {hasResendApiKey ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={clearResendKey}
-                  onChange={(e) => {
-                    setClearResendKey(e.target.checked);
-                    if (e.target.checked) setResendApiKey('');
-                  }}
-                />
-                {t('mailClearResendKey')}
-              </label>
+              <div className="grid gap-2">
+                <p className="m-0 text-sm text-brand">{t('mailSecretStored')}</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={clearResendKey}
+                    onChange={(e) => {
+                      setClearResendKey(e.target.checked);
+                      if (e.target.checked) setResendApiKey('');
+                    }}
+                  />
+                  {t('mailClearResendKey')}
+                </label>
+              </div>
             ) : null}
             <p className="m-0 text-sm text-ink-muted">{t('mailResendHint')}</p>
           </div>

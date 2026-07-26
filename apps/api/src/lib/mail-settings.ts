@@ -82,6 +82,11 @@ export async function resolveMailConfig(
     return { config: mailConfigFromEnv(env), source: 'env' };
   }
 
+  // Prefer DB secrets; fall back to env (same pattern as Admin → Storage).
+  const smtpPass = stored.smtpPass?.trim() || env.SMTP_PASS || undefined;
+  const resendApiKey =
+    stored.resendApiKey?.trim() || env.RESEND_API_KEY || undefined;
+
   const config: MailConfig = {
     driver: stored.driver,
     from: stored.from?.trim() || env.MAIL_FROM,
@@ -89,14 +94,14 @@ export async function resolveMailConfig(
     smtp:
       stored.driver === 'smtp'
         ? {
-            host: stored.smtpHost?.trim() || '',
+            host: stored.smtpHost?.trim() || env.SMTP_HOST || '',
             port: stored.smtpPort ?? env.SMTP_PORT,
             secure: stored.smtpSecure ?? false,
-            user: stored.smtpUser,
-            pass: stored.smtpPass,
+            user: stored.smtpUser?.trim() || env.SMTP_USER || undefined,
+            pass: smtpPass,
           }
         : undefined,
-    resendApiKey: stored.driver === 'resend' ? stored.resendApiKey : undefined,
+    resendApiKey: stored.driver === 'resend' ? resendApiKey : undefined,
   };
 
   return { config, source: 'override' };
@@ -118,8 +123,9 @@ export async function getPublicMailSettings(
     smtpPort: effective.smtpPort ?? env.SMTP_PORT,
     smtpSecure: effective.smtpSecure ?? false,
     smtpUser: effective.smtpUser ?? '',
-    hasSmtpPass: Boolean(effective.smtpPass),
-    hasResendApiKey: Boolean(effective.resendApiKey),
+    // True when a secret is available from DB and/or env (never returns the value).
+    hasSmtpPass: Boolean(stored?.smtpPass?.trim() || env.SMTP_PASS),
+    hasResendApiKey: Boolean(stored?.resendApiKey?.trim() || env.RESEND_API_KEY),
     source,
     effectiveDriver: config.driver,
     envDriver: env.MAIL_DRIVER,
@@ -190,10 +196,12 @@ export async function setStoredMailSettings(
     });
   }
 
-  if (next.driver === 'resend' && !next.resendApiKey) {
+  const effectiveResendKey = next.resendApiKey?.trim() || env.RESEND_API_KEY;
+  if (next.driver === 'resend' && !effectiveResendKey) {
     throw new AppError({
       code: 'RESEND_API_KEY_REQUIRED',
-      message: 'Resend API key is required for the Resend driver',
+      message:
+        'Resend API key is required for the Resend driver (save it here or set RESEND_API_KEY)',
       statusCode: 400,
     });
   }
@@ -210,10 +218,10 @@ export async function setStoredMailSettings(
             port: next.smtpPort ?? 587,
             secure: next.smtpSecure ?? false,
             user: next.smtpUser,
-            pass: next.smtpPass,
+            pass: next.smtpPass?.trim() || env.SMTP_PASS,
           }
         : undefined,
-    resendApiKey: next.resendApiKey,
+    resendApiKey: effectiveResendKey,
   });
 
   await database.db
