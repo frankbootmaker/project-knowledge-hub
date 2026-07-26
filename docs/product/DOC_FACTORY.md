@@ -1,6 +1,6 @@
 # Doc Factory
 
-**Status:** Parked — backlog item NF-001 in [`NEXT_FEATURES.md`](NEXT_FEATURES.md); module brief expanded 2026-07-27 (content templates + style packs + Admin template manager)  
+**Status:** Parked — backlog item NF-001 in [`NEXT_FEATURES.md`](NEXT_FEATURES.md); module brief expanded 2026-07-27 (content templates + style packs + Admin template manager + optional hub LLM forge)  
 **Last updated:** 2026-07-27  
 **Related:** ADR-008 (Markdown canonical), ADR-013 (draft-only MCP writes), ADR-006 (verification lifecycle), ADR-007 (provenance), NF-006 BlobStore (store uploaded style assets)
 
@@ -12,9 +12,9 @@ The package has three layers:
 
 1. **Content templates** — outlines / instructions that shape what goes into a knowledge record (overview, management summary, later legal/audit packs).
 2. **Style packs** — Word-like presentation (fonts, headings, cover, header/footer, logo) applied at **export** time. Users pick a pack or **Blank**.
-3. **Forged documents (later)** — merge selected hub records into a content template, then export with a style pack.
+3. **Forged documents (later)** — pull selected hub sources into a content template (rules and/or **hub-side LLM**), land a Markdown draft first, then optionally continue into the chosen **style pack** for PDF/DOCX.
 
-Generation model for early slices is **hybrid**: the hub owns templates, scoping, versioning, style packs, and export; a **connected AI** (Cursor / ChatGPT via MCP or Actions) fills Markdown drafts via existing write tools. There is **no hub-side LLM provider** in v1.
+Early slices use a **hybrid** generation model: the hub owns templates, scoping, versioning, style packs, and export; a **connected AI** (Cursor / ChatGPT via MCP or Actions) fills Markdown drafts. **Hub-orchestrated LLM** (OpenAI-compatible API) is an optional later mode for forge automation — not required for Phases A–E.
 
 ```mermaid
 flowchart TB
@@ -22,14 +22,20 @@ flowchart TB
     tm[Template manager]
     tm --> ct[Content templates]
     tm --> sp[Style packs]
+    llmCfg[Optional LLM provider config]
   end
   subgraph hub [Knowledge Hub]
-    md[Canonical Markdown records]
+    md[Canonical Markdown draft]
     df[Document factory UX]
     ct --> df
     df --> agent[Connected AI via MCP]
+    df --> forge[Forge job]
+    llmCfg --> forge
+    forge --> llm[OpenAI-compatible API]
+    llm --> md
     agent --> md
-    md --> export[Export PDF or DOCX]
+    md --> review[Human review Approve]
+    review --> export[Export PDF or DOCX]
     sp --> export
     blank[Blank style] --> export
   end
@@ -43,20 +49,55 @@ flowchart TB
 * Support outbound **PDF** and **DOCX** from canonical Markdown.
 * Let org admins manage **style packs** (corporate look) and eventually **content templates**.
 * Let users export any eligible record with a **selected style pack** or **Blank**.
-* Later: forge multi-source content into pre-defined content+style combinations for legal / audit / technical packs.
+* Later: forge multi-source content into pre-defined content+style combinations for legal / audit / technical packs — optionally via a **hub-called OpenAI-compatible API**.
 
 ## Non-goals
 
-* Server-side LLM API keys, provider billing, or generation jobs inside the worker (v1).
-* Auto-promoting AI drafts to `verified` / `current`.
+* Hub-side LLM keys / billing / forge jobs in **Phases A–E** (export + style packs ship without them).
+* Auto-promoting AI drafts to `verified` / `current` (even when hub LLM is enabled).
+* Skipping the Markdown draft and writing straight into a binary DOCX as the system of record.
 * Turning the hub into a WYSIWYG Word processor.
 * Perfect round-trip fidelity (export is best-effort presentation; Markdown remains editable source).
 * Importing PDF/DOCX/PPTX as editable Word clones (inbound ingest is NF-015 MarkItDown → Markdown drafts).
 * PowerPoint / slide decks in v1.
 * Collaborative real-time editing of factory documents.
 * Graph OneDrive as the sole document store (export downloads + optional BlobStore retention only).
+* Bundling a proprietary model — use **OpenAI-compatible** HTTP APIs (OpenAI, Azure OpenAI, local gateways, etc.).
 
 ---
+
+## Generation modes
+
+| Mode | Who calls the model | When |
+| --- | --- | --- |
+| **Hybrid MCP** (default early) | External Cursor / ChatGPT; hub supplies brief + write tools | Phases B–C |
+| **Hub LLM forge** (optional later) | Worker/API calls an org-configured OpenAI-compatible endpoint | Phase G+ |
+
+Both modes **must** land a **Markdown knowledge-record draft** first. Style packs apply only afterward as export. That keeps ADR-008 (Markdown SoT), versioning, Approve, and audit intact.
+
+### Hub LLM forge pipeline (recommended)
+
+1. User (or API) starts a forge: content template + scope/sources + optional **style pack** for later export.  
+2. Hub retrieves ranked source excerpts (search / selected record ids) — same brief discipline as MCP.  
+3. Hub calls the configured **chat/completions-compatible** API with template outline + instructions + excerpts.  
+4. Model returns Markdown → hub creates/updates the factory series record as **draft** (`ai_generated_draft`, `generatedByModel` set).  
+5. **Default:** stop for human review (edit → Approve).  
+6. **Optional auto-continue:** if the user opted in, queue export with the selected style pack (or Blank) and attach/download the PDF/DOCX artifact — still **without** auto-Approve of the Markdown.  
+
+“Place into the selected template” means: content template drives the Markdown; style pack drives the binary export. Never invert that order.
+
+### Why keep Markdown first
+
+* Diffs, history, MCP re-edits, and Approve all work on one representation.  
+* Failed or low-quality LLM output is fixable in the hub before anyone ships a PDF.  
+* Style packs can change without regenerating prose.
+
+### Provider config (when Phase G ships)
+
+* Org-level settings (Admin): base URL, API key (secret store), model id, optional max tokens / temperature caps.  
+* Prefer OpenAI-compatible shape so Azure OpenAI and self-hosted gateways work.  
+* Disable forge when unset; hybrid MCP still works.  
+* Audit forge runs (template, model, token usage if available, record id) — never log full prompts with secrets.
 
 ## Package shape (how it looks in the product)
 
@@ -64,8 +105,8 @@ flowchart TB
 
 | Surface | Who | Purpose |
 | --- | --- | --- |
-| **Admin → Templates** (Doc Factory) | Org admin | Manage **style packs** (upload/activate/archive) and later **content templates**; preview export sample |
-| **Workspace → Document factory** | Members | Pick **content template** + **scope**, prepare AI brief, open/regenerate factory series |
+| **Admin → Templates** (Doc Factory) | Org admin | Manage **style packs** (upload/activate/archive) and later **content templates**; optional **LLM provider** settings for forge; preview export sample |
+| **Workspace → Document factory** | Members | Pick **content template** + **scope**, prepare AI brief **or** start hub forge; open/regenerate factory series |
 | **Record page → Export** | Members | Download PDF/DOCX; choose **style pack** or **Blank** |
 | **MCP / OpenAPI** | Agents | Discover content templates; `prepare_standard_document` brief; existing create/update drafts; no verify/mark-current |
 
@@ -75,9 +116,10 @@ flowchart TB
 | --- | --- |
 | Domain catalog (content template defs, record types) | `packages/domain` (extend existing record-type catalog) |
 | Export pipeline (Markdown → DOCX/PDF + style application) | New package e.g. `@project-knowledge-hub/doc-export` used by API/worker |
+| Hub LLM client (OpenAI-compatible) | Small shared client (reuse patterns from embeddings OpenAI-compatible provider) + forge job on worker |
 | Style pack storage | BlobStore purpose `doc-templates` (NF-006); DB metadata table for packs |
-| Admin APIs | `/api/v1/admin/doc-factory/...` |
-| Member APIs | `/api/v1/doc-factory/templates`, `/api/v1/knowledge-records/:id/export` |
+| Admin APIs | `/api/v1/admin/doc-factory/...` (packs, later content templates, LLM config) |
+| Member APIs | `/api/v1/doc-factory/templates`, `/api/v1/doc-factory/forge`, `/api/v1/knowledge-records/:id/export` |
 | Web | Admin Templates page; workspace Document factory page; record Export modal |
 
 Markdown stays canonical (ADR-008). Style packs never replace the record body.
@@ -156,7 +198,12 @@ Structured payload so the agent does not dump the entire workspace:
 
 ### Forged document (later phase)
 
-A **forge** job selects one or more hub records (and/or catalogue entities), maps them into a content template’s sections (rules + optional AI assist), writes/updates a factory draft, then the user exports with a style pack. Same lifecycle rules: draft until human approve.
+A **forge** run selects hub sources, maps them into a content template’s sections, and writes/updates a factory **Markdown draft**. Mapping may be:
+
+* Deterministic section assembly (quotes / links only), and/or  
+* **Hub LLM** (OpenAI-compatible) that synthesizes prose from retrieved excerpts.
+
+Same lifecycle: draft until human Approve. Optional auto-export applies the chosen **style pack** after the draft exists — it does not skip Markdown or Approve.
 
 ---
 
@@ -178,11 +225,13 @@ A **forge** job selects one or more hub records (and/or catalogue entities), map
 5. Human reviews, edits Markdown, **Approves** / mark-current.  
 6. Export with preferred or selected **style pack**.
 
-### C — Forged pack (later)
+### C — Forged pack (later; optional hub LLM)
 
-1. User (or agent) picks content template + sources + style pack.  
-2. Hub forges section Markdown into a draft record.  
-3. Human review → export.
+1. User picks content template + sources + style pack (+ “auto-export after draft” optional).  
+2. Hub forge job retrieves excerpts; if LLM configured, calls OpenAI-compatible API; else assembles a structured stub.  
+3. Markdown draft lands in the factory series (`ai_generated_draft`).  
+4. Human review → Approve.  
+5. Export (manual or queued auto-continue) with the selected style pack / Blank.
 
 ---
 
@@ -247,19 +296,22 @@ Org-admin only:
 * Upload logo + base DOCX (or configure token-based pack without upload)  
 * Built-in **Blank** (not deletable)  
 * Later: CRUD for org **content templates** (override domain defaults)  
+* Later: **LLM provider** (OpenAI-compatible base URL, secret API key, model id) for forge  
 * Sample export preview against a fixed fixture Markdown  
 
-Authorization: same Admin gate as Monitoring / Storage. Audit `doc_factory.style_pack.*` / `doc_factory.content_template.*` and every export download.
+Authorization: same Admin gate as Monitoring / Storage. Audit `doc_factory.style_pack.*` / `doc_factory.content_template.*` / `doc_factory.forge.*` / `doc_factory.llm_config.*` and every export download.
 
 ---
 
 ## Audit and security
 
 * Factory create/update audits like any knowledge write.  
+* Forge runs audit model id, template, source count, record id (not raw secrets).  
 * Export downloads audited (format, stylePackId, record id, actor).  
 * Workspace membership for export; MCP writes still need `knowledge:write`, acting user, workspace allowlist.  
 * Untrusted Markdown rules (ADR-010) apply; export must not execute scripts.  
-* Uploaded style assets treated as trusted-admin content (virus scan / size limits later as needed).
+* Uploaded style assets treated as trusted-admin content (virus scan / size limits later as needed).  
+* LLM API keys stored as org secrets; never returned on GET.
 
 ---
 
@@ -270,10 +322,12 @@ Authorization: same Admin gate as Monitoring / Storage. Audit `doc_factory.style
 | Large workspaces blow agent context | Brief lists top-N records; agent fetches selectively |
 | Stale sources | Prefer `current` / `verified` in ranking; surface freshness |
 | Duplicate factory records | Series identity + regenerate guidance; mark-current cleanup |
-| Over-trusting AI | Draft-only MCP; Approve wording; no auto-verify |
+| Over-trusting AI | Draft-only writes; Approve required; hub LLM never auto-verifies |
 | Export ≠ Markdown fidelity | Best-effort presentation; Markdown remains source |
 | Style packs become a mini CMS | Keep packs presentation-only; content stays in records |
 | Perfect Word clone expectations | Ship Blank + token packs first; advanced `.dotx` later |
+| Hub LLM cost / data leakage | Org opt-in provider; redact secrets; audit usage; prefer excerpts over full workspace dump |
+| Prompt injection via knowledge text | Treat retrieved Markdown as untrusted data in the prompt; hard system instructions |
 
 ---
 
