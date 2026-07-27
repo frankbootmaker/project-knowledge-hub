@@ -23,6 +23,11 @@ import {
 } from './markdown-blocks.js';
 import { renderStructuredPdf } from './pdf-document.js';
 import {
+  exportChromeCopy,
+  labelLifecycleStatus,
+  labelRecordType,
+} from './export-labels.js';
+import {
   BLANK_STYLE_PACK_ID,
   buildStyleTemplateVars,
   interpolateStyleTemplate,
@@ -40,6 +45,8 @@ export type KnowledgeExportInput = {
   lifecycleStatus: string;
   contentMarkdown: string;
   exportedAt?: Date;
+  /** UI locale (en|de|hu) for cover labels and {type}/{status} tokens. */
+  locale?: string | null;
   /** Absolute origin for resolving /api/v1/media/... links (e.g. WEB_URL). */
   webUrl?: string;
   /** Session cookie header so Puppeteer can load private media in PDF. */
@@ -52,6 +59,31 @@ function isCustomStylePack(
   pack: StylePackExportChrome | null | undefined,
 ): pack is StylePackExportChrome {
   return Boolean(pack && pack.id !== BLANK_STYLE_PACK_ID);
+}
+
+function exportDisplayLabels(input: KnowledgeExportInput) {
+  const locale = input.locale;
+  return {
+    recordType: labelRecordType(input.recordType, locale),
+    lifecycleStatus: labelLifecycleStatus(input.lifecycleStatus, locale),
+    exported: exportChromeCopy(locale).exported,
+  };
+}
+
+function exportMetaLine(input: KnowledgeExportInput): string {
+  const labels = exportDisplayLabels(input);
+  return `${labels.recordType} · ${labels.lifecycleStatus} · ${input.slug}`;
+}
+
+function exportStyleVars(input: KnowledgeExportInput, exportedAt: Date) {
+  const labels = exportDisplayLabels(input);
+  return buildStyleTemplateVars({
+    title: input.title,
+    exportedAt,
+    slug: input.slug,
+    recordType: labels.recordType,
+    lifecycleStatus: labels.lifecycleStatus,
+  });
 }
 
 function mmToTwip(mm: number): number {
@@ -262,13 +294,8 @@ export async function buildExportHtmlDocument(
   }
 
   const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
-  const styleVars = buildStyleTemplateVars({
-    title: input.title,
-    exportedAt,
-    slug: input.slug,
-    recordType: input.recordType,
-    lifecycleStatus: input.lifecycleStatus,
-  });
+  const labels = exportDisplayLabels(input);
+  const styleVars = exportStyleVars(input, exportedAt);
   const summary = input.summary?.trim()
     ? `<p class="doc-summary">${escapeHtml(input.summary.trim())}</p>`
     : '';
@@ -314,7 +341,7 @@ export async function buildExportHtmlDocument(
     ? `<h1 style="margin:0 0 0.35em;font-size:1.7rem;letter-spacing:-0.015em;">${escapeHtml(input.title)}</h1>`
     : '';
   const detailsHtml = showDetails
-    ? `<p class="doc-meta">${escapeHtml(input.recordType)} · ${escapeHtml(input.lifecycleStatus)} · ${escapeHtml(input.slug)}</p>${summary}<p class="doc-meta">Exported ${escapeHtml(exportedAt.toISOString())}</p>`
+    ? `<p class="doc-meta">${escapeHtml(labels.recordType)} · ${escapeHtml(labels.lifecycleStatus)} · ${escapeHtml(input.slug)}</p>${summary}<p class="doc-meta">${escapeHtml(labels.exported)} ${escapeHtml(exportedAt.toISOString())}</p>`
     : '';
   const disclaimerRaw = pack?.chrome.disclaimer?.trim()
     ? interpolateStyleTemplate(pack.chrome.disclaimer.trim(), styleVars)
@@ -479,13 +506,7 @@ async function buildKnowledgeRecordPdfWithPuppeteer(
     const marginLeft = pack ? `${pack.chrome.marginLeftMm}mm` : '12mm';
     const marginRight = pack ? `${pack.chrome.marginRightMm}mm` : '12mm';
     const footerColor = pack?.typography.mutedColor ?? '#666';
-    const styleVars = buildStyleTemplateVars({
-      title: input.title,
-      exportedAt,
-      slug: input.slug,
-      recordType: input.recordType,
-      lifecycleStatus: input.lifecycleStatus,
-    });
+    const styleVars = exportStyleVars(input, exportedAt);
     const footerText = pack
       ? escapeHtml(
           interpolateStyleTemplate(pack.chrome.footerText || '{title}', styleVars),
@@ -556,18 +577,13 @@ export function buildKnowledgeRecordPdfWithPdfkit(
 ): Promise<Buffer> {
   const exportedAt = input.exportedAt ?? new Date();
   const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
-  const styleVars = buildStyleTemplateVars({
-    title: input.title,
-    exportedAt,
-    slug: input.slug,
-    recordType: input.recordType,
-    lifecycleStatus: input.lifecycleStatus,
-  });
+  const labels = exportDisplayLabels(input);
+  const styleVars = exportStyleVars(input, exportedAt);
   return renderStructuredPdf({
     title: input.title,
-    metaLine: `${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`,
+    metaLine: exportMetaLine(input),
     summary: input.summary,
-    footerNote: `Exported ${exportedAt.toISOString()}`,
+    footerNote: `${labels.exported} ${exportedAt.toISOString()}`,
     blocks: parseMarkdownBlocks(input.contentMarkdown),
     stylePack: pack
       ? {
@@ -694,13 +710,7 @@ export async function buildKnowledgeRecordDocx(
   const landscape = widestTableColumnCount(input.contentMarkdown) > 8;
   const contentWidthPx = landscape ? 900 : 620;
   const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
-  const styleVars = buildStyleTemplateVars({
-    title: input.title,
-    exportedAt,
-    slug: input.slug,
-    recordType: input.recordType,
-    lifecycleStatus: input.lifecycleStatus,
-  });
+  const styleVars = exportStyleVars(input, exportedAt);
 
   let bodyHtml = rendered.html;
   if (input.webUrl) {
@@ -711,9 +721,9 @@ export async function buildKnowledgeRecordDocx(
 
   const html = buildDocxDocumentHtml({
     title: input.title,
-    metaLine: `${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`,
+    metaLine: exportMetaLine(input),
     summary: input.summary,
-    exportedNote: `Exported ${exportedAt.toISOString()}`,
+    exportedNote: `${exportDisplayLabels(input).exported} ${exportedAt.toISOString()}`,
     bodyHtml,
     style: pack
       ? {
@@ -980,17 +990,21 @@ function writeDocumentSheet(
   addSpanningRow(sheet, input.title, { bold: true, size: 18 });
   addSpanningRow(
     sheet,
-    `${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`,
+    exportMetaLine(input),
     { size: 9.5, color: 'FF666666', wrap: false },
   );
   if (input.summary?.trim()) {
     addSpanningRow(sheet, input.summary.trim(), { italic: true, color: 'FF444444' });
   }
-  addSpanningRow(sheet, `Exported ${exportedAt.toISOString()}`, {
-    size: 9.5,
-    color: 'FF666666',
-    wrap: false,
-  });
+  addSpanningRow(
+    sheet,
+    `${exportDisplayLabels(input).exported} ${exportedAt.toISOString()}`,
+    {
+      size: 9.5,
+      color: 'FF666666',
+      wrap: false,
+    },
+  );
   addBlankRow(sheet);
 
   for (const block of blocks) {
@@ -1103,8 +1117,8 @@ export async function buildKnowledgeRecordXlsx(
   meta.addRows([
     { field: 'Title', value: input.title },
     { field: 'Slug', value: input.slug },
-    { field: 'Record type', value: input.recordType },
-    { field: 'Lifecycle', value: input.lifecycleStatus },
+    { field: 'Record type', value: exportDisplayLabels(input).recordType },
+    { field: 'Lifecycle', value: exportDisplayLabels(input).lifecycleStatus },
     { field: 'Summary', value: input.summary?.trim() || '' },
     { field: 'Exported at', value: exportedAt.toISOString() },
     { field: 'Tables', value: tables.length },

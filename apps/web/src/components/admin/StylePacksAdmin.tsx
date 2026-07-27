@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   Badge,
   Button,
@@ -167,6 +167,7 @@ const CREATE_ID = '__new__';
 export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
   const t = useTranslations('admin');
   const tCommon = useTranslations('common');
+  const locale = useLocale();
   const router = useRouter();
   const { pushToast } = useToast();
 
@@ -560,7 +561,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format }),
+          body: JSON.stringify({ format, locale }),
         },
       );
       if (!response.ok) {

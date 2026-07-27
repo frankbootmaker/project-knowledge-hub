@@ -3,9 +3,10 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   knowledgeRecords,
+  users,
   workspaces,
 } from '@project-knowledge-hub/database';
-import { AppError } from '@project-knowledge-hub/domain';
+import { AppError, appLocaleSchema } from '@project-knowledge-hub/domain';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import {
   requireWorkspaceAdmin,
@@ -174,6 +175,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         stylePackId: z
           .union([z.literal('blank'), z.string().uuid()])
           .optional(),
+        locale: appLocaleSchema.optional(),
       })
       .parse(request.query);
     const format = query.format;
@@ -228,6 +230,15 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     }
 
     const exportedAt = new Date();
+    let locale = query.locale;
+    if (!locale) {
+      const [user] = await app.database.db
+        .select({ preferredLocale: users.preferredLocale })
+        .from(users)
+        .where(eq(users.id, principal.userId))
+        .limit(1);
+      locale = appLocaleSchema.catch('en').parse(user?.preferredLocale);
+    }
     const exportInput = {
       title: record.title,
       slug: record.slug,
@@ -236,6 +247,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       lifecycleStatus: record.lifecycleStatus,
       contentMarkdown: record.contentMarkdown,
       exportedAt,
+      locale,
       webUrl: app.env.WEB_URL,
       cookieHeader:
         typeof request.headers.cookie === 'string' ? request.headers.cookie : null,

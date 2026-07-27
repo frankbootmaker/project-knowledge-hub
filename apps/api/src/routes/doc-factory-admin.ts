@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { organizations, stylePacks } from '@project-knowledge-hub/database';
-import { AppError } from '@project-knowledge-hub/domain';
+import { organizations, stylePacks, users } from '@project-knowledge-hub/database';
+import { AppError, appLocaleSchema } from '@project-knowledge-hub/domain';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import {
   assertMutatingOrigin,
@@ -52,6 +52,7 @@ const updateSchema = z.object({
 
 const previewSchema = z.object({
   format: z.enum(['pdf', 'docx']).default('docx'),
+  locale: appLocaleSchema.optional(),
 });
 
 async function resolveOrganizationId(
@@ -517,6 +518,16 @@ export async function registerDocFactoryAdminRoutes(
           '```',
         ].join('\n'),
         exportedAt: new Date(),
+        locale:
+          body.locale ??
+          (
+            await app.database.db
+              .select({ preferredLocale: users.preferredLocale })
+              .from(users)
+              .where(eq(users.id, principal.userId))
+              .limit(1)
+          )[0]?.preferredLocale ??
+          'en',
         webUrl: app.env.WEB_URL,
         stylePack,
       };

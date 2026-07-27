@@ -200,6 +200,50 @@ describe('knowledge-export', () => {
     expect(grid?.getCell('B1').numFmt).toBe('#,##0 "Ft"');
   });
 
+  it('localizes cover meta and tokens for the UI locale', async () => {
+    const html = await buildExportHtmlDocument({
+      ...sample,
+      recordType: 'inventory',
+      lifecycleStatus: 'current',
+      locale: 'hu',
+      stylePack: {
+        id: '00000000-0000-4000-8000-000000000099',
+        label: 'Preview',
+        typography: {
+          bodyFont: 'Calibri',
+          headingFont: 'Calibri',
+          monoFont: 'Consolas',
+          bodyColor: '#1A1A1A',
+          headingColor: '#111111',
+          mutedColor: '#5A6270',
+        },
+        chrome: {
+          headerText: '',
+          footerText: '{title}',
+          disclaimer: 'Állapot: {status} · Típus: {type}',
+          showLogo: false,
+          showCoverBrand: false,
+          showCoverTitle: true,
+          showCoverDetails: true,
+          marginTopMm: 14,
+          marginBottomMm: 14,
+          marginLeftMm: 12,
+          marginRightMm: 12,
+        },
+        logoDataUri: null,
+        logoWidthPx: null,
+        logoHeightPx: null,
+      },
+    });
+
+    expect(html).toContain('Leltár');
+    expect(html).toContain('Aktuális');
+    expect(html).toContain('Exportálva');
+    expect(html).toContain('Állapot: Aktuális · Típus: Leltár');
+    expect(html).not.toContain('>current<');
+    expect(html).not.toContain('inventory · current');
+  });
+
   it('builds a laid-out PDF without Chromium', async () => {
     const pdf = await buildKnowledgeRecordPdfWithPdfkit(sample);
     expect(pdf.byteLength).toBeGreaterThan(500);

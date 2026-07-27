@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
@@ -66,6 +66,7 @@ export function KnowledgeRecordManageMenu(props: {
   const t = useTranslations('records');
   const tCommon = useTranslations('common');
   const tArchive = useTranslations('archive');
+  const locale = useLocale();
   const { pushToast } = useToast();
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<Section>('menu');
@@ -131,7 +132,7 @@ export function KnowledgeRecordManageMenu(props: {
           ? `&stylePackId=${encodeURIComponent(stylePackId)}`
           : '';
       await downloadAuthenticatedExport(
-        `/api/v1/knowledge-records/${props.record.id}/export?format=${format}${styleQuery}`,
+        `/api/v1/knowledge-records/${props.record.id}/export?format=${format}&locale=${encodeURIComponent(locale)}${styleQuery}`,
         `${props.record.slug}.${format}`,
       );
       pushToast(t('exportOk', { format: format.toUpperCase() }));
