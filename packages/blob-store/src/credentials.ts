@@ -5,6 +5,8 @@
  */
 export function sanitizeS3Credential(value: string): string {
   let next = value
+    // Intentionally strip C0 controls / BOM / ZW* from pasted secrets.
+    // eslint-disable-next-line no-control-regex -- credential sanitization
     .replace(/[\u0000-\u001F\u007F\u00A0\u200B-\u200D\uFEFF]/g, '')
     .trim();
   if (

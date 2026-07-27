@@ -9,6 +9,7 @@ export type AttachmentImage = {
  */
 /** Postgres text rejects U+0000; PDF extractors often emit it for soft hyphens. */
 export function sanitizePgText(value: string): string {
+  // eslint-disable-next-line no-control-regex -- strip NUL for Postgres
   return value.replace(/\u0000/g, '');
 }
 

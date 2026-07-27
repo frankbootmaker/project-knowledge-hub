@@ -134,7 +134,6 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
 
   useEffect(() => {
     void refreshMedia();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load on workspace change
   }, [props.workspaceId]);
 
   function insertMarkdownSnippet(snippet: string) {
