@@ -44,11 +44,12 @@ x-app-env: &app-env
   BLOB_KEY_PREFIX: ${BLOB_KEY_PREFIX:-}
   # Local filesystem fallbacks when BLOB_PROVIDER=disabled. Absolute paths on the
   # shared knowledge_hub_data volume so api + worker see the same bytes (imports,
-  # media, avatars). Relative ./data/* under /app is not writable as uid 1001.
+  # media, avatars, style-pack logos). Relative ./data/* under /app is not writable as uid 1001.
   DATA_DIR: ${DATA_DIR:-/data}
   AVATAR_UPLOAD_DIR: ${AVATAR_UPLOAD_DIR:-/data/avatars}
   MEDIA_UPLOAD_DIR: ${MEDIA_UPLOAD_DIR:-/data/media}
   DOCUMENT_IMPORT_DIR: ${DOCUMENT_IMPORT_DIR:-/data/imports}
+  STYLE_PACK_UPLOAD_DIR: ${STYLE_PACK_UPLOAD_DIR:-/data/style-packs}
   BACKUP_OFFSITE: ${BACKUP_OFFSITE:-true}
   BACKUP_OFFSITE_SYNC_INTERVAL_MS: ${BACKUP_OFFSITE_SYNC_INTERVAL_MS:-300000}
   MARKITDOWN_URL: ${MARKITDOWN_URL:-http://kh-markitdown:8080}

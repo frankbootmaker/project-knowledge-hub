@@ -693,7 +693,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-2 border-t border-line pt-4">
+        <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
           <Button
             type="button"
             variant="secondary"

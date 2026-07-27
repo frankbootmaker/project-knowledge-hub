@@ -250,12 +250,23 @@ export async function writeStylePackLogo(options: {
   blobStore?: BlobStore;
 }): Promise<void> {
   const { uploadDir, blobKey, buffer, contentType, blobStore } = options;
-  if (blobStore && blobStore.provider !== 'disabled') {
-    await blobStore.put({ key: blobKey, body: buffer, contentType });
-  }
+  // Local first so logos work when S3 is misconfigured (common Dokploy paste:
+  // region "auto" without endpoint → s3.auto.amazonaws.com ENOTFOUND).
   const localPath = localLogoPath(uploadDir, blobKey);
   await mkdir(path.dirname(localPath), { recursive: true });
   await writeFile(localPath, buffer);
+
+  if (blobStore && blobStore.provider !== 'disabled') {
+    try {
+      await blobStore.put({ key: blobKey, body: buffer, contentType });
+    } catch (error) {
+      const detail =
+        error instanceof Error ? error.message : 'unknown object-store error';
+      console.error(
+        `[style-packs] blob put failed for ${blobKey}; using local file: ${detail}`,
+      );
+    }
+  }
 }
 
 export async function readStylePackLogo(options: {
@@ -265,9 +276,13 @@ export async function readStylePackLogo(options: {
 }): Promise<Buffer | null> {
   const { uploadDir, blobKey, blobStore } = options;
   if (blobStore && blobStore.provider !== 'disabled') {
-    const fromBlob = await blobStore.get(blobKey);
-    if (fromBlob) {
-      return fromBlob;
+    try {
+      const fromBlob = await blobStore.get(blobKey);
+      if (fromBlob) {
+        return fromBlob;
+      }
+    } catch {
+      // Fall through to local (broken S3 credentials / DNS, etc.).
     }
   }
   try {
