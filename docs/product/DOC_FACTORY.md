@@ -1,6 +1,6 @@
 # Doc Factory
 
-**Status:** Parked — backlog item NF-001 in [`NEXT_FEATURES.md`](NEXT_FEATURES.md); module brief expanded 2026-07-27 (content templates + style packs + Admin template manager + optional hub LLM forge)  
+**Status:** Parked — backlog item NF-001 in [`NEXT_FEATURES.md`](NEXT_FEATURES.md); module brief expanded 2026-07-27 (content templates + style packs + Admin template manager + optional hub LLM forge). **Blank / viewer-faithful PDF·DOCX export is baseline (done)** — next build is style packs or content templates.  
 **Last updated:** 2026-07-27  
 **Related:** ADR-008 (Markdown canonical), ADR-013 (draft-only MCP writes), ADR-006 (verification lifecycle), ADR-007 (provenance), NF-006 BlobStore (store uploaded style assets)
 
@@ -14,7 +14,9 @@ The package has three layers:
 2. **Style packs** — Word-like presentation (fonts, headings, cover, header/footer, logo) applied at **export** time. Users pick a pack or **Blank**.
 3. **Forged documents (later)** — pull selected hub sources into a content template (rules and/or **hub-side LLM**), land a Markdown draft first, then optionally continue into the chosen **style pack** for PDF/DOCX.
 
-Early slices use a **hybrid** generation model: the hub owns templates, scoping, versioning, style packs, and export; a **connected AI** (Cursor / ChatGPT via MCP or Actions) fills Markdown drafts. **Hub-orchestrated LLM** (OpenAI-compatible API) is an optional later mode for forge automation — not required for Phases A–E.
+Early slices use a **hybrid** generation model: the hub owns templates, scoping, versioning, style packs, and export; a **connected AI** (Cursor / ChatGPT via MCP or Actions) fills Markdown drafts. **Hub-orchestrated LLM** (OpenAI-compatible API) is an optional later mode for forge automation — not required for style packs or content templates.
+
+**Baseline already in product:** knowledge records export to **PDF/DOCX** in a **Blank** style that matches how Markdown renders in the hub viewer. Doc Factory does **not** rebuild that path; it layers **style packs** and **content templates** on top.
 
 ```mermaid
 flowchart TB
@@ -53,9 +55,9 @@ flowchart TB
 
 ## Non-goals
 
-* Hub-side LLM keys / billing / forge jobs in **Phases A–E** (export + style packs ship without them).
+* Hub-side LLM keys / billing / forge jobs before style packs and content templates ship.
+* Rebuilding viewer-faithful Blank PDF/DOCX export (already shipped/tested as the default export).
 * Auto-promoting AI drafts to `verified` / `current` (even when hub LLM is enabled).
-* Skipping the Markdown draft and writing straight into a binary DOCX as the system of record.
 * Turning the hub into a WYSIWYG Word processor.
 * Perfect round-trip fidelity (export is best-effort presentation; Markdown remains editable source).
 * Importing PDF/DOCX/PPTX as editable Word clones (inbound ingest is NF-015 MarkItDown → Markdown drafts).
@@ -274,17 +276,25 @@ Factory documents remain **editable** in the hub after AI write. Subsequent huma
 
 ## Export
 
-Canonical format stays Markdown. Export is a **derived** artifact:
+Canonical format stays Markdown. Export is a **derived** artifact.
+
+### Baseline (done) — Blank / viewer-faithful
+
+Existing record export produces **PDF** and **DOCX** that follow the same presentation as the Markdown viewer (headings, lists, tables, images/embeds as supported today). That path is the built-in **Blank** style pack: no corporate letterhead, no custom fonts beyond viewer-equivalent defaults.
+
+Do not re-implement Blank as part of Doc Factory; treat it as the default when no style pack is selected.
+
+### Next — style packs on top of Blank
 
 | Format | Approach |
 | --- | --- |
-| DOCX | Markdown → DOCX via maintained library (e.g. `docx`) or worker conversion; map headings/lists/tables/images into the **style pack** skeleton |
-| PDF | Markdown → HTML/CSS intermediate (pack tokens) → PDF; or DOCX→PDF via LibreOffice in worker if fidelity needs match |
+| DOCX | Reuse Blank export pipeline; when `stylePackId` is set, map content into the pack skeleton (cover, header/footer, logo, typography) |
+| PDF | Same: Blank path today; pack tokens / letterhead when a style pack is selected |
 
-API shape: `GET /api/v1/knowledge-records/:id/export?format=pdf|docx&stylePackId=<id|blank>` with workspace authz.  
-UI: Export modal on the record page (format + style pack picker).
+API shape (extend existing export): `…/export?format=pdf|docx&stylePackId=<id|blank>` (omit or `blank` = current viewer-faithful behavior).  
+UI: keep current Export; add an optional **style pack** picker once packs exist.
 
-**Fidelity rule:** export is presentation; if Word users need perfect `.dotx` clones, treat that as an advanced style-pack capability, not a blocker for Blank + light corporate packs.
+**Fidelity rule:** Blank ≈ viewer. Style packs are best-effort branding on that foundation; perfect `.dotx` clones are an advanced pack capability, not a blocker.
 
 ---
 
@@ -325,7 +335,7 @@ Authorization: same Admin gate as Monitoring / Storage. Audit `doc_factory.style
 | Over-trusting AI | Draft-only writes; Approve required; hub LLM never auto-verifies |
 | Export ≠ Markdown fidelity | Best-effort presentation; Markdown remains source |
 | Style packs become a mini CMS | Keep packs presentation-only; content stays in records |
-| Perfect Word clone expectations | Ship Blank + token packs first; advanced `.dotx` later |
+| Perfect Word clone expectations | Blank ≈ viewer already; ship light corporate packs next; advanced `.dotx` later |
 | Hub LLM cost / data leakage | Org opt-in provider; redact secrets; audit usage; prefer excerpts over full workspace dump |
 | Prompt injection via knowledge text | Treat retrieved Markdown as untrusted data in the prompt; hard system instructions |
 
@@ -333,17 +343,19 @@ Authorization: same Admin gate as Monitoring / Storage. Audit `doc_factory.style
 
 ## Implementation phases
 
-| Phase | Work |
-| --- | --- |
-| **A – Content templates** | Domain defs; `GET /api/v1/doc-factory/templates` |
-| **B – Factory UX** | Workspace Document factory: content template + scope, series, prepare-for-AI |
-| **C – MCP** | Template discovery in metadata; optional `prepare_standard_document` |
-| **D – Export + Blank** | PDF/DOCX export endpoint; Blank style; record Export UI |
-| **E – Style packs + Admin manager** | BlobStore assets; Admin → Templates; style picker on export |
-| **F – Polish** | Locale-aware templates, audit events, i18n, pack versioning |
-| **G – Forge + optional hub LLM** | Multi-source forge → Markdown draft; org OpenAI-compatible provider; optional auto-export with style pack (no auto-Approve) |
+| Phase | Work | Status |
+| --- | --- | --- |
+| **D – Export + Blank** | Viewer-faithful PDF/DOCX export on knowledge records | **Done (baseline)** |
+| **E – Style packs + Admin manager** | BlobStore assets; Admin → Templates; style picker on existing Export | **Next implementation target** |
+| **A – Content templates** | Domain defs; `GET /api/v1/doc-factory/templates` | Ready to start (can parallelize after E starts) |
+| **B – Factory UX** | Workspace Document factory: content template + scope, series, prepare-for-AI | After A |
+| **C – MCP** | Template discovery in metadata; optional `prepare_standard_document` | With A/B |
+| **F – Polish** | Locale-aware templates, audit events, i18n, pack versioning | After E + A |
+| **G – Forge + optional hub LLM** | Multi-source forge → Markdown draft; org OpenAI-compatible provider; optional auto-export with style pack (no auto-Approve) | After A–C and secrets/config |
 
-Suggested first implementation slice after design approval: **A + B** or **A + C**, then **D** (Blank export) before rich style packs (**E**). Hub LLM forge (**G**) only after export works and org secrets/config patterns exist.
+**Suggested first implementation PR:** **Phase E** — Admin style packs + optional `stylePackId` on the existing Blank export (default remains viewer-faithful).  
+**Second product slice:** **A + B/C** — content templates and Document factory / MCP brief.  
+**Later:** hub LLM forge (**G**).
 
 ---
 
@@ -351,11 +363,12 @@ Suggested first implementation slice after design approval: **A + B** or **A + C
 
 * This design document (expanded)  
 * Domain record types: `management-summary`, `progress-summary`  
-* Backlog row NF-001 in [`NEXT_FEATURES.md`](NEXT_FEATURES.md)
+* Backlog row NF-001 in [`NEXT_FEATURES.md`](NEXT_FEATURES.md)  
+* Baseline Blank PDF/DOCX export (viewer-faithful)
 
 ## Success criteria
 
-* Package boundaries are clear: content templates vs style packs vs forge vs generation modes.  
-* Admin Templates + user Export + Document factory surfaces are defined.  
-* Markdown remains SoT; export/styles are derived; hub LLM (if enabled) never skips the draft.  
-* Next implementation PR can start at Phase A without reopening architecture forks.
+* Package boundaries are clear: Blank export (done) vs style packs vs content templates vs forge.  
+* Admin Templates + Document factory surfaces are defined; Export extends rather than replaces Blank.  
+* Markdown remains SoT; styles are derived; hub LLM (if enabled) never skips the draft.  
+* Next implementation PR can start at **Phase E** without reopening architecture forks.

@@ -38,7 +38,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 
 | ID | Feature | Status | Needs before build | Notes |
 | --- | --- | --- | --- | --- |
-| NF-001 | **Doc Factory** — content templates + style packs + Admin template manager; AI/MCP or later hub OpenAI-compatible forge → Markdown draft; export PDF/DOCX (Blank or style); optional auto-export after forge | `parked` — module brief expanded | Start A–D (templates + Blank export); hub LLM forge is Phase G | Brief: [`DOC_FACTORY.md`](DOC_FACTORY.md). Wave **F**. |
+| NF-001 | **Doc Factory** — style packs + Admin template manager on existing Blank PDF/DOCX export; content templates + AI/MCP fill; later hub OpenAI-compatible forge | `parked` — module brief expanded; **Blank export = baseline done** | First build: **Phase E** (style packs); then A–C content templates; forge = Phase G | Brief: [`DOC_FACTORY.md`](DOC_FACTORY.md). Wave **F**. |
 | NF-002 | **Dokploy bootstrap admin seed** — Compose one-shot `seed` service (after `migrate`) that creates the default org + admin when `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` are set; no-op if admin already exists | `done` | — | Wave **A**. [`DOKPLOY.md`](../deployment/DOKPLOY.md). |
 | NF-003 | **User MCP setup wizard** — Account → AI connections guided create → test → schema copy for member workspaces | `done` | — | Shipped. Historical row. |
 | NF-004 | **ChatGPT MCP App** — register KnowHub as a Developer Mode / Workspace MCP app so tools work in normal chats (tools menu / `@`), separate from Custom GPT Actions | `parked` — awaiting module brief | ChatGPT-compatible MCP auth (prefer OAuth/OIDC + refresh tokens; Bearer may suffice for personal Dev Mode only); map ChatGPT identity → KnowHub user/scopes; tool safety (read vs write); workspace publish runbook | Wave **F**. FAQ: [`CHATGPT_CUSTOM_GPT_FAQ.md`](CHATGPT_CUSTOM_GPT_FAQ.md). |
@@ -60,10 +60,10 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 
 When ready to implement, follow [`DOC_FACTORY.md`](DOC_FACTORY.md). At minimum confirm:
 
-* **Surfaces** — Admin → Templates (style packs; later content templates); Workspace → Document factory; Record → Export (style or Blank)
-* **Boundaries** — Markdown SoT; style packs presentation-only; hybrid MCP first; optional hub OpenAI-compatible forge later; never auto-Approve
-* **v1 slice** — Phase A–D (content templates + Blank export) before rich style packs / forge / hub LLM
-* **Out of scope** — Word WYSIWYG editor; PPTX; writing binary DOCX as system of record; auto-approve AI drafts
+* **Surfaces** — Admin → Templates (style packs; later content templates); Workspace → Document factory; Record → Export (existing Blank + optional style pack)
+* **Boundaries** — Markdown SoT; Blank export already viewer-faithful; style packs presentation-only; hybrid MCP first; optional hub OpenAI-compatible forge later; never auto-Approve
+* **v1 slice** — **Phase E** (style packs on existing export), then A–C (content templates); forge / hub LLM later
+* **Out of scope** — Rebuilding Blank export; Word WYSIWYG editor; PPTX; writing binary DOCX as system of record; auto-approve AI drafts
 
 Until implementation starts, treat Doc Factory as backlog only — no UI, export pipeline, or new MCP tools beyond what the spike already documented.
 
