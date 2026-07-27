@@ -6,6 +6,7 @@
  * per-element declarations.
  */
 import JSZip from 'jszip';
+import { stylePackLogoImgHtml } from './style-pack-logo.js';
 
 const VIEWER = {
   heading: '#111111',
@@ -265,12 +266,58 @@ export type DocxDocumentInput = {
   exportedNote: string;
   /** Rendered markdown HTML; styled for Word by this function. */
   bodyHtml: string;
+  /** Optional Doc Factory style tokens (Blank = omit). */
+  style?: {
+    bodyFont?: string;
+    headingFont?: string;
+    headingColor?: string;
+    mutedColor?: string;
+    bodyColor?: string;
+    logoDataUri?: string | null;
+    logoWidthPx?: number | null;
+    logoHeightPx?: number | null;
+    showCoverBrand?: boolean;
+    headerText?: string;
+    disclaimer?: string;
+  };
 };
 
 export function buildDocxDocumentHtml(input: DocxDocumentInput): string {
+  const headingColor = input.style?.headingColor ?? VIEWER.heading;
+  const mutedColor = input.style?.mutedColor ?? VIEWER.muted;
+  const quoteColor = input.style?.bodyColor ?? VIEWER.quoteText;
   const summary = input.summary?.trim()
-    ? `<p style="font-size:10.5pt;color:${VIEWER.quoteText}"><em>${escapeHtml(
+    ? `<p style="font-size:10.5pt;color:${quoteColor}"><em>${escapeHtml(
         input.summary.trim(),
+      )}</em></p>`
+    : '';
+
+  const brandHeader = input.style?.headerText?.trim() ?? '';
+  const brandLogo =
+    input.style?.showCoverBrand && input.style.logoDataUri
+      ? stylePackLogoImgHtml({
+          dataUri: input.style.logoDataUri,
+          widthPx: input.style.logoWidthPx,
+          heightPx: input.style.logoHeightPx,
+          maxWidth: 180,
+          maxHeight: 48,
+        })
+      : '';
+  const brand =
+    input.style?.showCoverBrand && (brandLogo || brandHeader)
+      ? `<p style="margin:0 0 12pt">
+          ${brandLogo}
+          ${
+            brandHeader
+              ? `<span style="font-size:11pt;font-weight:bold;color:${mutedColor};vertical-align:middle;margin-left:8px">${escapeHtml(brandHeader)}</span>`
+              : ''
+          }
+        </p>`
+      : '';
+
+  const disclaimer = input.style?.disclaimer?.trim()
+    ? `<p style="font-size:8.5pt;color:${mutedColor}"><em>${escapeHtml(
+        input.style.disclaimer.trim(),
       )}</em></p>`
     : '';
 
@@ -278,33 +325,96 @@ export function buildDocxDocumentHtml(input: DocxDocumentInput): string {
 <html>
 <head><meta charset="utf-8" /></head>
 <body>
-  <h1 style="font-size:20pt;color:${VIEWER.heading};font-weight:bold">${escapeHtml(input.title)}</h1>
-  <p style="font-size:9.5pt;color:${VIEWER.muted}">${escapeHtml(input.metaLine)}</p>
+  ${brand}
+  <h1 style="font-size:20pt;color:${headingColor};font-weight:bold">${escapeHtml(input.title)}</h1>
+  <p style="font-size:9.5pt;color:${mutedColor}">${escapeHtml(input.metaLine)}</p>
   ${summary}
-  <p style="font-size:9pt;color:${VIEWER.muted}">${escapeHtml(input.exportedNote)}</p>
+  <p style="font-size:9pt;color:${mutedColor}">${escapeHtml(input.exportedNote)}</p>
+  ${disclaimer}
   <hr />
   ${styleMarkdownHtmlForDocx(input.bodyHtml)}
 </body>
 </html>`;
 }
 
-export function buildDocxFooterHtml(title: string): string {
-  return `<p style="font-size:8pt;color:${VIEWER.muted}">${escapeHtml(title)}</p>`;
+export function buildDocxHeaderHtml(input: {
+  text: string;
+  logoDataUri?: string | null;
+  logoWidthPx?: number | null;
+  logoHeightPx?: number | null;
+  mutedColor?: string;
+}): string | null {
+  const text = input.text.trim();
+  const logo = input.logoDataUri;
+  if (!text && !logo) {
+    return null;
+  }
+  const muted = input.mutedColor ?? VIEWER.muted;
+  return `<p style="font-size:8pt;color:${muted}">
+    ${
+      logo
+        ? stylePackLogoImgHtml({
+            dataUri: logo,
+            widthPx: input.logoWidthPx,
+            heightPx: input.logoHeightPx,
+            maxWidth: 120,
+            maxHeight: 28,
+            extraStyle: 'vertical-align:middle;margin-right:8px',
+          })
+        : ''
+    }
+    ${escapeHtml(text)}
+  </p>`;
+}
+
+export function buildDocxFooterHtml(
+  title: string,
+  options?: { mutedColor?: string },
+): string {
+  const muted = options?.mutedColor ?? VIEWER.muted;
+  return `<p style="font-size:8pt;color:${muted}">${escapeHtml(title)}</p>`;
 }
 
 /** Word page geometry mirroring the PDF export, in TWIP. */
 export function buildDocxDocumentOptions(input: {
   title: string;
   landscape: boolean;
+  bodyFont?: string;
+  includeHeader?: boolean;
+  /**
+   * Reserved for callers that need a title-page section; exporters currently
+   * keep header/footer on every page and omit the header logo when cover brand
+   * already shows it in the body.
+   */
+  skipFirstHeaderFooter?: boolean;
+  /** Margins in TWIP; defaults match Blank export. */
+  margins?: {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+    footer?: number;
+    header?: number;
+  };
 }): Record<string, unknown> {
   return {
     title: input.title,
     orientation: input.landscape ? 'landscape' : 'portrait',
     pageSize: { width: 11906, height: 16838 },
-    margins: { top: 1080, right: 1000, bottom: 1080, left: 1000, footer: 480 },
-    font: VIEWER.bodyFont,
+    margins: {
+      top: 1080,
+      right: 1000,
+      bottom: 1080,
+      left: 1000,
+      footer: 480,
+      ...(input.includeHeader ? { header: 480 } : {}),
+      ...input.margins,
+    },
+    font: input.bodyFont ?? VIEWER.bodyFont,
     fontSize: 22,
     footer: true,
+    header: Boolean(input.includeHeader),
+    skipFirstHeaderFooter: Boolean(input.skipFirstHeaderFooter),
     pageNumber: true,
     table: {
       row: { cantSplit: true },

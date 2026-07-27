@@ -16,6 +16,8 @@ import {
   type BlobStore,
 } from '@project-knowledge-hub/blob-store';
 import { registerBlobSettingsRoutes } from './routes/blob-settings.js';
+import { registerDocFactoryAdminRoutes } from './routes/doc-factory-admin.js';
+import { registerDocFactoryRoutes } from './routes/doc-factory.js';
 import { resolveBlobStore } from './lib/blob-settings.js';
 import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -179,6 +181,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
       fileSize: Math.max(
         deps.env.AVATAR_MAX_BYTES,
         deps.env.MEDIA_MAX_BYTES,
+        deps.env.STYLE_PACK_LOGO_MAX_BYTES,
         deps.env.DOCUMENT_IMPORT_MAX_BYTES,
         deps.env.BACKUP_MAX_UPLOAD_BYTES,
       ),
@@ -207,6 +210,8 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerUserRoutes(app);
   await registerMailSettingsRoutes(app);
   await registerBlobSettingsRoutes(app);
+  await registerDocFactoryAdminRoutes(app);
+  await registerDocFactoryRoutes(app);
   await registerMonitoringRoutes(app);
   await registerPlatformStatusRoutes(app);
   await registerMembershipRoutes(app);

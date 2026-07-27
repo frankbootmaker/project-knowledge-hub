@@ -1,6 +1,6 @@
 # Doc Factory
 
-**Status:** Parked — backlog item NF-001 in [`NEXT_FEATURES.md`](NEXT_FEATURES.md); module brief expanded 2026-07-27 (content templates + style packs + Admin template manager + optional hub LLM forge). **Blank / viewer-faithful PDF·DOCX export is baseline (done)** — next build is style packs or content templates.  
+**Status:** Phase E (style packs) implemented — backlog item NF-001 in [`NEXT_FEATURES.md`](NEXT_FEATURES.md). **Blank / viewer-faithful PDF·DOCX export is baseline (done)**. Style packs + Admin Templates + export picker shipped; content templates / forge still later.  
 **Last updated:** 2026-07-27  
 **Related:** ADR-008 (Markdown canonical), ADR-013 (draft-only MCP writes), ADR-006 (verification lifecycle), ADR-007 (provenance), NF-006 BlobStore (store uploaded style assets)
 
@@ -347,7 +347,7 @@ Authorization: same Admin gate as Monitoring / Storage. Audit `doc_factory.style
 | Phase | Work | Status |
 | --- | --- | --- |
 | **D – Export + Blank** | Viewer-faithful PDF/DOCX export on knowledge records | **Done (baseline)** |
-| **E – Style packs + Admin manager** | BlobStore assets; Admin → Templates; style picker on existing Export | **Next implementation target** |
+| **E – Style packs + Admin manager** | BlobStore assets; Admin → Templates; style picker on existing Export | **Done (first slice)** |
 | **A – Content templates** | Domain defs; `GET /api/v1/doc-factory/templates` | Ready to start (can parallelize after E starts) |
 | **B – Factory UX** | Workspace Document factory: content template + scope, series, prepare-for-AI | After A |
 | **C – MCP** | Template discovery in metadata; optional `prepare_standard_document` | With A/B |

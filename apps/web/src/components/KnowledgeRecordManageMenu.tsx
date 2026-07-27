@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
@@ -48,8 +48,15 @@ export type RecordManageDetails = {
 type Section = 'menu' | 'details' | 'export' | 'archive' | 'delete';
 type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'md';
 
+type StylePackOption = {
+  id: string;
+  label: string;
+  builtin: boolean;
+};
+
 export function KnowledgeRecordManageMenu(props: {
   workspaceSlug: string;
+  workspaceId: string;
   record: RecordManageDetails;
   canMutate: boolean;
   canPurge: boolean;
@@ -63,12 +70,45 @@ export function KnowledgeRecordManageMenu(props: {
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<Section>('menu');
   const [exportPending, setExportPending] = useState(false);
+  const [stylePacks, setStylePacks] = useState<StylePackOption[]>([
+    { id: 'blank', label: 'Blank', builtin: true },
+  ]);
+  const [stylePackId, setStylePackId] = useState('blank');
 
   const archived = Boolean(props.record.archivedAt);
   const gitManaged = props.record.sourceOfTruthMode === 'git_managed';
   const redirectParent = `/workspaces/${props.workspaceSlug}`;
   const editHref = `/workspaces/${props.workspaceSlug}/records/${props.record.slug}/edit`;
   const historyHref = `/workspaces/${props.workspaceSlug}/records/${props.record.slug}/history`;
+
+  useEffect(() => {
+    if (!open || section !== 'export') {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/v1/doc-factory/style-packs?workspaceId=${props.workspaceId}`,
+          { credentials: 'include' },
+        );
+        if (!response.ok || cancelled) {
+          return;
+        }
+        const body = (await response.json()) as {
+          stylePacks: StylePackOption[];
+        };
+        if (!cancelled && body.stylePacks.length > 0) {
+          setStylePacks(body.stylePacks);
+        }
+      } catch {
+        // Keep Blank default when the list cannot load.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, section, props.workspaceId]);
 
   function close() {
     setOpen(false);
@@ -86,8 +126,12 @@ export function KnowledgeRecordManageMenu(props: {
   async function exportRecord(format: ExportFormat) {
     setExportPending(true);
     try {
+      const styleQuery =
+        format === 'pdf' || format === 'docx'
+          ? `&stylePackId=${encodeURIComponent(stylePackId)}`
+          : '';
       await downloadAuthenticatedExport(
-        `/api/v1/knowledge-records/${props.record.id}/export?format=${format}`,
+        `/api/v1/knowledge-records/${props.record.id}/export?format=${format}${styleQuery}`,
         `${props.record.slug}.${format}`,
       );
       pushToast(t('exportOk', { format: format.toUpperCase() }));
@@ -172,6 +216,29 @@ export function KnowledgeRecordManageMenu(props: {
 
         {section === 'export' ? (
           <ul className="m-0 grid list-none gap-2 p-0">
+            <li className="grid gap-1 rounded-md border border-line bg-surface px-3 py-2">
+              <label
+                className="text-xs font-medium text-ink-muted"
+                htmlFor="export-style-pack"
+              >
+                {t('exportStylePack')}
+              </label>
+              <select
+                id="export-style-pack"
+                className="rounded border border-line bg-canvas px-2 py-1.5 text-sm text-ink"
+                value={stylePackId}
+                disabled={exportPending}
+                onChange={(event) => setStylePackId(event.target.value)}
+              >
+                {stylePacks.map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.label}
+                    {pack.builtin ? ` (${t('exportStylePackBlank')})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="m-0 text-xs text-ink-muted">{t('exportStylePackHint')}</p>
+            </li>
             <ManageMenuItem
               title={t('exportPdf')}
               hint={t('exportPdfHint')}

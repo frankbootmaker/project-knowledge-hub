@@ -21,7 +21,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 | **C — Admin ops UI** | **NF-011** Mon-0 + **Mon-1** done (client leaderboard + catalogue tops). Embedding reindex + archived counts on Monitoring | Fancy charts |
 | **D — Object storage** | **NF-006** BlobStore + **s3** + Admin → Storage + **Ops-2 avatars** done. **NF-013** knowledge media done. Imports/exports still later. **NF-007** Azure on same Storage page **with Entra IdP (NF-012)** | OneDrive/SharePoint |
 | **E — Ops polish** | **NF-009** support dump + ops log export + retention + richer alerts; **NF-014** external status REST/MCP (`monitoring:read`) | Log shipping to external aggregator |
-| **F — Product (parked)** | **NF-001** Doc Factory (content + style packs + export; see brief), **NF-004** ChatGPT MCP App, **NF-010** finer ACLs — only with real user jobs | Do not cut in front of A–C |
+| **F — Product** | **NF-001** Doc Factory Phase E (style packs) in progress; content templates / forge later. **NF-004** ChatGPT MCP App, **NF-010** finer ACLs — only with real user jobs | Do not cut in front of A–C for parked items |
 
 ### Merge / optimize notes
 
@@ -38,7 +38,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 
 | ID | Feature | Status | Needs before build | Notes |
 | --- | --- | --- | --- | --- |
-| NF-001 | **Doc Factory** — style packs + Admin template manager on existing Blank PDF/DOCX export; content templates + AI/MCP fill; later hub OpenAI-compatible forge | `parked` — module brief expanded; **Blank export = baseline done** | First build: **Phase E** (style packs); then A–C content templates; forge = Phase G | Brief: [`DOC_FACTORY.md`](DOC_FACTORY.md). Wave **F**. |
+| NF-001 | **Doc Factory** — style packs + Admin template manager on existing Blank PDF/DOCX export; content templates + AI/MCP fill; later hub OpenAI-compatible forge | `partial` — Phase E done; A–C/G later | Next: content templates (A–C); forge = Phase G | Brief: [`DOC_FACTORY.md`](DOC_FACTORY.md). Wave **F**. |
 | NF-002 | **Dokploy bootstrap admin seed** — Compose one-shot `seed` service (after `migrate`) that creates the default org + admin when `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` are set; no-op if admin already exists | `done` | — | Wave **A**. [`DOKPLOY.md`](../deployment/DOKPLOY.md). |
 | NF-003 | **User MCP setup wizard** — Account → AI connections guided create → test → schema copy for member workspaces | `done` | — | Shipped. Historical row. |
 | NF-004 | **ChatGPT MCP App** — register KnowHub as a Developer Mode / Workspace MCP app so tools work in normal chats (tools menu / `@`), separate from Custom GPT Actions | `parked` — awaiting module brief | ChatGPT-compatible MCP auth (prefer OAuth/OIDC + refresh tokens; Bearer may suffice for personal Dev Mode only); map ChatGPT identity → KnowHub user/scopes; tool safety (read vs write); workspace publish runbook | Wave **F**. FAQ: [`CHATGPT_CUSTOM_GPT_FAQ.md`](CHATGPT_CUSTOM_GPT_FAQ.md). |

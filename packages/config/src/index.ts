@@ -163,6 +163,14 @@ export const envSchema = z.object({
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
   /** Workspace knowledge media (JPEG/PNG/WebP) when BlobStore is disabled. */
   MEDIA_UPLOAD_DIR: z.string().min(1).default('./data/media'),
+  /** Doc Factory style-pack logos (local fallback when BlobStore is disabled). */
+  STYLE_PACK_UPLOAD_DIR: z.string().min(1).default('./data/style-packs'),
+  /** Logos from design tools are often multi‑MB PNGs; keep room under media cap. */
+  STYLE_PACK_LOGO_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5 * 1024 * 1024),
   /** Original files for document/image import (local fallback when BlobStore disabled). */
   DOCUMENT_IMPORT_DIR: z.string().min(1).default('./data/imports'),
   MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
@@ -407,6 +415,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     ...env,
     AVATAR_UPLOAD_DIR: resolveWorkspaceDataDir(env.AVATAR_UPLOAD_DIR, workspaceRoot),
     MEDIA_UPLOAD_DIR: resolveWorkspaceDataDir(env.MEDIA_UPLOAD_DIR, workspaceRoot),
+    STYLE_PACK_UPLOAD_DIR: resolveWorkspaceDataDir(
+      env.STYLE_PACK_UPLOAD_DIR,
+      workspaceRoot,
+    ),
     DOCUMENT_IMPORT_DIR: resolveWorkspaceDataDir(
       env.DOCUMENT_IMPORT_DIR,
       workspaceRoot,

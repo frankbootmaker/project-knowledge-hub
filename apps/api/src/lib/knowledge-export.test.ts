@@ -97,6 +97,43 @@ describe('knowledge-export', () => {
     expect(xml).not.toContain('| Year | Amount |');
   });
 
+  it('applies style-pack chrome markers to DOCX exports', async () => {
+    const docx = await buildKnowledgeRecordDocx({
+      ...sample,
+      stylePack: {
+        id: '00000000-0000-4000-8000-000000000099',
+        label: 'Corporate Letterhead',
+        typography: {
+          bodyFont: 'Georgia',
+          headingFont: 'Georgia',
+          monoFont: 'Consolas',
+          bodyColor: '#1A1A1A',
+          headingColor: '#003366',
+          mutedColor: '#5A6270',
+        },
+        chrome: {
+          headerText: 'Acme Corp',
+          footerText: '{title}',
+          disclaimer: 'Confidential preview',
+          showLogo: false,
+          showCoverBrand: true,
+          marginTopMm: 18,
+          marginBottomMm: 18,
+          marginLeftMm: 14,
+          marginRightMm: 14,
+        },
+        logoDataUri: null,
+        logoWidthPx: null,
+        logoHeightPx: null,
+      },
+    });
+
+    const xml = await readDocumentXml(docx);
+    expect(xml).not.toContain('Corporate Letterhead');
+    expect(xml).toContain('Confidential preview');
+    expect(xml).toContain('003366');
+  });
+
   it('turns the DOCX landscape for spreadsheet-wide tables', async () => {
     const headers = Array.from({ length: 14 }, (_, index) => `Metric ${index + 1}`);
     const docx = await buildKnowledgeRecordDocx({

@@ -45,6 +45,7 @@ export function KnowledgeRecordDetailActions({
     <>
       <KnowledgeRecordManageMenu
         workspaceSlug={workspaceSlug}
+        workspaceId={workspaceId}
         record={record}
         canMutate={canMutate}
         canPurge={canPurge}

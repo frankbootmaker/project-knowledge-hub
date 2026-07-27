@@ -6,6 +6,7 @@ import {
   buildDocxDocumentHtml,
   buildDocxDocumentOptions,
   buildDocxFooterHtml,
+  buildDocxHeaderHtml,
   decodeHtmlEntities,
   finalizeDocxPackage,
   inlineImageDataUris,
@@ -21,6 +22,12 @@ import {
   type MarkdownTable,
 } from './markdown-blocks.js';
 import { renderStructuredPdf } from './pdf-document.js';
+import {
+  BLANK_STYLE_PACK_ID,
+  interpolateStyleTemplate,
+  type StylePackExportChrome,
+} from './style-packs.js';
+import { stylePackLogoImgHtml } from './style-pack-logo.js';
 
 export type KnowledgeExportFormat = 'pdf' | 'docx' | 'md' | 'xlsx';
 
@@ -36,7 +43,19 @@ export type KnowledgeExportInput = {
   webUrl?: string;
   /** Session cookie header so Puppeteer can load private media in PDF. */
   cookieHeader?: string | null;
+  /** Resolved Doc Factory style pack; omit or Blank keeps viewer-faithful chrome. */
+  stylePack?: StylePackExportChrome | null;
 };
+
+function isCustomStylePack(
+  pack: StylePackExportChrome | null | undefined,
+): pack is StylePackExportChrome {
+  return Boolean(pack && pack.id !== BLANK_STYLE_PACK_ID);
+}
+
+function mmToTwip(mm: number): number {
+  return Math.round((mm / 25.4) * 1440);
+}
 
 type HtmlToDocxFn = (
   html: string,
@@ -241,11 +260,70 @@ export async function buildExportHtmlDocument(
     bodyHtml = absolutizeMediaUrls(bodyHtml, input.webUrl);
   }
 
+  const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
   const summary = input.summary?.trim()
     ? `<p class="doc-summary">${escapeHtml(input.summary.trim())}</p>`
     : '';
   const baseHref = input.webUrl
     ? `<base href="${escapeHtml(input.webUrl.replace(/\/$/, ''))}/" />`
+    : '';
+
+  const styleOverrides = pack
+    ? `
+  body { font-family: ${JSON.stringify(pack.typography.bodyFont)}, "Segoe UI", Helvetica, Arial, sans-serif; color: ${pack.typography.bodyColor}; }
+  .knowledge-markdown h1, .knowledge-markdown h2, .knowledge-markdown h3, .knowledge-markdown h4 {
+    font-family: ${JSON.stringify(pack.typography.headingFont)}, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: ${pack.typography.headingColor};
+  }
+  .doc-meta, .doc-summary { color: ${pack.typography.mutedColor}; }
+  .doc-brand { display:flex; align-items:center; gap:10px; margin:0 0 12px; }
+  .doc-brand img {
+    max-height:48px;
+    max-width:180px;
+    background: transparent;
+    border: 0;
+    display: block;
+  }
+  .doc-brand-text {
+    font-size: 11pt;
+    font-weight: 600;
+    color: ${pack.typography.mutedColor};
+    letter-spacing: 0.01em;
+  }
+  .doc-disclaimer { font-size:8.5pt; color: ${pack.typography.mutedColor}; font-style: italic; margin: 0 0 12px; }
+`
+    : '';
+
+  const brandHeaderText = pack
+    ? escapeHtml(
+        interpolateStyleTemplate(pack.chrome.headerText || '', {
+          title: input.title,
+        }).trim(),
+      )
+    : '';
+  const brandLogo =
+    pack && pack.chrome.showCoverBrand && pack.logoDataUri
+      ? stylePackLogoImgHtml({
+          dataUri: pack.logoDataUri,
+          widthPx: pack.logoWidthPx,
+          heightPx: pack.logoHeightPx,
+          maxWidth: 180,
+          maxHeight: 48,
+        })
+      : '';
+  const brand =
+    pack && pack.chrome.showCoverBrand && (brandLogo || brandHeaderText)
+      ? `<div class="doc-brand">
+          ${brandLogo}
+          ${
+            brandHeaderText
+              ? `<span class="doc-brand-text">${brandHeaderText}</span>`
+              : ''
+          }
+        </div>`
+      : '';
+  const disclaimer = pack?.chrome.disclaimer?.trim()
+    ? `<p class="doc-disclaimer">${escapeHtml(pack.chrome.disclaimer.trim())}</p>`
     : '';
 
   return `<!DOCTYPE html>
@@ -255,14 +333,16 @@ export async function buildExportHtmlDocument(
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   ${baseHref}
   <title>${escapeHtml(input.title)}</title>
-  <style>${EXPORT_CSS}</style>
+  <style>${EXPORT_CSS}${styleOverrides}</style>
 </head>
 <body>
   <div class="doc-shell">
+    ${brand}
     <h1 style="margin:0 0 0.35em;font-size:1.7rem;letter-spacing:-0.015em;">${escapeHtml(input.title)}</h1>
     <p class="doc-meta">${escapeHtml(input.recordType)} · ${escapeHtml(input.lifecycleStatus)} · ${escapeHtml(input.slug)}</p>
     ${summary}
     <p class="doc-meta">Exported ${escapeHtml(exportedAt.toISOString())}</p>
+    ${disclaimer}
     <hr class="doc-rule" />
     <article class="knowledge-markdown">
       ${bodyHtml}
@@ -364,6 +444,7 @@ async function buildKnowledgeRecordPdfWithPuppeteer(
 ): Promise<Buffer> {
   const html = await buildExportHtmlDocument(input);
   const landscape = widestTableColumnCount(input.contentMarkdown) > 8;
+  const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
@@ -384,17 +465,73 @@ async function buildKnowledgeRecordPdfWithPuppeteer(
     );
     await new Promise((resolve) => setTimeout(resolve, 250));
 
+    const hasRunningHeader = Boolean(
+      pack &&
+        (pack.chrome.headerText?.trim() ||
+          (pack.chrome.showLogo &&
+            pack.logoDataUri &&
+            !pack.chrome.showCoverBrand)),
+    );
+    const marginTop = pack
+      ? `${Math.max(pack.chrome.marginTopMm, hasRunningHeader ? 20 : 0)}mm`
+      : '14mm';
+    const marginBottom = pack ? `${pack.chrome.marginBottomMm}mm` : '14mm';
+    const marginLeft = pack ? `${pack.chrome.marginLeftMm}mm` : '12mm';
+    const marginRight = pack ? `${pack.chrome.marginRightMm}mm` : '12mm';
+    const footerColor = pack?.typography.mutedColor ?? '#666';
+    const footerText = pack
+      ? escapeHtml(
+          interpolateStyleTemplate(pack.chrome.footerText || '{title}', {
+            title: input.title,
+          }),
+        ).slice(0, 80)
+      : escapeHtml(input.title).slice(0, 80);
+
+    const headerText = pack
+      ? escapeHtml(
+          interpolateStyleTemplate(pack.chrome.headerText || '', {
+            title: input.title,
+          }),
+        )
+      : '';
+    const headerLogo =
+      pack?.chrome.showLogo &&
+      pack.logoDataUri &&
+      // Cover brand already paints the logo on page 1; Chromium cannot omit
+      // header chrome on the first page only, so keep text-only headers then.
+      !pack.chrome.showCoverBrand
+        ? stylePackLogoImgHtml({
+            dataUri: pack.logoDataUri,
+            widthPx: pack.logoWidthPx,
+            heightPx: pack.logoHeightPx,
+            maxWidth: 90,
+            maxHeight: 22,
+            extraStyle: 'margin-right:6px;vertical-align:middle',
+          })
+        : '';
+    const headerTemplate =
+      pack && (headerText || headerLogo)
+        ? `<div style="font-size:9px;width:100%;box-sizing:border-box;padding:0 ${marginLeft};color:${footerColor};">
+            ${headerLogo}<span>${headerText}</span>
+          </div>`
+        : '<div></div>';
+
     const pdfOptions: PDFOptions = {
       format: 'A4',
       landscape,
       printBackground: true,
-      margin: { top: '14mm', right: '12mm', bottom: '14mm', left: '12mm' },
+      margin: {
+        top: marginTop,
+        right: marginRight,
+        bottom: marginBottom,
+        left: marginLeft,
+      },
       displayHeaderFooter: true,
-      headerTemplate: '<div></div>',
+      headerTemplate,
       footerTemplate: `
-        <div style="font-size:8px;width:100%;padding:0 12mm;color:#666;display:flex;justify-content:space-between;">
-          <span>${escapeHtml(input.title).slice(0, 80)}</span>
-          <span class="pageNumber"></span>/<span class="totalPages"></span>
+        <div style="font-size:8px;width:100%;padding:0 ${marginLeft};color:${footerColor};display:flex;justify-content:space-between;">
+          <span>${footerText}</span>
+          <span><span class="pageNumber"></span>/<span class="totalPages"></span></span>
         </div>
       `,
     };
@@ -415,12 +552,30 @@ export function buildKnowledgeRecordPdfWithPdfkit(
   input: KnowledgeExportInput,
 ): Promise<Buffer> {
   const exportedAt = input.exportedAt ?? new Date();
+  const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
   return renderStructuredPdf({
     title: input.title,
     metaLine: `${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`,
     summary: input.summary,
     footerNote: `Exported ${exportedAt.toISOString()}`,
     blocks: parseMarkdownBlocks(input.contentMarkdown),
+    stylePack: pack
+      ? {
+          logoDataUri: pack.chrome.showLogo ? pack.logoDataUri : null,
+          coverLogoDataUri: pack.chrome.showCoverBrand ? pack.logoDataUri : null,
+          headerText: interpolateStyleTemplate(pack.chrome.headerText || '', {
+            title: input.title,
+          }),
+          footerText: interpolateStyleTemplate(
+            pack.chrome.footerText || '{title}',
+            { title: input.title },
+          ),
+          disclaimer: pack.chrome.disclaimer,
+          bodyColor: pack.typography.bodyColor,
+          mutedColor: pack.typography.mutedColor,
+          headingColor: pack.typography.headingColor,
+        }
+      : undefined,
   });
 }
 
@@ -523,6 +678,7 @@ export async function buildKnowledgeRecordDocx(
   const rendered = await renderMarkdown(input.contentMarkdown);
   const landscape = widestTableColumnCount(input.contentMarkdown) > 8;
   const contentWidthPx = landscape ? 900 : 620;
+  const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
 
   let bodyHtml = rendered.html;
   if (input.webUrl) {
@@ -537,13 +693,72 @@ export async function buildKnowledgeRecordDocx(
     summary: input.summary,
     exportedNote: `Exported ${exportedAt.toISOString()}`,
     bodyHtml,
+    style: pack
+      ? {
+          bodyFont: pack.typography.bodyFont,
+          headingFont: pack.typography.headingFont,
+          headingColor: pack.typography.headingColor,
+          mutedColor: pack.typography.mutedColor,
+          bodyColor: pack.typography.bodyColor,
+          logoDataUri: pack.logoDataUri,
+          showCoverBrand: pack.chrome.showCoverBrand,
+          headerText: interpolateStyleTemplate(pack.chrome.headerText || '', {
+            title: input.title,
+          }),
+          disclaimer: pack.chrome.disclaimer,
+          logoWidthPx: pack.logoWidthPx,
+          logoHeightPx: pack.logoHeightPx,
+        }
+      : undefined,
   });
+
+  const headerText = pack
+    ? interpolateStyleTemplate(pack.chrome.headerText || '', {
+        title: input.title,
+      })
+    : '';
+  // Cover brand already paints the logo in the body; keep the running header
+  // text-only in that case so page 1 is not blanked and the logo is not doubled.
+  const headerLogoUri =
+    pack?.chrome.showLogo && !pack.chrome.showCoverBrand
+      ? pack.logoDataUri
+      : null;
+  const headerHtml = pack
+    ? buildDocxHeaderHtml({
+        text: headerText,
+        logoDataUri: headerLogoUri,
+        mutedColor: pack.typography.mutedColor,
+        logoWidthPx: pack.logoWidthPx,
+        logoHeightPx: pack.logoHeightPx,
+      })
+    : null;
+
+  const footerText = pack
+    ? interpolateStyleTemplate(pack.chrome.footerText || '{title}', {
+        title: input.title,
+      })
+    : input.title;
 
   const result = await HTMLtoDOCX(
     html,
-    null,
-    buildDocxDocumentOptions({ title: input.title, landscape }),
-    buildDocxFooterHtml(input.title),
+    headerHtml,
+    buildDocxDocumentOptions({
+      title: input.title,
+      landscape,
+      bodyFont: pack?.typography.bodyFont,
+      includeHeader: Boolean(headerHtml),
+      margins: pack
+        ? {
+            top: mmToTwip(pack.chrome.marginTopMm),
+            bottom: mmToTwip(pack.chrome.marginBottomMm),
+            left: mmToTwip(pack.chrome.marginLeftMm),
+            right: mmToTwip(pack.chrome.marginRightMm),
+          }
+        : undefined,
+    }),
+    buildDocxFooterHtml(footerText, {
+      mutedColor: pack?.typography.mutedColor,
+    }),
   );
 
   return finalizeDocxPackage(await toBuffer(result));

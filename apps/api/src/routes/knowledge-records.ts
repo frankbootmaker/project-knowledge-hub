@@ -168,8 +168,16 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
   app.get('/api/v1/knowledge-records/:recordId/export', async (request, reply) => {
     const principal = requireAuthenticated(request);
     const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
-    const query = z.object({ format: exportFormatSchema }).parse(request.query);
+    const query = z
+      .object({
+        format: exportFormatSchema,
+        stylePackId: z
+          .union([z.literal('blank'), z.string().uuid()])
+          .optional(),
+      })
+      .parse(request.query);
     const format = query.format;
+    const stylePackId = query.stylePackId ?? 'blank';
 
     const [record] = await app.database.db
       .select()
@@ -197,6 +205,28 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       knowledgeExportFilename,
     } = await import('../lib/knowledge-export.js');
 
+    const organizationId = await resolveWorkspaceOrganizationId(
+      app.database,
+      record.workspaceId,
+    );
+
+    let stylePack = undefined;
+    if (
+      (format === 'pdf' || format === 'docx') &&
+      stylePackId !== 'blank' &&
+      organizationId
+    ) {
+      const { resolveExportStylePack } = await import('../lib/style-packs.js');
+      const { store: blobStore } = await app.getBlobStore();
+      stylePack = await resolveExportStylePack({
+        database: app.database,
+        organizationId,
+        stylePackId,
+        uploadDir: app.env.STYLE_PACK_UPLOAD_DIR,
+        blobStore,
+      });
+    }
+
     const exportedAt = new Date();
     const exportInput = {
       title: record.title,
@@ -209,6 +239,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       webUrl: app.env.WEB_URL,
       cookieHeader:
         typeof request.headers.cookie === 'string' ? request.headers.cookie : null,
+      stylePack,
     };
 
     let body: Buffer | string;
@@ -223,6 +254,9 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         body = await buildKnowledgeRecordDocx(exportInput);
       }
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : 'Export failed';
       throw new AppError({
         code: 'KNOWLEDGE_EXPORT_FAILED',
@@ -231,10 +265,6 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       });
     }
 
-    const organizationId = await resolveWorkspaceOrganizationId(
-      app.database,
-      record.workspaceId,
-    );
     await writeAuditEvent(app.database, {
       organizationId,
       actorType: 'user',
@@ -246,6 +276,8 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         format,
         slug: record.slug,
         workspaceId: record.workspaceId,
+        stylePackId:
+          format === 'pdf' || format === 'docx' ? stylePackId : 'blank',
       },
       ipAddress: request.ip,
     });

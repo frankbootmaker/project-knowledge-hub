@@ -826,6 +826,49 @@ export const workspaceMedia = pgTable(
   ],
 );
 
+/**
+ * Doc Factory style packs (Phase E) — presentation tokens + optional logo.
+ * Built-in Blank is synthetic (`blank`) and is not stored here.
+ */
+export const stylePacks = pgTable(
+  'style_packs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    slug: text('slug').notNull(),
+    label: text('label').notNull(),
+    status: text('status').notNull().default('active'),
+    /** Supported export formats, e.g. `["pdf","docx"]`. */
+    formats: jsonb('formats').$type<string[]>().notNull().default(['pdf', 'docx']),
+    typography: jsonb('typography')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    chrome: jsonb('chrome')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    logoBlobKey: text('logo_blob_key'),
+    logoContentType: text('logo_content_type'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('style_packs_organization_slug_uidx').on(
+      table.organizationId,
+      table.slug,
+    ),
+    index('style_packs_organization_status_idx').on(
+      table.organizationId,
+      table.status,
+    ),
+  ],
+);
+
 /** Images extracted during conversion and stored as workspace_media. */
 export const documentImportMedia = pgTable(
   'document_import_media',

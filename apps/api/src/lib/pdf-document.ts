@@ -18,6 +18,16 @@ export type PdfRenderInput = {
   summary: string | null;
   footerNote: string;
   blocks: MarkdownBlock[];
+  stylePack?: {
+    logoDataUri?: string | null;
+    coverLogoDataUri?: string | null;
+    headerText?: string;
+    footerText?: string;
+    disclaimer?: string;
+    bodyColor?: string;
+    mutedColor?: string;
+    headingColor?: string;
+  };
 };
 
 type FontSet = {
@@ -476,15 +486,53 @@ export function renderStructuredPdf(input: PdfRenderInput): Promise<Buffer> {
 
     addPage();
 
-    doc.font(fonts.bold).fontSize(18).fillColor(INK).text(input.title, {
+    const inkHeading = input.stylePack?.headingColor ?? INK;
+    const muted = input.stylePack?.mutedColor ?? INK_MUTED;
+
+    if (input.stylePack?.coverLogoDataUri) {
+      const match = /^data:([^;]+);base64,(.+)$/.exec(
+        input.stylePack.coverLogoDataUri,
+      );
+      if (match?.[2]) {
+        try {
+          const logo = Buffer.from(match[2], 'base64');
+          doc.image(logo, doc.page.margins.left, doc.y, {
+            height: 36,
+            fit: [160, 36],
+          });
+          doc.y += 44;
+        } catch {
+          // Ignore undecodable logos in the pdfkit fallback.
+        }
+      }
+    }
+    // Letterhead line under the cover logo (pdfkit has weak running-header support
+    // in some viewers; keep the resolved header text visible on page 1).
+    if (input.stylePack?.coverLogoDataUri && input.stylePack.headerText?.trim()) {
+      writeText(input.stylePack.headerText.trim(), {
+        size: 10,
+        color: muted,
+        gap: 4,
+      });
+    }
+
+    doc.font(fonts.bold).fontSize(18).fillColor(inkHeading).text(input.title, {
       width: proseWidth(),
       paragraphGap: 4,
     });
-    writeText(input.metaLine, { size: 9, color: INK_MUTED, gap: 1 });
+    writeText(input.metaLine, { size: 9, color: muted, gap: 1 });
     if (input.summary?.trim()) {
-      writeText(input.summary.trim(), { font: fonts.italic, size: 10, color: INK_MUTED });
+      writeText(input.summary.trim(), { font: fonts.italic, size: 10, color: muted });
     }
-    writeText(input.footerNote, { size: 9, color: INK_MUTED, gap: 6 });
+    writeText(input.footerNote, { size: 9, color: muted, gap: 4 });
+    if (input.stylePack?.disclaimer?.trim()) {
+      writeText(input.stylePack.disclaimer.trim(), {
+        font: fonts.italic,
+        size: 8,
+        color: muted,
+        gap: 6,
+      });
+    }
     doc
       .strokeColor(RULE_COLOR)
       .lineWidth(0.75)
@@ -580,16 +628,30 @@ export function renderStructuredPdf(input: PdfRenderInput): Promise<Buffer> {
     }
 
     const range = doc.bufferedPageRange();
+    const headerLabel = input.stylePack?.headerText?.trim() || '';
+    const footerLabel =
+      input.stylePack?.footerText?.trim() || input.title;
+    const footerColor = input.stylePack?.mutedColor ?? INK_MUTED;
     for (let index = 0; index < range.count; index += 1) {
       doc.switchToPage(range.start + index);
       const saved = { ...doc.page.margins };
       doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
+      if (headerLabel) {
+        doc
+          .font(fonts.body)
+          .fontSize(8)
+          .fillColor(footerColor)
+          .text(headerLabel, MARGINS.left, 22, {
+            width: doc.page.width - MARGINS.left - MARGINS.right,
+            lineBreak: false,
+          });
+      }
       doc
         .font(fonts.body)
         .fontSize(8)
-        .fillColor(INK_MUTED)
+        .fillColor(footerColor)
         .text(
-          input.title,
+          footerLabel,
           MARGINS.left,
           doc.page.height - MARGINS.bottom + 22,
           { width: doc.page.width - MARGINS.left - MARGINS.right - 60, lineBreak: false },
