@@ -125,6 +125,8 @@ describe('knowledge-export', () => {
         logoDataUri: null,
         logoWidthPx: null,
         logoHeightPx: null,
+        docxTemplateBuffer: null,
+        docxTemplateBodyAnchor: null,
       },
     });
 
@@ -233,6 +235,8 @@ describe('knowledge-export', () => {
         logoDataUri: null,
         logoWidthPx: null,
         logoHeightPx: null,
+        docxTemplateBuffer: null,
+        docxTemplateBodyAnchor: null,
       },
     });
 

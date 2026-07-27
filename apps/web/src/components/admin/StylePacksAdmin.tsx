@@ -134,6 +134,9 @@ export type PublicStylePack = {
   };
   hasLogo: boolean;
   logoContentType: string | null;
+  hasDocxTemplate: boolean;
+  docxTemplateContentType: string | null;
+  docxTemplateBodyAnchor: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   builtin: boolean;
@@ -201,6 +204,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [docxTemplateFile, setDocxTemplateFile] = useState<File | null>(null);
 
   const isCreating = selectedId === CREATE_ID;
   const selected = useMemo(
@@ -229,12 +233,14 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
     setSelectedId(CREATE_ID);
     setForm(emptyForm);
     setLogoFile(null);
+    setDocxTemplateFile(null);
     setError(null);
   }
 
   function loadPackIntoForm(pack: PublicStylePack) {
     setSelectedId(pack.id);
     setLogoFile(null);
+    setDocxTemplateFile(null);
     setError(null);
     if (pack.builtin) {
       setForm(emptyForm);
@@ -508,6 +514,120 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('templatesLogoFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function uploadDocxTemplate() {
+    if (!selected || selected.builtin || !docxTemplateFile) {
+      return;
+    }
+    const maxBytes = 15 * 1024 * 1024;
+    if (docxTemplateFile.size === 0) {
+      setError(t('templatesDocxEmpty'));
+      return;
+    }
+    if (docxTemplateFile.size > maxBytes) {
+      setError(t('templatesDocxTooLarge', { maxMb: 15 }));
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append('file', docxTemplateFile, docxTemplateFile.name);
+      const response = await fetch(
+        `/api/v1/admin/doc-factory/style-packs/${selected.id}/docx-template`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Origin: window.location.origin },
+          body,
+        },
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+          message?: string;
+        } | null;
+        throw new Error(
+          payload?.error?.message ??
+            payload?.message ??
+            t('templatesDocxFailed'),
+        );
+      }
+      pushToast(t('templatesDocxUploaded'));
+      setDocxTemplateFile(null);
+      await refresh();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('templatesDocxFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function removeDocxTemplate() {
+    if (!selected || selected.builtin || !selected.hasDocxTemplate) {
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/admin/doc-factory/style-packs/${selected.id}/docx-template`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { Origin: window.location.origin },
+        },
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+          message?: string;
+        } | null;
+        throw new Error(
+          payload?.error?.message ??
+            payload?.message ??
+            t('templatesDocxRemoveFailed'),
+        );
+      }
+      pushToast(t('templatesDocxRemoved'));
+      await refresh();
+      router.refresh();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : t('templatesDocxRemoveFailed'),
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function downloadDocxStarter() {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        '/api/v1/admin/doc-factory/style-packs/docx-template-starter',
+        { credentials: 'include' },
+      );
+      if (!response.ok) {
+        throw new Error(t('templatesDocxStarterFailed'));
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'pkh-style-pack-starter.docx';
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : t('templatesDocxStarterFailed'),
+      );
     } finally {
       setPending(false);
     }
@@ -872,24 +992,84 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
         </div>
 
         {selected && !selected.builtin ? (
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-            <Field label={t('templatesLogo')}>
-              <Input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(event) =>
-                  setLogoFile(event.target.files?.[0] ?? null)
-                }
-              />
-            </Field>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending || !logoFile}
-              onClick={() => void uploadLogo()}
-            >
-              {t('templatesUploadLogo')}
-            </Button>
+          <div className="grid gap-4">
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <Field label={t('templatesLogo')}>
+                <Input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(event) =>
+                    setLogoFile(event.target.files?.[0] ?? null)
+                  }
+                />
+              </Field>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending || !logoFile}
+                onClick={() => void uploadLogo()}
+              >
+                {t('templatesUploadLogo')}
+              </Button>
+            </div>
+            <div className="grid gap-3 border-t border-line pt-4">
+              <p className="m-0 text-sm font-semibold text-ink">
+                {t('templatesDocxShell')}
+              </p>
+              <p className="m-0 text-xs text-ink-muted">
+                {t('templatesDocxShellBlurb')}
+              </p>
+              {selected.hasDocxTemplate ? (
+                <p className="m-0 text-xs text-ink-muted">
+                  {t('templatesDocxPresent', {
+                    anchor: selected.docxTemplateBodyAnchor ?? '—',
+                  })}
+                </p>
+              ) : (
+                <p className="m-0 text-xs text-ink-muted">
+                  {t('templatesDocxMissing')}
+                </p>
+              )}
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <Field label={t('templatesDocxFile')}>
+                  <Input
+                    type="file"
+                    accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={(event) =>
+                      setDocxTemplateFile(event.target.files?.[0] ?? null)
+                    }
+                  />
+                </Field>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending || !docxTemplateFile}
+                  onClick={() => void uploadDocxTemplate()}
+                >
+                  {t('templatesUploadDocx')}
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() => void downloadDocxStarter()}
+                >
+                  {t('templatesDocxStarter')}
+                </Button>
+                {selected.hasDocxTemplate ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() => void removeDocxTemplate()}
+                  >
+                    {t('templatesRemoveDocx')}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           </div>
         ) : null}
 

@@ -182,6 +182,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
         deps.env.AVATAR_MAX_BYTES,
         deps.env.MEDIA_MAX_BYTES,
         deps.env.STYLE_PACK_LOGO_MAX_BYTES,
+        deps.env.STYLE_PACK_DOCX_TEMPLATE_MAX_BYTES,
         deps.env.DOCUMENT_IMPORT_MAX_BYTES,
         deps.env.BACKUP_MAX_UPLOAD_BYTES,
       ),

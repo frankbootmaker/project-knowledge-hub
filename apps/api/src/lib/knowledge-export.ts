@@ -13,6 +13,7 @@ import {
   mermaidFallbackHtml,
   mermaidImageHtml,
   replaceMermaidBlocks,
+  styleMarkdownHtmlForDocx,
   type DocxImage,
 } from './docx-document.js';
 import {
@@ -27,6 +28,10 @@ import {
   labelLifecycleStatus,
   labelRecordType,
 } from './export-labels.js';
+import {
+  mergeHtmlDocxIntoShell,
+  type DocxBodyAnchor,
+} from './docx-template.js';
 import {
   BLANK_STYLE_PACK_ID,
   buildStyleTemplateVars,
@@ -718,6 +723,36 @@ export async function buildKnowledgeRecordDocx(
   }
   bodyHtml = await embedMermaidDiagrams(bodyHtml, contentWidthPx);
   bodyHtml = await inlineImageDataUris(bodyHtml, { cookieHeader: input.cookieHeader });
+
+  // Word shell owns letterhead/headers/footers; inject Markdown body only.
+  // PDF export ignores docxTemplateBuffer and keeps the HTML/chrome path.
+  if (pack?.docxTemplateBuffer) {
+    const bodyOnlyHtml = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /></head>
+<body>
+  ${styleMarkdownHtmlForDocx(bodyHtml)}
+</body>
+</html>`;
+    const bodyResult = await HTMLtoDOCX(
+      bodyOnlyHtml,
+      null,
+      buildDocxDocumentOptions({
+        title: input.title,
+        landscape,
+        bodyFont: pack.typography.bodyFont,
+        includeHeader: false,
+      }),
+      null,
+    );
+    const bodyDocx = await finalizeDocxPackage(await toBuffer(bodyResult));
+    return mergeHtmlDocxIntoShell({
+      templateBuffer: pack.docxTemplateBuffer,
+      bodyDocxBuffer: bodyDocx,
+      vars: styleVars,
+      bodyAnchor: pack.docxTemplateBodyAnchor as DocxBodyAnchor | null,
+    });
+  }
 
   const html = buildDocxDocumentHtml({
     title: input.title,

@@ -852,6 +852,11 @@ export const stylePacks = pgTable(
       .default({}),
     logoBlobKey: text('logo_blob_key'),
     logoContentType: text('logo_content_type'),
+    /** Uploaded Word shell template for DOCX export (optional). */
+    docxTemplateBlobKey: text('docx_template_blob_key'),
+    docxTemplateContentType: text('docx_template_content_type'),
+    /** Detected body anchor: contentControl | bookmark | placeholder. */
+    docxTemplateBodyAnchor: text('docx_template_body_anchor'),
     createdBy: uuid('created_by').references(() => users.id, {
       onDelete: 'set null',
     }),

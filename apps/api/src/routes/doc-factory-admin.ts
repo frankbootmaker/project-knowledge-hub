@@ -18,6 +18,7 @@ import {
   readStylePackLogo,
   slugifyStylePackLabel,
   stylePackChromeSchema,
+  stylePackDocxTemplateBlobKey,
   stylePackLogoBlobKey,
   stylePackTypographySchema,
   toPublicStylePack,
@@ -25,6 +26,11 @@ import {
   BLANK_STYLE_PACK_ID,
   type PublicStylePack,
 } from '../lib/style-packs.js';
+import {
+  buildStarterDocxTemplate,
+  DOCX_TEMPLATE_CONTENT_TYPE,
+  validateDocxTemplateBuffer,
+} from '../lib/docx-template.js';
 
 const formatsSchema = z.array(z.enum(['pdf', 'docx'])).min(1).max(2);
 
@@ -278,6 +284,13 @@ export async function registerDocFactoryAdminRoutes(
         blobStore,
       });
     }
+    if (existing.docxTemplateBlobKey) {
+      await deleteStylePackLogo({
+        uploadDir: app.env.STYLE_PACK_UPLOAD_DIR,
+        blobKey: existing.docxTemplateBlobKey,
+        blobStore,
+      });
+    }
 
     await app.database.db
       .delete(stylePacks)
@@ -446,6 +459,249 @@ export async function registerDocFactoryAdminRoutes(
       reply.header('Content-Type', existing.logoContentType);
       reply.header('Cache-Control', 'private, max-age=3600');
       return reply.send(buffer);
+    },
+  );
+
+  app.get(
+    '/api/v1/admin/doc-factory/style-packs/docx-template-starter',
+    async (request, reply) => {
+      const principal = requireAuthenticated(request);
+      requireSystemAdmin(principal);
+      const buffer = await buildStarterDocxTemplate();
+      reply.header('Content-Type', DOCX_TEMPLATE_CONTENT_TYPE);
+      reply.header(
+        'Content-Disposition',
+        'attachment; filename="pkh-style-pack-starter.docx"',
+      );
+      return reply.send(buffer);
+    },
+  );
+
+  app.post(
+    '/api/v1/admin/doc-factory/style-packs/:id/docx-template',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      requireSystemAdmin(principal);
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+
+      const [existing] = await app.database.db
+        .select()
+        .from(stylePacks)
+        .where(eq(stylePacks.id, params.id))
+        .limit(1);
+      if (!existing) {
+        throw new AppError({
+          code: 'STYLE_PACK_NOT_FOUND',
+          message: 'Style pack not found',
+          statusCode: 404,
+        });
+      }
+
+      const file = await request.file();
+      if (!file) {
+        throw new AppError({
+          code: 'STYLE_PACK_DOCX_TEMPLATE_REQUIRED',
+          message: 'Word (.docx) template file is required',
+          statusCode: 400,
+        });
+      }
+
+      const filename = file.filename?.toLowerCase() ?? '';
+      const contentType = file.mimetype;
+      const looksLikeDocx =
+        contentType === DOCX_TEMPLATE_CONTENT_TYPE ||
+        contentType === 'application/zip' ||
+        contentType === 'application/octet-stream' ||
+        filename.endsWith('.docx');
+      if (!looksLikeDocx) {
+        throw new AppError({
+          code: 'STYLE_PACK_DOCX_TEMPLATE_TYPE_UNSUPPORTED',
+          message: 'Template must be a Word .docx file',
+          statusCode: 400,
+        });
+      }
+
+      const buffer = await file.toBuffer();
+      const truncated =
+        'fileTruncated' in file &&
+        Boolean((file as { fileTruncated?: boolean }).fileTruncated);
+      if (truncated) {
+        throw new AppError({
+          code: 'STYLE_PACK_DOCX_TEMPLATE_TOO_LARGE',
+          message: `Word template is too large (max ${app.env.STYLE_PACK_DOCX_TEMPLATE_MAX_BYTES} bytes)`,
+          statusCode: 400,
+        });
+      }
+      if (buffer.byteLength === 0) {
+        throw new AppError({
+          code: 'STYLE_PACK_DOCX_TEMPLATE_EMPTY',
+          message: 'Word template file is empty',
+          statusCode: 400,
+        });
+      }
+      if (buffer.byteLength > app.env.STYLE_PACK_DOCX_TEMPLATE_MAX_BYTES) {
+        throw new AppError({
+          code: 'STYLE_PACK_DOCX_TEMPLATE_TOO_LARGE',
+          message: `Word template is too large (max ${app.env.STYLE_PACK_DOCX_TEMPLATE_MAX_BYTES} bytes)`,
+          statusCode: 400,
+        });
+      }
+
+      const bodyAnchor = await validateDocxTemplateBuffer(buffer);
+      const blobKey = stylePackDocxTemplateBlobKey(
+        existing.organizationId,
+        existing.id,
+      );
+      const { store: blobStore } = await app.getBlobStore();
+
+      if (
+        existing.docxTemplateBlobKey &&
+        existing.docxTemplateBlobKey !== blobKey
+      ) {
+        await deleteStylePackLogo({
+          uploadDir: app.env.STYLE_PACK_UPLOAD_DIR,
+          blobKey: existing.docxTemplateBlobKey,
+          blobStore,
+        });
+      }
+
+      await writeStylePackLogo({
+        uploadDir: app.env.STYLE_PACK_UPLOAD_DIR,
+        blobKey,
+        buffer,
+        contentType: DOCX_TEMPLATE_CONTENT_TYPE,
+        blobStore,
+      });
+
+      const [updated] = await app.database.db
+        .update(stylePacks)
+        .set({
+          docxTemplateBlobKey: blobKey,
+          docxTemplateContentType: DOCX_TEMPLATE_CONTENT_TYPE,
+          docxTemplateBodyAnchor: bodyAnchor,
+          updatedAt: new Date(),
+        })
+        .where(eq(stylePacks.id, params.id))
+        .returning();
+
+      await writeAuditEvent(app.database, {
+        organizationId: existing.organizationId,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'doc_factory.style_pack.docx_template_upload',
+        entityType: 'style_pack',
+        entityId: existing.id,
+        metadata: {
+          contentType: DOCX_TEMPLATE_CONTENT_TYPE,
+          bytes: buffer.byteLength,
+          bodyAnchor,
+        },
+        ipAddress: request.ip,
+      });
+
+      return { stylePack: toPublicStylePack(updated!) };
+    },
+  );
+
+  app.get(
+    '/api/v1/admin/doc-factory/style-packs/:id/docx-template',
+    async (request, reply) => {
+      const principal = requireAuthenticated(request);
+      requireSystemAdmin(principal);
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const [existing] = await app.database.db
+        .select()
+        .from(stylePacks)
+        .where(eq(stylePacks.id, params.id))
+        .limit(1);
+      if (!existing?.docxTemplateBlobKey) {
+        throw new AppError({
+          code: 'STYLE_PACK_DOCX_TEMPLATE_NOT_FOUND',
+          message: 'Style pack Word template not found',
+          statusCode: 404,
+        });
+      }
+
+      const { store: blobStore } = await app.getBlobStore();
+      const buffer = await readStylePackLogo({
+        uploadDir: app.env.STYLE_PACK_UPLOAD_DIR,
+        blobKey: existing.docxTemplateBlobKey,
+        blobStore,
+      });
+      if (!buffer) {
+        throw new AppError({
+          code: 'STYLE_PACK_DOCX_TEMPLATE_NOT_FOUND',
+          message: 'Style pack Word template not found',
+          statusCode: 404,
+        });
+      }
+
+      reply.header(
+        'Content-Type',
+        existing.docxTemplateContentType ?? DOCX_TEMPLATE_CONTENT_TYPE,
+      );
+      reply.header(
+        'Content-Disposition',
+        `attachment; filename="${existing.slug}-template.docx"`,
+      );
+      return reply.send(buffer);
+    },
+  );
+
+  app.delete(
+    '/api/v1/admin/doc-factory/style-packs/:id/docx-template',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      requireSystemAdmin(principal);
+      const params = z.object({ id: z.string().uuid() }).parse(request.params);
+      const [existing] = await app.database.db
+        .select()
+        .from(stylePacks)
+        .where(eq(stylePacks.id, params.id))
+        .limit(1);
+      if (!existing) {
+        throw new AppError({
+          code: 'STYLE_PACK_NOT_FOUND',
+          message: 'Style pack not found',
+          statusCode: 404,
+        });
+      }
+      if (!existing.docxTemplateBlobKey) {
+        return { stylePack: toPublicStylePack(existing) };
+      }
+
+      const { store: blobStore } = await app.getBlobStore();
+      await deleteStylePackLogo({
+        uploadDir: app.env.STYLE_PACK_UPLOAD_DIR,
+        blobKey: existing.docxTemplateBlobKey,
+        blobStore,
+      });
+
+      const [updated] = await app.database.db
+        .update(stylePacks)
+        .set({
+          docxTemplateBlobKey: null,
+          docxTemplateContentType: null,
+          docxTemplateBodyAnchor: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(stylePacks.id, params.id))
+        .returning();
+
+      await writeAuditEvent(app.database, {
+        organizationId: existing.organizationId,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'doc_factory.style_pack.docx_template_delete',
+        entityType: 'style_pack',
+        entityId: existing.id,
+        metadata: { slug: existing.slug },
+        ipAddress: request.ip,
+      });
+
+      return { stylePack: toPublicStylePack(updated!) };
     },
   );
 

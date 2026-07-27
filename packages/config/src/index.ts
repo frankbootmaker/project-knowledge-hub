@@ -171,6 +171,12 @@ export const envSchema = z.object({
     .int()
     .positive()
     .default(5 * 1024 * 1024),
+  /** Doc Factory Word shell templates (.docx). */
+  STYLE_PACK_DOCX_TEMPLATE_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 1024 * 1024),
   /** Original files for document/image import (local fallback when BlobStore disabled). */
   DOCUMENT_IMPORT_DIR: z.string().min(1).default('./data/imports'),
   MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),

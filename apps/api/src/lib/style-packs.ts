@@ -80,6 +80,9 @@ export type PublicStylePack = {
   chrome: StylePackChrome;
   hasLogo: boolean;
   logoContentType: string | null;
+  hasDocxTemplate: boolean;
+  docxTemplateContentType: string | null;
+  docxTemplateBodyAnchor: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   /** True for the synthetic Blank pack. */
@@ -118,6 +121,9 @@ export type StylePackExportChrome = {
   /** Intrinsic pixel size of `logoDataUri` when a logo is present. */
   logoWidthPx: number | null;
   logoHeightPx: number | null;
+  /** Uploaded Word shell bytes for DOCX merge (null = chrome-only path). */
+  docxTemplateBuffer: Buffer | null;
+  docxTemplateBodyAnchor: string | null;
 };
 
 const DEFAULT_TYPOGRAPHY: StylePackExportChrome['typography'] = {
@@ -155,6 +161,9 @@ export function blankPublicStylePack(): PublicStylePack {
     chrome: {},
     hasLogo: false,
     logoContentType: null,
+    hasDocxTemplate: false,
+    docxTemplateContentType: null,
+    docxTemplateBodyAnchor: null,
     createdAt: null,
     updatedAt: null,
     builtin: true,
@@ -170,6 +179,8 @@ export function blankExportChrome(): StylePackExportChrome {
     logoDataUri: null,
     logoWidthPx: null,
     logoHeightPx: null,
+    docxTemplateBuffer: null,
+    docxTemplateBodyAnchor: null,
   };
 }
 
@@ -208,6 +219,9 @@ export function toPublicStylePack(
     chrome: asChrome(row.chrome),
     hasLogo: Boolean(row.logoBlobKey),
     logoContentType: row.logoContentType,
+    hasDocxTemplate: Boolean(row.docxTemplateBlobKey),
+    docxTemplateContentType: row.docxTemplateContentType,
+    docxTemplateBodyAnchor: row.docxTemplateBodyAnchor,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     builtin: false,
@@ -237,6 +251,16 @@ export function stylePackLogoBlobKey(
   return blobObjectKey(
     'doc-templates',
     `${organizationId}/${packId}/logo.${safeExt}`,
+  );
+}
+
+export function stylePackDocxTemplateBlobKey(
+  organizationId: string,
+  packId: string,
+): string {
+  return blobObjectKey(
+    'doc-templates',
+    `${organizationId}/${packId}/template.docx`,
   );
 }
 
@@ -426,6 +450,15 @@ export async function resolveExportStylePack(options: {
     }
   }
 
+  let docxTemplateBuffer: Buffer | null = null;
+  if (row.docxTemplateBlobKey) {
+    docxTemplateBuffer = await readStylePackLogo({
+      uploadDir: options.uploadDir,
+      blobKey: row.docxTemplateBlobKey,
+      blobStore: options.blobStore,
+    });
+  }
+
   return {
     id: row.id,
     label: row.label,
@@ -434,6 +467,8 @@ export async function resolveExportStylePack(options: {
     logoDataUri,
     logoWidthPx,
     logoHeightPx,
+    docxTemplateBuffer,
+    docxTemplateBodyAnchor: row.docxTemplateBodyAnchor,
   };
 }
 

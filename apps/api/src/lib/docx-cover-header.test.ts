@@ -57,6 +57,8 @@ describe('docx cover vs running header', () => {
           marginLeftMm: 12,
           marginRightMm: 12,
         },
+        docxTemplateBuffer: null,
+        docxTemplateBodyAnchor: null,
         ...logo,
       },
     });
@@ -108,6 +110,8 @@ describe('docx cover vs running header', () => {
           marginLeftMm: 12,
           marginRightMm: 12,
         },
+        docxTemplateBuffer: null,
+        docxTemplateBodyAnchor: null,
         ...logo,
       },
     });
