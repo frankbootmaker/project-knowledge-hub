@@ -30,6 +30,9 @@ USER markitdown
 
 ENV PORT=8080
 ENV TESSERACT_LANG=eng
+ENV PYTHONUTF8=1
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 EXPOSE 8080
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \

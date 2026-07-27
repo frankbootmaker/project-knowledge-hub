@@ -7,6 +7,8 @@
 
 Upload office/PDF/HTML/Markdown files or images, convert them to Markdown with [Microsoft MarkItDown](https://github.com/microsoft/markitdown), store extracted images as workspace media embeds, then create **draft** knowledge records.
 
+`.md` / `.txt` / `.csv` uploads are decoded as UTF-8 and passed through (MarkItDown’s plain-text charset sniff only samples the first 4KiB and can mis-label UTF-8 files as ASCII).
+
 This is **inbound ingest**, not Doc Factory (outbound PDF/DOCX export).
 
 ## Architecture

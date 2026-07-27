@@ -42,6 +42,17 @@ IMAGE_CONTENT_TYPES = {
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
+# Already-Markdown / plain text: skip MarkItDown (its charset sniff samples only
+# the first 4KiB and mis-labels UTF-8 files as ascii when non-ASCII appears later).
+PLAIN_TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".text", ".csv"}
+PLAIN_TEXT_CONTENT_TYPES = {
+    "text/markdown",
+    "text/x-markdown",
+    "text/plain",
+    "text/csv",
+    "application/csv",
+}
+
 VISION_OCR_PROMPT = (
     "Extract all readable text from this image exactly. "
     "Preserve tables, amounts, dates, invoice numbers, and line breaks. "
@@ -299,6 +310,51 @@ def _is_spreadsheet(filename: str | None, content_type: str) -> bool:
         return True
     ct = (content_type or "").lower()
     return any(hint in ct for hint in _SPREADSHEET_MIME_HINTS)
+
+
+def _is_plain_text_document(filename: str | None, content_type: str) -> bool:
+    name = (filename or "").lower()
+    suffix = Path(name).suffix.lower()
+    if suffix in PLAIN_TEXT_EXTENSIONS:
+        return True
+    ct = (content_type or "").lower().split(";", 1)[0].strip()
+    return ct in PLAIN_TEXT_CONTENT_TYPES
+
+
+def _decode_text_bytes(data: bytes) -> str:
+    """Decode upload bytes as text without MarkItDown's ascii-sniff trap."""
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data.decode("utf-8-sig")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        from charset_normalizer import from_bytes
+
+        guess = from_bytes(data).best()
+        if guess is not None:
+            return str(guess)
+    except Exception:  # noqa: BLE001
+        pass
+    # Last resort: keep bytes readable rather than failing the import.
+    return data.decode("utf-8", errors="replace")
+
+
+def _looks_like_text_bytes(data: bytes) -> bool:
+    """Heuristic for mislabeled uploads that are still plain text."""
+    if not data:
+        return False
+    sample = data[:8192]
+    if b"\x00" in sample:
+        return False
+    # High ratio of printable / whitespace ⇒ treat as text for UTF-8 fallback.
+    printable = sum(
+        1
+        for byte in sample
+        if byte in b"\t\n\r\f\v" or 32 <= byte <= 126 or byte >= 0x80
+    )
+    return (printable / len(sample)) >= 0.85
 
 
 def _format_spreadsheet_number(value: float) -> str:
@@ -609,14 +665,34 @@ async def convert(
             if _is_spreadsheet(file.filename, content_type):
                 # Custom path: MarkItDown/pandas default dumps floats as 3.52e+06.
                 markdown = _convert_spreadsheet_markdown(path).strip()
+            elif _is_plain_text_document(file.filename, content_type):
+                # Passthrough UTF-8 (and friends). MarkItDown PlainTextConverter
+                # samples 4096 bytes for charset and fails when the first block is
+                # ASCII-only but later bytes are UTF-8 (e.g. curly quotes, em dash).
+                markdown = _decode_text_bytes(data).strip()
             else:
                 md = _build_markitdown(ocr_engine, ocr_lang)
-                result = md.convert(str(path))
-                markdown = (
-                    getattr(result, "markdown", None)
-                    or getattr(result, "text_content", None)
-                    or ""
-                ).strip()
+                try:
+                    result = md.convert(str(path))
+                except Exception as convert_exc:  # noqa: BLE001
+                    # Same charset sniff bug can hit mislabeled plain uploads.
+                    message = str(convert_exc)
+                    if (
+                        "UnicodeDecodeError" in message
+                        or "codec can't decode" in message.lower()
+                    ) and _looks_like_text_bytes(data):
+                        markdown = _decode_text_bytes(data).strip()
+                        warnings.append(
+                            "MarkItDown charset sniff failed; imported raw UTF-8 text",
+                        )
+                    else:
+                        raise
+                else:
+                    markdown = (
+                        getattr(result, "markdown", None)
+                        or getattr(result, "text_content", None)
+                        or ""
+                    ).strip()
         except HTTPException:
             raise
         except Exception as exc:  # noqa: BLE001

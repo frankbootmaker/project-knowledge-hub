@@ -284,42 +284,20 @@ export async function buildExportHtmlDocument(
     border: 0;
     display: block;
   }
-  .doc-brand-text {
-    font-size: 11pt;
-    font-weight: 600;
-    color: ${pack.typography.mutedColor};
-    letter-spacing: 0.01em;
-  }
   .doc-disclaimer { font-size:8.5pt; color: ${pack.typography.mutedColor}; font-style: italic; margin: 0 0 12px; }
 `
     : '';
 
-  const brandHeaderText = pack
-    ? escapeHtml(
-        interpolateStyleTemplate(pack.chrome.headerText || '', {
-          title: input.title,
-        }).trim(),
-      )
-    : '';
-  const brandLogo =
-    pack && pack.chrome.showCoverBrand && pack.logoDataUri
-      ? stylePackLogoImgHtml({
-          dataUri: pack.logoDataUri,
-          widthPx: pack.logoWidthPx,
-          heightPx: pack.logoHeightPx,
-          maxWidth: 180,
-          maxHeight: 48,
-        })
-      : '';
   const brand =
-    pack && pack.chrome.showCoverBrand && (brandLogo || brandHeaderText)
+    pack && pack.chrome.showCoverBrand && pack.logoDataUri
       ? `<div class="doc-brand">
-          ${brandLogo}
-          ${
-            brandHeaderText
-              ? `<span class="doc-brand-text">${brandHeaderText}</span>`
-              : ''
-          }
+          ${stylePackLogoImgHtml({
+            dataUri: pack.logoDataUri,
+            widthPx: pack.logoWidthPx,
+            heightPx: pack.logoHeightPx,
+            maxWidth: 180,
+            maxHeight: 48,
+          })}
         </div>`
       : '';
   const disclaimer = pack?.chrome.disclaimer?.trim()
@@ -702,9 +680,6 @@ export async function buildKnowledgeRecordDocx(
           bodyColor: pack.typography.bodyColor,
           logoDataUri: pack.logoDataUri,
           showCoverBrand: pack.chrome.showCoverBrand,
-          headerText: interpolateStyleTemplate(pack.chrome.headerText || '', {
-            title: input.title,
-          }),
           disclaimer: pack.chrome.disclaimer,
           logoWidthPx: pack.logoWidthPx,
           logoHeightPx: pack.logoHeightPx,

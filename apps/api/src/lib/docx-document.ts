@@ -277,7 +277,6 @@ export type DocxDocumentInput = {
     logoWidthPx?: number | null;
     logoHeightPx?: number | null;
     showCoverBrand?: boolean;
-    headerText?: string;
     disclaimer?: string;
   };
 };
@@ -292,26 +291,16 @@ export function buildDocxDocumentHtml(input: DocxDocumentInput): string {
       )}</em></p>`
     : '';
 
-  const brandHeader = input.style?.headerText?.trim() ?? '';
-  const brandLogo =
-    input.style?.showCoverBrand && input.style.logoDataUri
-      ? stylePackLogoImgHtml({
-          dataUri: input.style.logoDataUri,
-          widthPx: input.style.logoWidthPx,
-          heightPx: input.style.logoHeightPx,
-          maxWidth: 180,
-          maxHeight: 48,
-        })
-      : '';
   const brand =
-    input.style?.showCoverBrand && (brandLogo || brandHeader)
+    input.style?.showCoverBrand && input.style.logoDataUri
       ? `<p style="margin:0 0 12pt">
-          ${brandLogo}
-          ${
-            brandHeader
-              ? `<span style="font-size:11pt;font-weight:bold;color:${mutedColor};vertical-align:middle;margin-left:8px">${escapeHtml(brandHeader)}</span>`
-              : ''
-          }
+          ${stylePackLogoImgHtml({
+            dataUri: input.style.logoDataUri,
+            widthPx: input.style.logoWidthPx,
+            heightPx: input.style.logoHeightPx,
+            maxWidth: 180,
+            maxHeight: 48,
+          })}
         </p>`
       : '';
 

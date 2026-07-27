@@ -506,15 +506,6 @@ export function renderStructuredPdf(input: PdfRenderInput): Promise<Buffer> {
         }
       }
     }
-    // Letterhead line under the cover logo (pdfkit has weak running-header support
-    // in some viewers; keep the resolved header text visible on page 1).
-    if (input.stylePack?.coverLogoDataUri && input.stylePack.headerText?.trim()) {
-      writeText(input.stylePack.headerText.trim(), {
-        size: 10,
-        color: muted,
-        gap: 4,
-      });
-    }
 
     doc.font(fonts.bold).fontSize(18).fillColor(inkHeading).text(input.title, {
       width: proseWidth(),
