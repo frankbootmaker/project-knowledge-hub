@@ -6,6 +6,7 @@ import type { BlobStore } from '@project-knowledge-hub/blob-store';
 import {
   blankExportChrome,
   blankPublicStylePack,
+  buildStyleTemplateVars,
   interpolateStyleTemplate,
   readStylePackLogo,
   slugifyStylePackLabel,
@@ -42,6 +43,32 @@ describe('style-packs helpers', () => {
         pages: '10',
       }),
     ).toBe('Q3 Report · p2/10');
+  });
+
+  it('interpolates disclaimer tokens and leaves plain text alone', () => {
+    const vars = buildStyleTemplateVars({
+      title: 'AMAE Brief',
+      slug: 'amae-brief',
+      recordType: 'inventory',
+      lifecycleStatus: 'current',
+      exportedAt: new Date('2026-07-27T19:25:51.251Z'),
+    });
+    expect(vars.date).toBe('2026-07-27');
+    expect(vars.datetime).toBe('2026.07.27 19:25 UTC');
+    expect(
+      interpolateStyleTemplate(
+        'Confidential · {date} · {title} ({type}/{status}/{slug})',
+        vars,
+      ),
+    ).toBe(
+      'Confidential · 2026-07-27 · AMAE Brief (inventory/current/amae-brief)',
+    );
+    expect(interpolateStyleTemplate('All rights reserved.', vars)).toBe(
+      'All rights reserved.',
+    );
+    expect(interpolateStyleTemplate('Keep {unknown} literal', vars)).toBe(
+      'Keep {unknown} literal',
+    );
   });
 
   it('builds doc-templates blob keys', () => {

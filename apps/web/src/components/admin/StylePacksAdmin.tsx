@@ -43,6 +43,67 @@ function fontOptions(current: string): string[] {
   return [...STYLE_PACK_FONTS];
 }
 
+/** Preview tokens for header/footer/disclaimer (mirrors API interpolator). */
+function previewStyleTemplate(
+  template: string,
+  samples: {
+    title: string;
+    date: string;
+    datetime: string;
+    slug: string;
+    type: string;
+    status: string;
+  },
+): string {
+  return template
+    .replaceAll('{title}', samples.title)
+    .replaceAll('{date}', samples.date)
+    .replaceAll('{datetime}', samples.datetime)
+    .replaceAll('{slug}', samples.slug)
+    .replaceAll('{type}', samples.type)
+    .replaceAll('{status}', samples.status);
+}
+
+const STYLE_TEMPLATE_TOKENS = [
+  { token: '{title}', descKey: 'templatesTokenDescTitle' },
+  { token: '{date}', descKey: 'templatesTokenDescDate' },
+  { token: '{datetime}', descKey: 'templatesTokenDescDatetime' },
+  { token: '{slug}', descKey: 'templatesTokenDescSlug' },
+  { token: '{type}', descKey: 'templatesTokenDescType' },
+  { token: '{status}', descKey: 'templatesTokenDescStatus' },
+] as const;
+
+function StylePackTokenHints(props: {
+  disabled?: boolean;
+  onInsert: (token: string) => void;
+}) {
+  const t = useTranslations('admin');
+
+  return (
+    <div className="grid gap-1.5">
+      <p className="m-0 text-xs text-ink-muted">{t('templatesAvailableTokens')}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {STYLE_TEMPLATE_TOKENS.map((item) => (
+          <button
+            key={item.token}
+            type="button"
+            disabled={props.disabled}
+            title={t(item.descKey)}
+            aria-label={`${item.token}: ${t(item.descKey)}`}
+            className="rounded border border-line bg-panel-solid px-2 py-0.5 font-mono text-xs text-ink transition hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => props.onInsert(item.token)}
+          >
+            {item.token}
+          </button>
+        ))}
+      </div>
+      <p className="m-0 text-[0.7rem] leading-snug text-ink-muted">
+        {t('templatesAvailableTokensHelp')}
+      </p>
+    </div>
+  );
+}
+
 export type PublicStylePack = {
   id: string;
   organizationId: string | null;
@@ -150,6 +211,18 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
   );
   /** Blank is read-only; create mode and custom packs are editable. */
   const fieldsDisabled = Boolean(selected?.builtin) && !isCreating;
+
+  const tokenSamples = useMemo(
+    () => ({
+      title: t('templatesTitleSample'),
+      date: t('templatesDateSample'),
+      datetime: t('templatesDatetimeSample'),
+      slug: t('templatesSlugSample'),
+      type: t('templatesTypeSample'),
+      status: t('templatesStatusSample'),
+    }),
+    [t],
+  );
 
   function startCreate() {
     setSelectedId(CREATE_ID);
@@ -583,7 +656,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             <Input
               value={form.headerText}
               disabled={fieldsDisabled}
-              placeholder={t('templatesHeaderFooterHint')}
+              placeholder={t('templatesTokenHint')}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -591,11 +664,20 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
                 }))
               }
             />
+            <StylePackTokenHints
+              disabled={fieldsDisabled}
+              onInsert={(token) =>
+                setForm((current) => ({
+                  ...current,
+                  headerText: `${current.headerText}${token}`,
+                }))
+              }
+            />
             <p className="m-0 text-xs text-ink-muted">
               {t('templatesResolvesTo', {
                 value:
                   form.headerText.trim().length > 0
-                    ? form.headerText.replaceAll('{title}', t('templatesTitleSample'))
+                    ? previewStyleTemplate(form.headerText, tokenSamples)
                     : tCommon('emDash'),
               })}
             </p>
@@ -604,7 +686,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             <Input
               value={form.footerText}
               disabled={fieldsDisabled}
-              placeholder={t('templatesHeaderFooterHint')}
+              placeholder={t('templatesTokenHint')}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -612,11 +694,20 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
                 }))
               }
             />
+            <StylePackTokenHints
+              disabled={fieldsDisabled}
+              onInsert={(token) =>
+                setForm((current) => ({
+                  ...current,
+                  footerText: `${current.footerText}${token}`,
+                }))
+              }
+            />
             <p className="m-0 text-xs text-ink-muted">
               {t('templatesResolvesTo', {
                 value:
                   form.footerText.trim().length > 0
-                    ? form.footerText.replaceAll('{title}', t('templatesTitleSample'))
+                    ? previewStyleTemplate(form.footerText, tokenSamples)
                     : tCommon('emDash'),
               })}
             </p>
@@ -693,6 +784,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
           <Input
             value={form.disclaimer}
             disabled={fieldsDisabled}
+            placeholder={t('templatesDisclaimerHint')}
             onChange={(event) =>
               setForm((current) => ({
                 ...current,
@@ -700,6 +792,23 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
               }))
             }
           />
+          <StylePackTokenHints
+            disabled={fieldsDisabled}
+            onInsert={(token) =>
+              setForm((current) => ({
+                ...current,
+                disclaimer: `${current.disclaimer}${token}`,
+              }))
+            }
+          />
+          <p className="m-0 text-xs text-ink-muted">
+            {t('templatesResolvesTo', {
+              value:
+                form.disclaimer.trim().length > 0
+                  ? previewStyleTemplate(form.disclaimer, tokenSamples)
+                  : tCommon('emDash'),
+            })}
+          </p>
         </Field>
 
         <div className="flex flex-wrap gap-4 text-sm">

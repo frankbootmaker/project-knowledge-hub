@@ -437,12 +437,60 @@ export async function resolveExportStylePack(options: {
   };
 }
 
+export type StyleTemplateVars = {
+  title: string;
+  date?: string;
+  datetime?: string;
+  slug?: string;
+  type?: string;
+  status?: string;
+  page?: string;
+  pages?: string;
+};
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** Export timestamp for `{datetime}`: `2026.07.27 19:25 UTC`. */
+export function formatStyleTemplateDatetime(at: Date): string {
+  return `${at.getUTCFullYear()}.${pad2(at.getUTCMonth() + 1)}.${pad2(at.getUTCDate())} ${pad2(at.getUTCHours())}:${pad2(at.getUTCMinutes())} UTC`;
+}
+
+/** Tokens for header/footer/disclaimer templates; unknown `{…}` stays literal. */
+export function buildStyleTemplateVars(input: {
+  title: string;
+  exportedAt?: Date;
+  slug?: string;
+  recordType?: string;
+  lifecycleStatus?: string;
+  page?: string;
+  pages?: string;
+}): StyleTemplateVars {
+  const at = input.exportedAt ?? new Date();
+  return {
+    title: input.title,
+    date: at.toISOString().slice(0, 10),
+    datetime: formatStyleTemplateDatetime(at),
+    slug: input.slug ?? '',
+    type: input.recordType ?? '',
+    status: input.lifecycleStatus ?? '',
+    page: input.page,
+    pages: input.pages,
+  };
+}
+
 export function interpolateStyleTemplate(
   template: string,
-  vars: { title: string; page?: string; pages?: string },
+  vars: StyleTemplateVars,
 ): string {
   return template
     .replaceAll('{title}', vars.title)
+    .replaceAll('{date}', vars.date ?? '')
+    .replaceAll('{datetime}', vars.datetime ?? '')
+    .replaceAll('{slug}', vars.slug ?? '')
+    .replaceAll('{type}', vars.type ?? '')
+    .replaceAll('{status}', vars.status ?? '')
     .replaceAll('{page}', vars.page ?? '')
     .replaceAll('{pages}', vars.pages ?? '');
 }

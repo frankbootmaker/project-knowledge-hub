@@ -24,6 +24,7 @@ import {
 import { renderStructuredPdf } from './pdf-document.js';
 import {
   BLANK_STYLE_PACK_ID,
+  buildStyleTemplateVars,
   interpolateStyleTemplate,
   type StylePackExportChrome,
 } from './style-packs.js';
@@ -261,6 +262,13 @@ export async function buildExportHtmlDocument(
   }
 
   const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
+  const styleVars = buildStyleTemplateVars({
+    title: input.title,
+    exportedAt,
+    slug: input.slug,
+    recordType: input.recordType,
+    lifecycleStatus: input.lifecycleStatus,
+  });
   const summary = input.summary?.trim()
     ? `<p class="doc-summary">${escapeHtml(input.summary.trim())}</p>`
     : '';
@@ -308,8 +316,11 @@ export async function buildExportHtmlDocument(
   const detailsHtml = showDetails
     ? `<p class="doc-meta">${escapeHtml(input.recordType)} · ${escapeHtml(input.lifecycleStatus)} · ${escapeHtml(input.slug)}</p>${summary}<p class="doc-meta">Exported ${escapeHtml(exportedAt.toISOString())}</p>`
     : '';
-  const disclaimer = pack?.chrome.disclaimer?.trim()
-    ? `<p class="doc-disclaimer">${escapeHtml(pack.chrome.disclaimer.trim())}</p>`
+  const disclaimerRaw = pack?.chrome.disclaimer?.trim()
+    ? interpolateStyleTemplate(pack.chrome.disclaimer.trim(), styleVars)
+    : '';
+  const disclaimer = disclaimerRaw
+    ? `<p class="doc-disclaimer">${escapeHtml(disclaimerRaw)}</p>`
     : '';
   const coverRule =
     brand || titleHtml || detailsHtml || disclaimer
@@ -430,6 +441,7 @@ function widestTableColumnCount(markdown: string): number {
 async function buildKnowledgeRecordPdfWithPuppeteer(
   input: KnowledgeExportInput,
 ): Promise<Buffer> {
+  const exportedAt = input.exportedAt ?? new Date();
   const html = await buildExportHtmlDocument(input);
   const landscape = widestTableColumnCount(input.contentMarkdown) > 8;
   const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
@@ -467,19 +479,22 @@ async function buildKnowledgeRecordPdfWithPuppeteer(
     const marginLeft = pack ? `${pack.chrome.marginLeftMm}mm` : '12mm';
     const marginRight = pack ? `${pack.chrome.marginRightMm}mm` : '12mm';
     const footerColor = pack?.typography.mutedColor ?? '#666';
+    const styleVars = buildStyleTemplateVars({
+      title: input.title,
+      exportedAt,
+      slug: input.slug,
+      recordType: input.recordType,
+      lifecycleStatus: input.lifecycleStatus,
+    });
     const footerText = pack
       ? escapeHtml(
-          interpolateStyleTemplate(pack.chrome.footerText || '{title}', {
-            title: input.title,
-          }),
+          interpolateStyleTemplate(pack.chrome.footerText || '{title}', styleVars),
         ).slice(0, 80)
       : escapeHtml(input.title).slice(0, 80);
 
     const headerText = pack
       ? escapeHtml(
-          interpolateStyleTemplate(pack.chrome.headerText || '', {
-            title: input.title,
-          }),
+          interpolateStyleTemplate(pack.chrome.headerText || '', styleVars),
         )
       : '';
     const headerLogo =
@@ -541,6 +556,13 @@ export function buildKnowledgeRecordPdfWithPdfkit(
 ): Promise<Buffer> {
   const exportedAt = input.exportedAt ?? new Date();
   const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
+  const styleVars = buildStyleTemplateVars({
+    title: input.title,
+    exportedAt,
+    slug: input.slug,
+    recordType: input.recordType,
+    lifecycleStatus: input.lifecycleStatus,
+  });
   return renderStructuredPdf({
     title: input.title,
     metaLine: `${input.recordType} · ${input.lifecycleStatus} · ${input.slug}`,
@@ -553,14 +575,17 @@ export function buildKnowledgeRecordPdfWithPdfkit(
           coverLogoDataUri: pack.chrome.showCoverBrand ? pack.logoDataUri : null,
           showCoverTitle: pack.chrome.showCoverTitle,
           showCoverDetails: pack.chrome.showCoverDetails,
-          headerText: interpolateStyleTemplate(pack.chrome.headerText || '', {
-            title: input.title,
-          }),
+          headerText: interpolateStyleTemplate(
+            pack.chrome.headerText || '',
+            styleVars,
+          ),
           footerText: interpolateStyleTemplate(
             pack.chrome.footerText || '{title}',
-            { title: input.title },
+            styleVars,
           ),
-          disclaimer: pack.chrome.disclaimer,
+          disclaimer: pack.chrome.disclaimer?.trim()
+            ? interpolateStyleTemplate(pack.chrome.disclaimer.trim(), styleVars)
+            : pack.chrome.disclaimer,
           bodyColor: pack.typography.bodyColor,
           mutedColor: pack.typography.mutedColor,
           headingColor: pack.typography.headingColor,
@@ -669,6 +694,13 @@ export async function buildKnowledgeRecordDocx(
   const landscape = widestTableColumnCount(input.contentMarkdown) > 8;
   const contentWidthPx = landscape ? 900 : 620;
   const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
+  const styleVars = buildStyleTemplateVars({
+    title: input.title,
+    exportedAt,
+    slug: input.slug,
+    recordType: input.recordType,
+    lifecycleStatus: input.lifecycleStatus,
+  });
 
   let bodyHtml = rendered.html;
   if (input.webUrl) {
@@ -694,7 +726,9 @@ export async function buildKnowledgeRecordDocx(
           showCoverBrand: pack.chrome.showCoverBrand,
           showCoverTitle: pack.chrome.showCoverTitle,
           showCoverDetails: pack.chrome.showCoverDetails,
-          disclaimer: pack.chrome.disclaimer,
+          disclaimer: pack.chrome.disclaimer?.trim()
+            ? interpolateStyleTemplate(pack.chrome.disclaimer.trim(), styleVars)
+            : pack.chrome.disclaimer,
           logoWidthPx: pack.logoWidthPx,
           logoHeightPx: pack.logoHeightPx,
         }
@@ -702,9 +736,7 @@ export async function buildKnowledgeRecordDocx(
   });
 
   const headerText = pack
-    ? interpolateStyleTemplate(pack.chrome.headerText || '', {
-        title: input.title,
-      })
+    ? interpolateStyleTemplate(pack.chrome.headerText || '', styleVars)
     : '';
   // Cover brand already paints the logo in the body; keep the running header
   // text-only in that case so page 1 is not blanked and the logo is not doubled.
@@ -723,9 +755,7 @@ export async function buildKnowledgeRecordDocx(
     : null;
 
   const footerText = pack
-    ? interpolateStyleTemplate(pack.chrome.footerText || '{title}', {
-        title: input.title,
-      })
+    ? interpolateStyleTemplate(pack.chrome.footerText || '{title}', styleVars)
     : input.title;
 
   const result = await HTMLtoDOCX(
