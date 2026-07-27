@@ -58,6 +58,7 @@ flowchart TB
 * Hub-side LLM keys / billing / forge jobs before style packs and content templates ship.
 * Rebuilding viewer-faithful Blank PDF/DOCX export (already shipped/tested as the default export).
 * Auto-promoting AI drafts to `verified` / `current` (even when hub LLM is enabled).
+* Skipping the Markdown draft and writing straight into a binary DOCX as the system of record.
 * Turning the hub into a WYSIWYG Word processor.
 * Perfect round-trip fidelity (export is best-effort presentation; Markdown remains editable source).
 * Importing PDF/DOCX/PPTX as editable Word clones (inbound ingest is NF-015 MarkItDown → Markdown drafts).
