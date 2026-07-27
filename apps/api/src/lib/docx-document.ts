@@ -277,6 +277,8 @@ export type DocxDocumentInput = {
     logoWidthPx?: number | null;
     logoHeightPx?: number | null;
     showCoverBrand?: boolean;
+    showCoverTitle?: boolean;
+    showCoverDetails?: boolean;
     disclaimer?: string;
   };
 };
@@ -285,11 +287,14 @@ export function buildDocxDocumentHtml(input: DocxDocumentInput): string {
   const headingColor = input.style?.headingColor ?? VIEWER.heading;
   const mutedColor = input.style?.mutedColor ?? VIEWER.muted;
   const quoteColor = input.style?.bodyColor ?? VIEWER.quoteText;
-  const summary = input.summary?.trim()
-    ? `<p style="font-size:10.5pt;color:${quoteColor}"><em>${escapeHtml(
-        input.summary.trim(),
-      )}</em></p>`
-    : '';
+  const showTitle = input.style?.showCoverTitle !== false;
+  const showDetails = input.style?.showCoverDetails !== false;
+  const summary =
+    showDetails && input.summary?.trim()
+      ? `<p style="font-size:10.5pt;color:${quoteColor}"><em>${escapeHtml(
+          input.summary.trim(),
+        )}</em></p>`
+      : '';
 
   const brand =
     input.style?.showCoverBrand && input.style.logoDataUri
@@ -304,23 +309,33 @@ export function buildDocxDocumentHtml(input: DocxDocumentInput): string {
         </p>`
       : '';
 
+  const titleHtml = showTitle
+    ? `<h1 style="font-size:20pt;color:${headingColor};font-weight:bold">${escapeHtml(input.title)}</h1>`
+    : '';
+  const detailsHtml = showDetails
+    ? `<p style="font-size:9.5pt;color:${mutedColor}">${escapeHtml(input.metaLine)}</p>
+  ${summary}
+  <p style="font-size:9pt;color:${mutedColor}">${escapeHtml(input.exportedNote)}</p>`
+    : '';
+
   const disclaimer = input.style?.disclaimer?.trim()
     ? `<p style="font-size:8.5pt;color:${mutedColor}"><em>${escapeHtml(
         input.style.disclaimer.trim(),
       )}</em></p>`
     : '';
 
+  const coverRule =
+    brand || titleHtml || detailsHtml || disclaimer ? '<hr />' : '';
+
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" /></head>
 <body>
   ${brand}
-  <h1 style="font-size:20pt;color:${headingColor};font-weight:bold">${escapeHtml(input.title)}</h1>
-  <p style="font-size:9.5pt;color:${mutedColor}">${escapeHtml(input.metaLine)}</p>
-  ${summary}
-  <p style="font-size:9pt;color:${mutedColor}">${escapeHtml(input.exportedNote)}</p>
+  ${titleHtml}
+  ${detailsHtml}
   ${disclaimer}
-  <hr />
+  ${coverRule}
   ${styleMarkdownHtmlForDocx(input.bodyHtml)}
 </body>
 </html>`;

@@ -10,8 +10,38 @@ import {
   Field,
   Input,
   Panel,
+  Select,
   useToast,
 } from '../ui';
+import { StylePackColorField } from './StylePackColorField';
+
+/** Fonts that map reliably to Word/PDF on typical desktops. */
+const STYLE_PACK_FONTS = [
+  'Calibri',
+  'Arial',
+  'Helvetica',
+  'Segoe UI',
+  'Verdana',
+  'Trebuchet MS',
+  'Georgia',
+  'Times New Roman',
+  'Garamond',
+  'Cambria',
+  'Courier New',
+  'Consolas',
+] as const;
+
+function fontOptions(current: string): string[] {
+  if (
+    current &&
+    !STYLE_PACK_FONTS.some(
+      (font) => font.toLowerCase() === current.toLowerCase(),
+    )
+  ) {
+    return [current, ...STYLE_PACK_FONTS];
+  }
+  return [...STYLE_PACK_FONTS];
+}
 
 export type PublicStylePack = {
   id: string;
@@ -34,6 +64,8 @@ export type PublicStylePack = {
     disclaimer?: string;
     showLogo?: boolean;
     showCoverBrand?: boolean;
+    showCoverTitle?: boolean;
+    showCoverDetails?: boolean;
     marginTopMm?: number;
     marginBottomMm?: number;
     marginLeftMm?: number;
@@ -64,6 +96,8 @@ const emptyForm = {
   mutedColor: '#5A6270',
   showLogo: true,
   showCoverBrand: true,
+  showCoverTitle: true,
+  showCoverDetails: true,
 };
 
 /** Sentinel for the create-pack editor (not a real style pack id). */
@@ -98,6 +132,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
       mutedColor: initialSelected.typography.mutedColor ?? '#5A6270',
       showLogo: initialSelected.chrome.showLogo ?? true,
       showCoverBrand: initialSelected.chrome.showCoverBrand ?? true,
+      showCoverTitle: initialSelected.chrome.showCoverTitle ?? true,
+      showCoverDetails: initialSelected.chrome.showCoverDetails ?? true,
     };
   });
   const [pending, setPending] = useState(false);
@@ -143,6 +179,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
       mutedColor: pack.typography.mutedColor ?? '#5A6270',
       showLogo: pack.chrome.showLogo ?? true,
       showCoverBrand: pack.chrome.showCoverBrand ?? true,
+      showCoverTitle: pack.chrome.showCoverTitle ?? true,
+      showCoverDetails: pack.chrome.showCoverDetails ?? true,
     });
   }
 
@@ -184,6 +222,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             disclaimer: form.disclaimer,
             showLogo: form.showLogo,
             showCoverBrand: form.showCoverBrand,
+            showCoverTitle: form.showCoverTitle,
+            showCoverDetails: form.showCoverDetails,
           },
         }),
       });
@@ -236,6 +276,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
               disclaimer: form.disclaimer,
               showLogo: form.showLogo,
               showCoverBrand: form.showCoverBrand,
+              showCoverTitle: form.showCoverTitle,
+              showCoverDetails: form.showCoverDetails,
             },
           }),
         },
@@ -426,6 +468,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
               disclaimer: form.disclaimer,
               showLogo: form.showLogo,
               showCoverBrand: form.showCoverBrand,
+              showCoverTitle: form.showCoverTitle,
+              showCoverDetails: form.showCoverDetails,
             },
           }),
         },
@@ -578,7 +622,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             </p>
           </Field>
           <Field label={t('templatesBodyFont')}>
-            <Input
+            <Select
               value={form.bodyFont}
               disabled={fieldsDisabled}
               onChange={(event) =>
@@ -587,10 +631,16 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
                   bodyFont: event.target.value,
                 }))
               }
-            />
+            >
+              {fontOptions(form.bodyFont).map((font) => (
+                <option key={font} value={font} style={{ fontFamily: font }}>
+                  {font}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label={t('templatesHeadingFont')}>
-            <Input
+            <Select
               value={form.headingFont}
               disabled={fieldsDisabled}
               onChange={(event) =>
@@ -599,29 +649,41 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
                   headingFont: event.target.value,
                 }))
               }
+            >
+              {fontOptions(form.headingFont).map((font) => (
+                <option key={font} value={font} style={{ fontFamily: font }}>
+                  {font}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('templatesBodyColor')}>
+            <StylePackColorField
+              label={t('templatesBodyColor')}
+              value={form.bodyColor}
+              disabled={fieldsDisabled}
+              onChange={(bodyColor) =>
+                setForm((current) => ({ ...current, bodyColor }))
+              }
             />
           </Field>
           <Field label={t('templatesHeadingColor')}>
-            <Input
+            <StylePackColorField
+              label={t('templatesHeadingColor')}
               value={form.headingColor}
               disabled={fieldsDisabled}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  headingColor: event.target.value,
-                }))
+              onChange={(headingColor) =>
+                setForm((current) => ({ ...current, headingColor }))
               }
             />
           </Field>
           <Field label={t('templatesMutedColor')}>
-            <Input
+            <StylePackColorField
+              label={t('templatesMutedColor')}
               value={form.mutedColor}
               disabled={fieldsDisabled}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  mutedColor: event.target.value,
-                }))
+              onChange={(mutedColor) =>
+                setForm((current) => ({ ...current, mutedColor }))
               }
             />
           </Field>
@@ -668,6 +730,34 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
               }
             />
             {t('templatesShowCoverBrand')}
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={form.showCoverTitle}
+              disabled={fieldsDisabled}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  showCoverTitle: event.target.checked,
+                }))
+              }
+            />
+            {t('templatesShowCoverTitle')}
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={form.showCoverDetails}
+              disabled={fieldsDisabled}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  showCoverDetails: event.target.checked,
+                }))
+              }
+            />
+            {t('templatesShowCoverDetails')}
           </label>
         </div>
 

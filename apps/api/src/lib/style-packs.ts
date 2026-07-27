@@ -55,6 +55,10 @@ export const stylePackChromeSchema = z
     disclaimer: z.string().max(500).optional(),
     showLogo: z.boolean().optional(),
     showCoverBrand: z.boolean().optional(),
+    /** Cover H1 title above the record body. */
+    showCoverTitle: z.boolean().optional(),
+    /** Meta line, summary, and exported timestamp under the cover title. */
+    showCoverDetails: z.boolean().optional(),
     marginTopMm: z.number().min(8).max(40).optional(),
     marginBottomMm: z.number().min(8).max(40).optional(),
     marginLeftMm: z.number().min(8).max(40).optional(),
@@ -101,6 +105,8 @@ export type StylePackExportChrome = {
       | 'disclaimer'
       | 'showLogo'
       | 'showCoverBrand'
+      | 'showCoverTitle'
+      | 'showCoverDetails'
       | 'marginTopMm'
       | 'marginBottomMm'
       | 'marginLeftMm'
@@ -129,6 +135,8 @@ const DEFAULT_CHROME: StylePackExportChrome['chrome'] = {
   disclaimer: '',
   showLogo: true,
   showCoverBrand: true,
+  showCoverTitle: true,
+  showCoverDetails: true,
   marginTopMm: 14,
   marginBottomMm: 14,
   marginLeftMm: 12,

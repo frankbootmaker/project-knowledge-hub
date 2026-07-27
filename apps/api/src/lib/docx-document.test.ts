@@ -82,6 +82,26 @@ describe('buildDocxDocumentHtml', () => {
     expect(html).toContain('note · draft · q3-q4');
     expect(html).toContain('<em>Rolling summary</em>');
   });
+
+  it('can omit cover title and details via style flags', () => {
+    const html = buildDocxDocumentHtml({
+      title: 'Cover Title',
+      metaLine: 'note · draft · slug',
+      summary: 'Should hide',
+      exportedNote: 'Exported now',
+      bodyHtml: '<h1>Body Title</h1><p>Body</p>',
+      style: {
+        showCoverTitle: false,
+        showCoverDetails: false,
+      },
+    });
+
+    expect(html).not.toContain('Cover Title');
+    expect(html).not.toContain('note · draft · slug');
+    expect(html).not.toContain('Should hide');
+    expect(html).not.toContain('Exported now');
+    expect(html).toContain('Body Title');
+  });
 });
 
 describe('buildDocxDocumentOptions', () => {

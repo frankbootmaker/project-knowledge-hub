@@ -21,6 +21,8 @@ export type PdfRenderInput = {
   stylePack?: {
     logoDataUri?: string | null;
     coverLogoDataUri?: string | null;
+    showCoverTitle?: boolean;
+    showCoverDetails?: boolean;
     headerText?: string;
     footerText?: string;
     disclaimer?: string;
@@ -507,15 +509,26 @@ export function renderStructuredPdf(input: PdfRenderInput): Promise<Buffer> {
       }
     }
 
-    doc.font(fonts.bold).fontSize(18).fillColor(inkHeading).text(input.title, {
-      width: proseWidth(),
-      paragraphGap: 4,
-    });
-    writeText(input.metaLine, { size: 9, color: muted, gap: 1 });
-    if (input.summary?.trim()) {
-      writeText(input.summary.trim(), { font: fonts.italic, size: 10, color: muted });
+    const showCoverTitle = input.stylePack?.showCoverTitle !== false;
+    const showCoverDetails = input.stylePack?.showCoverDetails !== false;
+
+    if (showCoverTitle) {
+      doc.font(fonts.bold).fontSize(18).fillColor(inkHeading).text(input.title, {
+        width: proseWidth(),
+        paragraphGap: 4,
+      });
     }
-    writeText(input.footerNote, { size: 9, color: muted, gap: 4 });
+    if (showCoverDetails) {
+      writeText(input.metaLine, { size: 9, color: muted, gap: 1 });
+      if (input.summary?.trim()) {
+        writeText(input.summary.trim(), {
+          font: fonts.italic,
+          size: 10,
+          color: muted,
+        });
+      }
+      writeText(input.footerNote, { size: 9, color: muted, gap: 4 });
+    }
     if (input.stylePack?.disclaimer?.trim()) {
       writeText(input.stylePack.disclaimer.trim(), {
         font: fonts.italic,
@@ -524,13 +537,20 @@ export function renderStructuredPdf(input: PdfRenderInput): Promise<Buffer> {
         gap: 6,
       });
     }
-    doc
-      .strokeColor(RULE_COLOR)
-      .lineWidth(0.75)
-      .moveTo(doc.page.margins.left, doc.y)
-      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
-      .stroke();
-    doc.moveDown(0.8);
+    if (
+      input.stylePack?.coverLogoDataUri ||
+      showCoverTitle ||
+      showCoverDetails ||
+      input.stylePack?.disclaimer?.trim()
+    ) {
+      doc
+        .strokeColor(RULE_COLOR)
+        .lineWidth(0.75)
+        .moveTo(doc.page.margins.left, doc.y)
+        .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+        .stroke();
+      doc.moveDown(0.8);
+    }
 
     for (const block of input.blocks) {
       switch (block.kind) {

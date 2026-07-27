@@ -300,9 +300,21 @@ export async function buildExportHtmlDocument(
           })}
         </div>`
       : '';
+  const showTitle = !pack || pack.chrome.showCoverTitle !== false;
+  const showDetails = !pack || pack.chrome.showCoverDetails !== false;
+  const titleHtml = showTitle
+    ? `<h1 style="margin:0 0 0.35em;font-size:1.7rem;letter-spacing:-0.015em;">${escapeHtml(input.title)}</h1>`
+    : '';
+  const detailsHtml = showDetails
+    ? `<p class="doc-meta">${escapeHtml(input.recordType)} · ${escapeHtml(input.lifecycleStatus)} · ${escapeHtml(input.slug)}</p>${summary}<p class="doc-meta">Exported ${escapeHtml(exportedAt.toISOString())}</p>`
+    : '';
   const disclaimer = pack?.chrome.disclaimer?.trim()
     ? `<p class="doc-disclaimer">${escapeHtml(pack.chrome.disclaimer.trim())}</p>`
     : '';
+  const coverRule =
+    brand || titleHtml || detailsHtml || disclaimer
+      ? `<hr class="doc-rule" />`
+      : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -316,12 +328,10 @@ export async function buildExportHtmlDocument(
 <body>
   <div class="doc-shell">
     ${brand}
-    <h1 style="margin:0 0 0.35em;font-size:1.7rem;letter-spacing:-0.015em;">${escapeHtml(input.title)}</h1>
-    <p class="doc-meta">${escapeHtml(input.recordType)} · ${escapeHtml(input.lifecycleStatus)} · ${escapeHtml(input.slug)}</p>
-    ${summary}
-    <p class="doc-meta">Exported ${escapeHtml(exportedAt.toISOString())}</p>
+    ${titleHtml}
+    ${detailsHtml}
     ${disclaimer}
-    <hr class="doc-rule" />
+    ${coverRule}
     <article class="knowledge-markdown">
       ${bodyHtml}
     </article>
@@ -541,6 +551,8 @@ export function buildKnowledgeRecordPdfWithPdfkit(
       ? {
           logoDataUri: pack.chrome.showLogo ? pack.logoDataUri : null,
           coverLogoDataUri: pack.chrome.showCoverBrand ? pack.logoDataUri : null,
+          showCoverTitle: pack.chrome.showCoverTitle,
+          showCoverDetails: pack.chrome.showCoverDetails,
           headerText: interpolateStyleTemplate(pack.chrome.headerText || '', {
             title: input.title,
           }),
@@ -680,6 +692,8 @@ export async function buildKnowledgeRecordDocx(
           bodyColor: pack.typography.bodyColor,
           logoDataUri: pack.logoDataUri,
           showCoverBrand: pack.chrome.showCoverBrand,
+          showCoverTitle: pack.chrome.showCoverTitle,
+          showCoverDetails: pack.chrome.showCoverDetails,
           disclaimer: pack.chrome.disclaimer,
           logoWidthPx: pack.logoWidthPx,
           logoHeightPx: pack.logoHeightPx,
