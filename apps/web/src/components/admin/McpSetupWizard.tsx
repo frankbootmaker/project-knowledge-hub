@@ -89,7 +89,7 @@ export function McpSetupWizard({
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const [name, setName] = useState(defaultClientName('cursor'));
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
-  const [workspaceId, setWorkspaceId] = useState('');
+  const [allowedWorkspaceIds, setAllowedWorkspaceIds] = useState<string[]>([]);
   const [actingUserId, setActingUserId] = useState(users[0]?.id ?? '');
 
   function selectLlmClient(next: LlmClientId) {
@@ -115,10 +115,14 @@ export function McpSetupWizard({
   );
 
   useEffect(() => {
-    if (!workspaceId && orgWorkspaces[0]) {
-      setWorkspaceId(orgWorkspaces[0].id);
-    }
-  }, [orgWorkspaces, workspaceId]);
+    setAllowedWorkspaceIds((current) => {
+      const valid = current.filter((id) =>
+        orgWorkspaces.some((workspace) => workspace.id === id),
+      );
+      if (valid.length > 0) return valid;
+      return orgWorkspaces[0] ? [orgWorkspaces[0].id] : [];
+    });
+  }, [orgWorkspaces]);
 
   async function runPreflight() {
     setPending(true);
@@ -193,7 +197,7 @@ export function McpSetupWizard({
     setPending(true);
     setError(null);
     try {
-      if (!organizationId || !workspaceId || !name.trim()) {
+      if (!organizationId || allowedWorkspaceIds.length === 0 || !name.trim()) {
         throw new Error(t('mcpWizardMissingFields'));
       }
       if (mode === 'write' && !actingUserId) {
@@ -208,7 +212,7 @@ export function McpSetupWizard({
           organizationId,
           name: name.trim(),
           scopes: mode === 'write' ? [...WRITE_SCOPES] : [...READ_SCOPES],
-          allowedWorkspaceIds: [workspaceId],
+          allowedWorkspaceIds,
           actingUserId: mode === 'write' ? actingUserId : null,
         }),
       });
@@ -246,8 +250,8 @@ export function McpSetupWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          workspaceId: workspaceId || undefined,
-          runSearch: Boolean(workspaceId),
+          workspaceId: allowedWorkspaceIds[0] || undefined,
+          runSearch: allowedWorkspaceIds.length > 0,
         }),
       });
       const payload = (await response.json()) as {
@@ -474,7 +478,7 @@ export function McpSetupWizard({
               value={organizationId}
               onChange={(e) => {
                 setOrganizationId(e.target.value);
-                setWorkspaceId('');
+                setAllowedWorkspaceIds([]);
               }}
             >
               {organizations.map((org) => (
@@ -484,19 +488,35 @@ export function McpSetupWizard({
               ))}
             </Select>
           </Field>
-          <Field label={t('workspace')}>
-            <Select value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
+          <fieldset className="m-0 grid gap-2 border-0 p-0">
+            <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
+            <p className="m-0 text-xs text-ink-muted">{t('workspacesAllowlistHint')}</p>
+            <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
               {orgWorkspaces.length === 0 ? (
-                <option value="">{tCommon('none')}</option>
+                <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
               ) : (
                 orgWorkspaces.map((workspace) => (
-                  <option key={workspace.id} value={workspace.id}>
+                  <label
+                    key={workspace.id}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={allowedWorkspaceIds.includes(workspace.id)}
+                      onChange={() => {
+                        setAllowedWorkspaceIds((current) =>
+                          current.includes(workspace.id)
+                            ? current.filter((id) => id !== workspace.id)
+                            : [...current, workspace.id],
+                        );
+                      }}
+                    />
                     {workspace.name}
-                  </option>
+                  </label>
                 ))
               )}
-            </Select>
-          </Field>
+            </div>
+          </fieldset>
           {mode === 'write' ? (
             <Field label={t('actingUser')}>
               <Select value={actingUserId} onChange={(e) => setActingUserId(e.target.value)}>
@@ -515,7 +535,9 @@ export function McpSetupWizard({
             </Button>
             <Button
               type="button"
-              disabled={pending || !name.trim() || !workspaceId}
+              disabled={
+                pending || !name.trim() || allowedWorkspaceIds.length === 0
+              }
               onClick={() => void createClient()}
             >
               {t('mcpWizardCreateClient')}
