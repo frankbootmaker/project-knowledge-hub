@@ -310,7 +310,7 @@ export function McpSetupWizard({
     setLlmClient('cursor');
     setName(defaultClientName('cursor'));
     setOrganizationId(organizations[0]?.id ?? '');
-    setWorkspaceId('');
+    setAllowedWorkspaceIds([]);
     setActingUserId(users[0]?.id ?? '');
     void runPreflight();
   }
