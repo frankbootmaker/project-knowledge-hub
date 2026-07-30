@@ -181,9 +181,8 @@ services:
     networks:
       - knowledge_hub_dev_net
 
-  # Optional local Ops-0 scheduler: docker compose --profile backup up -d db-backup
+  # Ops-0 scheduler (same loop as Dokploy). Disable with BACKUP_ENABLED=false or Admin schedule.
   db-backup:
-    profiles: ['backup']
     image: pgvector/pgvector:pg16
     container_name: knowledge-hub-dev-db-backup
     restart: unless-stopped

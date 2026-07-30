@@ -138,6 +138,20 @@ export type MonitoringPayload = {
       intervalSeconds: number;
       source: 'file' | 'env';
     };
+    scheduler?: {
+      alive: boolean;
+      heartbeat: {
+        stamp: {
+          kind: string;
+          at: string;
+          status: string;
+          nextDueAt: string;
+          detail: string;
+          hostname: string;
+        } | null;
+        ageSeconds: number | null;
+      };
+    };
     lastOffsite: {
       stamp: {
         kind: string;
@@ -1233,6 +1247,13 @@ export function MonitoringDashboard({
                           : t('monitoringNever'),
                       })}
                     </p>
+                    <p className="m-0 text-ink-muted">
+                      {t('monitoringScheduleNextDue', {
+                        when: data.backups.scheduler?.heartbeat.stamp?.nextDueAt
+                          ? data.backups.scheduler.heartbeat.stamp.nextDueAt
+                          : t('monitoringNever'),
+                      })}
+                    </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-ink-muted">{t('monitoringScheduleRunStatus')}</span>
                       <Badge tone={statusTone}>
@@ -1242,7 +1263,17 @@ export function MonitoringDashboard({
                             ? t('monitoringScheduleStatusFailure')
                             : t('monitoringScheduleStatusNotice')}
                       </Badge>
+                      <Badge tone={data.backups.scheduler?.alive ? 'success' : 'warn'}>
+                        {data.backups.scheduler?.alive
+                          ? t('monitoringSchedulerAlive')
+                          : t('monitoringSchedulerMissing')}
+                      </Badge>
                     </div>
+                    {!data.backups.scheduler?.alive && saved.enabled ? (
+                      <p className="m-0 text-xs text-ink-muted">
+                        {t('monitoringSchedulerMissingHint')}
+                      </p>
+                    ) : null}
                     {runStatus === 'notice' && data.attention.staleBackup ? (
                       <p className="m-0 text-xs text-ink-muted">
                         {t('monitoringStaleBackup', {

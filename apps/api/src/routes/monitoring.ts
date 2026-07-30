@@ -13,7 +13,9 @@ import {
   dumpFilePath,
   exportDatabaseDump,
   importDatabaseDump,
+  isSchedulerHeartbeatFresh,
   listDumpArtifacts,
+  readSchedulerHeartbeat,
   readStamp,
   rotateDumpArtifacts,
   saveUploadedDump,
@@ -144,6 +146,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       artifacts,
       retention,
       schedule,
+      schedulerHeartbeat,
       archived,
       workspaceOptions,
       onDutyAdmins,
@@ -168,6 +171,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         listDumpArtifacts(backupDir),
         readRetentionPolicy(backupDir, envRetentionDefaults(app.env)),
         readSchedulePolicy(backupDir, envScheduleDefaults(app.env)),
+        readSchedulerHeartbeat(backupDir),
         getArchivedEntityCounts(app.database),
         listActiveWorkspacesForMonitoring(app.database),
         listOnDutyAdmins(app.database),
@@ -192,6 +196,21 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const lastSuccessSummary = stampSummary(lastSuccess);
     const staleAfterHours = app.env.BACKUP_STALE_AFTER_HOURS;
     const staleBackup = isBackupStale(lastSuccessSummary.ageSeconds, staleAfterHours);
+    const schedulerHeartbeatSummary = schedulerHeartbeat
+      ? {
+          stamp: schedulerHeartbeat,
+          ageSeconds: stampSummary({
+            kind: schedulerHeartbeat.kind,
+            at: schedulerHeartbeat.at,
+            artifact: '',
+            schemaVersion: 'n/a',
+            hostname: schedulerHeartbeat.hostname,
+          }).ageSeconds,
+        }
+      : { stamp: null, ageSeconds: null as number | null };
+    const schedulerAlive = isSchedulerHeartbeatFresh(
+      schedulerHeartbeatSummary.ageSeconds,
+    );
 
     return {
       overall,
@@ -260,6 +279,10 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         schedule: {
           ...schedule.policy,
           source: schedule.source,
+        },
+        scheduler: {
+          alive: schedulerAlive,
+          heartbeat: schedulerHeartbeatSummary,
         },
         offsite: {
           enabled: offsiteEnabled,
