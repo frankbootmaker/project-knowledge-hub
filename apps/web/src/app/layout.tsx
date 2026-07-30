@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Viewport } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
@@ -8,9 +8,22 @@ import { ToastProvider } from '../components/ui';
 import { getThemePreference } from '../lib/theme-actions';
 import './globals.css';
 
+export const metadata: Metadata = {
+  title: {
+    default: 'Project Knowledge Hub',
+    template: '%s · Project Knowledge Hub',
+  },
+  description: 'Shared project knowledge for teams and AI tools.',
+  applicationName: 'Project Knowledge Hub',
+};
+
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#1F4B73' },
+    { media: '(prefers-color-scheme: dark)', color: '#1F4B73' },
+  ],
 };
 
 const sans = IBM_Plex_Sans({
