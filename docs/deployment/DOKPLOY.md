@@ -201,7 +201,7 @@ Use **Admin → Monitoring → Export ops log** for a redacted support + error-a
 
 ## Backup / export / import (Dev)
 
-**Ops-0 (NF-005):** Compose service `db-backup` writes `pg_dump -Fc` into volume `knowledge_hub_backups` (`/backups`), applies retention, and updates `last-success.json`. Disable with `BACKUP_ENABLED=false`, or Admin → Monitoring → schedule (`/backups/schedule.json`).
+**Ops-0 (NF-005):** Compose service `db-backup` writes `pg_dump -Fc` into volume `knowledge_hub_backups` (`/backups`), applies retention, and updates `last-success.json` (+ `scheduler-heartbeat.json`). Overdue dumps catch up immediately; the loop re-reads Admin schedule about once a minute. Disable with `BACKUP_ENABLED=false`, or Admin → Monitoring → schedule (`/backups/schedule.json`).
 
 The API (and worker) run as uid **1001**. Sidecar dumps are chowned to that uid after each cycle, and the API/worker entrypoints fix volume ownership on start — otherwise Admin **Export** / **Delete** fail with permission errors (the volume is often created root-owned). The API image installs **postgresql-client-16** (PGDG) so `pg_dump` matches Compose Postgres 16.
 
