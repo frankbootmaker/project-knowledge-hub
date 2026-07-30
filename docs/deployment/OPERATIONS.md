@@ -73,7 +73,7 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 ### Ops-0 — Scheduled local backup + export/import path — **done**
 
-* Compose service `db-backup` (Dokploy) / optional local `compose.yaml` profile `backup`: loop `pg_dump -Fc` on an interval (default `BACKUP_INTERVAL_SECONDS=86400`). Admin → Monitoring can override enable/interval via `BACKUP_DIR/schedule.json` (sidecar re-reads each cycle).
+* Compose service `db-backup` (Dokploy + local `compose.yaml`): loop `pg_dump -Fc` when due (default interval `BACKUP_INTERVAL_SECONDS=86400`). Overdue dumps run on catch-up; the loop polls about once a minute so Admin schedule changes apply without a full-interval sleep. Admin → Monitoring overrides enable/interval via `BACKUP_DIR/schedule.json` and shows a scheduler heartbeat.
 * Retention via `rotate-backups.sh` / Admin `retention.json`: `BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` (defaults 7 / 4 / 3).
 * Dumps on named volume `knowledge_hub_backups` (path `/backups` in the sidecar).
 * Volume ownership: API/worker use uid **1001**; `db-backup` and container entrypoints chown `/backups` so Monitoring export/delete work.
@@ -173,13 +173,13 @@ Minimal interface (implementation later):
 | Import (replace) | `CONFIRM_IMPORT=REPLACE POSTGRES_CONTAINER=… ./infrastructure/scripts/import-db.sh ./backups/latest.dump` (schema wipe default; add `WIPE_DATABASE=1` to recreate DB) |
 | Low-level restore | `./infrastructure/scripts/restore-db.sh ./backups/foo.dump` (prefer `import-db.sh`) |
 
-Local optional scheduler:
+Local / Dokploy:
 
 ```bash
-docker compose --profile backup up -d db-backup
+docker compose up -d db-backup   # included by default in compose.yaml + compose.dokploy.yaml
 ```
 
-Dokploy: `db-backup` is always defined in `compose.dokploy.yaml`; set `BACKUP_ENABLED=false` to idle without dumping.
+Set `BACKUP_ENABLED=false` (or Admin → Monitoring → disable schedule) to idle without dumping.
 
 ### Env knobs
 
@@ -191,6 +191,8 @@ Dokploy: `db-backup` is always defined in `compose.dokploy.yaml`; set `BACKUP_EN
 | `BACKUP_KEEP_WEEKLY` | `4` | Then keep ≤N one-per-ISO-week |
 | `BACKUP_KEEP_MONTHLY` | `3` | Then keep ≤N one-per-month; older deleted |
 | `BACKUP_RUN_ON_START` | `1` | Dump once when sidecar starts |
+| `BACKUP_FAILURE_RETRY_SECONDS` | `900` | Wait before retry after a failed dump |
+| `BACKUP_SCHEDULER_POLL_SECONDS` | `60` | How often the sidecar re-reads `schedule.json` while waiting |
 | `BACKUP_DIR` | `./backups` or `/backups` | Artifact + stamp directory |
 
 ---

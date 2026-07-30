@@ -60,6 +60,46 @@ export async function readStamp(
   }
 }
 
+export type SchedulerHeartbeat = {
+  kind: string;
+  at: string;
+  status: string;
+  nextDueAt: string;
+  detail: string;
+  hostname: string;
+};
+
+/** Sidecar writes scheduler-heartbeat.json about once a minute while alive. */
+export async function readSchedulerHeartbeat(
+  backupDir: string,
+): Promise<SchedulerHeartbeat | null> {
+  const stampPath = path.join(backupDir, 'scheduler-heartbeat.json');
+  try {
+    const raw = await fs.readFile(stampPath, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<SchedulerHeartbeat>;
+    if (!parsed.at || typeof parsed.at !== 'string') return null;
+    return {
+      kind: typeof parsed.kind === 'string' ? parsed.kind : 'scheduler_heartbeat',
+      at: parsed.at,
+      status: typeof parsed.status === 'string' ? parsed.status : 'unknown',
+      nextDueAt: typeof parsed.nextDueAt === 'string' ? parsed.nextDueAt : '',
+      detail: typeof parsed.detail === 'string' ? parsed.detail : '',
+      hostname: typeof parsed.hostname === 'string' ? parsed.hostname : 'unknown',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** True when the sidecar has checked in recently (default: 5 minutes). */
+export function isSchedulerHeartbeatFresh(
+  ageSeconds: number | null,
+  maxAgeSeconds = 300,
+): boolean {
+  if (ageSeconds == null) return false;
+  return ageSeconds <= maxAgeSeconds;
+}
+
 export async function writeStamp(
   backupDir: string,
   fileName: 'last-success.json' | 'last-import.json' | 'last-failure.json',
