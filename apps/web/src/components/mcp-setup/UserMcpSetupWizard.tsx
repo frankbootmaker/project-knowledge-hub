@@ -84,7 +84,9 @@ export function UserMcpSetupWizard({
   const [llmClient, setLlmClient] = useState<LlmClientId>('cursor');
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const [name, setName] = useState(defaultClientName('cursor'));
-  const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? '');
+  const [workspaceIds, setWorkspaceIds] = useState<string[]>(
+    workspaces[0] ? [workspaces[0].id] : [],
+  );
 
   const [token, setToken] = useState<string | null>(initialToken ?? null);
   const [clientName, setClientName] = useState<string | null>(
@@ -106,10 +108,14 @@ export function UserMcpSetupWizard({
   }
 
   useEffect(() => {
-    if (!workspaceId && workspaces[0]) {
-      setWorkspaceId(workspaces[0].id);
-    }
-  }, [workspaces, workspaceId]);
+    setWorkspaceIds((current) => {
+      const valid = current.filter((id) =>
+        workspaces.some((workspace) => workspace.id === id),
+      );
+      if (valid.length > 0) return valid;
+      return workspaces[0] ? [workspaces[0].id] : [];
+    });
+  }, [workspaces]);
 
   useEffect(() => {
     if (initialToken) {
@@ -148,7 +154,7 @@ export function UserMcpSetupWizard({
     setPending(true);
     setError(null);
     try {
-      if (!workspaceId || !name.trim()) {
+      if (workspaceIds.length === 0 || !name.trim()) {
         throw new Error(t('mcpWizardMissingFields'));
       }
 
@@ -159,7 +165,7 @@ export function UserMcpSetupWizard({
         body: JSON.stringify({
           name: name.trim(),
           scopes: mode === 'write' ? [...MCP_WRITE_SCOPES] : [...MCP_READ_SCOPES],
-          allowedWorkspaceIds: [workspaceId],
+          allowedWorkspaceIds: workspaceIds,
         }),
       });
       const payload = (await response.json()) as {
@@ -198,8 +204,8 @@ export function UserMcpSetupWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          workspaceId: workspaceId || undefined,
-          runSearch: Boolean(workspaceId),
+          workspaceId: workspaceIds[0] || undefined,
+          runSearch: workspaceIds.length > 0,
         }),
       });
       const payload = (await response.json()) as {
@@ -384,22 +390,35 @@ export function UserMcpSetupWizard({
           {mode === 'write' ? (
             <p className="m-0 text-xs text-ink-muted">{tAi('wizardWriteHint')}</p>
           ) : null}
-          <Field label={t('workspace')}>
-            <Select
-              value={workspaceId}
-              onChange={(e) => setWorkspaceId(e.target.value)}
-            >
+          <fieldset className="m-0 grid gap-2 border-0 p-0">
+            <legend className="mb-1 text-sm font-medium">{tAi('workspaces')}</legend>
+            <p className="m-0 text-xs text-ink-muted">{tAi('workspacesAllowlistHint')}</p>
+            <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
               {workspaces.length === 0 ? (
-                <option value="">{tCommon('none')}</option>
+                <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
               ) : (
                 workspaces.map((workspace) => (
-                  <option key={workspace.id} value={workspace.id}>
+                  <label
+                    key={workspace.id}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={workspaceIds.includes(workspace.id)}
+                      onChange={() => {
+                        setWorkspaceIds((current) =>
+                          current.includes(workspace.id)
+                            ? current.filter((id) => id !== workspace.id)
+                            : [...current, workspace.id],
+                        );
+                      }}
+                    />
                     {workspace.name}
-                  </option>
+                  </label>
                 ))
               )}
-            </Select>
-          </Field>
+            </div>
+          </fieldset>
           {error ? <ErrorText>{error}</ErrorText> : null}
           <div className="flex flex-wrap gap-2">
             <Button
@@ -411,7 +430,7 @@ export function UserMcpSetupWizard({
             </Button>
             <Button
               type="button"
-              disabled={pending || !name.trim() || !workspaceId}
+              disabled={pending || !name.trim() || workspaceIds.length === 0}
               onClick={() => void createClient()}
             >
               {t('mcpWizardCreateClient')}

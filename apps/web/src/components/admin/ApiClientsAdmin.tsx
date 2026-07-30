@@ -104,6 +104,13 @@ export function ApiClientsAdmin({
   const [approveWorkspaces, setApproveWorkspaces] = useState<string[]>([]);
   const [approveError, setApproveError] = useState<string | null>(null);
 
+  const [editClient, setEditClient] = useState<PublicApiClient | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editScopes, setEditScopes] = useState<string[]>([]);
+  const [editWorkspaces, setEditWorkspaces] = useState<string[]>([]);
+  const [editActingUserId, setEditActingUserId] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+
   const filteredClients = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return initialClients.filter((client) => {
@@ -137,10 +144,24 @@ export function ApiClientsAdmin({
     );
   }, [workspaces, approveClient]);
 
+  const editOrgWorkspaces = useMemo(() => {
+    if (!editClient) return [];
+    return workspaces.filter(
+      (workspace) => workspace.organizationId === editClient.organizationId,
+    );
+  }, [workspaces, editClient]);
+
   function userLabel(userId: string | null | undefined): string {
     if (!userId) return '—';
     const user = users.find((item) => item.id === userId);
     return user ? `${user.displayName} (${user.email})` : userId;
+  }
+
+  function workspaceNames(ids: string[]): string {
+    if (ids.length === 0) return t('workspacesAllowlistEmpty');
+    return ids
+      .map((id) => workspaces.find((workspace) => workspace.id === id)?.name ?? id)
+      .join(', ');
   }
 
   function resetCreateForm() {
@@ -168,6 +189,20 @@ export function ApiClientsAdmin({
     setApproveScopes([...client.scopes]);
     setApproveWorkspaces([...client.allowedWorkspaceIds]);
     setApproveError(null);
+  }
+
+  function openEdit(client: PublicApiClient) {
+    setEditClient(client);
+    setEditName(client.name);
+    setEditScopes([...client.scopes]);
+    setEditWorkspaces([...client.allowedWorkspaceIds]);
+    setEditActingUserId(client.actingUserId ?? '');
+    setEditError(null);
+  }
+
+  function closeEditModal() {
+    setEditClient(null);
+    setEditError(null);
   }
 
   async function createClient() {
@@ -270,6 +305,42 @@ export function ApiClientsAdmin({
     }
   }
 
+  async function saveEdit() {
+    if (!editClient) return;
+    setPending(true);
+    setEditError(null);
+    try {
+      const response = await fetch(`/api/v1/api-clients/${editClient.id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({
+          name: editName.trim(),
+          scopes: editScopes,
+          allowedWorkspaceIds: editWorkspaces,
+          actingUserId: editActingUserId || null,
+        }),
+      });
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? t('failed'));
+      }
+      const updatedName = editName.trim();
+      closeEditModal();
+      pushToast(t('toastApiClientUpdated', { name: updatedName }));
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('failed');
+      setEditError(message);
+      pushToast(message, 'danger');
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function rotate(clientId: string) {
     setPending(true);
     setError(null);
@@ -323,32 +394,28 @@ export function ApiClientsAdmin({
     }
   }
 
-  function toggleScope(scope: string, target: 'create' | 'approve') {
-    if (target === 'create') {
-      setScopes((current) =>
-        current.includes(scope)
-          ? current.filter((item) => item !== scope)
-          : [...current, scope],
-      );
-      return;
-    }
-    setApproveScopes((current) =>
+  function toggleScope(scope: string, target: 'create' | 'approve' | 'edit') {
+    const setter =
+      target === 'create'
+        ? setScopes
+        : target === 'approve'
+          ? setApproveScopes
+          : setEditScopes;
+    setter((current) =>
       current.includes(scope)
         ? current.filter((item) => item !== scope)
         : [...current, scope],
     );
   }
 
-  function toggleWorkspace(workspaceId: string, target: 'create' | 'approve') {
-    if (target === 'create') {
-      setAllowedWorkspaceIds((current) =>
-        current.includes(workspaceId)
-          ? current.filter((item) => item !== workspaceId)
-          : [...current, workspaceId],
-      );
-      return;
-    }
-    setApproveWorkspaces((current) =>
+  function toggleWorkspace(workspaceId: string, target: 'create' | 'approve' | 'edit') {
+    const setter =
+      target === 'create'
+        ? setAllowedWorkspaceIds
+        : target === 'approve'
+          ? setApproveWorkspaces
+          : setEditWorkspaces;
+    setter((current) =>
       current.includes(workspaceId)
         ? current.filter((item) => item !== workspaceId)
         : [...current, workspaceId],
@@ -569,6 +636,108 @@ export function ApiClientsAdmin({
         ) : null}
       </Modal>
 
+      <Modal
+        open={editClient != null}
+        onClose={closeEditModal}
+        title={t('editApiClient')}
+        description={editClient?.name}
+        size="lg"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={closeEditModal}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                pending ||
+                !editName.trim() ||
+                editScopes.length === 0 ||
+                (editScopes.includes('knowledge:write') &&
+                  (editWorkspaces.length === 0 || !editActingUserId))
+              }
+              onClick={() => void saveEdit()}
+            >
+              {tCommon('save')}
+            </Button>
+          </>
+        }
+      >
+        {editClient ? (
+          <div className="grid gap-3">
+            <p className="m-0 text-sm text-ink-muted">{t('editApiClientHint')}</p>
+            <Field label={tCommon('name')}>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                required
+                data-modal-initial-focus
+              />
+            </Field>
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {MCP_SCOPES.map((scope) => (
+                  <label key={scope} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editScopes.includes(scope)}
+                      onChange={() => toggleScope(scope, 'edit')}
+                    />
+                    <span className="font-mono text-xs">{scope}</span>
+                  </label>
+                ))}
+              </div>
+              {editScopes.includes('knowledge:write') ? (
+                <p className="m-0 text-xs text-ink-muted">{t('writeScopeHint')}</p>
+              ) : null}
+            </fieldset>
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
+              <p className="m-0 text-xs text-ink-muted">{t('workspacesAllowlistHint')}</p>
+              <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
+                {editOrgWorkspaces.length === 0 ? (
+                  <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
+                ) : (
+                  editOrgWorkspaces.map((workspace) => (
+                    <label
+                      key={workspace.id}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editWorkspaces.includes(workspace.id)}
+                        onChange={() => toggleWorkspace(workspace.id, 'edit')}
+                      />
+                      {workspace.name}
+                    </label>
+                  ))
+                )}
+              </div>
+            </fieldset>
+            <Field label={t('actingUser')}>
+              <Select
+                value={editActingUserId}
+                onChange={(e) => setEditActingUserId(e.target.value)}
+              >
+                <option value="">{tCommon('none')}</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.displayName} ({user.email})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {editError ? <ErrorText>{editError}</ErrorText> : null}
+          </div>
+        ) : null}
+      </Modal>
+
       {pendingClients.length > 0 ? (
         <section className="grid gap-3">
           <h2 className="m-0 text-base font-semibold">{t('pendingApiClientsTitle')}</h2>
@@ -637,7 +806,15 @@ export function ApiClientsAdmin({
                     <span className="font-mono">{client.tokenPrefix ?? '—'}</span>
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() => openEdit(client)}
+                  >
+                    {t('editApiClient')}
+                  </Button>
                   <Button
                     type="button"
                     variant="secondary"
@@ -659,6 +836,15 @@ export function ApiClientsAdmin({
               <p className="m-0 font-mono text-xs text-ink-muted">
                 {client.scopes.join(', ')}
               </p>
+              <p className="m-0 text-sm text-ink-muted">
+                <span className="font-medium text-ink">{t('allowedWorkspaces')}:</span>{' '}
+                {workspaceNames(client.allowedWorkspaceIds)}
+              </p>
+              {client.actingUserId ? (
+                <p className="m-0 text-xs text-ink-muted">
+                  {t('actingUser')}: {userLabel(client.actingUserId)}
+                </p>
+              ) : null}
               <p className="m-0 text-xs text-ink-muted">
                 {t('created')}: {new Date(client.createdAt).toLocaleString()}
                 {client.lastUsedAt
