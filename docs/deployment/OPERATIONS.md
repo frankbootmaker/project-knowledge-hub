@@ -73,7 +73,7 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 ### Ops-0 — Scheduled local backup + export/import path — **done**
 
-* Compose service `db-backup` (Dokploy + local `compose.yaml`): loop `pg_dump -Fc` when due (default interval `BACKUP_INTERVAL_SECONDS=86400`). Overdue dumps run on catch-up; the loop polls about once a minute so Admin schedule changes apply without a full-interval sleep. Admin → Monitoring overrides enable/interval via `BACKUP_DIR/schedule.json` and shows a scheduler heartbeat.
+* Compose service `db-backup` (Dokploy + local `compose.yaml`): loop `pg_dump -Fc` when due (default interval `BACKUP_INTERVAL_SECONDS=86400`). Scripts are copied into the image at build time (`infrastructure/docker/db-backup.Dockerfile`) so redeploys do not break a bind mount of the git checkout. Overdue dumps run on catch-up; the loop polls about once a minute so Admin schedule changes apply without a full-interval sleep. Admin → Monitoring overrides enable/interval via `BACKUP_DIR/schedule.json` and shows a scheduler heartbeat.
 * Retention via `rotate-backups.sh` / Admin `retention.json`: `BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` (defaults 7 / 4 / 3).
 * Dumps on named volume `knowledge_hub_backups` (path `/backups` in the sidecar).
 * Volume ownership: API/worker use uid **1001**; `db-backup` and container entrypoints chown `/backups` so Monitoring export/delete work.

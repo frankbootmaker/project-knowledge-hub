@@ -265,9 +265,14 @@ services:
       - default
 
   # Ops-0 (NF-005): scheduled pg_dump -Fc onto a named volume + retention + last-success stamp.
+  # Scripts are baked into the image (not bind-mounted from the git checkout). Dokploy replaces
+  # the clone on each deploy; a long-running bind mount then loses /scripts/*.sh mid-sleep.
   # Disable with BACKUP_ENABLED=false. Offsite upload is Ops-1 (after BlobStore).
   db-backup:
-    image: pgvector/pgvector:pg16
+    image: knowledge-hub-db-backup:dokploy
+    build:
+      context: .
+      dockerfile: infrastructure/docker/db-backup.Dockerfile
     restart: unless-stopped
     environment:
       POSTGRES_HOST: kh-postgres
@@ -284,8 +289,6 @@ services:
       BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-1}
     volumes:
       - knowledge_hub_backups:/backups
-      - ./infrastructure/scripts:/scripts:ro
-    entrypoint: ['/bin/bash', '/scripts/backup-loop.sh']
     depends_on:
       kh-postgres:
         condition: service_healthy

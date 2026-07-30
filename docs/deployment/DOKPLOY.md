@@ -203,6 +203,8 @@ Use **Admin → Monitoring → Export ops log** for a redacted support + error-a
 
 **Ops-0 (NF-005):** Compose service `db-backup` writes `pg_dump -Fc` into volume `knowledge_hub_backups` (`/backups`), applies retention, and updates `last-success.json` (+ `scheduler-heartbeat.json`). Overdue dumps catch up immediately; the loop re-reads Admin schedule about once a minute. Disable with `BACKUP_ENABLED=false`, or Admin → Monitoring → schedule (`/backups/schedule.json`).
 
+Scripts live **inside** the `knowledge-hub-db-backup` image (not a bind mount of the git checkout). Dokploy replaces the clone on each deploy; a long-running bind mount previously lost `/scripts/backup-db.sh` after the first overnight wake (`No such file or directory`) while the container kept sleeping 24h without heartbeats. After this change, each deploy rebuilds/recreates `db-backup` with fresh scripts.
+
 The API (and worker) run as uid **1001**. Sidecar dumps are chowned to that uid after each cycle, and the API/worker entrypoints fix volume ownership on start — otherwise Admin **Export** / **Delete** fail with permission errors (the volume is often created root-owned). The API image installs **postgresql-client-16** (PGDG) so `pg_dump` matches Compose Postgres 16.
 
 When `BLOB_PROVIDER=disabled`, avatars, knowledge media, and document-import originals use named volume `knowledge_hub_data` mounted at `/data` on **api and worker** (paths `/data/avatars`, `/data/media`, `/data/imports`). Without that shared mount, uploads fail with EACCES under `/app` and the worker cannot read originals written by the API.

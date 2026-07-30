@@ -181,9 +181,13 @@ services:
     networks:
       - knowledge_hub_dev_net
 
-  # Ops-0 scheduler (same loop as Dokploy). Disable with BACKUP_ENABLED=false or Admin schedule.
+  # Ops-0 scheduler (same loop as Dokploy). Scripts baked into the image — see db-backup.Dockerfile.
+  # Disable with BACKUP_ENABLED=false or Admin schedule.
   db-backup:
-    image: pgvector/pgvector:pg16
+    image: knowledge-hub-db-backup:dev
+    build:
+      context: .
+      dockerfile: infrastructure/docker/db-backup.Dockerfile
     container_name: knowledge-hub-dev-db-backup
     restart: unless-stopped
     environment:
@@ -201,8 +205,6 @@ services:
       BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-1}
     volumes:
       - knowledge_hub_dev_backups:/backups
-      - ./infrastructure/scripts:/scripts:ro
-    entrypoint: ['/bin/bash', '/scripts/backup-loop.sh']
     depends_on:
       postgres:
         condition: service_healthy
