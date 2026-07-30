@@ -263,7 +263,7 @@ export function UserMcpSetupWizard({
     setMode('read');
     setLlmClient('cursor');
     setName(defaultClientName('cursor'));
-    setWorkspaceId(workspaces[0]?.id ?? '');
+    setWorkspaceIds(workspaces[0]?.id ? [workspaces[0].id] : []);
     onTokenIssued?.();
     void runPreflight();
   }
