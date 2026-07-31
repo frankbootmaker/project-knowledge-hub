@@ -10,17 +10,17 @@
   --kh-on-brand: #ffffff;
 
   /* Surfaces */
-  --kh-surface: #f4f7fb;
-  --kh-panel: rgba(255, 255, 255, 0.82);
+  --kh-surface: #fcfdfe;
+  --kh-panel: rgba(255, 255, 255, 0.92);
   --kh-panel-solid: #ffffff;
-  --kh-line: rgba(21, 32, 43, 0.1);
-  --kh-line-strong: rgba(21, 32, 43, 0.18);
-  --kh-neutral-soft: #f3f4f6;
+  --kh-line: rgba(21, 32, 43, 0.08);
+  --kh-line-strong: rgba(21, 32, 43, 0.14);
+  --kh-neutral-soft: #f8f9fa;
 
   /* Brand & status */
   --kh-brand: #1f4b73;
   --kh-brand-hover: #183a59;
-  --kh-brand-soft: #e8f0f7;
+  --kh-brand-soft: #f3f7fb;
   --kh-accent: #145a36;
   --kh-accent-soft: #e3f6ec;
   --kh-warn: #8a5a00;
@@ -28,11 +28,11 @@
   --kh-danger: #9b1c1c;
   --kh-danger-soft: #fde8e8;
 
-  /* Atmosphere */
-  --kh-bg-glow-a: #d9e8f5;
-  --kh-bg-glow-b: #e8eef4;
-  --kh-bg-base-a: #f4f7fb;
-  --kh-bg-base-b: #eef2f6;
+  /* Atmosphere — near-white; barely-there cool wash */
+  --kh-bg-glow-a: #f7fafc;
+  --kh-bg-glow-b: #f9fafb;
+  --kh-bg-base-a: #fcfdfe;
+  --kh-bg-base-b: #f8fafc;
   --kh-selection: color-mix(in srgb, var(--kh-brand) 22%, white);
 
   /* Geometry */

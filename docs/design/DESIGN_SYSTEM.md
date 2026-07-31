@@ -177,6 +177,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-07-31
 
+* **Light atmosphere** — Page background nearly white (`--kh-bg-*` / `--kh-surface`); cool wash kept very subtle.
 * **Motion** — Tokenized durations/easing (`--kh-motion-*`, `--kh-ease-*`). Stronger modal/toast/mobile-nav entrances + backdrop fade; shell content enter; button press; Switch thumb timing. `prefers-reduced-motion` disables entrances/press. `FilePicker` for Browse/Tallózás as secondary buttons.
 
 ### 2026-07-22
