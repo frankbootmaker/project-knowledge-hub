@@ -20,6 +20,7 @@ export default async function AdminEmailPage() {
         smtpUser: '',
         hasSmtpPass: false,
         hasResendApiKey: false,
+        resendBaseUrl: '',
         source: 'env',
         effectiveDriver: 'console',
         envDriver: 'console',

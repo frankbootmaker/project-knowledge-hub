@@ -30,6 +30,8 @@ const updateMailSettingsSchema = z.object({
   /** Omit to keep; empty string ignored; null clears. */
   smtpPass: z.string().max(500).nullable().optional(),
   resendApiKey: z.string().max(500).nullable().optional(),
+  /** Empty string or null clears override (falls back to env / Resend default). */
+  resendBaseUrl: z.string().max(500).nullable().optional(),
 });
 
 const testMailSchema = z.object({
@@ -62,6 +64,7 @@ export async function registerMailSettingsRoutes(app: FastifyInstance): Promise<
         smtpUser: body.smtpUser,
         smtpPass: body.smtpPass,
         resendApiKey: body.resendApiKey,
+        resendBaseUrl: body.resendBaseUrl,
       },
       principal.userId,
     );
@@ -80,6 +83,7 @@ export async function registerMailSettingsRoutes(app: FastifyInstance): Promise<
         smtpHost: settings.smtpHost || null,
         hasSmtpPass: settings.hasSmtpPass,
         hasResendApiKey: settings.hasResendApiKey,
+        resendBaseUrl: settings.resendBaseUrl || null,
       },
       ipAddress: request.ip,
     });

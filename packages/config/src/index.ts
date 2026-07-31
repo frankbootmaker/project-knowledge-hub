@@ -143,6 +143,11 @@ export const envSchema = z.object({
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().optional(),
   ),
+  /** Optional Resend-compatible API origin (Freeresend, self-hosted, …). Default api.resend.com. */
+  RESEND_BASE_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
   AUTH_PASSWORD_RESET_TTL_SECONDS: z.coerce
     .number()
     .int()
@@ -476,5 +481,6 @@ export function mailConfigFromEnv(env: AppEnv) {
           }
         : undefined,
     resendApiKey: env.RESEND_API_KEY,
+    resendBaseUrl: env.RESEND_BASE_URL,
   };
 }

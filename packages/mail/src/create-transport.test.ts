@@ -41,6 +41,29 @@ describe('createMailTransport', () => {
     expect(transport).toBeInstanceOf(ResendMailTransport);
   });
 
+  it('accepts a custom Resend-compatible base URL', () => {
+    const transport = createMailTransport({
+      driver: 'resend',
+      from: 'hub@example.com',
+      webUrl: 'http://localhost:3100',
+      resendApiKey: 're_test',
+      resendBaseUrl: 'https://api.freeresend.com',
+    });
+    expect(transport).toBeInstanceOf(ResendMailTransport);
+  });
+
+  it('rejects an invalid Resend base URL', () => {
+    expect(() =>
+      createMailTransport({
+        driver: 'resend',
+        from: 'hub@example.com',
+        webUrl: 'http://localhost:3100',
+        resendApiKey: 're_test',
+        resendBaseUrl: 'not-a-url',
+      }),
+    ).toThrow(/RESEND_BASE_URL/);
+  });
+
   it('rejects smtp without host', () => {
     expect(() =>
       createMailTransport({

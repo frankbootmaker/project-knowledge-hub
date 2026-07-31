@@ -24,6 +24,7 @@ export type PublicMailSettings = {
   smtpUser: string;
   hasSmtpPass: boolean;
   hasResendApiKey: boolean;
+  resendBaseUrl: string;
   source: 'override' | 'env';
   effectiveDriver: string;
   envDriver: string;
@@ -49,6 +50,9 @@ export function MailSettingsAdmin({
   const [clearSmtpPass, setClearSmtpPass] = useState(false);
   const [resendApiKey, setResendApiKey] = useState('');
   const [clearResendKey, setClearResendKey] = useState(false);
+  const [resendBaseUrl, setResendBaseUrl] = useState(
+    initialSettings.resendBaseUrl ?? '',
+  );
   const [testTo, setTestTo] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -69,6 +73,7 @@ export function MailSettingsAdmin({
     setClearSmtpPass(false);
     setResendApiKey('');
     setClearResendKey(false);
+    setResendBaseUrl(settings.resendBaseUrl ?? '');
     setSource(settings.source);
     setHasSmtpPass(settings.hasSmtpPass);
     setHasResendApiKey(settings.hasResendApiKey);
@@ -85,6 +90,7 @@ export function MailSettingsAdmin({
         smtpPort: Number(smtpPort) || 587,
         smtpSecure,
         smtpUser: smtpUser.trim() || undefined,
+        resendBaseUrl: resendBaseUrl.trim() || null,
       };
       if (clearSmtpPass) {
         body.smtpPass = null;
@@ -328,6 +334,14 @@ export function MailSettingsAdmin({
                 </label>
               </div>
             ) : null}
+            <Field label={t('mailResendBaseUrl')}>
+              <Input
+                value={resendBaseUrl}
+                onChange={(e) => setResendBaseUrl(e.target.value)}
+                placeholder={t('mailResendBaseUrlPlaceholder')}
+                autoComplete="off"
+              />
+            </Field>
             <p className="m-0 text-sm text-ink-muted">{t('mailResendHint')}</p>
           </div>
         ) : null}

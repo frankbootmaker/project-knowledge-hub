@@ -27,6 +27,7 @@ export function createMailTransport(config: MailConfig): MailTransport {
     return new ResendMailTransport({
       from: config.from,
       apiKey: config.resendApiKey,
+      baseUrl: config.resendBaseUrl,
     });
   }
 

@@ -30,4 +30,6 @@ export type MailConfig = {
     pass?: string;
   };
   resendApiKey?: string;
+  /** Resend or compatible API origin (default https://api.resend.com). Freeresend, etc. */
+  resendBaseUrl?: string;
 };

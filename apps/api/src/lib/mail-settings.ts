@@ -22,6 +22,8 @@ export type StoredMailSettings = {
   smtpPass?: string;
   /** Stored secret — never returned to clients in full. */
   resendApiKey?: string;
+  /** Resend-compatible API origin (optional; default api.resend.com). */
+  resendBaseUrl?: string;
 };
 
 export type PublicMailSettings = {
@@ -33,6 +35,7 @@ export type PublicMailSettings = {
   smtpUser: string;
   hasSmtpPass: boolean;
   hasResendApiKey: boolean;
+  resendBaseUrl: string;
   source: 'override' | 'env';
   effectiveDriver: MailDriver;
   envDriver: MailDriver;
@@ -48,6 +51,7 @@ function envAsStored(env: AppEnv): StoredMailSettings {
     smtpUser: env.SMTP_USER,
     smtpPass: env.SMTP_PASS,
     resendApiKey: env.RESEND_API_KEY,
+    resendBaseUrl: env.RESEND_BASE_URL,
   };
 }
 
@@ -86,6 +90,8 @@ export async function resolveMailConfig(
   const smtpPass = stored.smtpPass?.trim() || env.SMTP_PASS || undefined;
   const resendApiKey =
     stored.resendApiKey?.trim() || env.RESEND_API_KEY || undefined;
+  const resendBaseUrl =
+    stored.resendBaseUrl?.trim() || env.RESEND_BASE_URL || undefined;
 
   const config: MailConfig = {
     driver: stored.driver,
@@ -102,6 +108,7 @@ export async function resolveMailConfig(
           }
         : undefined,
     resendApiKey: stored.driver === 'resend' ? resendApiKey : undefined,
+    resendBaseUrl: stored.driver === 'resend' ? resendBaseUrl : undefined,
   };
 
   return { config, source: 'override' };
@@ -126,6 +133,8 @@ export async function getPublicMailSettings(
     // True when a secret is available from DB and/or env (never returns the value).
     hasSmtpPass: Boolean(stored?.smtpPass?.trim() || env.SMTP_PASS),
     hasResendApiKey: Boolean(stored?.resendApiKey?.trim() || env.RESEND_API_KEY),
+    resendBaseUrl:
+      effective.resendBaseUrl?.trim() || env.RESEND_BASE_URL || '',
     source,
     effectiveDriver: config.driver,
     envDriver: env.MAIL_DRIVER,
@@ -142,6 +151,7 @@ export type MailSettingsUpdate = {
   /** Omit / undefined = keep existing; null = clear; string = set. */
   smtpPass?: string | null;
   resendApiKey?: string | null;
+  resendBaseUrl?: string | null;
 };
 
 export async function setStoredMailSettings(
@@ -169,6 +179,14 @@ export async function setStoredMailSettings(
     resendApiKey = update.resendApiKey;
   }
 
+  let resendBaseUrl = existing?.resendBaseUrl;
+  if (update.resendBaseUrl === null) {
+    resendBaseUrl = undefined;
+  } else if (typeof update.resendBaseUrl === 'string') {
+    const trimmed = update.resendBaseUrl.trim();
+    resendBaseUrl = trimmed || undefined;
+  }
+
   const next: StoredMailSettings = {
     driver: update.driver,
     from: update.from.trim(),
@@ -178,6 +196,7 @@ export async function setStoredMailSettings(
     smtpUser: update.smtpUser?.trim() || undefined,
     smtpPass,
     resendApiKey,
+    resendBaseUrl,
   };
 
   if (!next.from) {
@@ -197,6 +216,8 @@ export async function setStoredMailSettings(
   }
 
   const effectiveResendKey = next.resendApiKey?.trim() || env.RESEND_API_KEY;
+  const effectiveResendBaseUrl =
+    next.resendBaseUrl?.trim() || env.RESEND_BASE_URL || undefined;
   if (next.driver === 'resend' && !effectiveResendKey) {
     throw new AppError({
       code: 'RESEND_API_KEY_REQUIRED',
@@ -222,6 +243,7 @@ export async function setStoredMailSettings(
           }
         : undefined,
     resendApiKey: effectiveResendKey,
+    resendBaseUrl: effectiveResendBaseUrl,
   });
 
   await database.db
@@ -275,6 +297,7 @@ export function createResolvingMailTransport(
             }
           : null,
         resendApiKey: config.resendApiKey ? '[set]' : '',
+        resendBaseUrl: config.resendBaseUrl ?? '',
       });
       if (!cache || cache.key !== key) {
         cache = { key, transport: createMailTransport(config) };

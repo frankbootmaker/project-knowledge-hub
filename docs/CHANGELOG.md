@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Automated backups:** `db-backup` scripts are **baked into** `knowledge-hub-db-backup` (no git-checkout bind mount). Dokploy redeploys were replacing the clone while a long-sleeping sidecar kept a stale mount → overnight `backup-db.sh: No such file or directory`, then 24h sleeps with no heartbeat (“Ütemező offline”).
 * **Automated backups:** `db-backup` no longer sleeps a full interval before every dump. Overdue dumps run on catch-up, long waits are interruptible (~1 min polls) so Admin schedule changes apply quickly, failures retry sooner, and Monitoring shows a scheduler heartbeat / next-due. Local `compose.yaml` starts `db-backup` by default (no `--profile backup`).
 
+### Changed
+
+* **Mail Resend driver:** optional `RESEND_BASE_URL` / Admin → Email **API base URL** for Resend-compatible providers (e.g. Freeresend). Empty = `https://api.resend.com`.
+
 * `pnpm db:migrate` loads root `.env` via `loadNearestDotEnv` so `DATABASE_URL` is found when the script runs from `packages/database`.
 
 * Dokploy Monitoring backup **export** / **delete**: shared `knowledge_hub_backups` volume was root-owned by `db-backup` while api/worker run as uid 1001. Entrypoints chown `/backups` on start; sidecar re-chowns after each dump; clearer `BACKUP_PERMISSION_DENIED` errors.

@@ -61,8 +61,8 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | `NODE_ENV` | runtime | Always `production` in containers |
 | `MCP_PUBLIC_URL` | runtime | Optional; prefer `https://<domain>/mcp` |
 | `EMBEDDING_PROVIDER` | runtime | Default `disabled` (FTS only) |
-| `MAIL_DRIVER` | runtime | `console` (default), `smtp`, or `resend` |
-| `SMTP_*` / `RESEND_API_KEY` / `MCP_PUBLIC_URL` | runtime | Set only when used — omit empty values |
+| `MAIL_DRIVER` | runtime | `console` (default), `smtp`, or `resend` (Resend / Freeresend-compatible) |
+| `SMTP_*` / `RESEND_API_KEY` / `RESEND_BASE_URL` / `MCP_PUBLIC_URL` | runtime | Set only when used — omit empty values. `RESEND_BASE_URL` optional (default `https://api.resend.com`) |
 | `BOOTSTRAP_ADMIN_*` | migrate one-shot (seed step) | Optional first admin |
 | `MARKITDOWN_URL` | runtime | Default `http://kh-markitdown:8080` (document/image import) |
 | `VISION_LLM_*` | runtime + `kh-markitdown` | Optional OpenAI-compatible vision for import captions |

@@ -14,6 +14,7 @@ type StoredMailSettings = {
   smtpUser?: string;
   smtpPass?: string;
   resendApiKey?: string;
+  resendBaseUrl?: string;
 };
 
 export async function resolveWorkerMailConfig(
@@ -52,6 +53,10 @@ export async function resolveWorkerMailConfig(
       resendApiKey:
         stored.driver === 'resend'
           ? stored.resendApiKey?.trim() || env.RESEND_API_KEY || undefined
+          : undefined,
+      resendBaseUrl:
+        stored.driver === 'resend'
+          ? stored.resendBaseUrl?.trim() || env.RESEND_BASE_URL || undefined
           : undefined,
     };
   } catch {

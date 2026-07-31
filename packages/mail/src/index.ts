@@ -8,7 +8,11 @@ export type {
 export { createMailTransport } from './create-transport.js';
 export { ConsoleMailTransport } from './console.js';
 export { SmtpMailTransport } from './smtp.js';
-export { ResendMailTransport } from './resend.js';
+export {
+  ResendMailTransport,
+  DEFAULT_RESEND_BASE_URL,
+  normalizeResendBaseUrl,
+} from './resend.js';
 export {
   inviteEmail,
   passwordResetEmail,
