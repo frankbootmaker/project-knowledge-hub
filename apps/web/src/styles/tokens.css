@@ -51,6 +51,13 @@
   --kh-z-modal: 45;
   --kh-z-mobile-nav: 40;
 
+  /* Motion — keep intentional and short; respect prefers-reduced-motion in CSS */
+  --kh-motion-fast: 140ms;
+  --kh-motion-base: 220ms;
+  --kh-motion-enter: 280ms;
+  --kh-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --kh-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
   color-scheme: light;
 }
 

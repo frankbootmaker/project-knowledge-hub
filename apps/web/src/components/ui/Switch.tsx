@@ -34,8 +34,9 @@ export function Switch({
         disabled={disabled}
         onClick={() => onCheckedChange(!checked)}
         className={cn(
-          'relative inline-flex shrink-0 items-center rounded-md border transition',
+          'relative inline-flex shrink-0 items-center rounded-md border',
           'h-[var(--kh-control-height)] w-[var(--kh-control-width)]',
+          'transition-[background-color,border-color] duration-[var(--kh-motion-base)] ease-[var(--kh-ease-standard)]',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kh-focus-ring)]',
           'disabled:cursor-not-allowed disabled:opacity-50',
           checked
@@ -45,7 +46,8 @@ export function Switch({
       >
         <span
           className={cn(
-            'inline-block size-3 rounded-sm shadow-sm transition',
+            'inline-block size-3 rounded-sm shadow-sm',
+            'transition-transform duration-[var(--kh-motion-base)] ease-[var(--kh-ease-out)]',
             checked
               ? 'translate-x-[1.05rem] bg-accent'
               : 'translate-x-0.5 bg-ink-muted/50',

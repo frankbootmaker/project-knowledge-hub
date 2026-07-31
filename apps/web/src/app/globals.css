@@ -82,11 +82,18 @@
     font-size: 0.875rem;
     font-weight: 500;
     padding: var(--kh-control-pad-y) var(--kh-control-pad-x);
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    transition:
+      background-color var(--kh-motion-base) var(--kh-ease-standard),
+      border-color var(--kh-motion-base) var(--kh-ease-standard),
+      transform var(--kh-motion-fast) var(--kh-ease-standard);
   }
 
   .kh-input[type='file']::file-selector-button:hover {
     background: var(--kh-brand-soft);
+  }
+
+  .kh-input[type='file']::file-selector-button:active {
+    transform: translateY(1px);
   }
 
   .kh-label {
@@ -250,9 +257,20 @@
 
   .kh-btn {
     @apply inline-flex items-center justify-center gap-2 rounded-md border text-sm font-medium no-underline
-      transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30
       disabled:cursor-not-allowed;
     padding: var(--kh-control-pad-y) var(--kh-control-pad-x);
+    transition:
+      background-color var(--kh-motion-base) var(--kh-ease-standard),
+      border-color var(--kh-motion-base) var(--kh-ease-standard),
+      color var(--kh-motion-base) var(--kh-ease-standard),
+      box-shadow var(--kh-motion-base) var(--kh-ease-standard),
+      transform var(--kh-motion-fast) var(--kh-ease-standard),
+      opacity var(--kh-motion-base) var(--kh-ease-standard);
+  }
+
+  .kh-btn:not(:disabled):active {
+    transform: translateY(1px);
   }
 
   .kh-btn-primary {
@@ -330,7 +348,7 @@
   .kh-toast {
     @apply pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-md border px-3.5 py-3
       shadow-sm backdrop-blur-sm;
-    animation: kh-toast-in 180ms ease-out;
+    animation: kh-toast-in var(--kh-motion-enter) var(--kh-ease-out);
   }
 
   .kh-toast-success {
@@ -356,6 +374,7 @@
 
   .kh-shell-content {
     @apply py-8;
+    animation: kh-shell-in var(--kh-motion-enter) var(--kh-ease-out);
   }
 
   /* Portaled to document.body — must not sit under header backdrop-filter. */
@@ -366,13 +385,14 @@
 
   .kh-mobile-nav-backdrop {
     @apply absolute inset-0 border-0 bg-ink/25 p-0 backdrop-blur-[2px];
+    animation: kh-backdrop-in var(--kh-motion-base) var(--kh-ease-out);
   }
 
   .kh-mobile-nav-panel {
     @apply absolute inset-x-0 top-0 flex max-h-[min(100dvh,36rem)] w-full flex-col
       overflow-y-auto border-b border-line p-4 shadow-sm backdrop-blur-xl;
     background: color-mix(in srgb, var(--kh-panel-solid) 78%, transparent);
-    animation: kh-mobile-nav-in 180ms ease-out;
+    animation: kh-mobile-nav-in var(--kh-motion-enter) var(--kh-ease-out);
   }
 
   .kh-mobile-nav-links {
@@ -386,12 +406,13 @@
 
   .kh-modal-backdrop {
     @apply absolute inset-0 border-0 bg-ink/40 p-0;
+    animation: kh-backdrop-in var(--kh-motion-base) var(--kh-ease-out);
   }
 
   .kh-modal-panel {
     @apply relative flex max-h-[min(100%,40rem)] w-full max-w-lg flex-col overflow-hidden
       rounded-lg border border-line bg-panel-solid shadow-sm;
-    animation: kh-modal-in 160ms ease-out;
+    animation: kh-modal-in var(--kh-motion-enter) var(--kh-ease-out);
   }
 
   .kh-modal-panel-lg {
@@ -435,10 +456,19 @@
   }
 }
 
-@keyframes kh-modal-in {
+@keyframes kh-backdrop-in {
   from {
     opacity: 0;
-    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kh-shell-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.4rem);
   }
   to {
     opacity: 1;
@@ -446,10 +476,21 @@
   }
 }
 
+@keyframes kh-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @keyframes kh-mobile-nav-in {
   from {
     opacity: 0;
-    transform: translateY(-1rem);
+    transform: translateY(-1.25rem);
   }
   to {
     opacity: 1;
@@ -460,11 +501,30 @@
 @keyframes kh-toast-in {
   from {
     opacity: 0;
-    transform: translateY(0.5rem);
+    transform: translateY(0.75rem) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kh-btn,
+  .kh-btn:not(:disabled):active,
+  .kh-input[type='file']::file-selector-button,
+  .kh-input[type='file']::file-selector-button:active {
+    transition: none;
+    transform: none;
+  }
+
+  .kh-shell-content,
+  .kh-toast,
+  .kh-modal-panel,
+  .kh-modal-backdrop,
+  .kh-mobile-nav-panel,
+  .kh-mobile-nav-backdrop {
+    animation: none;
   }
 }
 

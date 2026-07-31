@@ -48,8 +48,24 @@ Before considering UI work done:
 | `--kh-z-toast` | Toast stacking context |
 | `--kh-z-modal` | Modal dialogs (below toasts, above mobile nav) |
 | `--kh-z-mobile-nav` | Mobile nav overlay (below toasts, above sticky header) |
+| `--kh-motion-fast` / `--kh-motion-base` / `--kh-motion-enter` | Interaction + entrance durations (~140 / 220 / 280ms) |
+| `--kh-ease-out` / `--kh-ease-standard` | Entrance vs hover/press easing |
 
 Dark mode flips the same `--kh-*` variables under `.dark` on `<html>`.
+
+## Motion
+
+Intentional, short motion for presence — not decoration. Prefer tokens above over ad-hoc `transition` / `duration-*`.
+
+| Moment | Behavior |
+|--------|----------|
+| Page shell | `.kh-shell-content` fades/slides in (`kh-shell-in`) |
+| Modal / mobile nav | Backdrop fades (`kh-backdrop-in`); panel enters with ease-out |
+| Toast | Slide + slight scale (`kh-toast-in`) |
+| Buttons / file Browse | Color transitions + 1px press (`:active`) |
+| Switch | Thumb `translate` over `--kh-motion-base` |
+
+`prefers-reduced-motion: reduce` disables entrance animations and press transforms.
 
 ## Responsive
 
@@ -110,6 +126,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer` actions; `size="lg"` for denser forms |
 | `Panel` | `default` / `solid` / `inset` surfaces |
 | `Field`, `Input`, `PasswordInput`, `PasswordStrengthHint`, `Select`, `Textarea`, `ErrorText` | Forms (`PasswordInput` show/hide; strength meter for new passwords) |
+| `FilePicker` | File choose control — secondary **Browse** / **Tallózás** button + filename (hides native file chrome) |
 | `Badge` | Compact status chips (e.g. health “ok”) |
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`) |
@@ -157,6 +174,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-07-31
+
+* **Motion** — Tokenized durations/easing (`--kh-motion-*`, `--kh-ease-*`). Stronger modal/toast/mobile-nav entrances + backdrop fade; shell content enter; button press; Switch thumb timing. `prefers-reduced-motion` disables entrances/press. `FilePicker` for Browse/Tallózás as secondary buttons.
 
 ### 2026-07-22
 
