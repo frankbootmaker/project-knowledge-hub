@@ -50,7 +50,9 @@
       "uppercase": "At least one uppercase letter",
       "nonLetter": "At least one number or symbol"
     },
-    "passwordPolicy": "Use at least 8 characters, one uppercase letter, and one number or symbol"
+    "passwordPolicy": "Use at least 8 characters, one uppercase letter, and one number or symbol",
+    "browse": "Browse",
+    "noFileChosen": "No file chosen"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -1467,6 +1469,7 @@
     "titlePlaceholder": "Defaults from the filename or document heading",
     "file": "File",
     "dropzoneTitle": "Drop a file here, or click to browse",
+    "dropzoneTitleBefore": "Drop a file here, or",
     "dropzoneActive": "Drop to upload",
     "dropzoneHint": "Click anywhere in this area to open the file picker",
     "dropzoneAria": "File drop zone. Click or press Enter to choose a file",

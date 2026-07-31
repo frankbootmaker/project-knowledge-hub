@@ -50,7 +50,9 @@
       "uppercase": "Legalább egy nagybetű",
       "nonLetter": "Legalább egy szám vagy szimbólum"
     },
-    "passwordPolicy": "Legalább 8 karakter, egy nagybetű és egy szám vagy szimbólum"
+    "passwordPolicy": "Legalább 8 karakter, egy nagybetű és egy szám vagy szimbólum",
+    "browse": "Tallózás",
+    "noFileChosen": "Nincs fájl kiválasztva"
   },
   "nav": {
     "dashboard": "Irányítópult",
@@ -1467,6 +1469,7 @@
     "titlePlaceholder": "Alapértelmezés a fájlnévből vagy a dokumentum címéből",
     "file": "Fájl",
     "dropzoneTitle": "Húzza ide a fájlt, vagy kattintson a tallózáshoz",
+    "dropzoneTitleBefore": "Húzza ide a fájlt, vagy",
     "dropzoneActive": "Ejtse ide a feltöltéshez",
     "dropzoneHint": "A terület bármely pontjára kattintva megnyílik a fájlválasztó",
     "dropzoneAria": "Fájl feltöltési terület. Kattintson vagy nyomjon Entert a fájlválasztáshoz",

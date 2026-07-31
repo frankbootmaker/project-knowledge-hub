@@ -50,7 +50,9 @@
       "uppercase": "Mindestens ein Großbuchstabe",
       "nonLetter": "Mindestens eine Zahl oder ein Sonderzeichen"
     },
-    "passwordPolicy": "Mindestens 8 Zeichen, ein Großbuchstabe und eine Zahl oder ein Sonderzeichen"
+    "passwordPolicy": "Mindestens 8 Zeichen, ein Großbuchstabe und eine Zahl oder ein Sonderzeichen",
+    "browse": "Durchsuchen",
+    "noFileChosen": "Keine Datei ausgewählt"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -1467,6 +1469,7 @@
     "titlePlaceholder": "Standard aus Dateiname oder Dokumentüberschrift",
     "file": "Datei",
     "dropzoneTitle": "Datei hierher ziehen oder klicken zum Auswählen",
+    "dropzoneTitleBefore": "Datei hierher ziehen oder",
     "dropzoneActive": "Zum Hochladen ablegen",
     "dropzoneHint": "Klicken Sie irgendwo in diesen Bereich, um den Dateidialog zu öffnen",
     "dropzoneAria": "Datei-Ablagebereich. Klicken oder Enter drücken, um eine Datei zu wählen",

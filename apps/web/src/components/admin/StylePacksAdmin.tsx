@@ -8,6 +8,7 @@ import {
   Button,
   ErrorText,
   Field,
+  FilePicker,
   Input,
   Panel,
   Select,
@@ -995,12 +996,10 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
           <div className="grid gap-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <Field label={t('templatesLogo')}>
-                <Input
-                  type="file"
+                <FilePicker
                   accept="image/png,image/jpeg,image/webp"
-                  onChange={(event) =>
-                    setLogoFile(event.target.files?.[0] ?? null)
-                  }
+                  fileName={logoFile?.name}
+                  onFileChange={setLogoFile}
                 />
               </Field>
               <Button
@@ -1032,12 +1031,10 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
               )}
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                 <Field label={t('templatesDocxFile')}>
-                  <Input
-                    type="file"
+                  <FilePicker
                     accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    onChange={(event) =>
-                      setDocxTemplateFile(event.target.files?.[0] ?? null)
-                    }
+                    fileName={docxTemplateFile?.name}
+                    onFileChange={setDocxTemplateFile}
                   />
                 </Field>
                 <Button

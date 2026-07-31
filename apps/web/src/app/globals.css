@@ -63,6 +63,32 @@
       focus:border-brand focus:ring-2 focus:ring-brand/20;
   }
 
+  /* Native file control: make Browse / Tallózás look like secondary buttons */
+  .kh-input[type='file'] {
+    @apply cursor-pointer py-2 text-sm text-ink-muted;
+  }
+
+  .kh-input[type='file']::file-selector-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-end: 0.75rem;
+    cursor: pointer;
+    border-radius: var(--kh-radius-md);
+    border: 1px solid var(--kh-line-strong);
+    background: var(--kh-panel-solid);
+    color: var(--kh-ink);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: var(--kh-control-pad-y) var(--kh-control-pad-x);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .kh-input[type='file']::file-selector-button:hover {
+    background: var(--kh-brand-soft);
+  }
+
   .kh-label {
     @apply grid gap-1.5 text-sm font-medium text-ink;
   }

@@ -18,6 +18,7 @@ import {
   Input,
   Panel,
   Select,
+  buttonClassName,
 } from './ui';
 
 type Option = { id: string; name: string; slug: string };
@@ -200,9 +201,18 @@ export function DocumentImportForm(props: {
                 : 'border-line-strong bg-panel-solid/60 hover:border-brand hover:bg-brand-soft/40',
             ].join(' ')}
           >
-            <p className="m-0 max-w-full text-base font-medium text-ink">
-              {dragActive ? t('dropzoneActive') : t('dropzoneTitle')}
-            </p>
+            {dragActive ? (
+              <p className="m-0 max-w-full text-base font-medium text-ink">
+                {t('dropzoneActive')}
+              </p>
+            ) : (
+              <p className="m-0 flex max-w-full flex-wrap items-center justify-center gap-2 text-base font-medium text-ink">
+                <span>{t('dropzoneTitleBefore')}</span>
+                <span className={buttonClassName('secondary')} aria-hidden>
+                  {tCommon('browse')}
+                </span>
+              </p>
+            )}
             <p className="m-0 max-w-full text-sm text-ink-muted">{t('dropzoneHint')}</p>
             {file ? (
               <p className="m-0 mt-2 w-full min-w-0 max-w-full break-words rounded-md bg-panel-solid px-3 py-1.5 text-sm text-ink">

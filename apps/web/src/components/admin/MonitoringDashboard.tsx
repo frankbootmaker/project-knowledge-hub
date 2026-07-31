@@ -8,6 +8,7 @@ import {
   Button,
   ErrorText,
   Field,
+  FilePicker,
   Input,
   Modal,
   Panel,
@@ -1482,14 +1483,11 @@ export function MonitoringDashboard({
             </Select>
           </Field>
           <Field label={t('monitoringImportUpload')}>
-            <Input
-              type="file"
+            <FilePicker
               accept=".dump,application/octet-stream"
               disabled={pending}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                setUploadFile(file);
-              }}
+              fileName={uploadFile?.name}
+              onFileChange={setUploadFile}
             />
           </Field>
           <Field label={t('monitoringImportConfirm')}>
