@@ -496,7 +496,9 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
     openapi: '3.1.0',
     info: {
       title,
-      version: '0.1.0',
+      // Bump when tool surface changes — ChatGPT Actions can cache schemas and
+      // return ClientResponseError without ever calling the hub until recreated.
+      version: '0.1.2',
       // ChatGPT Actions also enforces a 300-char limit on info.description.
       description: forChatGptActionsText(
         'OpenAPI facade for Project Knowledge Hub (ChatGPT Actions / OpenAPI clients). ' +
