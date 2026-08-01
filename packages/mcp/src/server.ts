@@ -26,6 +26,7 @@ export type McpToolHandlers = {
     workspaceId: string;
     projectId?: string;
     systemId?: string;
+    language?: string;
     limit: number;
   }) => Promise<unknown>;
   searchKnowledge: (input: {
@@ -35,6 +36,7 @@ export type McpToolHandlers = {
     systemIds?: string[];
     recordTypes?: string[];
     statuses?: string[];
+    language?: string;
     limit: number;
     mode?: 'fts' | 'hybrid';
   }) => Promise<unknown>;
@@ -52,6 +54,7 @@ export type McpToolHandlers = {
     systemId?: string;
     tags?: string[];
     language?: string;
+    translationGroupId?: string | null;
     generatedByModel?: string;
     sourceTitle?: string;
   }) => Promise<unknown>;
@@ -66,6 +69,7 @@ export type McpToolHandlers = {
     systemId?: string | null;
     tags?: string[];
     language?: string | null;
+    translationGroupId?: string | null;
     generatedByModel?: string;
     sourceTitle?: string;
   }) => Promise<unknown>;
@@ -277,6 +281,7 @@ export function createKnowledgeHubMcpServer(
       workspaceId: z.string().uuid(),
       projectId: z.string().uuid().optional(),
       systemId: z.string().uuid().optional(),
+      language: z.string().min(2).max(16).optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
     },
     async (args) =>
@@ -306,6 +311,7 @@ export function createKnowledgeHubMcpServer(
       systemIds: z.array(z.string().uuid()).optional(),
       recordTypes: z.array(z.string()).optional(),
       statuses: z.array(z.string()).optional(),
+      language: z.string().min(2).max(16).optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
       mode: z.enum(['fts', 'hybrid']).optional(),
     },
@@ -455,6 +461,7 @@ export function createKnowledgeHubMcpServer(
       systemId: z.string().uuid().optional(),
       tags: z.array(z.string().min(1).max(64)).max(30).optional(),
       language: z.string().min(2).max(16).optional(),
+      translationGroupId: z.string().uuid().nullable().optional(),
       generatedByModel: z.string().max(160).optional(),
       sourceTitle: z.string().max(300).optional(),
     },
@@ -485,6 +492,7 @@ export function createKnowledgeHubMcpServer(
       systemId: z.string().uuid().nullable().optional(),
       tags: z.array(z.string().min(1).max(64)).max(30).optional(),
       language: z.string().min(2).max(16).nullable().optional(),
+      translationGroupId: z.string().uuid().nullable().optional(),
       generatedByModel: z.string().max(160).optional(),
       sourceTitle: z.string().max(300).optional(),
     },

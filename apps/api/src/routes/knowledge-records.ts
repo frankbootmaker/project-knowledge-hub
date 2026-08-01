@@ -57,6 +57,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         workspaceId: z.string().uuid(),
         projectId: z.string().uuid().optional(),
         systemId: z.string().uuid().optional(),
+        language: z.string().min(2).max(16).optional(),
         includeArchived: z
           .enum(['true', 'false'])
           .optional()
@@ -75,6 +76,9 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     }
     if (query.systemId) {
       conditions.push(eq(knowledgeRecords.systemId, query.systemId));
+    }
+    if (query.language) {
+      conditions.push(eq(knowledgeRecords.language, query.language));
     }
 
     const rows = await app.database.db

@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Knowledge record content language (Phase 1):** editor language select (en/de/hu), language on detail / Manage details, catalogue + search language filters, list/search/MCP `language` filter. Schema adds nullable `translation_group_id` for linked translation families (UI linking / switcher deferred to Phase 2).
+
 * **Document / image import (MarkItDown):** Compose service `kh-markitdown`, package `@project-knowledge-hub/document-import`, API `/api/v1/document-imports`, worker convert queue, Import picker Documents + Images lanes. Selectable OCR: `none`, `vision` (`markitdown-ocr` + OpenAI-compatible / Ollama), or local `tesseract`. Extracted images become `workspace_media` embeds. See [`docs/product/DOCUMENT_IMPORT.md`](product/DOCUMENT_IMPORT.md).
+
+* **In-app page refresh:** secondary Refresh control next to Manage on workspace / project / system / knowledge-record / import pages (`ManageToolbar` + `router.refresh()`).
 
 ### Fixed
 

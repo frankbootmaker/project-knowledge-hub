@@ -158,6 +158,7 @@ async function invokeTool(
         workspaceId: raw.workspaceId,
         projectId: typeof raw.projectId === 'string' ? raw.projectId : undefined,
         systemId: typeof raw.systemId === 'string' ? raw.systemId : undefined,
+        language: typeof raw.language === 'string' ? raw.language : undefined,
         limit: typeof raw.limit === 'number' ? raw.limit : 50,
       });
     case 'search_knowledge':
@@ -183,6 +184,7 @@ async function invokeTool(
         statuses: Array.isArray(raw.statuses)
           ? raw.statuses.filter((id): id is string => typeof id === 'string')
           : undefined,
+        language: typeof raw.language === 'string' ? raw.language : undefined,
         limit: typeof raw.limit === 'number' ? raw.limit : 10,
       });
     case 'get_knowledge_record':
@@ -233,6 +235,12 @@ async function invokeTool(
           ? raw.tags.filter((tag): tag is string => typeof tag === 'string')
           : undefined,
         language: typeof raw.language === 'string' ? raw.language : undefined,
+        translationGroupId:
+          raw.translationGroupId === null
+            ? null
+            : typeof raw.translationGroupId === 'string'
+              ? raw.translationGroupId
+              : undefined,
         generatedByModel:
           typeof raw.generatedByModel === 'string' ? raw.generatedByModel : undefined,
         sourceTitle: typeof raw.sourceTitle === 'string' ? raw.sourceTitle : undefined,
@@ -278,6 +286,12 @@ async function invokeTool(
             ? null
             : typeof raw.language === 'string'
               ? raw.language
+              : undefined,
+        translationGroupId:
+          raw.translationGroupId === null
+            ? null
+            : typeof raw.translationGroupId === 'string'
+              ? raw.translationGroupId
               : undefined,
         generatedByModel:
           typeof raw.generatedByModel === 'string' ? raw.generatedByModel : undefined,

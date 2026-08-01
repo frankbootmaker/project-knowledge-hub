@@ -37,6 +37,7 @@ export type WorkspaceCatalogueRecord = {
   slug: string;
   recordType: string;
   lifecycleStatus: string;
+  language?: string | null;
   summary: string | null;
   systemId: string | null;
   updatedAt: string;
@@ -101,6 +102,7 @@ export function WorkspaceCatalogueSections({
 
   const recordItems: CatalogueListItem[] = records.map((record) => {
     const statusLabel = lifecycleLabel(record.lifecycleStatus, tRecords);
+    const language = record.language ?? 'en';
     return {
       id: record.id,
       title: record.title,
@@ -111,12 +113,14 @@ export function WorkspaceCatalogueSections({
         ? `${t('linkedToSystem')}${record.summary ? ` — ${record.summary}` : ''}`
         : record.summary,
       updatedAt: record.updatedAt,
+      language,
       searchText: [
         record.title,
         record.slug,
         record.recordType,
         record.lifecycleStatus,
         statusLabel,
+        language,
         record.summary ?? '',
       ]
         .join(' ')
@@ -157,6 +161,8 @@ export function WorkspaceCatalogueSections({
         searchPlaceholder={t('sectionSearchRecords')}
         filterLabel={t('sectionFilterLifecycle')}
         filterAllLabel={t('sectionFilterAll')}
+        languageFilterLabel={t('sectionFilterLanguage')}
+        languageFilterAllLabel={t('sectionFilterAnyLanguage')}
         createHref={`/workspaces/${workspaceSlug}/records/new`}
         createLabel={t('newRecord')}
         canCreate={canMutate}

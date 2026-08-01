@@ -173,6 +173,7 @@ export function contentFieldsChanged(
     summary: string | null;
     recordType: string;
     contentMarkdown: string;
+    language?: string | null;
     metadataJson: Record<string, unknown> | null;
   },
 ): boolean {
@@ -181,6 +182,7 @@ export function contentFieldsChanged(
     previous.summary !== next.summary ||
     previous.recordType !== next.recordType ||
     previous.contentMarkdown !== next.contentMarkdown ||
+    (next.language !== undefined && previous.language !== next.language) ||
     JSON.stringify(previous.metadataJson ?? null) !== JSON.stringify(next.metadataJson ?? null)
   );
 }

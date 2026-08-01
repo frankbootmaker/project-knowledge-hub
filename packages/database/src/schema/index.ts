@@ -410,6 +410,8 @@ export const knowledgeRecords = pgTable(
     contentMarkdown: text('content_markdown').notNull().default(''),
     contentHtmlCache: text('content_html_cache'),
     language: text('language').default('en'),
+    /** Shared id for translation siblings (Phase 1 foundation; UI linking later). */
+    translationGroupId: uuid('translation_group_id'),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
     currentVersionNumber: integer('current_version_number').notNull().default(1),
     supersedesRecordId: uuid('supersedes_record_id').references(
@@ -436,6 +438,7 @@ export const knowledgeRecords = pgTable(
     index('knowledge_records_project_id_idx').on(table.projectId),
     index('knowledge_records_system_id_idx').on(table.systemId),
     index('knowledge_records_lifecycle_status_idx').on(table.lifecycleStatus),
+    index('knowledge_records_translation_group_id_idx').on(table.translationGroupId),
   ],
 );
 

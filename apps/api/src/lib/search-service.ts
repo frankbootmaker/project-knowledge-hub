@@ -21,6 +21,7 @@ export const searchBodySchema = z.object({
   query: z.string().min(1).max(300),
   projectId: z.string().uuid().optional(),
   systemId: z.string().uuid().optional(),
+  language: z.string().min(2).max(16).optional(),
   recordTypes: z.array(recordTypeSchema).max(40).optional(),
   lifecycleStatuses: z.array(lifecycleStatusSchema).max(20).optional(),
   verifiedOnly: z.boolean().optional(),
@@ -158,6 +159,11 @@ export async function runSearch(app: FastifyInstance, input: SearchInput) {
   if (input.systemId) {
     conditions.push(`kr.system_id = $${paramIndex}`);
     params.push(input.systemId);
+    paramIndex += 1;
+  }
+  if (input.language) {
+    conditions.push(`kr.language = $${paramIndex}`);
+    params.push(input.language);
     paramIndex += 1;
   }
   if (input.recordTypes && input.recordTypes.length > 0) {

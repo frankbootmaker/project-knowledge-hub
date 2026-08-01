@@ -11,6 +11,7 @@ import {
   SOURCE_OF_TRUTH_MODES,
 } from '@project-knowledge-hub/domain';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
+import { localeLabels, locales, type AppLocale } from '../i18n/config';
 import { MarkdownDocument } from './MarkdownDocument';
 import {
   Button,
@@ -44,6 +45,7 @@ export type KnowledgeRecordEditorInitial = {
   lifecycleStatus: string;
   sourceOfTruthMode: string;
   contentMarkdown: string;
+  language?: string | null;
   projectId: string | null;
   systemId: string | null;
   tags: Array<{ name: string }>;
@@ -83,6 +85,10 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
   );
   const [sourceOfTruthMode, setSourceOfTruthMode] = useState(
     props.initial?.sourceOfTruthMode ?? 'hub_managed',
+  );
+  const initialLanguage = (props.initial?.language ?? 'en') as string;
+  const [language, setLanguage] = useState(
+    locales.includes(initialLanguage as AppLocale) ? initialLanguage : 'en',
   );
   const [contentMarkdown, setContentMarkdown] = useState(
     props.initial?.contentMarkdown ??
@@ -242,6 +248,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
       lifecycleStatus: status,
       sourceOfTruthMode,
       contentMarkdown,
+      language,
       projectId: projectId || null,
       systemId: systemId || null,
       tags: tags
@@ -277,6 +284,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
                   lifecycleStatus: body.lifecycleStatus,
                   sourceOfTruthMode: body.sourceOfTruthMode,
                   contentMarkdown: body.contentMarkdown,
+                  language: body.language,
                   projectId: body.projectId,
                   systemId: body.systemId,
                   tags: body.tags,
@@ -375,6 +383,18 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
             {SOURCE_OF_TRUTH_MODES.map((mode) => (
               <option key={mode} value={mode}>
                 {mode}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('contentLanguage')}>
+          <Select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+          >
+            {locales.map((code) => (
+              <option key={code} value={code}>
+                {localeLabels[code]} ({code})
               </option>
             ))}
           </Select>

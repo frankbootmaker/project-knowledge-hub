@@ -61,6 +61,8 @@ export type CatalogueListItem = {
   filterValue: string;
   /** Optional display label for filterValue in the select (defaults to filterValue). */
   filterLabel?: string;
+  /** Optional content language code for a secondary language filter. */
+  language?: string | null;
 };
 
 export function CatalogueSection({
@@ -70,6 +72,8 @@ export function CatalogueSection({
   searchPlaceholder,
   filterLabel,
   filterAllLabel,
+  languageFilterLabel,
+  languageFilterAllLabel,
   createHref,
   createLabel,
   canCreate,
@@ -81,6 +85,8 @@ export function CatalogueSection({
   searchPlaceholder: string;
   filterLabel: string;
   filterAllLabel: string;
+  languageFilterLabel?: string;
+  languageFilterAllLabel?: string;
   createHref: string;
   createLabel: string;
   canCreate: boolean;
@@ -92,9 +98,12 @@ export function CatalogueSection({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterValue, setFilterValue] = useState('all');
+  const [languageFilter, setLanguageFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState<SortOption>(DEFAULT_SORT);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
+
+  const showLanguageFilter = Boolean(languageFilterLabel && languageFilterAllLabel);
 
   const filterOptions = useMemo(() => {
     const labels = new Map<string, string>();
@@ -105,10 +114,27 @@ export function CatalogueSection({
     return [...labels.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [items]);
 
+  const languageOptions = useMemo(() => {
+    if (!showLanguageFilter) return [];
+    const values = new Set<string>();
+    for (const item of items) {
+      const code = item.language?.trim();
+      if (code) values.add(code);
+    }
+    return [...values].sort((a, b) => a.localeCompare(b));
+  }, [items, showLanguageFilter]);
+
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const matched = items.filter((item) => {
       if (filterValue !== 'all' && item.filterValue !== filterValue) {
+        return false;
+      }
+      if (
+        showLanguageFilter &&
+        languageFilter !== 'all' &&
+        (item.language ?? 'en') !== languageFilter
+      ) {
         return false;
       }
       if (!query) {
@@ -128,7 +154,14 @@ export function CatalogueSection({
       return sortOrder === 'oldest' ? aTime - bTime : bTime - aTime;
     });
     return sorted;
-  }, [items, searchQuery, filterValue, sortOrder]);
+  }, [
+    items,
+    searchQuery,
+    filterValue,
+    languageFilter,
+    showLanguageFilter,
+    sortOrder,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize) || 1);
   // Clamp for display/actions — no syncing effect (avoids remount/HMR races).
@@ -140,6 +173,7 @@ export function CatalogueSection({
   const filtersActive =
     searchQuery.trim() !== '' ||
     filterValue !== 'all' ||
+    languageFilter !== 'all' ||
     sortOrder !== DEFAULT_SORT ||
     pageSize !== DEFAULT_PAGE_SIZE;
 
@@ -150,6 +184,11 @@ export function CatalogueSection({
 
   function updateFilter(value: string) {
     setFilterValue(value);
+    setPage(1);
+  }
+
+  function updateLanguageFilter(value: string) {
+    setLanguageFilter(value);
     setPage(1);
   }
 
@@ -199,6 +238,20 @@ export function CatalogueSection({
                   </option>
                 ))}
               </Select>
+              {showLanguageFilter ? (
+                <Select
+                  value={languageFilter}
+                  onChange={(e) => updateLanguageFilter(e.target.value)}
+                  aria-label={languageFilterLabel}
+                >
+                  <option value="all">{languageFilterAllLabel}</option>
+                  {languageOptions.map((code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
               <Select
                 value={sortOrder}
                 onChange={(e) => updateSort(e.target.value as SortOption)}

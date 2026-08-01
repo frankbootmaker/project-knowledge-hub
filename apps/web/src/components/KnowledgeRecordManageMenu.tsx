@@ -19,6 +19,7 @@ export type RecordManageDetails = {
   slug: string;
   summary: string | null;
   recordType: string;
+  language?: string | null;
   lifecycleStatus: string;
   sourceOfTruthMode: string;
   currentVersionNumber: number;
@@ -290,6 +291,10 @@ export function KnowledgeRecordManageMenu(props: {
                 value={props.record.summary?.trim() || tCommon('noSummary')}
               />
               <ManageDetailRow label={t('recordType')} value={props.record.recordType} />
+              <ManageDetailRow
+                label={t('contentLanguage')}
+                value={props.record.language ?? 'en'}
+              />
               <ManageDetailRow
                 label={t('lifecycleStatus')}
                 value={lifecycleLabel(props.record.lifecycleStatus, t)}

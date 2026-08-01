@@ -53,6 +53,7 @@ export const createRecordInputSchema = z.object({
   sourceOfTruthMode: sourceOfTruthModeSchema.optional(),
   contentMarkdown: z.string().max(500_000).optional(),
   language: z.string().min(2).max(16).optional(),
+  translationGroupId: z.string().uuid().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   systemId: z.string().uuid().nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
@@ -68,6 +69,7 @@ export const updateRecordInputSchema = z.object({
   sourceOfTruthMode: sourceOfTruthModeSchema.optional(),
   contentMarkdown: z.string().max(500_000).optional(),
   language: z.string().min(2).max(16).nullable().optional(),
+  translationGroupId: z.string().uuid().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   systemId: z.string().uuid().nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
@@ -244,6 +246,7 @@ export function toPublicRecord(
       : undefined,
     toc: options?.includeToc ? (options.toc ?? []) : undefined,
     language: record.language,
+    translationGroupId: record.translationGroupId,
     metadata: record.metadataJson,
     currentVersionNumber: record.currentVersionNumber,
     supersedesRecordId: record.supersedesRecordId,
@@ -445,6 +448,7 @@ export async function createKnowledgeRecord(
       contentMarkdown,
       contentHtmlCache: rendered.html,
       language: body.language ?? 'en',
+      translationGroupId: body.translationGroupId ?? null,
       metadataJson,
       currentVersionNumber: 1,
       createdBy: actor.userId,
@@ -620,11 +624,19 @@ export async function updateKnowledgeRecord(
     nextMetadata = clearApprovedByMetadata(nextMetadata);
   }
 
+  const nextLanguage =
+    body.language === undefined ? record.language : body.language;
+  const nextTranslationGroupId =
+    body.translationGroupId === undefined
+      ? record.translationGroupId
+      : body.translationGroupId;
+
   const shouldVersion = contentFieldsChanged(record, {
     title: nextTitle,
     summary: nextSummary,
     recordType: nextRecordType,
     contentMarkdown: nextContent,
+    language: nextLanguage,
     metadataJson: nextMetadata,
   });
 
@@ -644,7 +656,8 @@ export async function updateKnowledgeRecord(
       sourceOfTruthMode: body.sourceOfTruthMode ?? record.sourceOfTruthMode,
       contentMarkdown: nextContent,
       contentHtmlCache: rendered.html,
-      language: body.language === undefined ? record.language : body.language,
+      language: nextLanguage,
+      translationGroupId: nextTranslationGroupId,
       projectId: nextProjectId,
       systemId: nextSystemId,
       metadataJson: nextMetadata,

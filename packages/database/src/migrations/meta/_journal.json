@@ -204,6 +204,13 @@
       "when": 1784424000000,
       "tag": "0028_style_pack_docx_template",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785599000000,
+      "tag": "0029_knowledge_record_translation_group",
+      "breakpoints": true
     }
   ]
 }

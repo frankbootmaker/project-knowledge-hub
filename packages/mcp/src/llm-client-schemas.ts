@@ -96,6 +96,10 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
           workspaceId: uuidProp('Workspace id'),
           projectId: uuidProp('Optional project filter'),
           systemId: uuidProp('Optional system filter'),
+          language: stringProp('Optional content language filter', {
+            minLength: 2,
+            maxLength: 16,
+          }),
           limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
         },
       },
@@ -130,6 +134,10 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
             items: { type: 'string' },
             description: 'Optional lifecycle status filters',
           },
+          language: stringProp('Optional content language filter', {
+            minLength: 2,
+            maxLength: 16,
+          }),
           limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
           mode: {
             type: 'string',
@@ -287,6 +295,12 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
             maxItems: 30,
           },
           language: stringProp('Optional language code', { minLength: 2, maxLength: 16 }),
+          translationGroupId: {
+            type: 'string',
+            format: 'uuid',
+            nullable: true,
+            description: 'Optional shared translation group id',
+          },
           generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
           sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
         },
@@ -319,6 +333,12 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
             maxItems: 30,
           },
           language: { type: 'string', nullable: true, minLength: 2, maxLength: 16 },
+          translationGroupId: {
+            type: 'string',
+            format: 'uuid',
+            nullable: true,
+            description: 'Optional shared translation group id',
+          },
           generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
           sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
         },

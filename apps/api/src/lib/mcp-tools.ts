@@ -331,7 +331,7 @@ export function createMcpToolHandlers(
       };
     },
 
-    async listKnowledgeRecords({ workspaceId, projectId, systemId, limit }) {
+    async listKnowledgeRecords({ workspaceId, projectId, systemId, language, limit }) {
       assertWorkspaceAllowed(client, workspaceId);
       if (projectId) {
         assertProjectAllowed(client, projectId);
@@ -345,6 +345,9 @@ export function createMcpToolHandlers(
       }
       if (systemId) {
         conditions.push(eq(knowledgeRecords.systemId, systemId));
+      }
+      if (language) {
+        conditions.push(eq(knowledgeRecords.language, language));
       }
       const rows = await app.database.db
         .select()
@@ -368,6 +371,8 @@ export function createMcpToolHandlers(
             recordType: row.recordType,
             lifecycleStatus: row.lifecycleStatus,
             summary: row.summary,
+            language: row.language,
+            translationGroupId: row.translationGroupId,
             projectId: row.projectId,
             systemId: row.systemId,
             verifiedAt: row.verifiedAt?.toISOString() ?? null,
@@ -390,6 +395,7 @@ export function createMcpToolHandlers(
         query: input.query,
         projectId,
         systemId,
+        language: input.language,
         recordTypes: input.recordTypes as never,
         lifecycleStatuses: input.statuses as never,
         limit: input.limit,
@@ -553,6 +559,7 @@ export function createMcpToolHandlers(
           systemId: input.systemId ?? null,
           tags: input.tags,
           language: input.language,
+          translationGroupId: input.translationGroupId,
           lifecycleStatus: 'draft',
           sourceOfTruthMode: 'ai_generated_draft',
           source: {
@@ -624,6 +631,7 @@ export function createMcpToolHandlers(
           systemId: input.systemId,
           tags: input.tags,
           language: input.language,
+          translationGroupId: input.translationGroupId,
           changeMessage: input.changeMessage,
           lifecycleStatus: 'draft',
           sourceOfTruthMode: 'ai_generated_draft',

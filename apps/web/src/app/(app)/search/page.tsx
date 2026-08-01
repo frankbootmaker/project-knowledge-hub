@@ -16,6 +16,7 @@ import {
   lifecycleLabel,
   lifecycleTone,
 } from '../../../components/ui';
+import { localeLabels, locales } from '../../../i18n/config';
 import { apiFetch, requireSession } from '../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -54,6 +55,7 @@ export default async function SearchPage({
   const projectId = typeof params.projectId === 'string' ? params.projectId : '';
   const systemId = typeof params.systemId === 'string' ? params.systemId : '';
   const recordType = typeof params.recordType === 'string' ? params.recordType : '';
+  const language = typeof params.language === 'string' ? params.language : '';
   const verifiedOnly = params.verifiedOnly === 'true';
   const currentOnly = params.currentOnly === 'true';
   const includeHistorical = params.includeHistorical === 'true';
@@ -104,6 +106,7 @@ export default async function SearchPage({
     if (projectId) searchUrl.set('projectId', projectId);
     if (systemId) searchUrl.set('systemId', systemId);
     if (recordType) searchUrl.set('recordTypes', recordType);
+    if (language) searchUrl.set('language', language);
     if (verifiedOnly) searchUrl.set('verifiedOnly', 'true');
     if (currentOnly) searchUrl.set('currentOnly', 'true');
     if (includeHistorical) searchUrl.set('includeHistorical', 'true');
@@ -149,6 +152,16 @@ export default async function SearchPage({
                 {RECORD_TYPE_CATALOG.map((entry) => (
                   <option key={entry.value} value={entry.value}>
                     {tRecords(`typeLabels.${entry.value}`)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t('language')}>
+              <Select name="language" defaultValue={language}>
+                <option value="">{tCommon('any')}</option>
+                {locales.map((code) => (
+                  <option key={code} value={code}>
+                    {localeLabels[code]} ({code})
                   </option>
                 ))}
               </Select>

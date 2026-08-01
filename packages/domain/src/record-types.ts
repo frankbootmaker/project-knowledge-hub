@@ -362,6 +362,13 @@ const CREATE_FIELDS: KnowledgeRecordFieldGuide[] = [
     appliesTo: ['create', 'update'],
   },
   {
+    name: 'translationGroupId',
+    requirement: 'optional',
+    description:
+      'Optional UUID shared by translation siblings (same group id). Phase 1: set via API/MCP only.',
+    appliesTo: ['create', 'update'],
+  },
+  {
     name: 'generatedByModel',
     requirement: 'optional',
     description: 'Model identifier for provenance (MCP conversation source).',
@@ -491,6 +498,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
         'systemId',
         'tags',
         'language',
+        'translationGroupId',
         'generatedByModel',
         'sourceTitle',
       ],
@@ -519,6 +527,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
         'systemId',
         'tags',
         'language',
+        'translationGroupId',
         'generatedByModel',
         'sourceTitle',
       ],

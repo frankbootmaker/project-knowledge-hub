@@ -25,6 +25,7 @@ type KnowledgeRecord = {
   slug: string;
   summary: string | null;
   recordType: string;
+  language?: string | null;
   lifecycleStatus: string;
   sourceOfTruthMode: string;
   currentVersionNumber: number;
@@ -145,7 +146,7 @@ export default async function KnowledgeRecordDetailPage({
           </>
         }
         title={record.title}
-        description={`${record.slug} · ${record.recordType}`}
+        description={`${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
       />
 
       {record.lifecycleStatus === 'superseded' ? (
@@ -191,6 +192,7 @@ export default async function KnowledgeRecordDetailPage({
               slug: record.slug,
               summary: record.summary,
               recordType: record.recordType,
+              language: record.language,
               lifecycleStatus: record.lifecycleStatus,
               sourceOfTruthMode: record.sourceOfTruthMode,
               currentVersionNumber: record.currentVersionNumber,
@@ -213,6 +215,7 @@ export default async function KnowledgeRecordDetailPage({
               lifecycleStatus: record.lifecycleStatus,
               sourceOfTruthMode: record.sourceOfTruthMode,
               contentMarkdown: record.contentMarkdown,
+              language: record.language,
               projectId: record.projectId,
               systemId: record.systemId,
               tags: record.tags,
@@ -259,6 +262,10 @@ export default async function KnowledgeRecordDetailPage({
           </>
         }
         sourceRows={[
+          {
+            label: t('contentLanguage'),
+            value: record.language ?? 'en',
+          },
           { label: t('sourceType'), value: record.source?.sourceType ?? dash },
           { label: t('sourceTitle'), value: record.source?.sourceTitle ?? dash },
           { label: t('provider'), value: record.source?.sourceProvider ?? dash },
