@@ -859,9 +859,30 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       .where(eq(workspaces.id, record.workspaceId))
       .limit(1);
 
+    const translationGroupId = record.translationGroupId;
+
     await app.database.db
       .delete(knowledgeRecords)
       .where(eq(knowledgeRecords.id, record.id));
+
+    // Solo survivor no longer needs a family id (Add translation can recreate cleanly).
+    if (translationGroupId) {
+      const survivors = await app.database.db
+        .select({ id: knowledgeRecords.id })
+        .from(knowledgeRecords)
+        .where(
+          and(
+            eq(knowledgeRecords.translationGroupId, translationGroupId),
+            isNull(knowledgeRecords.archivedAt),
+          ),
+        );
+      if (survivors.length === 1 && survivors[0]) {
+        await app.database.db
+          .update(knowledgeRecords)
+          .set({ translationGroupId: null, updatedAt: new Date() })
+          .where(eq(knowledgeRecords.id, survivors[0].id));
+      }
+    }
 
     await writeAuditEvent(app.database, {
       organizationId: workspace?.organizationId ?? null,
@@ -874,6 +895,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         title: record.title,
         slug: record.slug,
         sourceOfTruthMode: record.sourceOfTruthMode,
+        translationGroupId,
       },
       ipAddress: request.ip,
     });

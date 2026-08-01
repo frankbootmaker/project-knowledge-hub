@@ -13,7 +13,16 @@ import {
   ManageMenuLink,
   ManageToolbar,
 } from './manage-menu-shared';
-import { Button, ErrorText, Field, Modal, Select, lifecycleLabel, useToast } from './ui';
+import {
+  Button,
+  ErrorText,
+  Field,
+  Modal,
+  Panel,
+  Select,
+  lifecycleLabel,
+  useToast,
+} from './ui';
 
 export type RecordManageDetails = {
   id: string;
@@ -95,6 +104,11 @@ export function KnowledgeRecordManageMenu(props: {
   const [translateWithAi, setTranslateWithAi] = useState(false);
   const [translatePending, setTranslatePending] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
+  const [deleteSelectedIds, setDeleteSelectedIds] = useState<string[]>([]);
+  const [deleteConfirming, setDeleteConfirming] = useState(false);
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const archived = Boolean(props.record.archivedAt);
   const gitManaged = props.record.sourceOfTruthMode === 'git_managed';
@@ -102,6 +116,13 @@ export function KnowledgeRecordManageMenu(props: {
   const editHref = `/workspaces/${props.workspaceSlug}/records/${props.record.slug}/edit`;
   const historyHref = `/workspaces/${props.workspaceSlug}/records/${props.record.slug}/history`;
   const canTranslate = props.canMutate && !archived && !gitManaged;
+  const availableTranslationLocales = locales.filter(
+    (code) =>
+      !siblings.some(
+        (item) => (item.language ?? 'en').toLowerCase() === code,
+      ),
+  );
+  const noFurtherTranslations = availableTranslationLocales.length === 0;
 
   useEffect(() => {
     if (!open || section !== 'export') {
@@ -133,7 +154,7 @@ export function KnowledgeRecordManageMenu(props: {
   }, [open, section, props.workspaceId]);
 
   useEffect(() => {
-    if (!open || section !== 'translate') {
+    if (!open || (section !== 'translate' && section !== 'delete')) {
       return;
     }
     let cancelled = false;
@@ -151,13 +172,23 @@ export function KnowledgeRecordManageMenu(props: {
         };
         if (cancelled) return;
         setSiblings(body.translations);
-        const taken = new Set(
-          body.translations.map((item) => (item.language ?? 'en').toLowerCase()),
-        );
-        const next = locales.find((code) => !taken.has(code)) ?? 'en';
-        setTargetLanguage(next);
+        if (section === 'translate') {
+          const taken = new Set(
+            body.translations.map((item) =>
+              (item.language ?? 'en').toLowerCase(),
+            ),
+          );
+          const next = locales.find((code) => !taken.has(code)) ?? 'en';
+          setTargetLanguage(next);
+        }
+        if (section === 'delete') {
+          setDeleteSelectedIds([props.record.id]);
+          setDeleteConfirming(false);
+          setDeleteAcknowledged(false);
+          setDeleteError(null);
+        }
       } catch {
-        // Ignore load failures; create will surface errors.
+        // Ignore load failures; actions will surface errors.
       }
     })();
     return () => {
@@ -170,6 +201,72 @@ export function KnowledgeRecordManageMenu(props: {
     setSection('menu');
     setTranslateError(null);
     setTranslateWithAi(false);
+    setDeleteConfirming(false);
+    setDeleteAcknowledged(false);
+    setDeleteError(null);
+  }
+
+  function siblingLanguageLabel(code: string | null): string {
+    const normalized = (code ?? 'en').toLowerCase();
+    if (locales.includes(normalized as AppLocale)) {
+      return localeLabels[normalized as AppLocale];
+    }
+    return normalized.toUpperCase();
+  }
+
+  async function purgeSelectedTranslations() {
+    if (deleteSelectedIds.length === 0) {
+      setDeleteError(t('manageDeleteNoneSelected'));
+      return;
+    }
+    if (!deleteAcknowledged) {
+      return;
+    }
+    setDeletePending(true);
+    setDeleteError(null);
+    try {
+      const remaining = siblings.filter(
+        (item) => !deleteSelectedIds.includes(item.id),
+      );
+      for (const id of deleteSelectedIds) {
+        const response = await fetch(
+          `/api/v1/knowledge-records/${id}/purge`,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              Origin: window.location.origin,
+            },
+            body: JSON.stringify({ confirmDestroy: true }),
+          },
+        );
+        if (!response.ok && response.status !== 204) {
+          const payload = (await response.json()) as {
+            error?: { message?: string };
+          };
+          throw new Error(payload.error?.message ?? tArchive('failedDelete'));
+        }
+      }
+      close();
+      if (deleteSelectedIds.includes(props.record.id)) {
+        const next = remaining[0];
+        if (next) {
+          router.push(
+            `/workspaces/${props.workspaceSlug}/records/${next.slug}`,
+          );
+        } else {
+          router.push(redirectParent);
+        }
+      }
+      router.refresh();
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : tArchive('failedDelete'),
+      );
+    } finally {
+      setDeletePending(false);
+    }
   }
 
   function sectionTitle(): string {
@@ -387,80 +484,88 @@ export function KnowledgeRecordManageMenu(props: {
 
         {section === 'translate' ? (
           <div className="grid gap-4">
-            <p className="m-0 text-sm text-ink-muted">{t('manageTranslateBlurb')}</p>
-            <Field label={t('contentLanguage')}>
-              <Select
-                value={targetLanguage}
-                onChange={(e) => setTargetLanguage(e.target.value as AppLocale)}
-                disabled={translatePending}
-              >
-                {locales
-                  .filter(
-                    (code) =>
-                      !siblings.some(
-                        (item) => (item.language ?? 'en').toLowerCase() === code,
-                      ),
-                  )
-                  .map((code) => (
-                    <option key={code} value={code}>
-                      {localeLabels[code]} ({code})
-                    </option>
-                  ))}
-              </Select>
-            </Field>
-            {props.visionConfigured ? (
-              <label className="flex items-start gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={translateWithAi}
-                  disabled={translatePending}
-                  onChange={(e) => setTranslateWithAi(e.target.checked)}
-                />
-                <span>
-                  <span className="font-medium">{t('translateWithAi')}</span>
-                  <span className="mt-0.5 block text-ink-muted">
-                    {t('translateWithAiHint')}
-                  </span>
-                </span>
-              </label>
+            {noFurtherTranslations ? (
+              <>
+                <p className="m-0 text-sm text-ink-muted">{t('translateAllExist')}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setSection('menu')}
+                  >
+                    {tCommon('back')}
+                  </Button>
+                </div>
+              </>
             ) : (
-              <p className="m-0 text-sm text-ink-muted">{t('translateAiUnavailable')}</p>
+              <>
+                <p className="m-0 text-sm text-ink-muted">
+                  {t('manageTranslateBlurb')}
+                </p>
+                <Field label={t('contentLanguage')}>
+                  <Select
+                    value={
+                      availableTranslationLocales.includes(targetLanguage)
+                        ? targetLanguage
+                        : availableTranslationLocales[0]!
+                    }
+                    onChange={(e) =>
+                      setTargetLanguage(e.target.value as AppLocale)
+                    }
+                    disabled={translatePending}
+                  >
+                    {availableTranslationLocales.map((code) => (
+                      <option key={code} value={code}>
+                        {localeLabels[code]} ({code})
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {props.visionConfigured ? (
+                  <label className="flex items-start gap-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={translateWithAi}
+                      disabled={translatePending}
+                      onChange={(e) => setTranslateWithAi(e.target.checked)}
+                    />
+                    <span>
+                      <span className="font-medium">{t('translateWithAi')}</span>
+                      <span className="mt-0.5 block text-ink-muted">
+                        {t('translateWithAiHint')}
+                      </span>
+                    </span>
+                  </label>
+                ) : (
+                  <p className="m-0 text-sm text-ink-muted">
+                    {t('translateAiUnavailable')}
+                  </p>
+                )}
+                {translateError ? <ErrorText>{translateError}</ErrorText> : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    disabled={translatePending}
+                    onClick={() => void createTranslation()}
+                  >
+                    {translatePending
+                      ? translateWithAi
+                        ? t('translateAiPending')
+                        : tCommon('saving')
+                      : t('translateCreate')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={translatePending}
+                    onClick={() => setSection('menu')}
+                  >
+                    {tCommon('back')}
+                  </Button>
+                </div>
+              </>
             )}
-            {locales.every((code) =>
-              siblings.some((item) => (item.language ?? 'en').toLowerCase() === code),
-            ) ? (
-              <p className="m-0 text-sm text-ink-muted">{t('translateAllExist')}</p>
-            ) : null}
-            {translateError ? <ErrorText>{translateError}</ErrorText> : null}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                disabled={
-                  translatePending ||
-                  locales.every((code) =>
-                    siblings.some(
-                      (item) => (item.language ?? 'en').toLowerCase() === code,
-                    ),
-                  )
-                }
-                onClick={() => void createTranslation()}
-              >
-                {translatePending
-                  ? translateWithAi
-                    ? t('translateAiPending')
-                    : tCommon('saving')
-                  : t('translateCreate')}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={translatePending}
-                onClick={() => setSection('menu')}
-              >
-                {tCommon('back')}
-              </Button>
-            </div>
           </div>
         ) : null}
 
@@ -583,15 +688,154 @@ export function KnowledgeRecordManageMenu(props: {
 
         {section === 'delete' ? (
           <div className="grid gap-4">
-            <p className="m-0 text-sm text-ink-muted">{t('manageDeleteHint')}</p>
-            <PurgeEntityButton
-              kind="record"
-              entityId={props.record.id}
-              entityName={props.record.title}
-              redirectOnPurge={redirectParent}
-              extraHint={gitManaged ? tArchive('deleteHintRecordGitManaged') : null}
-            />
-            <Button type="button" variant="secondary" onClick={() => setSection('menu')}>
+            {siblings.length >= 2 ? (
+              <>
+                <p className="m-0 text-sm text-ink-muted">
+                  {t('manageDeleteFamilyHint')}
+                </p>
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {siblings.map((item) => {
+                    const checked = deleteSelectedIds.includes(item.id);
+                    const lang = siblingLanguageLabel(item.language);
+                    return (
+                      <li key={item.id}>
+                        <label className="flex items-start gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={checked}
+                            disabled={deletePending}
+                            onChange={(event) => {
+                              setDeleteSelectedIds((prev) =>
+                                event.target.checked
+                                  ? [...new Set([...prev, item.id])]
+                                  : prev.filter((id) => id !== item.id),
+                              );
+                            }}
+                          />
+                          <span>
+                            {t('manageDeleteSiblingLabel', {
+                              language: `${lang} (${(item.language ?? 'en').toLowerCase()})`,
+                              title: item.title,
+                            })}
+                            {item.id === props.record.id ? (
+                              <span className="mt-0.5 block text-xs text-ink-muted">
+                                {t('current')}
+                              </span>
+                            ) : null}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={deletePending}
+                    onClick={() =>
+                      setDeleteSelectedIds(siblings.map((item) => item.id))
+                    }
+                  >
+                    {t('manageDeleteSelectAll')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={deletePending}
+                    onClick={() => setDeleteSelectedIds([])}
+                  >
+                    {t('manageDeleteSelectNone')}
+                  </Button>
+                </div>
+                {!deleteConfirming ? (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={deletePending || deleteSelectedIds.length === 0}
+                    onClick={() => {
+                      setDeleteConfirming(true);
+                      setDeleteAcknowledged(false);
+                      setDeleteError(null);
+                    }}
+                  >
+                    {t('manageDeleteSelected')}
+                  </Button>
+                ) : (
+                  <Panel variant="inset" className="grid w-full gap-3">
+                    <p className="m-0 text-sm text-danger">
+                      {t('manageDeleteConfirmSelected', {
+                        count: deleteSelectedIds.length,
+                      })}
+                    </p>
+                    <p className="m-0 text-xs text-ink-muted">
+                      {tArchive('deleteHintRecord')}
+                    </p>
+                    {gitManaged ? (
+                      <p className="m-0 text-xs text-ink-muted">
+                        {tArchive('deleteHintRecordGitManaged')}
+                      </p>
+                    ) : null}
+                    <label className="flex items-start gap-2 text-sm text-ink">
+                      <input
+                        type="checkbox"
+                        checked={deleteAcknowledged}
+                        disabled={deletePending}
+                        onChange={(event) =>
+                          setDeleteAcknowledged(event.target.checked)
+                        }
+                      />
+                      <span>{tArchive('deleteAcknowledge')}</span>
+                    </label>
+                    {deleteError ? <ErrorText>{deleteError}</ErrorText> : null}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        disabled={deletePending || !deleteAcknowledged}
+                        onClick={() => void purgeSelectedTranslations()}
+                      >
+                        {deletePending
+                          ? tArchive('deletingPermanently')
+                          : tArchive('confirmDeleteAction')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={deletePending}
+                        onClick={() => {
+                          setDeleteConfirming(false);
+                          setDeleteAcknowledged(false);
+                          setDeleteError(null);
+                        }}
+                      >
+                        {tCommon('cancel')}
+                      </Button>
+                    </div>
+                  </Panel>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="m-0 text-sm text-ink-muted">{t('manageDeleteHint')}</p>
+                <PurgeEntityButton
+                  kind="record"
+                  entityId={props.record.id}
+                  entityName={props.record.title}
+                  redirectOnPurge={redirectParent}
+                  extraHint={
+                    gitManaged ? tArchive('deleteHintRecordGitManaged') : null
+                  }
+                />
+              </>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={deletePending}
+              onClick={() => setSection('menu')}
+            >
               {tCommon('back')}
             </Button>
           </div>
