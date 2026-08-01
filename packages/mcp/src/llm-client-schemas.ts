@@ -88,7 +88,8 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     },
     {
       name: 'list_knowledge_records',
-      description: 'List knowledge records in a workspace (excludes archived by default)',
+      description:
+        'List knowledge records in a workspace (excludes archived by default). Prefer language: "en" unless the user asks for another locale.',
       body: {
         type: 'object',
         required: ['workspaceId'],
@@ -107,7 +108,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'search_knowledge',
       description:
-        'Search knowledge records (full-text by default; optional hybrid when embeddings are enabled)',
+        'Search knowledge records (full-text by default; optional hybrid when embeddings are enabled). Prefer language: "en" unless the user asks for another locale.',
       body: {
         type: 'object',
         required: ['workspaceId', 'query'],
@@ -160,6 +161,16 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'get_record_provenance',
       description: 'Retrieve verification and source provenance for a knowledge record',
+      body: {
+        type: 'object',
+        required: ['recordId'],
+        properties: { recordId: uuidProp('Knowledge record id') },
+      },
+    },
+    {
+      name: 'list_record_translations',
+      description:
+        'List translation siblings for a knowledge record (same translationGroupId). Prefer English for default work.',
       body: {
         type: 'object',
         required: ['recordId'],
@@ -270,7 +281,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'create_knowledge_record',
       description:
-        'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: begin → append → finalize_workspace_media_upload, then include media.markdownSnippet — never data:image URIs.',
+        'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: begin → append → finalize_workspace_media_upload, then include media.markdownSnippet — never data:image URIs. For translations of an existing record prefer create_record_translation.',
       write: true,
       body: {
         type: 'object',
@@ -303,6 +314,32 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
           },
           generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
           sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
+        },
+      },
+    },
+    {
+      name: 'create_record_translation',
+      description:
+        'Create a linked draft translation sibling (shared translationGroupId, distinct slug). Prefer this when adding hu/de locales to an existing EN record. Set translateWithAi=true to machine-translate via hub VISION_LLM_*. Do not overwrite EN with a translation.',
+      write: true,
+      body: {
+        type: 'object',
+        required: ['recordId', 'language'],
+        properties: {
+          recordId: uuidProp('Source knowledge record id'),
+          language: stringProp('Target language code (e.g. hu, de)', {
+            minLength: 2,
+            maxLength: 16,
+          }),
+          slug: stringProp('Optional slug (defaults to source-slug-lang)', {
+            minLength: 1,
+            maxLength: 96,
+          }),
+          translateWithAi: {
+            type: 'boolean',
+            description:
+              'When true, fill title/summary/contentMarkdown via VISION_LLM_* before create (requires VISION_LLM_BASE_URL)',
+          },
         },
       },
     },

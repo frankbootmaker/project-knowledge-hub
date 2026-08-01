@@ -42,6 +42,13 @@ export type McpToolHandlers = {
   }) => Promise<unknown>;
   getKnowledgeRecord: (input: { recordId: string }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
+  listRecordTranslations: (input: { recordId: string }) => Promise<unknown>;
+  createRecordTranslation: (input: {
+    recordId: string;
+    language: string;
+    slug?: string;
+    translateWithAi?: boolean;
+  }) => Promise<unknown>;
   listRecordMetadata: () => Promise<unknown>;
   createKnowledgeRecord: (input: {
     workspaceId: string;
@@ -276,7 +283,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_knowledge_records',
-    'List knowledge records in a workspace (excludes archived by default)',
+    'List knowledge records in a workspace (excludes archived by default). Prefer language: "en" unless the user asks for another locale.',
     {
       workspaceId: z.string().uuid(),
       projectId: z.string().uuid().optional(),
@@ -303,7 +310,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'search_knowledge',
-    'Search knowledge records (full-text by default; optional hybrid when embeddings are enabled)',
+    'Search knowledge records (full-text by default; optional hybrid when embeddings are enabled). Prefer language: "en" unless the user asks for another locale.',
     {
       workspaceId: z.string().uuid(),
       query: z.string().min(1).max(300),
@@ -347,6 +354,37 @@ export function createKnowledgeHubMcpServer(
         'get_record_provenance',
         'provenance:read',
         () => handlers.getRecordProvenance(args),
+        { recordId: args.recordId },
+      )(),
+  );
+
+  server.tool(
+    'list_record_translations',
+    'List translation siblings for a knowledge record (same translationGroupId). Includes the source record. Prefer English siblings for default work.',
+    { recordId: z.string().uuid() },
+    async (args) =>
+      wrap(
+        'list_record_translations',
+        'knowledge:read',
+        () => handlers.listRecordTranslations(args),
+        { recordId: args.recordId },
+      )(),
+  );
+
+  server.tool(
+    'create_record_translation',
+    'Create a linked draft translation sibling (shared translationGroupId, distinct slug). Prefer this over create_knowledge_record when adding hu/de (or other) locales to an existing EN record. Set translateWithAi=true to fill title/summary/body via the hub VISION_LLM_* provider (same as vision OCR). Do not overwrite EN content with a translation — update the sibling instead.',
+    {
+      recordId: z.string().uuid(),
+      language: z.string().min(2).max(16),
+      slug: z.string().min(1).max(96).optional(),
+      translateWithAi: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_record_translation',
+        'knowledge:write',
+        () => handlers.createRecordTranslation(args),
         { recordId: args.recordId },
       )(),
   );

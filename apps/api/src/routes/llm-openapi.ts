@@ -26,10 +26,12 @@ const TOOL_NAMES = [
   'search_knowledge',
   'get_knowledge_record',
   'get_record_provenance',
+  'list_record_translations',
   'list_record_metadata',
   'list_workspace_media',
   'get_platform_status',
   'create_knowledge_record',
+  'create_record_translation',
   'update_knowledge_record',
   'begin_workspace_media_upload',
   'append_workspace_media_upload',
@@ -51,10 +53,12 @@ const scopeByTool: Record<ToolName, McpScope> = {
   search_knowledge: 'knowledge:search',
   get_knowledge_record: 'knowledge:read',
   get_record_provenance: 'provenance:read',
+  list_record_translations: 'knowledge:read',
   list_record_metadata: 'knowledge:read',
   list_workspace_media: 'knowledge:read',
   get_platform_status: 'monitoring:read',
   create_knowledge_record: 'knowledge:write',
+  create_record_translation: 'knowledge:write',
   update_knowledge_record: 'knowledge:write',
   begin_workspace_media_upload: 'knowledge:write',
   append_workspace_media_upload: 'knowledge:write',
@@ -205,6 +209,15 @@ async function invokeTool(
         });
       }
       return handlers.getRecordProvenance({ recordId: raw.recordId });
+    case 'list_record_translations':
+      if (typeof raw.recordId !== 'string') {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'recordId is required',
+          statusCode: 400,
+        });
+      }
+      return handlers.listRecordTranslations({ recordId: raw.recordId });
     case 'list_record_metadata':
       return handlers.listRecordMetadata();
     case 'get_platform_status':
@@ -244,6 +257,21 @@ async function invokeTool(
         generatedByModel:
           typeof raw.generatedByModel === 'string' ? raw.generatedByModel : undefined,
         sourceTitle: typeof raw.sourceTitle === 'string' ? raw.sourceTitle : undefined,
+      });
+    case 'create_record_translation':
+      if (typeof raw.recordId !== 'string' || typeof raw.language !== 'string') {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'recordId and language are required',
+          statusCode: 400,
+        });
+      }
+      return handlers.createRecordTranslation({
+        recordId: raw.recordId,
+        language: raw.language,
+        slug: typeof raw.slug === 'string' ? raw.slug : undefined,
+        translateWithAi:
+          typeof raw.translateWithAi === 'boolean' ? raw.translateWithAi : undefined,
       });
     case 'update_knowledge_record':
       if (typeof raw.recordId !== 'string' || typeof raw.changeMessage !== 'string') {

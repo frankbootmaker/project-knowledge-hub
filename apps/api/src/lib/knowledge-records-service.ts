@@ -27,6 +27,10 @@ import {
 } from './knowledge-versions.js';
 import { getKnowledgeRecordTags, setKnowledgeRecordTags } from './tags.js';
 import { writeAuditEvent } from './identity.js';
+import {
+  translateRecordFields,
+  visionLlmConfigured,
+} from './vision-llm.js';
 
 export const sourceInputSchema = z.object({
   sourceType: knowledgeSourceTypeSchema,
@@ -778,4 +782,294 @@ export async function updateKnowledgeRecord(
     rendered,
     shouldVersion,
   };
+}
+
+export const createTranslationInputSchema = z.object({
+  language: z.string().min(2).max(16),
+  slug: z.string().min(1).max(96).optional(),
+  /** When true, fill title/summary/body via VISION_LLM_* chat/completions before insert. */
+  translateWithAi: z.boolean().optional(),
+});
+
+export type CreateTranslationInput = z.infer<typeof createTranslationInputSchema>;
+
+export type TranslationSibling = {
+  id: string;
+  slug: string;
+  language: string | null;
+  title: string;
+  lifecycleStatus: string;
+};
+
+async function allocateUniqueRecordSlug(
+  database: Database,
+  workspaceId: string,
+  desired: string,
+): Promise<string> {
+  const base = slugify(desired).slice(0, 96) || 'record';
+  let candidate = base;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const [existing] = await database.db
+      .select({ id: knowledgeRecords.id })
+      .from(knowledgeRecords)
+      .where(
+        and(
+          eq(knowledgeRecords.workspaceId, workspaceId),
+          eq(knowledgeRecords.slug, candidate),
+        ),
+      )
+      .limit(1);
+    if (!existing) {
+      return candidate;
+    }
+    const suffix = `-${attempt + 2}`;
+    candidate = `${base.slice(0, 96 - suffix.length)}${suffix}`;
+  }
+  throw new AppError({
+    code: 'KNOWLEDGE_RECORD_SLUG_CONFLICT',
+    message: 'Unable to allocate a unique slug for this translation',
+    statusCode: 409,
+  });
+}
+
+export async function listRecordTranslations(
+  app: FastifyInstance,
+  recordId: string,
+): Promise<{ recordId: string; translationGroupId: string | null; translations: TranslationSibling[] }> {
+  const [record] = await app.database.db
+    .select()
+    .from(knowledgeRecords)
+    .where(eq(knowledgeRecords.id, recordId))
+    .limit(1);
+
+  if (!record || record.archivedAt) {
+    throw new AppError({
+      code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+      message: 'Knowledge record not found',
+      statusCode: 404,
+    });
+  }
+
+  if (!record.translationGroupId) {
+    return {
+      recordId: record.id,
+      translationGroupId: null,
+      translations: [
+        {
+          id: record.id,
+          slug: record.slug,
+          language: record.language,
+          title: record.title,
+          lifecycleStatus: record.lifecycleStatus,
+        },
+      ],
+    };
+  }
+
+  const rows = await app.database.db
+    .select()
+    .from(knowledgeRecords)
+    .where(
+      and(
+        eq(knowledgeRecords.translationGroupId, record.translationGroupId),
+        isNull(knowledgeRecords.archivedAt),
+      ),
+    );
+
+  const translations = rows
+    .map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      language: row.language,
+      title: row.title,
+      lifecycleStatus: row.lifecycleStatus,
+    }))
+    .sort((a, b) => (a.language ?? '').localeCompare(b.language ?? ''));
+
+  return {
+    recordId: record.id,
+    translationGroupId: record.translationGroupId,
+    translations,
+  };
+}
+
+export async function createRecordTranslation(
+  app: FastifyInstance,
+  sourceRecordId: string,
+  input: CreateTranslationInput,
+  actor: KnowledgeActor,
+  ipAddress?: string | null,
+) {
+  const body = createTranslationInputSchema.parse(input);
+  const language = body.language.trim().toLowerCase();
+
+  const [source] = await app.database.db
+    .select()
+    .from(knowledgeRecords)
+    .where(eq(knowledgeRecords.id, sourceRecordId))
+    .limit(1);
+
+  if (!source || source.archivedAt) {
+    throw new AppError({
+      code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+      message: 'Knowledge record not found',
+      statusCode: 404,
+    });
+  }
+
+  if (source.sourceOfTruthMode === 'git_managed') {
+    throw new AppError({
+      code: 'GIT_MANAGED_READ_ONLY',
+      message: 'Cannot add translations for git-managed records in the hub',
+      statusCode: 409,
+    });
+  }
+
+  const translateWithAi = body.translateWithAi === true;
+  if (translateWithAi && !visionLlmConfigured(app.env.VISION_LLM_BASE_URL)) {
+    throw new AppError({
+      code: 'TRANSLATION_AI_UNAVAILABLE',
+      message:
+        'AI translation requires VISION_LLM_BASE_URL (OpenAI-compatible, e.g. Ollama /v1).',
+      statusCode: 400,
+    });
+  }
+
+  if (source.translationGroupId) {
+    const siblings = await app.database.db
+      .select()
+      .from(knowledgeRecords)
+      .where(
+        and(
+          eq(knowledgeRecords.translationGroupId, source.translationGroupId),
+          isNull(knowledgeRecords.archivedAt),
+        ),
+      );
+    if (
+      siblings.some((row) => (row.language ?? '').toLowerCase() === language)
+    ) {
+      throw new AppError({
+        code: 'TRANSLATION_LANGUAGE_CONFLICT',
+        message: `A translation for language "${language}" already exists in this family`,
+        statusCode: 409,
+      });
+    }
+  } else if ((source.language ?? 'en').toLowerCase() === language) {
+    throw new AppError({
+      code: 'TRANSLATION_LANGUAGE_CONFLICT',
+      message: `A translation for language "${language}" already exists in this family`,
+      statusCode: 409,
+    });
+  }
+
+  let title = source.title;
+  let summary = source.summary;
+  let contentMarkdown = source.contentMarkdown;
+  let generatedByModel: string | null = null;
+
+  if (translateWithAi) {
+    try {
+      const translated = await translateRecordFields({
+        baseUrl: app.env.VISION_LLM_BASE_URL!,
+        apiKey: app.env.VISION_LLM_API_KEY,
+        model: app.env.VISION_LLM_MODEL,
+        timeoutMs: app.env.MARKITDOWN_TIMEOUT_MS,
+        targetLanguage: language,
+        sourceLanguage: source.language,
+        title: source.title,
+        summary: source.summary,
+        contentMarkdown: source.contentMarkdown,
+      });
+      title = translated.title;
+      summary = translated.summary;
+      contentMarkdown = translated.contentMarkdown;
+      generatedByModel = translated.model;
+    } catch (error) {
+      throw new AppError({
+        code: 'TRANSLATION_AI_FAILED',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'AI translation failed',
+        statusCode: 502,
+      });
+    }
+  }
+
+  let translationGroupId = source.translationGroupId;
+  if (!translationGroupId) {
+    translationGroupId = crypto.randomUUID();
+    await app.database.db
+      .update(knowledgeRecords)
+      .set({ translationGroupId, updatedAt: new Date() })
+      .where(eq(knowledgeRecords.id, source.id));
+  }
+
+  const desiredSlug = body.slug?.trim()
+    ? slugify(body.slug)
+    : slugify(`${source.slug}-${language}`);
+  const slug = await allocateUniqueRecordSlug(
+    app.database,
+    source.workspaceId,
+    desiredSlug || `${source.slug}-${language}`,
+  );
+
+  const tagList =
+    (await getKnowledgeRecordTags(app.database, [source.id])).get(source.id) ?? [];
+
+  const result = await createKnowledgeRecord(
+    app,
+    {
+      workspaceId: source.workspaceId,
+      title,
+      slug,
+      summary: summary ?? undefined,
+      recordType: recordTypeSchema.parse(source.recordType),
+      lifecycleStatus: 'draft',
+      sourceOfTruthMode: 'hub_managed',
+      contentMarkdown,
+      language,
+      translationGroupId,
+      projectId: source.projectId,
+      systemId: source.systemId,
+      tags: tagList.map((tag) => tag.name),
+      source: {
+        sourceType: translateWithAi ? 'conversation' : 'manual',
+        sourceProvider: translateWithAi ? 'vision_llm' : 'project-knowledge-hub',
+        sourceTitle: translateWithAi
+          ? `AI translation of ${source.slug}`
+          : `Translation of ${source.slug}`,
+        sourceReference: source.id,
+        generatedByModel,
+      },
+    },
+    actor,
+    ipAddress,
+  );
+
+  await writeAuditEvent(app.database, {
+    organizationId: (
+      await app.database.db
+        .select({ organizationId: workspaces.organizationId })
+        .from(workspaces)
+        .where(eq(workspaces.id, source.workspaceId))
+        .limit(1)
+    )[0]?.organizationId ?? null,
+    actorType: actor.actorType,
+    actorId: actor.actorId,
+    action: 'knowledge_record.create_translation',
+    entityType: 'knowledge_record',
+    entityId: result.knowledgeRecord.id,
+    metadata: {
+      sourceRecordId: source.id,
+      language,
+      translationGroupId,
+      slug,
+      translateWithAi,
+      generatedByModel,
+    },
+    ipAddress: ipAddress ?? null,
+  });
+
+  return result;
 }

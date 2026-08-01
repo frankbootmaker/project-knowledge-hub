@@ -5,6 +5,7 @@ import { KnowledgeRecordDetailActions } from '../../../../../../components/Knowl
 import { KnowledgeRecordMoreDetails } from '../../../../../../components/KnowledgeRecordMoreDetails';
 import { MarkdownDocument } from '../../../../../../components/MarkdownDocument';
 import { RecordLifecycleActions } from '../../../../../../components/RecordLifecycleActions';
+import { RecordTranslationSwitcher } from '../../../../../../components/RecordTranslationSwitcher';
 import {
   Badge,
   Page,
@@ -128,6 +129,23 @@ export default async function KnowledgeRecordDetailPage({
     );
   const gitManaged = record.sourceOfTruthMode === 'git_managed';
 
+  const translationsResponse = await apiFetch(
+    `/api/v1/knowledge-records/${record.id}/translations`,
+  );
+  const translations = translationsResponse.ok
+    ? (
+        (await translationsResponse.json()) as {
+          translations: Array<{
+            id: string;
+            slug: string;
+            language: string | null;
+            title: string;
+            lifecycleStatus: string;
+          }>;
+        }
+      ).translations
+    : [];
+
   const dash = tCommon('emDash');
 
   return (
@@ -147,6 +165,12 @@ export default async function KnowledgeRecordDetailPage({
         }
         title={record.title}
         description={`${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
+      />
+
+      <RecordTranslationSwitcher
+        workspaceSlug={workspace.slug}
+        currentRecordId={record.id}
+        translations={translations}
       />
 
       {record.lifecycleStatus === 'superseded' ? (
@@ -225,6 +249,7 @@ export default async function KnowledgeRecordDetailPage({
             systems={systems}
             canMutate={canMutate}
             canPurge={canPurge}
+            visionConfigured={Boolean(process.env.VISION_LLM_BASE_URL)}
           />
         }
         summary={<p className="m-0">{record.summary || tCommon('noSummary')}</p>}

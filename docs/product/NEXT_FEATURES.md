@@ -53,7 +53,8 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 | NF-013 | **Knowledge media** — workspace image library (JPEG/PNG/WebP) for Markdown embeds; optional link to a knowledge record; human editor insert + MCP upload | `done` | SVG later | BlobStore purpose `media`. Embed URL `/api/v1/media/:id`. MCP: `upload_workspace_media` / `list_workspace_media` / `delete_workspace_media`. |
 | NF-014 | **External platform status** — expose the redacted Monitoring / support-dump snapshot to external monitoring systems via REST and MCP | `done` — `GET /api/v1/platform/status` + MCP `get_platform_status` with opt-in `monitoring:read` | — | Wave **E**. Same payload as Admin support dump. Complements NF-009 alerts. |
 | NF-015 | **Document / image import (MarkItDown)** — Import picker Documents + Images → convert via `kh-markitdown` sidecar → draft knowledge records; selectable OCR (`none` / `vision` / `tesseract`) | `done` (first slice) | Audio/YouTube/ZIP batch; Azure Doc Intelligence | Brief: [`DOCUMENT_IMPORT.md`](DOCUMENT_IMPORT.md). Lifts PRD deferral of PDF/DOCX ingest for hub drafts. |
-| NF-016 | **Multilingual knowledge records** — content language + linked translation families | `partial` — Phase 1 done (language field UI, list/search filters, `translation_group_id` foundation) | Phase 2: Add translation + detail language switcher | Wave **F**. Distinct slugs per language; group id links siblings. |
+| NF-016 | **Multilingual knowledge records** — content language + linked translation families | `done` — Phase 1 + Phase 2 + AI translate via `VISION_LLM_*` (`translateWithAi`) | Same-slug URLs / `?lang=`; preferred_locale redirect; locale-aware FTS; re-translate existing sibling | Wave **F**. Distinct slugs per language; group id links siblings. |
+
 
 ---
 

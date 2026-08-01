@@ -24,6 +24,7 @@ export function KnowledgeRecordDetailActions({
   systems,
   canMutate,
   canPurge,
+  visionConfigured = false,
 }: {
   workspaceSlug: string;
   workspaceId: string;
@@ -33,6 +34,8 @@ export function KnowledgeRecordDetailActions({
   systems: Option[];
   canMutate: boolean;
   canPurge: boolean;
+  /** VISION_LLM_BASE_URL set — enables Translate with AI. */
+  visionConfigured?: boolean;
 }) {
   const t = useTranslations('records');
   const router = useRouter();
@@ -49,6 +52,7 @@ export function KnowledgeRecordDetailActions({
         record={record}
         canMutate={canMutate}
         canPurge={canPurge}
+        visionConfigured={visionConfigured}
         onEdit={canEdit ? () => setEditOpen(true) : undefined}
       />
 

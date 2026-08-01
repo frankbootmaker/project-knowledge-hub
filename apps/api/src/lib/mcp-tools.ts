@@ -21,6 +21,8 @@ import { runSearch } from './search-service.js';
 import { writeAuditEvent } from './identity.js';
 import {
   createKnowledgeRecord,
+  createRecordTranslation,
+  listRecordTranslations,
   resolveReviewedByUser,
   updateKnowledgeRecord,
 } from './knowledge-records-service.js';
@@ -535,6 +537,73 @@ export function createMcpToolHandlers(
           generatedByModel: source.generatedByModel,
           sourceCreatedAt: source.sourceCreatedAt?.toISOString() ?? null,
         })),
+      };
+    },
+
+    async listRecordTranslations({ recordId }) {
+      const [record] = await app.database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(and(eq(knowledgeRecords.id, recordId), isNull(knowledgeRecords.archivedAt)))
+        .limit(1);
+      if (!record) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found',
+          statusCode: 404,
+        });
+      }
+      assertWorkspaceAllowed(client, record.workspaceId);
+      assertProjectAllowed(client, record.projectId);
+      return listRecordTranslations(app, recordId);
+    },
+
+    async createRecordTranslation(input) {
+      const [record] = await app.database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(and(eq(knowledgeRecords.id, input.recordId), isNull(knowledgeRecords.archivedAt)))
+        .limit(1);
+      if (!record) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found',
+          statusCode: 404,
+        });
+      }
+      assertWriteWorkspaceAllowed(client, record.workspaceId);
+      assertProjectAllowed(client, record.projectId);
+      const actingUserId = requireActingUserId(client);
+      const result = await createRecordTranslation(
+        app,
+        input.recordId,
+        {
+          language: input.language,
+          slug: input.slug,
+          translateWithAi: input.translateWithAi,
+        },
+        {
+          actorType: 'api_client',
+          actorId: client.id,
+          userId: actingUserId,
+        },
+        ipAddress,
+      );
+      return {
+        knowledgeRecord: {
+          id: result.knowledgeRecord.id,
+          workspaceId: result.knowledgeRecord.workspaceId,
+          title: result.knowledgeRecord.title,
+          slug: result.knowledgeRecord.slug,
+          recordType: result.knowledgeRecord.recordType,
+          language: result.knowledgeRecord.language,
+          translationGroupId: result.knowledgeRecord.translationGroupId,
+          lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
+          sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
+          currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
+          projectId: result.knowledgeRecord.projectId,
+          systemId: result.knowledgeRecord.systemId,
+        },
       };
     },
 

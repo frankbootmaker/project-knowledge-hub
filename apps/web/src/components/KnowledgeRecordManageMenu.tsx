@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import { downloadAuthenticatedExport } from '../lib/download-export';
+import { localeLabels, locales, type AppLocale } from '../i18n/config';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
 import {
@@ -11,7 +13,7 @@ import {
   ManageMenuLink,
   ManageToolbar,
 } from './manage-menu-shared';
-import { Button, Modal, lifecycleLabel, useToast } from './ui';
+import { Button, ErrorText, Field, Modal, Select, lifecycleLabel, useToast } from './ui';
 
 export type RecordManageDetails = {
   id: string;
@@ -47,7 +49,7 @@ export type RecordManageDetails = {
   } | null;
 };
 
-type Section = 'menu' | 'details' | 'export' | 'archive' | 'delete';
+type Section = 'menu' | 'details' | 'export' | 'translate' | 'archive' | 'delete';
 type ExportFormat = 'pdf' | 'docx' | 'xlsx' | 'md';
 
 type StylePackOption = {
@@ -56,12 +58,22 @@ type StylePackOption = {
   builtin: boolean;
 };
 
+type TranslationSibling = {
+  id: string;
+  slug: string;
+  language: string | null;
+  title: string;
+  lifecycleStatus: string;
+};
+
 export function KnowledgeRecordManageMenu(props: {
   workspaceSlug: string;
   workspaceId: string;
   record: RecordManageDetails;
   canMutate: boolean;
   canPurge: boolean;
+  /** VISION_LLM_BASE_URL set — shows Translate with AI checkbox. */
+  visionConfigured?: boolean;
   /** When set, Edit opens the wide editor modal instead of navigating. */
   onEdit?: () => void;
 }) {
@@ -69,6 +81,7 @@ export function KnowledgeRecordManageMenu(props: {
   const tCommon = useTranslations('common');
   const tArchive = useTranslations('archive');
   const locale = useLocale();
+  const router = useRouter();
   const { pushToast } = useToast();
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<Section>('menu');
@@ -77,12 +90,18 @@ export function KnowledgeRecordManageMenu(props: {
     { id: 'blank', label: 'Blank', builtin: true },
   ]);
   const [stylePackId, setStylePackId] = useState('blank');
+  const [siblings, setSiblings] = useState<TranslationSibling[]>([]);
+  const [targetLanguage, setTargetLanguage] = useState<AppLocale>('hu');
+  const [translateWithAi, setTranslateWithAi] = useState(false);
+  const [translatePending, setTranslatePending] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
 
   const archived = Boolean(props.record.archivedAt);
   const gitManaged = props.record.sourceOfTruthMode === 'git_managed';
   const redirectParent = `/workspaces/${props.workspaceSlug}`;
   const editHref = `/workspaces/${props.workspaceSlug}/records/${props.record.slug}/edit`;
   const historyHref = `/workspaces/${props.workspaceSlug}/records/${props.record.slug}/history`;
+  const canTranslate = props.canMutate && !archived && !gitManaged;
 
   useEffect(() => {
     if (!open || section !== 'export') {
@@ -113,17 +132,95 @@ export function KnowledgeRecordManageMenu(props: {
     };
   }, [open, section, props.workspaceId]);
 
+  useEffect(() => {
+    if (!open || section !== 'translate') {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/v1/knowledge-records/${props.record.id}/translations`,
+          { credentials: 'include' },
+        );
+        if (!response.ok || cancelled) {
+          return;
+        }
+        const body = (await response.json()) as {
+          translations: TranslationSibling[];
+        };
+        if (cancelled) return;
+        setSiblings(body.translations);
+        const taken = new Set(
+          body.translations.map((item) => (item.language ?? 'en').toLowerCase()),
+        );
+        const next = locales.find((code) => !taken.has(code)) ?? 'en';
+        setTargetLanguage(next);
+      } catch {
+        // Ignore load failures; create will surface errors.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, section, props.record.id]);
+
   function close() {
     setOpen(false);
     setSection('menu');
+    setTranslateError(null);
+    setTranslateWithAi(false);
   }
 
   function sectionTitle(): string {
     if (section === 'menu') return t('manageTitle');
     if (section === 'details') return t('manageDetails');
     if (section === 'export') return t('manageExport');
+    if (section === 'translate') return t('manageTranslate');
     if (section === 'delete') return t('manageDelete');
     return archived ? t('manageRestore') : t('manageArchive');
+  }
+
+  async function createTranslation() {
+    setTranslatePending(true);
+    setTranslateError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/knowledge-records/${props.record.id}/translations`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({
+            language: targetLanguage,
+            translateWithAi: translateWithAi || undefined,
+          }),
+        },
+      );
+      const body = (await response.json()) as {
+        knowledgeRecord?: { slug: string };
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? t('translateFailed'));
+      }
+      const slug = body.knowledgeRecord?.slug;
+      pushToast(
+        translateWithAi ? t('translateAiCreated') : t('translateCreated'),
+      );
+      close();
+      if (slug) {
+        router.push(`/workspaces/${props.workspaceSlug}/records/${slug}`);
+      }
+      router.refresh();
+    } catch (err) {
+      setTranslateError(err instanceof Error ? err.message : t('translateFailed'));
+    } finally {
+      setTranslatePending(false);
+    }
   }
 
   async function exportRecord(format: ExportFormat) {
@@ -193,6 +290,13 @@ export function KnowledgeRecordManageMenu(props: {
                   onClick={close}
                 />
               )
+            ) : null}
+            {canTranslate ? (
+              <ManageMenuItem
+                title={t('manageTranslate')}
+                hint={t('manageTranslateHint')}
+                onClick={() => setSection('translate')}
+              />
             ) : null}
             <ManageMenuLink
               href={historyHref}
@@ -279,6 +383,85 @@ export function KnowledgeRecordManageMenu(props: {
               </Button>
             </li>
           </ul>
+        ) : null}
+
+        {section === 'translate' ? (
+          <div className="grid gap-4">
+            <p className="m-0 text-sm text-ink-muted">{t('manageTranslateBlurb')}</p>
+            <Field label={t('contentLanguage')}>
+              <Select
+                value={targetLanguage}
+                onChange={(e) => setTargetLanguage(e.target.value as AppLocale)}
+                disabled={translatePending}
+              >
+                {locales
+                  .filter(
+                    (code) =>
+                      !siblings.some(
+                        (item) => (item.language ?? 'en').toLowerCase() === code,
+                      ),
+                  )
+                  .map((code) => (
+                    <option key={code} value={code}>
+                      {localeLabels[code]} ({code})
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+            {props.visionConfigured ? (
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={translateWithAi}
+                  disabled={translatePending}
+                  onChange={(e) => setTranslateWithAi(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">{t('translateWithAi')}</span>
+                  <span className="mt-0.5 block text-ink-muted">
+                    {t('translateWithAiHint')}
+                  </span>
+                </span>
+              </label>
+            ) : (
+              <p className="m-0 text-sm text-ink-muted">{t('translateAiUnavailable')}</p>
+            )}
+            {locales.every((code) =>
+              siblings.some((item) => (item.language ?? 'en').toLowerCase() === code),
+            ) ? (
+              <p className="m-0 text-sm text-ink-muted">{t('translateAllExist')}</p>
+            ) : null}
+            {translateError ? <ErrorText>{translateError}</ErrorText> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={
+                  translatePending ||
+                  locales.every((code) =>
+                    siblings.some(
+                      (item) => (item.language ?? 'en').toLowerCase() === code,
+                    ),
+                  )
+                }
+                onClick={() => void createTranslation()}
+              >
+                {translatePending
+                  ? translateWithAi
+                    ? t('translateAiPending')
+                    : tCommon('saving')
+                  : t('translateCreate')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={translatePending}
+                onClick={() => setSection('menu')}
+              >
+                {tCommon('back')}
+              </Button>
+            </div>
+          </div>
         ) : null}
 
         {section === 'details' ? (

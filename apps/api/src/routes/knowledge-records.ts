@@ -31,6 +31,9 @@ import {
   approvedByFromMetadata,
   createKnowledgeRecord,
   createRecordInputSchema,
+  createRecordTranslation,
+  createTranslationInputSchema,
+  listRecordTranslations,
   loadApproverSnapshot,
   loadPrimarySource,
   resolveReviewedByUser,
@@ -168,6 +171,60 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         reviewedByUser,
       }),
     };
+  });
+
+  app.get('/api/v1/knowledge-records/:recordId/translations', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    const [record] = await app.database.db
+      .select({ workspaceId: knowledgeRecords.workspaceId })
+      .from(knowledgeRecords)
+      .where(eq(knowledgeRecords.id, params.recordId))
+      .limit(1);
+    if (!record) {
+      throw new AppError({
+        code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+        message: 'Knowledge record not found',
+        statusCode: 404,
+      });
+    }
+    requireWorkspaceView(principal, record.workspaceId);
+    return listRecordTranslations(app, params.recordId);
+  });
+
+  app.post('/api/v1/knowledge-records/:recordId/translations', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    const body = createTranslationInputSchema.parse(request.body);
+
+    const [record] = await app.database.db
+      .select({ workspaceId: knowledgeRecords.workspaceId })
+      .from(knowledgeRecords)
+      .where(eq(knowledgeRecords.id, params.recordId))
+      .limit(1);
+    if (!record) {
+      throw new AppError({
+        code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+        message: 'Knowledge record not found',
+        statusCode: 404,
+      });
+    }
+    requireWorkspaceMaintainer(principal, record.workspaceId);
+
+    const result = await createRecordTranslation(
+      app,
+      params.recordId,
+      body,
+      {
+        actorType: 'user',
+        actorId: principal.userId,
+        userId: principal.userId,
+      },
+      request.ip,
+    );
+
+    return { knowledgeRecord: result.knowledgeRecord };
   });
 
   app.get('/api/v1/knowledge-records/:recordId/export', async (request, reply) => {

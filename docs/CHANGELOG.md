@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **Knowledge record content language (Phase 1):** editor language select (en/de/hu), language on detail / Manage details, catalogue + search language filters, list/search/MCP `language` filter. Schema adds nullable `translation_group_id` for linked translation families (UI linking / switcher deferred to Phase 2).
+* **AI translation for knowledge siblings:** optional `translateWithAi` on create-translation (Manage checkbox + MCP/REST). Uses the same OpenAI-compatible `VISION_LLM_*` chat/completions path as vision OCR (Node API, not `kh-markitdown`). Fills title/summary/body into a draft sibling before insert; EN is never overwritten.
+
+* **Knowledge record translations (Phase 2):** Add translation from Manage (clone metadata, new language + slug, shared `translationGroupId`); detail language switcher among siblings; REST `GET|POST /api/v1/knowledge-records/:id/translations`; MCP `list_record_translations` / `create_record_translation` with EN-default agent guidance. Blocks git-managed sources; one language per group; new siblings start as draft hub-managed.
+
+* **Knowledge record content language (Phase 1):** editor language select (en/de/hu), language on detail / Manage details, catalogue + search language filters, list/search/MCP `language` filter. Schema adds nullable `translation_group_id` for linked translation families.
 
 * **Document / image import (MarkItDown):** Compose service `kh-markitdown`, package `@project-knowledge-hub/document-import`, API `/api/v1/document-imports`, worker convert queue, Import picker Documents + Images lanes. Selectable OCR: `none`, `vision` (`markitdown-ocr` + OpenAI-compatible / Ollama), or local `tesseract`. Extracted images become `workspace_media` embeds. See [`docs/product/DOCUMENT_IMPORT.md`](product/DOCUMENT_IMPORT.md).
 
