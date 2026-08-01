@@ -281,7 +281,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'create_knowledge_record',
       description:
-        'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images: begin → append → finalize_workspace_media_upload, then include media.markdownSnippet — never data:image URIs. For translations of an existing record prefer create_record_translation.',
+        'Create a draft knowledge record (knowledge:write; humans approve/mark-current). Prefer list_record_metadata first. Images: begin→append→finalize_workspace_media_upload + media.markdownSnippet — never data:image URIs. For locale siblings use create_record_translation.',
       write: true,
       body: {
         type: 'object',
@@ -441,6 +441,16 @@ const TOOL_RESULT_SCHEMA = {
   },
 } as const;
 
+/** ChatGPT Actions rejects operation summary/description longer than 300. */
+const CHATGPT_ACTIONS_TEXT_LIMIT = 300;
+
+function forChatGptActionsText(text: string): string {
+  if (text.length <= CHATGPT_ACTIONS_TEXT_LIMIT) {
+    return text;
+  }
+  return `${text.slice(0, CHATGPT_ACTIONS_TEXT_LIMIT - 1)}…`;
+}
+
 /** OpenAPI 3.1 for ChatGPT Actions, OpenWebUI OpenAPI tools, and generic OpenAPI clients. */
 export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<string, unknown> {
   const includeWrite = options.includeWriteTools !== false;
@@ -450,11 +460,12 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
 
   const paths: Record<string, unknown> = {};
   for (const tool of tools) {
+    const actionText = forChatGptActionsText(tool.description);
     paths[`/api/v1/llm/tools/${tool.name}`] = {
       post: {
         operationId: tool.name,
-        summary: tool.description,
-        description: tool.description,
+        summary: actionText,
+        description: actionText,
         tags: [tool.write ? 'write' : 'read'],
         security: [{ bearerAuth: [] }],
         requestBody: {
