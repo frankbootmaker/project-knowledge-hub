@@ -497,13 +497,13 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
     info: {
       title,
       version: '0.1.0',
-      description:
-        'OpenAPI facade over Project Knowledge Hub knowledge tools for ChatGPT Actions, ' +
-        'Gemini / OpenAPI clients, and OpenWebUI. Authenticate with the API client bearer token. ' +
-        'Write tools (require knowledge:write): begin/append/finalize_workspace_media_upload ' +
-        '(required for ChatGPT image/chart base64 — single-shot upload is not exposed here), ' +
-        'create_knowledge_record, update_knowledge_record, delete_workspace_media. ' +
-        'Re-import this schema in ChatGPT Actions after hub upgrades so new operations appear.',
+      // ChatGPT Actions also enforces a 300-char limit on info.description.
+      description: forChatGptActionsText(
+        'OpenAPI facade for Project Knowledge Hub (ChatGPT Actions / OpenAPI clients). ' +
+          'Use the API client bearer token. Writes need knowledge:write. ' +
+          'Images: begin→append→finalize_workspace_media_upload. ' +
+          'Re-import this schema after hub upgrades.',
+      ),
     },
     servers: [{ url: apiBase }],
     components: {
