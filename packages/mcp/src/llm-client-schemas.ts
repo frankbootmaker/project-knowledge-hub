@@ -281,7 +281,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'create_knowledge_record',
       description:
-        'Create a draft knowledge record (knowledge:write; humans approve/mark-current). Prefer list_record_metadata first. Images: begin→append→finalize_workspace_media_upload + media.markdownSnippet — never data:image URIs. For locale siblings use create_record_translation.',
+        'Create a NEW draft topic (not a locale). Prefer list_record_metadata first. Images: begin→append→finalize + media.markdownSnippet. NEVER use this to add hu/de of an existing record — that creates unlinked duplicates; use create_record_translation instead.',
       write: true,
       body: {
         type: 'object',
@@ -305,12 +305,16 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
             items: { type: 'string', minLength: 1, maxLength: 64 },
             maxItems: 30,
           },
-          language: stringProp('Optional language code', { minLength: 2, maxLength: 16 }),
+          language: stringProp(
+            'Language for a brand-new topic only (default en). Do not use for siblings of an existing record.',
+            { minLength: 2, maxLength: 16 },
+          ),
           translationGroupId: {
             type: 'string',
             format: 'uuid',
             nullable: true,
-            description: 'Optional shared translation group id',
+            description:
+              'Repair only. To add a locale sibling, call create_record_translation instead.',
           },
           generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
           sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
@@ -320,7 +324,7 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
     {
       name: 'create_record_translation',
       description:
-        'Create a linked draft translation sibling (shared translationGroupId, distinct slug). Prefer this when adding hu/de locales to an existing EN record. Set translateWithAi=true to machine-translate via hub VISION_LLM_*. Do not overwrite EN with a translation.',
+        'REQUIRED for locale siblings (hu/de/…). Links via shared translationGroupId. NEVER create_knowledge_record for another language of an existing record. Prefer translateWithAi=true; if AI unavailable/fails, omit it and pass title/summary/contentMarkdown. Do not overwrite EN.',
       write: true,
       body: {
         type: 'object',
@@ -338,8 +342,22 @@ function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
           translateWithAi: {
             type: 'boolean',
             description:
-              'When true, fill title/summary/contentMarkdown via VISION_LLM_* before create (requires VISION_LLM_BASE_URL)',
+              'When true, machine-translate via hub Translation AI provider / VISION_LLM_*. If this errors, retry without it and supply title/summary/contentMarkdown.',
           },
+          title: stringProp('Translated title (use when AI is off/unavailable)', {
+            minLength: 1,
+            maxLength: 300,
+          }),
+          summary: {
+            type: 'string',
+            nullable: true,
+            maxLength: 1000,
+            description: 'Translated summary (optional)',
+          },
+          contentMarkdown: stringProp(
+            'Translated markdown body (use when AI is off/unavailable)',
+            { maxLength: 500_000 },
+          ),
         },
       },
     },
@@ -498,7 +516,7 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
       title,
       // Bump when tool surface changes — ChatGPT Actions can cache schemas and
       // return ClientResponseError without ever calling the hub until recreated.
-      version: '0.1.2',
+      version: '0.1.3',
       // ChatGPT Actions also enforces a 300-char limit on info.description.
       description: forChatGptActionsText(
         'OpenAPI facade for Project Knowledge Hub (ChatGPT Actions / OpenAPI clients). ' +

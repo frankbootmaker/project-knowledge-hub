@@ -74,6 +74,7 @@ Requires ChatGPT Plus / Team / Enterprise (Custom GPTs + Actions).
    - Prefer searching Knowledge Hub before answering from memory.
    - When asked to save work, create/update **draft** knowledge records in the configured workspace.
    - For charts/images: use **chunked** upload — `begin_workspace_media_upload` → `append_workspace_media_upload` (~8000-char raw base64 chunks) → `finalize_workspace_media_upload`. Never put `data:` URIs in Markdown. Prefer `insertIntoRecord=true` with a `knowledgeRecordId` on begin.
+   - **Translations:** to add hu/de (or other locales) for an existing record, ALWAYS use `create_record_translation` (linked siblings). NEVER `create_knowledge_record` for another language of the same topic — that creates unlinked duplicates. Prefer `translateWithAi=true`; if AI fails, retry without it and pass `title` / `summary` / `contentMarkdown`. Do not overwrite the English source.
    - Ask which project/system to attach when unclear.
 8. **Save** / **Update**.
 
@@ -99,6 +100,7 @@ Requires ChatGPT Plus / Team / Enterprise (Custom GPTs + Actions).
 - “List my projects in Knowledge Hub.”
 - “Search knowledge for &lt;topic&gt; and summarize what we already decided.”
 - “Create a draft knowledge record titled … with this body … in workspace …”
+- “Add Hungarian and German linked translations for record &lt;id&gt; (use create_record_translation, not new records).”
 - “Update draft record &lt;id&gt; with the revised summary below.”
 - “Upload this PNG into workspace … with the chunked media tools, link it to draft record … with insertIntoRecord, alt ‘…’.”
 

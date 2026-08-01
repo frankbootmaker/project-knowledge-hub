@@ -514,9 +514,9 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
           'Prefer specific planning types (business-idea, vision, plan, initiative) over other.',
           'Do not embed data:image/...;base64 URIs in Markdown — use begin → append → finalize_workspace_media_upload (never upload_workspace_media from LLM clients).',
           'Prefer language: "en" on search_knowledge / list_knowledge_records unless the user asks for another locale.',
-          'To add hu/de (or other) locales for an existing record, call create_record_translation (not a parallel unlinked create). Update that sibling only — do not overwrite EN with a translation.',
-          'Use list_record_translations to discover siblings in a translation family.',
-          'When the user asks the hub to machine-translate, set translateWithAi=true on create_record_translation (uses VISION_LLM_*, same provider as vision OCR).',
+          'REQUIRED for locales: call create_record_translation — NEVER create_knowledge_record for hu/de of an existing topic (that creates unlinked duplicates).',
+          'If translateWithAi fails or AI is unconfigured, call create_record_translation again without translateWithAi and pass title/summary/contentMarkdown.',
+          'Use list_record_translations to discover siblings. Update the sibling only — never overwrite the EN source with a translation.',
         ],
       },
     },
@@ -564,6 +564,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
       'Pick the most specific recordType; use note for unstructured working notes.',
       'Attach projectId/systemId when the record is scoped to catalogue entities.',
       'For charts/screenshots: begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload, then embed media.markdownSnippet — never upload_workspace_media or data: URIs.',
+      'Locale siblings (hu/de/…): always create_record_translation; never a second create_knowledge_record.',
     ],
   };
 }

@@ -581,6 +581,9 @@ export function createMcpToolHandlers(
           language: input.language,
           slug: input.slug,
           translateWithAi: input.translateWithAi,
+          title: input.title,
+          summary: input.summary,
+          contentMarkdown: input.contentMarkdown,
         },
         {
           actorType: 'api_client',

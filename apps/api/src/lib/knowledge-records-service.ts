@@ -787,6 +787,10 @@ export const createTranslationInputSchema = z.object({
   slug: z.string().min(1).max(96).optional(),
   /** When true, fill title/summary/body via VISION_LLM_* chat/completions before insert. */
   translateWithAi: z.boolean().optional(),
+  /** Optional translated fields when not using AI (or to override after AI). */
+  title: z.string().min(1).max(300).optional(),
+  summary: z.string().max(1000).nullable().optional(),
+  contentMarkdown: z.string().max(500_000).optional(),
 });
 
 export type CreateTranslationInput = z.infer<typeof createTranslationInputSchema>;
@@ -931,7 +935,7 @@ export async function createRecordTranslation(
     throw new AppError({
       code: 'TRANSLATION_AI_UNAVAILABLE',
       message:
-        'AI translation requires an Admin AI Providers binding for Translation, or VISION_LLM_BASE_URL in env.',
+        'AI translation requires an Admin AI Providers binding for Translation, or VISION_LLM_BASE_URL in env. Retry create_record_translation without translateWithAi and pass title/summary/contentMarkdown. Do not use create_knowledge_record for locale siblings.',
       statusCode: 400,
     });
   }
@@ -995,6 +999,17 @@ export async function createRecordTranslation(
         statusCode: 502,
       });
     }
+  }
+
+  // Manual overrides win when provided (agents supply translated copy if AI is off/unavailable).
+  if (body.title?.trim()) {
+    title = body.title.trim();
+  }
+  if (body.summary !== undefined) {
+    summary = body.summary;
+  }
+  if (body.contentMarkdown !== undefined) {
+    contentMarkdown = body.contentMarkdown;
   }
 
   let translationGroupId = source.translationGroupId;

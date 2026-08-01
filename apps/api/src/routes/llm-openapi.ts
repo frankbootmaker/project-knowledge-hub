@@ -272,6 +272,15 @@ async function invokeTool(
         slug: typeof raw.slug === 'string' ? raw.slug : undefined,
         translateWithAi:
           typeof raw.translateWithAi === 'boolean' ? raw.translateWithAi : undefined,
+        title: typeof raw.title === 'string' ? raw.title : undefined,
+        summary:
+          raw.summary === null
+            ? null
+            : typeof raw.summary === 'string'
+              ? raw.summary
+              : undefined,
+        contentMarkdown:
+          typeof raw.contentMarkdown === 'string' ? raw.contentMarkdown : undefined,
       });
     case 'update_knowledge_record':
       if (typeof raw.recordId !== 'string' || typeof raw.changeMessage !== 'string') {

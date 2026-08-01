@@ -48,6 +48,9 @@ export type McpToolHandlers = {
     language: string;
     slug?: string;
     translateWithAi?: boolean;
+    title?: string;
+    summary?: string | null;
+    contentMarkdown?: string;
   }) => Promise<unknown>;
   listRecordMetadata: () => Promise<unknown>;
   createKnowledgeRecord: (input: {
@@ -373,12 +376,15 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_record_translation',
-    'Create a linked draft translation sibling (shared translationGroupId, distinct slug). Prefer this over create_knowledge_record when adding hu/de (or other) locales to an existing EN record. Set translateWithAi=true to fill title/summary/body via the hub VISION_LLM_* provider (same as vision OCR). Do not overwrite EN content with a translation — update the sibling instead.',
+    'REQUIRED for locale siblings (hu/de/…). Creates a linked draft with shared translationGroupId. NEVER use create_knowledge_record for another language of an existing record — that makes unlinked duplicates. Prefer translateWithAi=true when hub AI is configured; if AI is unavailable or fails, call again WITHOUT translateWithAi and pass title/summary/contentMarkdown yourself. Do not overwrite the EN source.',
     {
       recordId: z.string().uuid(),
       language: z.string().min(2).max(16),
       slug: z.string().min(1).max(96).optional(),
       translateWithAi: z.boolean().optional(),
+      title: z.string().min(1).max(300).optional(),
+      summary: z.string().max(1000).nullable().optional(),
+      contentMarkdown: z.string().max(500_000).optional(),
     },
     async (args) =>
       wrap(
@@ -487,7 +493,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_knowledge_record',
-    'Create a draft knowledge record (requires knowledge:write; humans must approve/mark-current). Prefer list_record_metadata first. For images/charts: begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload, then paste media.markdownSnippet (or insertIntoRecord on begin). Never use upload_workspace_media or data:image URIs.',
+    'Create a NEW draft topic (knowledge:write; humans approve/mark-current). Prefer list_record_metadata first. Images: begin→append→finalize + media.markdownSnippet — never data:image URIs. NEVER use this for hu/de of an existing record — that creates unlinked duplicates; use create_record_translation.',
     {
       workspaceId: z.string().uuid(),
       title: z.string().min(1).max(300),
