@@ -45,6 +45,18 @@ function FilterToggleIcon() {
   );
 }
 
+export type CatalogueLocaleVariant = {
+  id: string;
+  title: string;
+  href: string;
+  language: string;
+  secondaryBadge?: string;
+  subtitle?: string | null;
+  updatedAt?: string | null;
+  filterValue: string;
+  filterLabel?: string;
+};
+
 export type CatalogueListItem = {
   id: string;
   title: string;
@@ -63,7 +75,49 @@ export type CatalogueListItem = {
   filterLabel?: string;
   /** Optional content language code for a secondary language filter. */
   language?: string | null;
+  /** All content languages in this translation family (for badge + filter options). */
+  languages?: string[];
+  /** Locale siblings; language filter swaps the visible title/href among these. */
+  localeVariants?: CatalogueLocaleVariant[];
 };
+
+function resolveCatalogueItem(
+  item: CatalogueListItem,
+  languageFilter: string,
+): CatalogueListItem | null {
+  const variants = item.localeVariants;
+  if (!variants || variants.length === 0) {
+    if (
+      languageFilter !== 'all' &&
+      (item.language ?? 'en') !== languageFilter
+    ) {
+      return null;
+    }
+    return item;
+  }
+
+  if (languageFilter === 'all') {
+    return item;
+  }
+
+  const match = variants.find((variant) => variant.language === languageFilter);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    ...item,
+    id: item.id,
+    title: match.title,
+    href: match.href,
+    language: match.language,
+    secondaryBadge: match.secondaryBadge,
+    subtitle: match.subtitle,
+    updatedAt: match.updatedAt,
+    filterValue: match.filterValue,
+    filterLabel: match.filterLabel,
+  };
+}
 
 export function CatalogueSection({
   title,
@@ -118,30 +172,32 @@ export function CatalogueSection({
     if (!showLanguageFilter) return [];
     const values = new Set<string>();
     for (const item of items) {
-      const code = item.language?.trim();
-      if (code) values.add(code);
+      for (const code of item.languages ?? []) {
+        if (code.trim()) values.add(code);
+      }
+      const fallback = item.language?.trim();
+      if (fallback) values.add(fallback);
     }
     return [...values].sort((a, b) => a.localeCompare(b));
   }, [items, showLanguageFilter]);
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const matched = items.filter((item) => {
-      if (filterValue !== 'all' && item.filterValue !== filterValue) {
-        return false;
+    const matched: CatalogueListItem[] = [];
+    for (const item of items) {
+      const resolved =
+        showLanguageFilter
+          ? resolveCatalogueItem(item, languageFilter)
+          : resolveCatalogueItem(item, 'all');
+      if (!resolved) continue;
+      if (filterValue !== 'all' && resolved.filterValue !== filterValue) {
+        continue;
       }
-      if (
-        showLanguageFilter &&
-        languageFilter !== 'all' &&
-        (item.language ?? 'en') !== languageFilter
-      ) {
-        return false;
+      if (query && !resolved.searchText.includes(query)) {
+        continue;
       }
-      if (!query) {
-        return true;
-      }
-      return item.searchText.includes(query);
-    });
+      matched.push(resolved);
+    }
 
     const sorted = [...matched];
     sorted.sort((a, b) => {
@@ -320,6 +376,14 @@ export function CatalogueSection({
                     <Badge tone="brand">{item.primaryBadge}</Badge>
                   ) : null}
                   {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
+                  {(item.languages?.length ?? 0) > 1 ? (
+                    <span
+                      className="text-xs font-medium tracking-wide text-ink-muted uppercase"
+                      title={t('sectionLanguages')}
+                    >
+                      {item.languages!.map((code) => code.toUpperCase()).join(' · ')}
+                    </span>
+                  ) : null}
                 </div>
                 {item.subtitle ? (
                   <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>

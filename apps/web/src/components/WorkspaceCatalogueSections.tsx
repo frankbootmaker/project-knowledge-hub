@@ -1,12 +1,18 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { LinkButton, SectionHeader, lifecycleLabel } from './ui';
 import { ImportTypePickerButton } from './ImportTypePickerButton';
 import {
   CatalogueSection,
   type CatalogueListItem,
+  type CatalogueLocaleVariant,
 } from './CatalogueSection';
+import {
+  groupRecordsByTranslationFamily,
+  normalizeContentLanguage,
+  pickPreferredRecord,
+} from '../lib/translation-families';
 
 export type { CatalogueListItem } from './CatalogueSection';
 
@@ -38,10 +44,33 @@ export type WorkspaceCatalogueRecord = {
   recordType: string;
   lifecycleStatus: string;
   language?: string | null;
+  translationGroupId?: string | null;
   summary: string | null;
   systemId: string | null;
   updatedAt: string;
 };
+
+function recordVariant(
+  record: WorkspaceCatalogueRecord,
+  workspaceSlug: string,
+  linkedToSystem: string,
+  statusLabel: string,
+): CatalogueLocaleVariant {
+  const language = normalizeContentLanguage(record.language);
+  return {
+    id: record.id,
+    title: record.title,
+    href: `/workspaces/${workspaceSlug}/records/${record.slug}`,
+    language,
+    secondaryBadge: statusLabel,
+    subtitle: record.systemId
+      ? `${linkedToSystem}${record.summary ? ` — ${record.summary}` : ''}`
+      : record.summary,
+    updatedAt: record.updatedAt,
+    filterValue: record.lifecycleStatus,
+    filterLabel: statusLabel,
+  };
+}
 
 export function WorkspaceCatalogueSections({
   workspaceSlug,
@@ -59,6 +88,7 @@ export function WorkspaceCatalogueSections({
   const t = useTranslations('workspaces');
   const tCommon = useTranslations('common');
   const tRecords = useTranslations('records');
+  const locale = useLocale();
 
   const projectItems: CatalogueListItem[] = projects.map((project) => ({
     id: project.id,
@@ -100,35 +130,55 @@ export function WorkspaceCatalogueSections({
     filterValue: system.status,
   }));
 
-  const recordItems: CatalogueListItem[] = records.map((record) => {
-    const statusLabel = lifecycleLabel(record.lifecycleStatus, tRecords);
-    const language = record.language ?? 'en';
-    return {
-      id: record.id,
-      title: record.title,
-      href: `/workspaces/${workspaceSlug}/records/${record.slug}`,
-      primaryBadge: record.recordType,
-      secondaryBadge: statusLabel,
-      subtitle: record.systemId
-        ? `${t('linkedToSystem')}${record.summary ? ` — ${record.summary}` : ''}`
-        : record.summary,
-      updatedAt: record.updatedAt,
-      language,
-      searchText: [
-        record.title,
-        record.slug,
-        record.recordType,
-        record.lifecycleStatus,
+  const recordItems: CatalogueListItem[] = groupRecordsByTranslationFamily(records).map(
+    (family) => {
+      const preferred = pickPreferredRecord(family, locale);
+      const statusLabel = lifecycleLabel(preferred.lifecycleStatus, tRecords);
+      const variants = family.map((record) =>
+        recordVariant(
+          record,
+          workspaceSlug,
+          t('linkedToSystem'),
+          lifecycleLabel(record.lifecycleStatus, tRecords),
+        ),
+      );
+      const languages = [...new Set(variants.map((variant) => variant.language))].sort(
+        (a, b) => a.localeCompare(b),
+      );
+      const preferredVariant = recordVariant(
+        preferred,
+        workspaceSlug,
+        t('linkedToSystem'),
         statusLabel,
-        language,
-        record.summary ?? '',
-      ]
-        .join(' ')
-        .toLowerCase(),
-      filterValue: record.lifecycleStatus,
-      filterLabel: statusLabel,
-    };
-  });
+      );
+
+      return {
+        id: preferred.translationGroupId ?? preferred.id,
+        title: preferredVariant.title,
+        href: preferredVariant.href,
+        primaryBadge: preferred.recordType,
+        secondaryBadge: preferredVariant.secondaryBadge,
+        subtitle: preferredVariant.subtitle,
+        updatedAt: preferredVariant.updatedAt,
+        language: preferredVariant.language,
+        languages,
+        localeVariants: variants,
+        searchText: family
+          .flatMap((record) => [
+            record.title,
+            record.slug,
+            record.recordType,
+            record.lifecycleStatus,
+            normalizeContentLanguage(record.language),
+            record.summary ?? '',
+          ])
+          .join(' ')
+          .toLowerCase(),
+        filterValue: preferredVariant.filterValue,
+        filterLabel: preferredVariant.filterLabel,
+      };
+    },
+  );
 
   return (
     <>

@@ -42,6 +42,8 @@ type KnowledgeRecordSummary = {
   slug: string;
   recordType: string;
   lifecycleStatus: string;
+  language?: string | null;
+  translationGroupId?: string | null;
   summary: string | null;
   updatedAt: string;
 };
