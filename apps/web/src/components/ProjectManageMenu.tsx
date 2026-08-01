@@ -8,6 +8,7 @@ import { PurgeEntityButton } from './PurgeEntityButton';
 import {
   ManageDetailRow,
   ManageMenuItem,
+  ManageToolbar,
 } from './manage-menu-shared';
 import {
   Button,
@@ -126,14 +127,16 @@ export function ProjectManageMenu(props: {
   }
 
   if (!props.canMutate && !props.canPurge) {
-    return null;
+    return <ManageToolbar />;
   }
 
   return (
     <>
-      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
-        {t('manage')}
-      </Button>
+      <ManageToolbar>
+        <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+          {t('manage')}
+        </Button>
+      </ManageToolbar>
 
       <Modal
         open={open}

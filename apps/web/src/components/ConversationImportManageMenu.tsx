@@ -7,6 +7,7 @@ import { PurgeEntityButton } from './PurgeEntityButton';
 import {
   ManageDetailRow,
   ManageMenuItem,
+  ManageToolbar,
 } from './manage-menu-shared';
 import { Button, ErrorText, Modal, Panel } from './ui';
 
@@ -83,14 +84,16 @@ export function ConversationImportManageMenu(props: {
   }
 
   if (!props.canMutate && !props.canPurge) {
-    return null;
+    return <ManageToolbar />;
   }
 
   return (
     <>
-      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
-        {t('manage')}
-      </Button>
+      <ManageToolbar>
+        <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+          {t('manage')}
+        </Button>
+      </ManageToolbar>
 
       <Modal
         open={open}

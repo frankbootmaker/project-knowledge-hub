@@ -11,6 +11,7 @@ import {
   ManageDetailRow,
   ManageMenuItem,
   ManageMenuLink,
+  ManageToolbar,
 } from './manage-menu-shared';
 import {
   WORKSPACE_COLORS,
@@ -167,9 +168,11 @@ export function WorkspaceManageMenu(props: {
 
   return (
     <>
-      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
-        {t('manage')}
-      </Button>
+      <ManageToolbar>
+        <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+          {t('manage')}
+        </Button>
+      </ManageToolbar>
 
       <Modal
         open={open}

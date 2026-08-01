@@ -32,6 +32,8 @@
     "themeLight": "Hell",
     "themeDark": "Dunkel",
     "themeCycle": "Design: {current}. Klicken für {next}.",
+    "refreshPage": "Seite aktualisieren",
+    "refreshingPage": "Aktualisieren…",
     "tagsList": "Tags: {tags}",
     "emDash": "—",
     "closeDialog": "Dialog schließen",

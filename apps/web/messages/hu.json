@@ -32,6 +32,8 @@
     "themeLight": "Világos",
     "themeDark": "Sötét",
     "themeCycle": "Téma: {current}. Kattintás: {next}.",
+    "refreshPage": "Oldal frissítése",
+    "refreshingPage": "Frissítés…",
     "tagsList": "Címkék: {tags}",
     "emDash": "—",
     "closeDialog": "Párbeszédablak bezárása",

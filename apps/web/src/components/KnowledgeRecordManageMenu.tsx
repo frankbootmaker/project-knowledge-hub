@@ -9,6 +9,7 @@ import {
   ManageDetailRow,
   ManageMenuItem,
   ManageMenuLink,
+  ManageToolbar,
 } from './manage-menu-shared';
 import { Button, Modal, lifecycleLabel, useToast } from './ui';
 
@@ -148,9 +149,11 @@ export function KnowledgeRecordManageMenu(props: {
 
   return (
     <>
-      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
-        {t('manage')}
-      </Button>
+      <ManageToolbar>
+        <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+          {t('manage')}
+        </Button>
+      </ManageToolbar>
 
       <Modal
         open={open}

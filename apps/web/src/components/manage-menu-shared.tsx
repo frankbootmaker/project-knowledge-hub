@@ -2,12 +2,23 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { PageRefreshButton } from './PageRefreshButton';
 
 export const manageMenuItemClass =
   'kh-panel-inset flex w-full cursor-pointer items-center justify-between gap-3 border border-line bg-panel-solid text-left transition hover:border-brand/35';
 
 export const manageMenuLinkClass =
   'kh-panel-inset flex items-center justify-between gap-3 no-underline transition hover:border-brand/35';
+
+/** Refresh + Manage (or other page actions) on the same toolbar row. */
+export function ManageToolbar({ children }: { children?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <PageRefreshButton />
+      {children}
+    </div>
+  );
+}
 
 export function ManageDetailRow(props: {
   label: string;

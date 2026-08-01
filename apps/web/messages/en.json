@@ -32,6 +32,8 @@
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeCycle": "Theme: {current}. Click for {next}.",
+    "refreshPage": "Refresh page",
+    "refreshingPage": "Refreshing…",
     "tagsList": "Tags: {tags}",
     "emDash": "—",
     "closeDialog": "Close dialog",
