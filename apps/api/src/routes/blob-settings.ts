@@ -6,10 +6,12 @@ import {
   requireAuthenticated,
 } from '../plugins/auth.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
+import { migrateLocalBlobsToS3 } from '../lib/blob-migrate.js';
 import {
   BLOB_SETTINGS_KEY,
   clearStoredBlobSettings,
   getPublicBlobSettings,
+  resolveBlobStore,
   setStoredBlobSettings,
   testBlobConnection,
 } from '../lib/blob-settings.js';
@@ -122,5 +124,38 @@ export async function registerBlobSettingsRoutes(app: FastifyInstance): Promise<
     });
 
     return result;
+  });
+
+  app.post('/api/v1/admin/storage-settings/migrate-local', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+
+    const { store } = await resolveBlobStore(app.database, app.env);
+    const result = await migrateLocalBlobsToS3(store, {
+      avatarUploadDir: app.env.AVATAR_UPLOAD_DIR,
+      mediaUploadDir: app.env.MEDIA_UPLOAD_DIR,
+      documentImportDir: app.env.DOCUMENT_IMPORT_DIR,
+      stylePackUploadDir: app.env.STYLE_PACK_UPLOAD_DIR,
+    });
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'storage.migrate_local',
+      entityType: 'platform_settings',
+      entityId: BLOB_SETTINGS_KEY,
+      metadata: {
+        uploaded: result.uploaded,
+        skipped: result.skipped,
+        failed: result.failed,
+        errorCount: result.errors.length,
+      },
+      ipAddress: request.ip,
+    });
+
+    return { result };
   });
 }

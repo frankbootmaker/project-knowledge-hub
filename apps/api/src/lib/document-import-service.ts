@@ -35,6 +35,7 @@ import {
   createKnowledgeRecord,
   type KnowledgeActor,
 } from './knowledge-records-service.js';
+import { resolveLlmForService } from './llm-providers.js';
 import {
   deleteImportOriginal,
   writeImportOriginal,
@@ -251,13 +252,20 @@ export async function createDocumentImport(
   const ocrLang = documentImportOcrLangSchema.parse(
     input.ocrLang ?? (fallbackLang.success ? fallbackLang.data : 'eng'),
   );
-  if (ocrEngine === 'vision' && !app.env.VISION_LLM_BASE_URL) {
-    throw new AppError({
-      code: 'DOCUMENT_IMPORT_OCR_UNAVAILABLE',
-      message:
-        'Vision OCR requires VISION_LLM_BASE_URL (OpenAI-compatible, e.g. Ollama /v1).',
-      statusCode: 400,
-    });
+  if (ocrEngine === 'vision') {
+    const visionLlm = await resolveLlmForService(
+      app.database,
+      app.env,
+      'vision_ocr',
+    );
+    if (!visionLlm) {
+      throw new AppError({
+        code: 'DOCUMENT_IMPORT_OCR_UNAVAILABLE',
+        message:
+          'Vision OCR requires an Admin AI Providers binding for Vision OCR, or VISION_LLM_BASE_URL in env.',
+        statusCode: 400,
+      });
+    }
   }
   if (
     !isAllowedUpload({

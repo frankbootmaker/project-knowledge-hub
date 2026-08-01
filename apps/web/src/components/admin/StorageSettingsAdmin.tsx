@@ -175,6 +175,65 @@ export function StorageSettingsAdmin({
     }
   }
 
+  async function migrateLocal() {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/admin/storage-settings/migrate-local', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: '{}',
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+        result?: {
+          uploaded: number;
+          skipped: number;
+          failed: number;
+          errors: Array<{ key: string; message: string }>;
+        };
+      };
+      if (!response.ok) {
+        throw new Error(body.error?.message ?? `HTTP ${response.status}`);
+      }
+      const result = body.result ?? {
+        uploaded: 0,
+        skipped: 0,
+        failed: 0,
+        errors: [],
+      };
+      if (result.failed > 0) {
+        const detail = result.errors
+          .slice(0, 3)
+          .map((entry) => `${entry.key}: ${entry.message}`)
+          .join('; ');
+        setError(
+          t('storageMigratePartial', {
+            uploaded: result.uploaded,
+            skipped: result.skipped,
+            failed: result.failed,
+            detail,
+          }),
+        );
+      }
+      pushToast(
+        t('storageMigrateOk', {
+          uploaded: result.uploaded,
+          skipped: result.skipped,
+          failed: result.failed,
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('storageMigrateFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="grid gap-6">
       <Panel className="grid gap-4 p-5">
@@ -215,6 +274,7 @@ export function StorageSettingsAdmin({
 
         {provider === 's3' ? (
           <div className="grid gap-3">
+            <p className="m-0 text-sm text-ink-muted">{t('storageS3Hint')}</p>
             <Field label={t('storageS3Bucket')}>
               <Input
                 value={s3Bucket}
@@ -320,6 +380,14 @@ export function StorageSettingsAdmin({
             onClick={() => void testConnection()}
           >
             {t('storageTest')}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending || provider === 'disabled'}
+            onClick={() => void migrateLocal()}
+          >
+            {t('storageMigrate')}
           </Button>
           <Button
             type="button"

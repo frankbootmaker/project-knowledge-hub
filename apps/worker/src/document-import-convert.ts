@@ -20,6 +20,7 @@ import {
   sanitizePgText,
   titleFromImport,
 } from '@project-knowledge-hub/document-import';
+import { resolveWorkerVisionLlm } from './resolve-llm.js';
 
 const STOREABLE_MEDIA = new Set([
   'image/jpeg',
@@ -241,21 +242,35 @@ export async function processDocumentImportConvert(input: {
       throw new Error('Original upload bytes not found');
     }
 
+    const ocrEngine =
+      row.ocrEngine === 'vision' || row.ocrEngine === 'tesseract'
+        ? row.ocrEngine
+        : 'none';
+    const visionLlm =
+      ocrEngine === 'vision'
+        ? await resolveWorkerVisionLlm(input.database, input.env)
+        : null;
+    if (ocrEngine === 'vision' && !visionLlm) {
+      throw new Error(
+        'Vision OCR requires an Admin AI Providers binding for Vision OCR, or VISION_LLM_BASE_URL',
+      );
+    }
+
     const converted = await convertWithMarkItDown({
       baseUrl: input.env.MARKITDOWN_URL,
-      timeoutMs: input.env.MARKITDOWN_TIMEOUT_MS,
+      timeoutMs: visionLlm?.timeoutMs ?? input.env.MARKITDOWN_TIMEOUT_MS,
       filename: row.originalFilename,
       contentType: row.contentType,
       buffer,
       lane: row.lane === 'image' ? 'image' : 'document',
-      ocrEngine:
-        row.ocrEngine === 'vision' || row.ocrEngine === 'tesseract'
-          ? row.ocrEngine
-          : 'none',
+      ocrEngine,
       ocrLang:
         row.ocrLang === 'deu' || row.ocrLang === 'hun' || row.ocrLang === 'eng'
           ? row.ocrLang
           : 'eng',
+      visionBaseUrl: visionLlm?.baseUrl,
+      visionApiKey: visionLlm?.apiKey,
+      visionModel: visionLlm?.model,
     });
 
     const mediaByIndex = new Map<

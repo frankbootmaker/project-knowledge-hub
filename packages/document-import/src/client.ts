@@ -36,6 +36,10 @@ export async function convertWithMarkItDown(input: {
   lane: 'document' | 'image';
   ocrEngine?: DocumentImportOcrEngine;
   ocrLang?: DocumentImportOcrLang;
+  /** Optional per-request vision LLM overrides (Admin AI Providers). */
+  visionBaseUrl?: string;
+  visionApiKey?: string;
+  visionModel?: string;
 }): Promise<MarkItDownConvertResult> {
   const base = input.baseUrl.replace(/\/+$/, '');
   const form = new FormData();
@@ -47,6 +51,15 @@ export async function convertWithMarkItDown(input: {
   form.set('lane', input.lane);
   form.set('ocrEngine', input.ocrEngine ?? 'none');
   if (input.ocrLang) form.set('ocrLang', input.ocrLang);
+  if (input.visionBaseUrl?.trim()) {
+    form.set('visionBaseUrl', input.visionBaseUrl.trim());
+  }
+  if (input.visionApiKey?.trim()) {
+    form.set('visionApiKey', input.visionApiKey.trim());
+  }
+  if (input.visionModel?.trim()) {
+    form.set('visionModel', input.visionModel.trim());
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), input.timeoutMs);

@@ -27,10 +27,8 @@ import {
 } from './knowledge-versions.js';
 import { getKnowledgeRecordTags, setKnowledgeRecordTags } from './tags.js';
 import { writeAuditEvent } from './identity.js';
-import {
-  translateRecordFields,
-  visionLlmConfigured,
-} from './vision-llm.js';
+import { resolveLlmForService } from './llm-providers.js';
+import { translateRecordFields } from './vision-llm.js';
 
 export const sourceInputSchema = z.object({
   sourceType: knowledgeSourceTypeSchema,
@@ -926,11 +924,14 @@ export async function createRecordTranslation(
   }
 
   const translateWithAi = body.translateWithAi === true;
-  if (translateWithAi && !visionLlmConfigured(app.env.VISION_LLM_BASE_URL)) {
+  const translationLlm = translateWithAi
+    ? await resolveLlmForService(app.database, app.env, 'translation')
+    : null;
+  if (translateWithAi && !translationLlm) {
     throw new AppError({
       code: 'TRANSLATION_AI_UNAVAILABLE',
       message:
-        'AI translation requires VISION_LLM_BASE_URL (OpenAI-compatible, e.g. Ollama /v1).',
+        'AI translation requires an Admin AI Providers binding for Translation, or VISION_LLM_BASE_URL in env.',
       statusCode: 400,
     });
   }
@@ -967,13 +968,13 @@ export async function createRecordTranslation(
   let contentMarkdown = source.contentMarkdown;
   let generatedByModel: string | null = null;
 
-  if (translateWithAi) {
+  if (translateWithAi && translationLlm) {
     try {
       const translated = await translateRecordFields({
-        baseUrl: app.env.VISION_LLM_BASE_URL!,
-        apiKey: app.env.VISION_LLM_API_KEY,
-        model: app.env.VISION_LLM_MODEL,
-        timeoutMs: app.env.MARKITDOWN_TIMEOUT_MS,
+        baseUrl: translationLlm.baseUrl,
+        apiKey: translationLlm.apiKey,
+        model: translationLlm.model,
+        timeoutMs: translationLlm.timeoutMs,
         targetLanguage: language,
         sourceLanguage: source.language,
         title: source.title,

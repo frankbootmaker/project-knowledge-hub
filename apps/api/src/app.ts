@@ -18,6 +18,7 @@ import {
 import { registerBlobSettingsRoutes } from './routes/blob-settings.js';
 import { registerDocFactoryAdminRoutes } from './routes/doc-factory-admin.js';
 import { registerDocFactoryRoutes } from './routes/doc-factory.js';
+import { registerLlmProviderRoutes } from './routes/llm-providers.js';
 import { resolveBlobStore } from './lib/blob-settings.js';
 import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -211,6 +212,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerUserRoutes(app);
   await registerMailSettingsRoutes(app);
   await registerBlobSettingsRoutes(app);
+  await registerLlmProviderRoutes(app);
   await registerDocFactoryAdminRoutes(app);
   await registerDocFactoryRoutes(app);
   await registerMonitoringRoutes(app);

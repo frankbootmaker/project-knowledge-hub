@@ -33,21 +33,23 @@ export async function writeAvatarFile(
   buffer: Buffer,
   options?: { blobStore?: BlobStore; contentType?: string },
 ): Promise<void> {
-  const store = options?.blobStore;
-  if (store && store.provider !== 'disabled') {
-    await store.put({
-      key: avatarBlobKey(userId),
-      body: buffer,
-      contentType: options?.contentType,
-    });
-    // Best-effort local mirror for migration / disabled fallback later.
-    await ensureAvatarDir(uploadDir);
-    await writeFile(avatarFilePath(uploadDir, userId), buffer).catch(() => undefined);
-    return;
-  }
-
+  // Local first (same as workspace media) so uploads succeed when S3 is
+  // misconfigured; shared /data volume is the source of truth for api reads.
   await ensureAvatarDir(uploadDir);
   await writeFile(avatarFilePath(uploadDir, userId), buffer);
+
+  const store = options?.blobStore;
+  if (store && store.provider !== 'disabled') {
+    try {
+      await store.put({
+        key: avatarBlobKey(userId),
+        body: buffer,
+        contentType: options?.contentType,
+      });
+    } catch {
+      // Local file already persisted; read path falls back to disk.
+    }
+  }
 }
 
 export async function readAvatarFile(
@@ -57,9 +59,13 @@ export async function readAvatarFile(
 ): Promise<Buffer | null> {
   const store = options?.blobStore;
   if (store && store.provider !== 'disabled') {
-    const fromBlob = await store.get(avatarBlobKey(userId));
-    if (fromBlob) {
-      return fromBlob;
+    try {
+      const fromBlob = await store.get(avatarBlobKey(userId));
+      if (fromBlob) {
+        return fromBlob;
+      }
+    } catch {
+      // Fall through to local (broken S3 credentials, etc.).
     }
     // Local fallback + optional backfill when migrating to S3.
     const local = await readLocalAvatar(uploadDir, userId);

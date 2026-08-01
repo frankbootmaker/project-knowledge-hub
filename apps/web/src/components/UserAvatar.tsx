@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '../lib/cn';
 import { userMonogram } from '../lib/monogram';
 
@@ -24,6 +24,12 @@ export function UserAvatar({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
+
+  // A prior 404/onError must not stick after upload (new ?v=) or remove.
+  useEffect(() => {
+    setFailed(false);
+  }, [avatarUrl]);
+
   const showImage = Boolean(avatarUrl) && !failed;
   const monogram = userMonogram(displayName, fullName);
 

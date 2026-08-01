@@ -38,6 +38,17 @@ export default async function NewDocumentImportPage({
   const workspace = workspaces.find((item) => item.slug === slug);
   if (!workspace) notFound();
 
+  const llmCapabilitiesResponse = await apiFetch('/api/v1/llm/capabilities');
+  const visionConfigured = llmCapabilitiesResponse.ok
+    ? Boolean(
+        (
+          (await llmCapabilitiesResponse.json()) as {
+            visionOcrConfigured?: boolean;
+          }
+        ).visionOcrConfigured,
+      )
+    : false;
+
   const canMutate =
     session.user.isSystemAdmin ||
     session.memberships.some(
@@ -82,7 +93,7 @@ export default async function NewDocumentImportPage({
         projects={projects}
         systems={systems}
         defaultOcrEngine={defaultOcrEngine()}
-        visionConfigured={Boolean(process.env.VISION_LLM_BASE_URL)}
+        visionConfigured={visionConfigured}
       />
     </Page>
   );

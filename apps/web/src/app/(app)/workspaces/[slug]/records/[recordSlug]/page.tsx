@@ -100,9 +100,10 @@ export default async function KnowledgeRecordDetailPage({
   const record = detailPayload.knowledgeRecord;
   const isArchived = Boolean(record.archivedAt);
 
-  const [projectsResponse, systemsResponse] = await Promise.all([
+  const [projectsResponse, systemsResponse, llmCapabilitiesResponse] = await Promise.all([
     apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
     apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
+    apiFetch('/api/v1/llm/capabilities'),
   ]);
   const projects = projectsResponse.ok
     ? ((await projectsResponse.json()) as { projects: Project[] }).projects
@@ -110,6 +111,15 @@ export default async function KnowledgeRecordDetailPage({
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
     : [];
+  const translationConfigured = llmCapabilitiesResponse.ok
+    ? Boolean(
+        (
+          (await llmCapabilitiesResponse.json()) as {
+            translationConfigured?: boolean;
+          }
+        ).translationConfigured,
+      )
+    : false;
   const project = projects.find((item) => item.id === record.projectId);
   const system = systems.find((item) => item.id === record.systemId);
 
@@ -249,7 +259,7 @@ export default async function KnowledgeRecordDetailPage({
             systems={systems}
             canMutate={canMutate}
             canPurge={canPurge}
-            visionConfigured={Boolean(process.env.VISION_LLM_BASE_URL)}
+            visionConfigured={translationConfigured}
           />
         }
         summary={<p className="m-0">{record.summary || tCommon('noSummary')}</p>}

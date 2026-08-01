@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **AI translation for knowledge siblings:** optional `translateWithAi` on create-translation (Manage checkbox + MCP/REST). Uses the same OpenAI-compatible `VISION_LLM_*` chat/completions path as vision OCR (Node API, not `kh-markitdown`). Fills title/summary/body into a draft sibling before insert; EN is never overwritten.
+* **Admin AI Providers:** register reusable OpenAI-compatible LLM connections and bind them to Translation / Vision OCR (Doc Factory + embeddings reserved). Admin → AI providers; secrets redacted; Test connection; `VISION_LLM_*` remains env fallback. Authenticated `GET /api/v1/llm/capabilities` drives Manage/Import UI gates. Vision OCR convert accepts per-request provider overrides into `kh-markitdown`.
+
+* **AI translation for knowledge siblings:** optional `translateWithAi` on create-translation (Manage checkbox + MCP/REST). Uses resolved Translation LLM (Admin binding or `VISION_LLM_*`). Fills title/summary/body into a draft sibling before insert; EN is never overwritten.
 
 * **Knowledge record translations (Phase 2):** Add translation from Manage (clone metadata, new language + slug, shared `translationGroupId`); detail language switcher among siblings; REST `GET|POST /api/v1/knowledge-records/:id/translations`; MCP `list_record_translations` / `create_record_translation` with EN-default agent guidance. Blocks git-managed sources; one language per group; new siblings start as draft hub-managed.
 

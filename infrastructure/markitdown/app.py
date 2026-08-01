@@ -110,27 +110,42 @@ def _vision_prompt(ocr_lang: OcrLang) -> str:
     )
 
 
-def _build_markitdown(ocr_engine: OcrEngine, ocr_lang: OcrLang) -> Any:
+def _build_markitdown(
+    ocr_engine: OcrEngine,
+    ocr_lang: OcrLang,
+    *,
+    vision_base_url: str | None = None,
+    vision_api_key: str | None = None,
+    vision_model: str | None = None,
+) -> Any:
     from markitdown import MarkItDown
 
     if ocr_engine != "vision":
         return MarkItDown(enable_plugins=False)
 
-    if not _vision_configured():
+    base_url = (vision_base_url or os.environ.get("VISION_LLM_BASE_URL") or "").rstrip("/")
+    if not base_url:
         raise HTTPException(
             status_code=422,
             detail=(
-                "ocrEngine=vision requires VISION_LLM_BASE_URL "
+                "ocrEngine=vision requires visionBaseUrl form field or VISION_LLM_BASE_URL "
                 "(OpenAI-compatible endpoint, e.g. Ollama http://host:11434/v1)"
             ),
         )
 
     from openai import OpenAI
 
-    base_url = os.environ["VISION_LLM_BASE_URL"].rstrip("/")
     # Ollama and many local gateways accept any non-empty key.
-    api_key = os.environ.get("VISION_LLM_API_KEY") or "ollama"
-    model = os.environ.get("VISION_LLM_MODEL") or "gpt-4o-mini"
+    api_key = (
+        (vision_api_key or "").strip()
+        or os.environ.get("VISION_LLM_API_KEY")
+        or "ollama"
+    )
+    model = (
+        (vision_model or "").strip()
+        or os.environ.get("VISION_LLM_MODEL")
+        or "gpt-4o-mini"
+    )
     client = OpenAI(api_key=api_key, base_url=base_url)
     return MarkItDown(
         enable_plugins=True,
@@ -628,6 +643,9 @@ async def convert(
     lane: str = Form(default="document"),
     ocrEngine: str = Form(default="none"),
     ocrLang: str = Form(default=""),
+    visionBaseUrl: str = Form(default=""),
+    visionApiKey: str = Form(default=""),
+    visionModel: str = Form(default=""),
 ) -> JSONResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="filename required")
@@ -671,7 +689,13 @@ async def convert(
                 # ASCII-only but later bytes are UTF-8 (e.g. curly quotes, em dash).
                 markdown = _decode_text_bytes(data).strip()
             else:
-                md = _build_markitdown(ocr_engine, ocr_lang)
+                md = _build_markitdown(
+                    ocr_engine,
+                    ocr_lang,
+                    vision_base_url=visionBaseUrl.strip() or None,
+                    vision_api_key=visionApiKey.strip() or None,
+                    vision_model=visionModel.strip() or None,
+                )
                 try:
                     result = md.convert(str(path))
                 except Exception as convert_exc:  # noqa: BLE001

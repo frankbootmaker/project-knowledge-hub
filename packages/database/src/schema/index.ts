@@ -877,6 +877,52 @@ export const stylePacks = pgTable(
   ],
 );
 
+/**
+ * Outbound OpenAI-compatible LLM connections (Admin AI Providers).
+ * Distinct from inbound `api_clients` (MCP/OpenAPI tokens).
+ */
+export const llmProviders = pgTable(
+  'llm_providers',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: text('name').notNull(),
+    kind: text('kind').notNull().default('openai_compatible'),
+    baseUrl: text('base_url').notNull(),
+    apiKey: text('api_key'),
+    defaultModel: text('default_model').notNull(),
+    timeoutMs: integer('timeout_ms'),
+    status: text('status').notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    updatedBy: uuid('updated_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+  },
+  (table) => [
+    uniqueIndex('llm_providers_name_uidx').on(table.name),
+    index('llm_providers_status_idx').on(table.status),
+  ],
+);
+
+/** Maps a hub service role to one llm_providers row (+ optional model override). */
+export const llmServiceBindings = pgTable('llm_service_bindings', {
+  service: text('service').primaryKey(),
+  providerId: uuid('provider_id')
+    .notNull()
+    .references(() => llmProviders.id, { onDelete: 'restrict' }),
+  modelOverride: text('model_override'),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+    .notNull()
+    .defaultNow(),
+  updatedBy: uuid('updated_by').references(() => users.id, {
+    onDelete: 'set null',
+  }),
+});
+
 /** Images extracted during conversion and stored as workspace_media. */
 export const documentImportMedia = pgTable(
   'document_import_media',

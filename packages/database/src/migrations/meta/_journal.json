@@ -211,6 +211,13 @@
       "when": 1785599000000,
       "tag": "0029_knowledge_record_translation_group",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1785601000000,
+      "tag": "0030_llm_providers",
+      "breakpoints": true
     }
   ]
 }

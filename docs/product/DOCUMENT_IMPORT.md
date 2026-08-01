@@ -35,7 +35,7 @@ Trust boundary (same as conversation imports):
 | `DOCUMENT_IMPORT_MAX_BYTES` | Upload size limit (default 25 MiB). |
 | `DOCUMENT_IMPORT_DIR` | Local original storage when BlobStore is disabled. Relative paths resolve from the monorepo root (shared by API + worker). On Dokploy, use the absolute `/data/imports` path on the shared `knowledge_hub_data` volume (set by `compose.dokploy.yaml`). |
 | `DOCUMENT_IMPORT_OCR_ENGINE` | Default OCR when the client omits `ocrEngine`: `none` \| `vision` \| `tesseract`. |
-| `VISION_LLM_BASE_URL` / `VISION_LLM_API_KEY` / `VISION_LLM_MODEL` | OpenAI-compatible LLM for `ocrEngine=vision` (set on **api/worker/web and** `kh-markitdown`) **and** for knowledge-record AI translation (`translateWithAi` on create-translation; API calls `/chat/completions` directly). Ollama example: `http://host:11434/v1` + key `ollama` + a vision-capable model for OCR (text models work for translation). |
+| `VISION_LLM_BASE_URL` / `VISION_LLM_API_KEY` / `VISION_LLM_MODEL` | Env fallback for OpenAI-compatible LLM used by vision OCR and AI translation when Admin → **AI providers** has no service binding. Prefer Admin bindings so Translation and Vision OCR can use different providers/models. Ollama example: `http://host:11434/v1` + key `ollama`. |
 | `TESSERACT_LANG` | Fallback Tesseract primary language when the client omits `ocrLang` (`eng` \| `deu` \| `hun`). The import form defaults from the UI locale (`en`→`eng`, `de`→`deu`, `hu`→`hun`). Non-English runs use `{lang}+eng`. |
 
 Local: `docker compose --profile markitdown up -d kh-markitdown` (or include with `--profile full`).
@@ -53,6 +53,10 @@ Selected per upload in the Import UI (or via default env):
 | `tesseract` | Local Tesseract OCR on images and scanned PDF pages (no LLM). |
 
 Health: `GET {MARKITDOWN_URL}/health` reports `vision`, `tesseract`, and available `engines`.
+
+## Admin AI Providers
+
+System Admin → **AI providers** registers named OpenAI-compatible connections and binds them to **Vision OCR** (and separately **Translation**). When a binding is set, the worker passes `visionBaseUrl` / `visionApiKey` / `visionModel` into `kh-markitdown` `/convert` so OCR can use a different model than translation. Unbound services fall back to `VISION_LLM_*`.
 
 ## UI entry
 

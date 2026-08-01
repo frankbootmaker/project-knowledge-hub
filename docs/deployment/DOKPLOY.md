@@ -65,7 +65,7 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | `SMTP_*` / `RESEND_API_KEY` / `RESEND_BASE_URL` / `MCP_PUBLIC_URL` | runtime | Set only when used — omit empty values. `RESEND_BASE_URL` optional (default `https://api.resend.com`) |
 | `BOOTSTRAP_ADMIN_*` | migrate one-shot (seed step) | Optional first admin |
 | `MARKITDOWN_URL` | runtime | Default `http://kh-markitdown:8080` (document/image import) |
-| `VISION_LLM_*` | runtime + `kh-markitdown` | Optional OpenAI-compatible vision for import captions |
+| `VISION_LLM_*` | runtime + `kh-markitdown` | Optional env fallback for vision OCR / AI translation when Admin → AI providers has no binding for that service |
 
 **Warnings**
 
