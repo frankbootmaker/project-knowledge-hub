@@ -1,11 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import {
+  consumeChatCompletionsSse,
+  deltaTextFromChatChunk,
+  extractChatMessageContent,
   normalizeTranslatedMarkdown,
   parseTranslationJson,
   restoreStrippedMarkdownHeading,
   stripModelReasoning,
   unescapeLiteralNewlines,
 } from './vision-llm.js';
+import { formatSseEvent } from './sse.js';
+
+describe('extractChatMessageContent', () => {
+  it('returns content after a closing think tag', () => {
+    expect(
+      extractChatMessageContent({
+        content: 'plan…</think>\n\n{"title":"T"}',
+      }),
+    ).toBe('{"title":"T"}');
+  });
+
+  it('falls back to reasoning when content is empty', () => {
+    expect(
+      extractChatMessageContent({
+        content: '',
+        reasoning: 'scratch</think>\nfinal',
+      }),
+    ).toBe('final');
+  });
+});
 
 describe('stripModelReasoning', () => {
   it('removes think blocks before JSON', () => {
@@ -59,7 +82,7 @@ describe('normalizeTranslatedMarkdown', () => {
 });
 
 describe('parseTranslationJson', () => {
-  it('parses fenced JSON and unescapes contentMarkdown', () => {
+  it('parses whole-response fenced JSON and unescapes contentMarkdown', () => {
     const content = [
       '<think>ok</think>',
       '```json',
@@ -70,5 +93,59 @@ describe('parseTranslationJson', () => {
     const parsed = parseTranslationJson(content);
     expect(parsed.title).toBe('MCP Híd');
     expect(parsed.contentMarkdown).toBe('Híd\n\nBeállítások.\n');
+  });
+
+  it('does not treat code fences inside contentMarkdown as a JSON wrapper', () => {
+    const content = JSON.stringify({
+      title: 'Example',
+      summary: null,
+      contentMarkdown: '# Run\n\n```bash\necho hi\n```\n',
+    });
+
+    const parsed = parseTranslationJson(content);
+    expect(parsed.title).toBe('Example');
+    expect(parsed.contentMarkdown).toContain('```bash');
+    expect(parsed.contentMarkdown).toContain('echo hi');
+  });
+});
+
+describe('deltaTextFromChatChunk', () => {
+  it('joins content and reasoning delta fragments', () => {
+    expect(
+      deltaTextFromChatChunk({
+        choices: [{ delta: { content: '{"a"', reasoning: 'think' } }],
+      }),
+    ).toBe('{"a"think');
+  });
+});
+
+describe('consumeChatCompletionsSse', () => {
+  it('accumulates streamed deltas for the Details log', async () => {
+    const sse = [
+      'data: {"model":"qwen3:4b","choices":[{"delta":{"content":"{\\"title\\""}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":":\\"T\\"}"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ].join('');
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(sse));
+        controller.close();
+      },
+    });
+    const deltas: string[] = [];
+    const result = await consumeChatCompletionsSse(stream, (text) => {
+      deltas.push(text);
+    });
+    expect(deltas.join('')).toBe('{"title":"T"}');
+    expect(result.content).toBe('{"title":"T"}');
+    expect(result.model).toBe('qwen3:4b');
+  });
+});
+
+describe('formatSseEvent', () => {
+  it('formats event frames', () => {
+    expect(formatSseEvent('stage', { stage: 'preparing' })).toBe(
+      'event: stage\ndata: {"stage":"preparing"}\n\n',
+    );
   });
 });

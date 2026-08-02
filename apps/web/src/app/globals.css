@@ -509,6 +509,38 @@
   }
 }
 
+@keyframes kh-translate-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.kh-translate-progress {
+  height: 0.35rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-line, #d4d4d8) 80%, transparent);
+}
+
+.kh-translate-progress-bar {
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-brand, #0f766e);
+  animation: kh-translate-progress 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kh-translate-progress-bar {
+    width: 100%;
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kh-btn,
   .kh-btn:not(:disabled):active,

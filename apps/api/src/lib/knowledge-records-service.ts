@@ -28,7 +28,10 @@ import {
 import { getKnowledgeRecordTags, setKnowledgeRecordTags } from './tags.js';
 import { writeAuditEvent } from './identity.js';
 import { resolveLlmForService } from './llm-providers.js';
-import { translateRecordFields } from './vision-llm.js';
+import {
+  translateRecordFields,
+  type TranslationProgressEvent,
+} from './vision-llm.js';
 
 export const sourceInputSchema = z.object({
   sourceType: knowledgeSourceTypeSchema,
@@ -895,15 +898,23 @@ export async function listRecordTranslations(
   };
 }
 
+export type CreateRecordTranslationOptions = {
+  onProgress?: (event: TranslationProgressEvent) => void;
+};
+
 export async function createRecordTranslation(
   app: FastifyInstance,
   sourceRecordId: string,
   input: CreateTranslationInput,
   actor: KnowledgeActor,
   ipAddress?: string | null,
+  options?: CreateRecordTranslationOptions,
 ) {
+  const onProgress = options?.onProgress;
   const body = createTranslationInputSchema.parse(input);
   const language = body.language.trim().toLowerCase();
+
+  onProgress?.({ type: 'stage', stage: 'preparing' });
 
   const [source] = await app.database.db
     .select()
@@ -984,6 +995,7 @@ export async function createRecordTranslation(
         title: source.title,
         summary: source.summary,
         contentMarkdown: source.contentMarkdown,
+        onProgress,
       });
       title = translated.title;
       summary = translated.summary;
@@ -1011,6 +1023,8 @@ export async function createRecordTranslation(
   if (body.contentMarkdown !== undefined) {
     contentMarkdown = body.contentMarkdown;
   }
+
+  onProgress?.({ type: 'stage', stage: 'saving' });
 
   let translationGroupId = source.translationGroupId;
   if (!translationGroupId) {

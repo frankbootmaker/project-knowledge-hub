@@ -46,6 +46,8 @@ import {
   auditKnowledgeView,
   resolveWorkspaceOrganizationId,
 } from '../lib/telemetry-audit.js';
+import { formatSseEvent } from '../lib/sse.js';
+
 const restoreSchema = z.object({
   changeMessage: z.string().max(500).optional(),
 });
@@ -226,6 +228,92 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
 
     return { knowledgeRecord: result.knowledgeRecord };
   });
+
+  /**
+   * SSE progress channel for Manage → Add translation.
+   * MCP/OpenAPI keep the JSON POST above.
+   */
+  app.post(
+    '/api/v1/knowledge-records/:recordId/translations/stream',
+    async (request, reply) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ recordId: z.string().uuid() })
+        .parse(request.params);
+      const body = createTranslationInputSchema.parse(request.body);
+
+      const [record] = await app.database.db
+        .select({ workspaceId: knowledgeRecords.workspaceId })
+        .from(knowledgeRecords)
+        .where(eq(knowledgeRecords.id, params.recordId))
+        .limit(1);
+      if (!record) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found',
+          statusCode: 404,
+        });
+      }
+      requireWorkspaceMaintainer(principal, record.workspaceId);
+
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+
+      const send = (event: string, data: unknown) => {
+        reply.raw.write(formatSseEvent(event, data));
+      };
+
+      try {
+        const result = await createRecordTranslation(
+          app,
+          params.recordId,
+          body,
+          {
+            actorType: 'user',
+            actorId: principal.userId,
+            userId: principal.userId,
+          },
+          request.ip,
+          {
+            onProgress: (event) => {
+              if (event.type === 'stage') {
+                send('stage', {
+                  stage: event.stage,
+                  model: event.model,
+                  message: event.message,
+                });
+              } else {
+                send('llm_delta', { text: event.text });
+              }
+            },
+          },
+        );
+        send('done', { knowledgeRecord: result.knowledgeRecord });
+      } catch (error) {
+        if (error instanceof AppError) {
+          send('error', {
+            code: error.code,
+            message: error.message,
+          });
+        } else {
+          send('error', {
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Translation stream failed',
+          });
+        }
+      } finally {
+        reply.raw.end();
+      }
+    },
+  );
 
   app.get('/api/v1/knowledge-records/:recordId/export', async (request, reply) => {
     const principal = requireAuthenticated(request);

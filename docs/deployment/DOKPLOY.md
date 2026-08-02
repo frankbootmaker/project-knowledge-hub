@@ -104,7 +104,9 @@ entryPoints:
         idleTimeout: 180s
 ```
 
-Also confirm **Admin → AI Providers** has an active Translation binding whose **base URL** is an OpenAI-compatible root ending in `/v1` (e.g. `https://api.openai.com/v1`), not an HTML status page. Workaround without AI: create the sibling translation without “Translate with AI”, then edit title/body manually.
+Also confirm **Admin → AI Providers** has an active Translation binding whose **base URL** is an OpenAI-compatible root ending in `/v1` (e.g. `https://api.openai.com/v1`), not an HTML status page. Set the provider **Timeout (ms)** high enough for long docs (e.g. `300000`). Workaround without AI: create the sibling translation without “Translate with AI”, then edit title/body manually.
+
+**Manage → Add translation** uses `POST /api/v1/knowledge-records/:id/translations/stream` (SSE) for staged progress and optional live model Details. That stream still goes through the Next rewrite (`proxyTimeout: 600s`) and Traefik — the same timeout guidance above applies. MCP/OpenAPI keep the non-streaming JSON `POST .../translations`.
 
 **Networking:** Only `web` and `api` join external `dokploy-network` (Traefik). Postgres/Redis/worker/db-backup/`kh-markitdown` stay on the project `default` network with unique hostnames (`kh-postgres`, `kh-redis`, `kh-markitdown`). If `/api/v1/*` returns a plain-text `Internal Server Error` while `/login` works, `web` cannot reach `api`. Redeploy after pulling this compose, or on the Dokploy host temporarily:
 

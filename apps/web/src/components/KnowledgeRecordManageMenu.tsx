@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { readApiJson } from '../lib/api-json';
 import { downloadAuthenticatedExport } from '../lib/download-export';
+import {
+  consumeTranslationSse,
+  type TranslationStreamStage,
+} from '../lib/translation-sse';
 import { localeLabels, locales, type AppLocale } from '../i18n/config';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
@@ -105,6 +108,16 @@ export function KnowledgeRecordManageMenu(props: {
   const [translateWithAi, setTranslateWithAi] = useState(false);
   const [translatePending, setTranslatePending] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
+  const [translateStage, setTranslateStage] =
+    useState<TranslationStreamStage | null>(null);
+  const [translateModel, setTranslateModel] = useState<string | null>(null);
+  const [translateElapsedSec, setTranslateElapsedSec] = useState(0);
+  const [translateLog, setTranslateLog] = useState('');
+  const [translateDetailsOpen, setTranslateDetailsOpen] = useState(false);
+  const translateLogRef = useRef<HTMLPreElement | null>(null);
+  const translateStartedAtRef = useRef<number | null>(null);
+  /** Auto-open Details on the first token only; later deltas must not override Hide. */
+  const translateDetailsAutoOpenedRef = useRef(false);
   const [deleteSelectedIds, setDeleteSelectedIds] = useState<string[]>([]);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
@@ -197,11 +210,22 @@ export function KnowledgeRecordManageMenu(props: {
     };
   }, [open, section, props.record.id]);
 
+  function resetTranslateProgress() {
+    setTranslateStage(null);
+    setTranslateModel(null);
+    setTranslateElapsedSec(0);
+    setTranslateLog('');
+    setTranslateDetailsOpen(false);
+    translateStartedAtRef.current = null;
+    translateDetailsAutoOpenedRef.current = false;
+  }
+
   function close() {
     setOpen(false);
     setSection('menu');
     setTranslateError(null);
     setTranslateWithAi(false);
+    resetTranslateProgress();
     setDeleteConfirming(false);
     setDeleteAcknowledged(false);
     setDeleteError(null);
@@ -279,17 +303,53 @@ export function KnowledgeRecordManageMenu(props: {
     return archived ? t('manageRestore') : t('manageArchive');
   }
 
+  useEffect(() => {
+    if (!translatePending) {
+      return;
+    }
+    translateStartedAtRef.current = Date.now();
+    setTranslateElapsedSec(0);
+    const timer = window.setInterval(() => {
+      const started = translateStartedAtRef.current;
+      if (started == null) {
+        return;
+      }
+      setTranslateElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [translatePending]);
+
+  useEffect(() => {
+    const el = translateLogRef.current;
+    if (!el || !translateDetailsOpen) {
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
+  }, [translateLog, translateDetailsOpen]);
+
+  function translateStageLabel(stage: TranslationStreamStage): string {
+    if (stage === 'preparing') return t('translateStagePreparing');
+    if (stage === 'calling_model') return t('translateStageCallingModel');
+    if (stage === 'retrying') return t('translateStageRetrying');
+    return t('translateStageSaving');
+  }
+
   async function createTranslation() {
     setTranslatePending(true);
     setTranslateError(null);
+    resetTranslateProgress();
+    setTranslateStage('preparing');
+    let completedSlug: string | null = null;
+    let streamError: string | null = null;
     try {
       const response = await fetch(
-        `/api/v1/knowledge-records/${props.record.id}/translations`,
+        `/api/v1/knowledge-records/${props.record.id}/translations/stream`,
         {
           method: 'POST',
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
             Origin: window.location.origin,
           },
           body: JSON.stringify({
@@ -298,21 +358,44 @@ export function KnowledgeRecordManageMenu(props: {
           }),
         },
       );
-      const body = await readApiJson<{
-        knowledgeRecord?: { slug: string };
-        error?: { message?: string };
-      }>(response);
-      if (!response.ok) {
-        throw new Error(body.error?.message ?? t('translateFailed'));
+      await consumeTranslationSse(response, {
+        onStage: (stage) => {
+          setTranslateStage(stage.stage);
+          if (stage.model) {
+            setTranslateModel(stage.model);
+          }
+          // Drop the failed fast-path echo from Details before the real attempt.
+          if (stage.stage === 'retrying') {
+            setTranslateLog('');
+          }
+        },
+        onLlmDelta: (text) => {
+          setTranslateLog((prev) => prev + text);
+          if (!translateDetailsAutoOpenedRef.current) {
+            translateDetailsAutoOpenedRef.current = true;
+            setTranslateDetailsOpen(true);
+          }
+        },
+        onDone: (record) => {
+          completedSlug = record.slug;
+        },
+        onError: (error) => {
+          streamError = error.message;
+        },
+      });
+      if (streamError) {
+        throw new Error(streamError);
       }
-      const slug = body.knowledgeRecord?.slug;
+      if (!completedSlug) {
+        throw new Error(t('translateFailed'));
+      }
       pushToast(
         translateWithAi ? t('translateAiCreated') : t('translateCreated'),
       );
       close();
-      if (slug) {
-        router.push(`/workspaces/${props.workspaceSlug}/records/${slug}`);
-      }
+      router.push(
+        `/workspaces/${props.workspaceSlug}/records/${completedSlug}`,
+      );
       router.refresh();
     } catch (err) {
       setTranslateError(err instanceof Error ? err.message : t('translateFailed'));
@@ -543,7 +626,73 @@ export function KnowledgeRecordManageMenu(props: {
                     {t('translateAiUnavailable')}
                   </p>
                 )}
-                {translateError ? <ErrorText>{translateError}</ErrorText> : null}
+                {translatePending ? (
+                  <div className="grid gap-2 rounded-md border border-line bg-canvas-muted/40 p-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                      <span className="font-medium text-ink">
+                        {translateStage
+                          ? translateStageLabel(translateStage)
+                          : t('translateAiPending')}
+                        {translateModel ? (
+                          <span className="font-normal text-ink-muted">
+                            {' '}
+                            · {translateModel}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="tabular-nums text-ink-muted">
+                        {t('translateElapsed', { seconds: translateElapsedSec })}
+                      </span>
+                    </div>
+                    <div
+                      className="kh-translate-progress"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={t('translateAiPending')}
+                    >
+                      <div className="kh-translate-progress-bar" />
+                    </div>
+                    {translateWithAi ? (
+                      <div className="grid gap-1.5">
+                        <button
+                          type="button"
+                          className="justify-self-start text-left text-sm font-medium text-ink underline-offset-2 hover:underline"
+                          onClick={() =>
+                            setTranslateDetailsOpen((openDetails) => !openDetails)
+                          }
+                        >
+                          {translateDetailsOpen
+                            ? t('translateDetailsHide')
+                            : t('translateDetailsShow')}
+                        </button>
+                        {translateDetailsOpen ? (
+                          <pre
+                            ref={translateLogRef}
+                            className="m-0 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-canvas p-2 font-mono text-xs text-ink"
+                          >
+                            {translateLog || t('translateDetailsEmpty')}
+                          </pre>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {translateError ? (
+                  <div className="grid gap-2">
+                    <ErrorText>{translateError}</ErrorText>
+                    {translateLog ? (
+                      <details className="text-sm">
+                        <summary className="cursor-pointer font-medium text-ink">
+                          {t('translateDetailsShow')}
+                        </summary>
+                        <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-canvas p-2 font-mono text-xs text-ink">
+                          {translateLog}
+                        </pre>
+                      </details>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
