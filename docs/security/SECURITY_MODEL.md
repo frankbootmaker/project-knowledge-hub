@@ -8,12 +8,12 @@
 * Postgres/Redis bound to localhost in development Compose
 * Markdown content will be treated as untrusted once records exist (ADR-010)
 
-## Identity providers (stub)
+## Identity providers
 
-* `users.idp_source` and `users.idp_subject` are reserved for future OIDC / Entra / GitHub / Keycloak login
-* Local accounts keep both null and continue to use password / invite / reset flows
-* No IdP login or token exchange is implemented in this phase
-* **Planned:** Microsoft Entra ID as IdP (**NF-012**) unlocks Entra-auth **Azure Blob** on Admin → Storage (**NF-007**), not a separate storage product
+* `users.idp_source` and `users.idp_subject` store the external SSO key (unique together when set)
+* Local password accounts keep both null and continue to use password / invite / reset flows
+* **OIDC v1 (NF-017):** env-configured generic OIDC (Authentik first) — see [`OIDC_IDP.md`](../product/OIDC_IDP.md). Invite/link only (no JIT signup). Same `kh_session` cookie as password login.
+* **Planned:** Microsoft Entra ID (**NF-012**) reuses the OIDC path; Entra-auth **Azure Blob** on Admin → Storage remains **NF-007** (separate from human SSO)
 
 ## Auth email flows
 

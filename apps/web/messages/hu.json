@@ -285,7 +285,12 @@
     "register": "Regisztráció",
     "passwordSet": "Jelszó frissítve. Most már bejelentkezhet.",
     "accountClosed": "A fiókod bezárva.",
-    "aiDiscover": "AI ügynökök: MCP autodiscover"
+    "aiDiscover": "AI ügynökök: MCP autodiscover",
+    "ssoOrPassword": "Vagy jelentkezzen be e-mail címmel és jelszóval",
+    "ssoUnknown": "Ehhez az SSO-azonosítóhoz nincs KnowHub-fiók. Kérjen meg egy admint, hogy hívja meg.",
+    "ssoInactive": "A KnowHub-fiókja még nem aktív.",
+    "ssoConflict": "Ez az e-mail már egy másik SSO-azonosítóhoz van kötve.",
+    "ssoError": "Az SSO-bejelentkezés sikertelen. Próbálja újra, vagy használjon e-mailt és jelszót."
   },
   "register": {
     "title": "Regisztráció",

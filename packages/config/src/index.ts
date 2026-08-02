@@ -163,6 +163,27 @@ export const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 60 * 24),
+  /** OIDC issuer URL (Authentik / Entra / …). Enable SSO when issuer + client id + secret are set. */
+  OIDC_ISSUER: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
+  OIDC_CLIENT_ID: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  OIDC_CLIENT_SECRET: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  OIDC_BUTTON_LABEL: z.string().min(1).max(80).default('Sign in with SSO'),
+  /** Stored in users.idp_source (e.g. oidc, authentik, entra). */
+  OIDC_IDP_SOURCE: z.string().min(1).max(64).default('oidc'),
+  /** Defaults to {WEB_URL}/api/v1/auth/oidc/callback when unset. */
+  OIDC_REDIRECT_URI: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
   /** Directory for profile avatar binaries (one file per user id). */
   AVATAR_UPLOAD_DIR: z.string().min(1).default('./data/avatars'),
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
@@ -419,6 +440,15 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       );
     }
   }
+  const oidcAny =
+    Boolean(env.OIDC_ISSUER) || Boolean(env.OIDC_CLIENT_ID) || Boolean(env.OIDC_CLIENT_SECRET);
+  const oidcAll =
+    Boolean(env.OIDC_ISSUER) && Boolean(env.OIDC_CLIENT_ID) && Boolean(env.OIDC_CLIENT_SECRET);
+  if (oidcAny && !oidcAll) {
+    throw new Error(
+      'Invalid environment configuration: OIDC_ISSUER, OIDC_CLIENT_ID, and OIDC_CLIENT_SECRET must all be set to enable SSO',
+    );
+  }
 
   // Relative upload/backup dirs must be shared across api + worker (pnpm package cwd differs).
   const workspaceRoot = findWorkspaceRoot();
@@ -462,6 +492,31 @@ export function blobStoreConfigFromEnv(env: AppEnv) {
     secretAccessKey: env.BLOB_S3_SECRET_ACCESS_KEY!,
     forcePathStyle: env.BLOB_S3_FORCE_PATH_STYLE,
     keyPrefix: env.BLOB_KEY_PREFIX ?? env.APP_ENV,
+  };
+}
+
+export type OidcEnvConfig = {
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  buttonLabel: string;
+  idpSource: string;
+  redirectUri: string;
+};
+
+/** Returns OIDC settings when SSO is fully configured; otherwise null. */
+export function oidcConfigFromEnv(env: AppEnv): OidcEnvConfig | null {
+  if (!env.OIDC_ISSUER || !env.OIDC_CLIENT_ID || !env.OIDC_CLIENT_SECRET) {
+    return null;
+  }
+  const webBase = env.WEB_URL.replace(/\/$/, '');
+  return {
+    issuer: env.OIDC_ISSUER,
+    clientId: env.OIDC_CLIENT_ID,
+    clientSecret: env.OIDC_CLIENT_SECRET,
+    buttonLabel: env.OIDC_BUTTON_LABEL,
+    idpSource: env.OIDC_IDP_SOURCE,
+    redirectUri: env.OIDC_REDIRECT_URI ?? `${webBase}/api/v1/auth/oidc/callback`,
   };
 }
 

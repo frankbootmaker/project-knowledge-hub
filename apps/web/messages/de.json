@@ -285,7 +285,12 @@
     "register": "Registrierung",
     "passwordSet": "Passwort aktualisiert. Sie können sich jetzt anmelden.",
     "accountClosed": "Ihr Konto wurde geschlossen.",
-    "aiDiscover": "KI-Agenten: MCP-Autodiscover"
+    "aiDiscover": "KI-Agenten: MCP-Autodiscover",
+    "ssoOrPassword": "Oder mit E-Mail und Passwort anmelden",
+    "ssoUnknown": "Für diese SSO-Identität ist kein KnowHub-Konto verknüpft. Bitten Sie einen Admin um eine Einladung.",
+    "ssoInactive": "Ihr KnowHub-Konto ist noch nicht aktiv.",
+    "ssoConflict": "Diese E-Mail ist bereits mit einer anderen SSO-Identität verknüpft.",
+    "ssoError": "SSO-Anmeldung fehlgeschlagen. Bitte erneut versuchen oder E-Mail und Passwort nutzen."
   },
   "register": {
     "title": "Registrierung",

@@ -285,7 +285,12 @@
     "register": "Registration",
     "passwordSet": "Password updated. You can sign in now.",
     "accountClosed": "Your account has been closed.",
-    "aiDiscover": "AI agents: autodiscover MCP"
+    "aiDiscover": "AI agents: autodiscover MCP",
+    "ssoOrPassword": "Or sign in with email and password",
+    "ssoUnknown": "No KnowHub account is linked for this SSO identity. Ask an admin to invite you first.",
+    "ssoInactive": "Your KnowHub account is not active yet.",
+    "ssoConflict": "This email is already linked to a different SSO identity.",
+    "ssoError": "SSO sign-in failed. Try again or use email and password."
   },
   "register": {
     "title": "Registration",

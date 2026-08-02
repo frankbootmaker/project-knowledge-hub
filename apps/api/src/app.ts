@@ -22,6 +22,7 @@ import { registerLlmProviderRoutes } from './routes/llm-providers.js';
 import { resolveBlobStore } from './lib/blob-settings.js';
 import { registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerOidcAuthRoutes } from './routes/auth-oidc.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
 import { registerWorkspaceMediaRoutes } from './routes/workspace-media.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -196,6 +197,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerHealthRoutes(app);
   await registerReadyRoutes(app);
   await registerAuthRoutes(app);
+  await registerOidcAuthRoutes(app);
   await registerMeRoutes(app);
   await registerAvatarRoutes(app);
   await registerWorkspaceMediaRoutes(app);

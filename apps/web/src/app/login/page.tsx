@@ -1,12 +1,20 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { Button, ErrorText, Field, Input, Page, Panel, PasswordInput } from '../../components/ui';
+import {
+  Button,
+  ErrorText,
+  Field,
+  Input,
+  Page,
+  Panel,
+  PasswordInput,
+} from '../../components/ui';
 import type { AppLocale } from '../../i18n/config';
 
 function LoginForm() {
@@ -19,8 +27,50 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoLabel, setSsoLabel] = useState('Sign in with SSO');
   const passwordSet = searchParams.get('passwordSet') === '1';
   const accountClosed = searchParams.get('accountClosed') === '1';
+  const ssoError = searchParams.get('sso');
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/v1/auth/oidc/status', {
+          credentials: 'include',
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          enabled?: boolean;
+          buttonLabel?: string;
+        };
+        if (cancelled) return;
+        setSsoEnabled(Boolean(payload.enabled));
+        if (typeof payload.buttonLabel === 'string' && payload.buttonLabel.trim()) {
+          setSsoLabel(payload.buttonLabel);
+        }
+      } catch {
+        // SSO optional — ignore status failures
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ssoError) return;
+    const key =
+      ssoError === 'unknown'
+        ? 'ssoUnknown'
+        : ssoError === 'inactive'
+          ? 'ssoInactive'
+          : ssoError === 'conflict'
+            ? 'ssoConflict'
+            : 'ssoError';
+    setError(t(key));
+  }, [ssoError, t]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,6 +121,21 @@ function LoginForm() {
         ) : null}
         {accountClosed ? (
           <p className="mt-0 mb-4 text-sm text-ink-muted">{t('accountClosed')}</p>
+        ) : null}
+        {ssoEnabled ? (
+          <div className="mb-5 grid gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full py-2.5"
+              onClick={() => {
+                window.location.href = '/api/v1/auth/oidc/start';
+              }}
+            >
+              {ssoLabel}
+            </Button>
+            <p className="m-0 text-center text-xs text-ink-muted">{t('ssoOrPassword')}</p>
+          </div>
         ) : null}
         <form onSubmit={onSubmit} className="grid gap-4">
           <Field label={t('email')}>
