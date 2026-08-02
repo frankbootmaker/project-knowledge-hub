@@ -9,19 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **OIDC sign-in (Authentik):** optional OpenID Connect login beside local email/password; operator integration guide; session links IdP subject when configured.
+
+* **AI translation progress (SSE):** Manage → Translate streams stage updates, elapsed time, indeterminate bar, and a collapsible Details log (content deltas only; Hide stays respected). New `POST …/translations/stream`; JSON POST kept for MCP.
+
+* **Document-import OCR progress UI:** worker writes `progressStage` / `progressMessage` / `progressLog` (migration `0031`); import detail polls every 2s with translate-like bar, elapsed, stage labels (en/de/hu), and collapsible Details. No live Vision token stream (MarkItDown `/convert` stays opaque).
+
+* **Dokploy MinIO companion:** `compose.minio.dokploy.yaml` — MinIO + nginx Host gateway for path-style S3 (`s3-dev…`) and console (`s3-console-dev…`) behind Traefik/Dokploy domains (avoids console-on-API-port “incorrectly forwarded”).
+
 * **Admin AI Providers:** register reusable OpenAI-compatible LLM connections and bind them to Translation / Vision OCR (Doc Factory + embeddings reserved). Admin → AI providers; secrets redacted; Test connection; `VISION_LLM_*` remains env fallback. Authenticated `GET /api/v1/llm/capabilities` drives Manage/Import UI gates. Vision OCR convert accepts per-request provider overrides into `kh-markitdown`.
 
-* **AI translation for knowledge siblings:** optional `translateWithAi` on create-translation (Manage checkbox + MCP/REST). Uses resolved Translation LLM (Admin binding or `VISION_LLM_*`). Fills title/summary/body into a draft sibling before insert; EN is never overwritten.
+* **AI translation for knowledge siblings:** optional `translateWithAi` on create-translation (Manage checkbox + MCP/REST). Uses resolved Translation LLM (Admin binding or `VISION_LLM_*`). Fills title/summary/body into a draft sibling before insert; EN is never overwritten. MCP/REST also accept manual `title` / `summary` / `contentMarkdown` when AI is off or as override.
 
-* **Knowledge record translations (Phase 2):** Add translation from Manage (clone metadata, new language + slug, shared `translationGroupId`); detail language switcher among siblings; REST `GET|POST /api/v1/knowledge-records/:id/translations`; MCP `list_record_translations` / `create_record_translation` with EN-default agent guidance. Blocks git-managed sources; one language per group; new siblings start as draft hub-managed.
+* **Knowledge record translations (Phase 2):** Add translation from Manage (clone metadata, new language + slug, shared `translationGroupId`); detail language switcher among siblings; REST `GET|POST /api/v1/knowledge-records/:id/translations`; MCP `list_record_translations` / `create_record_translation` with EN-default agent guidance. Blocks git-managed sources; one language per group; new siblings start as draft hub-managed. Manage can selectively delete translation siblings. Catalogue collapses siblings into one row with language chips.
 
 * **Knowledge record content language (Phase 1):** editor language select (en/de/hu), language on detail / Manage details, catalogue + search language filters, list/search/MCP `language` filter. Schema adds nullable `translation_group_id` for linked translation families.
 
 * **Document / image import (MarkItDown):** Compose service `kh-markitdown`, package `@project-knowledge-hub/document-import`, API `/api/v1/document-imports`, worker convert queue, Import picker Documents + Images lanes. Selectable OCR: `none`, `vision` (`markitdown-ocr` + OpenAI-compatible / Ollama), or local `tesseract`. Extracted images become `workspace_media` embeds. See [`docs/product/DOCUMENT_IMPORT.md`](product/DOCUMENT_IMPORT.md).
 
+* **Admin Storage migrate:** **Migrate local files to S3** copies existing `/data` avatars/media/imports/style-packs into the configured bucket (dual-write remains for new uploads).
+
 * **In-app page refresh:** secondary Refresh control next to Manage on workspace / project / system / knowledge-record / import pages (`ManageToolbar` + `router.refresh()`).
 
 ### Fixed
+
+* **Long AI translate via Next:** `experimental.proxyTimeout` raised so Next rewrites no longer return opaque HTTP 500 after ~30s while the API/Ollama call is still running. Traefik/Dokploy gateway timeouts documented in `DOKPLOY.md`.
+
+* **AI translation Markdown/JSON:** harden Vision LLM parse (heading restore, unescape, strip `<think>`); unwrap only whole-response fences so fenced code inside `contentMarkdown` is not mistaken for the JSON wrapper. Fast path thinking-off with one thinking-on retry on echo/bad JSON; Details log clears on retry.
+
+* **Vision OCR GPU hang after abort:** `kh-markitdown` enforces convert `timeoutMs`, injects `think: false` / `max_tokens` for OCR, closes the Ollama HTTP client and best-effort unloads the model when the worker disconnects or the budget expires (prevents stuck GPU after a 5‑minute provider timeout).
+
+* **ChatGPT Actions OpenAPI:** clamp `info.description` and bump schema version so Custom GPT Actions import stays under the 300-character limit / cache clears.
 
 * **Automated backups:** `db-backup` scripts are **baked into** `knowledge-hub-db-backup` (no git-checkout bind mount). Dokploy redeploys were replacing the clone while a long-sleeping sidecar kept a stale mount → overnight `backup-db.sh: No such file or directory`, then 24h sleeps with no heartbeat (“Ütemező offline”).
 * **Automated backups:** `db-backup` no longer sleeps a full interval before every dump. Overdue dumps run on catch-up, long waits are interruptible (~1 min polls) so Admin schedule changes apply quickly, failures retry sooner, and Monitoring shows a scheduler heartbeat / next-due. Local `compose.yaml` starts `db-backup` by default (no `--profile backup`).
