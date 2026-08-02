@@ -60,6 +60,9 @@ export async function convertWithMarkItDown(input: {
   if (input.visionModel?.trim()) {
     form.set('visionModel', input.visionModel.trim());
   }
+  // Sidecar enforces the same budget and closes the Ollama HTTP client on expiry
+  // so the GPU does not keep running after the worker aborts.
+  form.set('timeoutMs', String(Math.max(5_000, input.timeoutMs)));
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), input.timeoutMs);

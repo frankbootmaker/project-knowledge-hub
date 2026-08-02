@@ -761,6 +761,10 @@ export const documentImports = pgTable(
     >(),
     conversionError: text('conversion_error'),
     conversionWarnings: jsonb('conversion_warnings').$type<string[]>(),
+    /** Worker progress for import detail UI (queued/reading/ocr/…). */
+    progressStage: text('progress_stage'),
+    progressMessage: text('progress_message'),
+    progressLog: text('progress_log'),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),

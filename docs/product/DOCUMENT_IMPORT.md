@@ -62,6 +62,10 @@ System Admin → **AI providers** registers named OpenAI-compatible connections 
 
 Workspace → **New import** → Documents or Images → choose OCR engine → upload → wait for status `ready` → **Create draft**.
 
+While status is `pending` / `converting`, the import detail page polls every 2s and shows staged progress (`queued` → `reading` → `converting`/`ocr` → `storing_media` → `finalizing`) with elapsed time and a collapsible Details log updated by the worker. MarkItDown `/convert` remains one opaque call — there is **no live Vision LLM token stream** for OCR.
+
+Vision OCR uses the provider **Timeout (ms)** (Admin → AI providers) as a hard budget: the worker aborts and `kh-markitdown` closes the Ollama HTTP client (and best-effort unloads the model) so a cancelled import does not leave the GPU stuck. OCR requests also disable model “thinking” and cap `max_tokens`. For receipts/slips where speed matters more than VL quality, prefer **Tesseract**.
+
 ## Out of scope (this slice)
 
 - Azure Document Intelligence / Content Understanding

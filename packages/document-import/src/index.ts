@@ -38,3 +38,9 @@ export {
   type MarkItDownConvertResult,
   type MarkItDownImage,
 } from './client.js';
+export {
+  DOCUMENT_IMPORT_PROGRESS_STAGES,
+  PROGRESS_LOG_MAX_CHARS,
+  appendProgressLog,
+  type DocumentImportProgressStage,
+} from './progress.js';

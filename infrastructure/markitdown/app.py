@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import math
@@ -13,12 +14,19 @@ import tempfile
 import zipfile
 from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+import httpx
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 app = FastAPI(title="kh-markitdown", version="0.2.0")
+
+# Worker aborts its fetch at the same budget; without a matching sidecar timeout the
+# OpenAI→Ollama call keeps the GPU busy after the import UI already failed.
+DEFAULT_CONVERT_TIMEOUT_MS = int(os.environ.get("MARKITDOWN_TIMEOUT_MS", "120000"))
+VISION_OCR_MAX_TOKENS = int(os.environ.get("VISION_OCR_MAX_TOKENS", "4096"))
 
 OcrEngine = Literal["none", "vision", "tesseract"]
 OCR_ENGINES: tuple[OcrEngine, ...] = ("none", "vision", "tesseract")
@@ -58,6 +66,74 @@ VISION_OCR_PROMPT = (
     "Preserve tables, amounts, dates, invoice numbers, and line breaks. "
     "Do not invent missing text. Return plain text only."
 )
+
+
+def _parse_timeout_seconds(raw: str | None) -> float:
+    try:
+        ms = int((raw or "").strip() or DEFAULT_CONVERT_TIMEOUT_MS)
+    except ValueError:
+        ms = DEFAULT_CONVERT_TIMEOUT_MS
+    ms = max(5_000, min(ms, 600_000))
+    return ms / 1000.0
+
+
+def _ollama_native_root(base_url: str) -> str:
+    root = base_url.rstrip("/")
+    if root.endswith("/v1"):
+        root = root[:-3]
+    return root.rstrip("/")
+
+
+def _best_effort_stop_vision(base_url: str | None, model: str | None) -> None:
+    """Close in-flight generation when possible (Ollama keep_alive unload)."""
+    if not base_url or not model:
+        return
+    root = _ollama_native_root(base_url)
+    try:
+        httpx.post(
+            f"{root}/api/generate",
+            json={"model": model, "prompt": "", "keep_alive": 0},
+            timeout=5.0,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+class _VisionChatCompletions:
+    """Inject OCR-safe caps so thinking models cannot burn the GPU for minutes."""
+
+    def __init__(self, inner: Any, max_tokens: int) -> None:
+        self._inner = inner
+        self._max_tokens = max_tokens
+
+    def create(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("max_tokens", self._max_tokens)
+        extra = dict(kwargs.get("extra_body") or {})
+        extra.setdefault("think", False)
+        extra.setdefault("reasoning_effort", "none")
+        options = dict(extra.get("options") or {})
+        options.setdefault("num_predict", self._max_tokens)
+        extra["options"] = options
+        kwargs["extra_body"] = extra
+        return self._inner.chat.completions.create(*args, **kwargs)
+
+
+class VisionOcrLlmClient:
+    """Shim matching OpenAI client shape used by MarkItDown image converters."""
+
+    def __init__(self, client: Any, max_tokens: int = VISION_OCR_MAX_TOKENS) -> None:
+        self._client = client
+        self.chat = SimpleNamespace(
+            completions=_VisionChatCompletions(client, max_tokens),
+        )
+
+    def close(self) -> None:
+        close = getattr(self._client, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _vision_configured() -> bool:
@@ -117,8 +193,11 @@ def _build_markitdown(
     vision_base_url: str | None = None,
     vision_api_key: str | None = None,
     vision_model: str | None = None,
+    timeout_seconds: float = 120.0,
+    vision_clients: list[VisionOcrLlmClient] | None = None,
 ) -> Any:
     from markitdown import MarkItDown
+    from openai import OpenAI
 
     if ocr_engine != "vision":
         return MarkItDown(enable_plugins=False)
@@ -133,8 +212,6 @@ def _build_markitdown(
             ),
         )
 
-    from openai import OpenAI
-
     # Ollama and many local gateways accept any non-empty key.
     api_key = (
         (vision_api_key or "").strip()
@@ -146,10 +223,22 @@ def _build_markitdown(
         or os.environ.get("VISION_LLM_MODEL")
         or "gpt-4o-mini"
     )
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    http_client = httpx.Client(
+        timeout=httpx.Timeout(timeout_seconds, connect=10.0),
+        limits=httpx.Limits(max_connections=4, max_keepalive_connections=0),
+    )
+    openai_client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        http_client=http_client,
+        max_retries=0,
+    )
+    llm_client = VisionOcrLlmClient(openai_client)
+    if vision_clients is not None:
+        vision_clients.append(llm_client)
     return MarkItDown(
         enable_plugins=True,
-        llm_client=client,
+        llm_client=llm_client,
         llm_model=model,
         llm_prompt=_vision_prompt(ocr_lang),
     )
@@ -639,6 +728,7 @@ def health() -> dict[str, Any]:
 
 @app.post("/convert")
 async def convert(
+    request: Request,
     file: UploadFile = File(...),
     lane: str = Form(default="document"),
     ocrEngine: str = Form(default="none"),
@@ -646,12 +736,17 @@ async def convert(
     visionBaseUrl: str = Form(default=""),
     visionApiKey: str = Form(default=""),
     visionModel: str = Form(default=""),
+    timeoutMs: str = Form(default=""),
 ) -> JSONResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="filename required")
 
     ocr_engine = _normalize_engine(ocrEngine)
     ocr_lang = _normalize_ocr_lang(ocrLang)
+    timeout_seconds = _parse_timeout_seconds(timeoutMs)
+    vision_base = visionBaseUrl.strip() or None
+    vision_key = visionApiKey.strip() or None
+    vision_model = visionModel.strip() or None
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty file")
@@ -659,113 +754,183 @@ async def convert(
     raw_ct = (file.content_type or _guess_content_type(file.filename) or "").lower()
     content_type = raw_ct.split(";", 1)[0].strip() or "application/octet-stream"
     suffix = Path(file.filename).suffix or ""
+    filename = file.filename
 
     warnings: list[str] = []
-    with tempfile.TemporaryDirectory(prefix="kh-mid-") as tmp:
-        path = Path(tmp) / (file.filename or f"upload{suffix}")
-        path.write_bytes(data)
+    vision_clients: list[VisionOcrLlmClient] = []
 
-        images, extract_warnings = _extract_images(path, content_type, file.filename)
-        warnings.extend(extract_warnings)
+    def _close_vision_clients() -> None:
+        while vision_clients:
+            vision_clients.pop().close()
 
-        # Image lane must always expose the original bytes as attachment:0 even
-        # when Content-Type is wrong/missing (proxy/browser quirks).
-        if lane == "image" and not images:
-            images = [
-                _image_entry(
-                    file.filename or f"upload{suffix or '.bin'}",
-                    data,
-                    content_type if content_type in IMAGE_CONTENT_TYPES else None,
-                )
-            ]
+    def _sync_convert() -> dict[str, Any]:
+        with tempfile.TemporaryDirectory(prefix="kh-mid-") as tmp:
+            path = Path(tmp) / (filename or f"upload{suffix}")
+            path.write_bytes(data)
 
-        try:
-            if _is_spreadsheet(file.filename, content_type):
-                # Custom path: MarkItDown/pandas default dumps floats as 3.52e+06.
-                markdown = _convert_spreadsheet_markdown(path).strip()
-            elif _is_plain_text_document(file.filename, content_type):
-                # Passthrough UTF-8 (and friends). MarkItDown PlainTextConverter
-                # samples 4096 bytes for charset and fails when the first block is
-                # ASCII-only but later bytes are UTF-8 (e.g. curly quotes, em dash).
-                markdown = _decode_text_bytes(data).strip()
-            else:
-                md = _build_markitdown(
-                    ocr_engine,
-                    ocr_lang,
-                    vision_base_url=visionBaseUrl.strip() or None,
-                    vision_api_key=visionApiKey.strip() or None,
-                    vision_model=visionModel.strip() or None,
-                )
-                try:
-                    result = md.convert(str(path))
-                except Exception as convert_exc:  # noqa: BLE001
-                    # Same charset sniff bug can hit mislabeled plain uploads.
-                    message = str(convert_exc)
-                    if (
-                        "UnicodeDecodeError" in message
-                        or "codec can't decode" in message.lower()
-                    ) and _looks_like_text_bytes(data):
-                        markdown = _decode_text_bytes(data).strip()
-                        warnings.append(
-                            "MarkItDown charset sniff failed; imported raw UTF-8 text",
-                        )
-                    else:
-                        raise
+            images, extract_warnings = _extract_images(path, content_type, filename)
+            local_warnings = [*extract_warnings]
+
+            # Image lane must always expose the original bytes as attachment:0 even
+            # when Content-Type is wrong/missing (proxy/browser quirks).
+            if lane == "image" and not images:
+                images = [
+                    _image_entry(
+                        filename or f"upload{suffix or '.bin'}",
+                        data,
+                        content_type if content_type in IMAGE_CONTENT_TYPES else None,
+                    )
+                ]
+
+            try:
+                if _is_spreadsheet(filename, content_type):
+                    # Custom path: MarkItDown/pandas default dumps floats as 3.52e+06.
+                    markdown = _convert_spreadsheet_markdown(path).strip()
+                elif _is_plain_text_document(filename, content_type):
+                    # Passthrough UTF-8 (and friends). MarkItDown PlainTextConverter
+                    # samples 4096 bytes for charset and fails when the first block is
+                    # ASCII-only but later bytes are UTF-8 (e.g. curly quotes, em dash).
+                    markdown = _decode_text_bytes(data).strip()
                 else:
+                    md = _build_markitdown(
+                        ocr_engine,
+                        ocr_lang,
+                        vision_base_url=vision_base,
+                        vision_api_key=vision_key,
+                        vision_model=vision_model,
+                        timeout_seconds=timeout_seconds,
+                        vision_clients=vision_clients,
+                    )
+                    try:
+                        result = md.convert(str(path))
+                    except Exception as convert_exc:  # noqa: BLE001
+                        # Same charset sniff bug can hit mislabeled plain uploads.
+                        message = str(convert_exc)
+                        if (
+                            "UnicodeDecodeError" in message
+                            or "codec can't decode" in message.lower()
+                        ) and _looks_like_text_bytes(data):
+                            markdown = _decode_text_bytes(data).strip()
+                            local_warnings.append(
+                                "MarkItDown charset sniff failed; imported raw UTF-8 text",
+                            )
+                        else:
+                            raise
+                    else:
+                        markdown = (
+                            getattr(result, "markdown", None)
+                            or getattr(result, "text_content", None)
+                            or ""
+                        ).strip()
+            except HTTPException:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"conversion failed: {exc}",
+                ) from exc
+
+            if markdown and ("|" in markdown):
+                markdown = _prettify_markdown_numbers(markdown)
+
+            if ocr_engine == "tesseract":
+                markdown = _apply_tesseract_ocr(
+                    path=path,
+                    content_type=content_type,
+                    filename=filename,
+                    lane=lane,
+                    markdown=markdown,
+                    images=images,
+                    warnings=local_warnings,
+                    ocr_lang=ocr_lang,
+                )
+
+            if not markdown:
+                if lane == "image" and images:
+                    markdown = f"![{Path(filename).stem}](attachment:0)\n"
+                else:
+                    local_warnings.append("MarkItDown returned empty markdown")
+                    markdown = f"# {Path(filename).stem}\n\n_(No extractable text.)_\n"
+
+            # Ensure image lane embeds reference attachment indices for the hub rewriter.
+            if (
+                lane == "image"
+                and images
+                and "attachment:0" not in markdown
+                and "](" not in markdown
+            ):
+                markdown = f"![{Path(filename).stem}](attachment:0)\n\n{markdown}"
+
+            # For office extracts, append placeholders for images not already referenced.
+            if images and lane != "image":
+                missing = []
+                for i, img in enumerate(images):
+                    token = f"attachment:{i}"
+                    if token not in markdown and img["filename"] not in markdown:
+                        missing.append(f"![{img['filename']}]({token})")
+                if missing:
                     markdown = (
-                        getattr(result, "markdown", None)
-                        or getattr(result, "text_content", None)
-                        or ""
-                    ).strip()
-        except HTTPException:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=422, detail=f"conversion failed: {exc}") from exc
+                        markdown.rstrip()
+                        + "\n\n## Extracted images\n\n"
+                        + "\n\n".join(missing)
+                        + "\n"
+                    )
 
-        if markdown and ("|" in markdown):
-            markdown = _prettify_markdown_numbers(markdown)
+            return {
+                "markdown": markdown,
+                "titleHint": _title_hint(filename, markdown),
+                "images": images,
+                "warnings": local_warnings,
+                "visionUsed": ocr_engine == "vision",
+                "ocrEngine": ocr_engine,
+                "ocrLang": ocr_lang,
+                "tesseractLangPack": _tesseract_lang_pack(ocr_lang),
+            }
 
-        if ocr_engine == "tesseract":
-            markdown = _apply_tesseract_ocr(
-                path=path,
-                content_type=content_type,
-                filename=file.filename,
-                lane=lane,
-                markdown=markdown,
-                images=images,
-                warnings=warnings,
-                ocr_lang=ocr_lang,
-            )
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_seconds
+    work = asyncio.create_task(asyncio.to_thread(_sync_convert))
+    try:
+        while not work.done():
+            if await request.is_disconnected():
+                _close_vision_clients()
+                _best_effort_stop_vision(
+                    vision_base or os.environ.get("VISION_LLM_BASE_URL"),
+                    vision_model or os.environ.get("VISION_LLM_MODEL"),
+                )
+                raise HTTPException(
+                    status_code=499,
+                    detail="client disconnected during conversion",
+                )
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                _close_vision_clients()
+                _best_effort_stop_vision(
+                    vision_base or os.environ.get("VISION_LLM_BASE_URL"),
+                    vision_model or os.environ.get("VISION_LLM_MODEL"),
+                )
+                raise HTTPException(
+                    status_code=504,
+                    detail=(
+                        f"conversion timed out after {int(timeout_seconds)}s "
+                        "(vision OCR cancelled; GPU should free shortly)"
+                    ),
+                )
+            await asyncio.wait({work}, timeout=min(0.5, remaining))
 
-        if not markdown:
-            if lane == "image" and images:
-                markdown = f"![{Path(file.filename).stem}](attachment:0)\n"
-            else:
-                warnings.append("MarkItDown returned empty markdown")
-                markdown = f"# {Path(file.filename).stem}\n\n_(No extractable text.)_\n"
-
-        # Ensure image lane embeds reference attachment indices for the hub rewriter.
-        if lane == "image" and images and "attachment:0" not in markdown and "](" not in markdown:
-            markdown = f"![{Path(file.filename).stem}](attachment:0)\n\n{markdown}"
-
-        # For office extracts, append placeholders for images not already referenced.
-        if images and lane != "image":
-            missing = []
-            for i, img in enumerate(images):
-                token = f"attachment:{i}"
-                if token not in markdown and img["filename"] not in markdown:
-                    missing.append(f"![{img['filename']}]({token})")
-            if missing:
-                markdown = markdown.rstrip() + "\n\n## Extracted images\n\n" + "\n\n".join(missing) + "\n"
-
-        payload = {
-            "markdown": markdown,
-            "titleHint": _title_hint(file.filename, markdown),
-            "images": images,
-            "warnings": warnings,
-            "visionUsed": ocr_engine == "vision",
-            "ocrEngine": ocr_engine,
-            "ocrLang": ocr_lang,
-            "tesseractLangPack": _tesseract_lang_pack(ocr_lang),
-        }
+        payload = work.result()
+        warnings.extend(payload.get("warnings") or [])
+        payload["warnings"] = warnings
         return JSONResponse(payload)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        # HTTPException raised inside the worker thread arrives wrapped.
+        current: BaseException | None = exc
+        while current is not None:
+            if isinstance(current, HTTPException):
+                raise current
+            current = current.__cause__ or current.__context__  # type: ignore[assignment]
+        raise
+    finally:
+        _close_vision_clients()

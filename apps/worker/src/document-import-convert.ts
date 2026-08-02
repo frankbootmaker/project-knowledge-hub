@@ -14,13 +14,43 @@ import {
   type Database,
 } from '@project-knowledge-hub/database';
 import {
+  appendProgressLog,
   convertWithMarkItDown,
   detectContentSecrets,
   rewriteAttachmentPlaceholders,
   sanitizePgText,
   titleFromImport,
+  type DocumentImportProgressStage,
 } from '@project-knowledge-hub/document-import';
 import { resolveWorkerVisionLlm } from './resolve-llm.js';
+
+async function setImportProgress(
+  database: Database,
+  importId: string,
+  stage: DocumentImportProgressStage,
+  message?: string | null,
+  logLine?: string | null,
+): Promise<void> {
+  const [current] = await database.db
+    .select({ progressLog: documentImports.progressLog })
+    .from(documentImports)
+    .where(eq(documentImports.id, importId))
+    .limit(1);
+
+  const progressLog = logLine
+    ? appendProgressLog(current?.progressLog, logLine)
+    : undefined;
+
+  await database.db
+    .update(documentImports)
+    .set({
+      progressStage: stage,
+      progressMessage: message ?? null,
+      ...(progressLog !== undefined ? { progressLog } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(documentImports.id, importId));
+}
 
 const STOREABLE_MEDIA = new Set([
   'image/jpeg',
@@ -214,6 +244,12 @@ export async function processDocumentImportConvert(input: {
       .set({
         status: 'failed',
         conversionError: 'MARKITDOWN_URL is not configured',
+        progressStage: null,
+        progressMessage: null,
+        progressLog: appendProgressLog(
+          row.progressLog,
+          'Failed: MARKITDOWN_URL is not configured',
+        ),
         updatedAt: new Date(),
       })
       .where(eq(documentImports.id, row.id));
@@ -222,7 +258,14 @@ export async function processDocumentImportConvert(input: {
 
   await input.database.db
     .update(documentImports)
-    .set({ status: 'converting', conversionError: null, updatedAt: new Date() })
+    .set({
+      status: 'converting',
+      conversionError: null,
+      progressStage: 'reading',
+      progressMessage: 'Loading original file',
+      progressLog: appendProgressLog(row.progressLog, 'Job started — reading upload'),
+      updatedAt: new Date(),
+    })
     .where(eq(documentImports.id, row.id));
 
   // Allow safe retries after a partial convert (media rows / prior markdown).
@@ -256,6 +299,22 @@ export async function processDocumentImportConvert(input: {
       );
     }
 
+    const convertStage: DocumentImportProgressStage =
+      ocrEngine === 'none' ? 'converting' : 'ocr';
+    const convertMessage =
+      ocrEngine === 'vision'
+        ? `Vision OCR (${visionLlm?.model ?? 'model'})`
+        : ocrEngine === 'tesseract'
+          ? `Tesseract OCR (${row.ocrLang || 'eng'})`
+          : 'Converting with MarkItDown';
+    await setImportProgress(
+      input.database,
+      row.id,
+      convertStage,
+      convertMessage,
+      convertMessage,
+    );
+
     const converted = await convertWithMarkItDown({
       baseUrl: input.env.MARKITDOWN_URL,
       timeoutMs: visionLlm?.timeoutMs ?? input.env.MARKITDOWN_TIMEOUT_MS,
@@ -279,6 +338,14 @@ export async function processDocumentImportConvert(input: {
     >();
     const warnings = [...(converted.warnings ?? [])];
     let markdownSource = converted.markdown;
+
+    await setImportProgress(
+      input.database,
+      row.id,
+      'storing_media',
+      'Saving attachments',
+      'Storing media attachments',
+    );
 
     if (row.lane === 'image') {
       // Always persist the original upload for image lane. Sidecar base64 in the
@@ -356,6 +423,14 @@ export async function processDocumentImportConvert(input: {
       }),
     );
 
+    await setImportProgress(
+      input.database,
+      row.id,
+      'finalizing',
+      'Finalizing markdown',
+      'Finalizing converted markdown',
+    );
+
     await input.database.db
       .update(documentImports)
       .set({
@@ -365,6 +440,9 @@ export async function processDocumentImportConvert(input: {
         contentWarnings,
         conversionWarnings: warnings.map(sanitizePgText),
         conversionError: null,
+        progressStage: null,
+        progressMessage: null,
+        progressLog: null,
         updatedAt: new Date(),
       })
       .where(eq(documentImports.id, row.id));
@@ -381,11 +459,25 @@ export async function processDocumentImportConvert(input: {
     const message = sanitizePgText(
       error instanceof Error ? error.message.slice(0, 1000) : String(error),
     );
+    const [current] = await input.database.db
+      .select({
+        progressStage: documentImports.progressStage,
+        progressLog: documentImports.progressLog,
+      })
+      .from(documentImports)
+      .where(eq(documentImports.id, row.id))
+      .limit(1);
     await input.database.db
       .update(documentImports)
       .set({
         status: 'failed',
         conversionError: message,
+        progressStage: current?.progressStage ?? 'converting',
+        progressMessage: message,
+        progressLog: appendProgressLog(
+          current?.progressLog,
+          `Failed: ${message}`,
+        ),
         updatedAt: new Date(),
       })
       .where(eq(documentImports.id, row.id));

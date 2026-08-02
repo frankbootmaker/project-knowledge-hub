@@ -1,7 +1,7 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -57,11 +57,32 @@ type DocumentImport = {
   contentWarnings?: ContentWarning[];
   conversionWarnings?: string[];
   conversionError: string | null;
+  progressStage?: string | null;
+  progressMessage?: string | null;
+  progressLog?: string | null;
   archivedAt: string | null;
   createdAt: string;
   linkedRecords: LinkedRecord[];
   media: MediaLink[];
 };
+
+const PROGRESS_STAGES = [
+  'queued',
+  'reading',
+  'converting',
+  'ocr',
+  'storing_media',
+  'finalizing',
+] as const;
+
+type ProgressStage = (typeof PROGRESS_STAGES)[number];
+
+function isProgressStage(value: string | null | undefined): value is ProgressStage {
+  return (
+    typeof value === 'string' &&
+    (PROGRESS_STAGES as readonly string[]).includes(value)
+  );
+}
 
 export function DocumentImportDetail(props: {
   workspaceSlug: string;
@@ -83,6 +104,31 @@ export function DocumentImportDetail(props: {
   const [acknowledgeSecrets, setAcknowledgeSecrets] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsAutoOpenedRef = useRef(false);
+  const detailsLogRef = useRef<HTMLPreElement | null>(null);
+  const inProgress = doc.status === 'pending' || doc.status === 'converting';
+
+  useEffect(() => {
+    if (!inProgress) return;
+    const startedAt = Date.parse(doc.createdAt);
+    const tick = () => {
+      const base = Number.isFinite(startedAt) ? startedAt : Date.now();
+      setElapsedSec(Math.max(0, Math.floor((Date.now() - base) / 1000)));
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [doc.createdAt, inProgress]);
+
+  useEffect(() => {
+    const log = doc.progressLog?.trim() ?? '';
+    if (log && !detailsAutoOpenedRef.current) {
+      detailsAutoOpenedRef.current = true;
+      setDetailsOpen(true);
+    }
+  }, [doc.progressLog]);
 
   useEffect(() => {
     if (doc.status === 'ready' || doc.status === 'failed') return;
@@ -103,6 +149,11 @@ export function DocumentImportDetail(props: {
         if (payload.documentImport.title) {
           setTitle(payload.documentImport.title);
         }
+        const log = payload.documentImport.progressLog?.trim() ?? '';
+        if (log && !detailsAutoOpenedRef.current) {
+          detailsAutoOpenedRef.current = true;
+          setDetailsOpen(true);
+        }
         if (
           payload.documentImport.status === 'ready' ||
           payload.documentImport.status === 'failed'
@@ -116,9 +167,18 @@ export function DocumentImportDetail(props: {
     return () => clearInterval(timer);
   }, [doc.id, doc.status, router]);
 
+  useEffect(() => {
+    const el = detailsLogRef.current;
+    if (!el || !detailsOpen) return;
+    el.scrollTop = el.scrollHeight;
+  }, [doc.progressLog, detailsOpen]);
+
   const warnings = doc.contentWarnings ?? [];
   const hasHigh = warnings.some((w) => w.severity === 'high');
   const ready = doc.status === 'ready' && Boolean(doc.convertedMarkdown);
+  const stageLabel = isProgressStage(doc.progressStage)
+    ? t(`progressStage_${doc.progressStage}`)
+    : t('convertingHint');
 
   async function onCreateDraft(event: FormEvent) {
     event.preventDefault();
@@ -199,8 +259,49 @@ export function DocumentImportDetail(props: {
             ))}
           </ul>
         ) : null}
-        {!ready && doc.status !== 'failed' ? (
-          <p className="mt-3 mb-0 text-sm text-ink-muted">{t('convertingHint')}</p>
+        {inProgress ? (
+          <div className="mt-4 grid gap-2 rounded-md border border-line bg-canvas-muted/40 p-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+              <span className="font-medium text-ink">
+                {stageLabel}
+                {doc.progressMessage ? (
+                  <span className="font-normal text-ink-muted">
+                    {' '}
+                    · {doc.progressMessage}
+                  </span>
+                ) : null}
+              </span>
+              <span className="tabular-nums text-ink-muted">
+                {t('progressElapsed', { seconds: elapsedSec })}
+              </span>
+            </div>
+            <div
+              className="kh-translate-progress"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={stageLabel}
+            >
+              <div className="kh-translate-progress-bar" />
+            </div>
+            <div className="grid gap-1.5">
+              <button
+                type="button"
+                className="justify-self-start text-left text-sm font-medium text-ink underline-offset-2 hover:underline"
+                onClick={() => setDetailsOpen((open) => !open)}
+              >
+                {detailsOpen ? t('progressDetailsHide') : t('progressDetailsShow')}
+              </button>
+              {detailsOpen ? (
+                <pre
+                  ref={detailsLogRef}
+                  className="m-0 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas p-2 font-mono text-xs text-ink-muted"
+                >
+                  {doc.progressLog?.trim() || t('progressDetailsEmpty')}
+                </pre>
+              ) : null}
+            </div>
+          </div>
         ) : null}
       </Panel>
 

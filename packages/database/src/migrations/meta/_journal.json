@@ -218,6 +218,13 @@
       "when": 1785601000000,
       "tag": "0030_llm_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1785688000000,
+      "tag": "0031_document_import_progress",
+      "breakpoints": true
     }
   ]
 }
