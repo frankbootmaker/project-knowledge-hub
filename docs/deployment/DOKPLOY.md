@@ -83,6 +83,29 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 4. Point a domain at the **web** service (port **3100**); enable HTTPS.
 5. Set `WEB_URL` to that HTTPS origin. Do not expose Postgres or Redis.
 
+**AI translation / long LLM calls return non-JSON / `Internal Server Error` in the browser:** the UI expected JSON but got HTML, empty body, or plain-text `Internal Server Error`. Two common causes while the API waits on the model (often 60–120s+ for local Ollama):
+
+1. **Next.js rewrite proxy** defaults to **30s** (`experimental.proxyTimeout`). KnowHub sets this to **600s** in `apps/web/next.config.ts` — rebuild/redeploy **web** after pulling that change. Local `pnpm run dev` must restart so Next reloads the config.
+2. **Traefik gateway timeout** (default ~60s). Raise entrypoint timeouts on the Dokploy host (`/etc/dokploy/traefik/traefik.yml`), then reload Traefik:
+
+```yaml
+entryPoints:
+  web:
+    transport:
+      respondingTimeouts:
+        readTimeout: 0s
+        writeTimeout: 0s
+        idleTimeout: 180s
+  websecure:
+    transport:
+      respondingTimeouts:
+        readTimeout: 0s
+        writeTimeout: 0s
+        idleTimeout: 180s
+```
+
+Also confirm **Admin → AI Providers** has an active Translation binding whose **base URL** is an OpenAI-compatible root ending in `/v1` (e.g. `https://api.openai.com/v1`), not an HTML status page. Workaround without AI: create the sibling translation without “Translate with AI”, then edit title/body manually.
+
 **Networking:** Only `web` and `api` join external `dokploy-network` (Traefik). Postgres/Redis/worker/db-backup/`kh-markitdown` stay on the project `default` network with unique hostnames (`kh-postgres`, `kh-redis`, `kh-markitdown`). If `/api/v1/*` returns a plain-text `Internal Server Error` while `/login` works, `web` cannot reach `api`. Redeploy after pulling this compose, or on the Dokploy host temporarily:
 
 ```bash

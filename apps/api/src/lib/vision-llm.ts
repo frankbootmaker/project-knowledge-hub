@@ -51,17 +51,25 @@ export async function chatCompletions(
       signal: controller.signal,
     });
 
+    const rawBody = await response.text();
     if (!response.ok) {
-      const body = await response.text();
       throw new Error(
-        `Vision LLM chat/completions failed (${response.status}): ${body.slice(0, 500)}`,
+        `Vision LLM chat/completions failed (${response.status}): ${rawBody.slice(0, 500)}`,
       );
     }
 
-    const payload = (await response.json()) as {
+    let payload: {
       model?: string;
       choices?: Array<{ message?: { content?: string | null } }>;
     };
+    try {
+      payload = JSON.parse(rawBody) as typeof payload;
+    } catch {
+      const snippet = rawBody.replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw new Error(
+        `Vision LLM chat/completions returned non-JSON (check Admin → AI Providers base URL ends with /v1): ${snippet}`,
+      );
+    }
     const content = payload.choices?.[0]?.message?.content?.trim();
     if (!content) {
       throw new Error('Vision LLM chat/completions response missing content');
@@ -115,13 +123,73 @@ const translationResultSchema = {
   },
 };
 
+/** Strip Qwen/DeepSeek-style reasoning blocks before JSON extraction. */
+export function stripModelReasoning(content: string): string {
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .trim();
+}
+
+/**
+ * Some small models put literal `\n` sequences into the JSON string value
+ * (or return a single-line body that only uses escaped newlines).
+ */
+export function unescapeLiteralNewlines(text: string): string {
+  const realNl = (text.match(/\n/g) ?? []).length;
+  const literalNl = (text.match(/\\n/g) ?? []).length;
+  if (literalNl >= 2 && literalNl > realNl) {
+    return text.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  }
+  return text;
+}
+
+/**
+ * Small models often drop ATX heading markers while translating the heading text.
+ * If the source opens with `#…` and the translation's first line does not, restore
+ * the same heading level.
+ */
+export function restoreStrippedMarkdownHeading(
+  sourceMarkdown: string,
+  translatedMarkdown: string,
+): string {
+  const srcLines = sourceMarkdown.replace(/\r\n/g, '\n').split('\n');
+  const dstLines = translatedMarkdown.replace(/\r\n/g, '\n').split('\n');
+  const srcFirstIdx = srcLines.findIndex((line) => line.trim().length > 0);
+  const dstFirstIdx = dstLines.findIndex((line) => line.trim().length > 0);
+  if (srcFirstIdx < 0 || dstFirstIdx < 0) {
+    return translatedMarkdown;
+  }
+
+  const srcFirst = srcLines[srcFirstIdx]!;
+  const dstFirst = dstLines[dstFirstIdx]!;
+  const heading = srcFirst.match(/^(#{1,6})\s+\S/);
+  if (!heading) {
+    return translatedMarkdown;
+  }
+  if (/^#{1,6}\s+\S/.test(dstFirst)) {
+    return translatedMarkdown;
+  }
+
+  dstLines[dstFirstIdx] = `${heading[1]} ${dstFirst.trim()}`;
+  return dstLines.join('\n');
+}
+
+export function normalizeTranslatedMarkdown(
+  sourceMarkdown: string,
+  translatedMarkdown: string,
+): string {
+  const unescaped = unescapeLiteralNewlines(translatedMarkdown);
+  return restoreStrippedMarkdownHeading(sourceMarkdown, unescaped);
+}
+
 /** Extract JSON object from model output (raw or fenced). */
 export function parseTranslationJson(content: string): {
   title: string;
   summary: string | null;
   contentMarkdown: string;
 } {
-  const trimmed = content.trim();
+  const trimmed = stripModelReasoning(content);
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = (fenced?.[1] ?? trimmed).trim();
 
@@ -137,7 +205,16 @@ export function parseTranslationJson(content: string): {
     parsed = JSON.parse(candidate.slice(start, end + 1));
   }
 
-  return translationResultSchema.parse(parsed);
+  const fields = translationResultSchema.parse(parsed);
+  return {
+    ...fields,
+    title: unescapeLiteralNewlines(fields.title).trim(),
+    summary:
+      fields.summary == null
+        ? null
+        : unescapeLiteralNewlines(fields.summary).trim().slice(0, 1000) || null,
+    contentMarkdown: unescapeLiteralNewlines(fields.contentMarkdown),
+  };
 }
 
 export async function translateRecordFields(input: {
@@ -160,10 +237,14 @@ export async function translateRecordFields(input: {
   const system = [
     'You are a professional translator for a knowledge-base CMS.',
     `Translate the knowledge record from ${sourceLang} into ${input.targetLanguage}.`,
-    'Preserve Markdown structure, headings, lists, tables, code fences, and links.',
+    'contentMarkdown MUST remain valid Markdown with the SAME structure as the source:',
+    'keep ATX headings (including the leading # characters), lists, tables, code fences, and links.',
+    'Example: source "# Bridge\\n\\nSettings." → contentMarkdown "# Híd\\n\\nBeállítások."',
+    'Never flatten headings into plain paragraphs. Never omit the # markers.',
+    'In JSON string values, use real newline escapes (\\n), not the two characters backslash and n as body text.',
     'Do NOT change media embed URLs of the form ![alt](/api/v1/media/...). You may translate alt text.',
     'Do NOT invent facts; translate faithfully.',
-    'Respond with ONLY a JSON object (no markdown outside JSON) with keys:',
+    'Respond with ONLY a JSON object (no markdown outside JSON, no commentary) with keys:',
     'title (string), summary (string or null), contentMarkdown (string).',
   ].join(' ');
 
@@ -187,5 +268,13 @@ export async function translateRecordFields(input: {
   );
 
   const fields = parseTranslationJson(content);
-  return { ...fields, model };
+  return {
+    title: fields.title,
+    summary: fields.summary,
+    contentMarkdown: normalizeTranslatedMarkdown(
+      input.contentMarkdown,
+      fields.contentMarkdown,
+    ),
+    model,
+  };
 }

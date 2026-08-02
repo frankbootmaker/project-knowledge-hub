@@ -27,6 +27,11 @@ const nextConfig: NextConfig = {
       dynamic: 0,
       static: 30,
     },
+    // Rewrites to the API use http-proxy with a 30s default. AI translate/OCR
+    // often exceeds that (local Ollama can take 60–120s+) and Next then returns
+    // plain-text "Internal Server Error" (HTTP 500) → UI non-JSON errors.
+    // Align with typical LLM provider timeoutMs (up to 10 minutes in Admin).
+    proxyTimeout: 600_000,
   },
   transpilePackages: [
     '@project-knowledge-hub/markdown',
@@ -43,7 +48,8 @@ const nextConfig: NextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
-      // Webpack sometimes fails named ESM re-exports from d3-path (mermaid → d3-shape).
+      // Webpack fails named ESM re-exports from the d3 umbrella (mermaid → d3).
+      // Pin to d3-shape/d3-path v3 src (pnpm overrides keep these off d3-sankey's 1.x).
       'd3-path': path.resolve(__dirname, '../../node_modules/d3-path/src/index.js'),
       'd3-shape': path.resolve(__dirname, '../../node_modules/d3-shape/src/index.js'),
     };

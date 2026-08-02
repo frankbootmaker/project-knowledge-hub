@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
+import { readApiJson } from '../lib/api-json';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { localeLabels, locales, type AppLocale } from '../i18n/config';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
@@ -297,10 +298,10 @@ export function KnowledgeRecordManageMenu(props: {
           }),
         },
       );
-      const body = (await response.json()) as {
+      const body = await readApiJson<{
         knowledgeRecord?: { slug: string };
         error?: { message?: string };
-      };
+      }>(response);
       if (!response.ok) {
         throw new Error(body.error?.message ?? t('translateFailed'));
       }
