@@ -1,10 +1,10 @@
 # OIDC sign-in with Authentik — integration guide
 
-**Status:** Draft (v1 implemented in product; awaiting staging smoke with a live Authentik).  
+**Status:** Staging smoke succeeded (KnowHub Dev ↔ `https://auth-dev.in3.technology`, 2026-08-03).  
 **Project:** Project Knowledge Hub  
 **Backlog:** NF-017 (OIDC / Authentik first); related NF-012 (Entra reuses same path), NF-007 (Azure Blob — separate).  
-**Repo brief:** [`OIDC_IDP.md`](OIDC_IDP.md)  
-**Hub record:** slug `oidc-authentik-integration-guide` (Project Knowledge Hub)
+**Repo brief:** `docs/product/OIDC_IDP.md`  
+**Related hub record:** Authentik Homelab Deployment Blueprint (`authentik-homelab-deployment-blueprint`)
 
 This guide explains how human SSO into KnowHub works, how to configure Authentik, how users are linked, and what is explicitly out of scope.
 
@@ -72,7 +72,7 @@ Otherwise the user is sent back to login with a query flag:
 
 | Query | Meaning |
 | --- | --- |
-| `?sso=unknown` | No matching / linkable KnowHub account |
+| `?sso=unknown` | No matching / linkable KnowHub account (also when email is present but `email_verified` is false) |
 | `?sso=inactive` | Account exists but is not `active` |
 | `?sso=conflict` | Email already linked to a different IdP subject |
 | `?sso=error` | OAuth/state/token failure |
@@ -83,6 +83,7 @@ Otherwise the user is sent back to login with a query flag:
 2. Ensure status is **active** and they have at least one workspace membership (same rules as password users).
 3. Optional: pre-fill **IdP source** / **IdP subject** in Admin → Users if you know Authentik’s `sub` (otherwise first successful SSO links by verified email).
 4. Prefer setting `OIDC_IDP_SOURCE=authentik` so the stored source is stable and readable.
+5. Ensure Authentik issues `email_verified: true` (see §5.1 — required on Authentik ≥ 2025.10).
 
 ---
 
@@ -92,7 +93,7 @@ Otherwise the user is sent back to login with a query flag:
 | --- | --- |
 | `sub` | Required → `idp_subject` |
 | `email` | Required for email-link path; stored/matched lower-case |
-| `email_verified` | Must be true to link by email |
+| `email_verified` | Must be **true** to link by email |
 | `name` / `preferred_username` | Ignored in v1 (display name stays hub-managed) |
 
 Scopes requested: `openid email profile`.
@@ -105,23 +106,56 @@ Scopes requested: `openid email profile`.
 2. Client type: **confidential**.
 3. Grant type: **authorization code** with **PKCE**.
 4. Redirect URI (exact):
-   * Staging example: `https://knowhub-dev.in3.technology/api/v1/auth/oidc/callback`
+   * Staging: `https://knowhub-dev.in3.technology/api/v1/auth/oidc/callback`
    * Local: `http://localhost:3100/api/v1/auth/oidc/callback`
-5. Scopes: `openid`, `email`, `profile`.
-6. Ensure users’ emails are verified in Authentik (needed for first-time email link).
-7. Copy:
-   * **Issuer URL** (application issuer / OpenID configuration base)
+5. Scopes: `openid`, `email`, `profile` (with the custom email mapping in §5.1).
+6. Copy:
+   * **Issuer URL** (e.g. `https://auth-dev.in3.technology/application/o/<slug>/`)
    * **Client ID**
    * **Client secret**
+
+### 5.1 Required: custom `email` scope (`email_verified`)
+
+From Authentik **2025.10** onward, the default OpenID `email` scope sets **`email_verified` to `false`** (Authentik no longer asserts verification by default).
+
+KnowHub **refuses first-time email linking** unless `email_verified` is true. Symptom:
+
+* Login returns `?sso=unknown`
+* Audit `auth.oidc_rejected` with `reason: "unknown"` and a **non-null** `email`
+
+**Fix (staging, verified 2026-08-03):**
+
+1. **Customization → Property Mappings → Create → Scope Mapping**
+   * Name: e.g. `KnowHub email (verified)`
+   * **Scope name:** `email`
+   * Expression:
+
+```python
+return {
+    "email": request.user.email,
+    "email_verified": True,
+}
+```
+
+2. **Applications → Providers → (KnowHub)** → Advanced protocol settings  
+   * **Remove** `authentik default OAuth Mapping: OpenID 'email'`  
+   * **Add** `KnowHub email (verified)`  
+   * Keep `openid` + `profile`
+
+3. Sign out of Authentik, retry KnowHub SSO.
+
+For stricter setups later, store verification in a user attribute and return that instead of hard-coding `True` (see Authentik docs: *Email scope verification*).
 
 ---
 
 ## 6. Configure KnowHub (env)
 
-Set all three of issuer + client id + secret together (partial config fails process start).
+`OIDC_*` must be listed in `compose.dokploy.yaml` **and** set on the Dokploy **Compose service Environment** tab (project-level env alone is not enough).
+
+Set all three of issuer + client id + secret together (partial config fails process start / keeps SSO disabled).
 
 ```bash
-OIDC_ISSUER=https://authentik.example.com/application/o/knowhub/
+OIDC_ISSUER=https://auth-dev.in3.technology/application/o/<slug>/
 OIDC_CLIENT_ID=...
 OIDC_CLIENT_SECRET=...
 OIDC_BUTTON_LABEL=Sign in with Authentik
@@ -134,11 +168,11 @@ Also ensure:
 
 * `WEB_URL` is the public browser origin users use.
 * Redis is available (PKCE `state` is stored with a short TTL).
-* API/web restarted or redeployed after env change.
+* Redeploy after env / compose change.
 
-References in repo: `.env.example`, `.env.dokploy.example`.
+References in repo: `.env.example`, `.env.dokploy.example`, `compose.dokploy.yaml`.
 
-When configured, `/login` shows the SSO button (label from `OIDC_BUTTON_LABEL`). Password login remains.
+When configured, `GET /api/v1/auth/oidc/status` returns `"enabled": true` and `/login` shows the SSO button. Password login remains.
 
 ---
 
@@ -152,8 +186,9 @@ When configured, `/login` shows the SSO button (label from `OIDC_BUTTON_LABEL`).
 6. Negative checks:
    * Unknown email → `sso=unknown`
    * Pending/inactive user → `sso=inactive`
+   * `email_verified` false → `sso=unknown` + audit email present (§5.1)
 
-Audit actions to look for: `auth.oidc_login`, `auth.oidc_link`, `auth.oidc_rejected`.
+Audit actions: `auth.oidc_login`, `auth.oidc_link`, `auth.oidc_rejected`.
 
 ---
 
@@ -161,10 +196,11 @@ Audit actions to look for: `auth.oidc_login`, `auth.oidc_link`, `auth.oidc_rejec
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| No SSO button | Env incomplete / API not restarted | Set all three OIDC_* vars; restart |
+| No SSO button / `enabled: false` | `OIDC_*` not in container env | Add vars to Compose Environment + ensure `compose.dokploy.yaml` interpolates them; redeploy |
 | Redirect URI mismatch | Authentik URI ≠ KnowHub callback | Align to `{WEB_URL}/api/v1/auth/oidc/callback` |
 | Cookie missing / bounce to login | Callback hit API host instead of web | Use WEB_URL redirect; do not register API_URL-only callback |
-| `sso=unknown` | User not invited / email mismatch / email not verified | Invite matching email; verify email in Authentik |
+| `sso=unknown`, audit **email null** | User not invited / email claim missing | Invite matching email; ensure `email` scope mapping |
+| `sso=unknown`, audit **email present** | `email_verified` false (Authentik ≥ 2025.10 default) | Custom email scope mapping (§5.1) |
 | `sso=inactive` | User not approved / wrong status | Approve + workspace membership |
 | `sso=conflict` | Email already linked to another `sub` | Clear/correct IdP fields in Admin, or use the original IdP identity |
 | `sso=error` | State expired, discovery/token failure | Retry quickly; check issuer URL, secrets, Redis, API logs |
@@ -181,14 +217,15 @@ Audit actions to look for: `auth.oidc_login`, `auth.oidc_link`, `auth.oidc_rejec
 
 ## 10. Follow-ups (not in v1)
 
-* Staging smoke with production-like Authentik → mark Feature Request List Authentik item done.
 * Admin UI for IdP config.
 * Authentik group → workspace role mapping.
 * Multiple concurrent issuers in one deployment UI.
+* Attribute-based `email_verified` instead of hard-coded `True` in the scope mapping.
 
 ---
 
 ## Related hub / repo docs
 
-* Feature Request List (Authentik IdP item — leave open until staging smoke).
-* Repo: [`OIDC_IDP.md`](OIDC_IDP.md), [`SECURITY_MODEL.md`](../security/SECURITY_MODEL.md), [`NEXT_FEATURES.md`](NEXT_FEATURES.md) (NF-017).
+* Hub: Authentik Homelab Deployment Blueprint (`authentik-homelab-deployment-blueprint`).
+* Feature Request List (Authentik IdP — staging smoke done).
+* Repo: `docs/product/OIDC_IDP.md`, `docs/security/SECURITY_MODEL.md`, `docs/product/NEXT_FEATURES.md` (NF-017), `docs/deployment/DOKPLOY.md`.
