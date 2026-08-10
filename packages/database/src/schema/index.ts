@@ -1,8 +1,10 @@
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   uuid,
   text,
   timestamp,
+  date,
   jsonb,
   boolean,
   integer,
@@ -952,5 +954,81 @@ export const documentImportMedia = pgTable(
       table.importId,
       table.attachmentIndex,
     ),
+  ],
+);
+
+/** Project delivery milestones (NF-018 / ADR-015). */
+export const projectMilestones = pgTable(
+  'project_milestones',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status').notNull().default('planned'),
+    targetDate: date('target_date', { mode: 'string' }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('project_milestones_project_id_idx').on(table.projectId),
+    index('project_milestones_project_status_idx').on(table.projectId, table.status),
+  ],
+);
+
+/** Project delivery tasks (NF-018 / ADR-015). */
+export const projectTasks = pgTable(
+  'project_tasks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    milestoneId: uuid('milestone_id').references(() => projectMilestones.id, {
+      onDelete: 'set null',
+    }),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status').notNull().default('todo'),
+    dueDate: date('due_date', { mode: 'string' }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('project_tasks_project_id_idx').on(table.projectId),
+    index('project_tasks_milestone_id_idx').on(table.milestoneId),
+    index('project_tasks_project_status_idx').on(table.projectId, table.status),
+  ],
+);
+
+/** RACI assignments for a task — at most one Accountable (A) per task. */
+export const projectTaskRaci = pgTable(
+  'project_task_raci',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => projectTasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_task_raci_task_user_uidx').on(table.taskId, table.userId),
+    uniqueIndex('project_task_raci_one_accountable_uidx')
+      .on(table.taskId)
+      .where(sql`${table.role} = 'A'`),
+    index('project_task_raci_user_id_idx').on(table.userId),
   ],
 );

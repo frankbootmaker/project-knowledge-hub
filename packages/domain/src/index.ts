@@ -70,6 +70,26 @@ export const projectStatusSchema = z.enum([
   'archived',
 ]);
 
+/** Project Delivery (NF-018): milestone lifecycle. */
+export const milestoneStatusSchema = z.enum([
+  'planned',
+  'active',
+  'done',
+  'cancelled',
+]);
+
+/** Project Delivery (NF-018): task lifecycle. */
+export const taskStatusSchema = z.enum([
+  'todo',
+  'in_progress',
+  'blocked',
+  'done',
+  'cancelled',
+]);
+
+/** Project Delivery (NF-018): RACI role codes. */
+export const raciRoleSchema = z.enum(['R', 'A', 'C', 'I']);
+
 export const systemStatusSchema = z.enum([
   'proposed',
   'experimental',
@@ -174,6 +194,9 @@ export type ProjectStatus = z.infer<typeof projectStatusSchema>;
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 export type MembershipRole = z.infer<typeof membershipRoleSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
+export type MilestoneStatus = z.infer<typeof milestoneStatusSchema>;
+export type TaskStatus = z.infer<typeof taskStatusSchema>;
+export type RaciRole = z.infer<typeof raciRoleSchema>;
 
 export class AppError extends Error {
   readonly code: string;

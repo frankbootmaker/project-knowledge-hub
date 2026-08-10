@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { cn } from '../lib/cn';
@@ -60,7 +60,8 @@ export type CatalogueLocaleVariant = {
 export type CatalogueListItem = {
   id: string;
   title: string;
-  href: string;
+  /** When omitted, the title is plain text (no detail link). */
+  href?: string;
   primaryBadge?: string;
   secondaryBadge?: string;
   subtitle?: string | null;
@@ -129,8 +130,10 @@ export function CatalogueSection({
   languageFilterLabel,
   languageFilterAllLabel,
   createHref,
+  onCreate,
   createLabel,
   canCreate,
+  renderItem,
   className,
 }: {
   title: string;
@@ -141,9 +144,14 @@ export function CatalogueSection({
   filterAllLabel: string;
   languageFilterLabel?: string;
   languageFilterAllLabel?: string;
-  createHref: string;
+  /** Detail/create page link. Prefer `onCreate` for modal flows. */
+  createHref?: string;
+  /** Opens a create flow (e.g. modal) instead of navigating. */
+  onCreate?: () => void;
   createLabel: string;
   canCreate: boolean;
+  /** Replace the default list-card body for each item. */
+  renderItem?: (item: CatalogueListItem) => ReactNode;
   className?: string;
 }) {
   const t = useTranslations('workspaces');
@@ -357,7 +365,13 @@ export function CatalogueSection({
               ) : null}
             </Button>
             {canCreate ? (
-              <LinkButton href={createHref}>{createLabel}</LinkButton>
+              onCreate ? (
+                <Button type="button" onClick={onCreate}>
+                  {createLabel}
+                </Button>
+              ) : createHref ? (
+                <LinkButton href={createHref}>{createLabel}</LinkButton>
+              ) : null
             ) : null}
           </>
         }
@@ -366,40 +380,48 @@ export function CatalogueSection({
       <ul className="m-0 grid list-none gap-3 p-0">
         {pageItems.map((item) => (
           <ListCard key={item.id}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link href={item.href} className="font-semibold no-underline">
-                    {item.title}
-                  </Link>
-                  {item.primaryBadge ? (
-                    <Badge tone="brand">{item.primaryBadge}</Badge>
+            {renderItem ? (
+              renderItem(item)
+            ) : (
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {item.href ? (
+                      <Link href={item.href} className="font-semibold no-underline">
+                        {item.title}
+                      </Link>
+                    ) : (
+                      <span className="font-semibold">{item.title}</span>
+                    )}
+                    {item.primaryBadge ? (
+                      <Badge tone="brand">{item.primaryBadge}</Badge>
+                    ) : null}
+                    {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
+                    {(item.languages?.length ?? 0) > 1 ? (
+                      <span
+                        className="text-xs font-medium tracking-wide text-ink-muted uppercase"
+                        title={t('sectionLanguages')}
+                      >
+                        {item.languages!.map((code) => code.toUpperCase()).join(' · ')}
+                      </span>
+                    ) : null}
+                  </div>
+                  {item.subtitle ? (
+                    <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
                   ) : null}
-                  {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
-                  {(item.languages?.length ?? 0) > 1 ? (
-                    <span
-                      className="text-xs font-medium tracking-wide text-ink-muted uppercase"
-                      title={t('sectionLanguages')}
-                    >
-                      {item.languages!.map((code) => code.toUpperCase()).join(' · ')}
-                    </span>
+                  {item.tagsLine ? (
+                    <p className="mt-2 mb-0 text-xs text-ink-muted">{item.tagsLine}</p>
                   ) : null}
                 </div>
-                {item.subtitle ? (
-                  <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
-                ) : null}
-                {item.tagsLine ? (
-                  <p className="mt-2 mb-0 text-xs text-ink-muted">{item.tagsLine}</p>
+                {item.updatedAt ? (
+                  <LocalDateTime
+                    className="shrink-0 text-xs text-ink-muted"
+                    value={item.updatedAt}
+                    prefix={tCommon('lastUpdated')}
+                  />
                 ) : null}
               </div>
-              {item.updatedAt ? (
-                <LocalDateTime
-                  className="shrink-0 text-xs text-ink-muted"
-                  value={item.updatedAt}
-                  prefix={tCommon('lastUpdated')}
-                />
-              ) : null}
-            </div>
+            )}
           </ListCard>
         ))}
         {filtered.length === 0 ? (

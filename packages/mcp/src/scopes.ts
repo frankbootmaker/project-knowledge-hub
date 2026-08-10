@@ -5,6 +5,9 @@ export const MCP_SCOPES = [
   'knowledge:search',
   'provenance:read',
   'knowledge:write',
+  /** Project Delivery milestones/tasks/RACI (NF-018). Opt-in; not in DEFAULT_MCP_SCOPES. */
+  'pm:read',
+  'pm:write',
   /** Redacted platform health / backup ages (NF-014). Opt-in; not in DEFAULT_MCP_SCOPES. */
   'monitoring:read',
 ] as const;

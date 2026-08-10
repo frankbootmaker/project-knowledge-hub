@@ -101,20 +101,24 @@ export function assertWriteClientConfig(input: {
   actingUserId: string | null | undefined;
   allowedWorkspaceIds: string[];
 }): void {
-  if (!input.scopes.includes('knowledge:write')) {
+  const needsWriteGate =
+    input.scopes.includes('knowledge:write') || input.scopes.includes('pm:write');
+  if (!needsWriteGate) {
     return;
   }
   if (!input.actingUserId) {
     throw new AppError({
       code: 'ACTING_USER_REQUIRED',
-      message: 'actingUserId is required when scopes include knowledge:write',
+      message:
+        'actingUserId is required when scopes include knowledge:write or pm:write',
       statusCode: 400,
     });
   }
   if (input.allowedWorkspaceIds.length === 0) {
     throw new AppError({
       code: 'WORKSPACE_ALLOWLIST_REQUIRED',
-      message: 'allowedWorkspaceIds must be non-empty when scopes include knowledge:write',
+      message:
+        'allowedWorkspaceIds must be non-empty when scopes include knowledge:write or pm:write',
       statusCode: 400,
     });
   }

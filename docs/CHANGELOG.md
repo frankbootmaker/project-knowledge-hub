@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Project Delivery (NF-018, local):** milestones, tasks, due/target dates, and RACI under Projects; REST + project page UI; MCP `pm:read` / `pm:write` for live agent participation. Brief [`PROJECT_DELIVERY.md`](product/PROJECT_DELIVERY.md), ADR-015. Branch `feature/project-delivery` — not for Dokploy until local smoke is done.
+
 * **OIDC sign-in (Authentik):** optional OpenID Connect login beside local email/password; operator integration guide; session links IdP subject when configured.
 
 * **AI translation progress (SSE):** Manage → Translate streams stage updates, elapsed time, indeterminate bar, and a collapsible Details log (content deltas only; Hide stays respected). New `POST …/translations/stream`; JSON POST kept for MCP.

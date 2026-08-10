@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { AppError, projectStatusSchema } from './index.js';
+import {
+  AppError,
+  milestoneStatusSchema,
+  projectStatusSchema,
+  raciRoleSchema,
+  taskStatusSchema,
+} from './index.js';
 
 describe('domain foundations', () => {
   it('validates project statuses', () => {
     expect(projectStatusSchema.parse('active')).toBe('active');
+  });
+
+  it('validates project delivery statuses and RACI roles', () => {
+    expect(milestoneStatusSchema.parse('planned')).toBe('planned');
+    expect(taskStatusSchema.parse('in_progress')).toBe('in_progress');
+    expect(raciRoleSchema.parse('A')).toBe('A');
   });
 
   it('creates typed application errors', () => {

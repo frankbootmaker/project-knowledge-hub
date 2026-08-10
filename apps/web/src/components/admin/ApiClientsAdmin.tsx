@@ -23,8 +23,14 @@ const MCP_SCOPES = [
   'knowledge:search',
   'provenance:read',
   'knowledge:write',
+  'pm:read',
+  'pm:write',
   'monitoring:read',
 ] as const;
+
+function needsActingUser(scopes: readonly string[]): boolean {
+  return scopes.includes('knowledge:write') || scopes.includes('pm:write');
+}
 
 export type PublicApiClient = {
   id: string;
@@ -532,7 +538,7 @@ export function ApiClientsAdmin({
               </label>
             ))}
           </div>
-          {scopes.includes('knowledge:write') ? (
+          {needsActingUser(scopes) ? (
             <p className="m-0 text-xs text-ink-muted">{t('writeScopeHint')}</p>
           ) : null}
         </fieldset>
@@ -658,7 +664,7 @@ export function ApiClientsAdmin({
                 pending ||
                 !editName.trim() ||
                 editScopes.length === 0 ||
-                (editScopes.includes('knowledge:write') &&
+                (needsActingUser(editScopes) &&
                   (editWorkspaces.length === 0 || !editActingUserId))
               }
               onClick={() => void saveEdit()}
@@ -693,7 +699,7 @@ export function ApiClientsAdmin({
                   </label>
                 ))}
               </div>
-              {editScopes.includes('knowledge:write') ? (
+              {needsActingUser(editScopes) ? (
                 <p className="m-0 text-xs text-ink-muted">{t('writeScopeHint')}</p>
               ) : null}
             </fieldset>

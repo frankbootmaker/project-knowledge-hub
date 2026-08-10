@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from 'react';
 
-function formatUtc(value: string): string {
-  return new Date(value).toLocaleString('en-GB', {
-    timeZone: 'UTC',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+/** Stable UTC label for SSR + first client paint (no Intl padding quirks). */
+function formatUtcStable(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy = String(date.getUTCFullYear());
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const mi = String(date.getUTCMinutes()).padStart(2, '0');
+  const ss = String(date.getUTCSeconds()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy}, ${hh}:${mi}:${ss}`;
 }
 
 /**
@@ -27,7 +30,7 @@ export function LocalDateTime({
   className?: string;
   prefix?: string;
 }) {
-  const [label, setLabel] = useState(() => formatUtc(value));
+  const [label, setLabel] = useState(() => formatUtcStable(value));
 
   useEffect(() => {
     setLabel(new Date(value).toLocaleString());

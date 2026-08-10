@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ProjectDeliveryPanel } from '../../../../../../components/ProjectDeliveryPanel';
 import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
 import {
@@ -104,18 +105,72 @@ export default async function ProjectDetailPage({
         membership.role === 'workspace_admin',
     );
 
-  const [systemsResponse, recordsResponse] = await Promise.all([
-    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
-    apiFetch(
-      `/api/v1/knowledge-records?workspaceId=${workspace.id}&projectId=${project.id}`,
-    ),
-  ]);
+  const [systemsResponse, recordsResponse, milestonesResponse, tasksResponse, membershipsResponse] =
+    await Promise.all([
+      apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
+      apiFetch(
+        `/api/v1/knowledge-records?workspaceId=${workspace.id}&projectId=${project.id}`,
+      ),
+      apiFetch(`/api/v1/projects/${project.id}/milestones`),
+      apiFetch(`/api/v1/projects/${project.id}/tasks`),
+      apiFetch(`/api/v1/memberships?workspaceId=${workspace.id}`),
+    ]);
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
     : [];
   const knowledgeRecords = recordsResponse.ok
     ? ((await recordsResponse.json()) as { knowledgeRecords: KnowledgeRecordSummary[] })
         .knowledgeRecords
+    : [];
+  const milestones = milestonesResponse.ok
+    ? ((await milestonesResponse.json()) as {
+        milestones: Array<{
+          id: string;
+          title: string;
+          description: string | null;
+          status: string;
+          targetDate: string | null;
+          sortOrder: number;
+          createdAt?: string;
+          updatedAt?: string;
+        }>;
+      }).milestones
+    : [];
+  const tasks = tasksResponse.ok
+    ? ((await tasksResponse.json()) as {
+        tasks: Array<{
+          id: string;
+          title: string;
+          description: string | null;
+          status: string;
+          dueDate: string | null;
+          milestoneId: string | null;
+          createdAt?: string;
+          updatedAt?: string;
+          raci: Array<{
+            userId: string;
+            displayName: string;
+            email: string;
+            role: 'R' | 'A' | 'C' | 'I';
+          }>;
+        }>;
+      }).tasks
+    : [];
+  const members = membershipsResponse.ok
+    ? (
+        (await membershipsResponse.json()) as {
+          memberships: Array<{
+            userId: string;
+            user?: { displayName?: string; email?: string };
+            displayName?: string;
+            email?: string;
+          }>;
+        }
+      ).memberships.map((row) => ({
+        userId: row.userId,
+        displayName: row.user?.displayName || row.displayName || row.email || row.userId,
+        email: row.user?.email || row.email || '',
+      }))
     : [];
 
   return (
@@ -160,6 +215,15 @@ export default async function ProjectDetailPage({
           </p>
         ) : null}
       </Panel>
+
+      <ProjectDeliveryPanel
+        projectId={project.id}
+        workspaceId={workspace.id}
+        canMutate={canMutate && !isArchived}
+        initialMilestones={milestones}
+        initialTasks={tasks}
+        members={members}
+      />
 
       <ProjectLinkedSections
         workspaceSlug={workspace.slug}

@@ -10,7 +10,10 @@ import {
 import {
   AppError,
   buildKnowledgeRecordMetadata,
+  milestoneStatusSchema,
+  raciRoleSchema,
   recordTypeSchema,
+  taskStatusSchema,
 } from '@project-knowledge-hub/domain';
 import {
   truncateContent,
@@ -44,6 +47,19 @@ import {
   auditKnowledgeSearch,
   auditKnowledgeView,
 } from './telemetry-audit.js';
+import {
+  assertProjectNotArchived,
+  createMilestone,
+  createTask,
+  getMilestone,
+  getTask,
+  listMilestones,
+  listTasks,
+  replaceTaskRaci,
+  requireProjectContext,
+  updateMilestone,
+  updateTask,
+} from './project-delivery.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -79,11 +95,28 @@ function requireActingUserId(client: McpClientContext): string {
   if (!client.actingUserId) {
     throw new AppError({
       code: 'ACTING_USER_REQUIRED',
-      message: 'API client is missing actingUserId required for knowledge:write',
+      message:
+        'API client is missing actingUserId required for knowledge:write or pm:write',
       statusCode: 403,
     });
   }
   return client.actingUserId;
+}
+
+async function requirePmProject(
+  app: FastifyInstance,
+  client: McpClientContext,
+  projectId: string,
+  opts?: { forWrite?: boolean },
+) {
+  const { project } = await requireProjectContext(app.database, projectId);
+  assertWorkspaceAllowed(client, project.workspaceId);
+  assertProjectAllowed(client, project.id);
+  if (opts?.forWrite) {
+    assertWriteWorkspaceAllowed(client, project.workspaceId);
+    assertProjectNotArchived(project);
+  }
+  return project;
 }
 
 async function embedMediaIntoRecord(
@@ -1014,6 +1047,195 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return dump;
+    },
+
+    async listProjectMilestones(input) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        milestones: await listMilestones(app.database, input.projectId, {
+          includeArchived: input.includeArchived,
+        }),
+      };
+    },
+
+    async listProjectTasks(input) {
+      await requirePmProject(app, client, input.projectId);
+      const milestoneId = input.unassignedMilestone
+        ? null
+        : input.milestoneId;
+      return {
+        tasks: await listTasks(app.database, input.projectId, {
+          milestoneId,
+          includeArchived: input.includeArchived,
+        }),
+      };
+    },
+
+    async getProjectTask(input) {
+      const task = await getTask(app.database, input.taskId);
+      await requirePmProject(app, client, task.projectId);
+      return { task };
+    },
+
+    async createProjectMilestone(input) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const milestone = await createMilestone(app.database, {
+        projectId: project.id,
+        title: input.title,
+        description: input.description,
+        status: input.status
+          ? milestoneStatusSchema.parse(input.status)
+          : undefined,
+        targetDate: input.targetDate,
+        sortOrder: input.sortOrder,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.milestone_created',
+        entityType: 'project_milestone',
+        entityId: milestone.id,
+        metadata: {
+          projectId: project.id,
+          title: milestone.title,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { milestone };
+    },
+
+    async updateProjectMilestone(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getMilestone(app.database, input.milestoneId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const milestone = await updateMilestone(app.database, input.milestoneId, {
+        title: input.title,
+        description: input.description,
+        status: input.status
+          ? milestoneStatusSchema.parse(input.status)
+          : undefined,
+        targetDate: input.targetDate,
+        sortOrder: input.sortOrder,
+        archived: input.archived,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.milestone_updated',
+        entityType: 'project_milestone',
+        entityId: milestone.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { milestone };
+    },
+
+    async createProjectTask(input) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const task = await createTask(app.database, {
+        projectId: project.id,
+        workspaceId: project.workspaceId,
+        title: input.title,
+        description: input.description,
+        status: input.status ? taskStatusSchema.parse(input.status) : undefined,
+        dueDate: input.dueDate,
+        milestoneId: input.milestoneId,
+        sortOrder: input.sortOrder,
+        createdBy: actingUserId,
+        raci: input.raci?.map((entry) => ({
+          userId: entry.userId,
+          role: raciRoleSchema.parse(entry.role),
+        })),
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.task_created',
+        entityType: 'project_task',
+        entityId: task.id,
+        metadata: {
+          projectId: project.id,
+          title: task.title,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { task };
+    },
+
+    async updateProjectTask(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getTask(app.database, input.taskId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const task = await updateTask(app.database, input.taskId, {
+        title: input.title,
+        description: input.description,
+        status: input.status ? taskStatusSchema.parse(input.status) : undefined,
+        dueDate: input.dueDate,
+        milestoneId: input.milestoneId,
+        sortOrder: input.sortOrder,
+        archived: input.archived,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.task_updated',
+        entityType: 'project_task',
+        entityId: task.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { task };
+    },
+
+    async setProjectTaskRaci(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getTask(app.database, input.taskId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const raci = await replaceTaskRaci(app.database, {
+        taskId: input.taskId,
+        workspaceId: project.workspaceId,
+        entries: input.entries.map((entry) => ({
+          userId: entry.userId,
+          role: raciRoleSchema.parse(entry.role),
+        })),
+      });
+      const task = await getTask(app.database, input.taskId);
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.task_raci_set',
+        entityType: 'project_task',
+        entityId: task.id,
+        metadata: {
+          projectId: project.id,
+          entries: input.entries,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { task, raci };
     },
 
     async onToolCall(toolName, ok, context) {

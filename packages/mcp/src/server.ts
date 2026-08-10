@@ -116,6 +116,59 @@ export type McpToolHandlers = {
   deleteWorkspaceMedia: (input: { mediaId: string }) => Promise<unknown>;
   /** NF-014 — redacted platform health snapshot (requires monitoring:read). */
   getPlatformStatus: () => Promise<unknown>;
+  /** NF-018 Project Delivery */
+  listProjectMilestones: (input: {
+    projectId: string;
+    includeArchived?: boolean;
+  }) => Promise<unknown>;
+  listProjectTasks: (input: {
+    projectId: string;
+    milestoneId?: string;
+    unassignedMilestone?: boolean;
+    includeArchived?: boolean;
+  }) => Promise<unknown>;
+  getProjectTask: (input: { taskId: string }) => Promise<unknown>;
+  createProjectMilestone: (input: {
+    projectId: string;
+    title: string;
+    description?: string | null;
+    status?: string;
+    targetDate?: string | null;
+    sortOrder?: number;
+  }) => Promise<unknown>;
+  updateProjectMilestone: (input: {
+    milestoneId: string;
+    title?: string;
+    description?: string | null;
+    status?: string;
+    targetDate?: string | null;
+    sortOrder?: number;
+    archived?: boolean;
+  }) => Promise<unknown>;
+  createProjectTask: (input: {
+    projectId: string;
+    title: string;
+    description?: string | null;
+    status?: string;
+    dueDate?: string | null;
+    milestoneId?: string | null;
+    sortOrder?: number;
+    raci?: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
+  }) => Promise<unknown>;
+  updateProjectTask: (input: {
+    taskId: string;
+    title?: string;
+    description?: string | null;
+    status?: string;
+    dueDate?: string | null;
+    milestoneId?: string | null;
+    sortOrder?: number;
+    archived?: boolean;
+  }) => Promise<unknown>;
+  setProjectTaskRaci: (input: {
+    taskId: string;
+    entries: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
+  }) => Promise<unknown>;
   onToolCall?: (
     toolName: string,
     ok: boolean,
@@ -582,6 +635,173 @@ export function createKnowledgeHubMcpServer(
     async () =>
       wrap('get_platform_status', 'monitoring:read', () =>
         handlers.getPlatformStatus(),
+      )(),
+  );
+
+  server.tool(
+    'list_project_milestones',
+    'List milestones for a project (Project Delivery). Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      includeArchived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_project_milestones',
+        'pm:read',
+        () => handlers.listProjectMilestones(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'list_project_tasks',
+    'List tasks for a project (optional milestone filter). Includes RACI. Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      milestoneId: z.string().uuid().optional(),
+      unassignedMilestone: z.boolean().optional(),
+      includeArchived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_project_tasks',
+        'pm:read',
+        () => handlers.listProjectTasks(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'get_project_task',
+    'Get one project task with RACI. Requires pm:read.',
+    { taskId: z.string().uuid() },
+    async (args) =>
+      wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
+  );
+
+  server.tool(
+    'create_project_milestone',
+    'Create a project milestone (live state). Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      title: z.string().min(1).max(200),
+      description: z.string().max(5000).nullable().optional(),
+      status: z.enum(['planned', 'active', 'done', 'cancelled']).optional(),
+      targetDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_project_milestone',
+        'pm:write',
+        () => handlers.createProjectMilestone(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'update_project_milestone',
+    'Update a project milestone (live state). Requires pm:write.',
+    {
+      milestoneId: z.string().uuid(),
+      title: z.string().min(1).max(200).optional(),
+      description: z.string().max(5000).nullable().optional(),
+      status: z.enum(['planned', 'active', 'done', 'cancelled']).optional(),
+      targetDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      archived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap('update_project_milestone', 'pm:write', () =>
+        handlers.updateProjectMilestone(args),
+      )(),
+  );
+
+  server.tool(
+    'create_project_task',
+    'Create a project task with optional RACI (exactly one A when set). Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      title: z.string().min(1).max(200),
+      description: z.string().max(10000).nullable().optional(),
+      status: z
+        .enum(['todo', 'in_progress', 'blocked', 'done', 'cancelled'])
+        .optional(),
+      dueDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      milestoneId: z.string().uuid().nullable().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      raci: z
+        .array(
+          z.object({
+            userId: z.string().uuid(),
+            role: z.enum(['R', 'A', 'C', 'I']),
+          }),
+        )
+        .max(50)
+        .optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_project_task',
+        'pm:write',
+        () => handlers.createProjectTask(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'update_project_task',
+    'Update a project task fields/status/due date. Requires pm:write.',
+    {
+      taskId: z.string().uuid(),
+      title: z.string().min(1).max(200).optional(),
+      description: z.string().max(10000).nullable().optional(),
+      status: z
+        .enum(['todo', 'in_progress', 'blocked', 'done', 'cancelled'])
+        .optional(),
+      dueDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      milestoneId: z.string().uuid().nullable().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      archived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap('update_project_task', 'pm:write', () => handlers.updateProjectTask(args))(),
+  );
+
+  server.tool(
+    'set_project_task_raci',
+    'Replace the RACI set for a task (workspace members only; at most one A). Requires pm:write.',
+    {
+      taskId: z.string().uuid(),
+      entries: z
+        .array(
+          z.object({
+            userId: z.string().uuid(),
+            role: z.enum(['R', 'A', 'C', 'I']),
+          }),
+        )
+        .max(50),
+    },
+    async (args) =>
+      wrap('set_project_task_raci', 'pm:write', () =>
+        handlers.setProjectTaskRaci(args),
       )(),
   );
 
