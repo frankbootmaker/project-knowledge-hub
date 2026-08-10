@@ -7,7 +7,14 @@ import {
   verifyPassword,
 } from '@project-knowledge-hub/auth';
 import { apiClients, sessions, users } from '@project-knowledge-hub/database';
-import { AppError, appLocaleSchema, emailNotificationPrefsPatchSchema, mergeEmailNotificationPrefs, passwordSchema } from '@project-knowledge-hub/domain';
+import {
+  AppError,
+  appLocaleSchema,
+  emailNotificationPrefsPatchSchema,
+  mergeEmailNotificationPrefs,
+  passwordSchema,
+  raciRoleSchema,
+} from '@project-knowledge-hub/domain';
 import { DEFAULT_MCP_SCOPES, MCP_SCOPES } from '@project-knowledge-hub/mcp';
 import {
   assertMutatingOrigin,
@@ -35,6 +42,7 @@ import {
 import { closeUserAccount } from '../lib/close-user.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { shouldSendOptionalEmail } from '../lib/notification-prefs.js';
+import { listAssignedTasksForUser } from '../lib/project-delivery.js';
 import { toPublicUser } from '../lib/public-user.js';
 
 const updateMeSchema = z.object({
@@ -86,6 +94,30 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     return { user: toPublicUser(user) };
+  });
+
+  app.get('/api/v1/me/tasks', async (request) => {
+    const principal = requireAuthenticated(request);
+    const query = z
+      .object({
+        role: raciRoleSchema.optional(),
+        includeArchived: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((value) => value === 'true'),
+      })
+      .parse(request.query ?? {});
+
+    const tasks = await listAssignedTasksForUser(
+      app.database,
+      principal.userId,
+      {
+        isSystemAdmin: principal.isSystemAdmin,
+        includeArchived: query.includeArchived,
+        role: query.role,
+      },
+    );
+    return { tasks };
   });
 
   app.patch('/api/v1/me/notification-prefs', async (request) => {

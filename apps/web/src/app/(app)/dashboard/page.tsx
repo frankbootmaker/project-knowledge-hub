@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { DashboardCollapsibleSection } from '../../../components/DashboardCollapsibleSection';
+import { DashboardMyTasks } from '../../../components/DashboardMyTasks';
 import {
   LinkButton,
   Page,
   PageHeader,
   Panel,
-  SectionHeader,
 } from '../../../components/ui';
 import { loadDashboardData } from '../../../lib/dashboard';
 import { requireSession } from '../../../lib/session';
@@ -67,17 +68,18 @@ export default async function DashboardPage() {
         }
       />
 
-      <section className="mb-8">
-        <SectionHeader
-          title={t('myWorkspaces')}
-          action={
-            data.workspaceTotal > 0 ? (
-              <Link href="/workspaces" className="kh-text-link">
-                {t('viewAllWorkspaces')}
-              </Link>
-            ) : null
-          }
-        />
+      <DashboardCollapsibleSection
+        storageKey="workspaces"
+        title={t('myWorkspaces')}
+        defaultOpen
+        action={
+          data.workspaceTotal > 0 ? (
+            <Link href="/workspaces" className="kh-text-link">
+              {t('viewAllWorkspaces')}
+            </Link>
+          ) : null
+        }
+      >
         {data.workspaces.length === 0 ? (
           <Panel>
             <p className="m-0 text-sm text-ink-muted">{t('emptyWorkspaces')}</p>
@@ -128,7 +130,7 @@ export default async function DashboardPage() {
             ) : null}
           </>
         )}
-      </section>
+      </DashboardCollapsibleSection>
 
       <section className="mb-8 grid gap-4 sm:grid-cols-2">
         <Link
@@ -159,8 +161,13 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <section>
-        <SectionHeader title={t('recentTitle')} />
+      <DashboardMyTasks tasks={data.myTasks} />
+
+      <DashboardCollapsibleSection
+        storageKey="recent"
+        title={t('recentTitle')}
+        defaultOpen
+      >
         {data.recent.length === 0 ? (
           <p className="m-0 text-sm text-ink-muted">{t('recentEmpty')}</p>
         ) : (
@@ -190,7 +197,7 @@ export default async function DashboardPage() {
             ))}
           </ul>
         )}
-      </section>
+      </DashboardCollapsibleSection>
     </Page>
   );
 }

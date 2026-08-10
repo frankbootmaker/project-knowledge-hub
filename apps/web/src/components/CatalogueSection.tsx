@@ -137,6 +137,7 @@ export function CatalogueSection({
   extraActions,
   showTitle = true,
   showList = true,
+  defaultSort = DEFAULT_SORT,
   className,
 }: {
   title: string;
@@ -161,6 +162,8 @@ export function CatalogueSection({
   showTitle?: boolean;
   /** When false, render only the toolbar (e.g. board/calendar body below). */
   showList?: boolean;
+  /** Initial sort (also treated as the “filters inactive” baseline). */
+  defaultSort?: SortOption;
   className?: string;
 }) {
   const t = useTranslations('workspaces');
@@ -170,7 +173,7 @@ export function CatalogueSection({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterValue, setFilterValue] = useState('all');
   const [languageFilter, setLanguageFilter] = useState('all');
-  const [sortOrder, setSortOrder] = useState<SortOption>(DEFAULT_SORT);
+  const [sortOrder, setSortOrder] = useState<SortOption>(defaultSort);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
 
@@ -247,7 +250,7 @@ export function CatalogueSection({
     searchQuery.trim() !== '' ||
     filterValue !== 'all' ||
     languageFilter !== 'all' ||
-    sortOrder !== DEFAULT_SORT ||
+    sortOrder !== defaultSort ||
     pageSize !== DEFAULT_PAGE_SIZE;
 
   function updateSearch(value: string) {

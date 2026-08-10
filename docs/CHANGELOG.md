@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **Project Delivery (NF-018, local):** milestones, tasks, due/target dates, RACI, and hybrid stakeholders (roster + reports-to org chart) under Projects; REST + project page UI; MCP `pm:read` / `pm:write` for live agent participation. Brief [`PROJECT_DELIVERY.md`](product/PROJECT_DELIVERY.md), ADR-015. Branch `feature/project-delivery` — not for Dokploy until local smoke is done.
+* **Project Delivery (NF-018, local):** milestones, epic → user story → task hierarchy, due/target dates, RACI + current-owner handoffs, task activity timeline, and hybrid stakeholders (roster + reports-to org chart) under Projects; REST + Manage-task modal + project page UI; MCP `pm:read` / `pm:write` for live agent participation. Dashboard **My tasks** (cross-project RACI assignments) plus collapsible workspaces/recent. Brief [`PROJECT_DELIVERY.md`](product/PROJECT_DELIVERY.md), ADR-015. Branch `feature/project-delivery` — not for Dokploy until local smoke is done.
 
 * **OIDC sign-in (Authentik):** optional OpenID Connect login beside local email/password; operator integration guide; session links IdP subject when configured.
 

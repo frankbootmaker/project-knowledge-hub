@@ -3,9 +3,8 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { workspaces } from '@project-knowledge-hub/database';
 import {
-  milestoneStatusSchema,
-  raciRoleSchema,
-  taskStatusSchema,
+  epicStatusSchema,
+  userStoryStatusSchema,
 } from '@project-knowledge-hub/domain';
 import {
   requireWorkspaceMaintainer,
@@ -17,17 +16,22 @@ import {
 } from '../plugins/auth.js';
 import { writeAuditEvent } from '../lib/identity.js';
 import {
+  addTaskComment,
+  createEpic,
+  createUserStory,
+  getEpic,
+  getUserStory,
+  handoffTask,
+  listEpics,
+  listTaskActivities,
+  listUserStories,
+  updateEpic,
+  updateUserStory,
+} from '../lib/project-agile.js';
+import {
   assertProjectNotArchived,
-  createMilestone,
-  createTask,
-  getMilestone,
   getTask,
-  listMilestones,
-  listTasks,
-  replaceTaskRaci,
   requireProjectContext,
-  updateMilestone,
-  updateTask,
 } from '../lib/project-delivery.js';
 
 async function workspaceOrgId(
@@ -42,65 +46,51 @@ async function workspaceOrgId(
   return workspace?.organizationId ?? null;
 }
 
-const dateStringSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .nullable();
-
-const raciEntrySchema = z.object({
-  userId: z.string().uuid(),
-  role: raciRoleSchema,
-});
-
-const createMilestoneSchema = z.object({
+const createEpicSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5000).nullable().optional(),
-  status: milestoneStatusSchema.optional(),
-  targetDate: dateStringSchema.optional(),
+  status: epicStatusSchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
 });
 
-const updateMilestoneSchema = z.object({
+const updateEpicSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(5000).nullable().optional(),
-  status: milestoneStatusSchema.optional(),
-  targetDate: dateStringSchema.optional(),
+  status: epicStatusSchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   archived: z.boolean().optional(),
 });
 
-const createTaskSchema = z.object({
+const createStorySchema = z.object({
+  epicId: z.string().uuid(),
   title: z.string().min(1).max(200),
-  description: z.string().max(10000).nullable().optional(),
-  status: taskStatusSchema.optional(),
-  dueDate: dateStringSchema.optional(),
-  milestoneId: z.string().uuid().nullable().optional(),
-  userStoryId: z.string().uuid().nullable().optional(),
-  currentOwnerUserId: z.string().uuid().nullable().optional(),
+  description: z.string().max(5000).nullable().optional(),
+  status: userStoryStatusSchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
-  raci: z.array(raciEntrySchema).max(50).optional(),
 });
 
-const updateTaskSchema = z.object({
+const updateStorySchema = z.object({
   title: z.string().min(1).max(200).optional(),
-  description: z.string().max(10000).nullable().optional(),
-  status: taskStatusSchema.optional(),
-  dueDate: dateStringSchema.optional(),
-  milestoneId: z.string().uuid().nullable().optional(),
-  userStoryId: z.string().uuid().nullable().optional(),
-  currentOwnerUserId: z.string().uuid().nullable().optional(),
+  description: z.string().max(5000).nullable().optional(),
+  status: userStoryStatusSchema.optional(),
+  epicId: z.string().uuid().optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   archived: z.boolean().optional(),
 });
 
-const replaceRaciSchema = z.object({
-  entries: z.array(raciEntrySchema).max(50),
+const commentSchema = z.object({
+  body: z.string().min(1).max(10000),
 });
 
-export async function registerProjectDeliveryRoutes(
+const handoffSchema = z.object({
+  toUserId: z.string().uuid(),
+  note: z.string().max(5000).nullable().optional(),
+});
+
+export async function registerProjectAgileRoutes(
   app: FastifyInstance,
 ): Promise<void> {
-  app.get('/api/v1/projects/:projectId/milestones', async (request) => {
+  app.get('/api/v1/projects/:projectId/epics', async (request) => {
     const principal = requireAuthenticated(request);
     const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
     const query = z
@@ -116,23 +106,23 @@ export async function registerProjectDeliveryRoutes(
     requireWorkspaceView(principal, project.workspaceId);
 
     return {
-      milestones: await listMilestones(app.database, project.id, {
+      epics: await listEpics(app.database, project.id, {
         includeArchived: query.includeArchived,
       }),
     };
   });
 
-  app.post('/api/v1/projects/:projectId/milestones', async (request) => {
+  app.post('/api/v1/projects/:projectId/epics', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
     const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
-    const body = createMilestoneSchema.parse(request.body);
+    const body = createEpicSchema.parse(request.body);
 
     const { project } = await requireProjectContext(app.database, params.projectId);
     requireWorkspaceMaintainer(principal, project.workspaceId);
     assertProjectNotArchived(project);
 
-    const milestone = await createMilestone(app.database, {
+    const epic = await createEpic(app.database, {
       projectId: project.id,
       ...body,
     });
@@ -141,53 +131,49 @@ export async function registerProjectDeliveryRoutes(
       organizationId: await workspaceOrgId(app, project.workspaceId),
       actorType: 'user',
       actorId: principal.userId,
-      action: 'project.milestone_created',
-      entityType: 'project_milestone',
-      entityId: milestone.id,
-      metadata: { projectId: project.id, title: milestone.title },
+      action: 'project.epic_created',
+      entityType: 'project_epic',
+      entityId: epic.id,
+      metadata: { projectId: project.id, title: epic.title },
       ipAddress: request.ip,
     });
 
-    return { milestone };
+    return { epic };
   });
 
-  app.patch('/api/v1/project-milestones/:milestoneId', async (request) => {
+  app.patch('/api/v1/project-epics/:epicId', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
-    const params = z.object({ milestoneId: z.string().uuid() }).parse(request.params);
-    const body = updateMilestoneSchema.parse(request.body);
+    const params = z.object({ epicId: z.string().uuid() }).parse(request.params);
+    const body = updateEpicSchema.parse(request.body);
 
-    const existing = await getMilestone(app.database, params.milestoneId);
+    const existing = await getEpic(app.database, params.epicId);
     const { project } = await requireProjectContext(app.database, existing.projectId);
     requireWorkspaceMaintainer(principal, project.workspaceId);
     assertProjectNotArchived(project);
 
-    const milestone = await updateMilestone(app.database, params.milestoneId, body);
+    const epic = await updateEpic(app.database, params.epicId, body);
 
     await writeAuditEvent(app.database, {
       organizationId: await workspaceOrgId(app, project.workspaceId),
       actorType: 'user',
       actorId: principal.userId,
-      action: 'project.milestone_updated',
-      entityType: 'project_milestone',
-      entityId: milestone.id,
+      action: 'project.epic_updated',
+      entityType: 'project_epic',
+      entityId: epic.id,
       metadata: { projectId: project.id, ...body },
       ipAddress: request.ip,
     });
 
-    return { milestone };
+    return { epic };
   });
 
-  app.get('/api/v1/projects/:projectId/tasks', async (request) => {
+  app.get('/api/v1/projects/:projectId/user-stories', async (request) => {
     const principal = requireAuthenticated(request);
     const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
     const query = z
       .object({
-        milestoneId: z.string().uuid().optional(),
-        unassignedMilestone: z
-          .enum(['true', 'false'])
-          .optional()
-          .transform((value) => value === 'true'),
+        epicId: z.string().uuid().optional(),
         includeArchived: z
           .enum(['true', 'false'])
           .optional()
@@ -198,32 +184,26 @@ export async function registerProjectDeliveryRoutes(
     const { project } = await requireProjectContext(app.database, params.projectId);
     requireWorkspaceView(principal, project.workspaceId);
 
-    const milestoneId = query.unassignedMilestone
-      ? null
-      : query.milestoneId;
-
     return {
-      tasks: await listTasks(app.database, project.id, {
-        milestoneId,
+      userStories: await listUserStories(app.database, project.id, {
+        epicId: query.epicId,
         includeArchived: query.includeArchived,
       }),
     };
   });
 
-  app.post('/api/v1/projects/:projectId/tasks', async (request) => {
+  app.post('/api/v1/projects/:projectId/user-stories', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
     const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
-    const body = createTaskSchema.parse(request.body);
+    const body = createStorySchema.parse(request.body);
 
     const { project } = await requireProjectContext(app.database, params.projectId);
     requireWorkspaceMaintainer(principal, project.workspaceId);
     assertProjectNotArchived(project);
 
-    const task = await createTask(app.database, {
+    const userStory = await createUserStory(app.database, {
       projectId: project.id,
-      workspaceId: project.workspaceId,
-      createdBy: principal.userId,
       ...body,
     });
 
@@ -231,17 +211,44 @@ export async function registerProjectDeliveryRoutes(
       organizationId: await workspaceOrgId(app, project.workspaceId),
       actorType: 'user',
       actorId: principal.userId,
-      action: 'project.task_created',
-      entityType: 'project_task',
-      entityId: task.id,
-      metadata: { projectId: project.id, title: task.title },
+      action: 'project.user_story_created',
+      entityType: 'project_user_story',
+      entityId: userStory.id,
+      metadata: { projectId: project.id, title: userStory.title },
       ipAddress: request.ip,
     });
 
-    return { task };
+    return { userStory };
   });
 
-  app.get('/api/v1/project-tasks/:taskId', async (request) => {
+  app.patch('/api/v1/project-user-stories/:storyId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ storyId: z.string().uuid() }).parse(request.params);
+    const body = updateStorySchema.parse(request.body);
+
+    const existing = await getUserStory(app.database, params.storyId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    const userStory = await updateUserStory(app.database, params.storyId, body);
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.user_story_updated',
+      entityType: 'project_user_story',
+      entityId: userStory.id,
+      metadata: { projectId: project.id, ...body },
+      ipAddress: request.ip,
+    });
+
+    return { userStory };
+  });
+
+  app.get('/api/v1/project-tasks/:taskId/activities', async (request) => {
     const principal = requireAuthenticated(request);
     const params = z.object({ taskId: z.string().uuid() }).parse(request.params);
 
@@ -249,70 +256,75 @@ export async function registerProjectDeliveryRoutes(
     const { project } = await requireProjectContext(app.database, task.projectId);
     requireWorkspaceView(principal, project.workspaceId);
 
-    return { task };
+    return {
+      activities: await listTaskActivities(app.database, params.taskId),
+    };
   });
 
-  app.patch('/api/v1/project-tasks/:taskId', async (request) => {
+  app.post('/api/v1/project-tasks/:taskId/comments', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
     const params = z.object({ taskId: z.string().uuid() }).parse(request.params);
-    const body = updateTaskSchema.parse(request.body);
+    const body = commentSchema.parse(request.body);
 
-    const existing = await getTask(app.database, params.taskId);
-    const { project } = await requireProjectContext(app.database, existing.projectId);
+    const task = await getTask(app.database, params.taskId);
+    const { project } = await requireProjectContext(app.database, task.projectId);
     requireWorkspaceMaintainer(principal, project.workspaceId);
     assertProjectNotArchived(project);
 
-    const task = await updateTask(app.database, params.taskId, {
-      ...body,
+    const activity = await addTaskComment(app.database, {
+      taskId: params.taskId,
       actorUserId: principal.userId,
-      workspaceId: project.workspaceId,
+      body: body.body,
     });
 
     await writeAuditEvent(app.database, {
       organizationId: await workspaceOrgId(app, project.workspaceId),
       actorType: 'user',
       actorId: principal.userId,
-      action: 'project.task_updated',
+      action: 'project.task_commented',
       entityType: 'project_task',
       entityId: task.id,
-      metadata: { projectId: project.id, ...body },
+      metadata: { projectId: project.id },
       ipAddress: request.ip,
     });
 
-    return { task };
+    return { activity };
   });
 
-  app.put('/api/v1/project-tasks/:taskId/raci', async (request) => {
+  app.post('/api/v1/project-tasks/:taskId/handoff', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
     const params = z.object({ taskId: z.string().uuid() }).parse(request.params);
-    const body = replaceRaciSchema.parse(request.body);
+    const body = handoffSchema.parse(request.body);
 
     const existing = await getTask(app.database, params.taskId);
     const { project } = await requireProjectContext(app.database, existing.projectId);
     requireWorkspaceMaintainer(principal, project.workspaceId);
     assertProjectNotArchived(project);
 
-    const raci = await replaceTaskRaci(app.database, {
+    const task = await handoffTask(app.database, {
       taskId: params.taskId,
       workspaceId: project.workspaceId,
-      entries: body.entries,
       actorUserId: principal.userId,
+      toUserId: body.toUserId,
+      note: body.note,
     });
-    const task = await getTask(app.database, params.taskId);
 
     await writeAuditEvent(app.database, {
       organizationId: await workspaceOrgId(app, project.workspaceId),
       actorType: 'user',
       actorId: principal.userId,
-      action: 'project.task_raci_set',
+      action: 'project.task_handoff',
       entityType: 'project_task',
       entityId: task.id,
-      metadata: { projectId: project.id, entries: body.entries },
+      metadata: {
+        projectId: project.id,
+        toUserId: body.toUserId,
+      },
       ipAddress: request.ip,
     });
 
-    return { task, raci };
+    return { task };
   });
 }

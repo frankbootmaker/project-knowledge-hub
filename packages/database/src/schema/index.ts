@@ -979,6 +979,52 @@ export const projectMilestones = pgTable(
   ],
 );
 
+/** Agile epics (orthogonal to milestone timeboxes). */
+export const projectEpics = pgTable(
+  'project_epics',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status').notNull().default('planned'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('project_epics_project_id_idx').on(table.projectId),
+    index('project_epics_project_status_idx').on(table.projectId, table.status),
+  ],
+);
+
+/** User stories under an epic. */
+export const projectUserStories = pgTable(
+  'project_user_stories',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    epicId: uuid('epic_id')
+      .notNull()
+      .references(() => projectEpics.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status').notNull().default('planned'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('project_user_stories_project_id_idx').on(table.projectId),
+    index('project_user_stories_epic_id_idx').on(table.epicId),
+    index('project_user_stories_project_status_idx').on(table.projectId, table.status),
+  ],
+);
+
 /** Project delivery tasks (NF-018 / ADR-015). */
 export const projectTasks = pgTable(
   'project_tasks',
@@ -990,6 +1036,9 @@ export const projectTasks = pgTable(
     milestoneId: uuid('milestone_id').references(() => projectMilestones.id, {
       onDelete: 'set null',
     }),
+    userStoryId: uuid('user_story_id').references(() => projectUserStories.id, {
+      onDelete: 'set null',
+    }),
     title: text('title').notNull(),
     description: text('description'),
     status: text('status').notNull().default('todo'),
@@ -998,13 +1047,44 @@ export const projectTasks = pgTable(
     createdBy: uuid('created_by').references(() => users.id, {
       onDelete: 'set null',
     }),
+    /** Ball-in-court owner; distinct from standing RACI. */
+    currentOwnerUserId: uuid('current_owner_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_tasks_project_id_idx').on(table.projectId),
     index('project_tasks_milestone_id_idx').on(table.milestoneId),
+    index('project_tasks_user_story_id_idx').on(table.userStoryId),
+    index('project_tasks_project_user_story_idx').on(table.projectId, table.userStoryId),
+    index('project_tasks_current_owner_user_id_idx').on(table.currentOwnerUserId),
     index('project_tasks_project_status_idx').on(table.projectId, table.status),
+  ],
+);
+
+/** Append-only activity timeline for a task (comments, handoffs, status, …). */
+export const projectTaskActivities = pgTable(
+  'project_task_activities',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => projectTasks.id, { onDelete: 'cascade' }),
+    actorUserId: uuid('actor_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    type: text('type').notNull(),
+    body: text('body'),
+    metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('project_task_activities_task_id_idx').on(table.taskId),
+    index('project_task_activities_task_created_idx').on(table.taskId, table.createdAt),
   ],
 );
 

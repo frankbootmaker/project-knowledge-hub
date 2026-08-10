@@ -152,6 +152,8 @@ export type McpToolHandlers = {
     status?: string;
     dueDate?: string | null;
     milestoneId?: string | null;
+    userStoryId?: string | null;
+    currentOwnerUserId?: string | null;
     sortOrder?: number;
     raci?: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
   }) => Promise<unknown>;
@@ -162,12 +164,65 @@ export type McpToolHandlers = {
     status?: string;
     dueDate?: string | null;
     milestoneId?: string | null;
+    userStoryId?: string | null;
+    currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
   }) => Promise<unknown>;
   setProjectTaskRaci: (input: {
     taskId: string;
     entries: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
+  }) => Promise<unknown>;
+  listProjectEpics: (input: {
+    projectId: string;
+    includeArchived?: boolean;
+  }) => Promise<unknown>;
+  createProjectEpic: (input: {
+    projectId: string;
+    title: string;
+    description?: string | null;
+    status?: string;
+    sortOrder?: number;
+  }) => Promise<unknown>;
+  updateProjectEpic: (input: {
+    epicId: string;
+    title?: string;
+    description?: string | null;
+    status?: string;
+    sortOrder?: number;
+    archived?: boolean;
+  }) => Promise<unknown>;
+  listProjectUserStories: (input: {
+    projectId: string;
+    epicId?: string;
+    includeArchived?: boolean;
+  }) => Promise<unknown>;
+  createProjectUserStory: (input: {
+    projectId: string;
+    epicId: string;
+    title: string;
+    description?: string | null;
+    status?: string;
+    sortOrder?: number;
+  }) => Promise<unknown>;
+  updateProjectUserStory: (input: {
+    storyId: string;
+    title?: string;
+    description?: string | null;
+    status?: string;
+    epicId?: string;
+    sortOrder?: number;
+    archived?: boolean;
+  }) => Promise<unknown>;
+  listProjectTaskActivities: (input: { taskId: string }) => Promise<unknown>;
+  addProjectTaskComment: (input: {
+    taskId: string;
+    body: string;
+  }) => Promise<unknown>;
+  handoffProjectTask: (input: {
+    taskId: string;
+    toUserId: string;
+    note?: string | null;
   }) => Promise<unknown>;
   listProjectStakeholders: (input: { projectId: string }) => Promise<unknown>;
   createProjectStakeholder: (input: {
@@ -749,7 +804,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task with optional RACI (exactly one A when set). Requires pm:write.',
+    'Create a project task with optional RACI, user story, and current owner. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -763,6 +818,8 @@ export function createKnowledgeHubMcpServer(
         .nullable()
         .optional(),
       milestoneId: z.string().uuid().nullable().optional(),
+      userStoryId: z.string().uuid().nullable().optional(),
+      currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       raci: z
         .array(
@@ -785,7 +842,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date. Requires pm:write.',
+    'Update a project task fields/status/due date/story/owner. Requires pm:write.',
     {
       taskId: z.string().uuid(),
       title: z.string().min(1).max(200).optional(),
@@ -799,6 +856,8 @@ export function createKnowledgeHubMcpServer(
         .nullable()
         .optional(),
       milestoneId: z.string().uuid().nullable().optional(),
+      userStoryId: z.string().uuid().nullable().optional(),
+      currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
     },
@@ -823,6 +882,150 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('set_project_task_raci', 'pm:write', () =>
         handlers.setProjectTaskRaci(args),
+      )(),
+  );
+
+  const epicStatusEnum = z.enum(['planned', 'active', 'done', 'cancelled']);
+
+  server.tool(
+    'list_project_epics',
+    'List epics for a project. Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      includeArchived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_project_epics',
+        'pm:read',
+        () => handlers.listProjectEpics(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'create_project_epic',
+    'Create a project epic. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      title: z.string().min(1).max(200),
+      description: z.string().max(5000).nullable().optional(),
+      status: epicStatusEnum.optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_project_epic',
+        'pm:write',
+        () => handlers.createProjectEpic(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'update_project_epic',
+    'Update a project epic. Requires pm:write.',
+    {
+      epicId: z.string().uuid(),
+      title: z.string().min(1).max(200).optional(),
+      description: z.string().max(5000).nullable().optional(),
+      status: epicStatusEnum.optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      archived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap('update_project_epic', 'pm:write', () => handlers.updateProjectEpic(args))(),
+  );
+
+  server.tool(
+    'list_project_user_stories',
+    'List user stories for a project (optional epic filter). Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      epicId: z.string().uuid().optional(),
+      includeArchived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_project_user_stories',
+        'pm:read',
+        () => handlers.listProjectUserStories(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'create_project_user_story',
+    'Create a user story under an epic. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      epicId: z.string().uuid(),
+      title: z.string().min(1).max(200),
+      description: z.string().max(5000).nullable().optional(),
+      status: epicStatusEnum.optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_project_user_story',
+        'pm:write',
+        () => handlers.createProjectUserStory(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'update_project_user_story',
+    'Update a user story. Requires pm:write.',
+    {
+      storyId: z.string().uuid(),
+      title: z.string().min(1).max(200).optional(),
+      description: z.string().max(5000).nullable().optional(),
+      status: epicStatusEnum.optional(),
+      epicId: z.string().uuid().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      archived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap('update_project_user_story', 'pm:write', () =>
+        handlers.updateProjectUserStory(args),
+      )(),
+  );
+
+  server.tool(
+    'list_project_task_activities',
+    'List activity timeline for a task. Requires pm:read.',
+    { taskId: z.string().uuid() },
+    async (args) =>
+      wrap('list_project_task_activities', 'pm:read', () =>
+        handlers.listProjectTaskActivities(args),
+      )(),
+  );
+
+  server.tool(
+    'add_project_task_comment',
+    'Add a comment to a task activity timeline. Requires pm:write.',
+    {
+      taskId: z.string().uuid(),
+      body: z.string().min(1).max(10000),
+    },
+    async (args) =>
+      wrap('add_project_task_comment', 'pm:write', () =>
+        handlers.addProjectTaskComment(args),
+      )(),
+  );
+
+  server.tool(
+    'handoff_project_task',
+    'Hand off current owner of a task (does not change RACI). Requires pm:write.',
+    {
+      taskId: z.string().uuid(),
+      toUserId: z.string().uuid(),
+      note: z.string().max(5000).nullable().optional(),
+    },
+    async (args) =>
+      wrap('handoff_project_task', 'pm:write', () =>
+        handlers.handoffProjectTask(args),
       )(),
   );
 

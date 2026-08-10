@@ -25,10 +25,32 @@ export type DashboardRecentItem = {
   updatedAt: string;
 };
 
+export type DashboardAssignedTask = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  dueDate: string | null;
+  myRole: 'R' | 'A' | 'C' | 'I';
+  projectName: string;
+  projectSlug: string;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
+  milestoneTitle: string | null;
+  currentOwner?: {
+    userId: string;
+    displayName: string;
+    email: string;
+  } | null;
+  updatedAt: string;
+};
+
 export type DashboardData = {
   workspaces: DashboardWorkspace[];
   workspaceTotal: number;
   recent: DashboardRecentItem[];
+  myTasks: DashboardAssignedTask[];
   primaryWorkspaceId: string | null;
 };
 
@@ -96,12 +118,15 @@ export async function loadDashboardData(
   );
   const tileWorkspaces = sorted.slice(0, DASHBOARD_WORKSPACE_TILE_LIMIT);
 
-  const bundles = await Promise.all(
-    tileWorkspaces.map(async (workspace) => {
-      const bundle = await loadWorkspaceBundle(workspace);
-      return { workspace, ...bundle };
-    }),
-  );
+  const [bundles, tasksRes] = await Promise.all([
+    Promise.all(
+      tileWorkspaces.map(async (workspace) => {
+        const bundle = await loadWorkspaceBundle(workspace);
+        return { workspace, ...bundle };
+      }),
+    ),
+    apiFetch('/api/v1/me/tasks'),
+  ]);
 
   const dashboardWorkspaces: DashboardWorkspace[] = bundles.map(
     ({ workspace, projects, systems, records }) => ({
@@ -150,10 +175,15 @@ export async function loadDashboardData(
     )
     .slice(0, DASHBOARD_RECENT_LIMIT);
 
+  const myTasks = tasksRes.ok
+    ? ((await tasksRes.json()) as { tasks: DashboardAssignedTask[] }).tasks
+    : [];
+
   return {
     workspaces: dashboardWorkspaces,
     workspaceTotal: workspaces.length,
     recent,
+    myTasks,
     primaryWorkspaceId: tileWorkspaces[0]?.id ?? null,
   };
 }

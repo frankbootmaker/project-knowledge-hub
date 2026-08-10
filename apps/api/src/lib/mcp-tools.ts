@@ -10,11 +10,13 @@ import {
 import {
   AppError,
   buildKnowledgeRecordMetadata,
+  epicStatusSchema,
   milestoneStatusSchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
   recordTypeSchema,
   taskStatusSchema,
+  userStoryStatusSchema,
 } from '@project-knowledge-hub/domain';
 import {
   truncateContent,
@@ -61,6 +63,19 @@ import {
   updateMilestone,
   updateTask,
 } from './project-delivery.js';
+import {
+  addTaskComment,
+  createEpic,
+  createUserStory,
+  getEpic,
+  getUserStory,
+  handoffTask,
+  listEpics,
+  listTaskActivities,
+  listUserStories,
+  updateEpic,
+  updateUserStory,
+} from './project-agile.js';
 import {
   deleteProjectStakeholder,
   getRosterStakeholder,
@@ -1160,6 +1175,8 @@ export function createMcpToolHandlers(
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
         dueDate: input.dueDate,
         milestoneId: input.milestoneId,
+        userStoryId: input.userStoryId,
+        currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         createdBy: actingUserId,
         raci: input.raci?.map((entry) => ({
@@ -1197,8 +1214,12 @@ export function createMcpToolHandlers(
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
         dueDate: input.dueDate,
         milestoneId: input.milestoneId,
+        userStoryId: input.userStoryId,
+        currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         archived: input.archived,
+        actorUserId: actingUserId,
+        workspaceId: project.workspaceId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -1226,6 +1247,7 @@ export function createMcpToolHandlers(
           userId: entry.userId,
           role: raciRoleSchema.parse(entry.role),
         })),
+        actorUserId: actingUserId,
       });
       const task = await getTask(app.database, input.taskId);
       await writeAuditEvent(app.database, {
@@ -1244,6 +1266,196 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { task, raci };
+    },
+
+    async listProjectEpics(input) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        epics: await listEpics(app.database, input.projectId, {
+          includeArchived: input.includeArchived,
+        }),
+      };
+    },
+
+    async createProjectEpic(input) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const epic = await createEpic(app.database, {
+        projectId: project.id,
+        title: input.title,
+        description: input.description,
+        status: input.status ? epicStatusSchema.parse(input.status) : undefined,
+        sortOrder: input.sortOrder,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.epic_created',
+        entityType: 'project_epic',
+        entityId: epic.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { epic };
+    },
+
+    async updateProjectEpic(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getEpic(app.database, input.epicId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const epic = await updateEpic(app.database, input.epicId, {
+        title: input.title,
+        description: input.description,
+        status: input.status ? epicStatusSchema.parse(input.status) : undefined,
+        sortOrder: input.sortOrder,
+        archived: input.archived,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.epic_updated',
+        entityType: 'project_epic',
+        entityId: epic.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { epic };
+    },
+
+    async listProjectUserStories(input) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        userStories: await listUserStories(app.database, input.projectId, {
+          epicId: input.epicId,
+          includeArchived: input.includeArchived,
+        }),
+      };
+    },
+
+    async createProjectUserStory(input) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const userStory = await createUserStory(app.database, {
+        projectId: project.id,
+        epicId: input.epicId,
+        title: input.title,
+        description: input.description,
+        status: input.status
+          ? userStoryStatusSchema.parse(input.status)
+          : undefined,
+        sortOrder: input.sortOrder,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.user_story_created',
+        entityType: 'project_user_story',
+        entityId: userStory.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { userStory };
+    },
+
+    async updateProjectUserStory(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getUserStory(app.database, input.storyId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const userStory = await updateUserStory(app.database, input.storyId, {
+        title: input.title,
+        description: input.description,
+        status: input.status
+          ? userStoryStatusSchema.parse(input.status)
+          : undefined,
+        epicId: input.epicId,
+        sortOrder: input.sortOrder,
+        archived: input.archived,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.user_story_updated',
+        entityType: 'project_user_story',
+        entityId: userStory.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { userStory };
+    },
+
+    async listProjectTaskActivities(input) {
+      const task = await getTask(app.database, input.taskId);
+      await requirePmProject(app, client, task.projectId);
+      return {
+        activities: await listTaskActivities(app.database, input.taskId),
+      };
+    },
+
+    async addProjectTaskComment(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getTask(app.database, input.taskId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const activity = await addTaskComment(app.database, {
+        taskId: input.taskId,
+        actorUserId: actingUserId,
+        body: input.body,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.task_commented',
+        entityType: 'project_task',
+        entityId: existing.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { activity };
+    },
+
+    async handoffProjectTask(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getTask(app.database, input.taskId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const task = await handoffTask(app.database, {
+        taskId: input.taskId,
+        workspaceId: project.workspaceId,
+        actorUserId: actingUserId,
+        toUserId: input.toUserId,
+        note: input.note,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.task_handoff',
+        entityType: 'project_task',
+        entityId: task.id,
+        metadata: {
+          projectId: project.id,
+          toUserId: input.toUserId,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { task };
     },
 
     async listProjectStakeholders(input) {

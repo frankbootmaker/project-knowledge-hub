@@ -42,10 +42,19 @@ Knowledge records stay under ADR-013: agents **draft** docs; delivery state is *
 ```text
 projects
   ├── project_stakeholders (durable roster + optional reports_to_user_id)
-  └── project_milestones
-        └── project_tasks (milestone optional)
-              └── project_task_raci (user_id + role; unique A per task)
+  ├── project_epics
+  │     └── project_user_stories
+  │           └── project_tasks (story optional)
+  ├── project_milestones          ← optional timeboxes (orthogonal to epic/story)
+  └── project_tasks
+        ├── milestone_id (optional)
+        ├── user_story_id (optional)
+        ├── current_owner_user_id  ← ball-in-court (≠ RACI)
+        ├── project_task_raci
+        └── project_task_activities
 ```
+
+Milestones remain **timeboxes**. Agile structure is **Epic → User story → Task**. A task may link to a story and/or a milestone.
 
 ### Stakeholders (hybrid)
 
@@ -57,15 +66,18 @@ projects
 
 ### Status sets
 
-* Milestone: `planned` \| `active` \| `done` \| `cancelled`
+* Milestone / Epic / User story: `planned` \| `active` \| `done` \| `cancelled`
 * Task: `todo` \| `in_progress` \| `blocked` \| `done` \| `cancelled`
 
-### RACI rules
+### RACI vs current owner
 
-* Roles: `R` (Responsible), `A` (Accountable), `C` (Consulted), `I` (Informed)
-* One user may hold at most one RACI role on a given task
-* Exactly zero or one `A` row per task; creating/updating must enforce uniqueness
-* All `user_id` values must be active members of the project’s workspace
+* Standing **RACI** (`R`/`A`/`C`/`I`) is unchanged (one user per task; at most one `A`)
+* **`current_owner_user_id`** is ball-in-court; handoff moves owner and writes an activity event **without** rewriting RACI
+* Default owner on create: Responsible → Accountable → `createdBy`
+
+### Activity timeline
+
+Append-only `project_task_activities`: `created`, `status_changed`, `comment`, `handoff`, `raci_changed`, `fields_updated`, `owner_set`.
 
 ## APIs (REST)
 
@@ -74,16 +86,24 @@ projects
 | `GET` | `/api/v1/projects/:projectId/milestones` | List |
 | `POST` | `/api/v1/projects/:projectId/milestones` | Create (maintainer+) |
 | `PATCH` | `/api/v1/project-milestones/:milestoneId` | Update |
+| `GET`/`POST` | `/api/v1/projects/:projectId/epics` | List / create |
+| `PATCH` | `/api/v1/project-epics/:epicId` | Update |
+| `GET`/`POST` | `/api/v1/projects/:projectId/user-stories` | List (`?epicId=`) / create |
+| `PATCH` | `/api/v1/project-user-stories/:storyId` | Update |
 | `GET` | `/api/v1/projects/:projectId/tasks` | List (`?milestoneId=`) |
-| `POST` | `/api/v1/projects/:projectId/tasks` | Create; optional `raci` |
-| `GET` | `/api/v1/project-tasks/:taskId` | Detail + RACI |
-| `PATCH` | `/api/v1/project-tasks/:taskId` | Update fields / milestone |
+| `POST` | `/api/v1/projects/:projectId/tasks` | Create; optional `raci`, `userStoryId`, `currentOwnerUserId` |
+| `GET` | `/api/v1/project-tasks/:taskId` | Detail + RACI + owner + story |
+| `PATCH` | `/api/v1/project-tasks/:taskId` | Update fields / milestone / story / owner |
 | `PUT` | `/api/v1/project-tasks/:taskId/raci` | Replace RACI set |
+| `GET` | `/api/v1/project-tasks/:taskId/activities` | Timeline |
+| `POST` | `/api/v1/project-tasks/:taskId/comments` | Comment |
+| `POST` | `/api/v1/project-tasks/:taskId/handoff` | `{ toUserId, note? }` |
 | `GET` | `/api/v1/projects/:projectId/stakeholders` | Unified roster + owner + RACI |
 | `POST` | `/api/v1/projects/:projectId/stakeholders` | Upsert roster row |
 | `PATCH` | `/api/v1/project-stakeholders/:id` | Update roster row |
 | `DELETE` | `/api/v1/project-stakeholders/:id` | Remove roster row only |
 | `GET` | `/api/v1/workspaces/:workspaceId/members` | Active members (view) for pickers |
+| `GET` | `/api/v1/me/tasks` | Cross-project tasks where the caller holds a RACI role (`?role=`, `?includeArchived=`) |
 
 Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archived projects are read-only.
 
@@ -91,8 +111,8 @@ Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archiv
 
 | Scope | Tools |
 | --- | --- |
-| `pm:read` | `list_project_milestones`, `list_project_tasks`, `get_project_task`, `list_project_stakeholders` |
-| `pm:write` | `create_project_milestone`, `update_project_milestone`, `create_project_task`, `update_project_task`, `set_project_task_raci`, `create_project_stakeholder`, `update_project_stakeholder`, `delete_project_stakeholder` |
+| `pm:read` | milestones/tasks/epics/stories/activities/stakeholders list + `get_project_task` |
+| `pm:write` | create/update milestone, epic, story, task; `set_project_task_raci`; `add_project_task_comment`; `handoff_project_task`; stakeholder CRUD |
 
 `pm:write` requires `actingUserId` + non-empty `allowedWorkspaceIds` (same gate pattern as `knowledge:write`). Optional `allowedProjectIds` restricts project scope. Mutations audit as `actorType: api_client`.
 
@@ -103,12 +123,14 @@ Not in `DEFAULT_MCP_SCOPES`.
 Project detail page gains a **Delivery** section using the same catalogue **search / filter / Add** chrome as linked systems & knowledge:
 
 * View modes: **List** (inline), **Board** / **Calendar** in a full-width modal
-* Flat list of milestones and tasks (badges + status filter)
-* **Add** opens one modal: create a task, or tick **Is milestone** to create a milestone instead
-* Board: drag tasks between status columns; milestones shown as chips above
+* Catalogue list of epics, stories, milestones, and tasks (badges + status filter); story/owner chips on tasks
+* **Add** kind select: task / milestone / epic / user story
+* **Manage task** modal: fields, current owner + handoff, standing RACI summary, activity timeline + comments
+* Board: drag tasks between status columns; owner/story chips; Manage on cards
 * Calendar: tasks by due date, milestones by target date
 * Inline status changes for maintainers; RACI (A/R) on task create
 * **Stakeholders** section (same catalogue chrome): list with contact details; **Org chart** full modal from reports-to
+* Home **Dashboard**: collapsible My workspaces / Recently updated; **My tasks** catalogue + Manage modal
 
 ## Non-goals
 
@@ -119,7 +141,7 @@ Project detail page gains a **Delivery** section using the same catalogue **sear
 
 ## Local verification
 
-1. Migrate DB (`0032_project_delivery`)
-2. Open a project → Delivery → create milestone + task + set RACI (one A)
-3. Grant an API client `pm:read` + `pm:write` → MCP list/create/update task
+1. Migrate DB (`0032`–`0034`)
+2. Open a project → Delivery → create epic → story → task with owner; Manage → comment + handoff
+3. Grant an API client `pm:read` + `pm:write` → MCP list/create/update task / handoff
 4. Confirm audit events for agent mutations

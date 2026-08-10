@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   AppError,
+  epicStatusSchema,
   milestoneStatusSchema,
   projectStakeholderRoleSchema,
   projectStatusSchema,
   raciRoleSchema,
+  taskActivityTypeSchema,
   taskStatusSchema,
+  userStoryStatusSchema,
 } from './index.js';
 
 describe('domain foundations', () => {
@@ -17,6 +20,9 @@ describe('domain foundations', () => {
     expect(milestoneStatusSchema.parse('planned')).toBe('planned');
     expect(taskStatusSchema.parse('in_progress')).toBe('in_progress');
     expect(raciRoleSchema.parse('A')).toBe('A');
+    expect(epicStatusSchema.parse('active')).toBe('active');
+    expect(userStoryStatusSchema.parse('done')).toBe('done');
+    expect(taskActivityTypeSchema.parse('handoff')).toBe('handoff');
   });
 
   it('validates project stakeholder roles', () => {

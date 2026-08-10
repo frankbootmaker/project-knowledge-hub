@@ -9,6 +9,7 @@ import {
 } from './CatalogueSection';
 import { ProjectDeliveryBoard } from './ProjectDeliveryBoard';
 import { ProjectDeliveryCalendar } from './ProjectDeliveryCalendar';
+import { ProjectTaskManageModal } from './ProjectTaskManageModal';
 import {
   Badge,
   Button,
@@ -37,11 +38,38 @@ type Milestone = {
   updatedAt?: string;
 };
 
+type Epic = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type UserStory = {
+  id: string;
+  epicId: string;
+  title: string;
+  description: string | null;
+  status: string;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 type RaciEntry = {
   userId: string;
   displayName: string;
   email: string;
   role: 'R' | 'A' | 'C' | 'I';
+};
+
+type TaskOwner = {
+  userId: string;
+  displayName: string;
+  email: string;
 };
 
 type Task = {
@@ -51,6 +79,12 @@ type Task = {
   status: string;
   dueDate: string | null;
   milestoneId: string | null;
+  userStoryId: string | null;
+  userStoryTitle: string | null;
+  epicId: string | null;
+  epicTitle: string | null;
+  currentOwnerUserId: string | null;
+  currentOwner: TaskOwner | null;
   raci: RaciEntry[];
   createdAt?: string;
   updatedAt?: string;
@@ -63,13 +97,22 @@ type Member = {
 };
 
 const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
+const EPIC_STATUSES = MILESTONE_STATUSES;
+const STORY_STATUSES = MILESTONE_STATUSES;
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
 const VIEW_MODES = ['list', 'board', 'calendar'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
-type DeliveryKind = 'milestone' | 'task';
+type DeliveryKind = 'epic' | 'story' | 'milestone' | 'task';
+type CreateKind = 'task' | 'milestone' | 'epic' | 'story';
 
 function parseItemId(id: string): { kind: DeliveryKind; entityId: string } | null {
+  if (id.startsWith('epic:')) {
+    return { kind: 'epic', entityId: id.slice('epic:'.length) };
+  }
+  if (id.startsWith('story:')) {
+    return { kind: 'story', entityId: id.slice('story:'.length) };
+  }
   if (id.startsWith('milestone:')) {
     return { kind: 'milestone', entityId: id.slice('milestone:'.length) };
   }
@@ -82,6 +125,8 @@ function parseItemId(id: string): { kind: DeliveryKind; entityId: string } | nul
 export function ProjectDeliveryPanel({
   projectId,
   canMutate,
+  initialEpics,
+  initialStories,
   initialMilestones,
   initialTasks,
   members,
@@ -89,6 +134,8 @@ export function ProjectDeliveryPanel({
   projectId: string;
   workspaceId: string;
   canMutate: boolean;
+  initialEpics: Epic[];
+  initialStories: UserStory[];
   initialMilestones: Milestone[];
   initialTasks: Task[];
   members: Member[];
@@ -99,17 +146,22 @@ export function ProjectDeliveryPanel({
   const router = useRouter();
   const { pushToast } = useToast();
 
+  const [epics, setEpics] = useState(initialEpics);
+  const [stories, setStories] = useState(initialStories);
   const [milestones, setMilestones] = useState(initialMilestones);
   const [tasks, setTasks] = useState(initialTasks);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [manageTaskId, setManageTaskId] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
-  const [isMilestone, setIsMilestone] = useState(false);
+  const [createKind, setCreateKind] = useState<CreateKind>('task');
   const [dateValue, setDateValue] = useState('');
   const [taskMilestoneId, setTaskMilestoneId] = useState('');
+  const [taskStoryId, setTaskStoryId] = useState('');
+  const [storyEpicId, setStoryEpicId] = useState('');
   const [taskAccountable, setTaskAccountable] = useState('');
   const [taskResponsible, setTaskResponsible] = useState('');
 
@@ -140,7 +192,57 @@ export function ProjectDeliveryPanel({
     return map;
   }, [milestones]);
 
+  const epicTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const epic of epics) {
+      map.set(epic.id, epic.title);
+    }
+    return map;
+  }, [epics]);
+
   const items: CatalogueListItem[] = useMemo(() => {
+    const epicItems: CatalogueListItem[] = epics.map((epic) => ({
+      id: `epic:${epic.id}`,
+      title: epic.title,
+      primaryBadge: t('kindEpic'),
+      secondaryBadge: t(`milestoneStatus.${epic.status}`),
+      subtitle: null,
+      updatedAt: epic.updatedAt ?? epic.createdAt ?? null,
+      searchText: [
+        epic.title,
+        epic.description ?? '',
+        epic.status,
+        'epic',
+      ]
+        .join(' ')
+        .toLowerCase(),
+      filterValue: `epic:${epic.status}`,
+      filterLabel: `${t('kindEpic')} · ${t(`milestoneStatus.${epic.status}`)}`,
+    }));
+
+    const storyItems: CatalogueListItem[] = stories.map((story) => {
+      const epicLabel = epicTitleById.get(story.epicId) ?? null;
+      return {
+        id: `story:${story.id}`,
+        title: story.title,
+        primaryBadge: t('kindStory'),
+        secondaryBadge: t(`milestoneStatus.${story.status}`),
+        subtitle: epicLabel ? `${t('kindEpic')}: ${epicLabel}` : null,
+        updatedAt: story.updatedAt ?? story.createdAt ?? null,
+        searchText: [
+          story.title,
+          story.description ?? '',
+          story.status,
+          'story',
+          epicLabel ?? '',
+        ]
+          .join(' ')
+          .toLowerCase(),
+        filterValue: `story:${story.status}`,
+        filterLabel: `${t('kindStory')} · ${t(`milestoneStatus.${story.status}`)}`,
+      };
+    });
+
     const milestoneItems: CatalogueListItem[] = milestones.map((milestone) => ({
       id: `milestone:${milestone.id}`,
       title: milestone.title,
@@ -164,21 +266,21 @@ export function ProjectDeliveryPanel({
     }));
 
     const taskItems: CatalogueListItem[] = tasks.map((task) => {
-      const milestoneLabel = task.milestoneId
-        ? milestoneTitleById.get(task.milestoneId)
-        : null;
       const raciLine =
         task.raci.length > 0
           ? task.raci.map((entry) => `${entry.role}: ${entry.displayName}`).join(' · ')
           : null;
+      const ownerLabel = task.currentOwner?.displayName ?? null;
       return {
         id: `task:${task.id}`,
         title: task.title,
         primaryBadge: t('kindTask'),
         secondaryBadge: t(`taskStatus.${task.status}`),
         subtitle: [
+          task.epicTitle,
+          task.userStoryTitle,
           task.dueDate ? `${t('dueDate')}: ${task.dueDate}` : null,
-          milestoneLabel ? `${t('milestoneOptional')}: ${milestoneLabel}` : null,
+          ownerLabel ? `${t('ownerLabel')}: ${ownerLabel}` : null,
           raciLine,
         ]
           .filter(Boolean)
@@ -190,7 +292,9 @@ export function ProjectDeliveryPanel({
           task.status,
           'task',
           task.dueDate ?? '',
-          milestoneLabel ?? '',
+          task.epicTitle ?? '',
+          task.userStoryTitle ?? '',
+          ownerLabel ?? '',
           raciLine ?? '',
         ]
           .join(' ')
@@ -200,8 +304,8 @@ export function ProjectDeliveryPanel({
       };
     });
 
-    return [...milestoneItems, ...taskItems];
-  }, [milestones, tasks, milestoneTitleById, t]);
+    return [...epicItems, ...storyItems, ...milestoneItems, ...taskItems];
+  }, [epics, stories, milestones, tasks, epicTitleById, t]);
 
   const calendarItems = useMemo(
     () => [
@@ -227,11 +331,30 @@ export function ProjectDeliveryPanel({
     [milestones, tasks],
   );
 
+  const boardTasks = useMemo(
+    () =>
+      tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        dueDate: task.dueDate,
+        milestoneId: task.milestoneId,
+        userStoryTitle: task.userStoryTitle,
+        currentOwner: task.currentOwner
+          ? { displayName: task.currentOwner.displayName }
+          : null,
+        raci: task.raci,
+      })),
+    [tasks],
+  );
+
   function resetCreateForm() {
     setTitle('');
-    setIsMilestone(false);
+    setCreateKind('task');
     setDateValue('');
     setTaskMilestoneId('');
+    setTaskStoryId('');
+    setStoryEpicId('');
     setTaskAccountable('');
     setTaskResponsible('');
     setError(null);
@@ -243,12 +366,51 @@ export function ProjectDeliveryPanel({
     resetCreateForm();
   }
 
+  const createSubmitDisabled =
+    pending ||
+    !title.trim() ||
+    (createKind === 'story' && !storyEpicId);
+
   async function submitCreate() {
     if (!title.trim()) return;
+    if (createKind === 'story' && !storyEpicId) return;
     setPending(true);
     setError(null);
     try {
-      if (isMilestone) {
+      if (createKind === 'epic') {
+        const response = await fetch(`/api/v1/projects/${projectId}/epics`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title.trim() }),
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          epic?: Epic;
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.epic) {
+          throw new Error(payload.error?.message || t('failedCreateEpic'));
+        }
+        setEpics((prev) => [...prev, payload.epic!]);
+        pushToast(t('epicCreated'), 'success');
+      } else if (createKind === 'story') {
+        const response = await fetch(`/api/v1/projects/${projectId}/user-stories`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title.trim(),
+            epicId: storyEpicId,
+          }),
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          userStory?: UserStory;
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.userStory) {
+          throw new Error(payload.error?.message || t('failedCreateStory'));
+        }
+        setStories((prev) => [...prev, payload.userStory!]);
+        pushToast(t('storyCreated'), 'success');
+      } else if (createKind === 'milestone') {
         const response = await fetch(`/api/v1/projects/${projectId}/milestones`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -284,6 +446,7 @@ export function ProjectDeliveryPanel({
             title: title.trim(),
             dueDate: dateValue || null,
             milestoneId: taskMilestoneId || null,
+            userStoryId: taskStoryId || null,
             raci: raci.length > 0 ? raci : undefined,
           }),
         });
@@ -302,13 +465,15 @@ export function ProjectDeliveryPanel({
       resetCreateForm();
       refresh();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : isMilestone
-            ? t('failedCreateMilestone')
-            : t('failedCreateTask'),
-      );
+      const fallback =
+        createKind === 'epic'
+          ? t('failedCreateEpic')
+          : createKind === 'story'
+            ? t('failedCreateStory')
+            : createKind === 'milestone'
+              ? t('failedCreateMilestone')
+              : t('failedCreateTask');
+      setError(err instanceof Error ? err.message : fallback);
     } finally {
       setPending(false);
     }
@@ -320,7 +485,46 @@ export function ProjectDeliveryPanel({
     setPending(true);
     setError(null);
     try {
-      if (parsed.kind === 'milestone') {
+      if (parsed.kind === 'epic') {
+        const response = await fetch(`/api/v1/project-epics/${parsed.entityId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          epic?: Epic;
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.epic) {
+          throw new Error(payload.error?.message || t('failedUpdateEpic'));
+        }
+        setEpics((prev) =>
+          prev.map((item) =>
+            item.id === parsed.entityId ? payload.epic! : item,
+          ),
+        );
+      } else if (parsed.kind === 'story') {
+        const response = await fetch(
+          `/api/v1/project-user-stories/${parsed.entityId}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+          },
+        );
+        const payload = (await response.json().catch(() => ({}))) as {
+          userStory?: UserStory;
+          error?: { message?: string };
+        };
+        if (!response.ok || !payload.userStory) {
+          throw new Error(payload.error?.message || t('failedUpdateStory'));
+        }
+        setStories((prev) =>
+          prev.map((item) =>
+            item.id === parsed.entityId ? payload.userStory! : item,
+          ),
+        );
+      } else if (parsed.kind === 'milestone') {
         const response = await fetch(
           `/api/v1/project-milestones/${parsed.entityId}`,
           {
@@ -370,6 +574,13 @@ export function ProjectDeliveryPanel({
     }
   }
 
+  function createSubmitLabel() {
+    if (createKind === 'epic') return t('addEpic');
+    if (createKind === 'story') return t('addStory');
+    if (createKind === 'milestone') return t('addMilestone');
+    return t('addTask');
+  }
+
   function viewSwitcher(activeMode: ViewMode) {
     return (
       <div
@@ -400,7 +611,7 @@ export function ProjectDeliveryPanel({
 
   return (
     <div className="mb-8">
-      {error && !createOpen && !wideModalOpen ? (
+      {error && !createOpen && !wideModalOpen && !manageTaskId ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
         </div>
@@ -424,7 +635,23 @@ export function ProjectDeliveryPanel({
         renderItem={(item) => {
           const parsed = parseItemId(item.id);
           const statusOptions =
-            parsed?.kind === 'milestone' ? MILESTONE_STATUSES : TASK_STATUSES;
+            parsed?.kind === 'task'
+              ? TASK_STATUSES
+              : parsed?.kind === 'milestone'
+                ? MILESTONE_STATUSES
+                : parsed?.kind === 'epic'
+                  ? EPIC_STATUSES
+                  : parsed?.kind === 'story'
+                    ? STORY_STATUSES
+                    : [];
+          const epic =
+            parsed?.kind === 'epic'
+              ? epics.find((row) => row.id === parsed.entityId)
+              : undefined;
+          const story =
+            parsed?.kind === 'story'
+              ? stories.find((row) => row.id === parsed.entityId)
+              : undefined;
           const milestone =
             parsed?.kind === 'milestone'
               ? milestones.find((row) => row.id === parsed.entityId)
@@ -433,7 +660,8 @@ export function ProjectDeliveryPanel({
             parsed?.kind === 'task'
               ? tasks.find((row) => row.id === parsed.entityId)
               : undefined;
-          const currentStatus = milestone?.status ?? task?.status;
+          const currentStatus =
+            epic?.status ?? story?.status ?? milestone?.status ?? task?.status;
           const scheduleTone =
             milestone || task
               ? deliveryScheduleTone({
@@ -474,23 +702,35 @@ export function ProjectDeliveryPanel({
                   </p>
                 ) : null}
               </div>
-              {canMutate && parsed && currentStatus ? (
-                <Select
-                  className="w-full sm:w-auto sm:max-w-[11rem]"
-                  value={currentStatus}
-                  disabled={pending}
-                  aria-label={t('filterStatus')}
-                  onChange={(e) => void updateStatus(item.id, e.target.value)}
-                >
-                  {statusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {parsed.kind === 'milestone'
-                        ? t(`milestoneStatus.${status}`)
-                        : t(`taskStatus.${status}`)}
-                    </option>
-                  ))}
-                </Select>
-              ) : null}
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                {parsed?.kind === 'task' ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full sm:w-auto"
+                    onClick={() => setManageTaskId(parsed.entityId)}
+                  >
+                    {t('manage')}
+                  </Button>
+                ) : null}
+                {canMutate && parsed && currentStatus ? (
+                  <Select
+                    className="w-full sm:w-auto sm:max-w-[11rem]"
+                    value={currentStatus}
+                    disabled={pending}
+                    aria-label={t('filterStatus')}
+                    onChange={(e) => void updateStatus(item.id, e.target.value)}
+                  >
+                    {statusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {parsed.kind === 'task'
+                          ? t(`taskStatus.${status}`)
+                          : t(`milestoneStatus.${status}`)}
+                      </option>
+                    ))}
+                  </Select>
+                ) : null}
+              </div>
             </div>
           );
         }}
@@ -537,7 +777,7 @@ export function ProjectDeliveryPanel({
         ) : null}
         {viewMode === 'board' ? (
           <ProjectDeliveryBoard
-            tasks={tasks}
+            tasks={boardTasks}
             milestones={milestones}
             milestoneTitles={milestoneTitleById}
             canMutate={canMutate}
@@ -545,6 +785,7 @@ export function ProjectDeliveryPanel({
             onTaskStatusChange={(taskId, status) =>
               void updateStatus(`task:${taskId}`, status)
             }
+            onManageTask={(taskId) => setManageTaskId(taskId)}
           />
         ) : null}
         {viewMode === 'calendar' ? (
@@ -570,43 +811,72 @@ export function ProjectDeliveryPanel({
             </Button>
             <Button
               type="button"
-              disabled={pending || !title.trim()}
+              disabled={createSubmitDisabled}
               onClick={() => void submitCreate()}
             >
-              {isMilestone ? t('addMilestone') : t('addTask')}
+              {createSubmitLabel()}
             </Button>
           </>
         }
       >
         <div className="grid gap-3">
           {error ? <ErrorText>{error}</ErrorText> : null}
+          <Field label={t('createKind')}>
+            <Select
+              value={createKind}
+              onChange={(e) => setCreateKind(e.target.value as CreateKind)}
+              disabled={pending}
+              data-modal-initial-focus
+            >
+              <option value="task">{t('createKindTask')}</option>
+              <option value="milestone">{t('createKindMilestone')}</option>
+              <option value="epic">{t('createKindEpic')}</option>
+              <option value="story">{t('createKindStory')}</option>
+            </Select>
+          </Field>
           <Field label={t('itemTitle')}>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               disabled={pending}
-              data-modal-initial-focus
             />
           </Field>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={isMilestone}
-              disabled={pending}
-              onChange={(e) => setIsMilestone(e.target.checked)}
-            />
-            <span>{t('isMilestone')}</span>
-          </label>
-          <Field label={isMilestone ? t('targetDate') : t('dueDate')}>
-            <Input
-              type="date"
-              value={dateValue}
-              onChange={(e) => setDateValue(e.target.value)}
-              disabled={pending}
-            />
-          </Field>
-          {!isMilestone ? (
+          {createKind === 'milestone' ? (
+            <Field label={t('targetDate')}>
+              <Input
+                type="date"
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
+                disabled={pending}
+              />
+            </Field>
+          ) : null}
+          {createKind === 'story' ? (
+            <Field label={t('selectEpic')}>
+              <Select
+                value={storyEpicId}
+                onChange={(e) => setStoryEpicId(e.target.value)}
+                disabled={pending}
+              >
+                <option value="">{t('selectEpic')}</option>
+                {epics.map((epic) => (
+                  <option key={epic.id} value={epic.id}>
+                    {epic.title}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+          {createKind === 'task' ? (
             <>
+              <Field label={t('dueDate')}>
+                <Input
+                  type="date"
+                  value={dateValue}
+                  onChange={(e) => setDateValue(e.target.value)}
+                  disabled={pending}
+                />
+              </Field>
               <Field label={t('milestoneOptional')}>
                 <Select
                   value={taskMilestoneId}
@@ -619,6 +889,24 @@ export function ProjectDeliveryPanel({
                       {milestone.title}
                     </option>
                   ))}
+                </Select>
+              </Field>
+              <Field label={t('storyOptional')}>
+                <Select
+                  value={taskStoryId}
+                  onChange={(e) => setTaskStoryId(e.target.value)}
+                  disabled={pending}
+                >
+                  <option value="">{t('noStory')}</option>
+                  {stories.map((story) => {
+                    const epicLabel = epicTitleById.get(story.epicId);
+                    return (
+                      <option key={story.id} value={story.id}>
+                        {epicLabel ? `${epicLabel} · ` : ''}
+                        {story.title}
+                      </option>
+                    );
+                  })}
                 </Select>
               </Field>
               <Field label={t('accountable')}>
@@ -653,6 +941,31 @@ export function ProjectDeliveryPanel({
           ) : null}
         </div>
       </Modal>
+
+      <ProjectTaskManageModal
+        open={Boolean(manageTaskId)}
+        onClose={() => setManageTaskId(null)}
+        taskId={manageTaskId}
+        canMutate={canMutate}
+        members={members}
+        epics={epics}
+        stories={stories}
+        milestones={milestones}
+        onUpdated={(updated) => {
+          setTasks((prev) =>
+            prev.map((item) =>
+              item.id === updated.id
+                ? {
+                    ...item,
+                    ...updated,
+                    currentOwner: updated.currentOwner,
+                  }
+                : item,
+            ),
+          );
+          refresh();
+        }}
+      />
     </div>
   );
 }

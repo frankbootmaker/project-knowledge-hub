@@ -21,10 +21,13 @@ import {
   knowledgeRecordVersions,
   memberships,
   organizations,
+  projectEpics,
   projectMilestones,
   projectStakeholders,
+  projectTaskActivities,
   projectTaskRaci,
   projectTasks,
+  projectUserStories,
   projects,
   systems,
   users,
@@ -703,8 +706,48 @@ Prefer a tool-capable model; tiny local models often skip tools.
       throw new Error('Failed to create lab delivery milestones');
     }
 
+    const [labEpic] = await database.db
+      .insert(projectEpics)
+      .values({
+        projectId: labProject.id,
+        title: 'Make Homelab operable for agents',
+        description: 'Epic covering edge, observability, and delivery UX.',
+        status: 'active',
+        sortOrder: 10,
+      })
+      .returning();
+    if (!labEpic) {
+      throw new Error('Failed to create lab epic');
+    }
+    const [storyEdge] = await database.db
+      .insert(projectUserStories)
+      .values({
+        projectId: labProject.id,
+        epicId: labEpic.id,
+        title: 'As an operator I can expose MCP safely',
+        description: 'Edge hardening stories for public MCP access.',
+        status: 'done',
+        sortOrder: 10,
+      })
+      .returning();
+    const [storyDelivery] = await database.db
+      .insert(projectUserStories)
+      .values({
+        projectId: labProject.id,
+        epicId: labEpic.id,
+        title: 'As a PM I can track work across stories',
+        description: 'Delivery board, owners, and handoffs.',
+        status: 'active',
+        sortOrder: 20,
+      })
+      .returning();
+    if (!storyEdge || !storyDelivery) {
+      throw new Error('Failed to create lab user stories');
+    }
+
     type SeedTask = {
       milestoneId: string | null;
+      userStoryId?: string | null;
       title: string;
       description?: string;
       status: string;
@@ -716,6 +759,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
     const labTasks: SeedTask[] = [
       {
         milestoneId: mNetwork.id,
+        userStoryId: storyEdge.id,
         title: 'Document Traefik → Authentik Tailscale route',
         status: 'done',
         dueDate: ymd(-20),
@@ -727,6 +771,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mNetwork.id,
+        userStoryId: storyEdge.id,
         title: 'Verify public MCP URL from mobile data',
         status: 'done',
         dueDate: ymd(-12),
@@ -773,6 +818,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mDelivery.id,
+        userStoryId: storyDelivery.id,
         title: 'Seed demo milestones/tasks for UI validation',
         status: 'in_progress',
         dueDate: ymd(0),
@@ -784,6 +830,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mDelivery.id,
+        userStoryId: storyDelivery.id,
         title: 'Validate list / board / calendar views',
         status: 'todo',
         dueDate: ymd(2),
@@ -796,6 +843,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mDelivery.id,
+        userStoryId: storyDelivery.id,
         title: 'MCP smoke: create_project_task + set RACI',
         status: 'todo',
         dueDate: ymd(4),
@@ -807,6 +855,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mDelivery.id,
+        userStoryId: storyDelivery.id,
         title: 'Polish board drag-and-drop affordances',
         status: 'todo',
         dueDate: ymd(12),
@@ -861,18 +910,25 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
     ];
 
+    let handoffDemoTaskId: string | null = null;
     for (const taskSpec of labTasks) {
+      const ownerUserId =
+        taskSpec.raci.find((entry) => entry.role === 'R')?.userId ??
+        taskSpec.raci.find((entry) => entry.role === 'A')?.userId ??
+        admin.id;
       const [task] = await database.db
         .insert(projectTasks)
         .values({
           projectId: labProject.id,
           milestoneId: taskSpec.milestoneId,
+          userStoryId: taskSpec.userStoryId ?? null,
           title: taskSpec.title,
           description: taskSpec.description ?? null,
           status: taskSpec.status,
           dueDate: taskSpec.dueDate,
           sortOrder: taskSpec.sortOrder,
           createdBy: admin.id,
+          currentOwnerUserId: ownerUserId,
         })
         .returning();
       if (!task) {
@@ -887,6 +943,37 @@ Prefer a tool-capable model; tiny local models often skip tools.
           })),
         );
       }
+      await database.db.insert(projectTaskActivities).values({
+        taskId: task.id,
+        actorUserId: admin.id,
+        type: 'created',
+        metadataJson: { title: task.title },
+      });
+      if (taskSpec.title === 'Validate list / board / calendar views') {
+        handoffDemoTaskId = task.id;
+      }
+    }
+
+    if (handoffDemoTaskId) {
+      await database.db
+        .update(projectTasks)
+        .set({ currentOwnerUserId: dana.id, updatedAt: new Date() })
+        .where(eq(projectTasks.id, handoffDemoTaskId));
+      await database.db.insert(projectTaskActivities).values([
+        {
+          taskId: handoffDemoTaskId,
+          actorUserId: blair.id,
+          type: 'comment',
+          body: 'Board looks good on desktop; checking mobile columns next.',
+        },
+        {
+          taskId: handoffDemoTaskId,
+          actorUserId: blair.id,
+          type: 'handoff',
+          body: 'Please sanity-check the calendar agenda view.',
+          metadataJson: { fromUserId: blair.id, toUserId: dana.id },
+        },
+      ]);
     }
 
     const [aiM1] = await database.db
@@ -941,17 +1028,23 @@ Prefer a tool-capable model; tiny local models often skip tools.
     ];
 
     for (const taskSpec of aiTasks) {
+      const ownerUserId =
+        taskSpec.raci.find((entry) => entry.role === 'R')?.userId ??
+        taskSpec.raci.find((entry) => entry.role === 'A')?.userId ??
+        admin.id;
       const [task] = await database.db
         .insert(projectTasks)
         .values({
           projectId: aiProject.id,
           milestoneId: taskSpec.milestoneId,
+          userStoryId: taskSpec.userStoryId ?? null,
           title: taskSpec.title,
           description: taskSpec.description ?? null,
           status: taskSpec.status,
           dueDate: taskSpec.dueDate,
           sortOrder: taskSpec.sortOrder,
           createdBy: admin.id,
+          currentOwnerUserId: ownerUserId,
         })
         .returning();
       if (!task) {
@@ -966,6 +1059,12 @@ Prefer a tool-capable model; tiny local models often skip tools.
           })),
         );
       }
+      await database.db.insert(projectTaskActivities).values({
+        taskId: task.id,
+        actorUserId: admin.id,
+        type: 'created',
+        metadataJson: { title: task.title },
+      });
     }
 
     // Stakeholders roster + reporting chain (overlaps RACI users)

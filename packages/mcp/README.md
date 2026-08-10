@@ -11,7 +11,7 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints, **and the image/media embed workflow**
 * `list_workspace_media` — recent workspace images with Markdown snippets
 * `get_platform_status` — redacted health/backup snapshot (requires opt-in `monitoring:read`; not in default scopes)
-* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_stakeholders` — Project Delivery (requires opt-in `pm:read`)
+* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` — Project Delivery (requires opt-in `pm:read`)
 
 Also available as REST: `GET /api/v1/platform/status` with the same scope.
 
@@ -35,8 +35,11 @@ Approve / mark-current remain human/session-API only.
 Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge writes, these **commit immediately** (not draft-only):
 
 * `create_project_milestone` / `update_project_milestone`
-* `create_project_task` / `update_project_task`
+* `create_project_epic` / `update_project_epic`
+* `create_project_user_story` / `update_project_user_story`
+* `create_project_task` / `update_project_task` (optional story + current owner)
 * `set_project_task_raci` — replace RACI; workspace members only; at most one Accountable (`A`)
+* `add_project_task_comment` / `handoff_project_task` — activity timeline; handoff moves current owner only
 * `create_project_stakeholder` / `update_project_stakeholder` / `delete_project_stakeholder` — durable roster (+ reports-to)
 
 ## Embedding images in knowledge Markdown

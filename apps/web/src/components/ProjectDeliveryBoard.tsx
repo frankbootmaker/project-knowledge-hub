@@ -3,7 +3,7 @@
 import type { DragEvent } from 'react';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Badge, Select } from './ui';
+import { Badge, Button, Select } from './ui';
 import { cn } from '../lib/cn';
 import {
   deliveryScheduleSurfaceClass,
@@ -18,6 +18,8 @@ export type BoardTask = {
   status: string;
   dueDate: string | null;
   milestoneId: string | null;
+  userStoryTitle?: string | null;
+  currentOwner?: { displayName: string } | null;
   raci: Array<{ role: string; displayName: string }>;
 };
 
@@ -39,6 +41,7 @@ function BoardTaskCard({
   pending,
   showStatusSelect,
   onTaskStatusChange,
+  onManageTask,
 }: {
   task: BoardTask;
   milestoneLabel: string | null;
@@ -47,6 +50,7 @@ function BoardTaskCard({
   pending: boolean;
   showStatusSelect: boolean;
   onTaskStatusChange: (taskId: string, status: string) => void;
+  onManageTask?: (taskId: string) => void;
 }) {
   const t = useTranslations('delivery');
   const accountable = task.raci.find((entry) => entry.role === 'A');
@@ -74,11 +78,31 @@ function BoardTaskCard({
         {task.dueDate ? (
           <span className="text-xs opacity-80">{task.dueDate}</span>
         ) : null}
+        {task.userStoryTitle ? (
+          <Badge tone="brand">{task.userStoryTitle}</Badge>
+        ) : null}
         {milestoneLabel ? <Badge>{milestoneLabel}</Badge> : null}
+        {task.currentOwner ? (
+          <Badge tone="neutral">{task.currentOwner.displayName}</Badge>
+        ) : null}
         {accountable ? (
           <Badge tone="neutral">A: {accountable.displayName}</Badge>
         ) : null}
       </div>
+      {onManageTask ? (
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-3 h-8 w-full px-2 text-xs"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onManageTask(task.id);
+          }}
+        >
+          {t('manage')}
+        </Button>
+      ) : null}
       {showStatusSelect && canMutate ? (
         <Select
           className="mt-3 w-full"
@@ -109,6 +133,7 @@ function BoardColumnPanel({
   showStatusSelect,
   onDrop,
   onTaskStatusChange,
+  onManageTask,
 }: {
   status: BoardColumn;
   tasks: BoardTask[];
@@ -120,6 +145,7 @@ function BoardColumnPanel({
   showStatusSelect: boolean;
   onDrop: (status: string, event: DragEvent<HTMLDivElement>) => void;
   onTaskStatusChange: (taskId: string, status: string) => void;
+  onManageTask?: (taskId: string) => void;
 }) {
   const t = useTranslations('delivery');
 
@@ -163,6 +189,7 @@ function BoardColumnPanel({
               pending={pending}
               showStatusSelect={showStatusSelect}
               onTaskStatusChange={onTaskStatusChange}
+              onManageTask={onManageTask}
             />
           ))
         )}
@@ -178,6 +205,7 @@ export function ProjectDeliveryBoard({
   canMutate,
   pending,
   onTaskStatusChange,
+  onManageTask,
 }: {
   tasks: BoardTask[];
   milestones: BoardMilestone[];
@@ -185,6 +213,7 @@ export function ProjectDeliveryBoard({
   canMutate: boolean;
   pending: boolean;
   onTaskStatusChange: (taskId: string, status: string) => void;
+  onManageTask?: (taskId: string) => void;
 }) {
   const t = useTranslations('delivery');
   const today = todayYmd();
@@ -272,6 +301,7 @@ export function ProjectDeliveryBoard({
           showStatusSelect
           onDrop={onDrop}
           onTaskStatusChange={onTaskStatusChange}
+          onManageTask={onManageTask}
         />
         {canMutate ? (
           <p className="m-0 text-xs text-ink-muted">{t('boardMobileHint')}</p>
@@ -294,6 +324,7 @@ export function ProjectDeliveryBoard({
               showStatusSelect={false}
               onDrop={onDrop}
               onTaskStatusChange={onTaskStatusChange}
+              onManageTask={onManageTask}
             />
           ))}
         </div>

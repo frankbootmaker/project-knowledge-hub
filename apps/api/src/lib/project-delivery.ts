@@ -2,19 +2,25 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   memberships,
+  projectEpics,
   projectMilestones,
+  projectTaskActivities,
   projectTaskRaci,
   projectTasks,
+  projectUserStories,
   projects,
   users,
+  workspaces,
 } from '@project-knowledge-hub/database';
 import {
   AppError,
   milestoneStatusSchema,
   raciRoleSchema,
+  taskActivityTypeSchema,
   taskStatusSchema,
   type MilestoneStatus,
   type RaciRole,
+  type TaskActivityType,
   type TaskStatus,
 } from '@project-knowledge-hub/domain';
 
@@ -23,6 +29,12 @@ export type PublicRaciEntry = {
   displayName: string;
   email: string;
   role: RaciRole;
+};
+
+export type PublicTaskOwner = {
+  userId: string;
+  displayName: string;
+  email: string;
 };
 
 export type PublicMilestone = {
@@ -42,16 +54,33 @@ export type PublicTask = {
   id: string;
   projectId: string;
   milestoneId: string | null;
+  userStoryId: string | null;
   title: string;
   description: string | null;
   status: TaskStatus;
   dueDate: string | null;
   sortOrder: number;
   createdBy: string | null;
+  currentOwnerUserId: string | null;
+  currentOwner: PublicTaskOwner | null;
+  userStoryTitle: string | null;
+  epicId: string | null;
+  epicTitle: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
   raci: PublicRaciEntry[];
+};
+
+/** Task the current user holds a RACI role on, with project/workspace context. */
+export type PublicAssignedTask = PublicTask & {
+  myRole: RaciRole;
+  projectName: string;
+  projectSlug: string;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
+  milestoneTitle: string | null;
 };
 
 export type ProjectContext = {
@@ -78,22 +107,177 @@ function toPublicMilestone(
 function toPublicTask(
   row: typeof projectTasks.$inferSelect,
   raci: PublicRaciEntry[],
+  extras?: {
+    currentOwner?: PublicTaskOwner | null;
+    userStoryTitle?: string | null;
+    epicId?: string | null;
+    epicTitle?: string | null;
+  },
 ): PublicTask {
   return {
     id: row.id,
     projectId: row.projectId,
     milestoneId: row.milestoneId,
+    userStoryId: row.userStoryId,
     title: row.title,
     description: row.description,
     status: taskStatusSchema.parse(row.status),
     dueDate: row.dueDate,
     sortOrder: row.sortOrder,
     createdBy: row.createdBy,
+    currentOwnerUserId: row.currentOwnerUserId,
+    currentOwner: extras?.currentOwner ?? null,
+    userStoryTitle: extras?.userStoryTitle ?? null,
+    epicId: extras?.epicId ?? null,
+    epicTitle: extras?.epicTitle ?? null,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     raci,
   };
+}
+
+async function loadTaskContext(
+  database: Database,
+  rows: Array<typeof projectTasks.$inferSelect>,
+): Promise<{
+  owners: Map<string, PublicTaskOwner>;
+  stories: Map<string, { title: string; epicId: string; epicTitle: string | null }>;
+}> {
+  const owners = new Map<string, PublicTaskOwner>();
+  const stories = new Map<
+    string,
+    { title: string; epicId: string; epicTitle: string | null }
+  >();
+  if (rows.length === 0) {
+    return { owners, stories };
+  }
+
+  const ownerIds = [
+    ...new Set(
+      rows
+        .map((row) => row.currentOwnerUserId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (ownerIds.length > 0) {
+    const ownerRows = await database.db
+      .select({
+        userId: users.id,
+        displayName: users.displayName,
+        email: users.email,
+      })
+      .from(users)
+      .where(inArray(users.id, ownerIds));
+    for (const owner of ownerRows) {
+      owners.set(owner.userId, owner);
+    }
+  }
+
+  const storyIds = [
+    ...new Set(
+      rows
+        .map((row) => row.userStoryId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (storyIds.length > 0) {
+    const storyRows = await database.db
+      .select({
+        id: projectUserStories.id,
+        title: projectUserStories.title,
+        epicId: projectUserStories.epicId,
+        epicTitle: projectEpics.title,
+      })
+      .from(projectUserStories)
+      .leftJoin(projectEpics, eq(projectUserStories.epicId, projectEpics.id))
+      .where(inArray(projectUserStories.id, storyIds));
+    for (const story of storyRows) {
+      stories.set(story.id, {
+        title: story.title,
+        epicId: story.epicId,
+        epicTitle: story.epicTitle,
+      });
+    }
+  }
+
+  return { owners, stories };
+}
+
+function mapTasksWithContext(
+  rows: Array<typeof projectTasks.$inferSelect>,
+  raciMap: Map<string, PublicRaciEntry[]>,
+  owners: Map<string, PublicTaskOwner>,
+  stories: Map<string, { title: string; epicId: string; epicTitle: string | null }>,
+): PublicTask[] {
+  return rows.map((row) => {
+    const story = row.userStoryId ? stories.get(row.userStoryId) : undefined;
+    return toPublicTask(row, raciMap.get(row.id) ?? [], {
+      currentOwner: row.currentOwnerUserId
+        ? owners.get(row.currentOwnerUserId) ?? null
+        : null,
+      userStoryTitle: story?.title ?? null,
+      epicId: story?.epicId ?? null,
+      epicTitle: story?.epicTitle ?? null,
+    });
+  });
+}
+
+function defaultOwnerFromRaci(
+  raci: Array<{ userId: string; role: RaciRole }>,
+  createdBy?: string | null,
+): string | null {
+  return (
+    raci.find((entry) => entry.role === 'R')?.userId ??
+    raci.find((entry) => entry.role === 'A')?.userId ??
+    createdBy ??
+    null
+  );
+}
+
+export async function recordTaskActivity(
+  database: Database,
+  input: {
+    taskId: string;
+    actorUserId?: string | null;
+    type: TaskActivityType;
+    body?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+): Promise<void> {
+  taskActivityTypeSchema.parse(input.type);
+  await database.db.insert(projectTaskActivities).values({
+    taskId: input.taskId,
+    actorUserId: input.actorUserId ?? null,
+    type: input.type,
+    body: input.body ?? null,
+    metadataJson: input.metadata ?? null,
+  });
+}
+
+async function assertUserStoryInProject(
+  database: Database,
+  projectId: string,
+  userStoryId: string | null | undefined,
+): Promise<void> {
+  if (!userStoryId) return;
+  const [story] = await database.db
+    .select({ id: projectUserStories.id })
+    .from(projectUserStories)
+    .where(
+      and(
+        eq(projectUserStories.id, userStoryId),
+        eq(projectUserStories.projectId, projectId),
+      ),
+    )
+    .limit(1);
+  if (!story) {
+    throw new AppError({
+      code: 'USER_STORY_NOT_FOUND',
+      message: 'User story not found in this project',
+      statusCode: 400,
+    });
+  }
 }
 
 export async function requireProjectContext(
@@ -314,7 +498,104 @@ export async function listTasks(
     database,
     rows.map((row) => row.id),
   );
-  return rows.map((row) => toPublicTask(row, raciMap.get(row.id) ?? []));
+  const { owners, stories } = await loadTaskContext(database, rows);
+  return mapTasksWithContext(rows, raciMap, owners, stories);
+}
+
+export async function listAssignedTasksForUser(
+  database: Database,
+  userId: string,
+  options?: {
+    isSystemAdmin?: boolean;
+    includeArchived?: boolean;
+    role?: RaciRole;
+  },
+): Promise<PublicAssignedTask[]> {
+  const conditions = [eq(projectTaskRaci.userId, userId)];
+  if (!options?.includeArchived) {
+    conditions.push(isNull(projectTasks.archivedAt));
+    conditions.push(isNull(projects.archivedAt));
+  }
+  if (options?.role) {
+    conditions.push(eq(projectTaskRaci.role, options.role));
+  }
+
+  const baseSelect = {
+    task: projectTasks,
+    myRole: projectTaskRaci.role,
+    projectName: projects.name,
+    projectSlug: projects.slug,
+    workspaceId: workspaces.id,
+    workspaceName: workspaces.name,
+    workspaceSlug: workspaces.slug,
+    milestoneTitle: projectMilestones.title,
+  };
+
+  const rows = options?.isSystemAdmin
+    ? await database.db
+        .select(baseSelect)
+        .from(projectTaskRaci)
+        .innerJoin(projectTasks, eq(projectTaskRaci.taskId, projectTasks.id))
+        .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+        .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
+        .leftJoin(
+          projectMilestones,
+          eq(projectTasks.milestoneId, projectMilestones.id),
+        )
+        .where(and(...conditions))
+    : await database.db
+        .select(baseSelect)
+        .from(projectTaskRaci)
+        .innerJoin(projectTasks, eq(projectTaskRaci.taskId, projectTasks.id))
+        .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+        .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
+        .innerJoin(
+          memberships,
+          and(
+            eq(memberships.workspaceId, workspaces.id),
+            eq(memberships.userId, userId),
+          ),
+        )
+        .leftJoin(
+          projectMilestones,
+          eq(projectTasks.milestoneId, projectMilestones.id),
+        )
+        .where(and(...conditions));
+
+  const raciMap = await loadRaciForTasks(
+    database,
+    rows.map((row) => row.task.id),
+  );
+
+  const taskRows = rows.map((row) => row.task);
+  const { owners, stories } = await loadTaskContext(database, taskRows);
+  const mapped = mapTasksWithContext(taskRows, raciMap, owners, stories);
+  const byId = new Map(mapped.map((task) => [task.id, task]));
+
+  const tasks: PublicAssignedTask[] = rows.map((row) => ({
+    ...(byId.get(row.task.id) as PublicTask),
+    myRole: raciRoleSchema.parse(row.myRole),
+    projectName: row.projectName,
+    projectSlug: row.projectSlug,
+    workspaceId: row.workspaceId,
+    workspaceName: row.workspaceName,
+    workspaceSlug: row.workspaceSlug,
+    milestoneTitle: row.milestoneTitle,
+  }));
+
+  tasks.sort((a, b) => {
+    if (a.dueDate && b.dueDate) {
+      const dueCmp = a.dueDate.localeCompare(b.dueDate);
+      if (dueCmp !== 0) return dueCmp;
+    } else if (a.dueDate) {
+      return -1;
+    } else if (b.dueDate) {
+      return 1;
+    }
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+
+  return tasks;
 }
 
 export async function getTask(
@@ -334,7 +615,8 @@ export async function getTask(
     });
   }
   const raciMap = await loadRaciForTasks(database, [row.id]);
-  return toPublicTask(row, raciMap.get(row.id) ?? []);
+  const { owners, stories } = await loadTaskContext(database, [row]);
+  return mapTasksWithContext([row], raciMap, owners, stories)[0]!;
 }
 
 async function assertMilestoneInProject(
@@ -421,6 +703,7 @@ export async function replaceTaskRaci(
     taskId: string;
     workspaceId: string;
     entries: Array<{ userId: string; role: RaciRole }>;
+    actorUserId?: string | null;
   },
 ): Promise<PublicRaciEntry[]> {
   validateRaciEntries(input.entries);
@@ -444,6 +727,13 @@ export async function replaceTaskRaci(
     );
   }
 
+  await recordTaskActivity(database, {
+    taskId: input.taskId,
+    actorUserId: input.actorUserId,
+    type: 'raci_changed',
+    metadata: { entries: input.entries },
+  });
+
   const map = await loadRaciForTasks(database, [input.taskId]);
   return map.get(input.taskId) ?? [];
 }
@@ -458,12 +748,15 @@ export async function createTask(
     status?: TaskStatus;
     dueDate?: string | null;
     milestoneId?: string | null;
+    userStoryId?: string | null;
+    currentOwnerUserId?: string | null;
     sortOrder?: number;
     createdBy?: string | null;
     raci?: Array<{ userId: string; role: RaciRole }>;
   },
 ): Promise<PublicTask> {
   await assertMilestoneInProject(database, input.projectId, input.milestoneId);
+  await assertUserStoryInProject(database, input.projectId, input.userStoryId);
   if (input.raci) {
     validateRaciEntries(input.raci);
     await assertWorkspaceMembers(
@@ -472,18 +765,29 @@ export async function createTask(
       input.raci.map((entry) => entry.userId),
     );
   }
+  if (input.currentOwnerUserId) {
+    await assertWorkspaceMembers(database, input.workspaceId, [
+      input.currentOwnerUserId,
+    ]);
+  }
+
+  const ownerUserId =
+    input.currentOwnerUserId ??
+    defaultOwnerFromRaci(input.raci ?? [], input.createdBy);
 
   const [row] = await database.db
     .insert(projectTasks)
     .values({
       projectId: input.projectId,
       milestoneId: input.milestoneId ?? null,
+      userStoryId: input.userStoryId ?? null,
       title: input.title,
       description: input.description ?? null,
       status: input.status ?? 'todo',
       dueDate: input.dueDate ?? null,
       sortOrder: input.sortOrder ?? 0,
       createdBy: input.createdBy ?? null,
+      currentOwnerUserId: ownerUserId,
     })
     .returning();
 
@@ -506,6 +810,17 @@ export async function createTask(
     );
   }
 
+  await recordTaskActivity(database, {
+    taskId: createdTask.id,
+    actorUserId: input.createdBy,
+    type: 'created',
+    metadata: {
+      title: createdTask.title,
+      currentOwnerUserId: ownerUserId,
+      userStoryId: createdTask.userStoryId,
+    },
+  });
+
   return getTask(database, createdTask.id);
 }
 
@@ -518,8 +833,12 @@ export async function updateTask(
     status?: TaskStatus;
     dueDate?: string | null;
     milestoneId?: string | null;
+    userStoryId?: string | null;
+    currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
+    actorUserId?: string | null;
+    workspaceId?: string;
   },
 ): Promise<PublicTask> {
   const [existing] = await database.db
@@ -538,6 +857,20 @@ export async function updateTask(
   if (input.milestoneId !== undefined) {
     await assertMilestoneInProject(database, existing.projectId, input.milestoneId);
   }
+  if (input.userStoryId !== undefined) {
+    await assertUserStoryInProject(database, existing.projectId, input.userStoryId);
+  }
+  if (input.currentOwnerUserId && input.workspaceId) {
+    await assertWorkspaceMembers(database, input.workspaceId, [
+      input.currentOwnerUserId,
+    ]);
+  }
+
+  const nextStatus = input.status ?? existing.status;
+  const nextOwner =
+    input.currentOwnerUserId !== undefined
+      ? input.currentOwnerUserId
+      : existing.currentOwnerUserId;
 
   await database.db
     .update(projectTasks)
@@ -545,10 +878,13 @@ export async function updateTask(
       title: input.title ?? existing.title,
       description:
         input.description !== undefined ? input.description : existing.description,
-      status: input.status ?? existing.status,
+      status: nextStatus,
       dueDate: input.dueDate !== undefined ? input.dueDate : existing.dueDate,
       milestoneId:
         input.milestoneId !== undefined ? input.milestoneId : existing.milestoneId,
+      userStoryId:
+        input.userStoryId !== undefined ? input.userStoryId : existing.userStoryId,
+      currentOwnerUserId: nextOwner,
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:
         input.archived === undefined
@@ -559,6 +895,47 @@ export async function updateTask(
       updatedAt: new Date(),
     })
     .where(eq(projectTasks.id, taskId));
+
+  if (input.status !== undefined && input.status !== existing.status) {
+    await recordTaskActivity(database, {
+      taskId,
+      actorUserId: input.actorUserId,
+      type: 'status_changed',
+      metadata: { from: existing.status, to: input.status },
+    });
+  }
+  if (
+    input.currentOwnerUserId !== undefined &&
+    input.currentOwnerUserId !== existing.currentOwnerUserId
+  ) {
+    await recordTaskActivity(database, {
+      taskId,
+      actorUserId: input.actorUserId,
+      type: 'owner_set',
+      metadata: {
+        fromUserId: existing.currentOwnerUserId,
+        toUserId: input.currentOwnerUserId,
+      },
+    });
+  }
+  const fieldKeys = [
+    'title',
+    'description',
+    'dueDate',
+    'milestoneId',
+    'userStoryId',
+    'sortOrder',
+    'archived',
+  ] as const;
+  const changedFields = fieldKeys.filter((key) => input[key] !== undefined);
+  if (changedFields.length > 0) {
+    await recordTaskActivity(database, {
+      taskId,
+      actorUserId: input.actorUserId,
+      type: 'fields_updated',
+      metadata: { fields: changedFields },
+    });
+  }
 
   return getTask(database, taskId);
 }

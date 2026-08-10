@@ -126,6 +126,8 @@ export default async function ProjectDetailPage({
     recordsResponse,
     milestonesResponse,
     tasksResponse,
+    epicsResponse,
+    storiesResponse,
     membersResponse,
     stakeholdersResponse,
   ] = await Promise.all([
@@ -135,6 +137,8 @@ export default async function ProjectDetailPage({
     ),
     apiFetch(`/api/v1/projects/${project.id}/milestones`),
     apiFetch(`/api/v1/projects/${project.id}/tasks`),
+    apiFetch(`/api/v1/projects/${project.id}/epics`),
+    apiFetch(`/api/v1/projects/${project.id}/user-stories`),
     apiFetch(`/api/v1/workspaces/${workspace.id}/members`),
     apiFetch(`/api/v1/projects/${project.id}/stakeholders`),
   ]);
@@ -168,6 +172,16 @@ export default async function ProjectDetailPage({
           status: string;
           dueDate: string | null;
           milestoneId: string | null;
+          userStoryId: string | null;
+          userStoryTitle: string | null;
+          epicId: string | null;
+          epicTitle: string | null;
+          currentOwnerUserId: string | null;
+          currentOwner: {
+            userId: string;
+            displayName: string;
+            email: string;
+          } | null;
           createdAt?: string;
           updatedAt?: string;
           raci: Array<{
@@ -178,6 +192,33 @@ export default async function ProjectDetailPage({
           }>;
         }>;
       }).tasks
+    : [];
+  const epics = epicsResponse.ok
+    ? ((await epicsResponse.json()) as {
+        epics: Array<{
+          id: string;
+          title: string;
+          description: string | null;
+          status: string;
+          sortOrder: number;
+          createdAt?: string;
+          updatedAt?: string;
+        }>;
+      }).epics
+    : [];
+  const stories = storiesResponse.ok
+    ? ((await storiesResponse.json()) as {
+        userStories: Array<{
+          id: string;
+          epicId: string;
+          title: string;
+          description: string | null;
+          status: string;
+          sortOrder: number;
+          createdAt?: string;
+          updatedAt?: string;
+        }>;
+      }).userStories
     : [];
   const members = membersResponse.ok
     ? (
@@ -271,6 +312,8 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         workspaceId={workspace.id}
         canMutate={canMutate && !isArchived}
+        initialEpics={epics}
+        initialStories={stories}
         initialMilestones={milestones}
         initialTasks={tasks}
         members={members}

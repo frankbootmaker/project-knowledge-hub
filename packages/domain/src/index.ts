@@ -90,6 +90,27 @@ export const taskStatusSchema = z.enum([
 /** Project Delivery (NF-018): RACI role codes. */
 export const raciRoleSchema = z.enum(['R', 'A', 'C', 'I']);
 
+/** Epic / user-story lifecycle (same set as milestones). */
+export const epicStatusSchema = z.enum([
+  'planned',
+  'active',
+  'done',
+  'cancelled',
+]);
+
+export const userStoryStatusSchema = epicStatusSchema;
+
+/** Task activity timeline event types. */
+export const taskActivityTypeSchema = z.enum([
+  'created',
+  'status_changed',
+  'comment',
+  'handoff',
+  'raci_changed',
+  'fields_updated',
+  'owner_set',
+]);
+
 /** Project stakeholders roster role (hybrid with RACI-derived people). */
 export const projectStakeholderRoleSchema = z.enum([
   'sponsor',
@@ -208,6 +229,9 @@ export type UserStatus = z.infer<typeof userStatusSchema>;
 export type MilestoneStatus = z.infer<typeof milestoneStatusSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export type RaciRole = z.infer<typeof raciRoleSchema>;
+export type EpicStatus = z.infer<typeof epicStatusSchema>;
+export type UserStoryStatus = z.infer<typeof userStoryStatusSchema>;
+export type TaskActivityType = z.infer<typeof taskActivityTypeSchema>;
 export type ProjectStakeholderRole = z.infer<typeof projectStakeholderRoleSchema>;
 
 export class AppError extends Error {
