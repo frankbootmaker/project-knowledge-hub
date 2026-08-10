@@ -1,3 +1,8 @@
+import type {
+  DisplayPrefs,
+  ReportDiagramPrefs,
+} from '@project-knowledge-hub/domain';
+import { DEFAULT_REPORT_DIAGRAM_PREFS } from '@project-knowledge-hub/domain';
 import {
   deliveryScheduleTone,
   projectDeliveryRag,
@@ -42,6 +47,14 @@ export type ReportRaidItem = {
   severity: string;
 };
 
+export type ReportBudgetBurndownPoint = {
+  capturedOn: string;
+  bac: number;
+  pv: number | null;
+  ev: number;
+  ac: number;
+};
+
 export type ReportBudgetSummary = {
   currency: string;
   initialBudget: number | null;
@@ -54,6 +67,7 @@ export type ReportBudgetSummary = {
   spi: number | null;
   financialRag: ProjectRagStatus;
   riskRag: ProjectRagStatus;
+  burndown?: ReportBudgetBurndownPoint[];
 };
 
 export type ProjectReportData = {
@@ -62,6 +76,15 @@ export type ProjectReportData = {
   stakeholders: ReportStakeholder[];
   raidItems: ReportRaidItem[];
   budget: ReportBudgetSummary | null;
+};
+
+export type ReportDiagramLabels = {
+  orgHierarchy: string;
+  raidBreakdown: string;
+  deliveryTimeline: string;
+  budgetBurndown: string;
+  milestonesSection: string;
+  tasksSection: string;
 };
 
 function downloadMarkdown(filename: string, markdown: string) {
@@ -128,12 +151,178 @@ export async function fetchProjectReportData(
   return { milestones, tasks, stakeholders, raidItems, budget };
 }
 
+export async function fetchReportDiagramPrefs(): Promise<ReportDiagramPrefs> {
+  try {
+    const response = await fetch('/api/v1/me', { credentials: 'include' });
+    if (!response.ok) return DEFAULT_REPORT_DIAGRAM_PREFS;
+    const payload = (await response.json()) as {
+      user?: { displayPrefs?: DisplayPrefs };
+    };
+    return {
+      ...DEFAULT_REPORT_DIAGRAM_PREFS,
+      ...(payload.user?.displayPrefs?.reportDiagrams ?? {}),
+    };
+  } catch {
+    return DEFAULT_REPORT_DIAGRAM_PREFS;
+  }
+}
+
 function nameByUserId(stakeholders: ReportStakeholder[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const row of stakeholders) {
     if (row.userId) map.set(row.userId, row.displayName);
   }
   return map;
+}
+
+function mermaidId(value: string, prefix: string): string {
+  const cleaned = value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
+  return `${prefix}${cleaned || 'x'}`;
+}
+
+function mermaidLabel(value: string): string {
+  return value.replace(/[[\]"#]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 48);
+}
+
+function fenceMermaid(source: string): string {
+  return ['```mermaid', source.trim(), '```', ''].join('\n');
+}
+
+export function buildOrgHierarchyMermaid(
+  stakeholders: ReportStakeholder[],
+): string | null {
+  const people = stakeholders.filter(
+    (row) => row.kind === 'person' && row.userId,
+  );
+  const edges: Array<{ from: string; to: string }> = [];
+  const ids = new Set<string>();
+
+  for (const row of people) {
+    if (!row.userId) continue;
+    ids.add(row.userId);
+    if (
+      row.reportsToUserId &&
+      row.reportsToUserId !== row.userId &&
+      people.some((item) => item.userId === row.reportsToUserId)
+    ) {
+      edges.push({ from: row.reportsToUserId, to: row.userId });
+    }
+  }
+
+  if (ids.size === 0 || edges.length === 0) return null;
+
+  const lines = ['flowchart TB'];
+  for (const row of people) {
+    if (!row.userId || !ids.has(row.userId)) continue;
+    lines.push(
+      `  ${mermaidId(row.userId, 'u')}["${mermaidLabel(row.displayName)}"]`,
+    );
+  }
+  for (const edge of edges) {
+    lines.push(
+      `  ${mermaidId(edge.from, 'u')} --> ${mermaidId(edge.to, 'u')}`,
+    );
+  }
+  return fenceMermaid(lines.join('\n'));
+}
+
+export function buildRaidBreakdownMermaid(
+  raidItems: ReportRaidItem[],
+  kindLabel: (kind: string) => string,
+): string | null {
+  if (raidItems.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const row of raidItems) {
+    counts.set(row.kind, (counts.get(row.kind) ?? 0) + 1);
+  }
+  const lines = ['pie showData'];
+  for (const [kind, count] of counts) {
+    lines.push(`  "${mermaidLabel(kindLabel(kind))}" : ${count}`);
+  }
+  return fenceMermaid(lines.join('\n'));
+}
+
+export function buildDeliveryTimelineMermaid(input: {
+  milestones: ReportMilestone[];
+  tasks: ReportTask[];
+  milestonesSection: string;
+  tasksSection: string;
+}): string | null {
+  const datedMilestones = input.milestones.filter((row) => row.targetDate);
+  const datedTasks = input.tasks.filter((row) => row.dueDate).slice(0, 24);
+  if (datedMilestones.length === 0 && datedTasks.length === 0) return null;
+
+  const lines = ['gantt', '  dateFormat YYYY-MM-DD'];
+
+  if (datedMilestones.length > 0) {
+    lines.push(`  section ${mermaidLabel(input.milestonesSection)}`);
+    datedMilestones.forEach((row, index) => {
+      lines.push(
+        `  ${mermaidLabel(row.title)} :milestone, m${index}, ${row.targetDate}, 0d`,
+      );
+    });
+  }
+
+  if (datedTasks.length > 0) {
+    lines.push(`  section ${mermaidLabel(input.tasksSection)}`);
+    datedTasks.forEach((row, index) => {
+      const done = row.status === 'done' ? 'done, ' : '';
+      lines.push(
+        `  ${mermaidLabel(row.title)} :${done}t${index}, ${row.dueDate}, 1d`,
+      );
+    });
+  }
+
+  return fenceMermaid(lines.join('\n'));
+}
+
+export function buildBudgetBurndownMermaid(
+  budget: ReportBudgetSummary | null,
+): string | null {
+  if (!budget) return null;
+  const series = budget.burndown ?? [];
+  if (series.length >= 2) {
+    const labels = series.map((point) => point.capturedOn.slice(5));
+    const remaining = series.map((point) =>
+      Math.max(0, Math.round(point.bac - point.ac)),
+    );
+    const maxY = Math.max(...remaining, 1);
+    return fenceMermaid(
+      [
+        'xychart-beta',
+        '  title Remaining budget',
+        `  x-axis [${labels.map((label) => `"${label}"`).join(', ')}]`,
+        `  y-axis "Amount" 0 --> ${maxY}`,
+        `  line [${remaining.join(', ')}]`,
+      ].join('\n'),
+    );
+  }
+
+  const values = (
+    [
+      ['BAC', budget.bac],
+      ['PV', budget.pv],
+      ['EV', budget.ev],
+      ['AC', budget.ac],
+    ] as Array<[string, number | null]>
+  ).filter((entry): entry is [string, number] => entry[1] != null && entry[1] > 0);
+
+  if (values.length < 2) return null;
+  const maxY = Math.max(...values.map((entry) => entry[1]), 1);
+  return fenceMermaid(
+    [
+      'xychart-beta',
+      '  title EVM snapshot',
+      `  x-axis [${values.map((entry) => entry[0]).join(', ')}]`,
+      `  y-axis "Amount" 0 --> ${Math.ceil(maxY)}`,
+      `  bar [${values.map((entry) => Math.round(entry[1])).join(', ')}]`,
+    ].join('\n'),
+  );
+}
+
+function diagramSection(title: string, mermaid: string | null): string {
+  if (!mermaid) return '';
+  return [`### ${title}`, '', mermaid].join('\n');
 }
 
 export function computeReportRags(input: {
@@ -170,6 +359,11 @@ export function buildDeliveryStatusReport(input: {
   projectStatus: string;
   milestones: ReportMilestone[];
   tasks: ReportTask[];
+  diagrams?: Partial<ReportDiagramPrefs>;
+  diagramLabels?: Pick<
+    ReportDiagramLabels,
+    'deliveryTimeline' | 'milestonesSection' | 'tasksSection'
+  >;
   labels: {
     title: string;
     generated: string;
@@ -183,6 +377,10 @@ export function buildDeliveryStatusReport(input: {
   };
 }): string {
   const today = todayYmd();
+  const diagrams = {
+    ...DEFAULT_REPORT_DIAGRAM_PREFS,
+    ...(input.diagrams ?? {}),
+  };
 
   const lines = [
     `# ${input.labels.title}: ${input.projectName}`,
@@ -192,9 +390,23 @@ export function buildDeliveryStatusReport(input: {
     `- ${input.labels.timelineRag}: **${input.labels.timelineRagValue}**`,
     `- ${input.labels.generated}: ${new Date().toISOString()}`,
     '',
-    `## ${input.labels.milestones}`,
-    '',
   ];
+
+  if (diagrams.deliveryTimeline && input.diagramLabels) {
+    lines.push(
+      diagramSection(
+        input.diagramLabels.deliveryTimeline,
+        buildDeliveryTimelineMermaid({
+          milestones: input.milestones,
+          tasks: input.tasks,
+          milestonesSection: input.diagramLabels.milestonesSection,
+          tasksSection: input.diagramLabels.tasksSection,
+        }),
+      ),
+    );
+  }
+
+  lines.push(`## ${input.labels.milestones}`, '');
 
   if (input.milestones.length === 0) {
     lines.push(input.labels.none, '');
@@ -251,6 +463,8 @@ export function buildStakeholdersReport(input: {
   stakeholders: ReportStakeholder[];
   currency?: string;
   locale?: string;
+  diagrams?: Partial<ReportDiagramPrefs>;
+  diagramLabels?: Pick<ReportDiagramLabels, 'orgHierarchy'>;
   labels: {
     title: string;
     generated: string;
@@ -268,6 +482,10 @@ export function buildStakeholdersReport(input: {
   );
   const currency = input.currency ?? 'EUR';
   const locale = input.locale ?? 'en';
+  const diagrams = {
+    ...DEFAULT_REPORT_DIAGRAM_PREFS,
+    ...(input.diagrams ?? {}),
+  };
 
   const lines = [
     `# ${input.labels.title}: ${input.projectName}`,
@@ -275,9 +493,18 @@ export function buildStakeholdersReport(input: {
     `- Slug: \`${input.projectSlug}\``,
     `- ${input.labels.generated}: ${new Date().toISOString()}`,
     '',
-    `## ${input.labels.people}`,
-    '',
   ];
+
+  if (diagrams.orgHierarchy && input.diagramLabels) {
+    lines.push(
+      diagramSection(
+        input.diagramLabels.orgHierarchy,
+        buildOrgHierarchyMermaid(input.stakeholders),
+      ),
+    );
+  }
+
+  lines.push(`## ${input.labels.people}`, '');
 
   if (people.length === 0) {
     lines.push(input.labels.none, '');
@@ -331,6 +558,8 @@ export function buildStakeholdersReport(input: {
 export function buildBudgetReportSection(input: {
   budget: ReportBudgetSummary | null;
   locale?: string;
+  diagrams?: Partial<ReportDiagramPrefs>;
+  diagramLabels?: Pick<ReportDiagramLabels, 'budgetBurndown'>;
   labels: {
     title: string;
     currency: string;
@@ -348,11 +577,24 @@ export function buildBudgetReportSection(input: {
   };
 }): string {
   const locale = input.locale ?? 'en';
+  const diagrams = {
+    ...DEFAULT_REPORT_DIAGRAM_PREFS,
+    ...(input.diagrams ?? {}),
+  };
   const lines = [`## ${input.labels.title}`, ''];
 
   if (!input.budget) {
     lines.push(input.labels.none, '');
     return lines.join('\n');
+  }
+
+  if (diagrams.budgetBurndown && input.diagramLabels) {
+    lines.push(
+      diagramSection(
+        input.diagramLabels.budgetBurndown,
+        buildBudgetBurndownMermaid(input.budget),
+      ),
+    );
   }
 
   const b = input.budget;
@@ -376,6 +618,8 @@ export function buildBudgetReportSection(input: {
 export function buildRaidReportSection(input: {
   raidItems: ReportRaidItem[];
   riskRagValue: string;
+  diagrams?: Partial<ReportDiagramPrefs>;
+  diagramLabels?: Pick<ReportDiagramLabels, 'raidBreakdown'>;
   labels: {
     title: string;
     riskRag: string;
@@ -385,12 +629,25 @@ export function buildRaidReportSection(input: {
   statusLabel: (status: string) => string;
   severityLabel: (severity: string) => string;
 }): string {
+  const diagrams = {
+    ...DEFAULT_REPORT_DIAGRAM_PREFS,
+    ...(input.diagrams ?? {}),
+  };
   const lines = [
     `## ${input.labels.title}`,
     '',
     `- ${input.labels.riskRag}: **${input.riskRagValue}**`,
     '',
   ];
+
+  if (diagrams.raidBreakdown && input.diagramLabels) {
+    lines.push(
+      diagramSection(
+        input.diagramLabels.raidBreakdown,
+        buildRaidBreakdownMermaid(input.raidItems, input.kindLabel),
+      ),
+    );
+  }
 
   if (input.raidItems.length === 0) {
     lines.push(input.labels.none, '');
@@ -417,6 +674,8 @@ export function buildProjectStatusReport(input: {
   raidItems: ReportRaidItem[];
   budget: ReportBudgetSummary | null;
   locale?: string;
+  diagrams?: Partial<ReportDiagramPrefs>;
+  diagramLabels?: ReportDiagramLabels;
   labels: {
     statusTitle: string;
     deliveryTitle: string;
@@ -456,6 +715,10 @@ export function buildProjectStatusReport(input: {
 }): string {
   const locale = input.locale ?? 'en';
   const currency = input.budget?.currency ?? 'EUR';
+  const diagrams = {
+    ...DEFAULT_REPORT_DIAGRAM_PREFS,
+    ...(input.diagrams ?? {}),
+  };
 
   const delivery = buildDeliveryStatusReport({
     projectName: input.projectName,
@@ -463,6 +726,8 @@ export function buildProjectStatusReport(input: {
     projectStatus: input.projectStatus,
     milestones: input.milestones,
     tasks: input.tasks,
+    diagrams,
+    diagramLabels: input.diagramLabels,
     labels: {
       title: input.labels.deliveryTitle,
       generated: input.labels.generated,
@@ -482,6 +747,8 @@ export function buildProjectStatusReport(input: {
     stakeholders: input.stakeholders,
     currency,
     locale,
+    diagrams,
+    diagramLabels: input.diagramLabels,
     labels: {
       title: input.labels.stakeholdersTitle,
       generated: input.labels.generated,
@@ -496,6 +763,8 @@ export function buildProjectStatusReport(input: {
   const budgetSection = buildBudgetReportSection({
     budget: input.budget,
     locale,
+    diagrams,
+    diagramLabels: input.diagramLabels,
     labels: {
       title: input.labels.budgetTitle,
       currency: input.labels.currency,
@@ -516,6 +785,8 @@ export function buildProjectStatusReport(input: {
   const raidSection = buildRaidReportSection({
     raidItems: input.raidItems,
     riskRagValue: input.labels.riskRagValue,
+    diagrams,
+    diagramLabels: input.diagramLabels,
     labels: {
       title: input.labels.raidTitle,
       riskRag: input.labels.riskRag,

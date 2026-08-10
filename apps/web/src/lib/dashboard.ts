@@ -1,7 +1,42 @@
+import type { DisplayPrefs } from '@project-knowledge-hub/domain';
+import {
+  DEFAULT_DISPLAY_PREFS,
+  mergeDisplayPrefs,
+} from '@project-knowledge-hub/domain';
 import { apiFetch, type SessionPayload } from './session';
 
 export const DASHBOARD_WORKSPACE_TILE_LIMIT = 6;
 export const DASHBOARD_RECENT_LIMIT = 5;
+
+export type DashboardInsights = {
+  tasksByDue: {
+    overdue: number;
+    dueSoon: number;
+    later: number;
+    none: number;
+  };
+  projectHealthRag: {
+    green: number;
+    amber: number;
+    red: number;
+  };
+  openRaid: {
+    risks: number;
+    issues: number;
+    assumptions: number;
+    dependencies: number;
+    total: number;
+  };
+  budgetAttention: Array<{
+    projectId: string;
+    projectName: string;
+    projectSlug: string;
+    workspaceSlug: string;
+    cpi: number | null;
+    spi: number | null;
+    financialRag: 'green' | 'amber' | 'red';
+  }>;
+};
 
 export type DashboardWorkspace = {
   id: string;
@@ -52,6 +87,21 @@ export type DashboardData = {
   recent: DashboardRecentItem[];
   myTasks: DashboardAssignedTask[];
   primaryWorkspaceId: string | null;
+  displayPrefs: DisplayPrefs;
+  insights: DashboardInsights;
+};
+
+const EMPTY_INSIGHTS: DashboardInsights = {
+  tasksByDue: { overdue: 0, dueSoon: 0, later: 0, none: 0 },
+  projectHealthRag: { green: 0, amber: 0, red: 0 },
+  openRaid: {
+    risks: 0,
+    issues: 0,
+    assumptions: 0,
+    dependencies: 0,
+    total: 0,
+  },
+  budgetAttention: [],
 };
 
 type WorkspaceRow = {
@@ -118,7 +168,7 @@ export async function loadDashboardData(
   );
   const tileWorkspaces = sorted.slice(0, DASHBOARD_WORKSPACE_TILE_LIMIT);
 
-  const [bundles, tasksRes] = await Promise.all([
+  const [bundles, tasksRes, meRes, insightsRes] = await Promise.all([
     Promise.all(
       tileWorkspaces.map(async (workspace) => {
         const bundle = await loadWorkspaceBundle(workspace);
@@ -126,6 +176,8 @@ export async function loadDashboardData(
       }),
     ),
     apiFetch('/api/v1/me/tasks'),
+    apiFetch('/api/v1/me'),
+    apiFetch('/api/v1/me/dashboard-insights'),
   ]);
 
   const dashboardWorkspaces: DashboardWorkspace[] = bundles.map(
@@ -179,11 +231,24 @@ export async function loadDashboardData(
     ? ((await tasksRes.json()) as { tasks: DashboardAssignedTask[] }).tasks
     : [];
 
+  const displayPrefs = meRes.ok
+    ? mergeDisplayPrefs(
+        ((await meRes.json()) as { user?: { displayPrefs?: DisplayPrefs } })
+          .user?.displayPrefs,
+      )
+    : DEFAULT_DISPLAY_PREFS;
+
+  const insights = insightsRes.ok
+    ? ((await insightsRes.json()) as { insights: DashboardInsights }).insights
+    : EMPTY_INSIGHTS;
+
   return {
     workspaces: dashboardWorkspaces,
     workspaceTotal: workspaces.length,
     recent,
     myTasks,
     primaryWorkspaceId: tileWorkspaces[0]?.id ?? null,
+    displayPrefs,
+    insights,
   };
 }

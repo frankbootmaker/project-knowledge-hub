@@ -30,6 +30,7 @@ import {
   buildStakeholdersReport,
   computeReportRags,
   fetchProjectReportData,
+  fetchReportDiagramPrefs,
 } from '../lib/project-reports';
 
 export type ProjectManageDetails = {
@@ -222,12 +223,23 @@ export function ProjectManageMenu(props: {
     setSection('menu');
 
     try {
-      const data = await fetchProjectReportData(props.project.id);
+      const [data, diagrams] = await Promise.all([
+        fetchProjectReportData(props.project.id),
+        fetchReportDiagramPrefs(),
+      ]);
       const rags = computeReportRags(data);
       const timelineRagValue = t(`rag.${rags.timelineRag}`);
       const riskRagValue = t(`rag.${rags.riskRag}`);
       const financialRagValue = t(`rag.${rags.financialRag}`);
       const currency = data.budget?.currency ?? 'EUR';
+      const diagramLabels = {
+        orgHierarchy: t('reportDiagramOrg'),
+        raidBreakdown: t('reportDiagramRaid'),
+        deliveryTimeline: t('reportDiagramDelivery'),
+        budgetBurndown: t('reportDiagramBudget'),
+        milestonesSection: tDelivery('kindMilestone'),
+        tasksSection: tDelivery('kindTask'),
+      };
 
       let markdown = '';
       if (kind === 'delivery') {
@@ -237,6 +249,8 @@ export function ProjectManageMenu(props: {
           projectStatus: props.project.status,
           milestones: data.milestones,
           tasks: data.tasks,
+          diagrams,
+          diagramLabels,
           labels: {
             title: t('reportDeliveryTitle'),
             generated: t('reportGenerated'),
@@ -256,6 +270,8 @@ export function ProjectManageMenu(props: {
           stakeholders: data.stakeholders,
           currency,
           locale,
+          diagrams,
+          diagramLabels,
           labels: {
             title: t('reportStakeholdersTitle'),
             generated: t('reportGenerated'),
@@ -278,6 +294,8 @@ export function ProjectManageMenu(props: {
           raidItems: data.raidItems,
           budget: data.budget,
           locale,
+          diagrams,
+          diagramLabels,
           labels: {
             statusTitle: t('reportStatusTitle'),
             deliveryTitle: t('reportDeliveryTitle'),

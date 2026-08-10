@@ -44,6 +44,7 @@ export async function AppHeader({ session }: { session: SessionPayload | null })
           { href: '/search', label: t('search') },
           { href: '/archived', label: t('archive') },
           { href: '/account/profile', label: t('profile') },
+          { href: '/account/display', label: t('display') },
           ...(session.user.isSystemAdmin
             ? [{ href: '/admin', label: t('admin') }]
             : []),

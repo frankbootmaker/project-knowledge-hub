@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { CollapsibleSection } from '../../../components/CollapsibleSection';
+import { DashboardInsightWidgets } from '../../../components/DashboardInsightWidgets';
 import { DashboardMyTasks } from '../../../components/DashboardMyTasks';
 import {
   LinkButton,
@@ -66,6 +67,11 @@ export default async function DashboardPage() {
             ) : null}
           </div>
         }
+      />
+
+      <DashboardInsightWidgets
+        insights={data.insights}
+        prefs={data.displayPrefs.dashboardWidgets}
       />
 
       <CollapsibleSection

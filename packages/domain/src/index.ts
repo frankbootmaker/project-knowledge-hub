@@ -337,6 +337,99 @@ export function allowsEmailNotification(
   return mergeEmailNotificationPrefs(prefs)[key];
 }
 
+/** Report Mermaid diagrams and dashboard summary widgets the user can toggle. */
+export const REPORT_DIAGRAM_KEYS = [
+  'orgHierarchy',
+  'raidBreakdown',
+  'deliveryTimeline',
+  'budgetBurndown',
+] as const;
+
+export const DASHBOARD_WIDGET_KEYS = [
+  'tasksByDue',
+  'projectHealthRag',
+  'openRaidCounts',
+  'budgetAttention',
+] as const;
+
+export type ReportDiagramKey = (typeof REPORT_DIAGRAM_KEYS)[number];
+export type DashboardWidgetKey = (typeof DASHBOARD_WIDGET_KEYS)[number];
+
+export type ReportDiagramPrefs = Record<ReportDiagramKey, boolean>;
+export type DashboardWidgetPrefs = Record<DashboardWidgetKey, boolean>;
+
+export type DisplayPrefs = {
+  reportDiagrams: ReportDiagramPrefs;
+  dashboardWidgets: DashboardWidgetPrefs;
+};
+
+export const DEFAULT_REPORT_DIAGRAM_PREFS: ReportDiagramPrefs = {
+  orgHierarchy: true,
+  raidBreakdown: true,
+  deliveryTimeline: true,
+  budgetBurndown: true,
+};
+
+export const DEFAULT_DASHBOARD_WIDGET_PREFS: DashboardWidgetPrefs = {
+  tasksByDue: true,
+  projectHealthRag: true,
+  openRaidCounts: true,
+  budgetAttention: true,
+};
+
+export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
+  reportDiagrams: DEFAULT_REPORT_DIAGRAM_PREFS,
+  dashboardWidgets: DEFAULT_DASHBOARD_WIDGET_PREFS,
+};
+
+export const reportDiagramPrefsSchema = z.object({
+  orgHierarchy: z.boolean(),
+  raidBreakdown: z.boolean(),
+  deliveryTimeline: z.boolean(),
+  budgetBurndown: z.boolean(),
+});
+
+export const dashboardWidgetPrefsSchema = z.object({
+  tasksByDue: z.boolean(),
+  projectHealthRag: z.boolean(),
+  openRaidCounts: z.boolean(),
+  budgetAttention: z.boolean(),
+});
+
+export const displayPrefsSchema = z.object({
+  reportDiagrams: reportDiagramPrefsSchema,
+  dashboardWidgets: dashboardWidgetPrefsSchema,
+});
+
+export const displayPrefsPatchSchema = z
+  .object({
+    reportDiagrams: reportDiagramPrefsSchema.partial().optional(),
+    dashboardWidgets: dashboardWidgetPrefsSchema.partial().optional(),
+  })
+  .refine(
+    (value) =>
+      (value.reportDiagrams != null &&
+        Object.keys(value.reportDiagrams).length > 0) ||
+      (value.dashboardWidgets != null &&
+        Object.keys(value.dashboardWidgets).length > 0),
+    { message: 'At least one display preference is required' },
+  );
+
+export function mergeDisplayPrefs(value: unknown): DisplayPrefs {
+  const parsed = displayPrefsSchema.partial().safeParse(value ?? {});
+  const partial = parsed.success ? parsed.data : {};
+  return {
+    reportDiagrams: {
+      ...DEFAULT_REPORT_DIAGRAM_PREFS,
+      ...(partial.reportDiagrams ?? {}),
+    },
+    dashboardWidgets: {
+      ...DEFAULT_DASHBOARD_WIDGET_PREFS,
+      ...(partial.dashboardWidgets ?? {}),
+    },
+  };
+}
+
 export type ProjectStatus = z.infer<typeof projectStatusSchema>;
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 export type MembershipRole = z.infer<typeof membershipRoleSchema>;

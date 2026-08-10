@@ -101,6 +101,11 @@ export const users = pgTable(
       .$type<Record<string, boolean>>()
       .notNull()
       .default({}),
+    /** Report diagram + dashboard widget visibility (missing keys default to on). */
+    displayPrefs: jsonb('display_prefs')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     /** Set when signup-pending escalation mail was sent to all admins (once). */
     signupPendingEscalatedAt: timestamp('signup_pending_escalated_at', {
       withTimezone: true,

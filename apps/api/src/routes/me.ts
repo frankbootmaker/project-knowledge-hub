@@ -10,7 +10,9 @@ import { apiClients, sessions, users } from '@project-knowledge-hub/database';
 import {
   AppError,
   appLocaleSchema,
+  displayPrefsPatchSchema,
   emailNotificationPrefsPatchSchema,
+  mergeDisplayPrefs,
   mergeEmailNotificationPrefs,
   passwordSchema,
   raciRoleSchema,
@@ -42,6 +44,7 @@ import {
 import { closeUserAccount } from '../lib/close-user.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { shouldSendOptionalEmail } from '../lib/notification-prefs.js';
+import { getDashboardInsights } from '../lib/dashboard-insights.js';
 import { listAssignedTasksForUser } from '../lib/project-delivery.js';
 import { toPublicUser } from '../lib/public-user.js';
 
@@ -120,6 +123,15 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
     return { tasks };
   });
 
+  app.get('/api/v1/me/dashboard-insights', async (request) => {
+    const principal = requireAuthenticated(request);
+    const insights = await getDashboardInsights(app.database, {
+      userId: principal.userId,
+      isSystemAdmin: principal.isSystemAdmin,
+    });
+    return { insights };
+  });
+
   app.patch('/api/v1/me/notification-prefs', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
@@ -161,6 +173,69 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
       entityType: 'user',
       entityId: principal.userId,
       metadata: { fields: Object.keys(body) },
+      ipAddress: request.ip,
+    });
+
+    return { user: updated ? toPublicUser(updated) : null };
+  });
+
+  app.patch('/api/v1/me/display-prefs', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const body = displayPrefsPatchSchema.parse(request.body);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, principal.userId))
+      .limit(1);
+    if (!existing) {
+      throw new AppError({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      });
+    }
+
+    const current = mergeDisplayPrefs(existing.displayPrefs);
+    const nextPrefs = mergeDisplayPrefs({
+      reportDiagrams: {
+        ...current.reportDiagrams,
+        ...(body.reportDiagrams ?? {}),
+      },
+      dashboardWidgets: {
+        ...current.dashboardWidgets,
+        ...(body.dashboardWidgets ?? {}),
+      },
+    });
+
+    const [updated] = await app.database.db
+      .update(users)
+      .set({
+        displayPrefs: nextPrefs,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, principal.userId))
+      .returning();
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'user.display_prefs_update',
+      entityType: 'user',
+      entityId: principal.userId,
+      metadata: {
+        fields: [
+          ...Object.keys(body.reportDiagrams ?? {}).map(
+            (key) => `reportDiagrams.${key}`,
+          ),
+          ...Object.keys(body.dashboardWidgets ?? {}).map(
+            (key) => `dashboardWidgets.${key}`,
+          ),
+        ],
+      },
       ipAddress: request.ip,
     });
 
