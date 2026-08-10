@@ -767,7 +767,9 @@
       "troubleshooting": "Hibaelhárítás",
       "incident-resolution": "Incidenslezárás",
       "migration-guide": "Migrációs útmutató",
-      "decision": "Döntés",
+      "decision": "Döntés / döntéshozatal",
+      "project-charter": "Projekt alapító okirat",
+      "meeting-minutes": "Jegyzőkönyv",
       "lessons-learned": "Tanulságok",
       "command-reference": "Parancsreferencia",
       "inventory": "Leltár",
@@ -791,7 +793,15 @@
       "other": "Egyéb"
     },
     "gitManagedReadOnly": "Ez a bejegyzés git-kezelt. Szerkessze a fájlt a repositoryban, majd futtasson Sync-et — a hub szerkesztés tiltott.",
-    "viewOnGitHub": "Megnyitás GitHubon"
+    "viewOnGitHub": "Megnyitás GitHubon",
+    "deliveryLinks": "Delivery kapcsolatok",
+    "deliveryLinksHint": "Kapcsold ezt a dokumentumot a kiválasztott projekt epikjeihez, user storyjaihoz vagy feladataihoz.",
+    "deliveryLinksLoading": "Delivery elemek betöltése…",
+    "deliveryLinksEmpty": "Ebben a projektben még nincsenek epikek, storyk vagy feladatok.",
+    "deliveryLinksSave": "Kapcsolatok mentése",
+    "deliveryLinksSaved": "Kapcsolatok mentve.",
+    "deliveryLinksFailedLoad": "Nem sikerült betölteni a kapcsolatokat",
+    "deliveryLinksFailedSave": "Nem sikerült menteni a kapcsolatokat"
   },
   "search": {
     "title": "Keresés",
@@ -1886,6 +1896,10 @@
     "treeNoTasks": "Ebben a storyban még nincs feladat.",
     "treeStoryCount": "{count} feladat",
     "treeEpicCount": "{stories} story · {tasks} feladat",
+    "linkedRaid": "Kapcsolt RAID",
+    "linkedRaidEmpty": "Nincs ehhez a feladathoz kapcsolt RAID tétel.",
+    "linkedDocuments": "Kapcsolt dokumentumok",
+    "linkedDocumentsEmpty": "Nincs ehhez az elemhez kapcsolt dokumentum.",
     "wideViewHint": "Széles nézet",
     "boardEmptyColumn": "Húzd ide a feladatokat",
     "boardDragHint": "Húzd a feladatokat az oszlopok között az állapot módosításához.",
@@ -1999,5 +2013,59 @@
     },
     "kindAiAssistant": "AI asszisztens",
     "aiOwner": "Tulajdonos"
+  },
+  "raid": {
+    "title": "RAID",
+    "empty": "Még nincsenek RAID tételek. Itt követheted a kockázatokat, feltételezéseket, problémákat és függőségeket.",
+    "searchPlaceholder": "Keresés cím, típus, tulajdonos, feladat…",
+    "filterLabel": "Szűrés típus és státusz szerint",
+    "addItem": "RAID tétel hozzáadása",
+    "modalDescription": "Hozz létre kockázatot, feltételezést, problémát vagy függőséget, és opcionálisan kapcsold feladatokhoz.",
+    "manage": "Kezelés",
+    "manageItem": "RAID tétel kezelése",
+    "manageDescription": "RAID adatok és kapcsolt feladatok frissítése, vagy a tétel törlése.",
+    "itemTitle": "Cím",
+    "kindLabel": "Típus",
+    "statusLabel": "Státusz",
+    "severityLabel": "Súlyosság",
+    "owner": "Tulajdonos",
+    "unassigned": "Nincs hozzárendelve",
+    "dueDate": "Határidő",
+    "description": "Leírás",
+    "linkedTasks": "Kapcsolt feladatok",
+    "noTasks": "Ebben a projektben még nincsenek feladatok.",
+    "linkedTasksCount": "{count} kapcsolt feladat",
+    "saveItem": "Mentés",
+    "deleteItem": "Törlés",
+    "confirmDelete": "RAID tétel törlése",
+    "confirmDeleteTitle": "Véglegesen törlöd: „{title}”?",
+    "deleteHint": "Ez nem vonható vissza. A feladatkapcsolatok törlődnek; a feladatok megmaradnak.",
+    "created": "RAID tétel létrehozva.",
+    "updated": "RAID tétel frissítve.",
+    "deleted": "RAID tétel törölve.",
+    "failedCreate": "Nem sikerült létrehozni a RAID tételt",
+    "failedUpdate": "Nem sikerült frissíteni a RAID tételt",
+    "failedDelete": "Nem sikerült törölni a RAID tételt",
+    "hint": "A RAID az operatív nyilvántartás kockázatokhoz, feltételezésekhez, problémákhoz és függőségekhez. Kapcsold a tételeket feladatokhoz, ha érintik a munkát.",
+    "readOnlyHint": "A RAID megtekinthető; a karbantartók és adminok szerkeszthetnek.",
+    "kind": {
+      "risk": "Kockázat",
+      "assumption": "Feltételezés",
+      "issue": "Probléma",
+      "dependency": "Függőség"
+    },
+    "status": {
+      "open": "Nyitott",
+      "mitigating": "Kezelés alatt",
+      "accepted": "Elfogadott",
+      "closed": "Lezárt",
+      "cancelled": "Törölt"
+    },
+    "severity": {
+      "low": "Alacsony",
+      "medium": "Közepes",
+      "high": "Magas",
+      "critical": "Kritikus"
+    }
   }
 }

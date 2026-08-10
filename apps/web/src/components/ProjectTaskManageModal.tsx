@@ -69,6 +69,21 @@ type Epic = { id: string; title: string };
 type Story = { id: string; epicId: string; title: string };
 type Milestone = { id: string; title: string };
 
+type LinkedRaid = {
+  id: string;
+  kind: string;
+  title: string;
+  status: string;
+  severity: string;
+};
+
+type LinkedDocument = {
+  knowledgeRecordId: string;
+  title: string;
+  recordType: string;
+  slug: string;
+};
+
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
 
 export function ProjectTaskManageModal({
@@ -116,14 +131,19 @@ export function ProjectTaskManageModal({
   const [description, setDescription] = useState('');
   const [milestoneId, setMilestoneId] = useState('');
   const [userStoryId, setUserStoryId] = useState('');
+  const [linkedRaid, setLinkedRaid] = useState<LinkedRaid[]>([]);
+  const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
+  const tRaid = useTranslations('raid');
+  const tRecords = useTranslations('records');
 
   const load = useCallback(async () => {
     if (!taskId) return;
     setError(null);
     try {
-      const [taskRes, actRes] = await Promise.all([
+      const [taskRes, actRes, raidRes] = await Promise.all([
         fetch(`/api/v1/project-tasks/${taskId}`),
         fetch(`/api/v1/project-tasks/${taskId}/activities`),
+        fetch(`/api/v1/project-tasks/${taskId}/raid-items`),
       ]);
       const taskPayload = (await taskRes.json().catch(() => ({}))) as {
         task?: TaskDetail;
@@ -145,6 +165,25 @@ export function ProjectTaskManageModal({
         activities?: Activity[];
       };
       setActivities(actPayload.activities ?? []);
+
+      if (raidRes.ok) {
+        const raidPayload = (await raidRes.json()) as { raidItems?: LinkedRaid[] };
+        setLinkedRaid(raidPayload.raidItems ?? []);
+      } else {
+        setLinkedRaid([]);
+      }
+
+      const docsRes = await fetch(
+        `/api/v1/projects/${loaded.projectId}/delivery-document-links?entityType=task&entityId=${taskId}`,
+      );
+      if (docsRes.ok) {
+        const docsPayload = (await docsRes.json()) as {
+          documentLinks?: LinkedDocument[];
+        };
+        setLinkedDocuments(docsPayload.documentLinks ?? []);
+      } else {
+        setLinkedDocuments([]);
+      }
 
       if (!membersProp || !epicsProp || !storiesProp || !milestonesProp) {
         const [epicRes, storyRes, mileRes, memberRes] = await Promise.all([
@@ -203,6 +242,8 @@ export function ProjectTaskManageModal({
       setHandoffNote('');
       setError(null);
       setConfirmDelete(false);
+      setLinkedRaid([]);
+      setLinkedDocuments([]);
       return;
     }
     setConfirmDelete(false);
@@ -534,6 +575,39 @@ export function ProjectTaskManageModal({
                 rows={4}
               />
             </Field>
+
+            <div className="rounded-md border border-line bg-panel-solid p-3">
+              <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedRaid')}</p>
+              {linkedRaid.length === 0 ? (
+                <p className="m-0 text-sm text-ink-muted">{t('linkedRaidEmpty')}</p>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {linkedRaid.map((item) => (
+                    <Badge key={item.id} tone="warn">
+                      {tRaid(`kind.${item.kind}`)}: {item.title}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-md border border-line bg-panel-solid p-3">
+              <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
+              {linkedDocuments.length === 0 ? (
+                <p className="m-0 text-sm text-ink-muted">
+                  {t('linkedDocumentsEmpty')}
+                </p>
+              ) : (
+                <ul className="m-0 grid list-none gap-1 p-0">
+                  {linkedDocuments.map((doc) => (
+                    <li key={doc.knowledgeRecordId} className="text-sm">
+                      <Badge>{tRecords(`typeLabels.${doc.recordType}`)}</Badge>{' '}
+                      {doc.title}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <div className="rounded-md border border-line bg-panel-solid p-3">
               <p className="mt-0 mb-2 text-sm font-semibold">{t('currentOwner')}</p>

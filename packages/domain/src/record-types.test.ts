@@ -28,6 +28,18 @@ describe('record types catalog', () => {
     }
   });
 
+  it('includes project charter, meeting minutes, and decision-making', () => {
+    for (const value of [
+      'project-charter',
+      'meeting-minutes',
+      'decision',
+    ] as const) {
+      expect(RECORD_TYPES).toContain(value);
+      expect(recordTypeSchema.parse(value)).toBe(value);
+      expect(RECORD_TYPE_CATALOG.some((entry) => entry.value === value)).toBe(true);
+    }
+  });
+
   it('includes invoice', () => {
     expect(recordTypeSchema.parse('invoice')).toBe('invoice');
     expect(RECORD_TYPE_CATALOG.some((entry) => entry.value === 'invoice')).toBe(

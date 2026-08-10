@@ -18,11 +18,14 @@ import {
   conversationImports,
   gitRepositoryConnections,
   knowledgeRecords,
+  knowledgeRecordDeliveryLinks,
   knowledgeRecordVersions,
   memberships,
   organizations,
   projectEpics,
   projectMilestones,
+  projectRaidItems,
+  projectRaidTaskLinks,
   projectStakeholders,
   projectTaskActivities,
   projectTaskRaci,
@@ -975,6 +978,229 @@ Prefer a tool-capable model; tiny local models often skip tools.
         },
       ]);
     }
+
+    const labTaskRows = await database.db
+      .select({ id: projectTasks.id, title: projectTasks.title })
+      .from(projectTasks)
+      .where(eq(projectTasks.projectId, labProject.id));
+    const taskIdByTitle = new Map(labTaskRows.map((row) => [row.title, row.id]));
+    const diskAlertTaskId = taskIdByTitle.get(
+      'Add disk-space alert for Postgres volume',
+    );
+    const monitoringTaskId = taskIdByTitle.get(
+      'Review Monitoring Mon-2 search telemetry',
+    );
+
+    const [riskRaid] = await database.db
+      .insert(projectRaidItems)
+      .values({
+        projectId: labProject.id,
+        kind: 'risk',
+        title: 'Public MCP exposure without Tailscale ACL review',
+        description:
+          'If edge auth drifts, agent tokens could be reachable from the public internet.',
+        status: 'mitigating',
+        severity: 'high',
+        ownerUserId: blair.id,
+        dueDate: ymd(10),
+        sortOrder: 10,
+      })
+      .returning();
+    const [assumptionRaid] = await database.db
+      .insert(projectRaidItems)
+      .values({
+        projectId: labProject.id,
+        kind: 'assumption',
+        title: 'Staging smoke traffic will unblock Mon-2 review',
+        description: 'Assumes staging generates enough search events this week.',
+        status: 'open',
+        severity: 'medium',
+        ownerUserId: dana.id,
+        dueDate: ymd(5),
+        sortOrder: 20,
+      })
+      .returning();
+    const [issueRaid] = await database.db
+      .insert(projectRaidItems)
+      .values({
+        projectId: labProject.id,
+        kind: 'issue',
+        title: 'Postgres volume nearing capacity on lab host',
+        description: 'Disk-space alert work is tracking the fix.',
+        status: 'open',
+        severity: 'critical',
+        ownerUserId: admin.id,
+        dueDate: ymd(7),
+        sortOrder: 30,
+      })
+      .returning();
+    const [dependencyRaid] = await database.db
+      .insert(projectRaidItems)
+      .values({
+        projectId: labProject.id,
+        kind: 'dependency',
+        title: 'Depends on Authentik email_verified mapping',
+        description: 'SSO smoke for maintainers waits on IdP claim mapping.',
+        status: 'accepted',
+        severity: 'medium',
+        ownerUserId: alex.id,
+        sortOrder: 40,
+      })
+      .returning();
+
+    if (!riskRaid || !assumptionRaid || !issueRaid || !dependencyRaid) {
+      throw new Error('Failed to create lab RAID items');
+    }
+
+    const raidTaskPairs: Array<{ raidItemId: string; taskId: string }> = [];
+    if (handoffDemoTaskId) {
+      raidTaskPairs.push({
+        raidItemId: riskRaid.id,
+        taskId: handoffDemoTaskId,
+      });
+    }
+    if (monitoringTaskId) {
+      raidTaskPairs.push({
+        raidItemId: assumptionRaid.id,
+        taskId: monitoringTaskId,
+      });
+    }
+    if (diskAlertTaskId) {
+      raidTaskPairs.push({
+        raidItemId: issueRaid.id,
+        taskId: diskAlertTaskId,
+      });
+    }
+    if (raidTaskPairs.length > 0) {
+      await database.db.insert(projectRaidTaskLinks).values(raidTaskPairs);
+    }
+
+    const [charterRecord] = await database.db
+      .insert(knowledgeRecords)
+      .values({
+        workspaceId: workspace.id,
+        projectId: labProject.id,
+        systemId: knowhub.id,
+        title: 'Homelab Knowledge Hub project charter',
+        slug: 'homelab-project-charter',
+        summary: 'Purpose, scope, and success criteria for the lab KnowHub project.',
+        recordType: 'project-charter',
+        lifecycleStatus: 'current',
+        sourceOfTruthMode: 'hub_managed',
+        contentMarkdown: `# Homelab Knowledge Hub project charter
+
+## Purpose
+
+Operate KnowHub as the shared system of record for lab knowledge and delivery.
+
+## In scope
+
+- Knowledge ledger, delivery hierarchy, RAID register, MCP agent access
+
+## Success criteria
+
+- Maintainers can track epics/stories/tasks and RAID in one project page
+`,
+        createdBy: admin.id,
+        verifiedAt: new Date(),
+      })
+      .returning();
+    const [minutesRecord] = await database.db
+      .insert(knowledgeRecords)
+      .values({
+        workspaceId: workspace.id,
+        projectId: labProject.id,
+        systemId: knowhub.id,
+        title: 'Delivery UX sync — meeting minutes',
+        slug: 'delivery-ux-sync-minutes',
+        summary: 'Notes from the delivery board / calendar review sync.',
+        recordType: 'meeting-minutes',
+        lifecycleStatus: 'draft',
+        sourceOfTruthMode: 'hub_managed',
+        contentMarkdown: `# Delivery UX sync
+
+## Attendees
+
+Blair, Dana, Admin
+
+## Decisions
+
+- Keep milestones as timeboxes; epics/stories for hierarchy
+- Hand off calendar check to Dana
+
+## Actions
+
+- Validate list / board / calendar views
+`,
+        createdBy: admin.id,
+      })
+      .returning();
+    const [decisionRecord] = await database.db
+      .insert(knowledgeRecords)
+      .values({
+        workspaceId: workspace.id,
+        projectId: labProject.id,
+        systemId: knowhub.id,
+        title: 'Decision: public MCP stays behind Authentik',
+        slug: 'decision-public-mcp-authentik',
+        summary: 'Decision-making record for edge auth on the MCP endpoint.',
+        recordType: 'decision',
+        lifecycleStatus: 'verified',
+        sourceOfTruthMode: 'hub_managed',
+        contentMarkdown: `# Decision: public MCP stays behind Authentik
+
+## Context
+
+Agents need remote access; raw token exposure is unacceptable.
+
+## Decision
+
+Keep public MCP behind Authentik + Tailscale ACL review.
+
+## Consequences
+
+- RAID risk tracked until ACL review completes
+`,
+        createdBy: admin.id,
+        verifiedAt: new Date(),
+      })
+      .returning();
+
+    if (!charterRecord || !minutesRecord || !decisionRecord) {
+      throw new Error('Failed to create delivery-linked demo documents');
+    }
+
+    await database.db.insert(knowledgeRecordDeliveryLinks).values([
+      {
+        knowledgeRecordId: charterRecord.id,
+        entityType: 'epic',
+        entityId: labEpic.id,
+      },
+      {
+        knowledgeRecordId: minutesRecord.id,
+        entityType: 'user_story',
+        entityId: storyDelivery.id,
+      },
+      ...(handoffDemoTaskId
+        ? [
+            {
+              knowledgeRecordId: minutesRecord.id,
+              entityType: 'task',
+              entityId: handoffDemoTaskId,
+            },
+          ]
+        : []),
+      {
+        knowledgeRecordId: decisionRecord.id,
+        entityType: 'epic',
+        entityId: labEpic.id,
+      },
+      {
+        knowledgeRecordId: decisionRecord.id,
+        entityType: 'user_story',
+        entityId: storyEdge.id,
+      },
+    ]);
 
     const [aiM1] = await database.db
       .insert(projectMilestones)

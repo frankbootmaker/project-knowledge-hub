@@ -12,6 +12,7 @@ import {
 } from '@project-knowledge-hub/domain';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import { localeLabels, locales, type AppLocale } from '../i18n/config';
+import { KnowledgeRecordDeliveryLinksField } from './KnowledgeRecordDeliveryLinksField';
 import { MarkdownDocument } from './MarkdownDocument';
 import {
   Button,
@@ -434,6 +435,13 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
         <Field label={tCommon('tagsHint')} className="sm:col-span-2">
           <Input value={tags} onChange={(e) => setTags(e.target.value)} />
         </Field>
+        {props.mode === 'edit' && props.initial?.id && projectId ? (
+          <KnowledgeRecordDeliveryLinksField
+            recordId={props.initial.id}
+            projectId={projectId}
+            canMutate
+          />
+        ) : null}
       </Panel>
 
       <Panel>

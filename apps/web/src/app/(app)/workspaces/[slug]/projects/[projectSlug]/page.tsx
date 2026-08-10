@@ -5,6 +5,10 @@ import { ProjectDeliveryPanel } from '../../../../../../components/ProjectDelive
 import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
 import {
+  ProjectRaidPanel,
+  type RaidItem,
+} from '../../../../../../components/ProjectRaidPanel';
+import {
   ProjectStakeholdersPanel,
   type Stakeholder,
 } from '../../../../../../components/ProjectStakeholdersPanel';
@@ -130,6 +134,7 @@ export default async function ProjectDetailPage({
     storiesResponse,
     membersResponse,
     stakeholdersResponse,
+    raidResponse,
   ] = await Promise.all([
     apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
     apiFetch(
@@ -141,6 +146,7 @@ export default async function ProjectDetailPage({
     apiFetch(`/api/v1/projects/${project.id}/user-stories`),
     apiFetch(`/api/v1/workspaces/${workspace.id}/members`),
     apiFetch(`/api/v1/projects/${project.id}/stakeholders`),
+    apiFetch(`/api/v1/projects/${project.id}/raid-items`),
   ]);
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
@@ -241,6 +247,9 @@ export default async function ProjectDetailPage({
     ? ((await stakeholdersResponse.json()) as { stakeholders: Stakeholder[] })
         .stakeholders
     : [];
+  const raidItems = raidResponse.ok
+    ? ((await raidResponse.json()) as { raidItems: RaidItem[] }).raidItems
+    : [];
 
   const deliveryRag = projectDeliveryRag([
     ...milestones.map((row) => ({ status: row.status, date: row.targetDate })),
@@ -316,6 +325,18 @@ export default async function ProjectDetailPage({
         initialStories={stories}
         initialMilestones={milestones}
         initialTasks={tasks}
+        members={members}
+      />
+
+      <ProjectRaidPanel
+        projectId={project.id}
+        canMutate={canMutate && !isArchived}
+        initialRaidItems={raidItems}
+        tasks={tasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+        }))}
         members={members}
       />
 

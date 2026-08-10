@@ -1145,3 +1145,86 @@ export const projectStakeholders = pgTable(
     index('project_stakeholders_reports_to_idx').on(table.reportsToUserId),
   ],
 );
+
+/** Project RAID register: Risks, Assumptions, Issues, Dependencies. */
+export const projectRaidItems = pgTable(
+  'project_raid_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status').notNull().default('open'),
+    severity: text('severity').notNull().default('medium'),
+    ownerUserId: uuid('owner_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    dueDate: date('due_date', { mode: 'string' }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('project_raid_items_project_id_idx').on(table.projectId),
+    index('project_raid_items_project_kind_idx').on(table.projectId, table.kind),
+    index('project_raid_items_project_status_idx').on(table.projectId, table.status),
+  ],
+);
+
+/** Links a RAID item to one or more delivery tasks (same project). */
+export const projectRaidTaskLinks = pgTable(
+  'project_raid_task_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    raidItemId: uuid('raid_item_id')
+      .notNull()
+      .references(() => projectRaidItems.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => projectTasks.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_raid_task_links_raid_task_uidx').on(
+      table.raidItemId,
+      table.taskId,
+    ),
+    index('project_raid_task_links_task_id_idx').on(table.taskId),
+  ],
+);
+
+/**
+ * Links a knowledge record to delivery entities (epic / user story / task).
+ * entity_id is polymorphic; app layer validates project ownership.
+ */
+export const knowledgeRecordDeliveryLinks = pgTable(
+  'knowledge_record_delivery_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    knowledgeRecordId: uuid('knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('knowledge_record_delivery_links_uidx').on(
+      table.knowledgeRecordId,
+      table.entityType,
+      table.entityId,
+    ),
+    index('knowledge_record_delivery_links_entity_idx').on(
+      table.entityType,
+      table.entityId,
+    ),
+    index('knowledge_record_delivery_links_record_idx').on(table.knowledgeRecordId),
+  ],
+);

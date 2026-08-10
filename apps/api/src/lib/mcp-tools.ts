@@ -10,10 +10,14 @@ import {
 import {
   AppError,
   buildKnowledgeRecordMetadata,
+  deliveryLinkEntityTypeSchema,
   epicStatusSchema,
   milestoneStatusSchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
+  raidKindSchema,
+  raidSeveritySchema,
+  raidStatusSchema,
   recordTypeSchema,
   taskStatusSchema,
   userStoryStatusSchema,
@@ -83,6 +87,18 @@ import {
   updateProjectStakeholder,
   upsertProjectStakeholder,
 } from './project-stakeholders.js';
+import {
+  createRaidItem,
+  getRaidItem,
+  listRaidItems,
+  setRaidTaskLinks,
+  updateRaidItem,
+} from './project-raid.js';
+import {
+  getKnowledgeRecordProjectContext,
+  listDeliveryLinksForRecord,
+  setDeliveryLinksForRecord,
+} from './knowledge-delivery-links.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -1567,6 +1583,172 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { ok: true, ...deleted };
+    },
+
+    async listProjectRaidItems(input) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        raidItems: await listRaidItems(app.database, input.projectId, {
+          includeArchived: input.includeArchived,
+        }),
+      };
+    },
+
+    async createProjectRaidItem(input) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const raidItem = await createRaidItem(app.database, {
+        projectId: project.id,
+        workspaceId: project.workspaceId,
+        kind: raidKindSchema.parse(input.kind),
+        title: input.title,
+        description: input.description,
+        status: input.status
+          ? raidStatusSchema.parse(input.status)
+          : undefined,
+        severity: input.severity
+          ? raidSeveritySchema.parse(input.severity)
+          : undefined,
+        ownerUserId: input.ownerUserId,
+        dueDate: input.dueDate,
+        sortOrder: input.sortOrder,
+        taskIds: input.taskIds,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.raid_item_created',
+        entityType: 'project_raid_item',
+        entityId: raidItem.id,
+        metadata: {
+          projectId: project.id,
+          kind: raidItem.kind,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { raidItem };
+    },
+
+    async updateProjectRaidItem(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getRaidItem(app.database, input.raidItemId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const raidItem = await updateRaidItem(app.database, input.raidItemId, {
+        workspaceId: project.workspaceId,
+        kind: input.kind ? raidKindSchema.parse(input.kind) : undefined,
+        title: input.title,
+        description: input.description,
+        status: input.status
+          ? raidStatusSchema.parse(input.status)
+          : undefined,
+        severity: input.severity
+          ? raidSeveritySchema.parse(input.severity)
+          : undefined,
+        ownerUserId: input.ownerUserId,
+        dueDate: input.dueDate,
+        sortOrder: input.sortOrder,
+        archived: input.archived,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.raid_item_updated',
+        entityType: 'project_raid_item',
+        entityId: raidItem.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { raidItem };
+    },
+
+    async setProjectRaidTaskLinks(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getRaidItem(app.database, input.raidItemId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const raidItem = await setRaidTaskLinks(app.database, {
+        raidItemId: input.raidItemId,
+        projectId: project.id,
+        taskIds: input.taskIds,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.raid_task_links_set',
+        entityType: 'project_raid_item',
+        entityId: raidItem.id,
+        metadata: {
+          projectId: project.id,
+          taskIds: input.taskIds,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { raidItem };
+    },
+
+    async getKnowledgeRecordDeliveryLinks(input) {
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        input.recordId,
+      );
+      assertWorkspaceAllowed(client, record.workspaceId);
+      return {
+        deliveryLinks: await listDeliveryLinksForRecord(
+          app.database,
+          input.recordId,
+        ),
+      };
+    },
+
+    async setKnowledgeRecordDeliveryLinks(input) {
+      const actingUserId = requireActingUserId(client);
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        input.recordId,
+      );
+      assertWriteWorkspaceAllowed(client, record.workspaceId);
+      if (record.projectId) {
+        const { project } = await requireProjectContext(
+          app.database,
+          record.projectId,
+        );
+        assertProjectNotArchived(project);
+      }
+      const deliveryLinks = await setDeliveryLinksForRecord(app.database, {
+        knowledgeRecordId: input.recordId,
+        links: input.links.map((link) => ({
+          entityType: deliveryLinkEntityTypeSchema.parse(link.entityType),
+          entityId: link.entityId,
+        })),
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'knowledge.delivery_links_set',
+        entityType: 'knowledge_record',
+        entityId: input.recordId,
+        metadata: {
+          projectId: record.projectId,
+          linkCount: deliveryLinks.length,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { deliveryLinks };
     },
 
     async onToolCall(toolName, ok, context) {

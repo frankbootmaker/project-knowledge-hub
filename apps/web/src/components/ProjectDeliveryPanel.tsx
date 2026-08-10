@@ -1026,6 +1026,7 @@ export function ProjectDeliveryPanel({
         onClose={() => setManageAgile(null)}
         kind={manageAgile?.kind ?? null}
         itemId={manageAgile?.id ?? null}
+        projectId={projectId}
         epics={epics}
         stories={stories}
         canMutate={canMutate}

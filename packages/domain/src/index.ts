@@ -122,6 +122,38 @@ export const projectStakeholderRoleSchema = z.enum([
   'other',
 ]);
 
+/** Project RAID register item kind. */
+export const raidKindSchema = z.enum([
+  'risk',
+  'assumption',
+  'issue',
+  'dependency',
+]);
+
+/** Project RAID register lifecycle. */
+export const raidStatusSchema = z.enum([
+  'open',
+  'mitigating',
+  'accepted',
+  'closed',
+  'cancelled',
+]);
+
+/** Project RAID severity (used most for risks/issues). */
+export const raidSeveritySchema = z.enum([
+  'low',
+  'medium',
+  'high',
+  'critical',
+]);
+
+/** Knowledge record → delivery entity link target. */
+export const deliveryLinkEntityTypeSchema = z.enum([
+  'epic',
+  'user_story',
+  'task',
+]);
+
 export const systemStatusSchema = z.enum([
   'proposed',
   'experimental',
@@ -233,6 +265,10 @@ export type EpicStatus = z.infer<typeof epicStatusSchema>;
 export type UserStoryStatus = z.infer<typeof userStoryStatusSchema>;
 export type TaskActivityType = z.infer<typeof taskActivityTypeSchema>;
 export type ProjectStakeholderRole = z.infer<typeof projectStakeholderRoleSchema>;
+export type RaidKind = z.infer<typeof raidKindSchema>;
+export type RaidStatus = z.infer<typeof raidStatusSchema>;
+export type RaidSeverity = z.infer<typeof raidSeveritySchema>;
+export type DeliveryLinkEntityType = z.infer<typeof deliveryLinkEntityTypeSchema>;
 
 export class AppError extends Error {
   readonly code: string;

@@ -11,7 +11,8 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints, **and the image/media embed workflow**
 * `list_workspace_media` — recent workspace images with Markdown snippets
 * `get_platform_status` — redacted health/backup snapshot (requires opt-in `monitoring:read`; not in default scopes)
-* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` — Project Delivery (requires opt-in `pm:read`)
+* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` — Project Delivery + RAID (requires opt-in `pm:read`)
+* `get_knowledge_record_delivery_links` — epic/story/task links for a knowledge record (`knowledge:read`)
 
 Also available as REST: `GET /api/v1/platform/status` with the same scope.
 
@@ -24,6 +25,7 @@ workspace allowlist, and `actingUserId`:
 
 * `create_knowledge_record` — always creates a **draft** with `ai_generated_draft` provenance
 * `update_knowledge_record` — updates as **draft**; requires `changeMessage`
+* `set_knowledge_record_delivery_links` — replace epic/story/task links (record must be project-scoped)
 * `begin_workspace_media_upload` / `append_workspace_media_upload` / `finalize_workspace_media_upload` — Redis-backed chunked base64 upload (**preferred for ChatGPT Actions**; ~8 KB chunks)
 * `upload_workspace_media` — single-shot JPEG/PNG/WebP/GIF base64 upload; returns `media.markdownSnippet`; optional `insertIntoRecord`
 * `delete_workspace_media` — soft-delete media + remove bytes
@@ -41,6 +43,7 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 * `set_project_task_raci` — replace RACI; workspace members only; at most one Accountable (`A`)
 * `add_project_task_comment` / `handoff_project_task` — activity timeline; handoff moves current owner only
 * `create_project_stakeholder` / `update_project_stakeholder` / `delete_project_stakeholder` — durable roster (+ reports-to)
+* `create_project_raid_item` / `update_project_raid_item` / `set_project_raid_task_links` — RAID register (+ task links)
 
 ## Embedding images in knowledge Markdown
 

@@ -26,7 +26,7 @@ Humans and AI agents work on the **same** project objects so full project contex
 
 | In v1 | Out of v1 |
 | --- | --- |
-| Milestones under a project | Dependencies / Gantt / critical path |
+| Milestones under a project | Gantt / critical path (RAID **Dependencies** are a register, not a schedule graph — see [PROJECT_RAID.md](./PROJECT_RAID.md)) |
 | Tasks (optional milestone link) | Subtasks / checklists as separate entities |
 | Due / target dates | Time tracking, capacity |
 | RACI matrix per task (`R`/`A`/`C`/`I`) | External contacts without accounts |
@@ -46,6 +46,8 @@ projects
   │     └── project_user_stories
   │           └── project_tasks (story optional)
   ├── project_milestones          ← optional timeboxes (orthogonal to epic/story)
+  ├── project_raid_items          ← RAID register (see PROJECT_RAID.md)
+  │     └── project_raid_task_links
   └── project_tasks
         ├── milestone_id (optional)
         ├── user_story_id (optional)
@@ -53,6 +55,8 @@ projects
         ├── project_task_raci
         └── project_task_activities
 ```
+
+Knowledge documents may link to epics / stories / tasks via `knowledge_record_delivery_links` (charter, meeting minutes, decisions, etc.).
 
 Milestones remain **timeboxes**. Agile structure is **Epic → User story → Task**. A task may link to a story and/or a milestone.
 

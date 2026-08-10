@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
+  Badge,
   Button,
   ErrorText,
   Field,
@@ -31,11 +32,19 @@ type Story = {
   status: string;
 };
 
+type LinkedDocument = {
+  knowledgeRecordId: string;
+  title: string;
+  recordType: string;
+  slug: string;
+};
+
 export function ProjectAgileManageModal({
   open,
   onClose,
   kind,
   itemId,
+  projectId,
   epics,
   stories,
   canMutate,
@@ -46,6 +55,7 @@ export function ProjectAgileManageModal({
   onClose: () => void;
   kind: 'epic' | 'story' | null;
   itemId: string | null;
+  projectId: string;
   epics: Epic[];
   stories: Story[];
   canMutate: boolean;
@@ -55,6 +65,7 @@ export function ProjectAgileManageModal({
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
   const tArchive = useTranslations('archive');
+  const tRecords = useTranslations('records');
   const { pushToast } = useToast();
 
   const [title, setTitle] = useState('');
@@ -65,12 +76,14 @@ export function ProjectAgileManageModal({
   const [pending, setPending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
 
   useEffect(() => {
     if (!open || !kind || !itemId) {
       setConfirmDelete(false);
       setDeleteAcknowledged(false);
       setError(null);
+      setLinkedDocuments([]);
       return;
     }
     if (kind === 'epic') {
@@ -91,7 +104,23 @@ export function ProjectAgileManageModal({
     setConfirmDelete(false);
     setDeleteAcknowledged(false);
     setError(null);
-  }, [open, kind, itemId, epics, stories]);
+
+    const entityType = kind === 'epic' ? 'epic' : 'user_story';
+    void fetch(
+      `/api/v1/projects/${projectId}/delivery-document-links?entityType=${entityType}&entityId=${itemId}`,
+    )
+      .then(async (response) => {
+        if (!response.ok) {
+          setLinkedDocuments([]);
+          return;
+        }
+        const payload = (await response.json()) as {
+          documentLinks?: LinkedDocument[];
+        };
+        setLinkedDocuments(payload.documentLinks ?? []);
+      })
+      .catch(() => setLinkedDocuments([]));
+  }, [open, kind, itemId, epics, stories, projectId]);
 
   async function save() {
     if (!kind || !itemId || !canMutate || !title.trim()) return;
@@ -357,6 +386,21 @@ export function ProjectAgileManageModal({
             rows={4}
           />
         </Field>
+        <div className="rounded-md border border-line bg-panel-solid p-3">
+          <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
+          {linkedDocuments.length === 0 ? (
+            <p className="m-0 text-sm text-ink-muted">{t('linkedDocumentsEmpty')}</p>
+          ) : (
+            <ul className="m-0 grid list-none gap-1 p-0">
+              {linkedDocuments.map((doc) => (
+                <li key={doc.knowledgeRecordId} className="text-sm">
+                  <Badge>{tRecords(`typeLabels.${doc.recordType}`)}</Badge>{' '}
+                  {doc.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </Modal>
   );

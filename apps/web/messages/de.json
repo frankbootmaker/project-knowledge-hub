@@ -767,7 +767,9 @@
       "troubleshooting": "Fehlerbehebung",
       "incident-resolution": "Incident-Auflösung",
       "migration-guide": "Migrationsleitfaden",
-      "decision": "Entscheidung",
+      "decision": "Entscheidung / Entscheidungsfindung",
+      "project-charter": "Projektcharta",
+      "meeting-minutes": "Sitzungsprotokoll",
       "lessons-learned": "Lessons Learned",
       "command-reference": "Befehlsreferenz",
       "inventory": "Inventar",
@@ -791,7 +793,15 @@
       "other": "Sonstiges"
     },
     "gitManagedReadOnly": "Dieser Eintrag wird von Git verwaltet. Datei im Repository ändern und Sync ausführen — Hub-Bearbeitung ist gesperrt.",
-    "viewOnGitHub": "Auf GitHub ansehen"
+    "viewOnGitHub": "Auf GitHub ansehen",
+    "deliveryLinks": "Umsetzungs-Verknüpfungen",
+    "deliveryLinksHint": "Verknüpfe dieses Dokument mit Epics, User Stories oder Aufgaben im gewählten Projekt.",
+    "deliveryLinksLoading": "Umsetzungsobjekte werden geladen…",
+    "deliveryLinksEmpty": "Noch keine Epics, Stories oder Aufgaben in diesem Projekt.",
+    "deliveryLinksSave": "Verknüpfungen speichern",
+    "deliveryLinksSaved": "Verknüpfungen gespeichert.",
+    "deliveryLinksFailedLoad": "Verknüpfungen konnten nicht geladen werden",
+    "deliveryLinksFailedSave": "Verknüpfungen konnten nicht gespeichert werden"
   },
   "search": {
     "title": "Suche",
@@ -1886,6 +1896,10 @@
     "treeNoTasks": "Noch keine Aufgaben in dieser Story.",
     "treeStoryCount": "{count} Aufgaben",
     "treeEpicCount": "{stories} Stories · {tasks} Aufgaben",
+    "linkedRaid": "Verknüpfte RAID-Einträge",
+    "linkedRaidEmpty": "Keine RAID-Einträge mit dieser Aufgabe verknüpft.",
+    "linkedDocuments": "Verknüpfte Dokumente",
+    "linkedDocumentsEmpty": "Keine Dokumente mit diesem Eintrag verknüpft.",
     "wideViewHint": "Breite Ansicht",
     "boardEmptyColumn": "Aufgaben hierher ziehen",
     "boardDragHint": "Ziehen Sie Aufgaben zwischen Spalten, um den Status zu ändern.",
@@ -1999,5 +2013,59 @@
     },
     "kindAiAssistant": "KI-Assistent",
     "aiOwner": "Owner"
+  },
+  "raid": {
+    "title": "RAID",
+    "empty": "Noch keine RAID-Einträge. Risiken, Annahmen, Issues und Abhängigkeiten hier verfolgen.",
+    "searchPlaceholder": "Titel, Art, Owner, Aufgaben suchen…",
+    "filterLabel": "Nach Art und Status filtern",
+    "addItem": "RAID-Eintrag hinzufügen",
+    "modalDescription": "Risiko, Annahme, Issue oder Abhängigkeit anlegen und optional Aufgaben verknüpfen.",
+    "manage": "Verwalten",
+    "manageItem": "RAID-Eintrag verwalten",
+    "manageDescription": "RAID-Details, verknüpfte Aufgaben aktualisieren oder den Eintrag löschen.",
+    "itemTitle": "Titel",
+    "kindLabel": "Art",
+    "statusLabel": "Status",
+    "severityLabel": "Schwere",
+    "owner": "Owner",
+    "unassigned": "Nicht zugewiesen",
+    "dueDate": "Fälligkeitsdatum",
+    "description": "Beschreibung",
+    "linkedTasks": "Verknüpfte Aufgaben",
+    "noTasks": "Noch keine Aufgaben in diesem Projekt.",
+    "linkedTasksCount": "{count} verknüpfte Aufgaben",
+    "saveItem": "Speichern",
+    "deleteItem": "Löschen",
+    "confirmDelete": "RAID-Eintrag löschen",
+    "confirmDeleteTitle": "„{title}“ dauerhaft löschen?",
+    "deleteHint": "Das kann nicht rückgängig gemacht werden. Aufgabenverknüpfungen werden entfernt; die Aufgaben bleiben erhalten.",
+    "created": "RAID-Eintrag erstellt.",
+    "updated": "RAID-Eintrag aktualisiert.",
+    "deleted": "RAID-Eintrag gelöscht.",
+    "failedCreate": "RAID-Eintrag konnte nicht erstellt werden",
+    "failedUpdate": "RAID-Eintrag konnte nicht aktualisiert werden",
+    "failedDelete": "RAID-Eintrag konnte nicht gelöscht werden",
+    "hint": "RAID ist das operative Register für Risiken, Annahmen, Issues und Abhängigkeiten. Verknüpfe Einträge mit Aufgaben, wenn sie die Umsetzung betreffen.",
+    "readOnlyHint": "RAID ist sichtbar; Maintainer und Admins können bearbeiten.",
+    "kind": {
+      "risk": "Risiko",
+      "assumption": "Annahme",
+      "issue": "Issue",
+      "dependency": "Abhängigkeit"
+    },
+    "status": {
+      "open": "Offen",
+      "mitigating": "In Mitigation",
+      "accepted": "Akzeptiert",
+      "closed": "Geschlossen",
+      "cancelled": "Abgebrochen"
+    },
+    "severity": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "critical": "Kritisch"
+    }
   }
 }

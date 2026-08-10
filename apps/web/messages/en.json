@@ -767,7 +767,9 @@
       "troubleshooting": "Troubleshooting",
       "incident-resolution": "Incident resolution",
       "migration-guide": "Migration guide",
-      "decision": "Decision",
+      "decision": "Decision / decision-making",
+      "project-charter": "Project charter",
+      "meeting-minutes": "Meeting minutes",
       "lessons-learned": "Lessons learned",
       "command-reference": "Command reference",
       "inventory": "Inventory",
@@ -791,7 +793,15 @@
       "other": "Other"
     },
     "gitManagedReadOnly": "This record is git-managed. Edit the file in the repository and run Sync — hub edits are blocked.",
-    "viewOnGitHub": "View on GitHub"
+    "viewOnGitHub": "View on GitHub",
+    "deliveryLinks": "Delivery links",
+    "deliveryLinksHint": "Link this document to epics, user stories, or tasks in the selected project.",
+    "deliveryLinksLoading": "Loading delivery items…",
+    "deliveryLinksEmpty": "No epics, stories, or tasks in this project yet.",
+    "deliveryLinksSave": "Save delivery links",
+    "deliveryLinksSaved": "Delivery links saved.",
+    "deliveryLinksFailedLoad": "Failed to load delivery links",
+    "deliveryLinksFailedSave": "Failed to save delivery links"
   },
   "search": {
     "title": "Search",
@@ -1886,6 +1896,10 @@
     "treeNoTasks": "No tasks in this story yet.",
     "treeStoryCount": "{count} tasks",
     "treeEpicCount": "{stories} stories · {tasks} tasks",
+    "linkedRaid": "Linked RAID",
+    "linkedRaidEmpty": "No RAID items linked to this task.",
+    "linkedDocuments": "Linked documents",
+    "linkedDocumentsEmpty": "No documents linked to this item.",
     "wideViewHint": "Wide view",
     "boardEmptyColumn": "Drop tasks here",
     "boardDragHint": "Drag tasks between columns to update status.",
@@ -1999,5 +2013,59 @@
     },
     "kindAiAssistant": "AI assistant",
     "aiOwner": "Owner"
+  },
+  "raid": {
+    "title": "RAID",
+    "empty": "No RAID items yet. Track risks, assumptions, issues, and dependencies here.",
+    "searchPlaceholder": "Search title, kind, owner, tasks…",
+    "filterLabel": "Filter by kind and status",
+    "addItem": "Add RAID item",
+    "modalDescription": "Create a risk, assumption, issue, or dependency and optionally link delivery tasks.",
+    "manage": "Manage",
+    "manageItem": "Manage RAID item",
+    "manageDescription": "Update RAID details, linked tasks, or delete the item.",
+    "itemTitle": "Title",
+    "kindLabel": "Kind",
+    "statusLabel": "Status",
+    "severityLabel": "Severity",
+    "owner": "Owner",
+    "unassigned": "Unassigned",
+    "dueDate": "Due date",
+    "description": "Description",
+    "linkedTasks": "Linked tasks",
+    "noTasks": "No delivery tasks in this project yet.",
+    "linkedTasksCount": "{count} linked tasks",
+    "saveItem": "Save",
+    "deleteItem": "Delete",
+    "confirmDelete": "Delete RAID item",
+    "confirmDeleteTitle": "Permanently delete “{title}”?",
+    "deleteHint": "This cannot be undone. Task links are removed; the tasks themselves stay.",
+    "created": "RAID item created.",
+    "updated": "RAID item updated.",
+    "deleted": "RAID item deleted.",
+    "failedCreate": "Failed to create RAID item",
+    "failedUpdate": "Failed to update RAID item",
+    "failedDelete": "Failed to delete RAID item",
+    "hint": "RAID is the operational register for risks, assumptions, issues, and dependencies. Link items to delivery tasks when they affect work.",
+    "readOnlyHint": "You can view RAID; maintainers and admins can edit.",
+    "kind": {
+      "risk": "Risk",
+      "assumption": "Assumption",
+      "issue": "Issue",
+      "dependency": "Dependency"
+    },
+    "status": {
+      "open": "Open",
+      "mitigating": "Mitigating",
+      "accepted": "Accepted",
+      "closed": "Closed",
+      "cancelled": "Cancelled"
+    },
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    }
   }
 }

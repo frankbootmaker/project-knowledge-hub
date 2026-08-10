@@ -245,6 +245,45 @@ export type McpToolHandlers = {
   deleteProjectStakeholder: (input: {
     stakeholderId: string;
   }) => Promise<unknown>;
+  listProjectRaidItems: (input: {
+    projectId: string;
+    includeArchived?: boolean;
+  }) => Promise<unknown>;
+  createProjectRaidItem: (input: {
+    projectId: string;
+    kind: string;
+    title: string;
+    description?: string | null;
+    status?: string;
+    severity?: string;
+    ownerUserId?: string | null;
+    dueDate?: string | null;
+    sortOrder?: number;
+    taskIds?: string[];
+  }) => Promise<unknown>;
+  updateProjectRaidItem: (input: {
+    raidItemId: string;
+    kind?: string;
+    title?: string;
+    description?: string | null;
+    status?: string;
+    severity?: string;
+    ownerUserId?: string | null;
+    dueDate?: string | null;
+    sortOrder?: number;
+    archived?: boolean;
+  }) => Promise<unknown>;
+  setProjectRaidTaskLinks: (input: {
+    raidItemId: string;
+    taskIds: string[];
+  }) => Promise<unknown>;
+  getKnowledgeRecordDeliveryLinks: (input: {
+    recordId: string;
+  }) => Promise<unknown>;
+  setKnowledgeRecordDeliveryLinks: (input: {
+    recordId: string;
+    links: Array<{ entityType: string; entityId: string }>;
+  }) => Promise<unknown>;
   onToolCall?: (
     toolName: string,
     ok: boolean,
@@ -1097,6 +1136,135 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('delete_project_stakeholder', 'pm:write', () =>
         handlers.deleteProjectStakeholder(args),
+      )(),
+  );
+
+  const raidKindEnum = z.enum(['risk', 'assumption', 'issue', 'dependency']);
+  const raidStatusEnum = z.enum([
+    'open',
+    'mitigating',
+    'accepted',
+    'closed',
+    'cancelled',
+  ]);
+  const raidSeverityEnum = z.enum(['low', 'medium', 'high', 'critical']);
+  const deliveryEntityEnum = z.enum(['epic', 'user_story', 'task']);
+
+  server.tool(
+    'list_project_raid_items',
+    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      includeArchived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_project_raid_items',
+        'pm:read',
+        () => handlers.listProjectRaidItems(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'create_project_raid_item',
+    'Create a RAID register item and optionally link delivery tasks. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      kind: raidKindEnum,
+      title: z.string().min(1).max(300),
+      description: z.string().max(10000).nullable().optional(),
+      status: raidStatusEnum.optional(),
+      severity: raidSeverityEnum.optional(),
+      ownerUserId: z.string().uuid().nullable().optional(),
+      dueDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      taskIds: z.array(z.string().uuid()).max(100).optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_project_raid_item',
+        'pm:write',
+        () => handlers.createProjectRaidItem(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'update_project_raid_item',
+    'Update a RAID register item. Requires pm:write.',
+    {
+      raidItemId: z.string().uuid(),
+      kind: raidKindEnum.optional(),
+      title: z.string().min(1).max(300).optional(),
+      description: z.string().max(10000).nullable().optional(),
+      status: raidStatusEnum.optional(),
+      severity: raidSeverityEnum.optional(),
+      ownerUserId: z.string().uuid().nullable().optional(),
+      dueDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      archived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap('update_project_raid_item', 'pm:write', () =>
+        handlers.updateProjectRaidItem(args),
+      )(),
+  );
+
+  server.tool(
+    'set_project_raid_task_links',
+    'Replace the set of delivery tasks linked to a RAID item. Requires pm:write.',
+    {
+      raidItemId: z.string().uuid(),
+      taskIds: z.array(z.string().uuid()).max(100),
+    },
+    async (args) =>
+      wrap('set_project_raid_task_links', 'pm:write', () =>
+        handlers.setProjectRaidTaskLinks(args),
+      )(),
+  );
+
+  server.tool(
+    'get_knowledge_record_delivery_links',
+    'List delivery entity links (epic / user story / task) for a knowledge record. Requires knowledge:read.',
+    { recordId: z.string().uuid() },
+    async (args) =>
+      wrap(
+        'get_knowledge_record_delivery_links',
+        'knowledge:read',
+        () => handlers.getKnowledgeRecordDeliveryLinks(args),
+        { recordId: args.recordId },
+      )(),
+  );
+
+  server.tool(
+    'set_knowledge_record_delivery_links',
+    'Replace delivery entity links for a project-scoped knowledge record. Requires knowledge:write.',
+    {
+      recordId: z.string().uuid(),
+      links: z
+        .array(
+          z.object({
+            entityType: deliveryEntityEnum,
+            entityId: z.string().uuid(),
+          }),
+        )
+        .max(200),
+    },
+    async (args) =>
+      wrap(
+        'set_knowledge_record_delivery_links',
+        'knowledge:write',
+        () => handlers.setKnowledgeRecordDeliveryLinks(args),
+        { recordId: args.recordId },
       )(),
   );
 

@@ -16,6 +16,8 @@ export const RECORD_TYPES = [
   'incident-resolution',
   'migration-guide',
   'decision',
+  'project-charter',
+  'meeting-minutes',
   'lessons-learned',
   'command-reference',
   'inventory',
@@ -122,8 +124,23 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
   {
     value: 'decision',
     category: 'delivery',
-    label: 'Decision',
-    description: 'Architecture or product decision record (ADR-style).',
+    label: 'Decision / decision-making',
+    description:
+      'Project or architecture decision record (ADR-style), including options considered and outcome.',
+  },
+  {
+    value: 'project-charter',
+    category: 'planning',
+    label: 'Project charter',
+    description:
+      'Authorizing project charter: purpose, scope, success criteria, and key stakeholders.',
+  },
+  {
+    value: 'meeting-minutes',
+    category: 'reflection',
+    label: 'Meeting minutes',
+    description:
+      'Structured minutes from a project meeting: attendees, topics, actions, and decisions.',
   },
   {
     value: 'lessons-learned',
