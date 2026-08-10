@@ -1,7 +1,7 @@
 # Project baseline, change management, and delivery timeline
 
 **Status:** implemented on `feature/project-delivery`  
-**Related:** [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), [PROJECT_RAID.md](./PROJECT_RAID.md), ADR-017
+**Related:** [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BUDGET.md](./PROJECT_BUDGET.md), ADR-017, ADR-018
 
 ## Goal
 
@@ -48,17 +48,19 @@ project_epics / project_user_stories / project_milestones
 | Baseline panel above Stakeholders | Freezing live Stakeholders when charter is approved |
 | Change register after RAID | Auto-creating changes from every delivery edit |
 | Timeline fishbone / duration bars | Full critical-path / dependency Gantt |
-| Budget as a change **kind** label | Budget tracking / finance ledgers |
+| Budget as a change **kind** label | Auto-updating BAC from change items (see [PROJECT_BUDGET.md](./PROJECT_BUDGET.md) for explicit budget fields) |
+| Currency + initial budget on Baseline | Multi-currency / FX |
 
 ## UI order on project page
 
 1. Summary  
-2. **Baseline**  
+2. **Baseline** (dates, currency, initial budget, pinned docs, initial stakeholders)  
 3. Stakeholders  
 4. Delivery (list / tree / board / calendar / **timeline**)  
-5. RAID  
-6. **Change management**  
-7. Linked systems / knowledge  
+5. **Budgeting** (approved BAC, EVM, burndown)  
+6. RAID  
+7. **Change management**  
+8. Linked systems / knowledge  
 
 ## Agents
 

@@ -561,11 +561,11 @@
     "manageReports": "Jelentések",
     "manageReportsHint": "Státusz-, szállítás- vagy stakeholder-jelentés megtekintése, majd export vagy nyomtatás.",
     "reportStatus": "Projekt státuszjelentés",
-    "reportStatusHint": "Széles előnézet RAG állapottal, összefoglalóval, szállítással és stakeholderekkel.",
+    "reportStatusHint": "Széles előnézet Ütemezés / Kockázatok / Pénzügyek RAG-gal, költségvetés EVM-mel, RAID-del, szállítással és stakeholderekkel.",
     "reportDelivery": "Szállítási jelentés",
-    "reportDeliveryHint": "Széles előnézet a mérföldkövekről és feladatokról ütemezési állapottal.",
+    "reportDeliveryHint": "Széles előnézet a mérföldkövekről és feladatokról ütemezési állapottal és órákkal.",
     "reportStakeholders": "Stakeholders jelentés",
-    "reportStakeholdersHint": "Széles előnézet a projektcsapatról, kapcsolatokról és AI asszisztensekről.",
+    "reportStakeholdersHint": "Széles előnézet a projektcsapatról, óradíjakról, kapcsolatokról és AI asszisztensekről.",
     "reportStatusTitle": "Projekt státuszjelentés",
     "reportDeliveryTitle": "Szállítási jelentés",
     "reportStakeholdersTitle": "Stakeholders jelentés",
@@ -583,7 +583,11 @@
     "reportLoading": "Jelentés készítése…",
     "reportPdfDownloaded": "PDF exportálva.",
     "reportPdfFailed": "PDF export sikertelen",
-    "reportPrintBlocked": "Nem sikerült megnyitni a nyomtatási ablakot. Engedélyezd a felugrókat, és próbáld újra."
+    "reportPrintBlocked": "Nem sikerült megnyitni a nyomtatási ablakot. Engedélyezd a felugrókat, és próbáld újra.",
+    "ragTimeline": "Ütemezés",
+    "ragRisks": "Kockázatok",
+    "ragFinancials": "Pénzügyek",
+    "reportPv": "PV"
   },
   "systems": {
     "createTitle": "Rendszer létrehozása",
@@ -1977,7 +1981,9 @@
       "overdue": "Lejárt",
       "completed": "Kész",
       "neutral": "Törölve"
-    }
+    },
+    "forecastHours": "Előrejelzett órák",
+    "actualHours": "Tényleges órák"
   },
   "stakeholders": {
     "title": "Stakeholders",
@@ -2003,7 +2009,7 @@
     "created": "Stakeholder mentve.",
     "failedCreate": "Nem sikerült menteni",
     "failedUpdate": "Nem sikerült frissíteni",
-    "hint": "A projektcsapat szerepei és a jelentési vonal alkotják az org chartot. A RACI-s emberek és az AI asszisztensek automatikusan megjelennek. A katalógus rendszerek a Rendszerek alatt maradnak.",
+    "hint": "A projektcsapat szerepei, díjai és a jelentési vonal alkotják az org chartot és a költségszámítást. A RACI-s emberek és az AI asszisztensek automatikusan megjelennek. A katalógus rendszerek a Rendszerek alatt maradnak.",
     "readOnlyHint": "Megtekintheted a stakeholdereket; a maintainer és admin szerkesztheti a projektcsapatot.",
     "viewModeLabel": "Stakeholders nézet",
     "viewMode": {
@@ -2025,7 +2031,24 @@
       "other": "Egyéb"
     },
     "kindAiAssistant": "AI asszisztens",
-    "aiOwner": "Tulajdonos"
+    "aiOwner": "Tulajdonos",
+    "hourlyRate": "Óradíj",
+    "hourlyRatePlaceholder": "Összeg ({currency})",
+    "hourlyRateValue": "{amount}/ó",
+    "manage": "Kezelés",
+    "manageTitle": "Stakeholder kezelése",
+    "manageDescription": "Szerep, díj, jelentési vonal frissítése, vagy eltávolítás a projektcsapatból.",
+    "deleteItem": "Eltávolítás a csapatból",
+    "confirmDelete": "Stakeholder eltávolítása",
+    "deleteHint": "Eltávolítja a roster sort. A RACI-s emberek származtatott stakeholderként megmaradnak.",
+    "updated": "Stakeholder frissítve.",
+    "deleted": "Stakeholder eltávolítva.",
+    "failedDelete": "Nem sikerült eltávolítani",
+    "orgChartExportPdf": "PDF export",
+    "orgChartExportingPdf": "PDF exportálása…",
+    "orgChartExportTitle": "{project} org chart",
+    "orgChartExported": "Org chart PDF letöltve.",
+    "orgChartExportFailed": "Nem sikerült exportálni az org chart PDF-et"
   },
   "raid": {
     "title": "RAID",
@@ -2085,7 +2108,7 @@
     "title": "Projekt baseline",
     "edit": "Baseline szerkesztése",
     "editTitle": "Projekt baseline szerkesztése",
-    "editDescription": "Állítsd be a tervezett időablakot, tűzd ki a chartert és a kezdeti tervet, és mentsd a kickoff érintettek pillanatképét.",
+    "editDescription": "Állítsd be a tervezett időablakot, pénznemet és kezdeti költségvetést, tűzd ki a chartert és a kezdeti tervet, és mentsd a kickoff érintetteket.",
     "startDate": "Kezdő dátum",
     "endDate": "Záró dátum",
     "charter": "Charter",
@@ -2095,8 +2118,10 @@
     "noMembers": "Nincs elérhető munkaterület-tag.",
     "updated": "Baseline frissítve.",
     "failedUpdate": "Nem sikerült frissíteni a baselinet",
-    "hint": "A baseline a tervezett kickoff pillanatkép. Az alábbi élő Érintettek változhatnak anélkül, hogy ezt a listát módosítanák.",
-    "readOnlyHint": "A baseline megtekinthető; a karbantartók és adminok szerkeszthetnek."
+    "hint": "A baseline a kickoff pillanatkép. Az élő Érintettek változhatnak. A jóváhagyott költségvetést a Költségvetés alatt szerkeszd.",
+    "readOnlyHint": "A baseline megtekinthető; a karbantartók és adminok szerkeszthetnek.",
+    "currency": "Pénznem",
+    "initialBudget": "Kezdeti költségvetés"
   },
   "changes": {
     "title": "Változáskezelés",
@@ -2158,5 +2183,38 @@
       "milestone": "Mérföldkő",
       "task": "Feladat"
     }
+  },
+  "budget": {
+    "title": "Költségvetés",
+    "approvedBudget": "Jóváhagyott költségvetés (BAC)",
+    "saveApproved": "Jóváhagyott költségvetés mentése",
+    "updated": "Költségvetés frissítve.",
+    "failedUpdate": "Nem sikerült frissíteni a költségvetést",
+    "financialRag": "Pénzügyek",
+    "kpi": {
+      "bac": "BAC",
+      "ev": "EV",
+      "ac": "AC",
+      "cpi": "CPI",
+      "spi": "SPI"
+    },
+    "burndown": "Költségvetés burndown",
+    "burndownLegend": "Szaggatott: ideális fennmaradó BAC. Folyamatos: fennmaradó BAC a napi AC pillanatképekből.",
+    "burndownEmpty": "Állíts be BAC-ot és projekt kezdő/záró dátumot a burndownhoz.",
+    "burndownAria": "Költségvetés burndown diagram",
+    "epicRollups": "Epik költség összesítések",
+    "epicRollupsEmpty": "Még nincs epik költségadat. Adj előrejelzett/tényleges órákat roster díjakkal.",
+    "epic": "Epik",
+    "forecastHours": "Előrejelzett órák",
+    "actualHours": "Tényleges órák",
+    "forecastCost": "Előrejelzett költség",
+    "actualCost": "Tényleges költség",
+    "effortRollup": "Erőforrás- és költségösszesítés",
+    "effortRollupValues": "Előrejelzés {forecastHours}ó ({forecastCost}) · Tény {actualHours}ó ({actualCost})",
+    "rateHint": "Díj: {name} ({rate}) · Előrejelzés {forecast} · Tény {actual}",
+    "rateMissing": "{name} nem rendelkezik óradíjjal a rosteren — az órák költség nélkül görgetődnek.",
+    "rateUnresolved": "Nincs owner/R/A roster díjjal — az órák költség nélkül görgetődnek.",
+    "hint": "A BAC a jóváhagyott költségvetés (különben a kezdeti). Költség: jelenlegi owner, majd RACI R, majd A.",
+    "readOnlyHint": "A költségvetés megtekinthető; a karbantartók és adminok szerkeszthetnek."
   }
 }

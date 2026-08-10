@@ -24,6 +24,7 @@ import {
   organizations,
   projectChangeDeliveryLinks,
   projectChangeItems,
+  projectCostSnapshots,
   projectEpics,
   projectInitialStakeholders,
   projectMilestones,
@@ -306,6 +307,7 @@ async function main(): Promise<void> {
         systemType: 'ai_assistant',
         summary: 'Local chat UI with MCP tool servers.',
         ownerUserId: admin.id,
+        metadataJson: { assistantBrand: 'openwebui' },
       })
       .returning();
 
@@ -638,8 +640,31 @@ Prefer a tool-capable model; tiny local models often skip tools.
       throw new Error('Expected demo users for delivery RACI seed');
     }
 
-    // Extra AI assistant systems for Stakeholders (after demo users exist for owners)
+    // AI assistant systems for Stakeholders (after demo users exist for owners).
+    // Homelab Platform + AI Assistants each get linked assistants (listing is per projectId).
     await database.db.insert(systems).values([
+      {
+        workspaceId: workspace.id,
+        projectId: labProject.id,
+        name: 'Cursor',
+        slug: 'cursor-homelab',
+        status: 'active',
+        systemType: 'ai_assistant',
+        summary: 'IDE agent for Homelab delivery via MCP Streamable HTTP.',
+        ownerUserId: admin.id,
+        metadataJson: { assistantBrand: 'cursor' },
+      },
+      {
+        workspaceId: workspace.id,
+        projectId: labProject.id,
+        name: 'KnowHub Ops Agent',
+        slug: 'knowhub-ops-agent',
+        status: 'active',
+        systemType: 'ai_assistant',
+        summary: 'API-client agent for RAID, delivery, and budget updates on Homelab.',
+        ownerUserId: blair.id,
+        metadataJson: { assistantBrand: 'generic' },
+      },
       {
         workspaceId: workspace.id,
         projectId: aiProject.id,
@@ -649,6 +674,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         systemType: 'ai_assistant',
         summary: 'IDE agent connected via MCP Streamable HTTP.',
         ownerUserId: admin.id,
+        metadataJson: { assistantBrand: 'cursor' },
       },
       {
         workspaceId: workspace.id,
@@ -659,6 +685,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         systemType: 'ai_assistant',
         summary: 'Custom GPT Actions (OpenAPI + Bearer) against the hub API.',
         ownerUserId: blair.id,
+        metadataJson: { assistantBrand: 'openai' },
       },
     ]);
 
@@ -768,6 +795,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       description?: string;
       status: string;
       dueDate: string | null;
+      forecastHours?: string | null;
+      actualHours?: string | null;
       sortOrder: number;
       raci: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
     };
@@ -779,6 +808,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Document Traefik → Authentik Tailscale route',
         status: 'done',
         dueDate: ymd(-20),
+        forecastHours: '8',
+        actualHours: '9.5',
         sortOrder: 1,
         raci: [
           { userId: admin.id, role: 'A' },
@@ -791,6 +822,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Verify public MCP URL from mobile data',
         status: 'done',
         dueDate: ymd(-12),
+        forecastHours: '4',
+        actualHours: '3.5',
         sortOrder: 2,
         raci: [
           { userId: blair.id, role: 'A' },
@@ -802,6 +835,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Wire ALERT_WEBHOOK_URL for backup failures',
         status: 'in_progress',
         dueDate: ymd(3),
+        forecastHours: '6',
+        actualHours: '2.5',
         sortOrder: 1,
         raci: [
           { userId: admin.id, role: 'A' },
@@ -814,6 +849,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Add disk-space alert for Postgres volume',
         status: 'todo',
         dueDate: ymd(7),
+        forecastHours: '5',
         sortOrder: 2,
         raci: [
           { userId: blair.id, role: 'A' },
@@ -825,8 +861,10 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Review Monitoring Mon-2 search telemetry',
         status: 'blocked',
         dueDate: ymd(5),
-        sortOrder: 3,
+        forecastHours: '3',
+        actualHours: '1',
         description: 'Waiting on sample traffic from staging smoke.',
+        sortOrder: 3,
         raci: [
           { userId: admin.id, role: 'A' },
           { userId: dana.id, role: 'C' },
@@ -838,6 +876,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Seed demo milestones/tasks for UI validation',
         status: 'in_progress',
         dueDate: ymd(0),
+        forecastHours: '10',
+        actualHours: '7',
         sortOrder: 1,
         raci: [
           { userId: admin.id, role: 'A' },
@@ -850,6 +890,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Validate list / board / calendar views',
         status: 'todo',
         dueDate: ymd(2),
+        forecastHours: '8',
         sortOrder: 2,
         raci: [
           { userId: blair.id, role: 'A' },
@@ -863,6 +904,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'MCP smoke: create_project_task + set RACI',
         status: 'todo',
         dueDate: ymd(4),
+        forecastHours: '4',
         sortOrder: 3,
         raci: [
           { userId: admin.id, role: 'A' },
@@ -875,6 +917,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Polish board drag-and-drop affordances',
         status: 'todo',
         dueDate: ymd(12),
+        forecastHours: '6',
         sortOrder: 4,
         raci: [
           { userId: blair.id, role: 'A' },
@@ -886,6 +929,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Schedule Postgres restore drill',
         status: 'todo',
         dueDate: ymd(28),
+        forecastHours: '12',
         sortOrder: 1,
         raci: [
           { userId: admin.id, role: 'A' },
@@ -897,6 +941,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Refresh Homelab runbook after Delivery ships',
         status: 'todo',
         dueDate: ymd(30),
+        forecastHours: '8',
         sortOrder: 2,
         raci: [
           { userId: dana.id, role: 'A' },
@@ -909,6 +954,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Triage leftover Docker volume usage',
         status: 'cancelled',
         dueDate: ymd(-3),
+        forecastHours: '2',
+        actualHours: '0.5',
         sortOrder: 99,
         raci: [{ userId: admin.id, role: 'A' }],
       },
@@ -917,6 +964,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Capture GPU host decision for embeddings',
         status: 'todo',
         dueDate: ymd(14),
+        forecastHours: '3',
         sortOrder: 50,
         raci: [
           { userId: admin.id, role: 'A' },
@@ -942,6 +990,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
           description: taskSpec.description ?? null,
           status: taskSpec.status,
           dueDate: taskSpec.dueDate,
+          forecastHours: taskSpec.forecastHours ?? null,
+          actualHours: taskSpec.actualHours ?? null,
           sortOrder: taskSpec.sortOrder,
           createdBy: admin.id,
           currentOwnerUserId: ownerUserId,
@@ -1219,6 +1269,9 @@ Keep public MCP behind Authentik + Tailscale ACL review.
       .set({
         startDate: ymd(-30),
         endDate: ymd(45),
+        currency: 'EUR',
+        initialBudget: '48000.00',
+        approvedBudget: '52000.00',
         charterRecordId: charterRecord.id,
         initialPlanRecordId: planRecord.id,
         updatedAt: new Date(),
@@ -1435,6 +1488,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         projectRole: 'sponsor',
         jobTitle: 'Executive sponsor',
         notes: 'Escalation for budget and priority calls.',
+        hourlyRate: '160.00',
         reportsToUserId: null,
         sortOrder: 0,
       },
@@ -1444,6 +1498,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         projectRole: 'owner',
         jobTitle: 'Project owner',
         notes: 'Day-to-day accountable for Homelab Platform.',
+        hourlyRate: '95.00',
         reportsToUserId: alex.id,
         sortOrder: 10,
       },
@@ -1453,6 +1508,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         projectRole: 'tech_lead',
         jobTitle: 'Platform tech lead',
         notes: 'Primary contact for infra and delivery questions.',
+        hourlyRate: '85.00',
         reportsToUserId: admin.id,
         sortOrder: 20,
       },
@@ -1462,8 +1518,46 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         projectRole: 'contributor',
         jobTitle: 'Docs & enablement',
         notes: 'Runbooks, onboarding, informed on ops alerts.',
+        hourlyRate: '70.00',
         reportsToUserId: blair.id,
         sortOrder: 30,
+      },
+    ]);
+
+    // Daily cost snapshots for Budgeting burndown (pragmatic EVM demo)
+    console.log('Seeding project cost snapshots…');
+    await database.db.insert(projectCostSnapshots).values([
+      {
+        projectId: labProject.id,
+        capturedOn: ymd(-21),
+        bac: '52000.00',
+        pv: '7280.00',
+        ev: '680.00',
+        ac: '807.50',
+      },
+      {
+        projectId: labProject.id,
+        capturedOn: ymd(-14),
+        bac: '52000.00',
+        pv: '14560.00',
+        ev: '1275.00',
+        ac: '1487.50',
+      },
+      {
+        projectId: labProject.id,
+        capturedOn: ymd(-7),
+        bac: '52000.00',
+        pv: '21840.00',
+        ev: '1275.00',
+        ac: '1912.50',
+      },
+      {
+        projectId: labProject.id,
+        capturedOn: ymd(0),
+        bac: '52000.00',
+        pv: '20800.00',
+        ev: '1275.00',
+        ac: '2337.50',
       },
     ]);
 
@@ -1509,7 +1603,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
     }
     console.log(`  Open: /workspaces/${DEMO_WORKSPACE_SLUG} or Admin → Memberships`);
     console.log(
-      '  Try: Homelab Platform → Delivery + Stakeholders (list / org chart); AI Assistants has a smaller board.',
+      '  Try: Homelab Platform → Delivery + Stakeholders (list / org chart; Cursor + KnowHub Ops Agent); AI Assistants has its own board + OpenWebUI/Cursor/ChatGPT.',
     );
 
   } finally {

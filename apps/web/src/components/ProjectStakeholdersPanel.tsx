@@ -2,13 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   CatalogueSection,
   type CatalogueListItem,
 } from './CatalogueSection';
 import { CollapsibleSection } from './CollapsibleSection';
+import { AssistantBrandMark } from './AssistantBrandMark';
 import { ProjectStakeholdersOrgChart } from './ProjectStakeholdersOrgChart';
+import { UserAvatar } from './UserAvatar';
+import { downloadAuthenticatedExport } from '../lib/download-export';
+import { formatMoney, parseOptionalNumber } from '../lib/project-currency';
 import {
   Badge,
   Button,
@@ -17,6 +21,7 @@ import {
   Input,
   Modal,
   Select,
+  Textarea,
   useToast,
 } from './ui';
 import { cn } from '../lib/cn';
@@ -33,6 +38,9 @@ export type Stakeholder = {
   jobTitle: string | null;
   notes: string | null;
   reportsToUserId: string | null;
+  hourlyRate: string | null;
+  avatarUrl: string | null;
+  assistantBrand: string | null;
   raciRoles: string[];
   taskCount: number;
   sources: string[];
@@ -64,18 +72,23 @@ type ViewMode = (typeof VIEW_MODES)[number];
 
 export function ProjectStakeholdersPanel({
   projectId,
+  projectName,
   canMutate,
   initialStakeholders,
   members,
+  currency = 'EUR',
 }: {
   projectId: string;
+  projectName: string;
   canMutate: boolean;
   initialStakeholders: Stakeholder[];
   members: Member[];
+  currency?: string;
 }) {
   const t = useTranslations('stakeholders');
   const tCommon = useTranslations('common');
   const tWorkspaces = useTranslations('workspaces');
+  const locale = useLocale();
   const router = useRouter();
   const { pushToast } = useToast();
 
@@ -85,7 +98,10 @@ export function ProjectStakeholdersPanel({
   }, [initialStakeholders]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [exportPending, setExportPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [manageRow, setManageRow] = useState<Stakeholder | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const [userId, setUserId] = useState('');
@@ -93,6 +109,13 @@ export function ProjectStakeholdersPanel({
   const [jobTitle, setJobTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [reportsToUserId, setReportsToUserId] = useState('');
+  const [hourlyRate, setHourlyRate] = useState('');
+
+  const [editRole, setEditRole] = useState('stakeholder');
+  const [editJobTitle, setEditJobTitle] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editReportsTo, setEditReportsTo] = useState('');
+  const [editHourlyRate, setEditHourlyRate] = useState('');
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -118,6 +141,36 @@ export function ProjectStakeholdersPanel({
     changeViewMode('list');
   }
 
+  async function exportOrgChartPdf() {
+    if (exportPending) return;
+    setExportPending(true);
+    setError(null);
+    try {
+      const title = t('orgChartExportTitle', { project: projectName });
+      const slug = projectName.replace(/[^\w.-]+/g, '-').toLowerCase();
+      await downloadAuthenticatedExport(
+        `/api/v1/projects/${projectId}/org-chart/export`,
+        `${slug}-org-chart.pdf`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({ title }),
+        },
+      );
+      pushToast(t('orgChartExported'));
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : t('orgChartExportFailed');
+      setError(message);
+      pushToast(message, 'danger');
+    } finally {
+      setExportPending(false);
+    }
+  }
+
   const refresh = useCallback(() => {
     router.refresh();
   }, [router]);
@@ -127,6 +180,13 @@ export function ProjectStakeholdersPanel({
     if (!response.ok) return;
     const payload = (await response.json()) as { stakeholders: Stakeholder[] };
     setStakeholders(payload.stakeholders);
+  }
+
+  function rateLabel(rate: string | null | undefined): string | null {
+    if (rate == null || rate === '') return null;
+    const n = Number(rate);
+    if (!Number.isFinite(n)) return null;
+    return t('hourlyRateValue', { amount: formatMoney(n, currency, locale) });
   }
 
   const items: CatalogueListItem[] = useMemo(
@@ -145,6 +205,7 @@ export function ProjectStakeholdersPanel({
           row.raciRoles.length > 0
             ? `${t('raciLabel')}: ${row.raciRoles.join(', ')}`
             : null;
+        const rate = rateLabel(row.hourlyRate);
         return {
           id: row.id,
           title: row.displayName,
@@ -161,6 +222,7 @@ export function ProjectStakeholdersPanel({
             reportsTo
               ? `${isAi ? t('aiOwner') : t('reportsTo')}: ${reportsTo}`
               : null,
+            rate,
             raciLabel,
             row.taskCount > 0 ? t('taskCount', { count: row.taskCount }) : null,
             row.notes,
@@ -181,6 +243,7 @@ export function ProjectStakeholdersPanel({
             row.raciRoles.join(' '),
             reportsTo ?? '',
             row.sources.join(' '),
+            row.hourlyRate ?? '',
           ]
             .join(' ')
             .toLowerCase(),
@@ -194,7 +257,7 @@ export function ProjectStakeholdersPanel({
           filterLabel: roleLabel,
         };
       }),
-    [stakeholders, nameById, t],
+    [stakeholders, nameById, t, currency, locale],
   );
 
   function resetCreateForm() {
@@ -203,12 +266,30 @@ export function ProjectStakeholdersPanel({
     setJobTitle('');
     setNotes('');
     setReportsToUserId('');
+    setHourlyRate('');
     setError(null);
   }
 
   function closeCreateModal() {
     setCreateOpen(false);
     resetCreateForm();
+  }
+
+  function openManage(row: Stakeholder) {
+    setManageRow(row);
+    setEditRole(row.projectRole || 'contributor');
+    setEditJobTitle(row.jobTitle ?? '');
+    setEditNotes(row.notes ?? '');
+    setEditReportsTo(row.reportsToUserId ?? '');
+    setEditHourlyRate(row.hourlyRate != null ? String(row.hourlyRate) : '');
+    setConfirmDelete(false);
+    setError(null);
+  }
+
+  function closeManage() {
+    setManageRow(null);
+    setConfirmDelete(false);
+    setError(null);
   }
 
   async function submitCreate() {
@@ -225,6 +306,7 @@ export function ProjectStakeholdersPanel({
           jobTitle: jobTitle.trim() || null,
           notes: notes.trim() || null,
           reportsToUserId: reportsToUserId || null,
+          hourlyRate: parseOptionalNumber(hourlyRate) ?? null,
         }),
       });
       if (!response.ok) {
@@ -259,6 +341,7 @@ export function ProjectStakeholdersPanel({
           jobTitle: row.jobTitle,
           notes: row.notes,
           reportsToUserId: row.reportsToUserId,
+          hourlyRate: row.hourlyRate,
         }),
       });
       if (!response.ok) {
@@ -274,28 +357,66 @@ export function ProjectStakeholdersPanel({
     }
   }
 
-  async function updateReportsTo(rosterId: string, next: string) {
-    if (!canMutate || pending) return;
+  async function saveManage() {
+    if (!manageRow?.rosterId || pending) return;
     setPending(true);
     setError(null);
     try {
-      const response = await fetch(`/api/v1/project-stakeholders/${rosterId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportsToUserId: next || null }),
-      });
+      const response = await fetch(
+        `/api/v1/project-stakeholders/${manageRow.rosterId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectRole: editRole,
+            jobTitle: editJobTitle.trim() || null,
+            notes: editNotes.trim() || null,
+            reportsToUserId: editReportsTo || null,
+            hourlyRate: parseOptionalNumber(editHourlyRate) ?? null,
+          }),
+        },
+      );
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as {
           message?: string;
+          error?: { message?: string };
         } | null;
-        throw new Error(payload?.message || t('failedUpdate'));
+        throw new Error(
+          payload?.error?.message || payload?.message || t('failedUpdate'),
+        );
       }
+      pushToast(t('updated'));
+      closeManage();
       await reloadStakeholders();
       refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedUpdate'));
     } finally {
       setPending(false);
+    }
+  }
+
+  async function deleteManage() {
+    if (!manageRow?.rosterId || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/project-stakeholders/${manageRow.rosterId}`,
+        { method: 'DELETE' },
+      );
+      if (!response.ok) {
+        throw new Error(t('failedDelete'));
+      }
+      pushToast(t('deleted'));
+      closeManage();
+      await reloadStakeholders();
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedDelete'));
+    } finally {
+      setPending(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -339,7 +460,7 @@ export function ProjectStakeholdersPanel({
         title={t('title')}
         defaultOpen
       >
-      {error && !createOpen && !wideModalOpen ? (
+      {error && !createOpen && !manageRow && !wideModalOpen ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
         </div>
@@ -365,9 +486,26 @@ export function ProjectStakeholdersPanel({
           const row = stakeholders.find((entry) => entry.id === item.id);
           if (!row) return null;
           const isAi = row.kind === 'ai_assistant';
+          const rate = rateLabel(row.hourlyRate);
           return (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                {isAi ? (
+                  <AssistantBrandMark
+                    brand={row.assistantBrand}
+                    name={row.displayName}
+                    slug={row.systemSlug}
+                    size="sm"
+                  />
+                ) : (
+                  <UserAvatar
+                    displayName={row.displayName}
+                    fullName={row.fullName}
+                    avatarUrl={row.avatarUrl}
+                    size="sm"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{row.displayName}</span>
                   {isAi ? (
@@ -400,6 +538,7 @@ export function ProjectStakeholdersPanel({
                   {row.reportsToUserId
                     ? ` · ${isAi ? t('aiOwner') : t('reportsTo')}: ${nameById.get(row.reportsToUserId) ?? '—'}`
                     : ''}
+                  {rate ? ` · ${rate}` : ''}
                   {row.taskCount > 0
                     ? ` · ${t('taskCount', { count: row.taskCount })}`
                     : ''}
@@ -407,28 +546,19 @@ export function ProjectStakeholdersPanel({
                 {row.notes ? (
                   <p className="mt-1 mb-0 text-xs text-ink-muted">{row.notes}</p>
                 ) : null}
+                </div>
               </div>
               {canMutate && !isAi ? (
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[12rem]">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[8rem]">
                   {row.rosterId ? (
-                    <Select
-                      className="w-full"
-                      value={row.reportsToUserId ?? ''}
+                    <Button
+                      type="button"
+                      variant="secondary"
                       disabled={pending}
-                      aria-label={t('reportsTo')}
-                      onChange={(event) =>
-                        void updateReportsTo(row.rosterId!, event.target.value)
-                      }
+                      onClick={() => openManage(row)}
                     >
-                      <option value="">{t('noReportsTo')}</option>
-                      {people
-                        .filter((entry) => entry.userId !== row.userId)
-                        .map((entry) => (
-                          <option key={entry.userId!} value={entry.userId!}>
-                            {entry.displayName}
-                          </option>
-                        ))}
-                    </Select>
+                      {t('manage')}
+                    </Button>
                   ) : (
                     <Button
                       type="button"
@@ -462,6 +592,14 @@ export function ProjectStakeholdersPanel({
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             {viewSwitcher(viewMode)}
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={exportPending || stakeholders.length === 0}
+                onClick={() => void exportOrgChartPdf()}
+              >
+                {exportPending ? t('orgChartExportingPdf') : t('orgChartExportPdf')}
+              </Button>
               {canMutate ? (
                 <Button
                   type="button"
@@ -565,6 +703,17 @@ export function ProjectStakeholdersPanel({
               disabled={pending}
             />
           </Field>
+          <Field label={t('hourlyRate')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={hourlyRate}
+              onChange={(event) => setHourlyRate(event.target.value)}
+              disabled={pending}
+              placeholder={t('hourlyRatePlaceholder', { currency })}
+            />
+          </Field>
           <Field label={t('reportsTo')}>
             <Select
               value={reportsToUserId}
@@ -586,6 +735,143 @@ export function ProjectStakeholdersPanel({
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               disabled={pending}
+            />
+          </Field>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(manageRow)}
+        onClose={closeManage}
+        title={t('manageTitle')}
+        description={t('manageDescription')}
+        size="md"
+        footer={
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <div>
+              {canMutate && manageRow?.rosterId ? (
+                !confirmDelete ? (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={pending}
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    {t('deleteItem')}
+                  </Button>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      {tCommon('cancel')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      disabled={pending}
+                      onClick={() => void deleteManage()}
+                    >
+                      {t('confirmDelete')}
+                    </Button>
+                  </div>
+                )
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={closeManage}
+                disabled={pending}
+              >
+                {tCommon('cancel')}
+              </Button>
+              <Button
+                type="button"
+                disabled={pending || confirmDelete}
+                onClick={() => void saveManage()}
+              >
+                {tCommon('save')}
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <div className="grid gap-3">
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          {confirmDelete ? (
+            <p className="m-0 text-sm font-semibold text-danger">
+              {t('deleteHint')}
+            </p>
+          ) : null}
+          <p className="m-0 text-sm font-semibold">
+            {manageRow?.displayName}
+            {manageRow?.email ? (
+              <span className="font-normal text-ink-muted">
+                {' '}
+                ({manageRow.email})
+              </span>
+            ) : null}
+          </p>
+          <Field label={t('projectRoleLabel')}>
+            <Select
+              value={editRole}
+              onChange={(event) => setEditRole(event.target.value)}
+              disabled={pending || confirmDelete}
+            >
+              {PROJECT_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {t(`projectRole.${role}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('jobTitle')}>
+            <Input
+              value={editJobTitle}
+              onChange={(event) => setEditJobTitle(event.target.value)}
+              disabled={pending || confirmDelete}
+            />
+          </Field>
+          <Field label={t('hourlyRate')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={editHourlyRate}
+              onChange={(event) => setEditHourlyRate(event.target.value)}
+              disabled={pending || confirmDelete}
+              placeholder={t('hourlyRatePlaceholder', { currency })}
+            />
+          </Field>
+          <Field label={t('reportsTo')}>
+            <Select
+              value={editReportsTo}
+              onChange={(event) => setEditReportsTo(event.target.value)}
+              disabled={pending || confirmDelete}
+            >
+              <option value="">{t('noReportsTo')}</option>
+              {people
+                .filter(
+                  (row) => row.userId && row.userId !== manageRow?.userId,
+                )
+                .map((row) => (
+                  <option key={row.userId!} value={row.userId!}>
+                    {row.displayName}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          <Field label={t('notes')}>
+            <Textarea
+              value={editNotes}
+              onChange={(event) => setEditNotes(event.target.value)}
+              disabled={pending || confirmDelete}
+              rows={3}
             />
           </Field>
         </div>

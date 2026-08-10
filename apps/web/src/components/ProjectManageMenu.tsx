@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
 import {
@@ -24,11 +24,11 @@ import {
   Textarea,
   useToast,
 } from './ui';
-import { projectDeliveryRag } from '../lib/delivery-schedule';
 import {
   buildDeliveryStatusReport,
   buildProjectStatusReport,
   buildStakeholdersReport,
+  computeReportRags,
   fetchProjectReportData,
 } from '../lib/project-reports';
 
@@ -79,9 +79,12 @@ export function ProjectManageMenu(props: {
 }) {
   const t = useTranslations('projects');
   const tBaseline = useTranslations('baseline');
+  const tBudget = useTranslations('budget');
+  const tRaid = useTranslations('raid');
   const tCommon = useTranslations('common');
   const tStakeholders = useTranslations('stakeholders');
   const tDelivery = useTranslations('delivery');
+  const locale = useLocale();
   const router = useRouter();
   const { pushToast } = useToast();
   const [open, setOpen] = useState(false);
@@ -220,14 +223,11 @@ export function ProjectManageMenu(props: {
 
     try {
       const data = await fetchProjectReportData(props.project.id);
-      const rag = projectDeliveryRag([
-        ...data.milestones.map((row) => ({
-          status: row.status,
-          date: row.targetDate,
-        })),
-        ...data.tasks.map((row) => ({ status: row.status, date: row.dueDate })),
-      ]);
-      const ragValue = t(`rag.${rag}`);
+      const rags = computeReportRags(data);
+      const timelineRagValue = t(`rag.${rags.timelineRag}`);
+      const riskRagValue = t(`rag.${rags.riskRag}`);
+      const financialRagValue = t(`rag.${rags.financialRag}`);
+      const currency = data.budget?.currency ?? 'EUR';
 
       let markdown = '';
       if (kind === 'delivery') {
@@ -240,11 +240,13 @@ export function ProjectManageMenu(props: {
           labels: {
             title: t('reportDeliveryTitle'),
             generated: t('reportGenerated'),
-            rag: t('ragLabel'),
-            ragValue,
+            timelineRag: t('ragTimeline'),
+            timelineRagValue,
             milestones: tDelivery('kindMilestone'),
             tasks: tDelivery('kindTask'),
             none: tCommon('none'),
+            forecastHours: tDelivery('forecastHours'),
+            actualHours: tDelivery('actualHours'),
           },
         });
       } else if (kind === 'stakeholders') {
@@ -252,6 +254,8 @@ export function ProjectManageMenu(props: {
           projectName: props.project.name,
           projectSlug: props.project.slug,
           stakeholders: data.stakeholders,
+          currency,
+          locale,
           labels: {
             title: t('reportStakeholdersTitle'),
             generated: t('reportGenerated'),
@@ -259,6 +263,7 @@ export function ProjectManageMenu(props: {
             aiAssistants: tStakeholders('kindAiAssistant'),
             none: tCommon('none'),
             reportsTo: tStakeholders('reportsTo'),
+            hourlyRate: tStakeholders('hourlyRate'),
           },
         });
       } else {
@@ -270,21 +275,45 @@ export function ProjectManageMenu(props: {
           milestones: data.milestones,
           tasks: data.tasks,
           stakeholders: data.stakeholders,
+          raidItems: data.raidItems,
+          budget: data.budget,
+          locale,
           labels: {
             statusTitle: t('reportStatusTitle'),
             deliveryTitle: t('reportDeliveryTitle'),
             stakeholdersTitle: t('reportStakeholdersTitle'),
+            budgetTitle: tBudget('title'),
+            raidTitle: tRaid('title'),
             generated: t('reportGenerated'),
-            rag: t('ragLabel'),
-            ragValue,
+            timelineRag: t('ragTimeline'),
+            timelineRagValue,
+            riskRag: t('ragRisks'),
+            riskRagValue,
+            financialRag: t('ragFinancials'),
+            financialRagValue,
             milestones: tDelivery('kindMilestone'),
             tasks: tDelivery('kindTask'),
             people: t('reportPeople'),
             aiAssistants: tStakeholders('kindAiAssistant'),
             none: tCommon('none'),
             reportsTo: tStakeholders('reportsTo'),
+            hourlyRate: tStakeholders('hourlyRate'),
             summary: tCommon('summary'),
+            forecastHours: tDelivery('forecastHours'),
+            actualHours: tDelivery('actualHours'),
+            currency: tBaseline('currency'),
+            initialBudget: tBaseline('initialBudget'),
+            approvedBudget: tBudget('approvedBudget'),
+            bac: tBudget('kpi.bac'),
+            ev: tBudget('kpi.ev'),
+            ac: tBudget('kpi.ac'),
+            pv: t('reportPv'),
+            cpi: tBudget('kpi.cpi'),
+            spi: tBudget('kpi.spi'),
           },
+          kindLabel: (kindValue) => tRaid(`kind.${kindValue}`),
+          statusLabel: (statusValue) => tRaid(`status.${statusValue}`),
+          severityLabel: (severityValue) => tRaid(`severity.${severityValue}`),
         });
       }
 

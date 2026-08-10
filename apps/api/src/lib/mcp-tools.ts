@@ -16,6 +16,7 @@ import {
   deliveryLinkEntityTypeSchema,
   epicStatusSchema,
   milestoneStatusSchema,
+  projectCurrencySchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
   raidKindSchema,
@@ -109,6 +110,12 @@ import {
   listChangeItems,
   updateChangeItem,
 } from './project-changes.js';
+import {
+  getProjectBudgetSummary,
+  parseBudgetAmount,
+  parseHours,
+  upsertProjectCostSnapshot,
+} from './project-budget.js';
 import {
   getKnowledgeRecordProjectContext,
   listDeliveryLinksForRecord,
@@ -401,6 +408,9 @@ export function createMcpToolHandlers(
           initialPlanRecord: project.initialPlanRecordId
             ? pinned.get(project.initialPlanRecordId) ?? null
             : null,
+          currency: projectCurrencySchema.parse(project.currency),
+          initialBudget: project.initialBudget,
+          approvedBudget: project.approvedBudget,
         },
       };
     },
@@ -411,6 +421,9 @@ export function createMcpToolHandlers(
       endDate?: string | null;
       charterRecordId?: string | null;
       initialPlanRecordId?: string | null;
+      currency?: string;
+      initialBudget?: number | string | null;
+      approvedBudget?: number | string | null;
     }) {
       const actingUserId = requireActingUserId(client);
       const project = await requirePmProject(app, client, input.projectId, {
@@ -447,6 +460,17 @@ export function createMcpToolHandlers(
             input.endDate === undefined ? project.endDate : input.endDate,
           charterRecordId: nextCharterId,
           initialPlanRecordId: nextPlanId,
+          currency: input.currency
+            ? projectCurrencySchema.parse(input.currency)
+            : project.currency,
+          initialBudget:
+            input.initialBudget === undefined
+              ? project.initialBudget
+              : parseBudgetAmount(input.initialBudget) ?? null,
+          approvedBudget:
+            input.approvedBudget === undefined
+              ? project.approvedBudget
+              : parseBudgetAmount(input.approvedBudget) ?? null,
           updatedAt: new Date(),
         })
         .where(eq(projects.id, project.id))
@@ -457,6 +481,13 @@ export function createMcpToolHandlers(
           message: 'Project not found',
           statusCode: 404,
         });
+      }
+      if (
+        input.currency !== undefined ||
+        input.initialBudget !== undefined ||
+        input.approvedBudget !== undefined
+      ) {
+        await upsertProjectCostSnapshot(app.database, project.id);
       }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -491,7 +522,17 @@ export function createMcpToolHandlers(
           initialPlanRecord: updated.initialPlanRecordId
             ? pinned.get(updated.initialPlanRecordId) ?? null
             : null,
+          currency: projectCurrencySchema.parse(updated.currency),
+          initialBudget: updated.initialBudget,
+          approvedBudget: updated.approvedBudget,
         },
+      };
+    },
+
+    async getProjectBudgetSummary(input: { projectId: string }) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        budget: await getProjectBudgetSummary(app.database, input.projectId),
       };
     },
 
@@ -1361,6 +1402,14 @@ export function createMcpToolHandlers(
         description: input.description,
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
         dueDate: input.dueDate,
+        forecastHours:
+          input.forecastHours === undefined
+            ? undefined
+            : parseHours(input.forecastHours) ?? null,
+        actualHours:
+          input.actualHours === undefined
+            ? undefined
+            : parseHours(input.actualHours) ?? null,
         milestoneId: input.milestoneId,
         userStoryId: input.userStoryId,
         currentOwnerUserId: input.currentOwnerUserId,
@@ -1371,6 +1420,12 @@ export function createMcpToolHandlers(
           role: raciRoleSchema.parse(entry.role),
         })),
       });
+      if (
+        input.forecastHours !== undefined ||
+        input.actualHours !== undefined
+      ) {
+        await upsertProjectCostSnapshot(app.database, project.id);
+      }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -1400,6 +1455,14 @@ export function createMcpToolHandlers(
         description: input.description,
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
         dueDate: input.dueDate,
+        forecastHours:
+          input.forecastHours === undefined
+            ? undefined
+            : parseHours(input.forecastHours) ?? null,
+        actualHours:
+          input.actualHours === undefined
+            ? undefined
+            : parseHours(input.actualHours) ?? null,
         milestoneId: input.milestoneId,
         userStoryId: input.userStoryId,
         currentOwnerUserId: input.currentOwnerUserId,
@@ -1408,6 +1471,12 @@ export function createMcpToolHandlers(
         actorUserId: actingUserId,
         workspaceId: project.workspaceId,
       });
+      if (
+        input.forecastHours !== undefined ||
+        input.actualHours !== undefined
+      ) {
+        await upsertProjectCostSnapshot(app.database, project.id);
+      }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -1673,6 +1742,10 @@ export function createMcpToolHandlers(
         jobTitle: input.jobTitle,
         notes: input.notes,
         reportsToUserId: input.reportsToUserId,
+        hourlyRate:
+          input.hourlyRate === undefined
+            ? undefined
+            : parseBudgetAmount(input.hourlyRate) ?? null,
         sortOrder: input.sortOrder,
       });
       await writeAuditEvent(app.database, {
@@ -1711,6 +1784,10 @@ export function createMcpToolHandlers(
             : undefined,
           jobTitle: input.jobTitle,
           notes: input.notes,
+          hourlyRate:
+            input.hourlyRate === undefined
+              ? undefined
+              : parseBudgetAmount(input.hourlyRate) ?? null,
           reportsToUserId: input.reportsToUserId,
           sortOrder: input.sortOrder,
         },

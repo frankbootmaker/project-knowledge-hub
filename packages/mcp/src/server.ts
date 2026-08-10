@@ -27,7 +27,11 @@ export type McpToolHandlers = {
     endDate?: string | null;
     charterRecordId?: string | null;
     initialPlanRecordId?: string | null;
+    currency?: string;
+    initialBudget?: number | string | null;
+    approvedBudget?: number | string | null;
   }) => Promise<unknown>;
+  getProjectBudgetSummary: (input: { projectId: string }) => Promise<unknown>;
   listProjectInitialStakeholders: (input: {
     projectId: string;
   }) => Promise<unknown>;
@@ -171,6 +175,8 @@ export type McpToolHandlers = {
     description?: string | null;
     status?: string;
     dueDate?: string | null;
+    forecastHours?: number | string | null;
+    actualHours?: number | string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     currentOwnerUserId?: string | null;
@@ -183,6 +189,8 @@ export type McpToolHandlers = {
     description?: string | null;
     status?: string;
     dueDate?: string | null;
+    forecastHours?: number | string | null;
+    actualHours?: number | string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     currentOwnerUserId?: string | null;
@@ -260,6 +268,7 @@ export type McpToolHandlers = {
     jobTitle?: string | null;
     notes?: string | null;
     reportsToUserId?: string | null;
+    hourlyRate?: number | string | null;
     sortOrder?: number;
   }) => Promise<unknown>;
   updateProjectStakeholder: (input: {
@@ -268,6 +277,7 @@ export type McpToolHandlers = {
     jobTitle?: string | null;
     notes?: string | null;
     reportsToUserId?: string | null;
+    hourlyRate?: number | string | null;
     sortOrder?: number;
   }) => Promise<unknown>;
   deleteProjectStakeholder: (input: {
@@ -511,9 +521,27 @@ export function createKnowledgeHubMcpServer(
       })(),
   );
 
+  const projectCurrencyEnum = z.enum([
+    'EUR',
+    'USD',
+    'GBP',
+    'CHF',
+    'HUF',
+    'PLN',
+    'CZK',
+    'RON',
+    'SEK',
+    'NOK',
+    'DKK',
+    'CAD',
+    'AUD',
+    'JPY',
+  ]);
+  const moneyInput = z.union([z.number(), z.string()]).nullable();
+
   server.tool(
     'update_project_baseline',
-    'Update project baseline window and pinned charter / initial plan knowledge records. Requires pm:write.',
+    'Update project baseline window, pinned docs, currency, and budgets. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       startDate: z
@@ -528,12 +556,28 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       charterRecordId: z.string().uuid().nullable().optional(),
       initialPlanRecordId: z.string().uuid().nullable().optional(),
+      currency: projectCurrencyEnum.optional(),
+      initialBudget: moneyInput.optional(),
+      approvedBudget: moneyInput.optional(),
     },
     async (args) =>
       wrap(
         'update_project_baseline',
         'pm:write',
         () => handlers.updateProjectBaseline(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'get_project_budget_summary',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Requires pm:read.',
+    { projectId: z.string().uuid() },
+    async (args) =>
+      wrap(
+        'get_project_budget_summary',
+        'pm:read',
+        () => handlers.getProjectBudgetSummary(args),
         { projectId: args.projectId },
       )(),
   );
@@ -998,6 +1042,8 @@ export function createKnowledgeHubMcpServer(
         .regex(/^\d{4}-\d{2}-\d{2}$/)
         .nullable()
         .optional(),
+      forecastHours: moneyInput.optional(),
+      actualHours: moneyInput.optional(),
       milestoneId: z.string().uuid().nullable().optional(),
       userStoryId: z.string().uuid().nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
@@ -1036,6 +1082,8 @@ export function createKnowledgeHubMcpServer(
         .regex(/^\d{4}-\d{2}-\d{2}$/)
         .nullable()
         .optional(),
+      forecastHours: moneyInput.optional(),
+      actualHours: moneyInput.optional(),
       milestoneId: z.string().uuid().nullable().optional(),
       userStoryId: z.string().uuid().nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
@@ -1243,13 +1291,14 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_stakeholder',
-    'Add or upsert a durable project stakeholder roster row. Requires pm:write.',
+    'Add or upsert a durable project stakeholder roster row (optional hourly rate in project currency). Requires pm:write.',
     {
       projectId: z.string().uuid(),
       userId: z.string().uuid(),
       projectRole: stakeholderRoleEnum,
       jobTitle: z.string().max(200).nullable().optional(),
       notes: z.string().max(5000).nullable().optional(),
+      hourlyRate: moneyInput.optional(),
       reportsToUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
     },
@@ -1264,12 +1313,13 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_stakeholder',
-    'Update a durable project stakeholder roster row. Requires pm:write.',
+    'Update a durable project stakeholder roster row (optional hourly rate). Requires pm:write.',
     {
       stakeholderId: z.string().uuid(),
       projectRole: stakeholderRoleEnum.optional(),
       jobTitle: z.string().max(200).nullable().optional(),
       notes: z.string().max(5000).nullable().optional(),
+      hourlyRate: moneyInput.optional(),
       reportsToUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
     },

@@ -5,9 +5,14 @@ import { slugify } from '@project-knowledge-hub/auth';
 import { projects, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
+  projectCurrencySchema,
   projectStakeholderRoleSchema,
   projectStatusSchema,
 } from '@project-knowledge-hub/domain';
+import {
+  parseBudgetAmount,
+  upsertProjectCostSnapshot,
+} from '../lib/project-budget.js';
 import {
   requireWorkspaceAdmin,
   requireWorkspaceMaintainer,
@@ -45,6 +50,9 @@ const createProjectSchema = z.object({
   endDate: dateStringSchema.optional(),
   charterRecordId: z.string().uuid().nullable().optional(),
   initialPlanRecordId: z.string().uuid().nullable().optional(),
+  currency: projectCurrencySchema.optional(),
+  initialBudget: z.union([z.number(), z.string()]).nullable().optional(),
+  approvedBudget: z.union([z.number(), z.string()]).nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -61,6 +69,9 @@ const updateProjectSchema = z.object({
   endDate: dateStringSchema.optional(),
   charterRecordId: z.string().uuid().nullable().optional(),
   initialPlanRecordId: z.string().uuid().nullable().optional(),
+  currency: projectCurrencySchema.optional(),
+  initialBudget: z.union([z.number(), z.string()]).nullable().optional(),
+  approvedBudget: z.union([z.number(), z.string()]).nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
   archived: z.boolean().optional(),
@@ -108,6 +119,9 @@ async function toPublicProject(
     initialPlanRecord: project.initialPlanRecordId
       ? pinned.get(project.initialPlanRecordId) ?? null
       : null,
+    currency: projectCurrencySchema.parse(project.currency),
+    initialBudget: project.initialBudget,
+    approvedBudget: project.approvedBudget,
     metadata: project.metadataJson,
     tags: tagList,
     archivedAt: project.archivedAt?.toISOString() ?? null,
@@ -213,6 +227,15 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         endDate: body.endDate ?? null,
         charterRecordId: null,
         initialPlanRecordId: null,
+        currency: body.currency ?? 'EUR',
+        initialBudget:
+          body.initialBudget === undefined
+            ? null
+            : parseBudgetAmount(body.initialBudget) ?? null,
+        approvedBudget:
+          body.approvedBudget === undefined
+            ? null
+            : parseBudgetAmount(body.approvedBudget) ?? null,
         metadataJson: body.metadata ?? null,
         updatedAt: new Date(),
       })
@@ -451,6 +474,15 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         endDate: body.endDate === undefined ? project.endDate : body.endDate,
         charterRecordId: nextCharterId,
         initialPlanRecordId: nextPlanId,
+        currency: body.currency ?? project.currency,
+        initialBudget:
+          body.initialBudget === undefined
+            ? project.initialBudget
+            : parseBudgetAmount(body.initialBudget) ?? null,
+        approvedBudget:
+          body.approvedBudget === undefined
+            ? project.approvedBudget
+            : parseBudgetAmount(body.approvedBudget) ?? null,
         metadataJson: body.metadata === undefined ? project.metadataJson : body.metadata,
         archivedAt:
           body.archived === undefined
@@ -480,6 +512,14 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         workspace.organizationId,
         body.tags,
       );
+    }
+
+    if (
+      body.currency !== undefined ||
+      body.initialBudget !== undefined ||
+      body.approvedBudget !== undefined
+    ) {
+      await upsertProjectCostSnapshot(app.database, updated.id);
     }
 
     await writeAuditEvent(app.database, {

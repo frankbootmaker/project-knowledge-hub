@@ -2,7 +2,7 @@
 
 **Status:** in progress (local MVP on `feature/project-delivery`)  
 **Backlog:** NF-018  
-**Related:** ADR-015, ADR-013 (knowledge draft writes), ADR-014 (catalogue propose/commit — separate)
+**Related:** ADR-015, ADR-016, ADR-017, ADR-018; [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BASELINE.md](./PROJECT_BASELINE.md), [PROJECT_BUDGET.md](./PROJECT_BUDGET.md); ADR-013 (knowledge draft writes), ADR-014 (catalogue propose/commit — separate)
 
 ## Goal
 
@@ -28,7 +28,7 @@ Humans and AI agents work on the **same** project objects so full project contex
 | --- | --- |
 | Milestones under a project; **Timeline** fishbone (duration bars) | Full dependency / critical-path Gantt (RAID **Dependencies** stay a register — see [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BASELINE.md](./PROJECT_BASELINE.md)) |
 | Tasks (optional milestone link) | Subtasks / checklists as separate entities |
-| Due / target dates | Time tracking, capacity |
+| Due / target dates; task forecast/actual **hours** (costing in [PROJECT_BUDGET.md](./PROJECT_BUDGET.md)) | Timesheets, capacity calendars, story points |
 | RACI matrix per task (`R`/`A`/`C`/`I`) | External contacts without accounts |
 | REST + UI on project page | Notifications / email digests |
 | MCP `pm:read` / `pm:write` (direct commit) | Propose/confirm for PM (keep for catalogue ADR-014) |
@@ -41,18 +41,20 @@ Knowledge records stay under ADR-013: agents **draft** docs; delivery state is *
 
 ```text
 projects
-  ├── baseline fields + project_initial_stakeholders (see PROJECT_BASELINE.md)
-  ├── project_stakeholders (durable roster + optional reports_to_user_id)
+  ├── baseline + currency/budgets (see PROJECT_BASELINE.md / PROJECT_BUDGET.md)
+  ├── project_stakeholders (roster + reports_to + hourly_rate)
   ├── project_epics (+ start/end)
   │     └── project_user_stories (+ start/end)
   │           └── project_tasks (story optional)
   ├── project_milestones          ← optional timeboxes (+ start + target_date)
+  ├── project_cost_snapshots      ← daily EVM burndown (see PROJECT_BUDGET.md)
   ├── project_raid_items          ← RAID register (see PROJECT_RAID.md)
   │     └── project_raid_task_links
   ├── project_change_items        ← change register (see PROJECT_BASELINE.md)
   └── project_tasks
         ├── milestone_id (optional)
         ├── user_story_id (optional)
+        ├── forecast_hours / actual_hours
         ├── current_owner_user_id  ← ball-in-court (≠ RACI)
         ├── project_task_raci
         └── project_task_activities

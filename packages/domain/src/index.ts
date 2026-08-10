@@ -122,6 +122,63 @@ export const projectStakeholderRoleSchema = z.enum([
   'other',
 ]);
 
+/** Project-level currency for budget and hourly rates (no FX). */
+export const projectCurrencySchema = z.enum([
+  'EUR',
+  'USD',
+  'GBP',
+  'CHF',
+  'HUF',
+  'PLN',
+  'CZK',
+  'RON',
+  'SEK',
+  'NOK',
+  'DKK',
+  'CAD',
+  'AUD',
+  'JPY',
+]);
+
+/** Product/LLM brand mark for AI-assistant catalogue systems. */
+export const assistantBrandSchema = z.enum([
+  'cursor',
+  'openai',
+  'claude',
+  'gemini',
+  'ollama',
+  'openwebui',
+  'generic',
+]);
+
+/** Resolve LLM/product brand for AI-assistant systems (metadata, then name/slug). */
+export function resolveAssistantBrand(input: {
+  name?: string | null;
+  slug?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): z.infer<typeof assistantBrandSchema> {
+  const meta = input.metadata?.assistantBrand;
+  const parsed = assistantBrandSchema.safeParse(meta);
+  if (parsed.success) return parsed.data;
+
+  const hay = `${input.slug ?? ''} ${input.name ?? ''}`.toLowerCase();
+  if (hay.includes('cursor')) return 'cursor';
+  if (
+    hay.includes('chatgpt') ||
+    hay.includes('openai') ||
+    /\bgpt\b/.test(hay)
+  ) {
+    return 'openai';
+  }
+  if (hay.includes('claude') || hay.includes('anthropic')) return 'claude';
+  if (hay.includes('gemini') || hay.includes('google')) return 'gemini';
+  if (hay.includes('ollama')) return 'ollama';
+  if (hay.includes('openwebui') || hay.includes('open-webui')) {
+    return 'openwebui';
+  }
+  return 'generic';
+}
+
 /** Project RAID register item kind. */
 export const raidKindSchema = z.enum([
   'risk',
@@ -291,6 +348,8 @@ export type EpicStatus = z.infer<typeof epicStatusSchema>;
 export type UserStoryStatus = z.infer<typeof userStoryStatusSchema>;
 export type TaskActivityType = z.infer<typeof taskActivityTypeSchema>;
 export type ProjectStakeholderRole = z.infer<typeof projectStakeholderRoleSchema>;
+export type ProjectCurrency = z.infer<typeof projectCurrencySchema>;
+export type AssistantBrand = z.infer<typeof assistantBrandSchema>;
 export type RaidKind = z.infer<typeof raidKindSchema>;
 export type RaidStatus = z.infer<typeof raidStatusSchema>;
 export type RaidSeverity = z.infer<typeof raidSeveritySchema>;

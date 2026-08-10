@@ -30,6 +30,7 @@ import {
   deliveryScheduleTone,
   todayYmd,
 } from '../lib/delivery-schedule';
+import { parseHoursInput, type RatePerson } from '../lib/task-costing';
 
 type Milestone = {
   id: string;
@@ -87,6 +88,8 @@ type Task = {
   description: string | null;
   status: string;
   dueDate: string | null;
+  forecastHours: string | null;
+  actualHours: string | null;
   milestoneId: string | null;
   userStoryId: string | null;
   userStoryTitle: string | null;
@@ -141,6 +144,8 @@ export function ProjectDeliveryPanel({
   initialMilestones,
   initialTasks,
   members,
+  currency = 'EUR',
+  ratePeople = [],
 }: {
   projectId: string;
   workspaceId: string;
@@ -152,6 +157,8 @@ export function ProjectDeliveryPanel({
   initialMilestones: Milestone[];
   initialTasks: Task[];
   members: Member[];
+  currency?: string;
+  ratePeople?: RatePerson[];
 }) {
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
@@ -183,6 +190,8 @@ export function ProjectDeliveryPanel({
   const [storyEpicId, setStoryEpicId] = useState('');
   const [taskAccountable, setTaskAccountable] = useState('');
   const [taskResponsible, setTaskResponsible] = useState('');
+  const [taskForecastHours, setTaskForecastHours] = useState('');
+  const [taskActualHours, setTaskActualHours] = useState('');
 
   function changeViewMode(mode: ViewMode) {
     setViewMode(mode);
@@ -401,6 +410,8 @@ export function ProjectDeliveryPanel({
     setStoryEpicId('');
     setTaskAccountable('');
     setTaskResponsible('');
+    setTaskForecastHours('');
+    setTaskActualHours('');
     setError(null);
   }
 
@@ -496,6 +507,8 @@ export function ProjectDeliveryPanel({
           body: JSON.stringify({
             title: title.trim(),
             dueDate: dateValue || null,
+            forecastHours: parseHoursInput(taskForecastHours),
+            actualHours: parseHoursInput(taskActualHours),
             milestoneId: taskMilestoneId || null,
             userStoryId: taskStoryId || null,
             raci: raci.length > 0 ? raci : undefined,
@@ -1047,6 +1060,28 @@ export function ProjectDeliveryPanel({
                   disabled={pending}
                 />
               </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t('forecastHours')}>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={taskForecastHours}
+                    onChange={(e) => setTaskForecastHours(e.target.value)}
+                    disabled={pending}
+                  />
+                </Field>
+                <Field label={t('actualHours')}>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={taskActualHours}
+                    onChange={(e) => setTaskActualHours(e.target.value)}
+                    disabled={pending}
+                  />
+                </Field>
+              </div>
               <Field label={t('milestoneOptional')}>
                 <Select
                   value={taskMilestoneId}
@@ -1121,6 +1156,8 @@ export function ProjectDeliveryPanel({
         epics={epics}
         stories={stories}
         milestones={milestones}
+        currency={currency}
+        ratePeople={ratePeople}
         onUpdated={(updated) => {
           setTasks((prev) =>
             prev.map((item) =>
@@ -1150,6 +1187,9 @@ export function ProjectDeliveryPanel({
         epics={epics}
         stories={stories}
         milestones={milestones}
+        tasks={tasks}
+        currency={currency}
+        ratePeople={ratePeople}
         canMutate={canMutate}
         onSaved={(kind, item) => {
           if (kind === 'epic') {

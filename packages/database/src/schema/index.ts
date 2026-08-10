@@ -8,6 +8,7 @@ import {
   jsonb,
   boolean,
   integer,
+  numeric,
   uniqueIndex,
   index,
   customType,
@@ -163,6 +164,12 @@ export const projects = pgTable(
       (): AnyPgColumn => knowledgeRecords.id,
       { onDelete: 'set null' },
     ),
+    /** Project currency for budget and stakeholder rates (no FX). */
+    currency: text('currency').notNull().default('EUR'),
+    /** Kickoff baseline budget amount in project currency. */
+    initialBudget: numeric('initial_budget', { precision: 14, scale: 2 }),
+    /** Working BAC; falls back to initialBudget when null. */
+    approvedBudget: numeric('approved_budget', { precision: 14, scale: 2 }),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
@@ -1060,6 +1067,8 @@ export const projectTasks = pgTable(
     description: text('description'),
     status: text('status').notNull().default('todo'),
     dueDate: date('due_date', { mode: 'string' }),
+    forecastHours: numeric('forecast_hours', { precision: 10, scale: 2 }),
+    actualHours: numeric('actual_hours', { precision: 10, scale: 2 }),
     sortOrder: integer('sort_order').notNull().default(0),
     createdBy: uuid('created_by').references(() => users.id, {
       onDelete: 'set null',
@@ -1150,6 +1159,8 @@ export const projectStakeholders = pgTable(
     reportsToUserId: uuid('reports_to_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
+    /** Hourly rate in the project's currency. */
+    hourlyRate: numeric('hourly_rate', { precision: 12, scale: 2 }),
     sortOrder: integer('sort_order').notNull().default(0),
     ...timestamps,
   },
@@ -1336,5 +1347,34 @@ export const projectChangeDeliveryLinks = pgTable(
       table.entityType,
       table.entityId,
     ),
+  ],
+);
+
+/** Daily EVM snapshot for burndown charts (upserted on budget/effort mutations). */
+export const projectCostSnapshots = pgTable(
+  'project_cost_snapshots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    capturedOn: date('captured_on', { mode: 'string' }).notNull(),
+    bac: numeric('bac', { precision: 14, scale: 2 }).notNull(),
+    pv: numeric('pv', { precision: 14, scale: 2 }),
+    ev: numeric('ev', { precision: 14, scale: 2 }).notNull(),
+    ac: numeric('ac', { precision: 14, scale: 2 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_cost_snapshots_project_day_uidx').on(
+      table.projectId,
+      table.capturedOn,
+    ),
+    index('project_cost_snapshots_project_id_idx').on(table.projectId),
   ],
 );

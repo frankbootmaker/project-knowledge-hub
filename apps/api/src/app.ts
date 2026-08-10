@@ -45,6 +45,7 @@ import { registerProjectStakeholderRoutes } from './routes/project-stakeholders.
 import { registerProjectRaidRoutes } from './routes/project-raid.js';
 import { registerKnowledgeDeliveryLinkRoutes } from './routes/knowledge-delivery-links.js';
 import { registerProjectChangeRoutes } from './routes/project-changes.js';
+import { registerProjectBudgetRoutes } from './routes/project-budget.js';
 import { registerProjectReportRoutes } from './routes/project-reports.js';
 import { registerReadyRoutes } from './routes/ready.js';
 import { registerRootRoutes } from './routes/root.js';
@@ -216,6 +217,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerProjectRaidRoutes(app);
   await registerKnowledgeDeliveryLinkRoutes(app);
   await registerProjectChangeRoutes(app);
+  await registerProjectBudgetRoutes(app);
   await registerProjectReportRoutes(app);
   await registerSystemRoutes(app);
   await registerKnowledgeRecordRoutes(app);

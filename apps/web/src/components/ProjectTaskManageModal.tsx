@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   Badge,
   Button,
@@ -19,6 +19,13 @@ import {
   deliveryScheduleTone,
   todayYmd,
 } from '../lib/delivery-schedule';
+import { formatMoney } from '../lib/project-currency';
+import {
+  hoursCost,
+  parseHoursInput,
+  resolveRatePerson,
+  type RatePerson,
+} from '../lib/task-costing';
 
 type RaciEntry = {
   userId: string;
@@ -40,6 +47,8 @@ type TaskDetail = {
   description: string | null;
   status: string;
   dueDate: string | null;
+  forecastHours: string | null;
+  actualHours: string | null;
   milestoneId: string | null;
   userStoryId: string | null;
   userStoryTitle: string | null;
@@ -95,6 +104,8 @@ export function ProjectTaskManageModal({
   epics: epicsProp,
   stories: storiesProp,
   milestones: milestonesProp,
+  currency = 'EUR',
+  ratePeople = [],
   onUpdated,
   onDeleted,
 }: {
@@ -106,11 +117,15 @@ export function ProjectTaskManageModal({
   epics?: Epic[];
   stories?: Story[];
   milestones?: Milestone[];
+  currency?: string;
+  ratePeople?: RatePerson[];
   onUpdated?: (task: TaskDetail) => void;
   onDeleted?: (taskId: string) => void;
 }) {
   const t = useTranslations('delivery');
+  const tBudget = useTranslations('budget');
   const tCommon = useTranslations('common');
+  const locale = useLocale();
   const { pushToast } = useToast();
 
   const [task, setTask] = useState<TaskDetail | null>(null);
@@ -128,6 +143,8 @@ export function ProjectTaskManageModal({
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState('todo');
   const [dueDate, setDueDate] = useState('');
+  const [forecastHours, setForecastHours] = useState('');
+  const [actualHours, setActualHours] = useState('');
   const [description, setDescription] = useState('');
   const [milestoneId, setMilestoneId] = useState('');
   const [userStoryId, setUserStoryId] = useState('');
@@ -135,6 +152,14 @@ export function ProjectTaskManageModal({
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
   const tRaid = useTranslations('raid');
   const tRecords = useTranslations('records');
+
+  const rateMap = useMemo(() => {
+    const map = new Map<string, RatePerson>();
+    for (const person of ratePeople) {
+      map.set(person.userId, person);
+    }
+    return map;
+  }, [ratePeople]);
 
   const load = useCallback(async () => {
     if (!taskId) return;
@@ -157,6 +182,12 @@ export function ProjectTaskManageModal({
       setTitle(loaded.title);
       setStatus(loaded.status);
       setDueDate(loaded.dueDate ?? '');
+      setForecastHours(
+        loaded.forecastHours != null ? String(loaded.forecastHours) : '',
+      );
+      setActualHours(
+        loaded.actualHours != null ? String(loaded.actualHours) : '',
+      );
       setDescription(loaded.description ?? '');
       setMilestoneId(loaded.milestoneId ?? '');
       setUserStoryId(loaded.userStoryId ?? '');
@@ -274,6 +305,8 @@ export function ProjectTaskManageModal({
           title: title.trim(),
           status,
           dueDate: dueDate || null,
+          forecastHours: parseHoursInput(forecastHours),
+          actualHours: parseHoursInput(actualHours),
           description: description.trim() || null,
           milestoneId: milestoneId || null,
           userStoryId: userStoryId || null,
@@ -410,6 +443,18 @@ export function ProjectTaskManageModal({
       })
     : null;
 
+  const ratePerson = task
+    ? resolveRatePerson(task.currentOwnerUserId, task.raci, rateMap)
+    : null;
+  const forecastCost = hoursCost(
+    parseHoursInput(forecastHours),
+    ratePerson?.hourlyRate,
+  );
+  const actualCost = hoursCost(
+    parseHoursInput(actualHours),
+    ratePerson?.hourlyRate,
+  );
+
   return (
     <Modal
       open={open}
@@ -535,6 +580,40 @@ export function ProjectTaskManageModal({
                 />
               </Field>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t('forecastHours')}>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={forecastHours}
+                  onChange={(e) => setForecastHours(e.target.value)}
+                  disabled={pending || !canMutate}
+                />
+              </Field>
+              <Field label={t('actualHours')}>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={actualHours}
+                  onChange={(e) => setActualHours(e.target.value)}
+                  disabled={pending || !canMutate}
+                />
+              </Field>
+            </div>
+            <p className="m-0 text-xs text-ink-muted">
+              {ratePerson
+                ? ratePerson.hourlyRate != null
+                  ? tBudget('rateHint', {
+                      name: ratePerson.displayName,
+                      rate: formatMoney(ratePerson.hourlyRate, currency, locale),
+                      forecast: formatMoney(forecastCost, currency, locale),
+                      actual: formatMoney(actualCost, currency, locale),
+                    })
+                  : tBudget('rateMissing', { name: ratePerson.displayName })
+                : tBudget('rateUnresolved')}
+            </p>
             <Field label={t('kindStory')}>
               <Select
                 value={userStoryId}

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   Badge,
   Button,
@@ -14,8 +14,26 @@ import {
   Textarea,
   useToast,
 } from './ui';
+import { formatMoney } from '../lib/project-currency';
+import {
+  hoursCost,
+  resolveRatePerson,
+  sumEffortRollup,
+  type RatePerson,
+} from '../lib/task-costing';
 
 const STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
+
+type EffortTask = {
+  id: string;
+  status: string;
+  epicId: string | null;
+  userStoryId: string | null;
+  forecastHours: string | number | null;
+  actualHours: string | number | null;
+  currentOwnerUserId: string | null;
+  raci: Array<{ userId: string; role: string }>;
+};
 
 type Epic = {
   id: string;
@@ -63,6 +81,9 @@ export function ProjectAgileManageModal({
   epics,
   stories,
   milestones = [],
+  tasks = [],
+  currency = 'EUR',
+  ratePeople = [],
   canMutate,
   onSaved,
   onDeleted,
@@ -75,6 +96,9 @@ export function ProjectAgileManageModal({
   epics: Epic[];
   stories: Story[];
   milestones?: Milestone[];
+  tasks?: EffortTask[];
+  currency?: string;
+  ratePeople?: RatePerson[];
   canMutate: boolean;
   onSaved: (
     kind: AgileKind,
@@ -83,9 +107,11 @@ export function ProjectAgileManageModal({
   onDeleted: (kind: AgileKind, id: string) => void;
 }) {
   const t = useTranslations('delivery');
+  const tBudget = useTranslations('budget');
   const tCommon = useTranslations('common');
   const tArchive = useTranslations('archive');
   const tRecords = useTranslations('records');
+  const locale = useLocale();
   const { pushToast } = useToast();
 
   const [title, setTitle] = useState('');
@@ -317,6 +343,45 @@ export function ProjectAgileManageModal({
           ? t('manageMilestoneDescription')
           : undefined;
 
+  const rateMap = useMemo(() => {
+    const map = new Map<string, RatePerson>();
+    for (const person of ratePeople) {
+      map.set(person.userId, person);
+    }
+    return map;
+  }, [ratePeople]);
+
+  const effortRollup = useMemo(() => {
+    if (!kind || !itemId || kind === 'milestone') return null;
+    const scoped =
+      kind === 'epic'
+        ? tasks.filter((task) => task.epicId === itemId)
+        : tasks.filter((task) => task.userStoryId === itemId);
+    const withCosts = scoped.map((task) => {
+      const person = resolveRatePerson(
+        task.currentOwnerUserId,
+        task.raci,
+        rateMap,
+      );
+      const fh =
+        typeof task.forecastHours === 'string'
+          ? Number(task.forecastHours)
+          : task.forecastHours;
+      const ah =
+        typeof task.actualHours === 'string'
+          ? Number(task.actualHours)
+          : task.actualHours;
+      return {
+        ...task,
+        forecastHours: fh,
+        actualHours: ah,
+        forecastCost: hoursCost(fh, person?.hourlyRate),
+        actualCost: hoursCost(ah, person?.hourlyRate),
+      };
+    });
+    return sumEffortRollup(withCosts);
+  }, [kind, itemId, tasks, rateMap]);
+
   return (
     <Modal
       open={open}
@@ -428,6 +493,29 @@ export function ProjectAgileManageModal({
         </Panel>
       ) : null}
       <div className="grid gap-3">
+        {effortRollup ? (
+          <div className="rounded-md border border-line bg-panel-solid p-3 text-sm">
+            <p className="mt-0 mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
+              {tBudget('effortRollup')}
+            </p>
+            <p className="m-0 text-ink">
+              {tBudget('effortRollupValues', {
+                forecastHours: effortRollup.forecastHours,
+                actualHours: effortRollup.actualHours,
+                forecastCost: formatMoney(
+                  effortRollup.forecastCost,
+                  currency,
+                  locale,
+                ),
+                actualCost: formatMoney(
+                  effortRollup.actualCost,
+                  currency,
+                  locale,
+                ),
+              })}
+            </p>
+          </div>
+        ) : null}
         <Field
           label={
             kind === 'epic'

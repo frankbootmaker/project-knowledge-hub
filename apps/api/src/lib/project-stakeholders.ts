@@ -12,6 +12,8 @@ import {
   AppError,
   projectStakeholderRoleSchema,
   raciRoleSchema,
+  resolveAssistantBrand,
+  type AssistantBrand,
   type ProjectStakeholderRole,
   type RaciRole,
 } from '@project-knowledge-hub/domain';
@@ -19,6 +21,7 @@ import {
   assertProjectNotArchived,
   requireProjectContext,
 } from './project-delivery.js';
+import { avatarUrlForUser } from './public-user.js';
 
 export type StakeholderKind = 'person' | 'ai_assistant';
 export type StakeholderSource = 'roster' | 'owner' | 'raci' | 'ai_assistant';
@@ -39,6 +42,11 @@ export type PublicStakeholder = {
   jobTitle: string | null;
   notes: string | null;
   reportsToUserId: string | null;
+  hourlyRate: string | null;
+  /** Profile photo URL for people; null when unset (UI uses monogram). */
+  avatarUrl: string | null;
+  /** LLM/product brand for AI assistants; null for people. */
+  assistantBrand: AssistantBrand | null;
   raciRoles: RaciRole[];
   taskCount: number;
   sources: StakeholderSource[];
@@ -81,12 +89,22 @@ async function loadUserMap(
 ): Promise<
   Map<
     string,
-    { displayName: string; fullName: string | null; email: string }
+    {
+      displayName: string;
+      fullName: string | null;
+      email: string;
+      avatarUrl: string | null;
+    }
   >
 > {
   const map = new Map<
     string,
-    { displayName: string; fullName: string | null; email: string }
+    {
+      displayName: string;
+      fullName: string | null;
+      email: string;
+      avatarUrl: string | null;
+    }
   >();
   if (userIds.length === 0) return map;
   const rows = await database.db
@@ -95,6 +113,8 @@ async function loadUserMap(
       displayName: users.displayName,
       fullName: users.fullName,
       email: users.email,
+      avatarContentType: users.avatarContentType,
+      updatedAt: users.updatedAt,
     })
     .from(users)
     .where(inArray(users.id, [...new Set(userIds)]));
@@ -103,6 +123,11 @@ async function loadUserMap(
       displayName: row.displayName,
       fullName: row.fullName,
       email: row.email,
+      avatarUrl: avatarUrlForUser(
+        row.id,
+        row.avatarContentType ?? null,
+        row.updatedAt,
+      ),
     });
   }
   return map;
@@ -229,6 +254,7 @@ export async function listProjectStakeholders(
       systemType: systems.systemType,
       status: systems.status,
       ownerUserId: systems.ownerUserId,
+      metadataJson: systems.metadataJson,
     })
     .from(systems)
     .where(
@@ -268,6 +294,9 @@ export async function listProjectStakeholders(
       jobTitle: null,
       notes: null,
       reportsToUserId: null,
+      hourlyRate: null,
+      avatarUrl: profile.avatarUrl,
+      assistantBrand: null,
       raciRoles: [],
       taskCount: 0,
       sources: [],
@@ -288,6 +317,7 @@ export async function listProjectStakeholders(
     entry.jobTitle = row.jobTitle;
     entry.notes = row.notes;
     entry.reportsToUserId = row.reportsToUserId;
+    entry.hourlyRate = row.hourlyRate;
     entry.sortOrder = row.sortOrder;
     if (!entry.sources.includes('roster')) entry.sources.push('roster');
   }
@@ -335,6 +365,13 @@ export async function listProjectStakeholders(
       jobTitle: 'AI assistant',
       notes: assistant.summary,
       reportsToUserId: ownerInSet,
+      hourlyRate: null,
+      avatarUrl: null,
+      assistantBrand: resolveAssistantBrand({
+        name: assistant.name,
+        slug: assistant.slug,
+        metadata: assistant.metadataJson,
+      }),
       raciRoles: [],
       taskCount: 0,
       sources: ['ai_assistant'] as StakeholderSource[],
@@ -385,6 +422,7 @@ export async function upsertProjectStakeholder(
     jobTitle?: string | null;
     notes?: string | null;
     reportsToUserId?: string | null;
+    hourlyRate?: string | null;
     sortOrder?: number;
   },
 ): Promise<PublicStakeholder> {
@@ -441,6 +479,8 @@ export async function upsertProjectStakeholder(
           input.reportsToUserId === undefined
             ? existing.reportsToUserId
             : input.reportsToUserId,
+        hourlyRate:
+          input.hourlyRate === undefined ? existing.hourlyRate : input.hourlyRate,
         sortOrder: input.sortOrder ?? existing.sortOrder,
         updatedAt: new Date(),
       })
@@ -453,6 +493,7 @@ export async function upsertProjectStakeholder(
       jobTitle: input.jobTitle ?? null,
       notes: input.notes ?? null,
       reportsToUserId: input.reportsToUserId ?? null,
+      hourlyRate: input.hourlyRate ?? null,
       sortOrder: input.sortOrder ?? 0,
     });
   }
@@ -479,6 +520,7 @@ export async function updateProjectStakeholder(
     jobTitle?: string | null;
     notes?: string | null;
     reportsToUserId?: string | null;
+    hourlyRate?: string | null;
     sortOrder?: number;
   },
 ): Promise<PublicStakeholder> {
@@ -521,6 +563,8 @@ export async function updateProjectStakeholder(
       jobTitle: input.jobTitle === undefined ? existing.jobTitle : input.jobTitle,
       notes: input.notes === undefined ? existing.notes : input.notes,
       reportsToUserId: nextReportsTo,
+      hourlyRate:
+        input.hourlyRate === undefined ? existing.hourlyRate : input.hourlyRate,
       sortOrder: input.sortOrder ?? existing.sortOrder,
       updatedAt: new Date(),
     })

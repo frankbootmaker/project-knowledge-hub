@@ -30,6 +30,10 @@ import {
   updateMilestone,
   updateTask,
 } from '../lib/project-delivery.js';
+import {
+  parseHours,
+  upsertProjectCostSnapshot,
+} from '../lib/project-budget.js';
 
 async function workspaceOrgId(
   app: FastifyInstance,
@@ -72,11 +76,15 @@ const updateMilestoneSchema = z.object({
   archived: z.boolean().optional(),
 });
 
+const hoursSchema = z.union([z.number(), z.string()]).nullable();
+
 const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(10000).nullable().optional(),
   status: taskStatusSchema.optional(),
   dueDate: dateStringSchema.optional(),
+  forecastHours: hoursSchema.optional(),
+  actualHours: hoursSchema.optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
   currentOwnerUserId: z.string().uuid().nullable().optional(),
@@ -89,6 +97,8 @@ const updateTaskSchema = z.object({
   description: z.string().max(10000).nullable().optional(),
   status: taskStatusSchema.optional(),
   dueDate: dateStringSchema.optional(),
+  forecastHours: hoursSchema.optional(),
+  actualHours: hoursSchema.optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
   currentOwnerUserId: z.string().uuid().nullable().optional(),
@@ -227,8 +237,28 @@ export async function registerProjectDeliveryRoutes(
       projectId: project.id,
       workspaceId: project.workspaceId,
       createdBy: principal.userId,
-      ...body,
+      title: body.title,
+      description: body.description,
+      status: body.status,
+      dueDate: body.dueDate,
+      forecastHours:
+        body.forecastHours === undefined
+          ? undefined
+          : parseHours(body.forecastHours) ?? null,
+      actualHours:
+        body.actualHours === undefined
+          ? undefined
+          : parseHours(body.actualHours) ?? null,
+      milestoneId: body.milestoneId,
+      userStoryId: body.userStoryId,
+      currentOwnerUserId: body.currentOwnerUserId,
+      sortOrder: body.sortOrder,
+      raci: body.raci,
     });
+
+    if (body.forecastHours !== undefined || body.actualHours !== undefined) {
+      await upsertProjectCostSnapshot(app.database, project.id);
+    }
 
     await writeAuditEvent(app.database, {
       organizationId: await workspaceOrgId(app, project.workspaceId),
@@ -267,10 +297,30 @@ export async function registerProjectDeliveryRoutes(
     assertProjectNotArchived(project);
 
     const task = await updateTask(app.database, params.taskId, {
-      ...body,
+      title: body.title,
+      description: body.description,
+      status: body.status,
+      dueDate: body.dueDate,
+      forecastHours:
+        body.forecastHours === undefined
+          ? undefined
+          : parseHours(body.forecastHours) ?? null,
+      actualHours:
+        body.actualHours === undefined
+          ? undefined
+          : parseHours(body.actualHours) ?? null,
+      milestoneId: body.milestoneId,
+      userStoryId: body.userStoryId,
+      currentOwnerUserId: body.currentOwnerUserId,
+      sortOrder: body.sortOrder,
+      archived: body.archived,
       actorUserId: principal.userId,
       workspaceId: project.workspaceId,
     });
+
+    if (body.forecastHours !== undefined || body.actualHours !== undefined) {
+      await upsertProjectCostSnapshot(app.database, project.id);
+    }
 
     await writeAuditEvent(app.database, {
       organizationId: await workspaceOrgId(app, project.workspaceId),

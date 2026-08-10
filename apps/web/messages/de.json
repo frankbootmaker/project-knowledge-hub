@@ -561,11 +561,11 @@
     "manageReports": "Berichte",
     "manageReportsHint": "Status-, Umsetzungs- oder Stakeholder-Berichte ansehen, dann exportieren oder drucken.",
     "reportStatus": "Projektstatusbericht",
-    "reportStatusHint": "Breite Vorschau mit RAG-Status, Zusammenfassung, Umsetzung und Stakeholdern.",
+    "reportStatusHint": "Breite Vorschau mit Zeitplan-/Risiko-/Finanz-RAG, Budget-EVM, RAID, Umsetzung und Stakeholdern.",
     "reportDelivery": "Umsetzungsbericht",
-    "reportDeliveryHint": "Breite Vorschau von Meilensteinen und Aufgaben mit Terminlage.",
+    "reportDeliveryHint": "Breite Vorschau von Meilensteinen und Aufgaben mit Terminlage und Aufwandstunden.",
     "reportStakeholders": "Stakeholder-Bericht",
-    "reportStakeholdersHint": "Breite Vorschau von Projektteam, Kontakten und KI-Assistenten.",
+    "reportStakeholdersHint": "Breite Vorschau von Projektteam, Sätzen, Kontakten und KI-Assistenten.",
     "reportStatusTitle": "Projektstatusbericht",
     "reportDeliveryTitle": "Umsetzungsbericht",
     "reportStakeholdersTitle": "Stakeholder-Bericht",
@@ -583,7 +583,11 @@
     "reportLoading": "Bericht wird erstellt…",
     "reportPdfDownloaded": "PDF exportiert.",
     "reportPdfFailed": "PDF-Export fehlgeschlagen",
-    "reportPrintBlocked": "Druckfenster konnte nicht geöffnet werden. Pop-ups erlauben und erneut versuchen."
+    "reportPrintBlocked": "Druckfenster konnte nicht geöffnet werden. Pop-ups erlauben und erneut versuchen.",
+    "ragTimeline": "Zeitplan",
+    "ragRisks": "Risiken",
+    "ragFinancials": "Finanzen",
+    "reportPv": "PV"
   },
   "systems": {
     "createTitle": "System erstellen",
@@ -1977,7 +1981,9 @@
       "overdue": "Überfällig",
       "completed": "Erledigt",
       "neutral": "Abgebrochen"
-    }
+    },
+    "forecastHours": "Prognose-Stunden",
+    "actualHours": "Ist-Stunden"
   },
   "stakeholders": {
     "title": "Stakeholder",
@@ -2003,7 +2009,7 @@
     "created": "Stakeholder gespeichert.",
     "failedCreate": "Stakeholder konnte nicht gespeichert werden",
     "failedUpdate": "Stakeholder konnte nicht aktualisiert werden",
-    "hint": "Rollen im Projektteam und „Berichtet an“ bilden das Org-Chart. RACI-Personen und KI-Assistenten erscheinen automatisch. Katalog-Systeme bleiben unter Systeme.",
+    "hint": "Rollen, Sätze und „Berichtet an“ bilden Org-Chart und Kosten. RACI-Personen und KI-Assistenten erscheinen automatisch. Katalog-Systeme bleiben unter Systeme.",
     "readOnlyHint": "Sie können Stakeholder sehen; Maintainer und Admins bearbeiten das Projektteam.",
     "viewModeLabel": "Stakeholder-Ansicht",
     "viewMode": {
@@ -2025,7 +2031,24 @@
       "other": "Sonstige"
     },
     "kindAiAssistant": "KI-Assistent",
-    "aiOwner": "Owner"
+    "aiOwner": "Owner",
+    "hourlyRate": "Stundensatz",
+    "hourlyRatePlaceholder": "Betrag in {currency}",
+    "hourlyRateValue": "{amount}/h",
+    "manage": "Verwalten",
+    "manageTitle": "Stakeholder verwalten",
+    "manageDescription": "Rolle, Satz, Berichtslinie aktualisieren oder aus dem Projektteam entfernen.",
+    "deleteItem": "Aus Team entfernen",
+    "confirmDelete": "Stakeholder entfernen",
+    "deleteHint": "Entfernt den Team-Eintrag. Personen mit RACI bleiben als abgeleitete Stakeholder.",
+    "updated": "Stakeholder aktualisiert.",
+    "deleted": "Stakeholder entfernt.",
+    "failedDelete": "Stakeholder konnte nicht entfernt werden",
+    "orgChartExportPdf": "PDF exportieren",
+    "orgChartExportingPdf": "PDF wird exportiert…",
+    "orgChartExportTitle": "Org-Chart: {project}",
+    "orgChartExported": "Org-Chart-PDF heruntergeladen.",
+    "orgChartExportFailed": "Org-Chart-PDF konnte nicht exportiert werden"
   },
   "raid": {
     "title": "RAID",
@@ -2085,7 +2108,7 @@
     "title": "Projekt-Baseline",
     "edit": "Baseline bearbeiten",
     "editTitle": "Projekt-Baseline bearbeiten",
-    "editDescription": "Geplantes Zeitfenster setzen, Charter und Initialplan anheften und Kickoff-Stakeholder als Snapshot speichern.",
+    "editDescription": "Geplantes Zeitfenster, Währung und Initialbudget setzen, Charter und Initialplan anheften und Kickoff-Stakeholder speichern.",
     "startDate": "Startdatum",
     "endDate": "Enddatum",
     "charter": "Charter",
@@ -2095,8 +2118,10 @@
     "noMembers": "Keine Workspace-Mitglieder verfügbar.",
     "updated": "Baseline aktualisiert.",
     "failedUpdate": "Baseline konnte nicht aktualisiert werden",
-    "hint": "Die Baseline ist der geplante Kickoff-Snapshot. Die Live-Stakeholder darunter können sich ändern, ohne diese Liste zu ändern.",
-    "readOnlyHint": "Baseline ist sichtbar; Maintainer und Admins können bearbeiten."
+    "hint": "Die Baseline ist der Kickoff-Snapshot. Live-Stakeholder können sich ändern. Das genehmigte Budget bearbeitest du unter Budgetierung.",
+    "readOnlyHint": "Baseline ist sichtbar; Maintainer und Admins können bearbeiten.",
+    "currency": "Währung",
+    "initialBudget": "Initialbudget"
   },
   "changes": {
     "title": "Change-Management",
@@ -2158,5 +2183,38 @@
       "milestone": "Meilenstein",
       "task": "Aufgabe"
     }
+  },
+  "budget": {
+    "title": "Budgetierung",
+    "approvedBudget": "Genehmigtes Budget (BAC)",
+    "saveApproved": "Genehmigtes Budget speichern",
+    "updated": "Budget aktualisiert.",
+    "failedUpdate": "Budget konnte nicht aktualisiert werden",
+    "financialRag": "Finanzen",
+    "kpi": {
+      "bac": "BAC",
+      "ev": "EV",
+      "ac": "AC",
+      "cpi": "CPI",
+      "spi": "SPI"
+    },
+    "burndown": "Budget-Burndown",
+    "burndownLegend": "Gestrichelt: ideales Rest-BAC. Durchgezogen: Rest-BAC aus täglichen AC-Snapshots.",
+    "burndownEmpty": "Setze BAC und Start-/Enddatum, um den Burndown zu sehen.",
+    "burndownAria": "Budget-Burndown-Diagramm",
+    "epicRollups": "Epic-Kostenrollups",
+    "epicRollupsEmpty": "Noch keine Epic-Kostendaten. Prognose-/Ist-Stunden mit Team-Sätzen pflegen.",
+    "epic": "Epic",
+    "forecastHours": "Prognose-Stunden",
+    "actualHours": "Ist-Stunden",
+    "forecastCost": "Prognosekosten",
+    "actualCost": "Ist-Kosten",
+    "effortRollup": "Aufwand- & Kostenrollup",
+    "effortRollupValues": "Prognose {forecastHours}h ({forecastCost}) · Ist {actualHours}h ({actualCost})",
+    "rateHint": "Satz von {name} ({rate}) · Prognose {forecast} · Ist {actual}",
+    "rateMissing": "{name} hat keinen Stundensatz im Team — Stunden rollen ohne Kosten hoch.",
+    "rateUnresolved": "Kein Owner/R/A mit Team-Satz — Stunden rollen ohne Kosten hoch.",
+    "hint": "BAC = genehmigtes Budget (sonst Initial). Kosten: aktueller Owner, sonst RACI R, sonst A.",
+    "readOnlyHint": "Budgetierung ist sichtbar; Maintainer und Admins können bearbeiten."
   }
 }

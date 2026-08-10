@@ -3,8 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { CollapsibleSection } from './CollapsibleSection';
+import {
+  PROJECT_CURRENCIES,
+  formatMoney,
+  parseOptionalNumber,
+} from '../lib/project-currency';
 import {
   Badge,
   Button,
@@ -40,6 +45,9 @@ export type BaselineProject = {
   charterRecord: PinnedRecord | null;
   initialPlanRecordId: string | null;
   initialPlanRecord: PinnedRecord | null;
+  currency?: string;
+  initialBudget?: string | number | null;
+  approvedBudget?: string | number | null;
 };
 
 type Member = {
@@ -90,6 +98,7 @@ export function ProjectBaselinePanel({
   const t = useTranslations('baseline');
   const tStakeholders = useTranslations('stakeholders');
   const tCommon = useTranslations('common');
+  const locale = useLocale();
   const router = useRouter();
   const { pushToast } = useToast();
 
@@ -110,9 +119,19 @@ export function ProjectBaselinePanel({
   const [initialPlanRecordId, setInitialPlanRecordId] = useState(
     project.initialPlanRecordId ?? '',
   );
+  const [currency, setCurrency] = useState(project.currency ?? 'EUR');
+  const [initialBudget, setInitialBudget] = useState(
+    project.initialBudget != null ? String(project.initialBudget) : '',
+  );
   const [draftStakeholders, setDraftStakeholders] = useState<DraftStakeholder[]>(
     [],
   );
+
+  const currencyCode = project.currency ?? 'EUR';
+  const initialBudgetNumber =
+    project.initialBudget == null || project.initialBudget === ''
+      ? null
+      : Number(project.initialBudget);
 
   const charterOptions = useMemo(
     () => knowledgeRecords.filter((row) => row.recordType === 'project-charter'),
@@ -128,6 +147,10 @@ export function ProjectBaselinePanel({
     setEndDate(project.endDate ?? '');
     setCharterRecordId(project.charterRecordId ?? '');
     setInitialPlanRecordId(project.initialPlanRecordId ?? '');
+    setCurrency(project.currency ?? 'EUR');
+    setInitialBudget(
+      project.initialBudget != null ? String(project.initialBudget) : '',
+    );
     setDraftStakeholders(
       stakeholders.map((row) => ({
         userId: row.userId,
@@ -173,6 +196,8 @@ export function ProjectBaselinePanel({
           endDate: endDate || null,
           charterRecordId: charterRecordId || null,
           initialPlanRecordId: initialPlanRecordId || null,
+          currency,
+          initialBudget: parseOptionalNumber(initialBudget) ?? null,
         }),
       });
       const patchPayload = (await patchResponse.json().catch(() => ({}))) as {
@@ -257,6 +282,26 @@ export function ProjectBaselinePanel({
             </dt>
             <dd className="m-0 mt-1 text-sm text-ink">
               {project.endDate || tCommon('none')}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+              {t('currency')}
+            </dt>
+            <dd className="m-0 mt-1 text-sm text-ink">{currencyCode}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+              {t('initialBudget')}
+            </dt>
+            <dd className="m-0 mt-1 text-sm text-ink">
+              {formatMoney(
+                Number.isFinite(initialBudgetNumber as number)
+                  ? (initialBudgetNumber as number)
+                  : null,
+                currencyCode,
+                locale,
+              )}
             </dd>
           </div>
           <div>
@@ -368,6 +413,32 @@ export function ProjectBaselinePanel({
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 disabled={pending}
+              />
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t('currency')}>
+              <Select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                disabled={pending}
+              >
+                {PROJECT_CURRENCIES.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t('initialBudget')}>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={initialBudget}
+                onChange={(e) => setInitialBudget(e.target.value)}
+                disabled={pending}
+                placeholder="0.00"
               />
             </Field>
           </div>

@@ -9,6 +9,10 @@ import {
   ProjectChangePanel,
   type ChangeItem,
 } from '../../../../../../components/ProjectChangePanel';
+import {
+  ProjectBudgetPanel,
+  type ProjectBudgetSummary,
+} from '../../../../../../components/ProjectBudgetPanel';
 import { ProjectDeliveryPanel } from '../../../../../../components/ProjectDeliveryPanel';
 import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
@@ -30,6 +34,7 @@ import {
   projectDeliveryRag,
   type ProjectRagStatus,
 } from '../../../../../../lib/delivery-schedule';
+import { computeRiskRag } from '../../../../../../lib/project-health';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 function ragBadgeTone(
@@ -53,6 +58,9 @@ type Project = {
   tags: Array<{ name: string }>;
   startDate: string | null;
   endDate: string | null;
+  currency: string;
+  initialBudget: string | null;
+  approvedBudget: string | null;
   charterRecordId: string | null;
   charterRecord: {
     id: string;
@@ -161,6 +169,7 @@ export default async function ProjectDetailPage({
     raidResponse,
     initialStakeholdersResponse,
     changesResponse,
+    budgetResponse,
   ] = await Promise.all([
     apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
     apiFetch(
@@ -175,6 +184,7 @@ export default async function ProjectDetailPage({
     apiFetch(`/api/v1/projects/${project.id}/raid-items`),
     apiFetch(`/api/v1/projects/${project.id}/initial-stakeholders`),
     apiFetch(`/api/v1/projects/${project.id}/change-items`),
+    apiFetch(`/api/v1/projects/${project.id}/budget-summary`),
   ]);
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
@@ -206,6 +216,8 @@ export default async function ProjectDetailPage({
           description: string | null;
           status: string;
           dueDate: string | null;
+          forecastHours: string | null;
+          actualHours: string | null;
           milestoneId: string | null;
           userStoryId: string | null;
           userStoryTitle: string | null;
@@ -294,11 +306,34 @@ export default async function ProjectDetailPage({
     ? ((await changesResponse.json()) as { changeItems: ChangeItem[] })
         .changeItems
     : [];
+  const budgetSummary = budgetResponse.ok
+    ? ((await budgetResponse.json()) as { budget: ProjectBudgetSummary }).budget
+    : null;
 
-  const deliveryRag = projectDeliveryRag([
+  const timelineRag = projectDeliveryRag([
     ...milestones.map((row) => ({ status: row.status, date: row.targetDate })),
     ...tasks.map((row) => ({ status: row.status, date: row.dueDate })),
   ]);
+  const riskRag = computeRiskRag(raidItems);
+  const financialRag = budgetSummary?.financialRag ?? 'green';
+
+  const ratePeople = stakeholders
+    .filter((row) => row.kind === 'person' && row.userId)
+    .map((row) => ({
+      userId: row.userId!,
+      displayName: row.displayName,
+      hourlyRate:
+        row.hourlyRate == null || row.hourlyRate === ''
+          ? null
+          : Number(row.hourlyRate),
+    }))
+    .map((row) => ({
+      ...row,
+      hourlyRate:
+        row.hourlyRate != null && Number.isFinite(row.hourlyRate)
+          ? row.hourlyRate
+          : null,
+    }));
 
   return (
     <Page wide>
@@ -319,11 +354,25 @@ export default async function ProjectDetailPage({
           <span className="inline-flex flex-wrap items-center gap-3">
             <span>{project.name}</span>
             <Badge
-              tone={ragBadgeTone(deliveryRag)}
-              title={t('ragLabel')}
-              aria-label={`${t('ragLabel')}: ${t(`rag.${deliveryRag}`)}`}
+              tone={ragBadgeTone(timelineRag)}
+              title={t('ragTimeline')}
+              aria-label={`${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`}
             >
-              {t(`rag.${deliveryRag}`)}
+              {t('ragTimeline')}: {t(`rag.${timelineRag}`)}
+            </Badge>
+            <Badge
+              tone={ragBadgeTone(riskRag)}
+              title={t('ragRisks')}
+              aria-label={`${t('ragRisks')}: ${t(`rag.${riskRag}`)}`}
+            >
+              {t('ragRisks')}: {t(`rag.${riskRag}`)}
+            </Badge>
+            <Badge
+              tone={ragBadgeTone(financialRag)}
+              title={t('ragFinancials')}
+              aria-label={`${t('ragFinancials')}: ${t(`rag.${financialRag}`)}`}
+            >
+              {t('ragFinancials')}: {t(`rag.${financialRag}`)}
             </Badge>
           </span>
         }
@@ -367,9 +416,11 @@ export default async function ProjectDetailPage({
 
       <ProjectStakeholdersPanel
         projectId={project.id}
+        projectName={project.name}
         canMutate={canMutate && !isArchived}
         initialStakeholders={stakeholders}
         members={members}
+        currency={project.currency ?? 'EUR'}
       />
 
       <ProjectDeliveryPanel
@@ -383,6 +434,14 @@ export default async function ProjectDetailPage({
         initialMilestones={milestones}
         initialTasks={tasks}
         members={members}
+        currency={project.currency ?? 'EUR'}
+        ratePeople={ratePeople}
+      />
+
+      <ProjectBudgetPanel
+        projectId={project.id}
+        canMutate={canMutate && !isArchived}
+        initialSummary={budgetSummary}
       />
 
       <ProjectRaidPanel

@@ -60,6 +60,8 @@ export type PublicTask = {
   description: string | null;
   status: TaskStatus;
   dueDate: string | null;
+  forecastHours: string | null;
+  actualHours: string | null;
   sortOrder: number;
   createdBy: string | null;
   currentOwnerUserId: string | null;
@@ -125,6 +127,8 @@ function toPublicTask(
     description: row.description,
     status: taskStatusSchema.parse(row.status),
     dueDate: row.dueDate,
+    forecastHours: row.forecastHours,
+    actualHours: row.actualHours,
     sortOrder: row.sortOrder,
     createdBy: row.createdBy,
     currentOwnerUserId: row.currentOwnerUserId,
@@ -753,6 +757,8 @@ export async function createTask(
     description?: string | null;
     status?: TaskStatus;
     dueDate?: string | null;
+    forecastHours?: string | null;
+    actualHours?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     currentOwnerUserId?: string | null;
@@ -791,6 +797,8 @@ export async function createTask(
       description: input.description ?? null,
       status: input.status ?? 'todo',
       dueDate: input.dueDate ?? null,
+      forecastHours: input.forecastHours ?? null,
+      actualHours: input.actualHours ?? null,
       sortOrder: input.sortOrder ?? 0,
       createdBy: input.createdBy ?? null,
       currentOwnerUserId: ownerUserId,
@@ -847,6 +855,8 @@ export async function updateTask(
     description?: string | null;
     status?: TaskStatus;
     dueDate?: string | null;
+    forecastHours?: string | null;
+    actualHours?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     currentOwnerUserId?: string | null;
@@ -895,6 +905,14 @@ export async function updateTask(
         input.description !== undefined ? input.description : existing.description,
       status: nextStatus,
       dueDate: input.dueDate !== undefined ? input.dueDate : existing.dueDate,
+      forecastHours:
+        input.forecastHours !== undefined
+          ? input.forecastHours
+          : existing.forecastHours,
+      actualHours:
+        input.actualHours !== undefined
+          ? input.actualHours
+          : existing.actualHours,
       milestoneId:
         input.milestoneId !== undefined ? input.milestoneId : existing.milestoneId,
       userStoryId:
@@ -937,6 +955,8 @@ export async function updateTask(
     'title',
     'description',
     'dueDate',
+    'forecastHours',
+    'actualHours',
     'milestoneId',
     'userStoryId',
     'sortOrder',

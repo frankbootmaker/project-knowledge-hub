@@ -626,6 +626,59 @@ export async function buildKnowledgeRecordPdf(
   }
 }
 
+/** Render a self-contained HTML document to PDF (org charts, ad-hoc printables). */
+export async function renderHtmlDocumentToPdf(input: {
+  html: string;
+  title: string;
+  landscape?: boolean;
+  webUrl?: string | null;
+  cookieHeader?: string | null;
+}): Promise<Buffer> {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setViewport({
+      width: input.landscape ? 1400 : 900,
+      height: 1100,
+      deviceScaleFactor: 2,
+    });
+    if (input.webUrl && input.cookieHeader) {
+      const cookies = parseCookieHeader(input.cookieHeader, input.webUrl);
+      if (cookies.length > 0) {
+        await page.setCookie(...cookies);
+      }
+    }
+    await page.setContent(input.html, {
+      waitUntil: 'load',
+      timeout: 60_000,
+    });
+    // Allow authenticated avatar images a moment to settle.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const pdfOptions: PDFOptions = {
+      format: 'A4',
+      landscape: Boolean(input.landscape),
+      printBackground: true,
+      margin: { top: '12mm', right: '10mm', bottom: '14mm', left: '10mm' },
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: `
+        <div style="font-size:8px;width:100%;padding:0 10mm;color:#666;display:flex;justify-content:space-between;">
+          <span>${escapeHtml(input.title).slice(0, 80)}</span>
+          <span><span class="pageNumber"></span>/<span class="totalPages"></span></span>
+        </div>
+      `,
+    };
+
+    const pdf = await page
+      .pdf({ ...pdfOptions, tagged: true, outline: true })
+      .catch(() => page.pdf(pdfOptions));
+    return Buffer.from(pdf);
+  } finally {
+    await page.close().catch(() => undefined);
+  }
+}
+
 /** Rasterizes mermaid sources so Word shows diagrams instead of their source. */
 async function renderMermaidImages(
   sources: string[],

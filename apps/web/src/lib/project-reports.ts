@@ -2,7 +2,10 @@ import {
   deliveryScheduleTone,
   projectDeliveryRag,
   todayYmd,
+  type ProjectRagStatus,
 } from './delivery-schedule';
+import { formatMoney } from './project-currency';
+import { computeRiskRag } from './project-health';
 
 export type ReportMilestone = {
   title: string;
@@ -15,6 +18,8 @@ export type ReportTask = {
   status: string;
   dueDate: string | null;
   milestoneId: string | null;
+  forecastHours: string | null;
+  actualHours: string | null;
 };
 
 export type ReportStakeholder = {
@@ -24,9 +29,39 @@ export type ReportStakeholder = {
   projectRole: string | null;
   jobTitle: string | null;
   reportsToUserId: string | null;
+  hourlyRate: string | null;
   raciRoles: string[];
   notes: string | null;
   userId: string | null;
+};
+
+export type ReportRaidItem = {
+  kind: string;
+  title: string;
+  status: string;
+  severity: string;
+};
+
+export type ReportBudgetSummary = {
+  currency: string;
+  initialBudget: number | null;
+  approvedBudget: number | null;
+  bac: number | null;
+  pv: number | null;
+  ev: number;
+  ac: number;
+  cpi: number | null;
+  spi: number | null;
+  financialRag: ProjectRagStatus;
+  riskRag: ProjectRagStatus;
+};
+
+export type ProjectReportData = {
+  milestones: ReportMilestone[];
+  tasks: ReportTask[];
+  stakeholders: ReportStakeholder[];
+  raidItems: ReportRaidItem[];
+  budget: ReportBudgetSummary | null;
 };
 
 function downloadMarkdown(filename: string, markdown: string) {
@@ -47,29 +82,50 @@ function slugify(value: string): string {
     .slice(0, 64) || 'project';
 }
 
-export async function fetchProjectReportData(projectId: string): Promise<{
-  milestones: ReportMilestone[];
-  tasks: ReportTask[];
-  stakeholders: ReportStakeholder[];
-}> {
-  const [milestonesRes, tasksRes, stakeholdersRes] = await Promise.all([
-    fetch(`/api/v1/projects/${projectId}/milestones`),
-    fetch(`/api/v1/projects/${projectId}/tasks`),
-    fetch(`/api/v1/projects/${projectId}/stakeholders`),
-  ]);
+function formatIndex(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toFixed(2);
+}
+
+function formatHours(value: string | null | undefined): string | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return String(n);
+}
+
+export async function fetchProjectReportData(
+  projectId: string,
+): Promise<ProjectReportData> {
+  const [milestonesRes, tasksRes, stakeholdersRes, raidRes, budgetRes] =
+    await Promise.all([
+      fetch(`/api/v1/projects/${projectId}/milestones`),
+      fetch(`/api/v1/projects/${projectId}/tasks`),
+      fetch(`/api/v1/projects/${projectId}/stakeholders`),
+      fetch(`/api/v1/projects/${projectId}/raid-items`),
+      fetch(`/api/v1/projects/${projectId}/budget-summary`),
+    ]);
 
   const milestones = milestonesRes.ok
-    ? ((await milestonesRes.json()) as { milestones: ReportMilestone[] }).milestones
+    ? ((await milestonesRes.json()) as { milestones: ReportMilestone[] })
+        .milestones
     : [];
   const tasks = tasksRes.ok
     ? ((await tasksRes.json()) as { tasks: ReportTask[] }).tasks
     : [];
   const stakeholders = stakeholdersRes.ok
-    ? ((await stakeholdersRes.json()) as { stakeholders: ReportStakeholder[] })
-        .stakeholders
+    ? ((await stakeholdersRes.json()) as {
+        stakeholders: ReportStakeholder[];
+      }).stakeholders
     : [];
+  const raidItems = raidRes.ok
+    ? ((await raidRes.json()) as { raidItems: ReportRaidItem[] }).raidItems
+    : [];
+  const budget = budgetRes.ok
+    ? ((await budgetRes.json()) as { budget: ReportBudgetSummary }).budget
+    : null;
 
-  return { milestones, tasks, stakeholders };
+  return { milestones, tasks, stakeholders, raidItems, budget };
 }
 
 function nameByUserId(stakeholders: ReportStakeholder[]): Map<string, string> {
@@ -78,6 +134,34 @@ function nameByUserId(stakeholders: ReportStakeholder[]): Map<string, string> {
     if (row.userId) map.set(row.userId, row.displayName);
   }
   return map;
+}
+
+export function computeReportRags(input: {
+  milestones: ReportMilestone[];
+  tasks: ReportTask[];
+  raidItems: ReportRaidItem[];
+  budget: ReportBudgetSummary | null;
+  today?: string;
+}): {
+  timelineRag: ProjectRagStatus;
+  riskRag: ProjectRagStatus;
+  financialRag: ProjectRagStatus;
+} {
+  const today = input.today ?? todayYmd();
+  return {
+    timelineRag: projectDeliveryRag(
+      [
+        ...input.milestones.map((row) => ({
+          status: row.status,
+          date: row.targetDate,
+        })),
+        ...input.tasks.map((row) => ({ status: row.status, date: row.dueDate })),
+      ],
+      today,
+    ),
+    riskRag: input.budget?.riskRag ?? computeRiskRag(input.raidItems),
+    financialRag: input.budget?.financialRag ?? 'green',
+  };
 }
 
 export function buildDeliveryStatusReport(input: {
@@ -89,31 +173,23 @@ export function buildDeliveryStatusReport(input: {
   labels: {
     title: string;
     generated: string;
-    rag: string;
-    ragValue: string;
+    timelineRag: string;
+    timelineRagValue: string;
     milestones: string;
     tasks: string;
     none: string;
+    forecastHours: string;
+    actualHours: string;
   };
 }): string {
   const today = todayYmd();
-  const rag = projectDeliveryRag(
-    [
-      ...input.milestones.map((row) => ({
-        status: row.status,
-        date: row.targetDate,
-      })),
-      ...input.tasks.map((row) => ({ status: row.status, date: row.dueDate })),
-    ],
-    today,
-  );
 
   const lines = [
     `# ${input.labels.title}: ${input.projectName}`,
     '',
     `- Slug: \`${input.projectSlug}\``,
     `- Status: ${input.projectStatus}`,
-    `- ${input.labels.rag}: **${input.labels.ragValue || rag}**`,
+    `- ${input.labels.timelineRag}: **${input.labels.timelineRagValue}**`,
     `- ${input.labels.generated}: ${new Date().toISOString()}`,
     '',
     `## ${input.labels.milestones}`,
@@ -148,10 +224,19 @@ export function buildDeliveryStatusReport(input: {
         date: row.dueDate,
         today,
       });
+      const forecast = formatHours(row.forecastHours);
+      const actual = formatHours(row.actualHours);
+      const effortBits = [
+        forecast != null
+          ? `${input.labels.forecastHours}: ${forecast}`
+          : null,
+        actual != null ? `${input.labels.actualHours}: ${actual}` : null,
+      ].filter(Boolean);
       lines.push(
         `- **${row.title}** — ${row.status}` +
           (row.dueDate ? `, due ${row.dueDate}` : '') +
-          ` (${tone})`,
+          ` (${tone})` +
+          (effortBits.length > 0 ? ` · ${effortBits.join(', ')}` : ''),
       );
     }
     lines.push('');
@@ -164,6 +249,8 @@ export function buildStakeholdersReport(input: {
   projectName: string;
   projectSlug: string;
   stakeholders: ReportStakeholder[];
+  currency?: string;
+  locale?: string;
   labels: {
     title: string;
     generated: string;
@@ -171,11 +258,16 @@ export function buildStakeholdersReport(input: {
     aiAssistants: string;
     none: string;
     reportsTo: string;
+    hourlyRate: string;
   };
 }): string {
   const names = nameByUserId(input.stakeholders);
   const people = input.stakeholders.filter((row) => row.kind === 'person');
-  const assistants = input.stakeholders.filter((row) => row.kind === 'ai_assistant');
+  const assistants = input.stakeholders.filter(
+    (row) => row.kind === 'ai_assistant',
+  );
+  const currency = input.currency ?? 'EUR';
+  const locale = input.locale ?? 'en';
 
   const lines = [
     `# ${input.labels.title}: ${input.projectName}`,
@@ -194,14 +286,23 @@ export function buildStakeholdersReport(input: {
       const reportsTo = row.reportsToUserId
         ? names.get(row.reportsToUserId)
         : null;
+      const rate =
+        row.hourlyRate != null && row.hourlyRate !== ''
+          ? Number(row.hourlyRate)
+          : null;
       const bits = [
         row.projectRole,
         row.jobTitle,
         row.email,
         row.raciRoles.length > 0 ? `RACI ${row.raciRoles.join('/')}` : null,
         reportsTo ? `${input.labels.reportsTo}: ${reportsTo}` : null,
+        rate != null && Number.isFinite(rate)
+          ? `${input.labels.hourlyRate}: ${formatMoney(rate, currency, locale)}`
+          : null,
       ].filter(Boolean);
-      lines.push(`- **${row.displayName}**${bits.length ? ` — ${bits.join(' · ')}` : ''}`);
+      lines.push(
+        `- **${row.displayName}**${bits.length ? ` — ${bits.join(' · ')}` : ''}`,
+      );
       if (row.notes) lines.push(`  - ${row.notes}`);
     }
     lines.push('');
@@ -227,6 +328,84 @@ export function buildStakeholdersReport(input: {
   return `${lines.join('\n').trim()}\n`;
 }
 
+export function buildBudgetReportSection(input: {
+  budget: ReportBudgetSummary | null;
+  locale?: string;
+  labels: {
+    title: string;
+    currency: string;
+    initialBudget: string;
+    approvedBudget: string;
+    bac: string;
+    ev: string;
+    ac: string;
+    pv: string;
+    cpi: string;
+    spi: string;
+    financialRag: string;
+    financialRagValue: string;
+    none: string;
+  };
+}): string {
+  const locale = input.locale ?? 'en';
+  const lines = [`## ${input.labels.title}`, ''];
+
+  if (!input.budget) {
+    lines.push(input.labels.none, '');
+    return lines.join('\n');
+  }
+
+  const b = input.budget;
+  const currency = b.currency;
+  lines.push(
+    `- ${input.labels.currency}: ${currency}`,
+    `- ${input.labels.initialBudget}: ${formatMoney(b.initialBudget, currency, locale)}`,
+    `- ${input.labels.approvedBudget}: ${formatMoney(b.approvedBudget, currency, locale)}`,
+    `- ${input.labels.bac}: ${formatMoney(b.bac, currency, locale)}`,
+    `- ${input.labels.ev}: ${formatMoney(b.ev, currency, locale)}`,
+    `- ${input.labels.ac}: ${formatMoney(b.ac, currency, locale)}`,
+    `- ${input.labels.pv}: ${formatMoney(b.pv, currency, locale)}`,
+    `- ${input.labels.cpi}: ${formatIndex(b.cpi)}`,
+    `- ${input.labels.spi}: ${formatIndex(b.spi)}`,
+    `- ${input.labels.financialRag}: **${input.labels.financialRagValue}**`,
+    '',
+  );
+  return lines.join('\n');
+}
+
+export function buildRaidReportSection(input: {
+  raidItems: ReportRaidItem[];
+  riskRagValue: string;
+  labels: {
+    title: string;
+    riskRag: string;
+    none: string;
+  };
+  kindLabel: (kind: string) => string;
+  statusLabel: (status: string) => string;
+  severityLabel: (severity: string) => string;
+}): string {
+  const lines = [
+    `## ${input.labels.title}`,
+    '',
+    `- ${input.labels.riskRag}: **${input.riskRagValue}**`,
+    '',
+  ];
+
+  if (input.raidItems.length === 0) {
+    lines.push(input.labels.none, '');
+    return lines.join('\n');
+  }
+
+  for (const row of input.raidItems) {
+    lines.push(
+      `- **${row.title}** — ${input.kindLabel(row.kind)} · ${input.statusLabel(row.status)} · ${input.severityLabel(row.severity)}`,
+    );
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
 export function buildProjectStatusReport(input: {
   projectName: string;
   projectSlug: string;
@@ -235,22 +414,49 @@ export function buildProjectStatusReport(input: {
   milestones: ReportMilestone[];
   tasks: ReportTask[];
   stakeholders: ReportStakeholder[];
+  raidItems: ReportRaidItem[];
+  budget: ReportBudgetSummary | null;
+  locale?: string;
   labels: {
     statusTitle: string;
     deliveryTitle: string;
     stakeholdersTitle: string;
+    budgetTitle: string;
+    raidTitle: string;
     generated: string;
-    rag: string;
-    ragValue: string;
+    timelineRag: string;
+    timelineRagValue: string;
+    riskRag: string;
+    riskRagValue: string;
+    financialRag: string;
+    financialRagValue: string;
     milestones: string;
     tasks: string;
     people: string;
     aiAssistants: string;
     none: string;
     reportsTo: string;
+    hourlyRate: string;
     summary: string;
+    forecastHours: string;
+    actualHours: string;
+    currency: string;
+    initialBudget: string;
+    approvedBudget: string;
+    bac: string;
+    ev: string;
+    ac: string;
+    pv: string;
+    cpi: string;
+    spi: string;
   };
+  kindLabel: (kind: string) => string;
+  statusLabel: (status: string) => string;
+  severityLabel: (severity: string) => string;
 }): string {
+  const locale = input.locale ?? 'en';
+  const currency = input.budget?.currency ?? 'EUR';
+
   const delivery = buildDeliveryStatusReport({
     projectName: input.projectName,
     projectSlug: input.projectSlug,
@@ -260,11 +466,13 @@ export function buildProjectStatusReport(input: {
     labels: {
       title: input.labels.deliveryTitle,
       generated: input.labels.generated,
-      rag: input.labels.rag,
-      ragValue: input.labels.ragValue,
+      timelineRag: input.labels.timelineRag,
+      timelineRagValue: input.labels.timelineRagValue,
       milestones: input.labels.milestones,
       tasks: input.labels.tasks,
       none: input.labels.none,
+      forecastHours: input.labels.forecastHours,
+      actualHours: input.labels.actualHours,
     },
   });
 
@@ -272,6 +480,8 @@ export function buildProjectStatusReport(input: {
     projectName: input.projectName,
     projectSlug: input.projectSlug,
     stakeholders: input.stakeholders,
+    currency,
+    locale,
     labels: {
       title: input.labels.stakeholdersTitle,
       generated: input.labels.generated,
@@ -279,7 +489,41 @@ export function buildProjectStatusReport(input: {
       aiAssistants: input.labels.aiAssistants,
       none: input.labels.none,
       reportsTo: input.labels.reportsTo,
+      hourlyRate: input.labels.hourlyRate,
     },
+  });
+
+  const budgetSection = buildBudgetReportSection({
+    budget: input.budget,
+    locale,
+    labels: {
+      title: input.labels.budgetTitle,
+      currency: input.labels.currency,
+      initialBudget: input.labels.initialBudget,
+      approvedBudget: input.labels.approvedBudget,
+      bac: input.labels.bac,
+      ev: input.labels.ev,
+      ac: input.labels.ac,
+      pv: input.labels.pv,
+      cpi: input.labels.cpi,
+      spi: input.labels.spi,
+      financialRag: input.labels.financialRag,
+      financialRagValue: input.labels.financialRagValue,
+      none: input.labels.none,
+    },
+  });
+
+  const raidSection = buildRaidReportSection({
+    raidItems: input.raidItems,
+    riskRagValue: input.labels.riskRagValue,
+    labels: {
+      title: input.labels.raidTitle,
+      riskRag: input.labels.riskRag,
+      none: input.labels.none,
+    },
+    kindLabel: input.kindLabel,
+    statusLabel: input.statusLabel,
+    severityLabel: input.severityLabel,
   });
 
   const header = [
@@ -287,7 +531,9 @@ export function buildProjectStatusReport(input: {
     '',
     `- Slug: \`${input.projectSlug}\``,
     `- Status: ${input.projectStatus}`,
-    `- ${input.labels.rag}: **${input.labels.ragValue}**`,
+    `- ${input.labels.timelineRag}: **${input.labels.timelineRagValue}**`,
+    `- ${input.labels.riskRag}: **${input.labels.riskRagValue}**`,
+    `- ${input.labels.financialRag}: **${input.labels.financialRagValue}**`,
     `- ${input.labels.generated}: ${new Date().toISOString()}`,
     '',
   ];
@@ -296,11 +542,13 @@ export function buildProjectStatusReport(input: {
     header.push(`## ${input.labels.summary}`, '', input.summary, '');
   }
 
-  // Drop duplicate H1s from sub-reports; keep their ## sections.
   const deliveryBody = delivery.replace(/^# .*\n+/, '');
   const stakeholdersBody = stakeholders.replace(/^# .*\n+/, '');
 
-  return `${header.join('\n')}${deliveryBody}\n${stakeholdersBody}`.trim() + '\n';
+  return (
+    `${header.join('\n')}${budgetSection}\n${raidSection}\n${deliveryBody}\n${stakeholdersBody}`.trim() +
+    '\n'
+  );
 }
 
 export function downloadProjectReport(
