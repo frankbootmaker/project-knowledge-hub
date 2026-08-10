@@ -373,7 +373,7 @@ export function ProjectDeliveryPanel({
   function viewSwitcher(activeMode: ViewMode) {
     return (
       <div
-        className="inline-flex rounded-md border border-line p-0.5"
+        className="inline-flex max-w-full overflow-x-auto rounded-md border border-line p-0.5"
         role="group"
         aria-label={t('viewModeLabel')}
       >
@@ -383,7 +383,7 @@ export function ProjectDeliveryPanel({
             type="button"
             variant={activeMode === mode ? 'primary' : 'secondary'}
             className={cn(
-              'h-8 rounded-sm px-2.5 text-xs',
+              'h-8 shrink-0 rounded-sm px-2 text-xs sm:px-2.5',
               activeMode === mode
                 ? ''
                 : 'border-transparent bg-transparent shadow-none',
@@ -444,8 +444,8 @@ export function ProjectDeliveryPanel({
               : null;
 
           return (
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{item.title}</span>
                   {item.primaryBadge ? (
@@ -461,17 +461,22 @@ export function ProjectDeliveryPanel({
                         deliveryScheduleSurfaceClass(scheduleTone),
                       )}
                     >
-                      {t(`scheduleTone.${scheduleTone}`)}
+                      <span className="sm:hidden">{t(`scheduleToneShort.${scheduleTone}`)}</span>
+                      <span className="hidden sm:inline">
+                        {t(`scheduleTone.${scheduleTone}`)}
+                      </span>
                     </span>
                   ) : null}
                 </div>
                 {item.subtitle ? (
-                  <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
+                  <p className="mt-2 mb-0 text-sm break-words text-ink-muted">
+                    {item.subtitle}
+                  </p>
                 ) : null}
               </div>
               {canMutate && parsed && currentStatus ? (
                 <Select
-                  className="max-w-[11rem]"
+                  className="w-full sm:w-auto sm:max-w-[11rem]"
                   value={currentStatus}
                   disabled={pending}
                   aria-label={t('filterStatus')}
@@ -503,9 +508,9 @@ export function ProjectDeliveryPanel({
         size="full"
         bodyClassName="!block overflow-auto"
         footer={
-          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             {viewSwitcher(viewMode)}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               {canMutate ? (
                 <Button
                   type="button"

@@ -1799,6 +1799,28 @@
       "overdue": "Overdue",
       "completed": "Completed",
       "neutral": "Cancelled"
+    },
+    "boardColumnTabsLabel": "Board columns",
+    "boardEmptyColumnMobile": "No tasks in this column",
+    "boardMobileHint": "Use the status menu on a card to move it between columns.",
+    "boardMoveStatus": "Move to status",
+    "calendarAgendaHint": "Agenda shows dated items for this month.",
+    "calendarAgendaEmpty": "No dated tasks or milestones this month.",
+    "calendarWeekdaysShort": {
+      "mon": "M",
+      "tue": "T",
+      "wed": "W",
+      "thu": "T",
+      "fri": "F",
+      "sat": "S",
+      "sun": "S"
+    },
+    "scheduleToneShort": {
+      "onTrack": "On track",
+      "atRisk": "At risk",
+      "overdue": "Overdue",
+      "completed": "Done",
+      "neutral": "Cancelled"
     }
   }
 }

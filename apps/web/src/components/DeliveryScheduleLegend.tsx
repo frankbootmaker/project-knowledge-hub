@@ -43,7 +43,8 @@ export function DeliveryScheduleLegend({ className }: { className?: string }) {
             )}
             aria-hidden
           />
-          {t(`scheduleTone.${tone}`)}
+          <span className="sm:hidden">{t(`scheduleToneShort.${tone}`)}</span>
+          <span className="hidden sm:inline">{t(`scheduleTone.${tone}`)}</span>
         </li>
       ))}
     </ul>

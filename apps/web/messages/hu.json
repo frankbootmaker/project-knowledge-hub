@@ -1799,6 +1799,28 @@
       "overdue": "Lejárt",
       "completed": "Kész",
       "neutral": "Törölve"
+    },
+    "boardColumnTabsLabel": "Tábla oszlopok",
+    "boardEmptyColumnMobile": "Nincs feladat ebben az oszlopban",
+    "boardMobileHint": "A kártyán lévő státuszmenüvel mozgathatod az oszlopok között.",
+    "boardMoveStatus": "Státusz módosítása",
+    "calendarAgendaHint": "A napirend a hónap dátumozott tételeit mutatja.",
+    "calendarAgendaEmpty": "Nincs dátumozott feladat vagy mérföldkő ebben a hónapban.",
+    "calendarWeekdaysShort": {
+      "mon": "H",
+      "tue": "K",
+      "wed": "Sz",
+      "thu": "Cs",
+      "fri": "P",
+      "sat": "Szo",
+      "sun": "V"
+    },
+    "scheduleToneShort": {
+      "onTrack": "Időben",
+      "atRisk": "Kockázatos",
+      "overdue": "Lejárt",
+      "completed": "Kész",
+      "neutral": "Törölve"
     }
   }
 }

@@ -101,7 +101,7 @@
   }
 
   .kh-function-header {
-    @apply mb-4 flex flex-nowrap items-center justify-between gap-2;
+    @apply mb-4 flex flex-wrap items-center justify-between gap-2;
   }
 
   .kh-function-header-controls {
@@ -109,7 +109,7 @@
   }
 
   .kh-function-header-controls input.kh-input {
-    @apply w-auto min-w-[10rem] flex-1 shrink basis-0;
+    @apply w-auto min-w-[8rem] flex-1 shrink basis-0 sm:min-w-[10rem];
   }
 
   .kh-function-header-controls select.kh-input {
@@ -117,7 +117,7 @@
   }
 
   .kh-function-header-actions {
-    @apply ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-2;
+    @apply ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2;
   }
 
   .kh-panel {
@@ -400,7 +400,7 @@
   }
 
   .kh-modal {
-    @apply fixed inset-0 flex items-end justify-center p-4 sm:items-center;
+    @apply fixed inset-0 flex items-end justify-center p-0 sm:items-center sm:p-4;
     z-index: var(--kh-z-modal);
   }
 
@@ -411,7 +411,7 @@
 
   .kh-modal-panel {
     @apply relative flex max-h-[min(100%,40rem)] w-full max-w-lg flex-col overflow-hidden
-      rounded-lg border border-line bg-panel-solid shadow-sm;
+      rounded-t-lg border border-line bg-panel-solid shadow-sm sm:rounded-lg;
     animation: kh-modal-in var(--kh-motion-enter) var(--kh-ease-out);
   }
 
@@ -420,7 +420,7 @@
   }
 
   .kh-modal-panel-xl {
-    @apply w-[min(90vw,96rem)] max-w-[min(90vw,96rem)] max-h-[90vh];
+    @apply w-full max-w-none max-h-[92dvh] sm:w-[min(90vw,96rem)] sm:max-w-[min(90vw,96rem)] sm:max-h-[90vh];
   }
 
   .kh-modal-panel-xl .kh-modal-body {
@@ -428,7 +428,9 @@
   }
 
   .kh-modal-panel-full {
-    @apply h-[min(96dvh,96rem)] max-h-[96dvh] w-[min(96vw,96rem)] max-w-[min(96vw,96rem)];
+    @apply h-dvh max-h-dvh w-full max-w-none rounded-none border-0
+      sm:h-[min(96dvh,96rem)] sm:max-h-[96dvh] sm:w-[min(96vw,96rem)]
+      sm:max-w-[min(96vw,96rem)] sm:rounded-lg sm:border;
   }
 
   .kh-modal-panel-full .kh-modal-body {
@@ -436,7 +438,7 @@
   }
 
   .kh-modal-header {
-    @apply flex items-start justify-between gap-3 border-b border-line px-4 py-3;
+    @apply flex items-start justify-between gap-3 border-b border-line px-3 py-3 sm:px-4;
   }
 
   .kh-modal-title {
@@ -447,12 +449,16 @@
     @apply mt-1 mb-0 text-sm text-ink-muted;
   }
 
+  .kh-modal-panel-full .kh-modal-description {
+    @apply hidden sm:block;
+  }
+
   .kh-modal-body {
-    @apply grid flex-1 gap-4 overflow-y-auto px-4 py-4;
+    @apply grid flex-1 gap-4 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4;
   }
 
   .kh-modal-footer {
-    @apply flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-3;
+    @apply flex flex-wrap items-center justify-end gap-2 border-t border-line px-3 py-3 sm:px-4;
   }
 }
 

@@ -1,8 +1,9 @@
 'use client';
 
 import type { DragEvent } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Badge } from './ui';
+import { Badge, Select } from './ui';
 import { cn } from '../lib/cn';
 import {
   deliveryScheduleSurfaceClass,
@@ -28,6 +29,147 @@ export type BoardMilestone = {
 };
 
 const BOARD_COLUMNS = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
+type BoardColumn = (typeof BOARD_COLUMNS)[number];
+
+function BoardTaskCard({
+  task,
+  milestoneLabel,
+  today,
+  canMutate,
+  pending,
+  showStatusSelect,
+  onTaskStatusChange,
+}: {
+  task: BoardTask;
+  milestoneLabel: string | null;
+  today: string;
+  canMutate: boolean;
+  pending: boolean;
+  showStatusSelect: boolean;
+  onTaskStatusChange: (taskId: string, status: string) => void;
+}) {
+  const t = useTranslations('delivery');
+  const accountable = task.raci.find((entry) => entry.role === 'A');
+  const tone = deliveryScheduleTone({
+    status: task.status,
+    date: task.dueDate,
+    today,
+  });
+
+  return (
+    <article
+      draggable={canMutate && !pending && !showStatusSelect}
+      onDragStart={(event) => {
+        event.dataTransfer.setData('text/kh-task-id', task.id);
+        event.dataTransfer.effectAllowed = 'move';
+      }}
+      className={cn(
+        'rounded-md border p-3 shadow-sm',
+        deliveryScheduleSurfaceClass(tone),
+        canMutate && !pending && !showStatusSelect && 'cursor-grab active:cursor-grabbing',
+      )}
+    >
+      <p className="m-0 text-sm font-medium text-ink">{task.title}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {task.dueDate ? (
+          <span className="text-xs opacity-80">{task.dueDate}</span>
+        ) : null}
+        {milestoneLabel ? <Badge>{milestoneLabel}</Badge> : null}
+        {accountable ? (
+          <Badge tone="neutral">A: {accountable.displayName}</Badge>
+        ) : null}
+      </div>
+      {showStatusSelect && canMutate ? (
+        <Select
+          className="mt-3 w-full"
+          value={task.status}
+          disabled={pending}
+          aria-label={t('boardMoveStatus')}
+          onChange={(event) => onTaskStatusChange(task.id, event.target.value)}
+        >
+          {BOARD_COLUMNS.map((status) => (
+            <option key={status} value={status}>
+              {t(`taskStatus.${status}`)}
+            </option>
+          ))}
+        </Select>
+      ) : null}
+    </article>
+  );
+}
+
+function BoardColumnPanel({
+  status,
+  tasks,
+  milestoneTitles,
+  today,
+  canMutate,
+  pending,
+  compact,
+  showStatusSelect,
+  onDrop,
+  onTaskStatusChange,
+}: {
+  status: BoardColumn;
+  tasks: BoardTask[];
+  milestoneTitles: Map<string, string>;
+  today: string;
+  canMutate: boolean;
+  pending: boolean;
+  compact: boolean;
+  showStatusSelect: boolean;
+  onDrop: (status: string, event: DragEvent<HTMLDivElement>) => void;
+  onTaskStatusChange: (taskId: string, status: string) => void;
+}) {
+  const t = useTranslations('delivery');
+
+  return (
+    <div
+      className={cn(
+        'flex flex-col rounded-lg border border-line bg-neutral-soft/40',
+        compact ? 'w-full' : 'w-[min(17.5rem,85vw)] shrink-0 snap-start md:w-[17.5rem]',
+      )}
+      onDragOver={(event) => {
+        if (canMutate && !showStatusSelect) event.preventDefault();
+      }}
+      onDrop={(event) => onDrop(status, event)}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+        <h3 className="m-0 text-sm font-semibold">{t(`taskStatus.${status}`)}</h3>
+        <span className="text-xs text-ink-muted">{tasks.length}</span>
+      </div>
+      <div
+        className={cn(
+          'flex flex-col gap-2 p-2',
+          compact ? 'min-h-[8rem]' : 'min-h-[12rem]',
+        )}
+      >
+        {tasks.length === 0 ? (
+          <p className="m-0 px-1 py-6 text-center text-xs text-ink-muted">
+            {showStatusSelect ? t('boardEmptyColumnMobile') : t('boardEmptyColumn')}
+          </p>
+        ) : (
+          tasks.map((task) => (
+            <BoardTaskCard
+              key={task.id}
+              task={task}
+              milestoneLabel={
+                task.milestoneId
+                  ? (milestoneTitles.get(task.milestoneId) ?? null)
+                  : null
+              }
+              today={today}
+              canMutate={canMutate}
+              pending={pending}
+              showStatusSelect={showStatusSelect}
+              onTaskStatusChange={onTaskStatusChange}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function ProjectDeliveryBoard({
   tasks,
@@ -46,6 +188,7 @@ export function ProjectDeliveryBoard({
 }) {
   const t = useTranslations('delivery');
   const today = todayYmd();
+  const [mobileColumn, setMobileColumn] = useState<BoardColumn>('todo');
 
   function onDrop(status: string, event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -53,6 +196,8 @@ export function ProjectDeliveryBoard({
     if (!taskId || !canMutate || pending) return;
     onTaskStatusChange(taskId, status);
   }
+
+  const mobileTasks = tasks.filter((task) => task.status === mobileColumn);
 
   return (
     <div className="grid gap-4">
@@ -75,10 +220,10 @@ export function ProjectDeliveryBoard({
                 )}
               >
                 <Badge tone="brand">{t('kindMilestone')}</Badge>
-                <span className="truncate font-medium">{milestone.title}</span>
+                <span className="min-w-0 truncate font-medium">{milestone.title}</span>
                 <Badge>{t(`milestoneStatus.${milestone.status}`)}</Badge>
                 {milestone.targetDate ? (
-                  <span className="text-xs opacity-80">{milestone.targetDate}</span>
+                  <span className="shrink-0 text-xs opacity-80">{milestone.targetDate}</span>
                 ) : null}
               </div>
             );
@@ -86,78 +231,76 @@ export function ProjectDeliveryBoard({
         </div>
       ) : null}
 
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {BOARD_COLUMNS.map((status) => {
-          const columnTasks = tasks.filter((task) => task.status === status);
-          return (
-            <div
-              key={status}
-              className="flex w-[17.5rem] shrink-0 flex-col rounded-lg border border-line bg-neutral-soft/40"
-              onDragOver={(event) => {
-                if (canMutate) event.preventDefault();
-              }}
-              onDrop={(event) => onDrop(status, event)}
-            >
-              <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
-                <h3 className="m-0 text-sm font-semibold">
-                  {t(`taskStatus.${status}`)}
-                </h3>
-                <span className="text-xs text-ink-muted">{columnTasks.length}</span>
-              </div>
-              <div className="flex min-h-[12rem] flex-col gap-2 p-2">
-                {columnTasks.length === 0 ? (
-                  <p className="m-0 px-1 py-6 text-center text-xs text-ink-muted">
-                    {t('boardEmptyColumn')}
-                  </p>
-                ) : (
-                  columnTasks.map((task) => {
-                    const accountable = task.raci.find((entry) => entry.role === 'A');
-                    const milestoneLabel = task.milestoneId
-                      ? milestoneTitles.get(task.milestoneId)
-                      : null;
-                    const tone = deliveryScheduleTone({
-                      status: task.status,
-                      date: task.dueDate,
-                      today,
-                    });
-                    return (
-                      <article
-                        key={task.id}
-                        draggable={canMutate && !pending}
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData('text/kh-task-id', task.id);
-                          event.dataTransfer.effectAllowed = 'move';
-                        }}
-                        className={cn(
-                          'rounded-md border p-3 shadow-sm',
-                          deliveryScheduleSurfaceClass(tone),
-                          canMutate && !pending && 'cursor-grab active:cursor-grabbing',
-                        )}
-                      >
-                        <p className="m-0 text-sm font-medium text-ink">{task.title}</p>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {task.dueDate ? (
-                            <span className="text-xs opacity-80">{task.dueDate}</span>
-                          ) : null}
-                          {milestoneLabel ? (
-                            <Badge>{milestoneLabel}</Badge>
-                          ) : null}
-                          {accountable ? (
-                            <Badge tone="neutral">A: {accountable.displayName}</Badge>
-                          ) : null}
-                        </div>
-                      </article>
-                    );
-                  })
+      {/* Mobile: one column at a time with status select on cards */}
+      <div className="grid gap-3 md:hidden">
+        <div
+          className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"
+          role="tablist"
+          aria-label={t('boardColumnTabsLabel')}
+        >
+          {BOARD_COLUMNS.map((status) => {
+            const count = tasks.filter((task) => task.status === status).length;
+            const active = mobileColumn === status;
+            return (
+              <button
+                key={status}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold',
+                  active
+                    ? 'border-brand bg-brand-soft text-brand'
+                    : 'border-line bg-panel text-ink-muted',
                 )}
-              </div>
-            </div>
-          );
-        })}
+                onClick={() => setMobileColumn(status)}
+              >
+                {t(`taskStatus.${status}`)}
+                <span className="tabular-nums opacity-80">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+        <BoardColumnPanel
+          status={mobileColumn}
+          tasks={mobileTasks}
+          milestoneTitles={milestoneTitles}
+          today={today}
+          canMutate={canMutate}
+          pending={pending}
+          compact
+          showStatusSelect
+          onDrop={onDrop}
+          onTaskStatusChange={onTaskStatusChange}
+        />
+        {canMutate ? (
+          <p className="m-0 text-xs text-ink-muted">{t('boardMobileHint')}</p>
+        ) : null}
       </div>
-      {canMutate ? (
-        <p className="m-0 text-xs text-ink-muted">{t('boardDragHint')}</p>
-      ) : null}
+
+      {/* Desktop / tablet landscape: horizontal kanban with drag */}
+      <div className="hidden md:block">
+        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 snap-x snap-mandatory">
+          {BOARD_COLUMNS.map((status) => (
+            <BoardColumnPanel
+              key={status}
+              status={status}
+              tasks={tasks.filter((task) => task.status === status)}
+              milestoneTitles={milestoneTitles}
+              today={today}
+              canMutate={canMutate}
+              pending={pending}
+              compact={false}
+              showStatusSelect={false}
+              onDrop={onDrop}
+              onTaskStatusChange={onTaskStatusChange}
+            />
+          ))}
+        </div>
+        {canMutate ? (
+          <p className="m-0 text-xs text-ink-muted">{t('boardDragHint')}</p>
+        ) : null}
+      </div>
     </div>
   );
 }
