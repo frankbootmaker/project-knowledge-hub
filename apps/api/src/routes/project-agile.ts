@@ -19,6 +19,8 @@ import {
   addTaskComment,
   createEpic,
   createUserStory,
+  deleteEpic,
+  deleteUserStory,
   getEpic,
   getUserStory,
   handoffTask,
@@ -168,6 +170,32 @@ export async function registerProjectAgileRoutes(
     return { epic };
   });
 
+  app.delete('/api/v1/project-epics/:epicId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ epicId: z.string().uuid() }).parse(request.params);
+
+    const existing = await getEpic(app.database, params.epicId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    const deleted = await deleteEpic(app.database, params.epicId);
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.epic_deleted',
+      entityType: 'project_epic',
+      entityId: deleted.id,
+      metadata: { projectId: project.id, title: existing.title },
+      ipAddress: request.ip,
+    });
+
+    return { ok: true };
+  });
+
   app.get('/api/v1/projects/:projectId/user-stories', async (request) => {
     const principal = requireAuthenticated(request);
     const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
@@ -246,6 +274,32 @@ export async function registerProjectAgileRoutes(
     });
 
     return { userStory };
+  });
+
+  app.delete('/api/v1/project-user-stories/:storyId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ storyId: z.string().uuid() }).parse(request.params);
+
+    const existing = await getUserStory(app.database, params.storyId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    const deleted = await deleteUserStory(app.database, params.storyId);
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.user_story_deleted',
+      entityType: 'project_user_story',
+      entityId: deleted.id,
+      metadata: { projectId: project.id, title: existing.title },
+      ipAddress: request.ip,
+    });
+
+    return { ok: true };
   });
 
   app.get('/api/v1/project-tasks/:taskId/activities', async (request) => {

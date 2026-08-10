@@ -20,6 +20,7 @@ import {
   assertProjectNotArchived,
   createMilestone,
   createTask,
+  deleteTask,
   getMilestone,
   getTask,
   listMilestones,
@@ -281,6 +282,32 @@ export async function registerProjectDeliveryRoutes(
     });
 
     return { task };
+  });
+
+  app.delete('/api/v1/project-tasks/:taskId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ taskId: z.string().uuid() }).parse(request.params);
+
+    const existing = await getTask(app.database, params.taskId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    const deleted = await deleteTask(app.database, params.taskId);
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.task_deleted',
+      entityType: 'project_task',
+      entityId: deleted.id,
+      metadata: { projectId: project.id, title: existing.title },
+      ipAddress: request.ip,
+    });
+
+    return { ok: true };
   });
 
   app.put('/api/v1/project-tasks/:taskId/raci', async (request) => {

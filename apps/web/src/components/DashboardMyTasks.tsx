@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
@@ -34,10 +34,15 @@ export function DashboardMyTasks({
   const tDelivery = useTranslations('delivery');
   const tWorkspaces = useTranslations('workspaces');
   const [manageTaskId, setManageTaskId] = useState<string | null>(null);
+  const [visibleTasks, setVisibleTasks] = useState(tasks);
+
+  useEffect(() => {
+    setVisibleTasks(tasks);
+  }, [tasks]);
 
   const items: CatalogueListItem[] = useMemo(
     () =>
-      tasks.map((task) => {
+      visibleTasks.map((task) => {
         const href = `/workspaces/${task.workspaceSlug}/projects/${task.projectSlug}`;
         const raciShort = t(RACI_LABEL[task.myRole]);
         return {
@@ -81,14 +86,14 @@ export function DashboardMyTasks({
           filterLabel: tDelivery(`taskStatus.${task.status}`),
         };
       }),
-    [tasks, t, tDelivery],
+    [visibleTasks, t, tDelivery],
   );
 
   const taskById = useMemo(() => {
     const map = new Map<string, DashboardAssignedTask>();
-    for (const task of tasks) map.set(task.id, task);
+    for (const task of visibleTasks) map.set(task.id, task);
     return map;
-  }, [tasks]);
+  }, [visibleTasks]);
 
   return (
     <>
@@ -172,6 +177,9 @@ export function DashboardMyTasks({
         onClose={() => setManageTaskId(null)}
         taskId={manageTaskId}
         canMutate
+        onDeleted={(taskId) => {
+          setVisibleTasks((prev) => prev.filter((task) => task.id !== taskId));
+        }}
       />
     </>
   );

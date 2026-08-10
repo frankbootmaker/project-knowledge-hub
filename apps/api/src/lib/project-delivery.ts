@@ -824,6 +824,15 @@ export async function createTask(
   return getTask(database, createdTask.id);
 }
 
+export async function deleteTask(
+  database: Database,
+  taskId: string,
+): Promise<{ id: string; projectId: string }> {
+  const existing = await getTask(database, taskId);
+  await database.db.delete(projectTasks).where(eq(projectTasks.id, taskId));
+  return { id: existing.id, projectId: existing.projectId };
+}
+
 export async function updateTask(
   database: Database,
   taskId: string,

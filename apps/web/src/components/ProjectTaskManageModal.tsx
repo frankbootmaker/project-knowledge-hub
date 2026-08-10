@@ -81,6 +81,7 @@ export function ProjectTaskManageModal({
   stories: storiesProp,
   milestones: milestonesProp,
   onUpdated,
+  onDeleted,
 }: {
   open: boolean;
   onClose: () => void;
@@ -91,6 +92,7 @@ export function ProjectTaskManageModal({
   stories?: Story[];
   milestones?: Milestone[];
   onUpdated?: (task: TaskDetail) => void;
+  onDeleted?: (taskId: string) => void;
 }) {
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
@@ -104,6 +106,7 @@ export function ProjectTaskManageModal({
   const [milestones, setMilestones] = useState<Milestone[]>(milestonesProp ?? []);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [comment, setComment] = useState('');
   const [handoffTo, setHandoffTo] = useState('');
   const [handoffNote, setHandoffNote] = useState('');
@@ -199,8 +202,10 @@ export function ProjectTaskManageModal({
       setHandoffTo('');
       setHandoffNote('');
       setError(null);
+      setConfirmDelete(false);
       return;
     }
+    setConfirmDelete(false);
     if (membersProp) setMembers(membersProp);
     if (epicsProp) setEpics(epicsProp);
     if (storiesProp) setStories(storiesProp);
@@ -310,6 +315,31 @@ export function ProjectTaskManageModal({
     }
   }
 
+  async function remove() {
+    if (!taskId || !canMutate) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/project-tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message || t('failedDeleteTask'));
+      }
+      onDeleted?.(taskId);
+      pushToast(t('taskDeleted'), 'success');
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedDeleteTask'));
+    } finally {
+      setPending(false);
+      setConfirmDelete(false);
+    }
+  }
+
   function activityLabel(activity: Activity): string {
     switch (activity.type) {
       case 'created':
@@ -347,19 +377,54 @@ export function ProjectTaskManageModal({
       description={t('manageTaskDescription')}
       size="xl"
       footer={
-        <div className="flex w-full flex-wrap items-center justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            {tCommon('cancel')}
-          </Button>
-          {canMutate ? (
-            <Button
-              type="button"
-              disabled={pending || !title.trim()}
-              onClick={() => void saveFields()}
-            >
-              {t('saveTask')}
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <div>
+            {canMutate && task ? (
+              !confirmDelete ? (
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={pending}
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  {t('deleteItem')}
+                </Button>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    {tCommon('cancel')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={pending}
+                    onClick={() => void remove()}
+                  >
+                    {t('confirmDeleteTask')}
+                  </Button>
+                </div>
+              )
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              {tCommon('cancel')}
             </Button>
-          ) : null}
+            {canMutate ? (
+              <Button
+                type="button"
+                disabled={pending || !title.trim() || confirmDelete}
+                onClick={() => void saveFields()}
+              >
+                {t('saveTask')}
+              </Button>
+            ) : null}
+          </div>
         </div>
       }
     >
@@ -367,6 +432,11 @@ export function ProjectTaskManageModal({
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
         </div>
+      ) : null}
+      {confirmDelete ? (
+        <p className="mb-3 text-sm font-semibold text-danger">
+          {t('deleteTaskHint')}
+        </p>
       ) : null}
 
       {!task ? (

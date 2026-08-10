@@ -384,6 +384,26 @@ export async function updateUserStory(
   return toPublicUserStory(row);
 }
 
+export async function deleteEpic(
+  database: Database,
+  epicId: string,
+): Promise<{ id: string; projectId: string }> {
+  const existing = await getEpic(database, epicId);
+  await database.db.delete(projectEpics).where(eq(projectEpics.id, epicId));
+  return { id: existing.id, projectId: existing.projectId };
+}
+
+export async function deleteUserStory(
+  database: Database,
+  storyId: string,
+): Promise<{ id: string; projectId: string }> {
+  const existing = await getUserStory(database, storyId);
+  await database.db
+    .delete(projectUserStories)
+    .where(eq(projectUserStories.id, storyId));
+  return { id: existing.id, projectId: existing.projectId };
+}
+
 export async function listTaskActivities(
   database: Database,
   taskId: string,

@@ -10,6 +10,8 @@ import {
 import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectDeliveryBoard } from './ProjectDeliveryBoard';
 import { ProjectDeliveryCalendar } from './ProjectDeliveryCalendar';
+import { ProjectDeliveryTree } from './ProjectDeliveryTree';
+import { ProjectAgileManageModal } from './ProjectAgileManageModal';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
 import {
   Badge,
@@ -101,7 +103,7 @@ const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 const EPIC_STATUSES = MILESTONE_STATUSES;
 const STORY_STATUSES = MILESTONE_STATUSES;
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
-const VIEW_MODES = ['list', 'board', 'calendar'] as const;
+const VIEW_MODES = ['list', 'tree', 'board', 'calendar'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
 type DeliveryKind = 'epic' | 'story' | 'milestone' | 'task';
@@ -156,6 +158,10 @@ export function ProjectDeliveryPanel({
   const [createOpen, setCreateOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [manageTaskId, setManageTaskId] = useState<string | null>(null);
+  const [manageAgile, setManageAgile] = useState<{
+    kind: 'epic' | 'story';
+    id: string;
+  } | null>(null);
 
   const [title, setTitle] = useState('');
   const [createKind, setCreateKind] = useState<CreateKind>('task');
@@ -617,7 +623,7 @@ export function ProjectDeliveryPanel({
         title={t('title')}
         defaultOpen
       >
-      {error && !createOpen && !wideModalOpen && !manageTaskId ? (
+      {error && !createOpen && !wideModalOpen && !manageTaskId && !manageAgile ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
         </div>
@@ -634,6 +640,7 @@ export function ProjectDeliveryPanel({
         filterAllLabel={tWorkspaces('sectionFilterAll')}
         createLabel={t('addItem')}
         canCreate={canMutate}
+        showList={viewMode === 'list'}
         extraActions={viewSwitcher(wideModalOpen ? 'list' : viewMode)}
         onCreate={() => {
           resetCreateForm();
@@ -720,6 +727,24 @@ export function ProjectDeliveryPanel({
                     {t('manage')}
                   </Button>
                 ) : null}
+                {parsed?.kind === 'epic' || parsed?.kind === 'story' ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full sm:w-auto"
+                    onClick={() => {
+                      if (parsed.kind !== 'epic' && parsed.kind !== 'story') {
+                        return;
+                      }
+                      setManageAgile({
+                        kind: parsed.kind,
+                        id: parsed.entityId,
+                      });
+                    }}
+                  >
+                    {t('manage')}
+                  </Button>
+                ) : null}
                 {canMutate && parsed && currentStatus ? (
                   <Select
                     className="w-full sm:w-auto sm:max-w-[11rem]"
@@ -743,9 +768,26 @@ export function ProjectDeliveryPanel({
         }}
       />
 
-      <p className="mt-3 mb-0 text-xs text-ink-muted">
-        {canMutate ? t('raciHint') : t('readOnlyHint')}
-      </p>
+      {viewMode === 'tree' ? (
+        <div className="mt-3">
+          <ProjectDeliveryTree
+            epics={epics}
+            stories={stories}
+            tasks={tasks}
+            onManageTask={(taskId) => setManageTaskId(taskId)}
+            onManageEpic={(epicId) => setManageAgile({ kind: 'epic', id: epicId })}
+            onManageStory={(storyId) =>
+              setManageAgile({ kind: 'story', id: storyId })
+            }
+          />
+        </div>
+      ) : null}
+
+      {viewMode === 'list' ? (
+        <p className="mt-3 mb-0 text-xs text-ink-muted">
+          {canMutate ? t('raciHint') : t('readOnlyHint')}
+        </p>
+      ) : null}
       </CollapsibleSection>
 
       <Modal
@@ -971,6 +1013,95 @@ export function ProjectDeliveryPanel({
                 : item,
             ),
           );
+          refresh();
+        }}
+        onDeleted={(taskId) => {
+          setTasks((prev) => prev.filter((item) => item.id !== taskId));
+          refresh();
+        }}
+      />
+
+      <ProjectAgileManageModal
+        open={Boolean(manageAgile)}
+        onClose={() => setManageAgile(null)}
+        kind={manageAgile?.kind ?? null}
+        itemId={manageAgile?.id ?? null}
+        epics={epics}
+        stories={stories}
+        canMutate={canMutate}
+        onSaved={(kind, item) => {
+          if (kind === 'epic') {
+            const epic = item as Epic;
+            setEpics((prev) =>
+              prev.map((row) => (row.id === epic.id ? { ...row, ...epic } : row)),
+            );
+            setTasks((prev) =>
+              prev.map((task) =>
+                task.epicId === epic.id
+                  ? { ...task, epicTitle: epic.title }
+                  : task,
+              ),
+            );
+          } else {
+            const story = item as UserStory;
+            setStories((prev) =>
+              prev.map((row) =>
+                row.id === story.id ? { ...row, ...story } : row,
+              ),
+            );
+            const epicTitle = epicTitleById.get(story.epicId) ?? null;
+            setTasks((prev) =>
+              prev.map((task) =>
+                task.userStoryId === story.id
+                  ? {
+                      ...task,
+                      userStoryTitle: story.title,
+                      epicId: story.epicId,
+                      epicTitle,
+                    }
+                  : task,
+              ),
+            );
+          }
+          refresh();
+        }}
+        onDeleted={(kind, id) => {
+          if (kind === 'epic') {
+            const removedStoryIds = new Set(
+              stories.filter((story) => story.epicId === id).map((s) => s.id),
+            );
+            setEpics((prev) => prev.filter((row) => row.id !== id));
+            setStories((prev) => prev.filter((row) => row.epicId !== id));
+            setTasks((prev) =>
+              prev.map((task) =>
+                task.epicId === id ||
+                (task.userStoryId && removedStoryIds.has(task.userStoryId))
+                  ? {
+                      ...task,
+                      userStoryId: null,
+                      userStoryTitle: null,
+                      epicId: null,
+                      epicTitle: null,
+                    }
+                  : task,
+              ),
+            );
+          } else {
+            setStories((prev) => prev.filter((row) => row.id !== id));
+            setTasks((prev) =>
+              prev.map((task) =>
+                task.userStoryId === id
+                  ? {
+                      ...task,
+                      userStoryId: null,
+                      userStoryTitle: null,
+                      epicId: null,
+                      epicTitle: null,
+                    }
+                  : task,
+              ),
+            );
+          }
           refresh();
         }}
       />
