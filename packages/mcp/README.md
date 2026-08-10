@@ -11,7 +11,7 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints, **and the image/media embed workflow**
 * `list_workspace_media` — recent workspace images with Markdown snippets
 * `get_platform_status` — redacted health/backup snapshot (requires opt-in `monitoring:read`; not in default scopes)
-* `list_project_milestones` / `list_project_tasks` / `get_project_task` — Project Delivery (requires opt-in `pm:read`)
+* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_stakeholders` — Project Delivery (requires opt-in `pm:read`)
 
 Also available as REST: `GET /api/v1/platform/status` with the same scope.
 
@@ -37,6 +37,7 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 * `create_project_milestone` / `update_project_milestone`
 * `create_project_task` / `update_project_task`
 * `set_project_task_raci` — replace RACI; workspace members only; at most one Accountable (`A`)
+* `create_project_stakeholder` / `update_project_stakeholder` / `delete_project_stakeholder` — durable roster (+ reports-to)
 
 ## Embedding images in knowledge Markdown
 

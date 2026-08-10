@@ -41,10 +41,19 @@ Knowledge records stay under ADR-013: agents **draft** docs; delivery state is *
 
 ```text
 projects
+  ├── project_stakeholders (durable roster + optional reports_to_user_id)
   └── project_milestones
         └── project_tasks (milestone optional)
               └── project_task_raci (user_id + role; unique A per task)
 ```
+
+### Stakeholders (hybrid)
+
+* Durable **roster** rows: project role (`sponsor` / `owner` / `product_owner` / `tech_lead` / `contributor` / `stakeholder` / `other`), optional job title, notes, and `reports_to_user_id` (cycle-checked).
+* **Derived** people: project `owner_user_id` and anyone on task RACI appear in the unified list with contact fields even without a roster row.
+* **AI assistants**: catalogue systems with `system_type = ai_assistant` linked to the project appear as `kind: ai_assistant` (not general Systems like Proxmox). Org-chart edge to `owner_user_id` when that person is in the set.
+* Org chart: humans via roster `reports_to`; AI assistants under their owner; unlinked nodes under Ungrouped.
+* Contact surface: people — display name, full name, email, job title/notes; AI assistants — name + summary. General Systems remain in the Systems catalogue.
 
 ### Status sets
 
@@ -70,6 +79,11 @@ projects
 | `GET` | `/api/v1/project-tasks/:taskId` | Detail + RACI |
 | `PATCH` | `/api/v1/project-tasks/:taskId` | Update fields / milestone |
 | `PUT` | `/api/v1/project-tasks/:taskId/raci` | Replace RACI set |
+| `GET` | `/api/v1/projects/:projectId/stakeholders` | Unified roster + owner + RACI |
+| `POST` | `/api/v1/projects/:projectId/stakeholders` | Upsert roster row |
+| `PATCH` | `/api/v1/project-stakeholders/:id` | Update roster row |
+| `DELETE` | `/api/v1/project-stakeholders/:id` | Remove roster row only |
+| `GET` | `/api/v1/workspaces/:workspaceId/members` | Active members (view) for pickers |
 
 Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archived projects are read-only.
 
@@ -77,8 +91,8 @@ Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archiv
 
 | Scope | Tools |
 | --- | --- |
-| `pm:read` | `list_project_milestones`, `list_project_tasks`, `get_project_task` |
-| `pm:write` | `create_project_milestone`, `update_project_milestone`, `create_project_task`, `update_project_task`, `set_project_task_raci` |
+| `pm:read` | `list_project_milestones`, `list_project_tasks`, `get_project_task`, `list_project_stakeholders` |
+| `pm:write` | `create_project_milestone`, `update_project_milestone`, `create_project_task`, `update_project_task`, `set_project_task_raci`, `create_project_stakeholder`, `update_project_stakeholder`, `delete_project_stakeholder` |
 
 `pm:write` requires `actingUserId` + non-empty `allowedWorkspaceIds` (same gate pattern as `knowledge:write`). Optional `allowedProjectIds` restricts project scope. Mutations audit as `actorType: api_client`.
 
@@ -94,6 +108,7 @@ Project detail page gains a **Delivery** section using the same catalogue **sear
 * Board: drag tasks between status columns; milestones shown as chips above
 * Calendar: tasks by due date, milestones by target date
 * Inline status changes for maintainers; RACI (A/R) on task create
+* **Stakeholders** section (same catalogue chrome): list with contact details; **Org chart** full modal from reports-to
 
 ## Non-goals
 

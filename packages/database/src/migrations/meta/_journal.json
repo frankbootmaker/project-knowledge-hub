@@ -232,6 +232,13 @@
       "when": 1786350000000,
       "tag": "0032_project_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786353600000,
+      "tag": "0033_project_stakeholders",
+      "breakpoints": true
     }
   ]
 }

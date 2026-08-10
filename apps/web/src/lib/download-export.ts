@@ -4,10 +4,12 @@
 export async function downloadAuthenticatedExport(
   url: string,
   fallbackFilename: string,
+  init?: RequestInit,
 ): Promise<void> {
   const response = await fetch(url, {
     method: 'GET',
     credentials: 'include',
+    ...init,
   });
 
   if (!response.ok) {

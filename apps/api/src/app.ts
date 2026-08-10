@@ -40,6 +40,8 @@ import { registerPlatformStatusRoutes } from './routes/platform-status.js';
 import { registerOrganizationRoutes } from './routes/organizations.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerProjectDeliveryRoutes } from './routes/project-delivery.js';
+import { registerProjectStakeholderRoutes } from './routes/project-stakeholders.js';
+import { registerProjectReportRoutes } from './routes/project-reports.js';
 import { registerReadyRoutes } from './routes/ready.js';
 import { registerRootRoutes } from './routes/root.js';
 import { registerSearchRoutes } from './routes/search.js';
@@ -205,6 +207,8 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerWorkspaceRoutes(app);
   await registerProjectRoutes(app);
   await registerProjectDeliveryRoutes(app);
+  await registerProjectStakeholderRoutes(app);
+  await registerProjectReportRoutes(app);
   await registerSystemRoutes(app);
   await registerKnowledgeRecordRoutes(app);
   await registerConversationImportRoutes(app);

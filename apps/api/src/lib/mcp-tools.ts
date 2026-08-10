@@ -11,6 +11,7 @@ import {
   AppError,
   buildKnowledgeRecordMetadata,
   milestoneStatusSchema,
+  projectStakeholderRoleSchema,
   raciRoleSchema,
   recordTypeSchema,
   taskStatusSchema,
@@ -60,6 +61,13 @@ import {
   updateMilestone,
   updateTask,
 } from './project-delivery.js';
+import {
+  deleteProjectStakeholder,
+  getRosterStakeholder,
+  listProjectStakeholders,
+  updateProjectStakeholder,
+  upsertProjectStakeholder,
+} from './project-stakeholders.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -1236,6 +1244,117 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { task, raci };
+    },
+
+    async listProjectStakeholders(input) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        stakeholders: await listProjectStakeholders(app.database, input.projectId),
+      };
+    },
+
+    async createProjectStakeholder(input) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const stakeholder = await upsertProjectStakeholder(app.database, {
+        projectId: project.id,
+        workspaceId: project.workspaceId,
+        userId: input.userId,
+        projectRole: projectStakeholderRoleSchema.parse(input.projectRole),
+        jobTitle: input.jobTitle,
+        notes: input.notes,
+        reportsToUserId: input.reportsToUserId,
+        sortOrder: input.sortOrder,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.stakeholder_upserted',
+        entityType: 'project_stakeholder',
+        entityId: stakeholder.rosterId ?? stakeholder.userId,
+        metadata: {
+          projectId: project.id,
+          userId: stakeholder.userId,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { stakeholder };
+    },
+
+    async updateProjectStakeholder(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getRosterStakeholder(
+        app.database,
+        input.stakeholderId,
+      );
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const stakeholder = await updateProjectStakeholder(
+        app.database,
+        input.stakeholderId,
+        {
+          projectRole: input.projectRole
+            ? projectStakeholderRoleSchema.parse(input.projectRole)
+            : undefined,
+          jobTitle: input.jobTitle,
+          notes: input.notes,
+          reportsToUserId: input.reportsToUserId,
+          sortOrder: input.sortOrder,
+        },
+      );
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.stakeholder_updated',
+        entityType: 'project_stakeholder',
+        entityId: input.stakeholderId,
+        metadata: {
+          projectId: project.id,
+          userId: stakeholder.userId,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { stakeholder };
+    },
+
+    async deleteProjectStakeholder(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getRosterStakeholder(
+        app.database,
+        input.stakeholderId,
+      );
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const deleted = await deleteProjectStakeholder(
+        app.database,
+        input.stakeholderId,
+      );
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.stakeholder_deleted',
+        entityType: 'project_stakeholder',
+        entityId: input.stakeholderId,
+        metadata: {
+          projectId: project.id,
+          userId: deleted.userId,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { ok: true, ...deleted };
     },
 
     async onToolCall(toolName, ok, context) {

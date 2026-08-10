@@ -169,6 +169,27 @@ export type McpToolHandlers = {
     taskId: string;
     entries: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
   }) => Promise<unknown>;
+  listProjectStakeholders: (input: { projectId: string }) => Promise<unknown>;
+  createProjectStakeholder: (input: {
+    projectId: string;
+    userId: string;
+    projectRole: string;
+    jobTitle?: string | null;
+    notes?: string | null;
+    reportsToUserId?: string | null;
+    sortOrder?: number;
+  }) => Promise<unknown>;
+  updateProjectStakeholder: (input: {
+    stakeholderId: string;
+    projectRole?: string;
+    jobTitle?: string | null;
+    notes?: string | null;
+    reportsToUserId?: string | null;
+    sortOrder?: number;
+  }) => Promise<unknown>;
+  deleteProjectStakeholder: (input: {
+    stakeholderId: string;
+  }) => Promise<unknown>;
   onToolCall?: (
     toolName: string,
     ok: boolean,
@@ -802,6 +823,77 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('set_project_task_raci', 'pm:write', () =>
         handlers.setProjectTaskRaci(args),
+      )(),
+  );
+
+  const stakeholderRoleEnum = z.enum([
+    'sponsor',
+    'owner',
+    'product_owner',
+    'tech_lead',
+    'contributor',
+    'stakeholder',
+    'other',
+  ]);
+
+  server.tool(
+    'list_project_stakeholders',
+    'List project stakeholders (roster + owner + RACI-derived) with contact fields. Requires pm:read.',
+    { projectId: z.string().uuid() },
+    async (args) =>
+      wrap(
+        'list_project_stakeholders',
+        'pm:read',
+        () => handlers.listProjectStakeholders(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'create_project_stakeholder',
+    'Add or upsert a durable project stakeholder roster row. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      userId: z.string().uuid(),
+      projectRole: stakeholderRoleEnum,
+      jobTitle: z.string().max(200).nullable().optional(),
+      notes: z.string().max(5000).nullable().optional(),
+      reportsToUserId: z.string().uuid().nullable().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_project_stakeholder',
+        'pm:write',
+        () => handlers.createProjectStakeholder(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'update_project_stakeholder',
+    'Update a durable project stakeholder roster row. Requires pm:write.',
+    {
+      stakeholderId: z.string().uuid(),
+      projectRole: stakeholderRoleEnum.optional(),
+      jobTitle: z.string().max(200).nullable().optional(),
+      notes: z.string().max(5000).nullable().optional(),
+      reportsToUserId: z.string().uuid().nullable().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+    },
+    async (args) =>
+      wrap('update_project_stakeholder', 'pm:write', () =>
+        handlers.updateProjectStakeholder(args),
+      )(),
+  );
+
+  server.tool(
+    'delete_project_stakeholder',
+    'Remove a durable project stakeholder roster row (RACI-derived people remain). Requires pm:write.',
+    { stakeholderId: z.string().uuid() },
+    async (args) =>
+      wrap('delete_project_stakeholder', 'pm:write', () =>
+        handlers.deleteProjectStakeholder(args),
       )(),
   );
 

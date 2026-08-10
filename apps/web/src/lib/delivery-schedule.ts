@@ -80,3 +80,28 @@ export function deliveryScheduleSurfaceClass(tone: DeliveryScheduleTone): string
       return 'border-line bg-panel text-ink-muted';
   }
 }
+
+/** Project-level Red / Amber / Green from open delivery items. */
+export type ProjectRagStatus = 'red' | 'amber' | 'green';
+
+/**
+ * Worst open schedule tone across tasks/milestones:
+ * overdue → red, at-risk → amber, otherwise green (incl. all done / empty).
+ */
+export function projectDeliveryRag(
+  items: Array<{ status: string; date: string | null | undefined }>,
+  today?: string,
+): ProjectRagStatus {
+  const day = today ?? todayYmd();
+  let worst: ProjectRagStatus = 'green';
+  for (const item of items) {
+    const tone = deliveryScheduleTone({
+      status: item.status,
+      date: item.date,
+      today: day,
+    });
+    if (tone === 'overdue') return 'red';
+    if (tone === 'atRisk') worst = 'amber';
+  }
+  return worst;
+}

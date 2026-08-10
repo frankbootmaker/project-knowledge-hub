@@ -5,12 +5,28 @@ import { ProjectDeliveryPanel } from '../../../../../../components/ProjectDelive
 import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
 import {
+  ProjectStakeholdersPanel,
+  type Stakeholder,
+} from '../../../../../../components/ProjectStakeholdersPanel';
+import {
   Badge,
   Page,
   PageHeader,
   Panel,
 } from '../../../../../../components/ui';
+import {
+  projectDeliveryRag,
+  type ProjectRagStatus,
+} from '../../../../../../lib/delivery-schedule';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
+
+function ragBadgeTone(
+  rag: ProjectRagStatus,
+): 'success' | 'warn' | 'danger' {
+  if (rag === 'red') return 'danger';
+  if (rag === 'amber') return 'warn';
+  return 'success';
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -105,16 +121,23 @@ export default async function ProjectDetailPage({
         membership.role === 'workspace_admin',
     );
 
-  const [systemsResponse, recordsResponse, milestonesResponse, tasksResponse, membershipsResponse] =
-    await Promise.all([
-      apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
-      apiFetch(
-        `/api/v1/knowledge-records?workspaceId=${workspace.id}&projectId=${project.id}`,
-      ),
-      apiFetch(`/api/v1/projects/${project.id}/milestones`),
-      apiFetch(`/api/v1/projects/${project.id}/tasks`),
-      apiFetch(`/api/v1/memberships?workspaceId=${workspace.id}`),
-    ]);
+  const [
+    systemsResponse,
+    recordsResponse,
+    milestonesResponse,
+    tasksResponse,
+    membersResponse,
+    stakeholdersResponse,
+  ] = await Promise.all([
+    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
+    apiFetch(
+      `/api/v1/knowledge-records?workspaceId=${workspace.id}&projectId=${project.id}`,
+    ),
+    apiFetch(`/api/v1/projects/${project.id}/milestones`),
+    apiFetch(`/api/v1/projects/${project.id}/tasks`),
+    apiFetch(`/api/v1/workspaces/${workspace.id}/members`),
+    apiFetch(`/api/v1/projects/${project.id}/stakeholders`),
+  ]);
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
     : [];
@@ -156,22 +179,32 @@ export default async function ProjectDetailPage({
         }>;
       }).tasks
     : [];
-  const members = membershipsResponse.ok
+  const members = membersResponse.ok
     ? (
-        (await membershipsResponse.json()) as {
-          memberships: Array<{
+        (await membersResponse.json()) as {
+          members: Array<{
             userId: string;
-            user?: { displayName?: string; email?: string };
-            displayName?: string;
-            email?: string;
+            displayName: string;
+            fullName?: string | null;
+            email: string;
           }>;
         }
-      ).memberships.map((row) => ({
+      ).members.map((row) => ({
         userId: row.userId,
-        displayName: row.user?.displayName || row.displayName || row.email || row.userId,
-        email: row.user?.email || row.email || '',
+        displayName: row.displayName || row.email || row.userId,
+        fullName: row.fullName ?? null,
+        email: row.email || '',
       }))
     : [];
+  const stakeholders = stakeholdersResponse.ok
+    ? ((await stakeholdersResponse.json()) as { stakeholders: Stakeholder[] })
+        .stakeholders
+    : [];
+
+  const deliveryRag = projectDeliveryRag([
+    ...milestones.map((row) => ({ status: row.status, date: row.targetDate })),
+    ...tasks.map((row) => ({ status: row.status, date: row.dueDate })),
+  ]);
 
   return (
     <Page wide>
@@ -188,7 +221,18 @@ export default async function ProjectDetailPage({
             {t('breadcrumb')}
           </>
         }
-        title={project.name}
+        title={
+          <span className="inline-flex flex-wrap items-center gap-3">
+            <span>{project.name}</span>
+            <Badge
+              tone={ragBadgeTone(deliveryRag)}
+              title={t('ragLabel')}
+              aria-label={`${t('ragLabel')}: ${t(`rag.${deliveryRag}`)}`}
+            >
+              {t(`rag.${deliveryRag}`)}
+            </Badge>
+          </span>
+        }
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
             <span>{project.slug}</span>
@@ -215,6 +259,13 @@ export default async function ProjectDetailPage({
           </p>
         ) : null}
       </Panel>
+
+      <ProjectStakeholdersPanel
+        projectId={project.id}
+        canMutate={canMutate && !isArchived}
+        initialStakeholders={stakeholders}
+        members={members}
+      />
 
       <ProjectDeliveryPanel
         projectId={project.id}

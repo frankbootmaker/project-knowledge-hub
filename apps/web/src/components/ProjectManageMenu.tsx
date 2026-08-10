@@ -6,6 +6,10 @@ import { useTranslations } from 'next-intl';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
 import {
+  ProjectReportViewer,
+  type ProjectReportKind,
+} from './ProjectReportViewer';
+import {
   ManageDetailRow,
   ManageMenuItem,
   ManageToolbar,
@@ -20,6 +24,13 @@ import {
   Textarea,
   useToast,
 } from './ui';
+import { projectDeliveryRag } from '../lib/delivery-schedule';
+import {
+  buildDeliveryStatusReport,
+  buildProjectStatusReport,
+  buildStakeholdersReport,
+  fetchProjectReportData,
+} from '../lib/project-reports';
 
 export type ProjectManageDetails = {
   id: string;
@@ -34,7 +45,7 @@ export type ProjectManageDetails = {
   archivedAt: string | null;
 };
 
-type Section = 'menu' | 'details' | 'edit' | 'archive' | 'delete';
+type Section = 'menu' | 'details' | 'edit' | 'archive' | 'delete' | 'reports';
 
 export function ProjectManageMenu(props: {
   workspaceSlug: string;
@@ -44,6 +55,8 @@ export function ProjectManageMenu(props: {
 }) {
   const t = useTranslations('projects');
   const tCommon = useTranslations('common');
+  const tStakeholders = useTranslations('stakeholders');
+  const tDelivery = useTranslations('delivery');
   const router = useRouter();
   const { pushToast } = useToast();
   const [open, setOpen] = useState(false);
@@ -57,6 +70,12 @@ export function ProjectManageMenu(props: {
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportKind, setReportKind] = useState<ProjectReportKind | null>(null);
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportMarkdown, setReportMarkdown] = useState('');
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const archived = Boolean(props.project.archivedAt);
   const redirectParent = `/workspaces/${props.workspaceSlug}`;
@@ -75,10 +94,20 @@ export function ProjectManageMenu(props: {
     setError(null);
   }
 
+  function closeReport() {
+    setReportOpen(false);
+    setReportKind(null);
+    setReportTitle('');
+    setReportMarkdown('');
+    setReportError(null);
+    setReportLoading(false);
+  }
+
   function sectionTitle(): string {
     if (section === 'menu') return t('manageTitle');
     if (section === 'details') return t('manageDetails');
     if (section === 'edit') return t('manageEdit');
+    if (section === 'reports') return t('manageReports');
     if (section === 'delete') return t('manageDelete');
     return archived ? t('manageRestore') : t('manageArchive');
   }
@@ -126,8 +155,97 @@ export function ProjectManageMenu(props: {
     }
   }
 
-  if (!props.canMutate && !props.canPurge) {
-    return <ManageToolbar />;
+  async function openReport(kind: ProjectReportKind) {
+    const titles: Record<ProjectReportKind, string> = {
+      delivery: t('reportDeliveryTitle'),
+      stakeholders: t('reportStakeholdersTitle'),
+      status: t('reportStatusTitle'),
+    };
+    setReportKind(kind);
+    setReportTitle(titles[kind]);
+    setReportMarkdown('');
+    setReportError(null);
+    setReportLoading(true);
+    setReportOpen(true);
+    setOpen(false);
+    setSection('menu');
+
+    try {
+      const data = await fetchProjectReportData(props.project.id);
+      const rag = projectDeliveryRag([
+        ...data.milestones.map((row) => ({
+          status: row.status,
+          date: row.targetDate,
+        })),
+        ...data.tasks.map((row) => ({ status: row.status, date: row.dueDate })),
+      ]);
+      const ragValue = t(`rag.${rag}`);
+
+      let markdown = '';
+      if (kind === 'delivery') {
+        markdown = buildDeliveryStatusReport({
+          projectName: props.project.name,
+          projectSlug: props.project.slug,
+          projectStatus: props.project.status,
+          milestones: data.milestones,
+          tasks: data.tasks,
+          labels: {
+            title: t('reportDeliveryTitle'),
+            generated: t('reportGenerated'),
+            rag: t('ragLabel'),
+            ragValue,
+            milestones: tDelivery('kindMilestone'),
+            tasks: tDelivery('kindTask'),
+            none: tCommon('none'),
+          },
+        });
+      } else if (kind === 'stakeholders') {
+        markdown = buildStakeholdersReport({
+          projectName: props.project.name,
+          projectSlug: props.project.slug,
+          stakeholders: data.stakeholders,
+          labels: {
+            title: t('reportStakeholdersTitle'),
+            generated: t('reportGenerated'),
+            people: t('reportPeople'),
+            aiAssistants: tStakeholders('kindAiAssistant'),
+            none: tCommon('none'),
+            reportsTo: tStakeholders('reportsTo'),
+          },
+        });
+      } else {
+        markdown = buildProjectStatusReport({
+          projectName: props.project.name,
+          projectSlug: props.project.slug,
+          projectStatus: props.project.status,
+          summary: props.project.summary,
+          milestones: data.milestones,
+          tasks: data.tasks,
+          stakeholders: data.stakeholders,
+          labels: {
+            statusTitle: t('reportStatusTitle'),
+            deliveryTitle: t('reportDeliveryTitle'),
+            stakeholdersTitle: t('reportStakeholdersTitle'),
+            generated: t('reportGenerated'),
+            rag: t('ragLabel'),
+            ragValue,
+            milestones: tDelivery('kindMilestone'),
+            tasks: tDelivery('kindTask'),
+            people: t('reportPeople'),
+            aiAssistants: tStakeholders('kindAiAssistant'),
+            none: tCommon('none'),
+            reportsTo: tStakeholders('reportsTo'),
+            summary: tCommon('summary'),
+          },
+        });
+      }
+
+      setReportMarkdown(markdown);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : t('reportFailed'));
+    } finally {
+      setReportLoading(false);
+    }
   }
 
   return (
@@ -142,7 +260,13 @@ export function ProjectManageMenu(props: {
         open={open}
         onClose={close}
         title={sectionTitle()}
-        description={section === 'menu' ? t('manageDescription') : undefined}
+        description={
+          section === 'menu'
+            ? t('manageDescription')
+            : section === 'reports'
+              ? t('manageReportsHint')
+              : undefined
+        }
         size="md"
       >
         {section === 'menu' ? (
@@ -151,6 +275,11 @@ export function ProjectManageMenu(props: {
               title={t('manageDetails')}
               hint={t('manageDetailsHint')}
               onClick={() => setSection('details')}
+            />
+            <ManageMenuItem
+              title={t('manageReports')}
+              hint={t('manageReportsHint')}
+              onClick={() => setSection('reports')}
             />
             {props.canMutate && !archived ? (
               <ManageMenuItem
@@ -176,6 +305,43 @@ export function ProjectManageMenu(props: {
               />
             ) : null}
           </ul>
+        ) : null}
+
+        {section === 'reports' ? (
+          <div className="grid gap-4">
+            <ul className="m-0 grid list-none gap-2 p-0">
+              <ManageMenuItem
+                title={t('reportStatus')}
+                hint={t('reportStatusHint')}
+                disabled={reportLoading}
+                onClick={() => void openReport('status')}
+              />
+              <ManageMenuItem
+                title={t('reportDelivery')}
+                hint={t('reportDeliveryHint')}
+                disabled={reportLoading}
+                onClick={() => void openReport('delivery')}
+              />
+              <ManageMenuItem
+                title={t('reportStakeholders')}
+                hint={t('reportStakeholdersHint')}
+                disabled={reportLoading}
+                onClick={() => void openReport('stakeholders')}
+              />
+            </ul>
+            {error ? <ErrorText>{error}</ErrorText> : null}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={reportLoading}
+              onClick={() => {
+                setError(null);
+                setSection('menu');
+              }}
+            >
+              {tCommon('back')}
+            </Button>
+          </div>
         ) : null}
 
         {section === 'details' ? (
@@ -289,6 +455,18 @@ export function ProjectManageMenu(props: {
           </div>
         ) : null}
       </Modal>
+
+      <ProjectReportViewer
+        open={reportOpen}
+        onClose={closeReport}
+        projectName={props.project.name}
+        projectId={props.project.id}
+        kind={reportKind}
+        title={reportTitle}
+        markdown={reportMarkdown}
+        loading={reportLoading}
+        error={reportError}
+      />
     </>
   );
 }

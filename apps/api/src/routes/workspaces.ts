@@ -22,6 +22,7 @@ import {
   toPublicWorkspace,
   writeAuditEvent,
 } from '../lib/identity.js';
+import { listWorkspaceMembers } from '../lib/project-stakeholders.js';
 
 const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(120),
@@ -154,6 +155,29 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     });
 
     return { workspace: toPublicWorkspace(created) };
+  });
+
+  app.get('/api/v1/workspaces/:workspaceId/members', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    requireWorkspaceView(principal, params.workspaceId);
+
+    const [workspace] = await app.database.db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.id, params.workspaceId))
+      .limit(1);
+    if (!workspace) {
+      throw new AppError({
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'Workspace not found',
+        statusCode: 404,
+      });
+    }
+
+    return {
+      members: await listWorkspaceMembers(app.database, params.workspaceId),
+    };
   });
 
   app.get('/api/v1/workspaces/:workspaceId', async (request) => {

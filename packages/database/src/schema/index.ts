@@ -1032,3 +1032,36 @@ export const projectTaskRaci = pgTable(
     index('project_task_raci_user_id_idx').on(table.userId),
   ],
 );
+
+/**
+ * Durable project stakeholder roster (hybrid with RACI / owner-derived people).
+ * reports_to_user_id is a soft reporting line within the project stakeholder set.
+ */
+export const projectStakeholders = pgTable(
+  'project_stakeholders',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    projectRole: text('project_role').notNull().default('stakeholder'),
+    jobTitle: text('job_title'),
+    notes: text('notes'),
+    reportsToUserId: uuid('reports_to_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('project_stakeholders_project_user_uidx').on(
+      table.projectId,
+      table.userId,
+    ),
+    index('project_stakeholders_project_id_idx').on(table.projectId),
+    index('project_stakeholders_reports_to_idx').on(table.reportsToUserId),
+  ],
+);

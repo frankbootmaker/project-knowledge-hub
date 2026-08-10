@@ -22,6 +22,7 @@ import {
   memberships,
   organizations,
   projectMilestones,
+  projectStakeholders,
   projectTaskRaci,
   projectTasks,
   projects,
@@ -293,6 +294,7 @@ async function main(): Promise<void> {
         name: 'OpenWebUI',
         slug: 'openwebui',
         status: 'active',
+        systemType: 'ai_assistant',
         summary: 'Local chat UI with MCP tool servers.',
         ownerUserId: admin.id,
       })
@@ -627,6 +629,30 @@ Prefer a tool-capable model; tiny local models often skip tools.
       throw new Error('Expected demo users for delivery RACI seed');
     }
 
+    // Extra AI assistant systems for Stakeholders (after demo users exist for owners)
+    await database.db.insert(systems).values([
+      {
+        workspaceId: workspace.id,
+        projectId: aiProject.id,
+        name: 'Cursor',
+        slug: 'cursor',
+        status: 'active',
+        systemType: 'ai_assistant',
+        summary: 'IDE agent connected via MCP Streamable HTTP.',
+        ownerUserId: admin.id,
+      },
+      {
+        workspaceId: workspace.id,
+        projectId: aiProject.id,
+        name: 'ChatGPT Custom GPT',
+        slug: 'chatgpt-custom-gpt',
+        status: 'active',
+        systemType: 'ai_assistant',
+        summary: 'Custom GPT Actions (OpenAPI + Bearer) against the hub API.',
+        ownerUserId: blair.id,
+      },
+    ]);
+
     const [mNetwork] = await database.db
       .insert(projectMilestones)
       .values({
@@ -942,12 +968,56 @@ Prefer a tool-capable model; tiny local models often skip tools.
       }
     }
 
+    // Stakeholders roster + reporting chain (overlaps RACI users)
+    console.log('Seeding project stakeholders…');
+    await database.db.insert(projectStakeholders).values([
+      {
+        projectId: labProject.id,
+        userId: alex.id,
+        projectRole: 'sponsor',
+        jobTitle: 'Executive sponsor',
+        notes: 'Escalation for budget and priority calls.',
+        reportsToUserId: null,
+        sortOrder: 0,
+      },
+      {
+        projectId: labProject.id,
+        userId: admin.id,
+        projectRole: 'owner',
+        jobTitle: 'Project owner',
+        notes: 'Day-to-day accountable for Homelab Platform.',
+        reportsToUserId: alex.id,
+        sortOrder: 10,
+      },
+      {
+        projectId: labProject.id,
+        userId: blair.id,
+        projectRole: 'tech_lead',
+        jobTitle: 'Platform tech lead',
+        notes: 'Primary contact for infra and delivery questions.',
+        reportsToUserId: admin.id,
+        sortOrder: 20,
+      },
+      {
+        projectId: labProject.id,
+        userId: dana.id,
+        projectRole: 'contributor',
+        jobTitle: 'Docs & enablement',
+        notes: 'Runbooks, onboarding, informed on ops alerts.',
+        reportsToUserId: blair.id,
+        sortOrder: 30,
+      },
+    ]);
+
     const [milestoneCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(projectMilestones);
     const [taskCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(projectTasks);
+    const [stakeholderCount] = await database.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(projectStakeholders);
 
     // Final counts
     const [usersCount] = await database.db
@@ -968,7 +1038,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       `  users=${usersCount?.n ?? 0} workspaces=${wsCount?.n ?? 0} knowledge_records=${recCount?.n ?? 0} memberships=${memCount?.n ?? 0}`,
     );
     console.log(
-      `  delivery: milestones=${milestoneCount?.n ?? 0} tasks=${taskCount?.n ?? 0}`,
+      `  delivery: milestones=${milestoneCount?.n ?? 0} tasks=${taskCount?.n ?? 0} stakeholders=${stakeholderCount?.n ?? 0}`,
     );
     console.log(`  Sign in (admin): ${admin.email} / (BOOTSTRAP_ADMIN_PASSWORD)`);
     console.log(`  Demo users password: ${DEMO_PASSWORD}`);
@@ -981,7 +1051,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
     }
     console.log(`  Open: /workspaces/${DEMO_WORKSPACE_SLUG} or Admin → Memberships`);
     console.log(
-      '  Try: Homelab Platform → Delivery (list / board / calendar); AI Assistants has a smaller board.',
+      '  Try: Homelab Platform → Delivery + Stakeholders (list / org chart); AI Assistants has a smaller board.',
     );
 
   } finally {

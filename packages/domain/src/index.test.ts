@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AppError,
   milestoneStatusSchema,
+  projectStakeholderRoleSchema,
   projectStatusSchema,
   raciRoleSchema,
   taskStatusSchema,
@@ -16,6 +17,11 @@ describe('domain foundations', () => {
     expect(milestoneStatusSchema.parse('planned')).toBe('planned');
     expect(taskStatusSchema.parse('in_progress')).toBe('in_progress');
     expect(raciRoleSchema.parse('A')).toBe('A');
+  });
+
+  it('validates project stakeholder roles', () => {
+    expect(projectStakeholderRoleSchema.parse('sponsor')).toBe('sponsor');
+    expect(projectStakeholderRoleSchema.parse('tech_lead')).toBe('tech_lead');
   });
 
   it('creates typed application errors', () => {
