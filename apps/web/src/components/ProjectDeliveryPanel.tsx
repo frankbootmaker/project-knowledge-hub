@@ -7,6 +7,8 @@ import {
   CatalogueSection,
   type CatalogueListItem,
 } from './CatalogueSection';
+import { ProjectDeliveryBoard } from './ProjectDeliveryBoard';
+import { ProjectDeliveryCalendar } from './ProjectDeliveryCalendar';
 import {
   Badge,
   Button,
@@ -17,6 +19,12 @@ import {
   Select,
   useToast,
 } from './ui';
+import { cn } from '../lib/cn';
+import {
+  deliveryScheduleSurfaceClass,
+  deliveryScheduleTone,
+  todayYmd,
+} from '../lib/delivery-schedule';
 
 type Milestone = {
   id: string;
@@ -56,6 +64,8 @@ type Member = {
 
 const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
+const VIEW_MODES = ['list', 'board', 'calendar'] as const;
+type ViewMode = (typeof VIEW_MODES)[number];
 
 type DeliveryKind = 'milestone' | 'task';
 
@@ -94,6 +104,7 @@ export function ProjectDeliveryPanel({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const [title, setTitle] = useState('');
   const [isMilestone, setIsMilestone] = useState(false);
@@ -101,6 +112,21 @@ export function ProjectDeliveryPanel({
   const [taskMilestoneId, setTaskMilestoneId] = useState('');
   const [taskAccountable, setTaskAccountable] = useState('');
   const [taskResponsible, setTaskResponsible] = useState('');
+
+  function changeViewMode(mode: ViewMode) {
+    setViewMode(mode);
+    try {
+      window.sessionStorage.setItem(`kh-delivery-view:${projectId}`, mode);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const wideModalOpen = viewMode === 'board' || viewMode === 'calendar';
+
+  function closeWideModal() {
+    changeViewMode('list');
+  }
 
   const refresh = useCallback(() => {
     router.refresh();
@@ -176,6 +202,30 @@ export function ProjectDeliveryPanel({
 
     return [...milestoneItems, ...taskItems];
   }, [milestones, tasks, milestoneTitleById, t]);
+
+  const calendarItems = useMemo(
+    () => [
+      ...milestones
+        .filter((milestone) => milestone.targetDate)
+        .map((milestone) => ({
+          id: `milestone:${milestone.id}`,
+          kind: 'milestone' as const,
+          title: milestone.title,
+          date: milestone.targetDate!,
+          status: milestone.status,
+        })),
+      ...tasks
+        .filter((task) => task.dueDate)
+        .map((task) => ({
+          id: `task:${task.id}`,
+          kind: 'task' as const,
+          title: task.title,
+          date: task.dueDate!,
+          status: task.status,
+        })),
+    ],
+    [milestones, tasks],
+  );
 
   function resetCreateForm() {
     setTitle('');
@@ -320,9 +370,37 @@ export function ProjectDeliveryPanel({
     }
   }
 
+  function viewSwitcher(activeMode: ViewMode) {
+    return (
+      <div
+        className="inline-flex rounded-md border border-line p-0.5"
+        role="group"
+        aria-label={t('viewModeLabel')}
+      >
+        {VIEW_MODES.map((mode) => (
+          <Button
+            key={mode}
+            type="button"
+            variant={activeMode === mode ? 'primary' : 'secondary'}
+            className={cn(
+              'h-8 rounded-sm px-2.5 text-xs',
+              activeMode === mode
+                ? ''
+                : 'border-transparent bg-transparent shadow-none',
+            )}
+            aria-pressed={activeMode === mode}
+            onClick={() => changeViewMode(mode)}
+          >
+            {t(`viewMode.${mode}`)}
+          </Button>
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <>
-      {error && !createOpen ? (
+    <div className="mb-8">
+      {error && !createOpen && !wideModalOpen ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
         </div>
@@ -338,6 +416,7 @@ export function ProjectDeliveryPanel({
         filterAllLabel={tWorkspaces('sectionFilterAll')}
         createLabel={t('addItem')}
         canCreate={canMutate}
+        extraActions={viewSwitcher(wideModalOpen ? 'list' : viewMode)}
         onCreate={() => {
           resetCreateForm();
           setCreateOpen(true);
@@ -346,11 +425,23 @@ export function ProjectDeliveryPanel({
           const parsed = parseItemId(item.id);
           const statusOptions =
             parsed?.kind === 'milestone' ? MILESTONE_STATUSES : TASK_STATUSES;
-          const currentStatus = parsed
-            ? parsed.kind === 'milestone'
-              ? milestones.find((row) => row.id === parsed.entityId)?.status
-              : tasks.find((row) => row.id === parsed.entityId)?.status
-            : undefined;
+          const milestone =
+            parsed?.kind === 'milestone'
+              ? milestones.find((row) => row.id === parsed.entityId)
+              : undefined;
+          const task =
+            parsed?.kind === 'task'
+              ? tasks.find((row) => row.id === parsed.entityId)
+              : undefined;
+          const currentStatus = milestone?.status ?? task?.status;
+          const scheduleTone =
+            milestone || task
+              ? deliveryScheduleTone({
+                  status: (milestone ?? task)!.status,
+                  date: milestone?.targetDate ?? task?.dueDate,
+                  today: todayYmd(),
+                })
+              : null;
 
           return (
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -362,6 +453,16 @@ export function ProjectDeliveryPanel({
                   ) : null}
                   {!canMutate && item.secondaryBadge ? (
                     <Badge>{item.secondaryBadge}</Badge>
+                  ) : null}
+                  {scheduleTone ? (
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide',
+                        deliveryScheduleSurfaceClass(scheduleTone),
+                      )}
+                    >
+                      {t(`scheduleTone.${scheduleTone}`)}
+                    </span>
                   ) : null}
                 </div>
                 {item.subtitle ? (
@@ -390,9 +491,61 @@ export function ProjectDeliveryPanel({
         }}
       />
 
-      <p className="mb-8 text-xs text-ink-muted">
+      <p className="mt-3 mb-0 text-xs text-ink-muted">
         {canMutate ? t('raciHint') : t('readOnlyHint')}
       </p>
+
+      <Modal
+        open={wideModalOpen}
+        onClose={closeWideModal}
+        title={t('title')}
+        description={t('wideModalDescription')}
+        size="full"
+        bodyClassName="!block overflow-auto"
+        footer={
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            {viewSwitcher(viewMode)}
+            <div className="flex flex-wrap items-center gap-2">
+              {canMutate ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    resetCreateForm();
+                    setCreateOpen(true);
+                  }}
+                >
+                  {t('addItem')}
+                </Button>
+              ) : null}
+              <Button type="button" variant="secondary" onClick={closeWideModal}>
+                {t('closeWideView')}
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        {error ? (
+          <div className="mb-3">
+            <ErrorText>{error}</ErrorText>
+          </div>
+        ) : null}
+        {viewMode === 'board' ? (
+          <ProjectDeliveryBoard
+            tasks={tasks}
+            milestones={milestones}
+            milestoneTitles={milestoneTitleById}
+            canMutate={canMutate}
+            pending={pending}
+            onTaskStatusChange={(taskId, status) =>
+              void updateStatus(`task:${taskId}`, status)
+            }
+          />
+        ) : null}
+        {viewMode === 'calendar' ? (
+          <ProjectDeliveryCalendar items={calendarItems} />
+        ) : null}
+      </Modal>
 
       <Modal
         open={createOpen}
@@ -495,6 +648,6 @@ export function ProjectDeliveryPanel({
           ) : null}
         </div>
       </Modal>
-    </>
+    </div>
   );
 }

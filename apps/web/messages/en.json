@@ -1750,6 +1750,55 @@
       "blocked": "Blocked",
       "done": "Done",
       "cancelled": "Cancelled"
+    },
+    "viewModeLabel": "Delivery view",
+    "viewMode": {
+      "list": "List",
+      "board": "Board",
+      "calendar": "Calendar"
+    },
+    "wideViewHint": "Wide view",
+    "boardEmptyColumn": "Drop tasks here",
+    "boardDragHint": "Drag tasks between columns to update status.",
+    "calendarLoading": "Loading calendar…",
+    "calendarPrev": "Previous",
+    "calendarNext": "Next",
+    "calendarToday": "Today",
+    "calendarMonthLabel": "{month} {year}",
+    "calendarMore": "+{count} more",
+    "calendarHint": "Tasks use due dates; milestones use target dates.",
+    "calendarWeekdays": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "calendarMonths": {
+      "0": "January",
+      "1": "February",
+      "2": "March",
+      "3": "April",
+      "4": "May",
+      "5": "June",
+      "6": "July",
+      "7": "August",
+      "8": "September",
+      "9": "October",
+      "10": "November",
+      "11": "December"
+    },
+    "wideModalDescription": "Board and calendar open in a full-width view. Choose List to return to the page.",
+    "closeWideView": "Back to list",
+    "scheduleLegendLabel": "Schedule colors",
+    "scheduleTone": {
+      "onTrack": "On track",
+      "atRisk": "At risk (due soon)",
+      "overdue": "Overdue",
+      "completed": "Completed",
+      "neutral": "Cancelled"
     }
   }
 }

@@ -21,11 +21,24 @@ import {
   knowledgeRecordVersions,
   memberships,
   organizations,
+  projectMilestones,
+  projectTaskRaci,
+  projectTasks,
   projects,
   systems,
   users,
   workspaces,
 } from '@project-knowledge-hub/database';
+
+/** Local calendar date YYYY-MM-DD offset from today (for Delivery calendar/board demos). */
+function ymd(offsetDays: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 const DEMO_WORKSPACE_SLUG = 'home-infrastructure';
 const DEMO_PASSWORD = 'change-me-demo-pass';
@@ -595,6 +608,347 @@ Prefer a tool-capable model; tiny local models often skip tools.
       console.log(`  user ${email} → ${Object.keys(demoUser.roles).length} membership(s)`);
     }
 
+    // --- Project Delivery (milestones / tasks / RACI) ---
+    console.log('Seeding project delivery demo data…');
+    const demoUserRows = await database.db
+      .select()
+      .from(users)
+      .where(
+        inArray(
+          users.email,
+          MEMBERSHIP_DEMO_USERS.map((item) => item.email.toLowerCase()),
+        ),
+      );
+    const userByEmail = new Map(demoUserRows.map((row) => [row.email, row]));
+    const blair = userByEmail.get('blair.maintainer@demo.local');
+    const dana = userByEmail.get('dana.multi@demo.local');
+    const alex = userByEmail.get('alex.admin@demo.local');
+    if (!blair || !dana || !alex) {
+      throw new Error('Expected demo users for delivery RACI seed');
+    }
+
+    const [mNetwork] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Network edge hardening',
+        description: 'TLS, Traefik routes, and split-DNS notes for public MCP.',
+        status: 'done',
+        targetDate: ymd(-14),
+        sortOrder: 10,
+      })
+      .returning();
+    const [mObservability] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Observability baseline',
+        description: 'Monitoring, alerts, and backup age stamps.',
+        status: 'active',
+        targetDate: ymd(10),
+        sortOrder: 20,
+      })
+      .returning();
+    const [mDelivery] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Project Delivery MVP',
+        description:
+          'Milestones, tasks, RACI, list/board/calendar for humans + MCP agents.',
+        status: 'active',
+        targetDate: ymd(21),
+        sortOrder: 30,
+      })
+      .returning();
+    const [mDocsDay] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Docs & restore drill',
+        description: 'Runbook refresh and restore rehearsal.',
+        status: 'planned',
+        targetDate: ymd(35),
+        sortOrder: 40,
+      })
+      .returning();
+
+    if (!mNetwork || !mObservability || !mDelivery || !mDocsDay) {
+      throw new Error('Failed to create lab delivery milestones');
+    }
+
+    type SeedTask = {
+      milestoneId: string | null;
+      title: string;
+      description?: string;
+      status: string;
+      dueDate: string | null;
+      sortOrder: number;
+      raci: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
+    };
+
+    const labTasks: SeedTask[] = [
+      {
+        milestoneId: mNetwork.id,
+        title: 'Document Traefik → Authentik Tailscale route',
+        status: 'done',
+        dueDate: ymd(-20),
+        sortOrder: 1,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mNetwork.id,
+        title: 'Verify public MCP URL from mobile data',
+        status: 'done',
+        dueDate: ymd(-12),
+        sortOrder: 2,
+        raci: [
+          { userId: blair.id, role: 'A' },
+          { userId: admin.id, role: 'C' },
+        ],
+      },
+      {
+        milestoneId: mObservability.id,
+        title: 'Wire ALERT_WEBHOOK_URL for backup failures',
+        status: 'in_progress',
+        dueDate: ymd(3),
+        sortOrder: 1,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+          { userId: dana.id, role: 'I' },
+        ],
+      },
+      {
+        milestoneId: mObservability.id,
+        title: 'Add disk-space alert for Postgres volume',
+        status: 'todo',
+        dueDate: ymd(7),
+        sortOrder: 2,
+        raci: [
+          { userId: blair.id, role: 'A' },
+          { userId: admin.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mObservability.id,
+        title: 'Review Monitoring Mon-2 search telemetry',
+        status: 'blocked',
+        dueDate: ymd(5),
+        sortOrder: 3,
+        description: 'Waiting on sample traffic from staging smoke.',
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: dana.id, role: 'C' },
+        ],
+      },
+      {
+        milestoneId: mDelivery.id,
+        title: 'Seed demo milestones/tasks for UI validation',
+        status: 'in_progress',
+        dueDate: ymd(0),
+        sortOrder: 1,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mDelivery.id,
+        title: 'Validate list / board / calendar views',
+        status: 'todo',
+        dueDate: ymd(2),
+        sortOrder: 2,
+        raci: [
+          { userId: blair.id, role: 'A' },
+          { userId: admin.id, role: 'R' },
+          { userId: alex.id, role: 'I' },
+        ],
+      },
+      {
+        milestoneId: mDelivery.id,
+        title: 'MCP smoke: create_project_task + set RACI',
+        status: 'todo',
+        dueDate: ymd(4),
+        sortOrder: 3,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mDelivery.id,
+        title: 'Polish board drag-and-drop affordances',
+        status: 'todo',
+        dueDate: ymd(12),
+        sortOrder: 4,
+        raci: [
+          { userId: blair.id, role: 'A' },
+          { userId: dana.id, role: 'C' },
+        ],
+      },
+      {
+        milestoneId: mDocsDay.id,
+        title: 'Schedule Postgres restore drill',
+        status: 'todo',
+        dueDate: ymd(28),
+        sortOrder: 1,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mDocsDay.id,
+        title: 'Refresh Homelab runbook after Delivery ships',
+        status: 'todo',
+        dueDate: ymd(30),
+        sortOrder: 2,
+        raci: [
+          { userId: dana.id, role: 'A' },
+          { userId: admin.id, role: 'R' },
+          { userId: blair.id, role: 'C' },
+        ],
+      },
+      {
+        milestoneId: null,
+        title: 'Triage leftover Docker volume usage',
+        status: 'cancelled',
+        dueDate: ymd(-3),
+        sortOrder: 99,
+        raci: [{ userId: admin.id, role: 'A' }],
+      },
+      {
+        milestoneId: null,
+        title: 'Capture GPU host decision for embeddings',
+        status: 'todo',
+        dueDate: ymd(14),
+        sortOrder: 50,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: alex.id, role: 'C' },
+          { userId: blair.id, role: 'I' },
+        ],
+      },
+    ];
+
+    for (const taskSpec of labTasks) {
+      const [task] = await database.db
+        .insert(projectTasks)
+        .values({
+          projectId: labProject.id,
+          milestoneId: taskSpec.milestoneId,
+          title: taskSpec.title,
+          description: taskSpec.description ?? null,
+          status: taskSpec.status,
+          dueDate: taskSpec.dueDate,
+          sortOrder: taskSpec.sortOrder,
+          createdBy: admin.id,
+        })
+        .returning();
+      if (!task) {
+        throw new Error(`Failed to create task: ${taskSpec.title}`);
+      }
+      if (taskSpec.raci.length > 0) {
+        await database.db.insert(projectTaskRaci).values(
+          taskSpec.raci.map((entry) => ({
+            taskId: task.id,
+            userId: entry.userId,
+            role: entry.role,
+          })),
+        );
+      }
+    }
+
+    const [aiM1] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: aiProject.id,
+        title: 'Assistant onboarding pack',
+        description: 'MCP wizard docs + sample API client scopes.',
+        status: 'active',
+        targetDate: ymd(8),
+        sortOrder: 10,
+      })
+      .returning();
+    if (!aiM1) {
+      throw new Error('Failed to create AI Assistants milestone');
+    }
+
+    const aiTasks: SeedTask[] = [
+      {
+        milestoneId: aiM1.id,
+        title: 'Document pm:read / pm:write for Cursor clients',
+        status: 'in_progress',
+        dueDate: ymd(1),
+        sortOrder: 1,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: aiM1.id,
+        title: 'Record ChatGPT Actions timeout notes',
+        status: 'todo',
+        dueDate: ymd(6),
+        sortOrder: 2,
+        raci: [
+          { userId: blair.id, role: 'A' },
+          { userId: dana.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: null,
+        title: 'Spike: agent proposes tasks from meeting notes',
+        status: 'todo',
+        dueDate: ymd(18),
+        sortOrder: 3,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: alex.id, role: 'I' },
+        ],
+      },
+    ];
+
+    for (const taskSpec of aiTasks) {
+      const [task] = await database.db
+        .insert(projectTasks)
+        .values({
+          projectId: aiProject.id,
+          milestoneId: taskSpec.milestoneId,
+          title: taskSpec.title,
+          description: taskSpec.description ?? null,
+          status: taskSpec.status,
+          dueDate: taskSpec.dueDate,
+          sortOrder: taskSpec.sortOrder,
+          createdBy: admin.id,
+        })
+        .returning();
+      if (!task) {
+        throw new Error(`Failed to create AI task: ${taskSpec.title}`);
+      }
+      if (taskSpec.raci.length > 0) {
+        await database.db.insert(projectTaskRaci).values(
+          taskSpec.raci.map((entry) => ({
+            taskId: task.id,
+            userId: entry.userId,
+            role: entry.role,
+          })),
+        );
+      }
+    }
+
+    const [milestoneCount] = await database.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(projectMilestones);
+    const [taskCount] = await database.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(projectTasks);
+
     // Final counts
     const [usersCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
@@ -613,6 +967,9 @@ Prefer a tool-capable model; tiny local models often skip tools.
     console.log(
       `  users=${usersCount?.n ?? 0} workspaces=${wsCount?.n ?? 0} knowledge_records=${recCount?.n ?? 0} memberships=${memCount?.n ?? 0}`,
     );
+    console.log(
+      `  delivery: milestones=${milestoneCount?.n ?? 0} tasks=${taskCount?.n ?? 0}`,
+    );
     console.log(`  Sign in (admin): ${admin.email} / (BOOTSTRAP_ADMIN_PASSWORD)`);
     console.log(`  Demo users password: ${DEMO_PASSWORD}`);
     console.log('  Demo users:');
@@ -623,7 +980,10 @@ Prefer a tool-capable model; tiny local models often skip tools.
       console.log(`    ${demoUser.email} — ${roleSummary}`);
     }
     console.log(`  Open: /workspaces/${DEMO_WORKSPACE_SLUG} or Admin → Memberships`);
-    console.log('  Try: Homelab Platform → linked systems + knowledge; long TOC on overview/runbook.');
+    console.log(
+      '  Try: Homelab Platform → Delivery (list / board / calendar); AI Assistants has a smaller board.',
+    );
+
   } finally {
     await database.close();
   }

@@ -1750,6 +1750,55 @@
       "blocked": "Blockiert",
       "done": "Erledigt",
       "cancelled": "Abgebrochen"
+    },
+    "viewModeLabel": "Umsetzungsansicht",
+    "viewMode": {
+      "list": "Liste",
+      "board": "Board",
+      "calendar": "Kalender"
+    },
+    "wideViewHint": "Breite Ansicht",
+    "boardEmptyColumn": "Aufgaben hierher ziehen",
+    "boardDragHint": "Ziehen Sie Aufgaben zwischen Spalten, um den Status zu ändern.",
+    "calendarLoading": "Kalender wird geladen…",
+    "calendarPrev": "Zurück",
+    "calendarNext": "Weiter",
+    "calendarToday": "Heute",
+    "calendarMonthLabel": "{month} {year}",
+    "calendarMore": "+{count} weitere",
+    "calendarHint": "Aufgaben nutzen Fälligkeitsdaten; Meilensteine nutzen Zieldaten.",
+    "calendarWeekdays": {
+      "mon": "Mo",
+      "tue": "Di",
+      "wed": "Mi",
+      "thu": "Do",
+      "fri": "Fr",
+      "sat": "Sa",
+      "sun": "So"
+    },
+    "calendarMonths": {
+      "0": "Januar",
+      "1": "Februar",
+      "2": "März",
+      "3": "April",
+      "4": "Mai",
+      "5": "Juni",
+      "6": "Juli",
+      "7": "August",
+      "8": "September",
+      "9": "Oktober",
+      "10": "November",
+      "11": "Dezember"
+    },
+    "wideModalDescription": "Board und Kalender öffnen in der Vollansicht. Mit Liste kehren Sie zur Seite zurück.",
+    "closeWideView": "Zurück zur Liste",
+    "scheduleLegendLabel": "Termin-Farben",
+    "scheduleTone": {
+      "onTrack": "Im Plan",
+      "atRisk": "Gefährdet (bald fällig)",
+      "overdue": "Überfällig",
+      "completed": "Erledigt",
+      "neutral": "Abgebrochen"
     }
   }
 }

@@ -88,8 +88,11 @@ Not in `DEFAULT_MCP_SCOPES`.
 
 Project detail page gains a **Delivery** section using the same catalogue **search / filter / Add** chrome as linked systems & knowledge:
 
+* View modes: **List** (inline), **Board** / **Calendar** in a full-width modal
 * Flat list of milestones and tasks (badges + status filter)
 * **Add** opens one modal: create a task, or tick **Is milestone** to create a milestone instead
+* Board: drag tasks between status columns; milestones shown as chips above
+* Calendar: tasks by due date, milestones by target date
 * Inline status changes for maintainers; RACI (A/R) on task create
 
 ## Non-goals

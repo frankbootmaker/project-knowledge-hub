@@ -134,6 +134,9 @@ export function CatalogueSection({
   createLabel,
   canCreate,
   renderItem,
+  extraActions,
+  showTitle = true,
+  showList = true,
   className,
 }: {
   title: string;
@@ -152,6 +155,12 @@ export function CatalogueSection({
   canCreate: boolean;
   /** Replace the default list-card body for each item. */
   renderItem?: (item: CatalogueListItem) => ReactNode;
+  /** Extra controls in the toolbar actions (before Create). */
+  extraActions?: ReactNode;
+  /** When false, omit the section heading (parent already rendered one). */
+  showTitle?: boolean;
+  /** When false, render only the toolbar (e.g. board/calendar body below). */
+  showList?: boolean;
   className?: string;
 }) {
   const t = useTranslations('workspaces');
@@ -269,11 +278,11 @@ export function CatalogueSection({
 
   return (
     <section className={cn('mb-8', className)}>
-      <SectionHeader title={title} />
+      {showTitle ? <SectionHeader title={title} /> : null}
       <FunctionHeader
         className="mb-3"
         search={
-          filtersOpen ? (
+          showList && filtersOpen ? (
             <Input
               id={`${controlsId}-search`}
               type="search"
@@ -285,7 +294,7 @@ export function CatalogueSection({
           ) : undefined
         }
         filters={
-          filtersOpen ? (
+          showList && filtersOpen ? (
             <div
               id={controlsId}
               className="flex shrink-0 flex-nowrap items-center gap-2"
@@ -342,28 +351,31 @@ export function CatalogueSection({
         }
         actions={
           <>
-            <Button
-              type="button"
-              variant="secondary"
-              className={cn(
-                'relative size-[2.0475rem] shrink-0 px-0 py-0',
-                filtersOpen && 'ring-2 ring-brand/35',
-              )}
-              aria-expanded={filtersOpen}
-              aria-controls={filtersOpen ? controlsId : undefined}
-              aria-label={
-                filtersOpen ? t('sectionHideFilters') : t('sectionShowFilters')
-              }
-              onClick={() => setFiltersOpen((open) => !open)}
-            >
-              <FilterToggleIcon />
-              {filtersActive ? (
-                <span
-                  className="absolute top-1 right-1 size-1.5 rounded-full bg-brand"
-                  aria-hidden
-                />
-              ) : null}
-            </Button>
+            {extraActions}
+            {showList ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className={cn(
+                  'relative size-[2.0475rem] shrink-0 px-0 py-0',
+                  filtersOpen && 'ring-2 ring-brand/35',
+                )}
+                aria-expanded={filtersOpen}
+                aria-controls={filtersOpen ? controlsId : undefined}
+                aria-label={
+                  filtersOpen ? t('sectionHideFilters') : t('sectionShowFilters')
+                }
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                <FilterToggleIcon />
+                {filtersActive ? (
+                  <span
+                    className="absolute top-1 right-1 size-1.5 rounded-full bg-brand"
+                    aria-hidden
+                  />
+                ) : null}
+              </Button>
+            ) : null}
             {canCreate ? (
               onCreate ? (
                 <Button type="button" onClick={onCreate}>
@@ -377,96 +389,100 @@ export function CatalogueSection({
         }
       />
 
-      <ul className="m-0 grid list-none gap-3 p-0">
-        {pageItems.map((item) => (
-          <ListCard key={item.id}>
-            {renderItem ? (
-              renderItem(item)
-            ) : (
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {item.href ? (
-                      <Link href={item.href} className="font-semibold no-underline">
-                        {item.title}
-                      </Link>
-                    ) : (
-                      <span className="font-semibold">{item.title}</span>
-                    )}
-                    {item.primaryBadge ? (
-                      <Badge tone="brand">{item.primaryBadge}</Badge>
-                    ) : null}
-                    {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
-                    {(item.languages?.length ?? 0) > 1 ? (
-                      <span
-                        className="text-xs font-medium tracking-wide text-ink-muted uppercase"
-                        title={t('sectionLanguages')}
-                      >
-                        {item.languages!.map((code) => code.toUpperCase()).join(' · ')}
-                      </span>
+      {showList ? (
+        <>
+          <ul className="m-0 grid list-none gap-3 p-0">
+            {pageItems.map((item) => (
+              <ListCard key={item.id}>
+                {renderItem ? (
+                  renderItem(item)
+                ) : (
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {item.href ? (
+                          <Link href={item.href} className="font-semibold no-underline">
+                            {item.title}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold">{item.title}</span>
+                        )}
+                        {item.primaryBadge ? (
+                          <Badge tone="brand">{item.primaryBadge}</Badge>
+                        ) : null}
+                        {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
+                        {(item.languages?.length ?? 0) > 1 ? (
+                          <span
+                            className="text-xs font-medium tracking-wide text-ink-muted uppercase"
+                            title={t('sectionLanguages')}
+                          >
+                            {item.languages!.map((code) => code.toUpperCase()).join(' · ')}
+                          </span>
+                        ) : null}
+                      </div>
+                      {item.subtitle ? (
+                        <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
+                      ) : null}
+                      {item.tagsLine ? (
+                        <p className="mt-2 mb-0 text-xs text-ink-muted">{item.tagsLine}</p>
+                      ) : null}
+                    </div>
+                    {item.updatedAt ? (
+                      <LocalDateTime
+                        className="shrink-0 text-xs text-ink-muted"
+                        value={item.updatedAt}
+                        prefix={tCommon('lastUpdated')}
+                      />
                     ) : null}
                   </div>
-                  {item.subtitle ? (
-                    <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
-                  ) : null}
-                  {item.tagsLine ? (
-                    <p className="mt-2 mb-0 text-xs text-ink-muted">{item.tagsLine}</p>
-                  ) : null}
-                </div>
-                {item.updatedAt ? (
-                  <LocalDateTime
-                    className="shrink-0 text-xs text-ink-muted"
-                    value={item.updatedAt}
-                    prefix={tCommon('lastUpdated')}
-                  />
-                ) : null}
-              </div>
-            )}
-          </ListCard>
-        ))}
-        {filtered.length === 0 ? (
-          <li className="kh-muted list-none">
-            {items.length === 0 ? emptyLabel : t('sectionEmptyFiltered')}
-          </li>
-        ) : null}
-      </ul>
+                )}
+              </ListCard>
+            ))}
+            {filtered.length === 0 ? (
+              <li className="kh-muted list-none">
+                {items.length === 0 ? emptyLabel : t('sectionEmptyFiltered')}
+              </li>
+            ) : null}
+          </ul>
 
-      {filtered.length > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="m-0 text-sm text-ink-muted">
-            {t('sectionShowing', {
-              from: rangeFrom,
-              to: rangeTo,
-              total: filtered.length,
-            })}
-          </p>
-          {totalPages > 1 ? (
-            <nav
-              className="flex flex-wrap items-center gap-2"
-              aria-label={title}
-            >
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={currentPage <= 1}
-                onClick={() => setPage(Math.max(1, currentPage - 1))}
-              >
-                {t('sectionPrevPage')}
-              </Button>
-              <span className="kh-page-num-active" aria-current="page">
-                {currentPage} / {totalPages}
-              </span>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={currentPage >= totalPages}
-                onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
-              >
-                {t('sectionNextPage')}
-              </Button>
-            </nav>
+          {filtered.length > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="m-0 text-sm text-ink-muted">
+                {t('sectionShowing', {
+                  from: rangeFrom,
+                  to: rangeTo,
+                  total: filtered.length,
+                })}
+              </p>
+              {totalPages > 1 ? (
+                <nav
+                  className="flex flex-wrap items-center gap-2"
+                  aria-label={title}
+                >
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage(Math.max(1, currentPage - 1))}
+                  >
+                    {t('sectionPrevPage')}
+                  </Button>
+                  <span className="kh-page-num-active" aria-current="page">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+                  >
+                    {t('sectionNextPage')}
+                  </Button>
+                </nav>
+              ) : null}
+            </div>
           ) : null}
-        </div>
+        </>
       ) : null}
     </section>
   );
