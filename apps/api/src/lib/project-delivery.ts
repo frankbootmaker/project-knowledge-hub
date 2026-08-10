@@ -43,6 +43,7 @@ export type PublicMilestone = {
   title: string;
   description: string | null;
   status: MilestoneStatus;
+  startDate: string | null;
   targetDate: string | null;
   sortOrder: number;
   archivedAt: string | null;
@@ -96,6 +97,7 @@ function toPublicMilestone(
     title: row.title,
     description: row.description,
     status: milestoneStatusSchema.parse(row.status),
+    startDate: row.startDate,
     targetDate: row.targetDate,
     sortOrder: row.sortOrder,
     archivedAt: row.archivedAt?.toISOString() ?? null,
@@ -374,6 +376,7 @@ export async function createMilestone(
     title: string;
     description?: string | null;
     status?: MilestoneStatus;
+    startDate?: string | null;
     targetDate?: string | null;
     sortOrder?: number;
   },
@@ -385,6 +388,7 @@ export async function createMilestone(
       title: input.title,
       description: input.description ?? null,
       status: input.status ?? 'planned',
+      startDate: input.startDate ?? null,
       targetDate: input.targetDate ?? null,
       sortOrder: input.sortOrder ?? 0,
     })
@@ -406,6 +410,7 @@ export async function updateMilestone(
     title?: string;
     description?: string | null;
     status?: MilestoneStatus;
+    startDate?: string | null;
     targetDate?: string | null;
     sortOrder?: number;
     archived?: boolean;
@@ -431,6 +436,7 @@ export async function updateMilestone(
       description:
         input.description !== undefined ? input.description : existing.description,
       status: input.status ?? existing.status,
+      startDate: input.startDate !== undefined ? input.startDate : existing.startDate,
       targetDate: input.targetDate !== undefined ? input.targetDate : existing.targetDate,
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:

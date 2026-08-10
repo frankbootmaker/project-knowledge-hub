@@ -26,7 +26,7 @@ Humans and AI agents work on the **same** project objects so full project contex
 
 | In v1 | Out of v1 |
 | --- | --- |
-| Milestones under a project | Gantt / critical path (RAID **Dependencies** are a register, not a schedule graph — see [PROJECT_RAID.md](./PROJECT_RAID.md)) |
+| Milestones under a project; **Timeline** fishbone (duration bars) | Full dependency / critical-path Gantt (RAID **Dependencies** stay a register — see [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BASELINE.md](./PROJECT_BASELINE.md)) |
 | Tasks (optional milestone link) | Subtasks / checklists as separate entities |
 | Due / target dates | Time tracking, capacity |
 | RACI matrix per task (`R`/`A`/`C`/`I`) | External contacts without accounts |
@@ -41,13 +41,15 @@ Knowledge records stay under ADR-013: agents **draft** docs; delivery state is *
 
 ```text
 projects
+  ├── baseline fields + project_initial_stakeholders (see PROJECT_BASELINE.md)
   ├── project_stakeholders (durable roster + optional reports_to_user_id)
-  ├── project_epics
-  │     └── project_user_stories
+  ├── project_epics (+ start/end)
+  │     └── project_user_stories (+ start/end)
   │           └── project_tasks (story optional)
-  ├── project_milestones          ← optional timeboxes (orthogonal to epic/story)
+  ├── project_milestones          ← optional timeboxes (+ start + target_date)
   ├── project_raid_items          ← RAID register (see PROJECT_RAID.md)
   │     └── project_raid_task_links
+  ├── project_change_items        ← change register (see PROJECT_BASELINE.md)
   └── project_tasks
         ├── milestone_id (optional)
         ├── user_story_id (optional)

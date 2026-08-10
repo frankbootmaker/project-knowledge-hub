@@ -40,9 +40,32 @@ export type ProjectManageDetails = {
   summary: string | null;
   description: string | null;
   tags: Array<{ name: string }>;
+  startDate?: string | null;
+  endDate?: string | null;
+  charterRecordId?: string | null;
+  charterRecord?: {
+    id: string;
+    title: string;
+    slug: string;
+    recordType: string;
+  } | null;
+  initialPlanRecordId?: string | null;
+  initialPlanRecord?: {
+    id: string;
+    title: string;
+    slug: string;
+    recordType: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
+};
+
+type KnowledgeOption = {
+  id: string;
+  title: string;
+  slug: string;
+  recordType: string;
 };
 
 type Section = 'menu' | 'details' | 'edit' | 'archive' | 'delete' | 'reports';
@@ -52,8 +75,10 @@ export function ProjectManageMenu(props: {
   project: ProjectManageDetails;
   canMutate: boolean;
   canPurge: boolean;
+  knowledgeRecords?: KnowledgeOption[];
 }) {
   const t = useTranslations('projects');
+  const tBaseline = useTranslations('baseline');
   const tCommon = useTranslations('common');
   const tStakeholders = useTranslations('stakeholders');
   const tDelivery = useTranslations('delivery');
@@ -67,6 +92,21 @@ export function ProjectManageMenu(props: {
   const [status, setStatus] = useState(props.project.status);
   const [tags, setTags] = useState(
     props.project.tags.map((tag) => tag.name).join(', '),
+  );
+  const [startDate, setStartDate] = useState(props.project.startDate ?? '');
+  const [endDate, setEndDate] = useState(props.project.endDate ?? '');
+  const [charterRecordId, setCharterRecordId] = useState(
+    props.project.charterRecordId ?? '',
+  );
+  const [initialPlanRecordId, setInitialPlanRecordId] = useState(
+    props.project.initialPlanRecordId ?? '',
+  );
+  const knowledgeRecords = props.knowledgeRecords ?? [];
+  const charterOptions = knowledgeRecords.filter(
+    (row) => row.recordType === 'project-charter',
+  );
+  const planOptions = knowledgeRecords.filter(
+    (row) => row.recordType === 'plan',
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -86,6 +126,10 @@ export function ProjectManageMenu(props: {
     setDescription(props.project.description ?? '');
     setStatus(props.project.status);
     setTags(props.project.tags.map((tag) => tag.name).join(', '));
+    setStartDate(props.project.startDate ?? '');
+    setEndDate(props.project.endDate ?? '');
+    setCharterRecordId(props.project.charterRecordId ?? '');
+    setInitialPlanRecordId(props.project.initialPlanRecordId ?? '');
   }, [props.project]);
 
   function close() {
@@ -132,6 +176,10 @@ export function ProjectManageMenu(props: {
             .split(',')
             .map((tag) => tag.trim())
             .filter(Boolean),
+          startDate: startDate || null,
+          endDate: endDate || null,
+          charterRecordId: charterRecordId || null,
+          initialPlanRecordId: initialPlanRecordId || null,
         }),
       });
       const payload = (await response.json()) as {
@@ -284,7 +332,7 @@ export function ProjectManageMenu(props: {
             {props.canMutate && !archived ? (
               <ManageMenuItem
                 title={t('manageEdit')}
-                hint={t('manageEditHint')}
+                hint={t('manageEditHintBaseline')}
                 onClick={() => setSection('edit')}
               />
             ) : null}
@@ -359,6 +407,24 @@ export function ProjectManageMenu(props: {
                 }
               />
               <ManageDetailRow
+                label={tBaseline('startDate')}
+                value={props.project.startDate || tCommon('none')}
+              />
+              <ManageDetailRow
+                label={tBaseline('endDate')}
+                value={props.project.endDate || tCommon('none')}
+              />
+              <ManageDetailRow
+                label={tBaseline('charter')}
+                value={props.project.charterRecord?.title || tCommon('none')}
+              />
+              <ManageDetailRow
+                label={tBaseline('initialPlan')}
+                value={
+                  props.project.initialPlanRecord?.title || tCommon('none')
+                }
+              />
+              <ManageDetailRow
                 label={t('detailsCreated')}
                 value={new Date(props.project.createdAt).toLocaleString()}
               />
@@ -401,6 +467,48 @@ export function ProjectManageMenu(props: {
             </Field>
             <Field label={tCommon('tagsHint')}>
               <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={tBaseline('startDate')}>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </Field>
+              <Field label={tBaseline('endDate')}>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </Field>
+            </div>
+            <Field label={tBaseline('charter')}>
+              <Select
+                value={charterRecordId}
+                onChange={(e) => setCharterRecordId(e.target.value)}
+              >
+                <option value="">{tCommon('none')}</option>
+                {charterOptions.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.title}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={tBaseline('initialPlan')}>
+              <Select
+                value={initialPlanRecordId}
+                onChange={(e) => setInitialPlanRecordId(e.target.value)}
+              >
+                <option value="">{tCommon('none')}</option>
+                {planOptions.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.title}
+                  </option>
+                ))}
+              </Select>
             </Field>
             {error ? <ErrorText>{error}</ErrorText> : null}
             <div className="flex flex-wrap gap-2">

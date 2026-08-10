@@ -10,6 +10,7 @@ import {
 import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectDeliveryBoard } from './ProjectDeliveryBoard';
 import { ProjectDeliveryCalendar } from './ProjectDeliveryCalendar';
+import { ProjectDeliveryTimeline } from './ProjectDeliveryTimeline';
 import { ProjectDeliveryTree } from './ProjectDeliveryTree';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
@@ -35,6 +36,7 @@ type Milestone = {
   title: string;
   description: string | null;
   status: string;
+  startDate: string | null;
   targetDate: string | null;
   sortOrder: number;
   createdAt?: string;
@@ -46,6 +48,8 @@ type Epic = {
   title: string;
   description: string | null;
   status: string;
+  startDate: string | null;
+  endDate: string | null;
   sortOrder: number;
   createdAt?: string;
   updatedAt?: string;
@@ -57,6 +61,8 @@ type UserStory = {
   title: string;
   description: string | null;
   status: string;
+  startDate: string | null;
+  endDate: string | null;
   sortOrder: number;
   createdAt?: string;
   updatedAt?: string;
@@ -103,7 +109,7 @@ const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 const EPIC_STATUSES = MILESTONE_STATUSES;
 const STORY_STATUSES = MILESTONE_STATUSES;
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
-const VIEW_MODES = ['list', 'tree', 'board', 'calendar'] as const;
+const VIEW_MODES = ['list', 'tree', 'board', 'calendar', 'timeline'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
 type DeliveryKind = 'epic' | 'story' | 'milestone' | 'task';
@@ -128,6 +134,8 @@ function parseItemId(id: string): { kind: DeliveryKind; entityId: string } | nul
 export function ProjectDeliveryPanel({
   projectId,
   canMutate,
+  projectStartDate = null,
+  projectEndDate = null,
   initialEpics,
   initialStories,
   initialMilestones,
@@ -137,6 +145,8 @@ export function ProjectDeliveryPanel({
   projectId: string;
   workspaceId: string;
   canMutate: boolean;
+  projectStartDate?: string | null;
+  projectEndDate?: string | null;
   initialEpics: Epic[];
   initialStories: UserStory[];
   initialMilestones: Milestone[];
@@ -159,13 +169,15 @@ export function ProjectDeliveryPanel({
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [manageTaskId, setManageTaskId] = useState<string | null>(null);
   const [manageAgile, setManageAgile] = useState<{
-    kind: 'epic' | 'story';
+    kind: 'epic' | 'story' | 'milestone';
     id: string;
   } | null>(null);
 
   const [title, setTitle] = useState('');
   const [createKind, setCreateKind] = useState<CreateKind>('task');
   const [dateValue, setDateValue] = useState('');
+  const [startDateValue, setStartDateValue] = useState('');
+  const [endDateValue, setEndDateValue] = useState('');
   const [taskMilestoneId, setTaskMilestoneId] = useState('');
   const [taskStoryId, setTaskStoryId] = useState('');
   const [storyEpicId, setStoryEpicId] = useState('');
@@ -181,7 +193,8 @@ export function ProjectDeliveryPanel({
     }
   }
 
-  const wideModalOpen = viewMode === 'board' || viewMode === 'calendar';
+  const wideModalOpen =
+    viewMode === 'board' || viewMode === 'calendar' || viewMode === 'timeline';
 
   function closeWideModal() {
     changeViewMode('list');
@@ -213,13 +226,18 @@ export function ProjectDeliveryPanel({
       title: epic.title,
       primaryBadge: t('kindEpic'),
       secondaryBadge: t(`milestoneStatus.${epic.status}`),
-      subtitle: null,
+      subtitle:
+        epic.startDate || epic.endDate
+          ? `${t('startDate')}: ${epic.startDate ?? '…'} · ${t('endDate')}: ${epic.endDate ?? '…'}`
+          : null,
       updatedAt: epic.updatedAt ?? epic.createdAt ?? null,
       searchText: [
         epic.title,
         epic.description ?? '',
         epic.status,
         'epic',
+        epic.startDate ?? '',
+        epic.endDate ?? '',
       ]
         .join(' ')
         .toLowerCase(),
@@ -234,7 +252,14 @@ export function ProjectDeliveryPanel({
         title: story.title,
         primaryBadge: t('kindStory'),
         secondaryBadge: t(`milestoneStatus.${story.status}`),
-        subtitle: epicLabel ? `${t('kindEpic')}: ${epicLabel}` : null,
+        subtitle: [
+          epicLabel ? `${t('kindEpic')}: ${epicLabel}` : null,
+          story.startDate || story.endDate
+            ? `${t('startDate')}: ${story.startDate ?? '…'} · ${t('endDate')}: ${story.endDate ?? '…'}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || null,
         updatedAt: story.updatedAt ?? story.createdAt ?? null,
         searchText: [
           story.title,
@@ -242,6 +267,8 @@ export function ProjectDeliveryPanel({
           story.status,
           'story',
           epicLabel ?? '',
+          story.startDate ?? '',
+          story.endDate ?? '',
         ]
           .join(' ')
           .toLowerCase(),
@@ -255,15 +282,23 @@ export function ProjectDeliveryPanel({
       title: milestone.title,
       primaryBadge: t('kindMilestone'),
       secondaryBadge: t(`milestoneStatus.${milestone.status}`),
-      subtitle: milestone.targetDate
-        ? `${t('targetDate')}: ${milestone.targetDate}`
-        : null,
+      subtitle: [
+        milestone.startDate
+          ? `${t('startDate')}: ${milestone.startDate}`
+          : null,
+        milestone.targetDate
+          ? `${t('targetDate')}: ${milestone.targetDate}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || null,
       updatedAt: milestone.updatedAt ?? milestone.createdAt ?? null,
       searchText: [
         milestone.title,
         milestone.description ?? '',
         milestone.status,
         'milestone',
+        milestone.startDate ?? '',
         milestone.targetDate ?? '',
       ]
         .join(' ')
@@ -359,6 +394,8 @@ export function ProjectDeliveryPanel({
     setTitle('');
     setCreateKind('task');
     setDateValue('');
+    setStartDateValue('');
+    setEndDateValue('');
     setTaskMilestoneId('');
     setTaskStoryId('');
     setStoryEpicId('');
@@ -388,7 +425,11 @@ export function ProjectDeliveryPanel({
         const response = await fetch(`/api/v1/projects/${projectId}/epics`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: title.trim() }),
+          body: JSON.stringify({
+            title: title.trim(),
+            startDate: startDateValue || null,
+            endDate: endDateValue || null,
+          }),
         });
         const payload = (await response.json().catch(() => ({}))) as {
           epic?: Epic;
@@ -406,6 +447,8 @@ export function ProjectDeliveryPanel({
           body: JSON.stringify({
             title: title.trim(),
             epicId: storyEpicId,
+            startDate: startDateValue || null,
+            endDate: endDateValue || null,
           }),
         });
         const payload = (await response.json().catch(() => ({}))) as {
@@ -423,6 +466,7 @@ export function ProjectDeliveryPanel({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: title.trim(),
+            startDate: startDateValue || null,
             targetDate: dateValue || null,
           }),
         });
@@ -727,13 +771,19 @@ export function ProjectDeliveryPanel({
                     {t('manage')}
                   </Button>
                 ) : null}
-                {parsed?.kind === 'epic' || parsed?.kind === 'story' ? (
+                {parsed?.kind === 'epic' ||
+                parsed?.kind === 'story' ||
+                parsed?.kind === 'milestone' ? (
                   <Button
                     type="button"
                     variant="secondary"
                     className="w-full sm:w-auto"
                     onClick={() => {
-                      if (parsed.kind !== 'epic' && parsed.kind !== 'story') {
+                      if (
+                        parsed.kind !== 'epic' &&
+                        parsed.kind !== 'story' &&
+                        parsed.kind !== 'milestone'
+                      ) {
                         return;
                       }
                       setManageAgile({
@@ -841,6 +891,26 @@ export function ProjectDeliveryPanel({
         {viewMode === 'calendar' ? (
           <ProjectDeliveryCalendar items={calendarItems} />
         ) : null}
+        {viewMode === 'timeline' ? (
+          <ProjectDeliveryTimeline
+            projectStartDate={projectStartDate}
+            projectEndDate={projectEndDate}
+            epics={epics}
+            stories={stories}
+            milestones={milestones}
+            tasks={tasks}
+            onManageEpic={(epicId) =>
+              setManageAgile({ kind: 'epic', id: epicId })
+            }
+            onManageStory={(storyId) =>
+              setManageAgile({ kind: 'story', id: storyId })
+            }
+            onManageMilestone={(milestoneId) =>
+              setManageAgile({ kind: 'milestone', id: milestoneId })
+            }
+            onManageTask={(taskId) => setManageTaskId(taskId)}
+          />
+        ) : null}
       </Modal>
 
       <Modal
@@ -892,30 +962,80 @@ export function ProjectDeliveryPanel({
             />
           </Field>
           {createKind === 'milestone' ? (
-            <Field label={t('targetDate')}>
-              <Input
-                type="date"
-                value={dateValue}
-                onChange={(e) => setDateValue(e.target.value)}
-                disabled={pending}
-              />
-            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t('startDate')}>
+                <Input
+                  type="date"
+                  value={startDateValue}
+                  onChange={(e) => setStartDateValue(e.target.value)}
+                  disabled={pending}
+                />
+              </Field>
+              <Field label={t('targetDate')}>
+                <Input
+                  type="date"
+                  value={dateValue}
+                  onChange={(e) => setDateValue(e.target.value)}
+                  disabled={pending}
+                />
+              </Field>
+            </div>
+          ) : null}
+          {createKind === 'epic' ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t('startDate')}>
+                <Input
+                  type="date"
+                  value={startDateValue}
+                  onChange={(e) => setStartDateValue(e.target.value)}
+                  disabled={pending}
+                />
+              </Field>
+              <Field label={t('endDate')}>
+                <Input
+                  type="date"
+                  value={endDateValue}
+                  onChange={(e) => setEndDateValue(e.target.value)}
+                  disabled={pending}
+                />
+              </Field>
+            </div>
           ) : null}
           {createKind === 'story' ? (
-            <Field label={t('selectEpic')}>
-              <Select
-                value={storyEpicId}
-                onChange={(e) => setStoryEpicId(e.target.value)}
-                disabled={pending}
-              >
-                <option value="">{t('selectEpic')}</option>
-                {epics.map((epic) => (
-                  <option key={epic.id} value={epic.id}>
-                    {epic.title}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <>
+              <Field label={t('selectEpic')}>
+                <Select
+                  value={storyEpicId}
+                  onChange={(e) => setStoryEpicId(e.target.value)}
+                  disabled={pending}
+                >
+                  <option value="">{t('selectEpic')}</option>
+                  {epics.map((epic) => (
+                    <option key={epic.id} value={epic.id}>
+                      {epic.title}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t('startDate')}>
+                  <Input
+                    type="date"
+                    value={startDateValue}
+                    onChange={(e) => setStartDateValue(e.target.value)}
+                    disabled={pending}
+                  />
+                </Field>
+                <Field label={t('endDate')}>
+                  <Input
+                    type="date"
+                    value={endDateValue}
+                    onChange={(e) => setEndDateValue(e.target.value)}
+                    disabled={pending}
+                  />
+                </Field>
+              </div>
+            </>
           ) : null}
           {createKind === 'task' ? (
             <>
@@ -1029,6 +1149,7 @@ export function ProjectDeliveryPanel({
         projectId={projectId}
         epics={epics}
         stories={stories}
+        milestones={milestones}
         canMutate={canMutate}
         onSaved={(kind, item) => {
           if (kind === 'epic') {
@@ -1043,7 +1164,7 @@ export function ProjectDeliveryPanel({
                   : task,
               ),
             );
-          } else {
+          } else if (kind === 'story') {
             const story = item as UserStory;
             setStories((prev) =>
               prev.map((row) =>
@@ -1063,10 +1184,20 @@ export function ProjectDeliveryPanel({
                   : task,
               ),
             );
+          } else {
+            const milestone = item as Milestone;
+            setMilestones((prev) =>
+              prev.map((row) =>
+                row.id === milestone.id ? { ...row, ...milestone } : row,
+              ),
+            );
           }
           refresh();
         }}
         onDeleted={(kind, id) => {
+          if (kind === 'milestone') {
+            return;
+          }
           if (kind === 'epic') {
             const removedStoryIds = new Set(
               stories.filter((story) => story.epicId === id).map((s) => s.id),

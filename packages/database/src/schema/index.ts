@@ -151,6 +151,18 @@ export const projects = pgTable(
     }),
     businessDomain: text('business_domain'),
     criticality: text('criticality'),
+    startDate: date('start_date', { mode: 'string' }),
+    endDate: date('end_date', { mode: 'string' }),
+    /** Pinned project charter knowledge record (same project). */
+    charterRecordId: uuid('charter_record_id').references(
+      (): AnyPgColumn => knowledgeRecords.id,
+      { onDelete: 'set null' },
+    ),
+    /** Pinned initial plan knowledge record (same project). */
+    initialPlanRecordId: uuid('initial_plan_record_id').references(
+      (): AnyPgColumn => knowledgeRecords.id,
+      { onDelete: 'set null' },
+    ),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
@@ -968,6 +980,7 @@ export const projectMilestones = pgTable(
     title: text('title').notNull(),
     description: text('description'),
     status: text('status').notNull().default('planned'),
+    startDate: date('start_date', { mode: 'string' }),
     targetDate: date('target_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
@@ -990,6 +1003,8 @@ export const projectEpics = pgTable(
     title: text('title').notNull(),
     description: text('description'),
     status: text('status').notNull().default('planned'),
+    startDate: date('start_date', { mode: 'string' }),
+    endDate: date('end_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
@@ -1014,6 +1029,8 @@ export const projectUserStories = pgTable(
     title: text('title').notNull(),
     description: text('description'),
     status: text('status').notNull().default('planned'),
+    startDate: date('start_date', { mode: 'string' }),
+    endDate: date('end_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
@@ -1226,5 +1243,98 @@ export const knowledgeRecordDeliveryLinks = pgTable(
       table.entityId,
     ),
     index('knowledge_record_delivery_links_record_idx').on(table.knowledgeRecordId),
+  ],
+);
+
+/** Kickoff stakeholder snapshot (separate from live project_stakeholders roster). */
+export const projectInitialStakeholders = pgTable(
+  'project_initial_stakeholders',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    projectRole: text('project_role').notNull().default('stakeholder'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('project_initial_stakeholders_project_user_uidx').on(
+      table.projectId,
+      table.userId,
+    ),
+    index('project_initial_stakeholders_project_id_idx').on(table.projectId),
+  ],
+);
+
+/** Change management register for baseline / plan / timeline changes. */
+export const projectChangeItems = pgTable(
+  'project_change_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    rationale: text('rationale'),
+    status: text('status').notNull().default('proposed'),
+    requestedByUserId: uuid('requested_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    approvedByUserId: uuid('approved_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    requestedAt: timestamp('requested_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'date' }),
+    effectiveDate: date('effective_date', { mode: 'string' }),
+    baselineStartBefore: date('baseline_start_before', { mode: 'string' }),
+    baselineStartAfter: date('baseline_start_after', { mode: 'string' }),
+    baselineEndBefore: date('baseline_end_before', { mode: 'string' }),
+    baselineEndAfter: date('baseline_end_after', { mode: 'string' }),
+    knowledgeRecordId: uuid('knowledge_record_id').references(
+      () => knowledgeRecords.id,
+      { onDelete: 'set null' },
+    ),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('project_change_items_project_id_idx').on(table.projectId),
+    index('project_change_items_project_status_idx').on(table.projectId, table.status),
+  ],
+);
+
+/** Links a change item to delivery entities (epic / story / milestone / task). */
+export const projectChangeDeliveryLinks = pgTable(
+  'project_change_delivery_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    changeId: uuid('change_id')
+      .notNull()
+      .references(() => projectChangeItems.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_change_delivery_links_uidx').on(
+      table.changeId,
+      table.entityType,
+      table.entityId,
+    ),
+    index('project_change_delivery_links_entity_idx').on(
+      table.entityType,
+      table.entityId,
+    ),
   ],
 );

@@ -1,6 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import {
+  ProjectBaselinePanel,
+  type InitialStakeholder,
+} from '../../../../../../components/ProjectBaselinePanel';
+import {
+  ProjectChangePanel,
+  type ChangeItem,
+} from '../../../../../../components/ProjectChangePanel';
 import { ProjectDeliveryPanel } from '../../../../../../components/ProjectDeliveryPanel';
 import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
@@ -43,6 +51,22 @@ type Project = {
   summary: string | null;
   description: string | null;
   tags: Array<{ name: string }>;
+  startDate: string | null;
+  endDate: string | null;
+  charterRecordId: string | null;
+  charterRecord: {
+    id: string;
+    title: string;
+    slug: string;
+    recordType: string;
+  } | null;
+  initialPlanRecordId: string | null;
+  initialPlanRecord: {
+    id: string;
+    title: string;
+    slug: string;
+    recordType: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -135,6 +159,8 @@ export default async function ProjectDetailPage({
     membersResponse,
     stakeholdersResponse,
     raidResponse,
+    initialStakeholdersResponse,
+    changesResponse,
   ] = await Promise.all([
     apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
     apiFetch(
@@ -147,6 +173,8 @@ export default async function ProjectDetailPage({
     apiFetch(`/api/v1/workspaces/${workspace.id}/members`),
     apiFetch(`/api/v1/projects/${project.id}/stakeholders`),
     apiFetch(`/api/v1/projects/${project.id}/raid-items`),
+    apiFetch(`/api/v1/projects/${project.id}/initial-stakeholders`),
+    apiFetch(`/api/v1/projects/${project.id}/change-items`),
   ]);
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
@@ -162,6 +190,7 @@ export default async function ProjectDetailPage({
           title: string;
           description: string | null;
           status: string;
+          startDate: string | null;
           targetDate: string | null;
           sortOrder: number;
           createdAt?: string;
@@ -206,6 +235,8 @@ export default async function ProjectDetailPage({
           title: string;
           description: string | null;
           status: string;
+          startDate: string | null;
+          endDate: string | null;
           sortOrder: number;
           createdAt?: string;
           updatedAt?: string;
@@ -220,6 +251,8 @@ export default async function ProjectDetailPage({
           title: string;
           description: string | null;
           status: string;
+          startDate: string | null;
+          endDate: string | null;
           sortOrder: number;
           createdAt?: string;
           updatedAt?: string;
@@ -249,6 +282,17 @@ export default async function ProjectDetailPage({
     : [];
   const raidItems = raidResponse.ok
     ? ((await raidResponse.json()) as { raidItems: RaidItem[] }).raidItems
+    : [];
+  const initialStakeholders = initialStakeholdersResponse.ok
+    ? (
+        (await initialStakeholdersResponse.json()) as {
+          initialStakeholders: InitialStakeholder[];
+        }
+      ).initialStakeholders
+    : [];
+  const changeItems = changesResponse.ok
+    ? ((await changesResponse.json()) as { changeItems: ChangeItem[] })
+        .changeItems
     : [];
 
   const deliveryRag = projectDeliveryRag([
@@ -296,6 +340,7 @@ export default async function ProjectDetailPage({
             project={project}
             canMutate={canMutate}
             canPurge={canPurge}
+            knowledgeRecords={knowledgeRecords}
           />
         }
       />
@@ -310,6 +355,16 @@ export default async function ProjectDetailPage({
         ) : null}
       </Panel>
 
+      <ProjectBaselinePanel
+        projectId={project.id}
+        workspaceSlug={workspace.slug}
+        canMutate={canMutate && !isArchived}
+        project={project}
+        initialStakeholders={initialStakeholders}
+        members={members}
+        knowledgeRecords={knowledgeRecords}
+      />
+
       <ProjectStakeholdersPanel
         projectId={project.id}
         canMutate={canMutate && !isArchived}
@@ -321,6 +376,8 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         workspaceId={workspace.id}
         canMutate={canMutate && !isArchived}
+        projectStartDate={project.startDate}
+        projectEndDate={project.endDate}
         initialEpics={epics}
         initialStories={stories}
         initialMilestones={milestones}
@@ -338,6 +395,36 @@ export default async function ProjectDetailPage({
           status: task.status,
         }))}
         members={members}
+      />
+
+      <ProjectChangePanel
+        projectId={project.id}
+        canMutate={canMutate && !isArchived}
+        initialChangeItems={changeItems}
+        members={members}
+        deliveryOptions={[
+          ...epics.map((epic) => ({
+            entityType: 'epic' as const,
+            entityId: epic.id,
+            title: epic.title,
+          })),
+          ...stories.map((story) => ({
+            entityType: 'user_story' as const,
+            entityId: story.id,
+            title: story.title,
+          })),
+          ...milestones.map((milestone) => ({
+            entityType: 'milestone' as const,
+            entityId: milestone.id,
+            title: milestone.title,
+          })),
+          ...tasks.map((task) => ({
+            entityType: 'task' as const,
+            entityId: task.id,
+            title: task.title,
+          })),
+        ]}
+        knowledgeRecords={knowledgeRecords}
       />
 
       <ProjectLinkedSections

@@ -10,6 +10,9 @@ import {
 import {
   AppError,
   buildKnowledgeRecordMetadata,
+  changeDeliveryEntityTypeSchema,
+  changeKindSchema,
+  changeStatusSchema,
   deliveryLinkEntityTypeSchema,
   epicStatusSchema,
   milestoneStatusSchema,
@@ -94,6 +97,18 @@ import {
   setRaidTaskLinks,
   updateRaidItem,
 } from './project-raid.js';
+import {
+  assertPinnedKnowledgeRecord,
+  listInitialStakeholders,
+  loadPinnedRecords,
+  setInitialStakeholders,
+} from './project-baseline.js';
+import {
+  createChangeItem,
+  getChangeItem,
+  listChangeItems,
+  updateChangeItem,
+} from './project-changes.js';
 import {
   getKnowledgeRecordProjectContext,
   listDeliveryLinksForRecord,
@@ -363,6 +378,10 @@ export function createMcpToolHandlers(
       }
       assertWorkspaceAllowed(client, project.workspaceId);
       assertProjectAllowed(client, project.id);
+      const pinned = await loadPinnedRecords(app.database, [
+        project.charterRecordId,
+        project.initialPlanRecordId,
+      ]);
       return {
         project: {
           id: project.id,
@@ -372,8 +391,158 @@ export function createMcpToolHandlers(
           status: project.status,
           summary: project.summary,
           description: project.description,
+          startDate: project.startDate,
+          endDate: project.endDate,
+          charterRecordId: project.charterRecordId,
+          charterRecord: project.charterRecordId
+            ? pinned.get(project.charterRecordId) ?? null
+            : null,
+          initialPlanRecordId: project.initialPlanRecordId,
+          initialPlanRecord: project.initialPlanRecordId
+            ? pinned.get(project.initialPlanRecordId) ?? null
+            : null,
         },
       };
+    },
+
+    async updateProjectBaseline(input: {
+      projectId: string;
+      startDate?: string | null;
+      endDate?: string | null;
+      charterRecordId?: string | null;
+      initialPlanRecordId?: string | null;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const nextCharterId =
+        input.charterRecordId === undefined
+          ? project.charterRecordId
+          : input.charterRecordId;
+      const nextPlanId =
+        input.initialPlanRecordId === undefined
+          ? project.initialPlanRecordId
+          : input.initialPlanRecordId;
+      if (nextCharterId) {
+        await assertPinnedKnowledgeRecord(app.database, {
+          recordId: nextCharterId,
+          projectId: project.id,
+          expectedTypes: ['project-charter'],
+        });
+      }
+      if (nextPlanId) {
+        await assertPinnedKnowledgeRecord(app.database, {
+          recordId: nextPlanId,
+          projectId: project.id,
+          expectedTypes: ['plan'],
+        });
+      }
+      const [updated] = await app.database.db
+        .update(projects)
+        .set({
+          startDate:
+            input.startDate === undefined ? project.startDate : input.startDate,
+          endDate:
+            input.endDate === undefined ? project.endDate : input.endDate,
+          charterRecordId: nextCharterId,
+          initialPlanRecordId: nextPlanId,
+          updatedAt: new Date(),
+        })
+        .where(eq(projects.id, project.id))
+        .returning();
+      if (!updated) {
+        throw new AppError({
+          code: 'PROJECT_NOT_FOUND',
+          message: 'Project not found',
+          statusCode: 404,
+        });
+      }
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.baseline_updated',
+        entityType: 'project',
+        entityId: project.id,
+        metadata: { via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      const pinned = await loadPinnedRecords(app.database, [
+        updated.charterRecordId,
+        updated.initialPlanRecordId,
+      ]);
+      return {
+        project: {
+          id: updated.id,
+          workspaceId: updated.workspaceId,
+          name: updated.name,
+          slug: updated.slug,
+          status: updated.status,
+          summary: updated.summary,
+          description: updated.description,
+          startDate: updated.startDate,
+          endDate: updated.endDate,
+          charterRecordId: updated.charterRecordId,
+          charterRecord: updated.charterRecordId
+            ? pinned.get(updated.charterRecordId) ?? null
+            : null,
+          initialPlanRecordId: updated.initialPlanRecordId,
+          initialPlanRecord: updated.initialPlanRecordId
+            ? pinned.get(updated.initialPlanRecordId) ?? null
+            : null,
+        },
+      };
+    },
+
+    async listProjectInitialStakeholders(input: { projectId: string }) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        initialStakeholders: await listInitialStakeholders(
+          app.database,
+          input.projectId,
+        ),
+      };
+    },
+
+    async setProjectInitialStakeholders(input: {
+      projectId: string;
+      stakeholders: Array<{
+        userId: string;
+        projectRole?: string;
+        sortOrder?: number;
+      }>;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const initialStakeholders = await setInitialStakeholders(app.database, {
+        projectId: project.id,
+        workspaceId: project.workspaceId,
+        stakeholders: input.stakeholders.map((row) => ({
+          userId: row.userId,
+          projectRole: row.projectRole
+            ? projectStakeholderRoleSchema.parse(row.projectRole)
+            : undefined,
+          sortOrder: row.sortOrder,
+        })),
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.initial_stakeholders_set',
+        entityType: 'project',
+        entityId: project.id,
+        metadata: {
+          count: initialStakeholders.length,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { initialStakeholders };
     },
 
     async getSystem({ systemId }) {
@@ -1128,6 +1297,7 @@ export function createMcpToolHandlers(
         status: input.status
           ? milestoneStatusSchema.parse(input.status)
           : undefined,
+        startDate: input.startDate,
         targetDate: input.targetDate,
         sortOrder: input.sortOrder,
       });
@@ -1161,6 +1331,7 @@ export function createMcpToolHandlers(
         status: input.status
           ? milestoneStatusSchema.parse(input.status)
           : undefined,
+        startDate: input.startDate,
         targetDate: input.targetDate,
         sortOrder: input.sortOrder,
         archived: input.archived,
@@ -1303,6 +1474,8 @@ export function createMcpToolHandlers(
         title: input.title,
         description: input.description,
         status: input.status ? epicStatusSchema.parse(input.status) : undefined,
+        startDate: input.startDate,
+        endDate: input.endDate,
         sortOrder: input.sortOrder,
       });
       await writeAuditEvent(app.database, {
@@ -1328,6 +1501,8 @@ export function createMcpToolHandlers(
         title: input.title,
         description: input.description,
         status: input.status ? epicStatusSchema.parse(input.status) : undefined,
+        startDate: input.startDate,
+        endDate: input.endDate,
         sortOrder: input.sortOrder,
         archived: input.archived,
       });
@@ -1367,6 +1542,8 @@ export function createMcpToolHandlers(
         status: input.status
           ? userStoryStatusSchema.parse(input.status)
           : undefined,
+        startDate: input.startDate,
+        endDate: input.endDate,
         sortOrder: input.sortOrder,
       });
       await writeAuditEvent(app.database, {
@@ -1395,6 +1572,8 @@ export function createMcpToolHandlers(
           ? userStoryStatusSchema.parse(input.status)
           : undefined,
         epicId: input.epicId,
+        startDate: input.startDate,
+        endDate: input.endDate,
         sortOrder: input.sortOrder,
         archived: input.archived,
       });
@@ -1710,6 +1889,143 @@ export function createMcpToolHandlers(
           input.recordId,
         ),
       };
+    },
+
+    async listProjectChangeItems(input: {
+      projectId: string;
+      includeArchived?: boolean;
+    }) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        changeItems: await listChangeItems(app.database, input.projectId, {
+          includeArchived: input.includeArchived,
+        }),
+      };
+    },
+
+    async createProjectChangeItem(input: {
+      projectId: string;
+      kind: string;
+      title: string;
+      description?: string | null;
+      rationale?: string | null;
+      status?: string;
+      requestedByUserId?: string | null;
+      approvedByUserId?: string | null;
+      effectiveDate?: string | null;
+      baselineStartBefore?: string | null;
+      baselineStartAfter?: string | null;
+      baselineEndBefore?: string | null;
+      baselineEndAfter?: string | null;
+      knowledgeRecordId?: string | null;
+      sortOrder?: number;
+      deliveryLinks?: Array<{ entityType: string; entityId: string }>;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const changeItem = await createChangeItem(app.database, {
+        projectId: project.id,
+        workspaceId: project.workspaceId,
+        kind: changeKindSchema.parse(input.kind),
+        title: input.title,
+        description: input.description,
+        rationale: input.rationale,
+        status: input.status
+          ? changeStatusSchema.parse(input.status)
+          : undefined,
+        requestedByUserId: input.requestedByUserId ?? actingUserId,
+        approvedByUserId: input.approvedByUserId,
+        effectiveDate: input.effectiveDate,
+        baselineStartBefore: input.baselineStartBefore,
+        baselineStartAfter: input.baselineStartAfter,
+        baselineEndBefore: input.baselineEndBefore,
+        baselineEndAfter: input.baselineEndAfter,
+        knowledgeRecordId: input.knowledgeRecordId,
+        sortOrder: input.sortOrder,
+        deliveryLinks: input.deliveryLinks?.map((link) => ({
+          entityType: changeDeliveryEntityTypeSchema.parse(link.entityType),
+          entityId: link.entityId,
+        })),
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.change_item_created',
+        entityType: 'project_change_item',
+        entityId: changeItem.id,
+        metadata: {
+          projectId: project.id,
+          kind: changeItem.kind,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { changeItem };
+    },
+
+    async updateProjectChangeItem(input: {
+      changeId: string;
+      kind?: string;
+      title?: string;
+      description?: string | null;
+      rationale?: string | null;
+      status?: string;
+      requestedByUserId?: string | null;
+      approvedByUserId?: string | null;
+      effectiveDate?: string | null;
+      baselineStartBefore?: string | null;
+      baselineStartAfter?: string | null;
+      baselineEndBefore?: string | null;
+      baselineEndAfter?: string | null;
+      knowledgeRecordId?: string | null;
+      sortOrder?: number;
+      archived?: boolean;
+      deliveryLinks?: Array<{ entityType: string; entityId: string }>;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getChangeItem(app.database, input.changeId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const changeItem = await updateChangeItem(app.database, input.changeId, {
+        workspaceId: project.workspaceId,
+        kind: input.kind ? changeKindSchema.parse(input.kind) : undefined,
+        title: input.title,
+        description: input.description,
+        rationale: input.rationale,
+        status: input.status
+          ? changeStatusSchema.parse(input.status)
+          : undefined,
+        requestedByUserId: input.requestedByUserId,
+        approvedByUserId: input.approvedByUserId,
+        effectiveDate: input.effectiveDate,
+        baselineStartBefore: input.baselineStartBefore,
+        baselineStartAfter: input.baselineStartAfter,
+        baselineEndBefore: input.baselineEndBefore,
+        baselineEndAfter: input.baselineEndAfter,
+        knowledgeRecordId: input.knowledgeRecordId,
+        sortOrder: input.sortOrder,
+        archived: input.archived,
+        deliveryLinks: input.deliveryLinks?.map((link) => ({
+          entityType: changeDeliveryEntityTypeSchema.parse(link.entityType),
+          entityId: link.entityId,
+        })),
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.change_item_updated',
+        entityType: 'project_change_item',
+        entityId: changeItem.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { changeItem };
     },
 
     async setKnowledgeRecordDeliveryLinks(input) {

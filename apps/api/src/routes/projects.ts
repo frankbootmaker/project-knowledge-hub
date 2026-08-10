@@ -3,7 +3,11 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { slugify } from '@project-knowledge-hub/auth';
 import { projects, workspaces } from '@project-knowledge-hub/database';
-import { AppError, projectStatusSchema } from '@project-knowledge-hub/domain';
+import {
+  AppError,
+  projectStakeholderRoleSchema,
+  projectStatusSchema,
+} from '@project-knowledge-hub/domain';
 import {
   requireWorkspaceAdmin,
   requireWorkspaceMaintainer,
@@ -15,6 +19,17 @@ import {
 } from '../plugins/auth.js';
 import { writeAuditEvent } from '../lib/identity.js';
 import { getProjectTags, setProjectTags } from '../lib/tags.js';
+import {
+  assertPinnedKnowledgeRecord,
+  listInitialStakeholders,
+  loadPinnedRecords,
+  setInitialStakeholders,
+} from '../lib/project-baseline.js';
+
+const dateStringSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable();
 
 const createProjectSchema = z.object({
   workspaceId: z.string().uuid(),
@@ -26,6 +41,10 @@ const createProjectSchema = z.object({
   ownerUserId: z.string().uuid().nullable().optional(),
   businessDomain: z.string().max(160).optional(),
   criticality: z.string().max(80).optional(),
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
+  charterRecordId: z.string().uuid().nullable().optional(),
+  initialPlanRecordId: z.string().uuid().nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -38,15 +57,36 @@ const updateProjectSchema = z.object({
   ownerUserId: z.string().uuid().nullable().optional(),
   businessDomain: z.string().max(160).nullable().optional(),
   criticality: z.string().max(80).nullable().optional(),
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
+  charterRecordId: z.string().uuid().nullable().optional(),
+  initialPlanRecordId: z.string().uuid().nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
   archived: z.boolean().optional(),
 });
 
-function toPublicProject(
+const initialStakeholdersSchema = z.object({
+  stakeholders: z
+    .array(
+      z.object({
+        userId: z.string().uuid(),
+        projectRole: projectStakeholderRoleSchema.optional(),
+        sortOrder: z.number().int().min(0).max(100000).optional(),
+      }),
+    )
+    .max(200),
+});
+
+async function toPublicProject(
+  database: Parameters<typeof loadPinnedRecords>[0],
   project: typeof projects.$inferSelect,
   tagList: Array<{ id: string; name: string; slug: string }>,
 ) {
+  const pinned = await loadPinnedRecords(database, [
+    project.charterRecordId,
+    project.initialPlanRecordId,
+  ]);
   return {
     id: project.id,
     workspaceId: project.workspaceId,
@@ -58,6 +98,16 @@ function toPublicProject(
     ownerUserId: project.ownerUserId,
     businessDomain: project.businessDomain,
     criticality: project.criticality,
+    startDate: project.startDate,
+    endDate: project.endDate,
+    charterRecordId: project.charterRecordId,
+    charterRecord: project.charterRecordId
+      ? pinned.get(project.charterRecordId) ?? null
+      : null,
+    initialPlanRecordId: project.initialPlanRecordId,
+    initialPlanRecord: project.initialPlanRecordId
+      ? pinned.get(project.initialPlanRecordId) ?? null
+      : null,
     metadata: project.metadataJson,
     tags: tagList,
     archivedAt: project.archivedAt?.toISOString() ?? null,
@@ -96,7 +146,11 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     );
 
     return {
-      projects: rows.map((row) => toPublicProject(row, tagMap.get(row.id) ?? [])),
+      projects: await Promise.all(
+        rows.map((row) =>
+          toPublicProject(app.database, row, tagMap.get(row.id) ?? []),
+        ),
+      ),
     };
   });
 
@@ -155,6 +209,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         ownerUserId: body.ownerUserId ?? principal.userId,
         businessDomain: body.businessDomain ?? null,
         criticality: body.criticality ?? null,
+        startDate: body.startDate ?? null,
+        endDate: body.endDate ?? null,
+        charterRecordId: null,
+        initialPlanRecordId: null,
         metadataJson: body.metadata ?? null,
         updatedAt: new Date(),
       })
@@ -167,6 +225,37 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         statusCode: 500,
       });
     }
+
+    if (body.charterRecordId) {
+      await assertPinnedKnowledgeRecord(app.database, {
+        recordId: body.charterRecordId,
+        projectId: created.id,
+        expectedTypes: ['project-charter'],
+      });
+    }
+    if (body.initialPlanRecordId) {
+      await assertPinnedKnowledgeRecord(app.database, {
+        recordId: body.initialPlanRecordId,
+        projectId: created.id,
+        expectedTypes: ['plan'],
+      });
+    }
+    if (body.charterRecordId || body.initialPlanRecordId) {
+      await app.database.db
+        .update(projects)
+        .set({
+          charterRecordId: body.charterRecordId ?? null,
+          initialPlanRecordId: body.initialPlanRecordId ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(projects.id, created.id));
+    }
+
+    const [fresh] = await app.database.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, created.id))
+      .limit(1);
 
     const tagList = await setProjectTags(
       app.database,
@@ -186,7 +275,9 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       ipAddress: request.ip,
     });
 
-    return { project: toPublicProject(created, tagList) };
+    return {
+      project: await toPublicProject(app.database, fresh ?? created, tagList),
+    };
   });
 
   app.get('/api/v1/projects/:projectId', async (request) => {
@@ -208,7 +299,89 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
 
     requireWorkspaceView(principal, project.workspaceId);
     const tagMap = await getProjectTags(app.database, [project.id]);
-    return { project: toPublicProject(project, tagMap.get(project.id) ?? []) };
+    return {
+      project: await toPublicProject(
+        app.database,
+        project,
+        tagMap.get(project.id) ?? [],
+      ),
+    };
+  });
+
+  app.get('/api/v1/projects/:projectId/initial-stakeholders', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
+    const [project] = await app.database.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, params.projectId))
+      .limit(1);
+    if (!project) {
+      throw new AppError({
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found',
+        statusCode: 404,
+      });
+    }
+    requireWorkspaceView(principal, project.workspaceId);
+    return {
+      initialStakeholders: await listInitialStakeholders(
+        app.database,
+        project.id,
+      ),
+    };
+  });
+
+  app.put('/api/v1/projects/:projectId/initial-stakeholders', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
+    const body = initialStakeholdersSchema.parse(request.body);
+    const [project] = await app.database.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, params.projectId))
+      .limit(1);
+    if (!project) {
+      throw new AppError({
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found',
+        statusCode: 404,
+      });
+    }
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    if (project.archivedAt) {
+      throw new AppError({
+        code: 'PROJECT_ARCHIVED',
+        message: 'Archived projects are read-only',
+        statusCode: 409,
+      });
+    }
+
+    const initialStakeholders = await setInitialStakeholders(app.database, {
+      projectId: project.id,
+      workspaceId: project.workspaceId,
+      stakeholders: body.stakeholders,
+    });
+
+    const [workspace] = await app.database.db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, project.workspaceId))
+      .limit(1);
+
+    await writeAuditEvent(app.database, {
+      organizationId: workspace?.organizationId ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.initial_stakeholders_set',
+      entityType: 'project',
+      entityId: project.id,
+      metadata: { count: initialStakeholders.length },
+      ipAddress: request.ip,
+    });
+
+    return { initialStakeholders };
   });
 
   app.patch('/api/v1/projects/:projectId', async (request) => {
@@ -239,6 +412,30 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       .where(eq(workspaces.id, project.workspaceId))
       .limit(1);
 
+    const nextCharterId =
+      body.charterRecordId === undefined
+        ? project.charterRecordId
+        : body.charterRecordId;
+    const nextPlanId =
+      body.initialPlanRecordId === undefined
+        ? project.initialPlanRecordId
+        : body.initialPlanRecordId;
+
+    if (nextCharterId) {
+      await assertPinnedKnowledgeRecord(app.database, {
+        recordId: nextCharterId,
+        projectId: project.id,
+        expectedTypes: ['project-charter'],
+      });
+    }
+    if (nextPlanId) {
+      await assertPinnedKnowledgeRecord(app.database, {
+        recordId: nextPlanId,
+        projectId: project.id,
+        expectedTypes: ['plan'],
+      });
+    }
+
     const [updated] = await app.database.db
       .update(projects)
       .set({
@@ -250,6 +447,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         businessDomain:
           body.businessDomain === undefined ? project.businessDomain : body.businessDomain,
         criticality: body.criticality === undefined ? project.criticality : body.criticality,
+        startDate: body.startDate === undefined ? project.startDate : body.startDate,
+        endDate: body.endDate === undefined ? project.endDate : body.endDate,
+        charterRecordId: nextCharterId,
+        initialPlanRecordId: nextPlanId,
         metadataJson: body.metadata === undefined ? project.metadataJson : body.metadata,
         archivedAt:
           body.archived === undefined
@@ -292,7 +493,9 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       ipAddress: request.ip,
     });
 
-    return { project: toPublicProject(updated, tagList) };
+    return {
+      project: await toPublicProject(app.database, updated, tagList),
+    };
   });
 
   app.delete('/api/v1/projects/:projectId', async (request) => {
@@ -341,7 +544,11 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     const tagMap = await getProjectTags(app.database, [project.id]);
     return {
       project: archived
-        ? toPublicProject(archived, tagMap.get(archived.id) ?? [])
+        ? await toPublicProject(
+            app.database,
+            archived,
+            tagMap.get(archived.id) ?? [],
+          )
         : null,
     };
   });

@@ -48,10 +48,17 @@ async function workspaceOrgId(
   return workspace?.organizationId ?? null;
 }
 
+const dateStringSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable();
+
 const createEpicSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5000).nullable().optional(),
   status: epicStatusSchema.optional(),
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
 });
 
@@ -59,6 +66,8 @@ const updateEpicSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(5000).nullable().optional(),
   status: epicStatusSchema.optional(),
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   archived: z.boolean().optional(),
 });
@@ -68,6 +77,8 @@ const createStorySchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5000).nullable().optional(),
   status: userStoryStatusSchema.optional(),
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
 });
 
@@ -76,6 +87,8 @@ const updateStorySchema = z.object({
   description: z.string().max(5000).nullable().optional(),
   status: userStoryStatusSchema.optional(),
   epicId: z.string().uuid().optional(),
+  startDate: dateStringSchema.optional(),
+  endDate: dateStringSchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   archived: z.boolean().optional(),
 });

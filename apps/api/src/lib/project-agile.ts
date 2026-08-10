@@ -29,6 +29,8 @@ export type PublicEpic = {
   title: string;
   description: string | null;
   status: EpicStatus;
+  startDate: string | null;
+  endDate: string | null;
   sortOrder: number;
   archivedAt: string | null;
   createdAt: string;
@@ -42,6 +44,8 @@ export type PublicUserStory = {
   title: string;
   description: string | null;
   status: UserStoryStatus;
+  startDate: string | null;
+  endDate: string | null;
   sortOrder: number;
   archivedAt: string | null;
   createdAt: string;
@@ -67,6 +71,8 @@ function toPublicEpic(row: typeof projectEpics.$inferSelect): PublicEpic {
     title: row.title,
     description: row.description,
     status: epicStatusSchema.parse(row.status),
+    startDate: row.startDate,
+    endDate: row.endDate,
     sortOrder: row.sortOrder,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -84,6 +90,8 @@ function toPublicUserStory(
     title: row.title,
     description: row.description,
     status: userStoryStatusSchema.parse(row.status),
+    startDate: row.startDate,
+    endDate: row.endDate,
     sortOrder: row.sortOrder,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -161,6 +169,8 @@ export async function createEpic(
     title: string;
     description?: string | null;
     status?: EpicStatus;
+    startDate?: string | null;
+    endDate?: string | null;
     sortOrder?: number;
   },
 ): Promise<PublicEpic> {
@@ -171,6 +181,8 @@ export async function createEpic(
       title: input.title,
       description: input.description ?? null,
       status: input.status ?? 'planned',
+      startDate: input.startDate ?? null,
+      endDate: input.endDate ?? null,
       sortOrder: input.sortOrder ?? 0,
     })
     .returning();
@@ -191,6 +203,8 @@ export async function updateEpic(
     title?: string;
     description?: string | null;
     status?: EpicStatus;
+    startDate?: string | null;
+    endDate?: string | null;
     sortOrder?: number;
     archived?: boolean;
   },
@@ -214,6 +228,8 @@ export async function updateEpic(
       description:
         input.description !== undefined ? input.description : existing.description,
       status: input.status ?? existing.status,
+      startDate: input.startDate !== undefined ? input.startDate : existing.startDate,
+      endDate: input.endDate !== undefined ? input.endDate : existing.endDate,
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:
         input.archived === undefined
@@ -303,6 +319,8 @@ export async function createUserStory(
     title: string;
     description?: string | null;
     status?: UserStoryStatus;
+    startDate?: string | null;
+    endDate?: string | null;
     sortOrder?: number;
   },
 ): Promise<PublicUserStory> {
@@ -315,6 +333,8 @@ export async function createUserStory(
       title: input.title,
       description: input.description ?? null,
       status: input.status ?? 'planned',
+      startDate: input.startDate ?? null,
+      endDate: input.endDate ?? null,
       sortOrder: input.sortOrder ?? 0,
     })
     .returning();
@@ -336,6 +356,8 @@ export async function updateUserStory(
     description?: string | null;
     status?: UserStoryStatus;
     epicId?: string;
+    startDate?: string | null;
+    endDate?: string | null;
     sortOrder?: number;
     archived?: boolean;
   },
@@ -363,6 +385,8 @@ export async function updateUserStory(
         input.description !== undefined ? input.description : existing.description,
       status: input.status ?? existing.status,
       epicId: input.epicId ?? existing.epicId,
+      startDate: input.startDate !== undefined ? input.startDate : existing.startDate,
+      endDate: input.endDate !== undefined ? input.endDate : existing.endDate,
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:
         input.archived === undefined

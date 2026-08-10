@@ -21,6 +21,24 @@ export type McpToolHandlers = {
     limit: number;
   }) => Promise<unknown>;
   getProject: (input: { projectId: string }) => Promise<unknown>;
+  updateProjectBaseline: (input: {
+    projectId: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    charterRecordId?: string | null;
+    initialPlanRecordId?: string | null;
+  }) => Promise<unknown>;
+  listProjectInitialStakeholders: (input: {
+    projectId: string;
+  }) => Promise<unknown>;
+  setProjectInitialStakeholders: (input: {
+    projectId: string;
+    stakeholders: Array<{
+      userId: string;
+      projectRole?: string;
+      sortOrder?: number;
+    }>;
+  }) => Promise<unknown>;
   getSystem: (input: { systemId: string }) => Promise<unknown>;
   listKnowledgeRecords: (input: {
     workspaceId: string;
@@ -133,6 +151,7 @@ export type McpToolHandlers = {
     title: string;
     description?: string | null;
     status?: string;
+    startDate?: string | null;
     targetDate?: string | null;
     sortOrder?: number;
   }) => Promise<unknown>;
@@ -141,6 +160,7 @@ export type McpToolHandlers = {
     title?: string;
     description?: string | null;
     status?: string;
+    startDate?: string | null;
     targetDate?: string | null;
     sortOrder?: number;
     archived?: boolean;
@@ -182,6 +202,8 @@ export type McpToolHandlers = {
     title: string;
     description?: string | null;
     status?: string;
+    startDate?: string | null;
+    endDate?: string | null;
     sortOrder?: number;
   }) => Promise<unknown>;
   updateProjectEpic: (input: {
@@ -189,6 +211,8 @@ export type McpToolHandlers = {
     title?: string;
     description?: string | null;
     status?: string;
+    startDate?: string | null;
+    endDate?: string | null;
     sortOrder?: number;
     archived?: boolean;
   }) => Promise<unknown>;
@@ -203,6 +227,8 @@ export type McpToolHandlers = {
     title: string;
     description?: string | null;
     status?: string;
+    startDate?: string | null;
+    endDate?: string | null;
     sortOrder?: number;
   }) => Promise<unknown>;
   updateProjectUserStory: (input: {
@@ -211,6 +237,8 @@ export type McpToolHandlers = {
     description?: string | null;
     status?: string;
     epicId?: string;
+    startDate?: string | null;
+    endDate?: string | null;
     sortOrder?: number;
     archived?: boolean;
   }) => Promise<unknown>;
@@ -276,6 +304,47 @@ export type McpToolHandlers = {
   setProjectRaidTaskLinks: (input: {
     raidItemId: string;
     taskIds: string[];
+  }) => Promise<unknown>;
+  listProjectChangeItems: (input: {
+    projectId: string;
+    includeArchived?: boolean;
+  }) => Promise<unknown>;
+  createProjectChangeItem: (input: {
+    projectId: string;
+    kind: string;
+    title: string;
+    description?: string | null;
+    rationale?: string | null;
+    status?: string;
+    requestedByUserId?: string | null;
+    approvedByUserId?: string | null;
+    effectiveDate?: string | null;
+    baselineStartBefore?: string | null;
+    baselineStartAfter?: string | null;
+    baselineEndBefore?: string | null;
+    baselineEndAfter?: string | null;
+    knowledgeRecordId?: string | null;
+    sortOrder?: number;
+    deliveryLinks?: Array<{ entityType: string; entityId: string }>;
+  }) => Promise<unknown>;
+  updateProjectChangeItem: (input: {
+    changeId: string;
+    kind?: string;
+    title?: string;
+    description?: string | null;
+    rationale?: string | null;
+    status?: string;
+    requestedByUserId?: string | null;
+    approvedByUserId?: string | null;
+    effectiveDate?: string | null;
+    baselineStartBefore?: string | null;
+    baselineStartAfter?: string | null;
+    baselineEndBefore?: string | null;
+    baselineEndAfter?: string | null;
+    knowledgeRecordId?: string | null;
+    sortOrder?: number;
+    archived?: boolean;
+    deliveryLinks?: Array<{ entityType: string; entityId: string }>;
   }) => Promise<unknown>;
   getKnowledgeRecordDeliveryLinks: (input: {
     recordId: string;
@@ -434,12 +503,86 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project',
-    'Get a project by id',
+    'Get a project by id (includes baseline dates and pinned charter/plan)',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap('get_project', 'projects:read', () => handlers.getProject(args), {
         projectId: args.projectId,
       })(),
+  );
+
+  server.tool(
+    'update_project_baseline',
+    'Update project baseline window and pinned charter / initial plan knowledge records. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      startDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      endDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+      charterRecordId: z.string().uuid().nullable().optional(),
+      initialPlanRecordId: z.string().uuid().nullable().optional(),
+    },
+    async (args) =>
+      wrap(
+        'update_project_baseline',
+        'pm:write',
+        () => handlers.updateProjectBaseline(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'list_project_initial_stakeholders',
+    'List the kickoff initial-stakeholders snapshot (separate from live roster). Requires pm:read.',
+    { projectId: z.string().uuid() },
+    async (args) =>
+      wrap(
+        'list_project_initial_stakeholders',
+        'pm:read',
+        () => handlers.listProjectInitialStakeholders(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'set_project_initial_stakeholders',
+    'Replace the kickoff initial-stakeholders snapshot. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      stakeholders: z
+        .array(
+          z.object({
+            userId: z.string().uuid(),
+            projectRole: z
+              .enum([
+                'sponsor',
+                'owner',
+                'product_owner',
+                'tech_lead',
+                'contributor',
+                'stakeholder',
+                'other',
+              ])
+              .optional(),
+            sortOrder: z.number().int().min(0).max(100000).optional(),
+          }),
+        )
+        .max(200),
+    },
+    async (args) =>
+      wrap(
+        'set_project_initial_stakeholders',
+        'pm:write',
+        () => handlers.setProjectInitialStakeholders(args),
+        { projectId: args.projectId },
+      )(),
   );
 
   server.tool(
@@ -795,6 +938,11 @@ export function createKnowledgeHubMcpServer(
       wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
   );
 
+  const ymdDate = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable();
+
   server.tool(
     'create_project_milestone',
     'Create a project milestone (live state). Requires pm:write.',
@@ -803,11 +951,8 @@ export function createKnowledgeHubMcpServer(
       title: z.string().min(1).max(200),
       description: z.string().max(5000).nullable().optional(),
       status: z.enum(['planned', 'active', 'done', 'cancelled']).optional(),
-      targetDate: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional(),
+      startDate: ymdDate.optional(),
+      targetDate: ymdDate.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
     },
     async (args) =>
@@ -827,11 +972,8 @@ export function createKnowledgeHubMcpServer(
       title: z.string().min(1).max(200).optional(),
       description: z.string().max(5000).nullable().optional(),
       status: z.enum(['planned', 'active', 'done', 'cancelled']).optional(),
-      targetDate: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional(),
+      startDate: ymdDate.optional(),
+      targetDate: ymdDate.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
     },
@@ -950,6 +1092,8 @@ export function createKnowledgeHubMcpServer(
       title: z.string().min(1).max(200),
       description: z.string().max(5000).nullable().optional(),
       status: epicStatusEnum.optional(),
+      startDate: ymdDate.optional(),
+      endDate: ymdDate.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
     },
     async (args) =>
@@ -969,6 +1113,8 @@ export function createKnowledgeHubMcpServer(
       title: z.string().min(1).max(200).optional(),
       description: z.string().max(5000).nullable().optional(),
       status: epicStatusEnum.optional(),
+      startDate: ymdDate.optional(),
+      endDate: ymdDate.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
     },
@@ -1002,6 +1148,8 @@ export function createKnowledgeHubMcpServer(
       title: z.string().min(1).max(200),
       description: z.string().max(5000).nullable().optional(),
       status: epicStatusEnum.optional(),
+      startDate: ymdDate.optional(),
+      endDate: ymdDate.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
     },
     async (args) =>
@@ -1022,6 +1170,8 @@ export function createKnowledgeHubMcpServer(
       description: z.string().max(5000).nullable().optional(),
       status: epicStatusEnum.optional(),
       epicId: z.string().uuid().optional(),
+      startDate: ymdDate.optional(),
+      endDate: ymdDate.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
     },
@@ -1229,6 +1379,117 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('set_project_raid_task_links', 'pm:write', () =>
         handlers.setProjectRaidTaskLinks(args),
+      )(),
+  );
+
+  const changeKindEnum = z.enum([
+    'scope',
+    'timeline',
+    'stakeholder',
+    'budget',
+    'other',
+  ]);
+  const changeStatusEnum = z.enum([
+    'proposed',
+    'approved',
+    'rejected',
+    'implemented',
+    'cancelled',
+  ]);
+  const changeDeliveryEntityEnum = z.enum([
+    'epic',
+    'user_story',
+    'milestone',
+    'task',
+  ]);
+
+  server.tool(
+    'list_project_change_items',
+    'List change-management register items for a project. Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      includeArchived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_project_change_items',
+        'pm:read',
+        () => handlers.listProjectChangeItems(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'create_project_change_item',
+    'Create a change-management item with optional delivery links. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      kind: changeKindEnum,
+      title: z.string().min(1).max(300),
+      description: z.string().max(10000).nullable().optional(),
+      rationale: z.string().max(10000).nullable().optional(),
+      status: changeStatusEnum.optional(),
+      requestedByUserId: z.string().uuid().nullable().optional(),
+      approvedByUserId: z.string().uuid().nullable().optional(),
+      effectiveDate: ymdDate.optional(),
+      baselineStartBefore: ymdDate.optional(),
+      baselineStartAfter: ymdDate.optional(),
+      baselineEndBefore: ymdDate.optional(),
+      baselineEndAfter: ymdDate.optional(),
+      knowledgeRecordId: z.string().uuid().nullable().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      deliveryLinks: z
+        .array(
+          z.object({
+            entityType: changeDeliveryEntityEnum,
+            entityId: z.string().uuid(),
+          }),
+        )
+        .max(200)
+        .optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_project_change_item',
+        'pm:write',
+        () => handlers.createProjectChangeItem(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'update_project_change_item',
+    'Update a change-management item. Requires pm:write.',
+    {
+      changeId: z.string().uuid(),
+      kind: changeKindEnum.optional(),
+      title: z.string().min(1).max(300).optional(),
+      description: z.string().max(10000).nullable().optional(),
+      rationale: z.string().max(10000).nullable().optional(),
+      status: changeStatusEnum.optional(),
+      requestedByUserId: z.string().uuid().nullable().optional(),
+      approvedByUserId: z.string().uuid().nullable().optional(),
+      effectiveDate: ymdDate.optional(),
+      baselineStartBefore: ymdDate.optional(),
+      baselineStartAfter: ymdDate.optional(),
+      baselineEndBefore: ymdDate.optional(),
+      baselineEndAfter: ymdDate.optional(),
+      knowledgeRecordId: z.string().uuid().nullable().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      archived: z.boolean().optional(),
+      deliveryLinks: z
+        .array(
+          z.object({
+            entityType: changeDeliveryEntityEnum,
+            entityId: z.string().uuid(),
+          }),
+        )
+        .max(200)
+        .optional(),
+    },
+    async (args) =>
+      wrap('update_project_change_item', 'pm:write', () =>
+        handlers.updateProjectChangeItem(args),
       )(),
   );
 

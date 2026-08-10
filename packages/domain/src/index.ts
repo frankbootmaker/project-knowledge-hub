@@ -154,6 +154,32 @@ export const deliveryLinkEntityTypeSchema = z.enum([
   'task',
 ]);
 
+/** Change management register kind. */
+export const changeKindSchema = z.enum([
+  'scope',
+  'timeline',
+  'stakeholder',
+  'budget',
+  'other',
+]);
+
+/** Change management lifecycle. */
+export const changeStatusSchema = z.enum([
+  'proposed',
+  'approved',
+  'rejected',
+  'implemented',
+  'cancelled',
+]);
+
+/** Change → delivery entity link (includes milestones). */
+export const changeDeliveryEntityTypeSchema = z.enum([
+  'epic',
+  'user_story',
+  'milestone',
+  'task',
+]);
+
 export const systemStatusSchema = z.enum([
   'proposed',
   'experimental',
@@ -269,6 +295,9 @@ export type RaidKind = z.infer<typeof raidKindSchema>;
 export type RaidStatus = z.infer<typeof raidStatusSchema>;
 export type RaidSeverity = z.infer<typeof raidSeveritySchema>;
 export type DeliveryLinkEntityType = z.infer<typeof deliveryLinkEntityTypeSchema>;
+export type ChangeKind = z.infer<typeof changeKindSchema>;
+export type ChangeStatus = z.infer<typeof changeStatusSchema>;
+export type ChangeDeliveryEntityType = z.infer<typeof changeDeliveryEntityTypeSchema>;
 
 export class AppError extends Error {
   readonly code: string;

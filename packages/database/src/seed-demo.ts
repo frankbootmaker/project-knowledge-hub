@@ -22,7 +22,10 @@ import {
   knowledgeRecordVersions,
   memberships,
   organizations,
+  projectChangeDeliveryLinks,
+  projectChangeItems,
   projectEpics,
+  projectInitialStakeholders,
   projectMilestones,
   projectRaidItems,
   projectRaidTaskLinks,
@@ -666,6 +669,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Network edge hardening',
         description: 'TLS, Traefik routes, and split-DNS notes for public MCP.',
         status: 'done',
+        startDate: ymd(-28),
         targetDate: ymd(-14),
         sortOrder: 10,
       })
@@ -677,6 +681,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Observability baseline',
         description: 'Monitoring, alerts, and backup age stamps.',
         status: 'active',
+        startDate: ymd(-7),
         targetDate: ymd(10),
         sortOrder: 20,
       })
@@ -689,6 +694,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         description:
           'Milestones, tasks, RACI, list/board/calendar for humans + MCP agents.',
         status: 'active',
+        startDate: ymd(0),
         targetDate: ymd(21),
         sortOrder: 30,
       })
@@ -700,6 +706,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Docs & restore drill',
         description: 'Runbook refresh and restore rehearsal.',
         status: 'planned',
+        startDate: ymd(28),
         targetDate: ymd(35),
         sortOrder: 40,
       })
@@ -716,6 +723,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'Make Homelab operable for agents',
         description: 'Epic covering edge, observability, and delivery UX.',
         status: 'active',
+        startDate: ymd(-30),
+        endDate: ymd(40),
         sortOrder: 10,
       })
       .returning();
@@ -730,6 +739,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'As an operator I can expose MCP safely',
         description: 'Edge hardening stories for public MCP access.',
         status: 'done',
+        startDate: ymd(-28),
+        endDate: ymd(-10),
         sortOrder: 10,
       })
       .returning();
@@ -741,6 +752,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         title: 'As a PM I can track work across stories',
         description: 'Delivery board, owners, and handoffs.',
         status: 'active',
+        startDate: ymd(-5),
+        endDate: ymd(25),
         sortOrder: 20,
       })
       .returning();
@@ -1166,9 +1179,129 @@ Keep public MCP behind Authentik + Tailscale ACL review.
       })
       .returning();
 
-    if (!charterRecord || !minutesRecord || !decisionRecord) {
+    const [planRecord] = await database.db
+      .insert(knowledgeRecords)
+      .values({
+        workspaceId: workspace.id,
+        projectId: labProject.id,
+        systemId: knowhub.id,
+        title: 'Homelab Knowledge Hub initial plan',
+        slug: 'homelab-initial-plan',
+        summary: 'Kickoff plan: phases, windows, and delivery milestones.',
+        recordType: 'plan',
+        lifecycleStatus: 'current',
+        sourceOfTruthMode: 'hub_managed',
+        contentMarkdown: `# Homelab Knowledge Hub initial plan
+
+## Window
+
+- Start: lab edge hardening
+- End: docs & restore drill
+
+## Phases
+
+1. Network edge
+2. Observability
+3. Delivery UX
+4. Docs & restore
+`,
+        createdBy: admin.id,
+        verifiedAt: new Date(),
+      })
+      .returning();
+
+    if (!charterRecord || !minutesRecord || !decisionRecord || !planRecord) {
       throw new Error('Failed to create delivery-linked demo documents');
     }
+
+    await database.db
+      .update(projects)
+      .set({
+        startDate: ymd(-30),
+        endDate: ymd(45),
+        charterRecordId: charterRecord.id,
+        initialPlanRecordId: planRecord.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, labProject.id));
+
+    await database.db.insert(projectInitialStakeholders).values([
+      {
+        projectId: labProject.id,
+        userId: admin.id,
+        projectRole: 'sponsor',
+        sortOrder: 10,
+      },
+      {
+        projectId: labProject.id,
+        userId: blair.id,
+        projectRole: 'tech_lead',
+        sortOrder: 20,
+      },
+      {
+        projectId: labProject.id,
+        userId: dana.id,
+        projectRole: 'product_owner',
+        sortOrder: 30,
+      },
+    ]);
+
+    const [timelineChange] = await database.db
+      .insert(projectChangeItems)
+      .values({
+        projectId: labProject.id,
+        kind: 'timeline',
+        title: 'Slip docs day by one week',
+        description: 'Restore drill conflicts with authentik maintenance.',
+        rationale: 'Keep edge hardening window; move docs milestone only.',
+        status: 'approved',
+        requestedByUserId: blair.id,
+        approvedByUserId: admin.id,
+        effectiveDate: ymd(0),
+        baselineStartBefore: ymd(-30),
+        baselineStartAfter: ymd(-30),
+        baselineEndBefore: ymd(38),
+        baselineEndAfter: ymd(45),
+        knowledgeRecordId: planRecord.id,
+        sortOrder: 10,
+      })
+      .returning();
+    const [scopeChange] = await database.db
+      .insert(projectChangeItems)
+      .values({
+        projectId: labProject.id,
+        kind: 'scope',
+        title: 'Add fishbone timeline view to Delivery',
+        description: 'Baseline + change register require a schedule swimlane.',
+        rationale: 'Operators need duration bars without a full Gantt.',
+        status: 'implemented',
+        requestedByUserId: dana.id,
+        approvedByUserId: blair.id,
+        effectiveDate: ymd(-2),
+        knowledgeRecordId: charterRecord.id,
+        sortOrder: 20,
+      })
+      .returning();
+    if (!timelineChange || !scopeChange) {
+      throw new Error('Failed to create lab change items');
+    }
+    await database.db.insert(projectChangeDeliveryLinks).values([
+      {
+        changeId: timelineChange.id,
+        entityType: 'milestone',
+        entityId: mDocsDay.id,
+      },
+      {
+        changeId: scopeChange.id,
+        entityType: 'epic',
+        entityId: labEpic.id,
+      },
+      {
+        changeId: scopeChange.id,
+        entityType: 'user_story',
+        entityId: storyDelivery.id,
+      },
+    ]);
 
     await database.db.insert(knowledgeRecordDeliveryLinks).values([
       {

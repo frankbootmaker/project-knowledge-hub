@@ -22,6 +22,8 @@ type Epic = {
   title: string;
   description: string | null;
   status: string;
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 type Story = {
@@ -30,6 +32,17 @@ type Story = {
   title: string;
   description: string | null;
   status: string;
+  startDate?: string | null;
+  endDate?: string | null;
+};
+
+type Milestone = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  startDate?: string | null;
+  targetDate?: string | null;
 };
 
 type LinkedDocument = {
@@ -39,6 +52,8 @@ type LinkedDocument = {
   slug: string;
 };
 
+type AgileKind = 'epic' | 'story' | 'milestone';
+
 export function ProjectAgileManageModal({
   open,
   onClose,
@@ -47,20 +62,25 @@ export function ProjectAgileManageModal({
   projectId,
   epics,
   stories,
+  milestones = [],
   canMutate,
   onSaved,
   onDeleted,
 }: {
   open: boolean;
   onClose: () => void;
-  kind: 'epic' | 'story' | null;
+  kind: AgileKind | null;
   itemId: string | null;
   projectId: string;
   epics: Epic[];
   stories: Story[];
+  milestones?: Milestone[];
   canMutate: boolean;
-  onSaved: (kind: 'epic' | 'story', item: Epic | Story) => void;
-  onDeleted: (kind: 'epic' | 'story', id: string) => void;
+  onSaved: (
+    kind: AgileKind,
+    item: Epic | Story | Milestone,
+  ) => void;
+  onDeleted: (kind: AgileKind, id: string) => void;
 }) {
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
@@ -72,6 +92,9 @@ export function ProjectAgileManageModal({
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('planned');
   const [epicId, setEpicId] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [targetDate, setTargetDate] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -93,19 +116,36 @@ export function ProjectAgileManageModal({
       setDescription(epic.description ?? '');
       setStatus(epic.status);
       setEpicId('');
-    } else {
+      setStartDate(epic.startDate ?? '');
+      setEndDate(epic.endDate ?? '');
+      setTargetDate('');
+    } else if (kind === 'story') {
       const story = stories.find((row) => row.id === itemId);
       if (!story) return;
       setTitle(story.title);
       setDescription(story.description ?? '');
       setStatus(story.status);
       setEpicId(story.epicId);
+      setStartDate(story.startDate ?? '');
+      setEndDate(story.endDate ?? '');
+      setTargetDate('');
+    } else {
+      const milestone = milestones.find((row) => row.id === itemId);
+      if (!milestone) return;
+      setTitle(milestone.title);
+      setDescription(milestone.description ?? '');
+      setStatus(milestone.status);
+      setEpicId('');
+      setStartDate(milestone.startDate ?? '');
+      setEndDate('');
+      setTargetDate(milestone.targetDate ?? '');
     }
     setConfirmDelete(false);
     setDeleteAcknowledged(false);
     setError(null);
 
-    const entityType = kind === 'epic' ? 'epic' : 'user_story';
+    const entityType =
+      kind === 'epic' ? 'epic' : kind === 'story' ? 'user_story' : 'milestone';
     void fetch(
       `/api/v1/projects/${projectId}/delivery-document-links?entityType=${entityType}&entityId=${itemId}`,
     )
@@ -120,7 +160,7 @@ export function ProjectAgileManageModal({
         setLinkedDocuments(payload.documentLinks ?? []);
       })
       .catch(() => setLinkedDocuments([]));
-  }, [open, kind, itemId, epics, stories, projectId]);
+  }, [open, kind, itemId, epics, stories, milestones, projectId]);
 
   async function save() {
     if (!kind || !itemId || !canMutate || !title.trim()) return;
@@ -131,20 +171,34 @@ export function ProjectAgileManageModal({
       const path =
         kind === 'epic'
           ? `/api/v1/project-epics/${itemId}`
-          : `/api/v1/project-user-stories/${itemId}`;
+          : kind === 'story'
+            ? `/api/v1/project-user-stories/${itemId}`
+            : `/api/v1/project-milestones/${itemId}`;
       const body =
         kind === 'epic'
           ? {
               title: title.trim(),
               description: description.trim() || null,
               status,
+              startDate: startDate || null,
+              endDate: endDate || null,
             }
-          : {
-              title: title.trim(),
-              description: description.trim() || null,
-              status,
-              epicId,
-            };
+          : kind === 'story'
+            ? {
+                title: title.trim(),
+                description: description.trim() || null,
+                status,
+                epicId,
+                startDate: startDate || null,
+                endDate: endDate || null,
+              }
+            : {
+                title: title.trim(),
+                description: description.trim() || null,
+                status,
+                startDate: startDate || null,
+                targetDate: targetDate || null,
+              };
       const response = await fetch(path, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -153,23 +207,41 @@ export function ProjectAgileManageModal({
       const payload = (await response.json().catch(() => ({}))) as {
         epic?: Epic;
         userStory?: Story;
+        milestone?: Milestone;
         error?: { message?: string };
       };
       if (!response.ok) {
         throw new Error(
           payload.error?.message ||
-            (kind === 'epic' ? t('failedUpdateEpic') : t('failedUpdateStory')),
+            (kind === 'epic'
+              ? t('failedUpdateEpic')
+              : kind === 'story'
+                ? t('failedUpdateStory')
+                : t('failedUpdateMilestone')),
         );
       }
-      const saved = kind === 'epic' ? payload.epic : payload.userStory;
+      const saved =
+        kind === 'epic'
+          ? payload.epic
+          : kind === 'story'
+            ? payload.userStory
+            : payload.milestone;
       if (!saved) {
         throw new Error(
-          kind === 'epic' ? t('failedUpdateEpic') : t('failedUpdateStory'),
+          kind === 'epic'
+            ? t('failedUpdateEpic')
+            : kind === 'story'
+              ? t('failedUpdateStory')
+              : t('failedUpdateMilestone'),
         );
       }
       onSaved(kind, saved);
       pushToast(
-        kind === 'epic' ? t('epicUpdated') : t('storyUpdated'),
+        kind === 'epic'
+          ? t('epicUpdated')
+          : kind === 'story'
+            ? t('storyUpdated')
+            : t('milestoneUpdated'),
         'success',
       );
       onClose();
@@ -179,7 +251,9 @@ export function ProjectAgileManageModal({
           ? err.message
           : kind === 'epic'
             ? t('failedUpdateEpic')
-            : t('failedUpdateStory'),
+            : kind === 'story'
+              ? t('failedUpdateStory')
+              : t('failedUpdateMilestone'),
       );
     } finally {
       setPending(false);
@@ -187,7 +261,7 @@ export function ProjectAgileManageModal({
   }
 
   async function remove() {
-    if (!kind || !itemId || !canMutate) return;
+    if (!kind || !itemId || !canMutate || kind === 'milestone') return;
     setPending(true);
     setError(null);
     try {
@@ -230,23 +304,30 @@ export function ProjectAgileManageModal({
       ? t('manageEpic')
       : kind === 'story'
         ? t('manageStory')
-        : t('manage');
+        : kind === 'milestone'
+          ? t('manageMilestone')
+          : t('manage');
+
+  const modalDescription =
+    kind === 'epic'
+      ? t('manageEpicDescription')
+      : kind === 'story'
+        ? t('manageStoryDescription')
+        : kind === 'milestone'
+          ? t('manageMilestoneDescription')
+          : undefined;
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={title.trim() || modalTitle}
-      description={
-        kind === 'epic'
-          ? t('manageEpicDescription')
-          : t('manageStoryDescription')
-      }
+      description={modalDescription}
       size="md"
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <div>
-            {canMutate ? (
+            {canMutate && kind && kind !== 'milestone' ? (
               !confirmDelete ? (
                 <Button
                   type="button"
@@ -301,7 +382,11 @@ export function ProjectAgileManageModal({
                 }
                 onClick={() => void save()}
               >
-                {kind === 'epic' ? t('saveEpic') : t('saveStory')}
+                {kind === 'epic'
+                  ? t('saveEpic')
+                  : kind === 'story'
+                    ? t('saveStory')
+                    : t('saveMilestone')}
               </Button>
             ) : null}
           </div>
@@ -313,14 +398,16 @@ export function ProjectAgileManageModal({
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      {confirmDelete ? (
+      {confirmDelete && kind && kind !== 'milestone' ? (
         <Panel
           variant="inset"
           className="mb-3 grid gap-3 border-danger/40 bg-danger/5"
         >
           <p className="m-0 text-sm font-semibold text-danger">
             {kind === 'epic'
-              ? t('confirmDeleteEpicTitle', { title: title.trim() || t('kindEpic') })
+              ? t('confirmDeleteEpicTitle', {
+                  title: title.trim() || t('kindEpic'),
+                })
               : t('confirmDeleteStoryTitle', {
                   title: title.trim() || t('kindStory'),
                 })}
@@ -341,7 +428,15 @@ export function ProjectAgileManageModal({
         </Panel>
       ) : null}
       <div className="grid gap-3">
-        <Field label={kind === 'epic' ? t('epicTitle') : t('storyTitle')}>
+        <Field
+          label={
+            kind === 'epic'
+              ? t('epicTitle')
+              : kind === 'story'
+                ? t('storyTitle')
+                : t('milestoneTitle')
+          }
+        >
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -378,6 +473,45 @@ export function ProjectAgileManageModal({
             ))}
           </Select>
         </Field>
+        {kind === 'milestone' ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t('startDate')}>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                disabled={pending || !canMutate || confirmDelete}
+              />
+            </Field>
+            <Field label={t('targetDate')}>
+              <Input
+                type="date"
+                value={targetDate}
+                onChange={(e) => setTargetDate(e.target.value)}
+                disabled={pending || !canMutate || confirmDelete}
+              />
+            </Field>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t('startDate')}>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                disabled={pending || !canMutate || confirmDelete}
+              />
+            </Field>
+            <Field label={t('endDate')}>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                disabled={pending || !canMutate || confirmDelete}
+              />
+            </Field>
+          </div>
+        )}
         <Field label={t('description')}>
           <Textarea
             value={description}
