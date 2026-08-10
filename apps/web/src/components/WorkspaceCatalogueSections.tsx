@@ -1,13 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { LinkButton, SectionHeader, lifecycleLabel } from './ui';
+import { LinkButton, lifecycleLabel } from './ui';
 import { ImportTypePickerButton } from './ImportTypePickerButton';
 import {
   CatalogueSection,
   type CatalogueListItem,
   type CatalogueLocaleVariant,
 } from './CatalogueSection';
+import { CollapsibleSection } from './CollapsibleSection';
 import {
   groupRecordsByTranslationFamily,
   normalizeContentLanguage,
@@ -182,61 +184,94 @@ export function WorkspaceCatalogueSections({
 
   return (
     <>
-      <CatalogueSection
+      <CollapsibleSection
+        storageKey={`workspace:${workspaceSlug}:projects`}
         title={t('projects')}
-        items={projectItems}
-        emptyLabel={t('noProjects')}
-        searchPlaceholder={t('sectionSearchProjects')}
-        filterLabel={t('sectionFilterStatus')}
-        filterAllLabel={t('sectionFilterAll')}
-        createHref={`/workspaces/${workspaceSlug}/projects/new`}
-        createLabel={t('newProject')}
-        canCreate={canMutate}
-      />
-      <CatalogueSection
-        title={t('systems')}
-        items={systemItems}
-        emptyLabel={t('noSystems')}
-        searchPlaceholder={t('sectionSearchSystems')}
-        filterLabel={t('sectionFilterStatus')}
-        filterAllLabel={t('sectionFilterAll')}
-        createHref={`/workspaces/${workspaceSlug}/systems/new`}
-        createLabel={t('newSystem')}
-        canCreate={canMutate}
-      />
-      <CatalogueSection
-        title={t('knowledgeRecords')}
-        items={recordItems}
-        emptyLabel={t('noRecords')}
-        searchPlaceholder={t('sectionSearchRecords')}
-        filterLabel={t('sectionFilterLifecycle')}
-        filterAllLabel={t('sectionFilterAll')}
-        languageFilterLabel={t('sectionFilterLanguage')}
-        languageFilterAllLabel={t('sectionFilterAnyLanguage')}
-        createHref={`/workspaces/${workspaceSlug}/records/new`}
-        createLabel={t('newRecord')}
-        canCreate={canMutate}
-      />
-      <section>
-        <SectionHeader
-          title={t('imports')}
-          action={
-            canMutate ? (
-              <ImportTypePickerButton
-                workspaceSlug={workspaceSlug}
-                label={t('newImport')}
-              />
-            ) : (
-              <LinkButton
-                href={`/workspaces/${workspaceSlug}/imports`}
-                variant="secondary"
-              >
-                {t('imports')}
-              </LinkButton>
-            )
-          }
+        defaultOpen
+      >
+        <CatalogueSection
+          title={t('projects')}
+          showTitle={false}
+          className="mb-0"
+          items={projectItems}
+          emptyLabel={t('noProjects')}
+          searchPlaceholder={t('sectionSearchProjects')}
+          filterLabel={t('sectionFilterStatus')}
+          filterAllLabel={t('sectionFilterAll')}
+          createHref={`/workspaces/${workspaceSlug}/projects/new`}
+          createLabel={t('newProject')}
+          canCreate={canMutate}
         />
-      </section>
+      </CollapsibleSection>
+      <CollapsibleSection
+        storageKey={`workspace:${workspaceSlug}:systems`}
+        title={t('systems')}
+        defaultOpen
+      >
+        <CatalogueSection
+          title={t('systems')}
+          showTitle={false}
+          className="mb-0"
+          items={systemItems}
+          emptyLabel={t('noSystems')}
+          searchPlaceholder={t('sectionSearchSystems')}
+          filterLabel={t('sectionFilterStatus')}
+          filterAllLabel={t('sectionFilterAll')}
+          createHref={`/workspaces/${workspaceSlug}/systems/new`}
+          createLabel={t('newSystem')}
+          canCreate={canMutate}
+        />
+      </CollapsibleSection>
+      <CollapsibleSection
+        storageKey={`workspace:${workspaceSlug}:records`}
+        title={t('knowledgeRecords')}
+        defaultOpen
+      >
+        <CatalogueSection
+          title={t('knowledgeRecords')}
+          showTitle={false}
+          className="mb-0"
+          items={recordItems}
+          emptyLabel={t('noRecords')}
+          searchPlaceholder={t('sectionSearchRecords')}
+          filterLabel={t('sectionFilterLifecycle')}
+          filterAllLabel={t('sectionFilterAll')}
+          languageFilterLabel={t('sectionFilterLanguage')}
+          languageFilterAllLabel={t('sectionFilterAnyLanguage')}
+          createHref={`/workspaces/${workspaceSlug}/records/new`}
+          createLabel={t('newRecord')}
+          canCreate={canMutate}
+        />
+      </CollapsibleSection>
+      <CollapsibleSection
+        storageKey={`workspace:${workspaceSlug}:imports`}
+        title={t('imports')}
+        defaultOpen
+        action={
+          canMutate ? (
+            <ImportTypePickerButton
+              workspaceSlug={workspaceSlug}
+              label={t('newImport')}
+            />
+          ) : (
+            <LinkButton
+              href={`/workspaces/${workspaceSlug}/imports`}
+              variant="secondary"
+            >
+              {t('imports')}
+            </LinkButton>
+          )
+        }
+      >
+        <p className="m-0 text-sm text-ink-muted">
+          <Link
+            href={`/workspaces/${workspaceSlug}/imports`}
+            className="kh-text-link"
+          >
+            {t('viewImports')}
+          </Link>
+        </p>
+      </CollapsibleSection>
     </>
   );
 }

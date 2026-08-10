@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { DashboardCollapsibleSection } from '../../../components/DashboardCollapsibleSection';
+import { CollapsibleSection } from '../../../components/CollapsibleSection';
 import { DashboardMyTasks } from '../../../components/DashboardMyTasks';
 import {
   LinkButton,
@@ -68,8 +68,8 @@ export default async function DashboardPage() {
         }
       />
 
-      <DashboardCollapsibleSection
-        storageKey="workspaces"
+      <CollapsibleSection
+        storageKey="dashboard:workspaces"
         title={t('myWorkspaces')}
         defaultOpen
         action={
@@ -130,7 +130,7 @@ export default async function DashboardPage() {
             ) : null}
           </>
         )}
-      </DashboardCollapsibleSection>
+      </CollapsibleSection>
 
       <section className="mb-8 grid gap-4 sm:grid-cols-2">
         <Link
@@ -163,8 +163,8 @@ export default async function DashboardPage() {
 
       <DashboardMyTasks tasks={data.myTasks} />
 
-      <DashboardCollapsibleSection
-        storageKey="recent"
+      <CollapsibleSection
+        storageKey="dashboard:recent"
         title={t('recentTitle')}
         defaultOpen
       >
@@ -197,7 +197,7 @@ export default async function DashboardPage() {
             ))}
           </ul>
         )}
-      </DashboardCollapsibleSection>
+      </CollapsibleSection>
     </Page>
   );
 }

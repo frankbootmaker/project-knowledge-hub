@@ -321,6 +321,7 @@ export default async function ProjectDetailPage({
 
       <ProjectLinkedSections
         workspaceSlug={workspace.slug}
+        projectId={project.id}
         systems={systems}
         records={knowledgeRecords}
         canMutate={canMutate && !isArchived}

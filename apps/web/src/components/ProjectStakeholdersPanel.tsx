@@ -7,6 +7,7 @@ import {
   CatalogueSection,
   type CatalogueListItem,
 } from './CatalogueSection';
+import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectStakeholdersOrgChart } from './ProjectStakeholdersOrgChart';
 import {
   Badge,
@@ -332,7 +333,12 @@ export function ProjectStakeholdersPanel({
   );
 
   return (
-    <div className="mb-8">
+    <>
+      <CollapsibleSection
+        storageKey={`project:${projectId}:stakeholders`}
+        title={t('title')}
+        defaultOpen
+      >
       {error && !createOpen && !wideModalOpen ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
@@ -342,6 +348,7 @@ export function ProjectStakeholdersPanel({
       <CatalogueSection
         className="mb-2"
         title={t('title')}
+        showTitle={false}
         items={items}
         emptyLabel={t('empty')}
         searchPlaceholder={t('searchPlaceholder')}
@@ -442,6 +449,7 @@ export function ProjectStakeholdersPanel({
       <p className="mt-3 mb-0 text-xs text-ink-muted">
         {canMutate ? t('hint') : t('readOnlyHint')}
       </p>
+      </CollapsibleSection>
 
       <Modal
         open={wideModalOpen}
@@ -582,6 +590,6 @@ export function ProjectStakeholdersPanel({
           </Field>
         </div>
       </Modal>
-    </div>
+    </>
   );
 }

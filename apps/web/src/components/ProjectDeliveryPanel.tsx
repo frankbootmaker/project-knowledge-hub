@@ -7,6 +7,7 @@ import {
   CatalogueSection,
   type CatalogueListItem,
 } from './CatalogueSection';
+import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectDeliveryBoard } from './ProjectDeliveryBoard';
 import { ProjectDeliveryCalendar } from './ProjectDeliveryCalendar';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
@@ -610,7 +611,12 @@ export function ProjectDeliveryPanel({
   }
 
   return (
-    <div className="mb-8">
+    <>
+      <CollapsibleSection
+        storageKey={`project:${projectId}:delivery`}
+        title={t('title')}
+        defaultOpen
+      >
       {error && !createOpen && !wideModalOpen && !manageTaskId ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
@@ -620,6 +626,7 @@ export function ProjectDeliveryPanel({
       <CatalogueSection
         className="mb-2"
         title={t('title')}
+        showTitle={false}
         items={items}
         emptyLabel={t('empty')}
         searchPlaceholder={t('searchPlaceholder')}
@@ -739,6 +746,7 @@ export function ProjectDeliveryPanel({
       <p className="mt-3 mb-0 text-xs text-ink-muted">
         {canMutate ? t('raciHint') : t('readOnlyHint')}
       </p>
+      </CollapsibleSection>
 
       <Modal
         open={wideModalOpen}
@@ -966,6 +974,6 @@ export function ProjectDeliveryPanel({
           refresh();
         }}
       />
-    </div>
+    </>
   );
 }

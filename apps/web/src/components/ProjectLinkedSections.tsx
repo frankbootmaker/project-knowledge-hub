@@ -6,6 +6,7 @@ import {
   type CatalogueListItem,
   type CatalogueLocaleVariant,
 } from './CatalogueSection';
+import { CollapsibleSection } from './CollapsibleSection';
 import { lifecycleLabel } from './ui';
 import {
   groupRecordsByTranslationFamily,
@@ -56,11 +57,13 @@ function recordVariant(
 
 export function ProjectLinkedSections({
   workspaceSlug,
+  projectId,
   systems,
   records,
   canMutate,
 }: {
   workspaceSlug: string;
+  projectId: string;
   systems: ProjectLinkedSystem[];
   records: ProjectLinkedRecord[];
   canMutate: boolean;
@@ -141,30 +144,46 @@ export function ProjectLinkedSections({
 
   return (
     <>
-      <CatalogueSection
+      <CollapsibleSection
+        storageKey={`project:${projectId}:systems`}
         title={t('linkedSystems')}
-        items={systemItems}
-        emptyLabel={t('noLinkedSystems')}
-        searchPlaceholder={tWorkspaces('sectionSearchSystems')}
-        filterLabel={tWorkspaces('sectionFilterStatus')}
-        filterAllLabel={tWorkspaces('sectionFilterAll')}
-        createHref={`/workspaces/${workspaceSlug}/systems/new`}
-        createLabel={tWorkspaces('newSystem')}
-        canCreate={canMutate}
-      />
-      <CatalogueSection
+        defaultOpen
+      >
+        <CatalogueSection
+          title={t('linkedSystems')}
+          showTitle={false}
+          className="mb-0"
+          items={systemItems}
+          emptyLabel={t('noLinkedSystems')}
+          searchPlaceholder={tWorkspaces('sectionSearchSystems')}
+          filterLabel={tWorkspaces('sectionFilterStatus')}
+          filterAllLabel={tWorkspaces('sectionFilterAll')}
+          createHref={`/workspaces/${workspaceSlug}/systems/new`}
+          createLabel={tWorkspaces('newSystem')}
+          canCreate={canMutate}
+        />
+      </CollapsibleSection>
+      <CollapsibleSection
+        storageKey={`project:${projectId}:records`}
         title={t('linkedKnowledge')}
-        items={recordItems}
-        emptyLabel={t('noLinkedKnowledge')}
-        searchPlaceholder={tWorkspaces('sectionSearchRecords')}
-        filterLabel={tWorkspaces('sectionFilterLifecycle')}
-        filterAllLabel={tWorkspaces('sectionFilterAll')}
-        languageFilterLabel={tWorkspaces('sectionFilterLanguage')}
-        languageFilterAllLabel={tWorkspaces('sectionFilterAnyLanguage')}
-        createHref={`/workspaces/${workspaceSlug}/records/new`}
-        createLabel={tWorkspaces('newRecord')}
-        canCreate={canMutate}
-      />
+        defaultOpen
+      >
+        <CatalogueSection
+          title={t('linkedKnowledge')}
+          showTitle={false}
+          className="mb-0"
+          items={recordItems}
+          emptyLabel={t('noLinkedKnowledge')}
+          searchPlaceholder={tWorkspaces('sectionSearchRecords')}
+          filterLabel={tWorkspaces('sectionFilterLifecycle')}
+          filterAllLabel={tWorkspaces('sectionFilterAll')}
+          languageFilterLabel={tWorkspaces('sectionFilterLanguage')}
+          languageFilterAllLabel={tWorkspaces('sectionFilterAnyLanguage')}
+          createHref={`/workspaces/${workspaceSlug}/records/new`}
+          createLabel={tWorkspaces('newRecord')}
+          canCreate={canMutate}
+        />
+      </CollapsibleSection>
     </>
   );
 }

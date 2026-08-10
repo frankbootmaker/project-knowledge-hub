@@ -7,7 +7,7 @@ import {
   CatalogueSection,
   type CatalogueListItem,
 } from './CatalogueSection';
-import { DashboardCollapsibleSection } from './DashboardCollapsibleSection';
+import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
 import { Badge, Button } from './ui';
 import { cn } from '../lib/cn';
@@ -92,8 +92,8 @@ export function DashboardMyTasks({
 
   return (
     <>
-      <DashboardCollapsibleSection
-        storageKey="my-tasks"
+      <CollapsibleSection
+        storageKey="dashboard:my-tasks"
         title={t('myTasks')}
         defaultOpen
       >
@@ -166,7 +166,7 @@ export function DashboardMyTasks({
             );
           }}
         />
-      </DashboardCollapsibleSection>
+      </CollapsibleSection>
       <ProjectTaskManageModal
         open={Boolean(manageTaskId)}
         onClose={() => setManageTaskId(null)}
