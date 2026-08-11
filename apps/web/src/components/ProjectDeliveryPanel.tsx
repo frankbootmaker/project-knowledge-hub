@@ -12,13 +12,16 @@ import {
   ProjectDeliveryBoard,
   type BoardExportHandle,
 } from './ProjectDeliveryBoard';
-import { ProjectDeliveryCalendar } from './ProjectDeliveryCalendar';
+import {
+  ProjectDeliveryCalendar,
+  type CalendarExportHandle,
+} from './ProjectDeliveryCalendar';
 import {
   ProjectDeliveryTimeline,
   type TimelineExportHandle,
 } from './ProjectDeliveryTimeline';
 import { ProjectDeliveryTree } from './ProjectDeliveryTree';
-import { ProjectScrumView } from './ProjectScrumView';
+import { ProjectScrumView, type ScrumExportHandle } from './ProjectScrumView';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
 import {
@@ -231,6 +234,28 @@ export function ProjectDeliveryPanel({
   const onBoardExportStateChange = useCallback(
     (state: { pending: boolean; canExport: boolean } | null) => {
       setBoardExportState(state);
+    },
+    [],
+  );
+  const calendarExportRef = useRef<CalendarExportHandle | null>(null);
+  const [calendarExportState, setCalendarExportState] = useState<{
+    pending: boolean;
+    canExport: boolean;
+  } | null>(null);
+  const onCalendarExportStateChange = useCallback(
+    (state: { pending: boolean; canExport: boolean } | null) => {
+      setCalendarExportState(state);
+    },
+    [],
+  );
+  const scrumExportRef = useRef<ScrumExportHandle | null>(null);
+  const [scrumExportState, setScrumExportState] = useState<{
+    pending: boolean;
+    canExport: boolean;
+  } | null>(null);
+  const onScrumExportStateChange = useCallback(
+    (state: { pending: boolean; canExport: boolean } | null) => {
+      setScrumExportState(state);
     },
     [],
   );
@@ -956,6 +981,36 @@ export function ProjectDeliveryPanel({
                     : t('boardExportPdf')}
                 </Button>
               ) : null}
+              {viewMode === 'calendar' ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={
+                    !calendarExportState?.canExport ||
+                    Boolean(calendarExportState?.pending)
+                  }
+                  onClick={() => calendarExportRef.current?.exportPdf()}
+                >
+                  {calendarExportState?.pending
+                    ? t('calendarExportingPdf')
+                    : t('calendarExportPdf')}
+                </Button>
+              ) : null}
+              {viewMode === 'scrum' ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={
+                    !scrumExportState?.canExport ||
+                    Boolean(scrumExportState?.pending)
+                  }
+                  onClick={() => scrumExportRef.current?.exportPdf()}
+                >
+                  {scrumExportState?.pending
+                    ? t('scrumExportingPdf')
+                    : t('scrumExportPdf')}
+                </Button>
+              ) : null}
               {canMutate ? (
                 <Button
                   type="button"
@@ -1011,6 +1066,9 @@ export function ProjectDeliveryPanel({
             canMutate={canMutate}
             definitionOfDone={definitionOfDone}
             tasks={boardTasks}
+            milestoneTitles={milestoneTitleById}
+            exportHandleRef={scrumExportRef}
+            onExportStateChange={onScrumExportStateChange}
             onTaskStatusChange={(taskId, status) =>
               void updateStatus(`task:${taskId}`, status)
             }
@@ -1049,7 +1107,13 @@ export function ProjectDeliveryPanel({
           />
         ) : null}
         {viewMode === 'calendar' ? (
-          <ProjectDeliveryCalendar items={calendarItems} />
+          <ProjectDeliveryCalendar
+            projectId={projectId}
+            projectName={projectName}
+            items={calendarItems}
+            exportHandleRef={calendarExportRef}
+            onExportStateChange={onCalendarExportStateChange}
+          />
         ) : null}
         {viewMode === 'timeline' ? (
           <ProjectDeliveryTimeline

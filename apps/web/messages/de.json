@@ -2007,6 +2007,11 @@
     "calendarMonthLabel": "{month} {year}",
     "calendarMore": "+{count} weitere",
     "calendarHint": "Aufgaben nutzen Fälligkeitsdaten; Meilensteine nutzen Zieldaten.",
+    "calendarExportPdf": "PDF exportieren",
+    "calendarExportingPdf": "PDF wird exportiert…",
+    "calendarExportTitle": "{project} Lieferkalender",
+    "calendarExported": "Kalender-PDF exportiert.",
+    "calendarExportFailed": "Kalender-PDF konnte nicht exportiert werden",
     "calendarWeekdays": {
       "mon": "Mo",
       "tue": "Di",

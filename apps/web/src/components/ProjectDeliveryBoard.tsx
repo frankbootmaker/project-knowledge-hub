@@ -76,7 +76,7 @@ export type BoardExportHandle = {
   exportPdf: () => void;
 };
 
-const DEFAULT_META_FILTERS: BoardMetaFilters = {
+export const DEFAULT_BOARD_META_FILTERS: BoardMetaFilters = {
   story: true,
   milestone: true,
   owner: true,
@@ -84,6 +84,8 @@ const DEFAULT_META_FILTERS: BoardMetaFilters = {
   dueDate: true,
   storyPoints: false,
 };
+
+const DEFAULT_META_FILTERS = DEFAULT_BOARD_META_FILTERS;
 
 const BOARD_COLUMNS = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
 type BoardColumn = (typeof BOARD_COLUMNS)[number];
@@ -121,6 +123,14 @@ function readMetaFilters(storageKey: string): BoardMetaFilters {
   } catch {
     return DEFAULT_META_FILTERS;
   }
+}
+
+export function boardMetaStorageKey(projectId: string): string {
+  return `kh-board-meta:${projectId}`;
+}
+
+export function readBoardMetaFilters(projectId: string): BoardMetaFilters {
+  return readMetaFilters(boardMetaStorageKey(projectId));
 }
 
 function writeMetaFilters(storageKey: string, filters: BoardMetaFilters): void {
@@ -294,7 +304,7 @@ function BoardMilestoneCard({
   );
 }
 
-function BoardTaskCard({
+export function BoardTaskCard({
   task,
   milestoneLabel,
   today,
@@ -304,6 +314,7 @@ function BoardTaskCard({
   showStatusSelect,
   onTaskStatusChange,
   onManageTask,
+  actions,
 }: {
   task: BoardTask;
   milestoneLabel: string | null;
@@ -314,6 +325,7 @@ function BoardTaskCard({
   showStatusSelect: boolean;
   onTaskStatusChange: (taskId: string, status: string) => void;
   onManageTask?: (taskId: string) => void;
+  actions?: ReactNode;
 }) {
   const t = useTranslations('delivery');
   const accountable = task.raci.find((entry) => entry.role === 'A');
@@ -339,10 +351,11 @@ function BoardTaskCard({
     showOwner ||
     showDue ||
     showPoints;
+  const canDrag = canMutate && !pending && !showStatusSelect;
 
   return (
     <article
-      draggable={canMutate && !pending && !showStatusSelect}
+      draggable={canDrag}
       onDragStart={(event) => {
         event.dataTransfer.setData('text/kh-task-id', task.id);
         event.dataTransfer.effectAllowed = 'move';
@@ -350,13 +363,15 @@ function BoardTaskCard({
       className={cn(
         'rounded-md border p-3 shadow-sm',
         deliveryScheduleSurfaceClass(tone),
-        canMutate &&
-          !pending &&
-          !showStatusSelect &&
-          'cursor-grab active:cursor-grabbing',
+        canDrag && 'cursor-grab active:cursor-grabbing',
       )}
     >
-      <p className="m-0 text-sm font-medium text-ink">{task.title}</p>
+      <p className="m-0 text-sm font-medium text-ink">
+        {task.humanKey ? (
+          <span className="text-ink-muted">{task.humanKey} · </span>
+        ) : null}
+        {task.title}
+      </p>
       {hasMeta ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {showStory ? (
@@ -409,6 +424,7 @@ function BoardTaskCard({
           {t('manage')}
         </Button>
       ) : null}
+      {actions}
       {showStatusSelect && canMutate ? (
         <Select
           className="mt-3 w-full"
@@ -547,6 +563,7 @@ export function ProjectDeliveryBoard({
   onManageMilestone,
   exportHandleRef,
   onExportStateChange,
+  onMetaFiltersChange,
 }: {
   projectId: string;
   projectName: string;
@@ -563,24 +580,28 @@ export function ProjectDeliveryBoard({
   onExportStateChange?: (
     state: { pending: boolean; canExport: boolean } | null,
   ) => void;
+  onMetaFiltersChange?: (meta: BoardMetaFilters) => void;
 }) {
   const t = useTranslations('delivery');
   const tProjects = useTranslations('projects');
   const { pushToast } = useToast();
   const today = todayYmd();
-  const filterKey = `kh-board-meta:${projectId}`;
+  const filterKey = boardMetaStorageKey(projectId);
   const [mobileColumn, setMobileColumn] = useState<BoardColumn>('todo');
   const [meta, setMeta] = useState<BoardMetaFilters>(DEFAULT_META_FILTERS);
   const [exportPending, setExportPending] = useState(false);
 
   useEffect(() => {
-    setMeta(readMetaFilters(filterKey));
-  }, [filterKey]);
+    const next = readMetaFilters(filterKey);
+    setMeta(next);
+    onMetaFiltersChange?.(next);
+  }, [filterKey, onMetaFiltersChange]);
 
   function toggleMeta(key: keyof BoardMetaFilters) {
     setMeta((current) => {
       const next = { ...current, [key]: !current[key] };
       writeMetaFilters(filterKey, next);
+      onMetaFiltersChange?.(next);
       return next;
     });
   }

@@ -38,6 +38,7 @@ import {
   upsertProjectCostSnapshot,
 } from '../lib/project-budget.js';
 import { buildBoardPdf } from '../lib/board-export.js';
+import { buildCalendarPdf } from '../lib/calendar-export.js';
 import { buildTimelinePdf } from '../lib/timeline-export.js';
 
 async function workspaceOrgId(
@@ -749,6 +750,155 @@ export async function registerProjectDeliveryRoutes(
       });
 
       const filename = knowledgeExportFilename(`${project.slug}-board`, 'pdf');
+      reply
+        .header('Content-Type', 'application/pdf')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="${filename.replace(/"/g, '')}"`,
+        );
+      return reply.send(pdf);
+    },
+  );
+
+  app.post(
+    '/api/v1/projects/:projectId/calendar/export',
+    async (request, reply) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ projectId: z.string().uuid() })
+        .parse(request.params);
+      const body = z
+        .object({
+          title: z.string().min(1).max(300).optional(),
+          year: z.number().int().min(1970).max(2100),
+          monthIndex: z.number().int().min(0).max(11),
+          today: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .optional(),
+          labels: z
+            .object({
+              generated: z.string().min(1).max(80),
+              empty: z.string().min(1).max(200),
+              more: z.string().min(1).max(80),
+              milestone: z.string().min(1).max(80),
+              task: z.string().min(1).max(80),
+              weekdays: z.object({
+                mon: z.string().min(1).max(40),
+                tue: z.string().min(1).max(40),
+                wed: z.string().min(1).max(40),
+                thu: z.string().min(1).max(40),
+                fri: z.string().min(1).max(40),
+                sat: z.string().min(1).max(40),
+                sun: z.string().min(1).max(40),
+              }),
+              monthLabel: z.string().min(1).max(120),
+            })
+            .optional(),
+        })
+        .parse(request.body ?? {});
+
+      const { project } = await requireProjectContext(
+        app.database,
+        params.projectId,
+      );
+      requireWorkspaceView(principal, project.workspaceId);
+
+      const [milestones, tasks] = await Promise.all([
+        listMilestones(app.database, project.id),
+        listTasks(app.database, project.id),
+      ]);
+
+      const today =
+        body.today ??
+        (() => {
+          const now = new Date();
+          return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+        })();
+
+      const items = [
+        ...milestones
+          .filter((row) => row.targetDate)
+          .map((row) => ({
+            id: `milestone:${row.id}`,
+            kind: 'milestone' as const,
+            title: row.title,
+            date: row.targetDate!,
+            status: row.status,
+          })),
+        ...tasks
+          .filter((row) => row.dueDate)
+          .map((row) => ({
+            id: `task:${row.id}`,
+            kind: 'task' as const,
+            title: row.title,
+            date: row.dueDate!,
+            status: row.status,
+          })),
+      ];
+
+      const title = body.title?.trim() || `${project.name} calendar`;
+      const labels = body.labels ?? {
+        generated: 'Generated',
+        empty: 'No dated tasks or milestones this month.',
+        more: '+{count} more',
+        milestone: 'Milestone',
+        task: 'Task',
+        weekdays: {
+          mon: 'Mon',
+          tue: 'Tue',
+          wed: 'Wed',
+          thu: 'Thu',
+          fri: 'Fri',
+          sat: 'Sat',
+          sun: 'Sun',
+        },
+        monthLabel: `${body.year}-${body.monthIndex + 1}`,
+      };
+
+      let pdf: Buffer;
+      try {
+        pdf = await buildCalendarPdf({
+          title,
+          projectName: project.name,
+          year: body.year,
+          monthIndex: body.monthIndex,
+          today,
+          items,
+          labels,
+        });
+      } catch (error) {
+        throw new AppError({
+          code: 'CALENDAR_EXPORT_FAILED',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Failed to export calendar PDF',
+          statusCode: 500,
+        });
+      }
+
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.calendar_exported',
+        entityType: 'project',
+        entityId: project.id,
+        metadata: {
+          format: 'pdf',
+          title,
+          year: body.year,
+          monthIndex: body.monthIndex,
+        },
+        ipAddress: request.ip,
+      });
+
+      const filename = knowledgeExportFilename(
+        `${project.slug}-calendar`,
+        'pdf',
+      );
       reply
         .header('Content-Type', 'application/pdf')
         .header(

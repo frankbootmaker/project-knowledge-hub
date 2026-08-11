@@ -1,8 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type RefObject,
+} from 'react';
 import { useTranslations } from 'next-intl';
-import { Badge, Button } from './ui';
+import { Badge, Button, useToast } from './ui';
 import { cn } from '../lib/cn';
 import {
   deliveryScheduleSurfaceClass,
@@ -10,6 +16,7 @@ import {
   todayYmd,
 } from '../lib/delivery-schedule';
 import { DeliveryScheduleLegend } from './DeliveryScheduleLegend';
+import { downloadAuthenticatedExport } from '../lib/download-export';
 
 export type CalendarItem = {
   id: string;
@@ -17,6 +24,10 @@ export type CalendarItem = {
   title: string;
   date: string;
   status: string;
+};
+
+export type CalendarExportHandle = {
+  exportPdf: () => void;
 };
 
 const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -83,19 +94,122 @@ function CalendarItemChip({
 }
 
 export function ProjectDeliveryCalendar({
+  projectId,
+  projectName,
   items,
+  exportHandleRef,
+  onExportStateChange,
 }: {
+  projectId: string;
+  projectName: string;
   items: CalendarItem[];
+  exportHandleRef?: RefObject<CalendarExportHandle | null>;
+  onExportStateChange?: (
+    state: { pending: boolean; canExport: boolean } | null,
+  ) => void;
 }) {
   const t = useTranslations('delivery');
+  const tProjects = useTranslations('projects');
+  const { pushToast } = useToast();
   const [cursor, setCursor] = useState<{ year: number; month: number } | null>(null);
   const [today, setToday] = useState<string | null>(null);
+  const [exportPending, setExportPending] = useState(false);
 
   useEffect(() => {
     const now = new Date();
     setCursor({ year: now.getFullYear(), month: now.getMonth() });
     setToday(todayYmd(now));
   }, []);
+
+  const exportCalendarPdf = useCallback(async () => {
+    if (exportPending || !cursor || !today) return;
+    setExportPending(true);
+    try {
+      const monthName = t(`calendarMonths.${cursor.month}`);
+      const monthLabel = t('calendarMonthLabel', {
+        month: monthName,
+        year: cursor.year,
+      });
+      const title = t('calendarExportTitle', { project: projectName });
+      const slug = projectName.replace(/[^\w.-]+/g, '-').toLowerCase();
+      await downloadAuthenticatedExport(
+        `/api/v1/projects/${projectId}/calendar/export`,
+        `${slug}-calendar.pdf`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({
+            title,
+            year: cursor.year,
+            monthIndex: cursor.month,
+            today,
+            labels: {
+              generated: tProjects('reportGenerated'),
+              empty: t('calendarAgendaEmpty'),
+              more: t('calendarMore', { count: '{count}' }),
+              milestone: t('kindMilestone'),
+              task: t('kindTask'),
+              weekdays: {
+                mon: t('calendarWeekdaysShort.mon'),
+                tue: t('calendarWeekdaysShort.tue'),
+                wed: t('calendarWeekdaysShort.wed'),
+                thu: t('calendarWeekdaysShort.thu'),
+                fri: t('calendarWeekdaysShort.fri'),
+                sat: t('calendarWeekdaysShort.sat'),
+                sun: t('calendarWeekdaysShort.sun'),
+              },
+              monthLabel,
+            },
+          }),
+        },
+      );
+      pushToast(t('calendarExported'));
+    } catch (err) {
+      pushToast(
+        err instanceof Error ? err.message : t('calendarExportFailed'),
+        'danger',
+      );
+    } finally {
+      setExportPending(false);
+    }
+  }, [
+    cursor,
+    exportPending,
+    projectId,
+    projectName,
+    pushToast,
+    t,
+    tProjects,
+    today,
+  ]);
+
+  useEffect(() => {
+    if (exportHandleRef) {
+      exportHandleRef.current = {
+        exportPdf: () => {
+          void exportCalendarPdf();
+        },
+      };
+    }
+    onExportStateChange?.({
+      pending: exportPending,
+      canExport: Boolean(cursor && today),
+    });
+    return () => {
+      if (exportHandleRef) exportHandleRef.current = null;
+      onExportStateChange?.(null);
+    };
+  }, [
+    cursor,
+    exportCalendarPdf,
+    exportHandleRef,
+    exportPending,
+    onExportStateChange,
+    today,
+  ]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();

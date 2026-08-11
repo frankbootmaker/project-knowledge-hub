@@ -1,6 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type RefObject,
+} from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Badge,
@@ -10,8 +16,17 @@ import {
   Modal,
   Select,
   Textarea,
+  useToast,
 } from './ui';
-import { ProjectDeliveryBoard, type BoardTask } from './ProjectDeliveryBoard';
+import {
+  BoardTaskCard,
+  ProjectDeliveryBoard,
+  readBoardMetaFilters,
+  type BoardMetaFilters,
+  type BoardTask,
+} from './ProjectDeliveryBoard';
+import { todayYmd } from '../lib/delivery-schedule';
+import { downloadAuthenticatedExport } from '../lib/download-export';
 import {
   BurndownLegendHelp,
   SprintPointBurndownChart,
@@ -31,10 +46,20 @@ export type ScrumSprint = {
   humanKey?: string | null;
 };
 
+export type ScrumExportHandle = {
+  exportPdf: () => void;
+};
+
 type PlanRow = {
   taskId: string;
   selected: boolean;
   storyPoints: string;
+};
+
+type CeremonyStakeholder = {
+  id: string;
+  displayName: string;
+  projectRole: string | null;
 };
 
 type Props = {
@@ -44,11 +69,31 @@ type Props = {
   canMutate: boolean;
   definitionOfDone?: string | null;
   tasks: BoardTask[];
+  milestoneTitles?: Map<string, string>;
   onTaskStatusChange: (taskId: string, status: string) => void;
   onOpenTask: (taskId: string) => void;
   onAssignToSprint: (taskId: string, sprintId: string | null) => Promise<void>;
   onRefresh: () => void;
+  exportHandleRef?: RefObject<ScrumExportHandle | null>;
+  onExportStateChange?: (
+    state: { pending: boolean; canExport: boolean } | null,
+  ) => void;
 };
+
+const TASK_STATUSES = [
+  'todo',
+  'in_progress',
+  'blocked',
+  'done',
+  'cancelled',
+] as const;
+
+const SPRINT_STATUSES = [
+  'planned',
+  'active',
+  'completed',
+  'cancelled',
+] as const;
 
 export function ProjectScrumView({
   projectId,
@@ -57,24 +102,57 @@ export function ProjectScrumView({
   canMutate,
   definitionOfDone = null,
   tasks,
+  milestoneTitles = new Map(),
   onTaskStatusChange,
   onOpenTask,
   onAssignToSprint,
   onRefresh,
+  exportHandleRef,
+  onExportStateChange,
 }: Props) {
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
+  const tStakeholders = useTranslations('stakeholders');
+  const tProjects = useTranslations('projects');
+  const { pushToast } = useToast();
+  const today = todayYmd();
+  const [boardMeta, setBoardMeta] = useState<BoardMetaFilters>(() =>
+    readBoardMetaFilters(projectId),
+  );
+  const [exportPending, setExportPending] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportIncludeBurndown, setExportIncludeBurndown] = useState(true);
+  const [exportIncludeBoard, setExportIncludeBoard] = useState(true);
+  const [exportIncludeBacklog, setExportIncludeBacklog] = useState(true);
   const [sprints, setSprints] = useState<ScrumSprint[]>([]);
   const [selectedSprintId, setSelectedSprintId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [ceremonyOpen, setCeremonyOpen] = useState<
+    null | 'sprint_retrospective' | 'sprint_review'
+  >(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [capacity, setCapacity] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [ceremonyTitle, setCeremonyTitle] = useState('');
+  const [ceremonySummary, setCeremonySummary] = useState('');
+  const [reviewDemo, setReviewDemo] = useState('');
+  const [reviewFeedback, setReviewFeedback] = useState('');
+  const [reviewOutcomes, setReviewOutcomes] = useState('');
+  const [ceremonyStakeholders, setCeremonyStakeholders] = useState<
+    CeremonyStakeholder[]
+  >([]);
+  const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<string[]>([]);
+  const [reviewGuests, setReviewGuests] = useState<string[]>([]);
+  const [guestDraft, setGuestDraft] = useState('');
+  const [stakeholdersLoading, setStakeholdersLoading] = useState(false);
+  const [retroWentWell, setRetroWentWell] = useState('');
+  const [retroImprove, setRetroImprove] = useState('');
+  const [retroActions, setRetroActions] = useState('');
   const [planRows, setPlanRows] = useState<PlanRow[]>([]);
   const [wizardActivate, setWizardActivate] = useState(false);
   const [burndown, setBurndown] = useState<{
@@ -118,6 +196,122 @@ export function ProjectScrumView({
       tasks.filter((task) => !task.sprintId && task.status !== 'cancelled'),
     [tasks],
   );
+
+  const exportSectionsSelected =
+    exportIncludeBurndown || exportIncludeBoard || exportIncludeBacklog;
+
+  const exportScrumPdf = useCallback(async () => {
+    if (exportPending || !selected || !exportSectionsSelected) return;
+    setExportPending(true);
+    try {
+      const title = t('scrumExportTitle', {
+        project: projectName,
+        sprint: selected.humanKey
+          ? `${selected.humanKey} · ${selected.name}`
+          : selected.name,
+      });
+      const slug = projectName.replace(/[^\w.-]+/g, '-').toLowerCase();
+      const sprintSlug = (selected.humanKey ?? selected.name)
+        .replace(/[^\w.-]+/g, '-')
+        .toLowerCase();
+      const statusLabels = Object.fromEntries(
+        TASK_STATUSES.map((status) => [status, t(`taskStatus.${status}`)]),
+      );
+      const sprintStatusLabels = Object.fromEntries(
+        SPRINT_STATUSES.map((status) => [
+          status,
+          t(`scrumStatus.${status}`),
+        ]),
+      );
+      await downloadAuthenticatedExport(
+        `/api/v1/project-sprints/${selected.id}/export`,
+        `${slug}-scrum-${sprintSlug}.pdf`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({
+            title,
+            includeBurndown: exportIncludeBurndown,
+            includeBoard: exportIncludeBoard,
+            includeBacklog: exportIncludeBacklog,
+            showStory: boardMeta.story,
+            showMilestone: boardMeta.milestone,
+            showOwner: boardMeta.owner,
+            showAccountable: boardMeta.accountable,
+            showDueDate: boardMeta.dueDate,
+            showStoryPoints: boardMeta.storyPoints,
+            labels: {
+              story: t('kindStory'),
+              milestone: t('kindMilestone'),
+              owner: t('currentOwner'),
+              accountable: t('accountable'),
+              dueDate: t('dueDate'),
+              storyPoints: t('boardMetaStoryPoints'),
+              generated: tProjects('reportGenerated'),
+              empty: t('boardEmptyColumn'),
+              backlog: t('scrumBacklog'),
+              sprintBoard: t('scrumExportBoard'),
+              burndown: t('scrumBurndown'),
+              burndownEmpty: t('scrumBurndownEmpty'),
+              goal: t('scrumGoal'),
+              capacity: t('scrumCapacity'),
+              window: t('scrumExportWindow'),
+              status: statusLabels,
+              sprintStatus: sprintStatusLabels,
+            },
+          }),
+        },
+      );
+      setExportOpen(false);
+      pushToast(t('scrumExported'));
+    } catch (err) {
+      pushToast(
+        err instanceof Error ? err.message : t('scrumExportFailed'),
+        'danger',
+      );
+    } finally {
+      setExportPending(false);
+    }
+  }, [
+    boardMeta,
+    exportIncludeBacklog,
+    exportIncludeBoard,
+    exportIncludeBurndown,
+    exportPending,
+    exportSectionsSelected,
+    projectName,
+    pushToast,
+    selected,
+    t,
+    tProjects,
+  ]);
+
+  useEffect(() => {
+    if (exportHandleRef) {
+      exportHandleRef.current = {
+        exportPdf: () => {
+          if (!selected) return;
+          setExportOpen(true);
+        },
+      };
+    }
+    onExportStateChange?.({
+      pending: exportPending,
+      canExport: Boolean(selected),
+    });
+    return () => {
+      if (exportHandleRef) exportHandleRef.current = null;
+      onExportStateChange?.(null);
+    };
+  }, [
+    exportHandleRef,
+    exportPending,
+    onExportStateChange,
+    selected,
+  ]);
 
   useEffect(() => {
     if (!selectedSprintId) {
@@ -263,17 +457,269 @@ export function ProjectScrumView({
     }
   }
 
-  async function createCeremony(
-    recordType: 'sprint_retrospective' | 'sprint_review',
-  ) {
+  function formatTaskBullet(task: BoardTask) {
+    const key = task.humanKey ? `${task.humanKey} · ` : '';
+    const points =
+      task.storyPoints != null && Number.isFinite(task.storyPoints)
+        ? ` (${task.storyPoints} pts)`
+        : '';
+    return `- ${key}${task.title}${points}`;
+  }
+
+  function sprintContextLines(sprint: ScrumSprint) {
+    const lines = [
+      `- Sprint: ${(sprint.humanKey ? `${sprint.humanKey} · ` : '') + sprint.name}`,
+      `- Project: ${projectName}`,
+    ];
+    if (sprint.goal?.trim()) lines.push(`- Sprint goal: ${sprint.goal.trim()}`);
+    if (sprint.startDate || sprint.endDate) {
+      lines.push(
+        `- Window: ${[sprint.startDate, sprint.endDate].filter(Boolean).join(' → ')}`,
+      );
+    }
+    lines.push(
+      `- Points: ${sprint.committedPoints} committed` +
+        (sprint.capacityPoints != null ? ` / ${sprint.capacityPoints} capacity` : '') +
+        ` · ${sprint.donePoints} done`,
+    );
+    return lines.join('\n');
+  }
+
+  function resetCeremonyForm() {
+    setCeremonyTitle('');
+    setCeremonySummary('');
+    setReviewDemo('');
+    setReviewFeedback('');
+    setReviewOutcomes('');
+    setSelectedAttendeeIds([]);
+    setReviewGuests([]);
+    setGuestDraft('');
+    setRetroWentWell('');
+    setRetroImprove('');
+    setRetroActions('');
+  }
+
+  async function loadCeremonyStakeholders() {
+    setStakeholdersLoading(true);
+    try {
+      const response = await fetch(`/api/v1/projects/${projectId}/stakeholders`);
+      if (!response.ok) {
+        setCeremonyStakeholders([]);
+        return;
+      }
+      const payload = (await response.json()) as {
+        stakeholders: Array<{
+          id: string;
+          kind: string;
+          displayName: string;
+          projectRole: string | null;
+        }>;
+      };
+      setCeremonyStakeholders(
+        payload.stakeholders
+          .filter((row) => row.kind === 'person')
+          .map((row) => ({
+            id: row.id,
+            displayName: row.displayName,
+            projectRole: row.projectRole,
+          }))
+          .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+      );
+    } catch {
+      setCeremonyStakeholders([]);
+    } finally {
+      setStakeholdersLoading(false);
+    }
+  }
+
+  function openCeremony(recordType: 'sprint_retrospective' | 'sprint_review') {
     if (!selected) return;
+    setCeremonyOpen(recordType);
+    setCeremonyTitle(
+      recordType === 'sprint_retrospective'
+        ? t('scrumCeremonyDefaultRetro', { sprint: selected.name })
+        : t('scrumCeremonyDefaultReview', { sprint: selected.name }),
+    );
+    setCeremonySummary(
+      selected.goal?.trim() ||
+        t('scrumCeremonySummaryDefault', {
+          committed: selected.committedPoints,
+          done: selected.donePoints,
+        }),
+    );
+
+    if (recordType === 'sprint_review') {
+      const doneTasks = sprintTasks.filter((task) => task.status === 'done');
+      const unfinished = sprintTasks.filter(
+        (task) => task.status !== 'done' && task.status !== 'cancelled',
+      );
+      setReviewDemo(
+        doneTasks.length > 0
+          ? doneTasks.map(formatTaskBullet).join('\n')
+          : '',
+      );
+      setReviewFeedback('');
+      setReviewOutcomes(
+        [
+          t('scrumReviewAcceptedHeading'),
+          ...(doneTasks.length > 0
+            ? doneTasks.map(formatTaskBullet)
+            : ['-']),
+          '',
+          t('scrumReviewCarryHeading'),
+          ...(unfinished.length > 0
+            ? unfinished.map(formatTaskBullet)
+            : ['-']),
+        ].join('\n'),
+      );
+      setSelectedAttendeeIds([]);
+      setReviewGuests([]);
+      setGuestDraft('');
+      void loadCeremonyStakeholders();
+    } else {
+      setRetroWentWell('');
+      setRetroImprove('');
+      setRetroActions('');
+    }
+    setError(null);
+  }
+
+  function toggleAttendee(id: string) {
+    setSelectedAttendeeIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
+  }
+
+  function addGuestsFromDraft() {
+    const parts = guestDraft
+      .split(/[,;\n]/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    setReviewGuests((current) => {
+      const seen = new Set(current.map((name) => name.toLowerCase()));
+      const next = [...current];
+      for (const name of parts) {
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        next.push(name);
+      }
+      return next;
+    });
+    setGuestDraft('');
+  }
+
+  function removeGuest(name: string) {
+    setReviewGuests((current) => current.filter((item) => item !== name));
+  }
+
+  function formatStakeholderRole(role: string | null) {
+    switch (role) {
+      case 'sponsor':
+      case 'owner':
+      case 'product_owner':
+      case 'tech_lead':
+      case 'contributor':
+      case 'stakeholder':
+      case 'other':
+        return tStakeholders(`projectRole.${role}`);
+      default:
+        return role;
+    }
+  }
+
+  function formatAttendeesMarkdown() {
+    const selectedPeople = ceremonyStakeholders.filter((row) =>
+      selectedAttendeeIds.includes(row.id),
+    );
+    const lines: string[] = [];
+    if (selectedPeople.length > 0) {
+      lines.push(`### ${t('scrumReviewAttendeeStakeholders')}`, '');
+      for (const person of selectedPeople) {
+        const role = formatStakeholderRole(person.projectRole);
+        lines.push(
+          role
+            ? `- ${person.displayName} (${role})`
+            : `- ${person.displayName}`,
+        );
+      }
+      lines.push('');
+    }
+    if (reviewGuests.length > 0) {
+      lines.push(`### ${t('scrumReviewAttendeeGuests')}`, '');
+      for (const guest of reviewGuests) {
+        lines.push(`- ${guest}`);
+      }
+      lines.push('');
+    }
+    return lines.length > 0 ? lines.join('\n').trimEnd() : '-';
+  }
+
+  function buildCeremonyMarkdown(
+    recordType: 'sprint_retrospective' | 'sprint_review',
+    title: string,
+    sprint: ScrumSprint,
+  ) {
+    const context = `## ${t('scrumCeremonyContext')}\n\n${sprintContextLines(sprint)}`;
+    if (recordType === 'sprint_review') {
+      return [
+        `# ${title}`,
+        '',
+        context,
+        '',
+        `## ${t('scrumReviewDemo')}`,
+        '',
+        reviewDemo.trim() || '-',
+        '',
+        `## ${t('scrumReviewFeedback')}`,
+        '',
+        reviewFeedback.trim() || '-',
+        '',
+        `## ${t('scrumReviewOutcomes')}`,
+        '',
+        reviewOutcomes.trim() || '-',
+        '',
+        `## ${t('scrumReviewAttendees')}`,
+        '',
+        formatAttendeesMarkdown(),
+        '',
+      ].join('\n');
+    }
+    return [
+      `# ${title}`,
+      '',
+      context,
+      '',
+      `## ${t('scrumRetroWentWell')}`,
+      '',
+      retroWentWell.trim() || '-',
+      '',
+      `## ${t('scrumRetroImprove')}`,
+      '',
+      retroImprove.trim() || '-',
+      '',
+      `## ${t('scrumRetroActions')}`,
+      '',
+      retroActions.trim() || '-',
+      '',
+    ].join('\n');
+  }
+
+  async function createCeremony() {
+    if (!selected || !ceremonyOpen || !ceremonyTitle.trim()) return;
     setPending(true);
     setError(null);
     try {
-      const title =
-        recordType === 'sprint_retrospective'
-          ? `Retrospective — ${selected.name}`
-          : `Sprint review — ${selected.name}`;
+      const title = ceremonyTitle.trim();
+      const summary = ceremonySummary.trim() || null;
+      const contentMarkdown = buildCeremonyMarkdown(
+        ceremonyOpen,
+        title,
+        selected,
+      );
       const createResponse = await fetch('/api/v1/knowledge-records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -281,8 +727,9 @@ export function ProjectScrumView({
           workspaceId,
           projectId,
           title,
-          recordType,
-          contentMarkdown: `# ${title}\n\n`,
+          summary,
+          recordType: ceremonyOpen,
+          contentMarkdown,
           lifecycleStatus: 'draft',
         }),
       });
@@ -311,6 +758,8 @@ export function ProjectScrumView({
         } | null;
         throw new Error(payload?.message ?? t('scrumCeremonyFailed'));
       }
+      setCeremonyOpen(null);
+      resetCeremonyForm();
       onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('scrumCeremonyFailed'));
@@ -388,13 +837,45 @@ export function ProjectScrumView({
           </Select>
         </Field>
         {canMutate ? (
-          <Button type="button" variant="secondary" onClick={() => setCreateOpen(true)}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setName('');
+              setGoal('');
+              setCapacity('');
+              setStartDate('');
+              setEndDate('');
+              setCreateOpen(true);
+              setError(null);
+            }}
+          >
             {t('scrumNewSprint')}
           </Button>
         ) : null}
         {canMutate && selected && selected.status !== 'completed' ? (
           <Button type="button" disabled={pending} onClick={openWizard}>
             {t('scrumPlanWizard')}
+          </Button>
+        ) : null}
+        {canMutate && selected ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => openCeremony('sprint_review')}
+          >
+            {t('scrumCreateReview')}
+          </Button>
+        ) : null}
+        {canMutate && selected ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => openCeremony('sprint_retrospective')}
+          >
+            {t('scrumCreateRetro')}
           </Button>
         ) : null}
         {canMutate && selected?.status === 'planned' ? (
@@ -414,26 +895,6 @@ export function ProjectScrumView({
             onClick={() => void setSprintStatus('completed')}
           >
             {t('scrumClose')}
-          </Button>
-        ) : null}
-        {canMutate && selected ? (
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending}
-            onClick={() => void createCeremony('sprint_retrospective')}
-          >
-            {t('scrumCreateRetro')}
-          </Button>
-        ) : null}
-        {canMutate && selected ? (
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending}
-            onClick={() => void createCeremony('sprint_review')}
-          >
-            {t('scrumCreateReview')}
           </Button>
         ) : null}
       </div>
@@ -480,12 +941,159 @@ export function ProjectScrumView({
         </div>
       ) : null}
 
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {error && !createOpen && ceremonyOpen == null && !wizardOpen ? (
+        <p className="text-sm text-danger">{error}</p>
+      ) : null}
 
-      {createOpen ? (
-        <div className="grid gap-3 rounded-lg border border-line p-4">
+      <div className="grid min-w-0 gap-4">
+        <div className="min-w-0 overflow-x-auto">
+          {selected ? (
+            <ProjectDeliveryBoard
+              projectId={projectId}
+              projectName={projectName}
+              tasks={sprintTasks}
+              milestoneTitles={milestoneTitles}
+              canMutate={canMutate}
+              onTaskStatusChange={onTaskStatusChange}
+              onManageTask={onOpenTask}
+              onMetaFiltersChange={setBoardMeta}
+            />
+          ) : (
+            <p className="text-sm text-ink-muted">{t('scrumPickOrCreate')}</p>
+          )}
+        </div>
+
+        <section className="grid min-w-0 gap-2 border-t border-line pt-4">
+          <div className="flex w-[min(17.5rem,85vw)] flex-col rounded-lg border border-line bg-neutral-soft/40 md:w-[17.5rem]">
+            <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+              <h3 className="m-0 text-sm font-semibold">{t('scrumBacklog')}</h3>
+              <span className="text-xs text-ink-muted">{backlogTasks.length}</span>
+            </div>
+            {backlogTasks.length === 0 ? (
+              <p className="m-0 p-3 text-sm text-ink-muted">{t('scrumBacklogEmpty')}</p>
+            ) : (
+              <ul className="m-0 flex list-none flex-col gap-2 p-2">
+                {backlogTasks.map((task) => (
+                  <li key={task.id} className="min-w-0">
+                    <BoardTaskCard
+                      task={task}
+                      milestoneLabel={
+                        task.milestoneId
+                          ? (milestoneTitles.get(task.milestoneId) ?? null)
+                          : null
+                      }
+                      today={today}
+                      meta={boardMeta}
+                      canMutate={false}
+                      pending={pending}
+                      showStatusSelect={false}
+                      onTaskStatusChange={onTaskStatusChange}
+                      onManageTask={onOpenTask}
+                      actions={
+                        canMutate &&
+                        selected &&
+                        selected.status !== 'completed' ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="mt-2 h-8 w-full px-2 text-xs"
+                            disabled={pending}
+                            onClick={() =>
+                              void onAssignToSprint(task.id, selected.id)
+                            }
+                          >
+                            {t('scrumAddToSprint')}
+                          </Button>
+                        ) : null
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <Modal
+        open={exportOpen}
+        onClose={() => {
+          if (!exportPending) setExportOpen(false);
+        }}
+        title={t('scrumExportPdf')}
+        description={t('scrumExportHint')}
+      >
+        <div className="grid gap-3">
+          <p className="m-0 text-sm text-ink-muted">{t('scrumExportSections')}</p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={exportIncludeBurndown}
+              disabled={exportPending}
+              onChange={(event) =>
+                setExportIncludeBurndown(event.target.checked)
+              }
+              data-modal-initial-focus
+            />
+            {t('scrumBurndown')}
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={exportIncludeBoard}
+              disabled={exportPending}
+              onChange={(event) => setExportIncludeBoard(event.target.checked)}
+            />
+            {t('scrumExportBoard')}
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={exportIncludeBacklog}
+              disabled={exportPending}
+              onChange={(event) =>
+                setExportIncludeBacklog(event.target.checked)
+              }
+            />
+            {t('scrumBacklog')}
+          </label>
+          {!exportSectionsSelected ? (
+            <p className="m-0 text-sm text-danger">{t('scrumExportSelectOne')}</p>
+          ) : null}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              disabled={
+                exportPending || !selected || !exportSectionsSelected
+              }
+              onClick={() => void exportScrumPdf()}
+            >
+              {exportPending ? t('scrumExportingPdf') : t('scrumExportPdf')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={exportPending}
+              onClick={() => setExportOpen(false)}
+            >
+              {tCommon('cancel')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title={t('scrumNewSprint')}
+      >
+        <div className="grid gap-3">
           <Field label={tCommon('name')}>
-            <Input value={name} onChange={(event) => setName(event.target.value)} />
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              data-modal-initial-focus
+            />
           </Field>
           <Field label={t('scrumGoal')}>
             <Textarea
@@ -518,6 +1126,9 @@ export function ProjectScrumView({
               />
             </Field>
           </div>
+          {error && createOpen ? (
+            <p className="m-0 text-sm text-danger">{error}</p>
+          ) : null}
           <div className="flex gap-2">
             <Button
               type="button"
@@ -535,59 +1146,216 @@ export function ProjectScrumView({
             </Button>
           </div>
         </div>
-      ) : null}
+      </Modal>
 
-      <div className="grid min-w-0 gap-4">
-        <div className="min-w-0 overflow-x-auto">
-          {selected ? (
-            <ProjectDeliveryBoard
-              projectId={projectId}
-              projectName={projectName}
-              tasks={sprintTasks}
-              canMutate={canMutate}
-              onTaskStatusChange={onTaskStatusChange}
-              onManageTask={onOpenTask}
+      <Modal
+        open={ceremonyOpen != null}
+        onClose={() => {
+          setCeremonyOpen(null);
+          resetCeremonyForm();
+        }}
+        title={
+          ceremonyOpen === 'sprint_retrospective'
+            ? t('scrumCreateRetro')
+            : t('scrumCreateReview')
+        }
+        description={
+          ceremonyOpen === 'sprint_retrospective'
+            ? t('scrumRetroHint')
+            : t('scrumReviewHint')
+        }
+        size="lg"
+      >
+        <div className="grid gap-3">
+          <Field label={tCommon('title')}>
+            <Input
+              value={ceremonyTitle}
+              onChange={(event) => setCeremonyTitle(event.target.value)}
+              data-modal-initial-focus
             />
-          ) : (
-            <p className="text-sm text-ink-muted">{t('scrumPickOrCreate')}</p>
-          )}
-        </div>
+          </Field>
+          <Field label={tCommon('summary')}>
+            <Input
+              value={ceremonySummary}
+              onChange={(event) => setCeremonySummary(event.target.value)}
+            />
+          </Field>
 
-        <section className="grid min-w-0 gap-2 border-t border-line pt-4">
-          <h3 className="m-0 text-sm font-semibold">{t('scrumBacklog')}</h3>
-          {backlogTasks.length === 0 ? (
-            <p className="m-0 text-sm text-ink-muted">{t('scrumBacklogEmpty')}</p>
-          ) : (
-            <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2 lg:grid-cols-3">
-              {backlogTasks.map((task) => (
-                <li
-                  key={task.id}
-                  className="grid gap-1 rounded-md border border-line bg-panel-solid px-2 py-2 text-sm"
-                >
-                  <button
-                    type="button"
-                    className="border-0 bg-transparent p-0 text-left font-medium text-ink"
-                    onClick={() => onOpenTask(task.id)}
-                  >
-                    {task.humanKey ? `${task.humanKey} · ` : ''}
-                    {task.title}
-                  </button>
-                  {canMutate && selected && selected.status !== 'completed' ? (
+          {ceremonyOpen === 'sprint_review' ? (
+            <>
+              <Field label={t('scrumReviewDemo')}>
+                <Textarea
+                  value={reviewDemo}
+                  onChange={(event) => setReviewDemo(event.target.value)}
+                  rows={5}
+                  placeholder={t('scrumReviewDemoPlaceholder')}
+                />
+              </Field>
+              <Field label={t('scrumReviewFeedback')}>
+                <Textarea
+                  value={reviewFeedback}
+                  onChange={(event) => setReviewFeedback(event.target.value)}
+                  rows={4}
+                  placeholder={t('scrumReviewFeedbackPlaceholder')}
+                />
+              </Field>
+              <Field label={t('scrumReviewOutcomes')}>
+                <Textarea
+                  value={reviewOutcomes}
+                  onChange={(event) => setReviewOutcomes(event.target.value)}
+                  rows={5}
+                  placeholder={t('scrumReviewOutcomesPlaceholder')}
+                />
+              </Field>
+              <div className="grid gap-2">
+                <p className="m-0 text-sm font-medium">{t('scrumReviewAttendees')}</p>
+                <p className="m-0 text-xs text-ink-muted">
+                  {t('scrumReviewAttendeesHint')}
+                </p>
+                <div className="grid gap-2">
+                  <p className="m-0 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    {t('scrumReviewAttendeeStakeholders')}
+                  </p>
+                  {stakeholdersLoading ? (
+                    <p className="m-0 text-sm text-ink-muted">{tCommon('loading')}</p>
+                  ) : ceremonyStakeholders.length === 0 ? (
+                    <p className="m-0 text-sm text-ink-muted">
+                      {t('scrumReviewNoStakeholders')}
+                    </p>
+                  ) : (
+                    <ul className="m-0 grid max-h-48 list-none gap-1 overflow-y-auto rounded-md border border-line p-2">
+                      {ceremonyStakeholders.map((person) => {
+                        const role = formatStakeholderRole(person.projectRole);
+                        const checked = selectedAttendeeIds.includes(person.id);
+                        return (
+                          <li key={person.id}>
+                            <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-neutral-soft/60">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleAttendee(person.id)}
+                              />
+                              <span className="min-w-0 flex-1 font-medium">
+                                {person.displayName}
+                              </span>
+                              {role ? (
+                                <Badge tone="neutral">{role}</Badge>
+                              ) : null}
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+                <div className="grid gap-2">
+                  <p className="m-0 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    {t('scrumReviewAttendeeGuests')}
+                  </p>
+                  {reviewGuests.length > 0 ? (
+                    <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+                      {reviewGuests.map((guest) => (
+                        <li key={guest}>
+                          <span className="inline-flex items-center gap-1 rounded-md border border-line bg-neutral-soft/40 px-2 py-1 text-sm">
+                            {guest}
+                            <button
+                              type="button"
+                              className="text-ink-muted hover:text-ink"
+                              aria-label={t('scrumReviewRemoveGuest', {
+                                name: guest,
+                              })}
+                              onClick={() => removeGuest(guest)}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="min-w-[12rem] flex-1">
+                      <Field label={t('scrumReviewGuestName')}>
+                        <Input
+                          value={guestDraft}
+                          onChange={(event) => setGuestDraft(event.target.value)}
+                          placeholder={t('scrumReviewGuestPlaceholder')}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              addGuestsFromDraft();
+                            }
+                          }}
+                        />
+                      </Field>
+                    </div>
                     <Button
                       type="button"
                       variant="secondary"
-                      disabled={pending}
-                      onClick={() => void onAssignToSprint(task.id, selected.id)}
+                      disabled={!guestDraft.trim()}
+                      onClick={addGuestsFromDraft}
                     >
-                      {t('scrumAddToSprint')}
+                      {t('scrumReviewAddGuest')}
                     </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {ceremonyOpen === 'sprint_retrospective' ? (
+            <>
+              <Field label={t('scrumRetroWentWell')}>
+                <Textarea
+                  value={retroWentWell}
+                  onChange={(event) => setRetroWentWell(event.target.value)}
+                  rows={4}
+                  placeholder={t('scrumRetroWentWellPlaceholder')}
+                />
+              </Field>
+              <Field label={t('scrumRetroImprove')}>
+                <Textarea
+                  value={retroImprove}
+                  onChange={(event) => setRetroImprove(event.target.value)}
+                  rows={4}
+                  placeholder={t('scrumRetroImprovePlaceholder')}
+                />
+              </Field>
+              <Field label={t('scrumRetroActions')}>
+                <Textarea
+                  value={retroActions}
+                  onChange={(event) => setRetroActions(event.target.value)}
+                  rows={4}
+                  placeholder={t('scrumRetroActionsPlaceholder')}
+                />
+              </Field>
+            </>
+          ) : null}
+
+          {error && ceremonyOpen ? (
+            <p className="m-0 text-sm text-danger">{error}</p>
+          ) : null}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              disabled={pending || !ceremonyTitle.trim() || !selected}
+              onClick={() => void createCeremony()}
+            >
+              {tCommon('create')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setCeremonyOpen(null);
+                resetCeremonyForm();
+              }}
+            >
+              {tCommon('cancel')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={wizardOpen}
