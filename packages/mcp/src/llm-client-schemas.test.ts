@@ -26,15 +26,22 @@ describe('llm-client-schemas', () => {
     );
   });
 
-  it('builds OpenAPI with search tool and optional write tools', () => {
+  it('builds OpenAPI with delivery tools under the ChatGPT 30-op limit', () => {
     const readOnly = buildLlmOpenApiDocument({ ...opts, includeWriteTools: false });
     const paths = readOnly.paths as Record<string, unknown>;
     expect(paths['/api/v1/llm/tools/search_knowledge']).toBeTruthy();
     expect(paths['/api/v1/llm/tools/list_record_metadata']).toBeTruthy();
+    expect(paths['/api/v1/llm/tools/list_project_tasks']).toBeTruthy();
     expect(paths['/api/v1/llm/tools/create_knowledge_record']).toBeUndefined();
+    expect(paths['/api/v1/llm/tools/create_project_task']).toBeUndefined();
+    expect(Object.keys(paths).length).toBeLessThanOrEqual(30);
 
     const withWrite = buildLlmOpenApiDocument({ ...opts, includeWriteTools: true });
     const writePaths = withWrite.paths as Record<string, unknown>;
+    expect(Object.keys(writePaths).length).toBeLessThanOrEqual(30);
+    expect(writePaths['/api/v1/llm/tools/create_project_task']).toBeTruthy();
+    expect(writePaths['/api/v1/llm/tools/call_hub_tool']).toBeTruthy();
+    expect(withWrite.info).toMatchObject({ version: '0.2.0' });
     const createPath = writePaths['/api/v1/llm/tools/create_knowledge_record'] as {
       post: {
         requestBody: {
@@ -133,7 +140,7 @@ describe('llm-client-schemas', () => {
     expect(server.headers.Authorization).toBe('Bearer kh_test_token');
   });
 
-  it('builds Gemini function declarations without uuid format', () => {
+  it('builds Gemini function declarations without uuid format and includes PM tools', () => {
     const gemini = buildGeminiFunctionDeclarations({ ...opts, includeWriteTools: false });
     const decls = gemini.functionDeclarations as Array<{
       name: string;
@@ -142,5 +149,7 @@ describe('llm-client-schemas', () => {
     const search = decls.find((d) => d.name === 'search_knowledge');
     expect(search).toBeTruthy();
     expect(search?.parameters.properties?.workspaceId?.format).toBeUndefined();
+    expect(decls.some((d) => d.name === 'list_project_tasks')).toBe(true);
+    expect(decls.some((d) => d.name === 'call_hub_tool')).toBe(false);
   });
 });

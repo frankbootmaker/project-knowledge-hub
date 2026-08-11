@@ -34,5 +34,12 @@ export {
   buildClaudeSetupSteps,
   buildChatGptActionsMeta,
   stringifySchema,
+  LLM_TOOL_CATALOG,
+  findLlmTool,
+  listHubToolSummaries,
+  toolDefinitionsForGemini,
+  toolDefinitionsForOpenApi,
+  toolNameToHandlerMethod,
   type LlmSchemaOptions,
+  type LlmToolDef,
 } from './llm-client-schemas.js';

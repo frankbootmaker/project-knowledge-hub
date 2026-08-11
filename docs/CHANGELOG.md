@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **MCP Project Delivery coverage:** sprint burndown + velocity tools; My tasks / dashboard insights; project delivery-document index; ceremony links to `sprint`; human/document keys on more knowledge + change/delivery-link tools; `list_knowledge_records` returns `humanKey`; MCP setup wizards can opt into `pm:read` / `pm:write`.
 
+* **LLM OpenAPI / Gemini schemas:** ChatGPT Actions + OpenWebUI OpenAPI include first-class delivery tools (`create_project_task`, sprints, milestones, …) under the 30-op limit, plus `call_hub_tool` for the full catalog; Gemini function declarations include the full PM surface; `update_knowledge_record` supports soft-archive.
+
 ### Fixed
 
 * **Long AI translate via Next:** `experimental.proxyTimeout` raised so Next rewrites no longer return opaque HTTP 500 after ~30s while the API/Ollama call is still running. Traefik/Dokploy gateway timeouts documented in `DOKPLOY.md`.

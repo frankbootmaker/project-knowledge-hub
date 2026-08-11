@@ -105,12 +105,13 @@ ChatGPT’s normal client does **not** use MCP. Wire Knowledge Hub as a **Custom
    https://<your-public-host>/api/v1/llm/openapi.json
    ```
    Example (Dev): `https://knowhub-dev.in3.technology/api/v1/llm/openapi.json`  
+   Schema **0.2.0+** includes first-class Project Delivery tools (`create_project_task`, sprints, milestones, …) and `call_hub_tool` for extended tools (RAID, budget, delivery links). Soft-archive a draft with `update_knowledge_record` + `archived: true`. Re-import after hub upgrades — ChatGPT does not auto-refresh.  
    The document must advertise the public HTTPS origin (not `http://api:3101`). Response schemas use `components.schemas.ToolResult` with explicit `properties` so ChatGPT’s Actions validator accepts the import.
-4. **Authentication** — API Key, auth type **Bearer**, paste the hub token (no `Bearer ` prefix; ChatGPT adds it).
-5. **Instructions** (optional) — e.g. search Knowledge Hub before answering; create/update only as drafts when write is enabled.
+4. **Authentication** — API Key, auth type **Bearer**, paste the hub token (no `Bearer ` prefix; ChatGPT adds it). Grant **`pm:read` / `pm:write`** (wizard checkbox **Include Project Delivery**) when the GPT should manage tasks/sprints — knowledge-only tokens cannot create delivery items.
+5. **Instructions** (optional) — e.g. search Knowledge Hub before answering; use `create_project_task` for delivery work (not knowledge notes); create/update knowledge only as drafts when write is enabled.
 6. **Save** the GPT and chat **in that Custom GPT** (not the default ChatGPT thread, and not via `@` mention alone).
 
-Humans use the web UI; Cursor, Antigravity CLI (`agy`), and other MCP clients use `/mcp`; ChatGPT uses the same ledger via OpenAPI Actions — one shared knowledge base across systems.
+Humans use the web UI; Cursor, Antigravity CLI (`agy`), and other MCP clients use `/mcp`; ChatGPT / OpenWebUI OpenAPI use the same ledger via `/api/v1/llm/openapi.json` — one shared knowledge base across systems.
 
 **Note:** Public `/mcp` must not be redirected to the login page by the web middleware (Bearer auth is enforced on the API). If MCP clients get `initialize` EOF / connection closed, check that `apps/web` lets `/mcp` through like `/api/*`. `/.well-known/*` must return JSON **404** (not a login HTML page) so proxies like `mcp-remote` do not crash parsing `<!DOCTYPE` during OAuth discovery.
 

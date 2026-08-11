@@ -3,10 +3,13 @@ import { z } from 'zod';
 import { AppError } from '@project-knowledge-hub/domain';
 import {
   buildLlmOpenApiDocument,
+  findLlmTool,
   hasMcpScope,
+  listHubToolSummaries,
+  LLM_TOOL_CATALOG,
   MCP_RATE_LIMIT_PER_MINUTE,
+  toolNameToHandlerMethod,
   type McpClientContext,
-  type McpScope,
   type McpToolHandlers,
 } from '@project-knowledge-hub/mcp';
 import {
@@ -17,55 +20,9 @@ import { createMcpToolHandlers } from '../lib/mcp-tools.js';
 import { resolveMcpPublicUrl } from '../lib/mcp-public-url.js';
 import { writeAuditEvent } from '../lib/identity.js';
 
-const TOOL_NAMES = [
-  'list_projects',
-  'list_systems',
-  'get_project',
-  'get_system',
-  'list_knowledge_records',
-  'search_knowledge',
-  'get_knowledge_record',
-  'get_record_provenance',
-  'list_record_translations',
-  'list_record_metadata',
-  'list_workspace_media',
-  'get_platform_status',
-  'create_knowledge_record',
-  'create_record_translation',
-  'update_knowledge_record',
-  'begin_workspace_media_upload',
-  'append_workspace_media_upload',
-  'finalize_workspace_media_upload',
-  'upload_workspace_media',
-  'delete_workspace_media',
-] as const;
-
-type ToolName = (typeof TOOL_NAMES)[number];
-
-const toolNameSchema = z.enum(TOOL_NAMES);
-
-const scopeByTool: Record<ToolName, McpScope> = {
-  list_projects: 'projects:read',
-  list_systems: 'systems:read',
-  get_project: 'projects:read',
-  get_system: 'systems:read',
-  list_knowledge_records: 'knowledge:read',
-  search_knowledge: 'knowledge:search',
-  get_knowledge_record: 'knowledge:read',
-  get_record_provenance: 'provenance:read',
-  list_record_translations: 'knowledge:read',
-  list_record_metadata: 'knowledge:read',
-  list_workspace_media: 'knowledge:read',
-  get_platform_status: 'monitoring:read',
-  create_knowledge_record: 'knowledge:write',
-  create_record_translation: 'knowledge:write',
-  update_knowledge_record: 'knowledge:write',
-  begin_workspace_media_upload: 'knowledge:write',
-  append_workspace_media_upload: 'knowledge:write',
-  finalize_workspace_media_upload: 'knowledge:write',
-  upload_workspace_media: 'knowledge:write',
-  delete_workspace_media: 'knowledge:write',
-};
+const TOOL_NAME_SET = new Set(LLM_TOOL_CATALOG.map((tool) => tool.name));
+/** Native MCP-only tools still invokable via call_hub_tool / OpenAPI path. */
+TOOL_NAME_SET.add('upload_workspace_media');
 
 async function enforceRateLimit(app: FastifyInstance, clientId: string): Promise<void> {
   const key = `mcp:rl:${clientId}`;
@@ -103,360 +60,105 @@ async function requireApiClient(app: FastifyInstance, authorization: string | un
   return client;
 }
 
-async function invokeTool(
+function asArgs(body: unknown): Record<string, unknown> {
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    return { ...(body as Record<string, unknown>) };
+  }
+  return {};
+}
+
+async function invokeNamedTool(
   handlers: McpToolHandlers,
   client: McpClientContext,
-  toolName: ToolName,
+  toolName: string,
   body: unknown,
+  depth = 0,
 ): Promise<unknown> {
-  const scope = scopeByTool[toolName];
-  if (!hasMcpScope(client.scopes, scope)) {
+  if (depth > 1) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'call_hub_tool cannot nest another call_hub_tool',
+      statusCode: 400,
+    });
+  }
+
+  if (toolName === 'list_hub_tools') {
+    if (!hasMcpScope(client.scopes, 'projects:read')) {
+      throw new AppError({
+        code: 'FORBIDDEN',
+        message: 'Missing required scope: projects:read',
+        statusCode: 403,
+      });
+    }
+    const includeWrite =
+      hasMcpScope(client.scopes, 'knowledge:write') ||
+      hasMcpScope(client.scopes, 'pm:write');
+    return { tools: listHubToolSummaries(includeWrite) };
+  }
+
+  if (toolName === 'call_hub_tool') {
+    const raw = asArgs(body);
+    if (typeof raw.toolName !== 'string' || raw.toolName.trim().length === 0) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'toolName is required',
+        statusCode: 400,
+      });
+    }
+    const innerName = raw.toolName.trim();
+    if (innerName === 'call_hub_tool') {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'call_hub_tool cannot invoke itself',
+        statusCode: 400,
+      });
+    }
+    const innerArgs =
+      raw.arguments && typeof raw.arguments === 'object' && !Array.isArray(raw.arguments)
+        ? raw.arguments
+        : {};
+    return invokeNamedTool(handlers, client, innerName, innerArgs, depth + 1);
+  }
+
+  const catalog = findLlmTool(toolName);
+  const scope = catalog?.scope;
+  if (!scope && toolName !== 'upload_workspace_media') {
+    throw new AppError({
+      code: 'NOT_FOUND',
+      message: `Unknown tool: ${toolName}`,
+      statusCode: 404,
+    });
+  }
+  const requiredScope =
+    toolName === 'upload_workspace_media' ? 'knowledge:write' : scope!;
+  if (!hasMcpScope(client.scopes, requiredScope)) {
     throw new AppError({
       code: 'FORBIDDEN',
-      message: `Missing required scope: ${scope}`,
+      message: `Missing required scope: ${requiredScope}`,
       statusCode: 403,
     });
   }
 
-  const raw = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-
-  switch (toolName) {
-    case 'list_projects':
-      return handlers.listProjects({
-        workspaceId: typeof raw.workspaceId === 'string' ? raw.workspaceId : undefined,
-        limit: typeof raw.limit === 'number' ? raw.limit : 50,
-      });
-    case 'list_systems':
-      return handlers.listSystems({
-        workspaceId: typeof raw.workspaceId === 'string' ? raw.workspaceId : undefined,
-        projectId: typeof raw.projectId === 'string' ? raw.projectId : undefined,
-        limit: typeof raw.limit === 'number' ? raw.limit : 50,
-      });
-    case 'get_project':
-      if (typeof raw.projectId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'projectId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.getProject({ projectId: raw.projectId });
-    case 'get_system':
-      if (typeof raw.systemId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'systemId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.getSystem({ systemId: raw.systemId });
-    case 'list_knowledge_records':
-      if (typeof raw.workspaceId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'workspaceId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.listKnowledgeRecords({
-        workspaceId: raw.workspaceId,
-        projectId: typeof raw.projectId === 'string' ? raw.projectId : undefined,
-        systemId: typeof raw.systemId === 'string' ? raw.systemId : undefined,
-        language: typeof raw.language === 'string' ? raw.language : undefined,
-        limit: typeof raw.limit === 'number' ? raw.limit : 50,
-      });
-    case 'search_knowledge':
-      if (typeof raw.workspaceId !== 'string' || typeof raw.query !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'workspaceId and query are required',
-          statusCode: 400,
-        });
-      }
-      return handlers.searchKnowledge({
-        workspaceId: raw.workspaceId,
-        query: raw.query,
-        projectIds: Array.isArray(raw.projectIds)
-          ? raw.projectIds.filter((id): id is string => typeof id === 'string')
-          : undefined,
-        systemIds: Array.isArray(raw.systemIds)
-          ? raw.systemIds.filter((id): id is string => typeof id === 'string')
-          : undefined,
-        recordTypes: Array.isArray(raw.recordTypes)
-          ? raw.recordTypes.filter((id): id is string => typeof id === 'string')
-          : undefined,
-        statuses: Array.isArray(raw.statuses)
-          ? raw.statuses.filter((id): id is string => typeof id === 'string')
-          : undefined,
-        language: typeof raw.language === 'string' ? raw.language : undefined,
-        limit: typeof raw.limit === 'number' ? raw.limit : 10,
-      });
-    case 'get_knowledge_record':
-      if (typeof raw.recordId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'recordId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.getKnowledgeRecord({ recordId: raw.recordId });
-    case 'get_record_provenance':
-      if (typeof raw.recordId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'recordId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.getRecordProvenance({ recordId: raw.recordId });
-    case 'list_record_translations':
-      if (typeof raw.recordId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'recordId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.listRecordTranslations({ recordId: raw.recordId });
-    case 'list_record_metadata':
-      return handlers.listRecordMetadata();
-    case 'get_platform_status':
-      return handlers.getPlatformStatus();
-    case 'create_knowledge_record':
-      if (
-        typeof raw.workspaceId !== 'string' ||
-        typeof raw.title !== 'string' ||
-        typeof raw.recordType !== 'string' ||
-        typeof raw.contentMarkdown !== 'string'
-      ) {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'workspaceId, title, recordType, and contentMarkdown are required',
-          statusCode: 400,
-        });
-      }
-      return handlers.createKnowledgeRecord({
-        workspaceId: raw.workspaceId,
-        title: raw.title,
-        recordType: raw.recordType,
-        contentMarkdown: raw.contentMarkdown,
-        summary: typeof raw.summary === 'string' ? raw.summary : undefined,
-        slug: typeof raw.slug === 'string' ? raw.slug : undefined,
-        projectId: typeof raw.projectId === 'string' ? raw.projectId : undefined,
-        systemId: typeof raw.systemId === 'string' ? raw.systemId : undefined,
-        tags: Array.isArray(raw.tags)
-          ? raw.tags.filter((tag): tag is string => typeof tag === 'string')
-          : undefined,
-        language: typeof raw.language === 'string' ? raw.language : undefined,
-        translationGroupId:
-          raw.translationGroupId === null
-            ? null
-            : typeof raw.translationGroupId === 'string'
-              ? raw.translationGroupId
-              : undefined,
-        generatedByModel:
-          typeof raw.generatedByModel === 'string' ? raw.generatedByModel : undefined,
-        sourceTitle: typeof raw.sourceTitle === 'string' ? raw.sourceTitle : undefined,
-      });
-    case 'create_record_translation':
-      if (typeof raw.recordId !== 'string' || typeof raw.language !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'recordId and language are required',
-          statusCode: 400,
-        });
-      }
-      return handlers.createRecordTranslation({
-        recordId: raw.recordId,
-        language: raw.language,
-        slug: typeof raw.slug === 'string' ? raw.slug : undefined,
-        translateWithAi:
-          typeof raw.translateWithAi === 'boolean' ? raw.translateWithAi : undefined,
-        title: typeof raw.title === 'string' ? raw.title : undefined,
-        summary:
-          raw.summary === null
-            ? null
-            : typeof raw.summary === 'string'
-              ? raw.summary
-              : undefined,
-        contentMarkdown:
-          typeof raw.contentMarkdown === 'string' ? raw.contentMarkdown : undefined,
-      });
-    case 'update_knowledge_record':
-      if (typeof raw.recordId !== 'string' || typeof raw.changeMessage !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'recordId and changeMessage are required',
-          statusCode: 400,
-        });
-      }
-      return handlers.updateKnowledgeRecord({
-        recordId: raw.recordId,
-        changeMessage: raw.changeMessage,
-        title: typeof raw.title === 'string' ? raw.title : undefined,
-        summary:
-          raw.summary === null
-            ? null
-            : typeof raw.summary === 'string'
-              ? raw.summary
-              : undefined,
-        recordType: typeof raw.recordType === 'string' ? raw.recordType : undefined,
-        contentMarkdown:
-          typeof raw.contentMarkdown === 'string' ? raw.contentMarkdown : undefined,
-        projectId:
-          raw.projectId === null
-            ? null
-            : typeof raw.projectId === 'string'
-              ? raw.projectId
-              : undefined,
-        systemId:
-          raw.systemId === null
-            ? null
-            : typeof raw.systemId === 'string'
-              ? raw.systemId
-              : undefined,
-        tags: Array.isArray(raw.tags)
-          ? raw.tags.filter((tag): tag is string => typeof tag === 'string')
-          : undefined,
-        language:
-          raw.language === null
-            ? null
-            : typeof raw.language === 'string'
-              ? raw.language
-              : undefined,
-        translationGroupId:
-          raw.translationGroupId === null
-            ? null
-            : typeof raw.translationGroupId === 'string'
-              ? raw.translationGroupId
-              : undefined,
-        generatedByModel:
-          typeof raw.generatedByModel === 'string' ? raw.generatedByModel : undefined,
-        sourceTitle: typeof raw.sourceTitle === 'string' ? raw.sourceTitle : undefined,
-      });
-    case 'list_workspace_media':
-      if (typeof raw.workspaceId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'workspaceId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.listWorkspaceMedia({
-        workspaceId: raw.workspaceId,
-        knowledgeRecordId:
-          typeof raw.knowledgeRecordId === 'string' ? raw.knowledgeRecordId : undefined,
-        limit: typeof raw.limit === 'number' ? raw.limit : 20,
-      });
-    case 'begin_workspace_media_upload': {
-      if (typeof raw.workspaceId !== 'string' || typeof raw.contentType !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'workspaceId and contentType are required',
-          statusCode: 400,
-        });
-      }
-      if (
-        raw.contentType !== 'image/jpeg' &&
-        raw.contentType !== 'image/png' &&
-        raw.contentType !== 'image/webp' &&
-        raw.contentType !== 'image/gif'
-      ) {
-        throw new AppError({
-          code: 'MEDIA_TYPE_UNSUPPORTED',
-          message: 'contentType must be image/jpeg, image/png, image/webp, or image/gif',
-          statusCode: 400,
-        });
-      }
-      return handlers.beginWorkspaceMediaUpload({
-        workspaceId: raw.workspaceId,
-        contentType: raw.contentType,
-        filename: typeof raw.filename === 'string' ? raw.filename : undefined,
-        alt: typeof raw.alt === 'string' ? raw.alt : undefined,
-        knowledgeRecordId:
-          typeof raw.knowledgeRecordId === 'string' ? raw.knowledgeRecordId : undefined,
-        insertIntoRecord:
-          typeof raw.insertIntoRecord === 'boolean' ? raw.insertIntoRecord : undefined,
-      });
-    }
-    case 'append_workspace_media_upload': {
-      if (typeof raw.uploadId !== 'string' || typeof raw.chunkBase64 !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'uploadId and chunkBase64 are required',
-          statusCode: 400,
-        });
-      }
-      return handlers.appendWorkspaceMediaUpload({
-        uploadId: raw.uploadId,
-        chunkBase64: raw.chunkBase64,
-        index: typeof raw.index === 'number' ? raw.index : undefined,
-      });
-    }
-    case 'finalize_workspace_media_upload': {
-      if (typeof raw.uploadId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'uploadId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.finalizeWorkspaceMediaUpload({ uploadId: raw.uploadId });
-    }
-    case 'upload_workspace_media': {
-      if (
-        typeof raw.workspaceId !== 'string' ||
-        typeof raw.contentBase64 !== 'string' ||
-        typeof raw.contentType !== 'string'
-      ) {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'workspaceId, contentBase64, and contentType are required',
-          statusCode: 400,
-        });
-      }
-      if (
-        raw.contentType !== 'image/jpeg' &&
-        raw.contentType !== 'image/png' &&
-        raw.contentType !== 'image/webp' &&
-        raw.contentType !== 'image/gif'
-      ) {
-        throw new AppError({
-          code: 'MEDIA_TYPE_UNSUPPORTED',
-          message: 'contentType must be image/jpeg, image/png, image/webp, or image/gif',
-          statusCode: 400,
-        });
-      }
-      return handlers.uploadWorkspaceMedia({
-        workspaceId: raw.workspaceId,
-        contentBase64: raw.contentBase64,
-        contentType: raw.contentType,
-        filename: typeof raw.filename === 'string' ? raw.filename : undefined,
-        alt: typeof raw.alt === 'string' ? raw.alt : undefined,
-        knowledgeRecordId:
-          typeof raw.knowledgeRecordId === 'string' ? raw.knowledgeRecordId : undefined,
-        insertIntoRecord:
-          typeof raw.insertIntoRecord === 'boolean' ? raw.insertIntoRecord : undefined,
-      });
-    }
-    case 'delete_workspace_media':
-      if (typeof raw.mediaId !== 'string') {
-        throw new AppError({
-          code: 'VALIDATION_ERROR',
-          message: 'mediaId is required',
-          statusCode: 400,
-        });
-      }
-      return handlers.deleteWorkspaceMedia({ mediaId: raw.mediaId });
-    default: {
-      const _exhaustive: never = toolName;
-      throw new AppError({
-        code: 'NOT_FOUND',
-        message: `Unknown tool: ${_exhaustive}`,
-        statusCode: 404,
-      });
-    }
+  const methodName = toolNameToHandlerMethod(toolName);
+  const fn = (handlers as Record<string, unknown>)[methodName];
+  if (typeof fn !== 'function') {
+    throw new AppError({
+      code: 'NOT_FOUND',
+      message: `Tool handler not available: ${toolName}`,
+      statusCode: 404,
+    });
   }
+
+  const raw = asArgs(body);
+  const args = {
+    ...(catalog?.defaults ?? {}),
+    ...raw,
+  };
+
+  return (fn as (this: McpToolHandlers, input: Record<string, unknown>) => Promise<unknown>).call(
+    handlers,
+    args,
+  );
 }
 
 export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<void> {
@@ -470,16 +172,31 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
   });
 
   app.post('/api/v1/llm/tools/:toolName', async (request) => {
-    const params = z.object({ toolName: toolNameSchema }).parse(request.params);
+    const params = z
+      .object({
+        toolName: z.string().min(1).max(80),
+      })
+      .parse(request.params);
+
+    if (!TOOL_NAME_SET.has(params.toolName)) {
+      throw new AppError({
+        code: 'NOT_FOUND',
+        message: `Unknown tool: ${params.toolName}`,
+        statusCode: 404,
+      });
+    }
+
     const client = await requireApiClient(app, request.headers.authorization);
     const handlers = createMcpToolHandlers(app, client.context, request.ip);
 
     try {
-      const result = await invokeTool(handlers, client.context, params.toolName, request.body);
-      const body =
-        request.body && typeof request.body === 'object' && !Array.isArray(request.body)
-          ? (request.body as Record<string, unknown>)
-          : {};
+      const result = await invokeNamedTool(
+        handlers,
+        client.context,
+        params.toolName,
+        request.body,
+      );
+      const body = asArgs(request.body);
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -492,6 +209,10 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
           toolName: params.toolName,
           ok: true,
           via: 'openapi',
+          nestedTool:
+            params.toolName === 'call_hub_tool' && typeof body.toolName === 'string'
+              ? body.toolName
+              : undefined,
           workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : undefined,
           recordId:
             typeof body.recordId === 'string'
@@ -501,8 +222,8 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
                 : undefined,
           projectId: typeof body.projectId === 'string' ? body.projectId : undefined,
           systemId: typeof body.systemId === 'string' ? body.systemId : undefined,
+          taskId: typeof body.taskId === 'string' ? body.taskId : undefined,
           uploadId: typeof body.uploadId === 'string' ? body.uploadId : undefined,
-          // Avoid logging multi‑MB base64 payloads in audit metadata.
           contentBase64Chars:
             typeof body.contentBase64 === 'string' ? body.contentBase64.length : undefined,
           chunkBase64Chars:
@@ -516,10 +237,7 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
       });
       return result;
     } catch (error) {
-      const body =
-        request.body && typeof request.body === 'object' && !Array.isArray(request.body)
-          ? (request.body as Record<string, unknown>)
-          : {};
+      const body = asArgs(request.body);
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -532,19 +250,11 @@ export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<vo
           toolName: params.toolName,
           ok: false,
           via: 'openapi',
-          workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : undefined,
-          recordId:
-            typeof body.recordId === 'string'
-              ? body.recordId
-              : typeof body.knowledgeRecordId === 'string'
-                ? body.knowledgeRecordId
-                : undefined,
-          uploadId: typeof body.uploadId === 'string' ? body.uploadId : undefined,
-          contentBase64Chars:
-            typeof body.contentBase64 === 'string' ? body.contentBase64.length : undefined,
-          chunkBase64Chars:
-            typeof body.chunkBase64 === 'string' ? body.chunkBase64.length : undefined,
-          message: error instanceof Error ? error.message : 'Tool failed',
+          nestedTool:
+            params.toolName === 'call_hub_tool' && typeof body.toolName === 'string'
+              ? body.toolName
+              : undefined,
+          message: error instanceof Error ? error.message : 'unknown',
         },
         ipAddress: request.ip,
       });

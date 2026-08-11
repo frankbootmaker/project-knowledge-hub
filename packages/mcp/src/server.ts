@@ -110,6 +110,8 @@ export type McpToolHandlers = {
     translationGroupId?: string | null;
     generatedByModel?: string;
     sourceTitle?: string;
+    /** Soft-archive (true) or restore (false). */
+    archived?: boolean;
   }) => Promise<unknown>;
   uploadWorkspaceMedia: (input: {
     workspaceId: string;
@@ -993,7 +995,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_knowledge_record',
-    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Set archived=true to soft-archive (or false to restore). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     {
       recordId: z.string().min(1).max(80),
       changeMessage: z.string().min(1).max(500),
@@ -1008,6 +1010,7 @@ export function createKnowledgeHubMcpServer(
       translationGroupId: z.string().uuid().nullable().optional(),
       generatedByModel: z.string().max(160).optional(),
       sourceTitle: z.string().max(300).optional(),
+      archived: z.boolean().optional(),
     },
     async (args) =>
       wrap('update_knowledge_record', 'knowledge:write', () =>

@@ -69,7 +69,7 @@ Requires ChatGPT Plus / Team / Enterprise (Custom GPTs + Actions).
    ```
 
 5. **Authentication:** API Key → auth type **Bearer** → paste the hub token (**no** `Bearer ` prefix).
-6. Confirm **Available actions** includes `begin_workspace_media_upload`, `append_workspace_media_upload`, and `finalize_workspace_media_upload` (plus create/update), and does **not** list `upload_workspace_media` (single-shot is omitted from this schema). If the list is stale after a hub upgrade, click **Import from URL** again on the same OpenAPI URL — ChatGPT does **not** auto-refresh Actions when the hub changes tools.
+6. Confirm **Available actions** includes `create_project_task` / `list_project_tasks` (and `call_hub_tool` for extended PM tools), plus knowledge create/update and `begin_workspace_media_upload` → `append` → `finalize`. Soft-archive drafts with `update_knowledge_record` + `archived: true`. If the list is stale after a hub upgrade, click **Import from URL** again on the same OpenAPI URL — ChatGPT does **not** auto-refresh Actions when the hub changes tools. Ensure the API client has **`pm:read`/`pm:write`** when creating delivery items.
 7. Optional instructions, for example:
    - Prefer searching Knowledge Hub before answering from memory.
    - When asked to save work, create/update **draft** knowledge records in the configured workspace.

@@ -1068,10 +1068,16 @@ export function createMcpToolHandlers(
         idOrKey: input.recordId,
       });
 
+      const conditions = [eq(knowledgeRecords.id, resolvedId)];
+      // Restores may target an already-archived row.
+      if (input.archived !== false) {
+        conditions.push(isNull(knowledgeRecords.archivedAt));
+      }
+
       const [existing] = await app.database.db
         .select()
         .from(knowledgeRecords)
-        .where(and(eq(knowledgeRecords.id, resolvedId), isNull(knowledgeRecords.archivedAt)))
+        .where(and(...conditions))
         .limit(1);
       if (!existing) {
         throw new AppError({
@@ -1091,6 +1097,18 @@ export function createMcpToolHandlers(
           ? undefined
           : recordTypeSchema.parse(input.recordType);
 
+      const archiveOnly =
+        input.archived !== undefined &&
+        input.title === undefined &&
+        input.summary === undefined &&
+        input.recordType === undefined &&
+        input.contentMarkdown === undefined &&
+        input.projectId === undefined &&
+        input.systemId === undefined &&
+        input.tags === undefined &&
+        input.language === undefined &&
+        input.translationGroupId === undefined;
+
       const result = await updateKnowledgeRecord(
         app,
         resolvedId,
@@ -1105,8 +1123,13 @@ export function createMcpToolHandlers(
           language: input.language,
           translationGroupId: input.translationGroupId,
           changeMessage: input.changeMessage,
-          lifecycleStatus: 'draft',
-          sourceOfTruthMode: 'ai_generated_draft',
+          archived: input.archived,
+          ...(archiveOnly
+            ? {}
+            : {
+                lifecycleStatus: 'draft' as const,
+                sourceOfTruthMode: 'ai_generated_draft' as const,
+              }),
           source:
             input.generatedByModel !== undefined || input.sourceTitle !== undefined
               ? {

@@ -3,7 +3,11 @@
  * Pure JSON/YAML builders — safe to import from web and API.
  */
 
-import { RECORD_TYPES } from '@project-knowledge-hub/domain';
+import {
+  toolDefinitionsForGemini,
+  toolDefinitionsForOpenApi,
+  type LlmToolDef,
+} from './llm-tool-catalog.js';
 
 export type LlmSchemaOptions = {
   mcpUrl: string;
@@ -23,399 +27,16 @@ export function llmOpenApiUrlFromMcpUrl(mcpUrl: string): string {
   return `${apiBaseFromMcpUrl(mcpUrl)}/api/v1/llm/openapi.json`;
 }
 
-function uuidProp(description: string) {
-  return { type: 'string', format: 'uuid', description };
-}
+export {
+  LLM_TOOL_CATALOG,
+  findLlmTool,
+  listHubToolSummaries,
+  toolDefinitionsForGemini,
+  toolDefinitionsForOpenApi,
+  toolNameToHandlerMethod,
+  type LlmToolDef,
+} from './llm-tool-catalog.js';
 
-function stringProp(description: string, opts?: { minLength?: number; maxLength?: number }) {
-  return {
-    type: 'string',
-    description,
-    ...(opts?.minLength != null ? { minLength: opts.minLength } : {}),
-    ...(opts?.maxLength != null ? { maxLength: opts.maxLength } : {}),
-  };
-}
-
-type ToolDef = {
-  name: string;
-  description: string;
-  write?: boolean;
-  body: Record<string, unknown>;
-};
-
-function toolDefinitions(includeWriteTools: boolean): ToolDef[] {
-  const read: ToolDef[] = [
-    {
-      name: 'list_projects',
-      description: 'List accessible projects in allowed workspaces',
-      body: {
-        type: 'object',
-        properties: {
-          workspaceId: uuidProp('Optional workspace filter'),
-          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
-        },
-      },
-    },
-    {
-      name: 'list_systems',
-      description: 'List accessible systems in allowed workspaces',
-      body: {
-        type: 'object',
-        properties: {
-          workspaceId: uuidProp('Optional workspace filter'),
-          projectId: uuidProp('Optional project filter'),
-          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
-        },
-      },
-    },
-    {
-      name: 'get_project',
-      description: 'Get a project by id',
-      body: {
-        type: 'object',
-        required: ['projectId'],
-        properties: { projectId: uuidProp('Project id') },
-      },
-    },
-    {
-      name: 'get_system',
-      description: 'Get a system by id',
-      body: {
-        type: 'object',
-        required: ['systemId'],
-        properties: { systemId: uuidProp('System id') },
-      },
-    },
-    {
-      name: 'list_knowledge_records',
-      description:
-        'List knowledge records in a workspace (excludes archived by default). Prefer language: "en" unless the user asks for another locale.',
-      body: {
-        type: 'object',
-        required: ['workspaceId'],
-        properties: {
-          workspaceId: uuidProp('Workspace id'),
-          projectId: uuidProp('Optional project filter'),
-          systemId: uuidProp('Optional system filter'),
-          language: stringProp('Optional content language filter', {
-            minLength: 2,
-            maxLength: 16,
-          }),
-          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
-        },
-      },
-    },
-    {
-      name: 'search_knowledge',
-      description:
-        'Search knowledge records (full-text by default; optional hybrid when embeddings are enabled). Prefer language: "en" unless the user asks for another locale.',
-      body: {
-        type: 'object',
-        required: ['workspaceId', 'query'],
-        properties: {
-          workspaceId: uuidProp('Workspace id'),
-          query: stringProp('Search query', { minLength: 1, maxLength: 300 }),
-          projectIds: {
-            type: 'array',
-            items: { type: 'string', format: 'uuid' },
-            description: 'Optional project filters',
-          },
-          systemIds: {
-            type: 'array',
-            items: { type: 'string', format: 'uuid' },
-            description: 'Optional system filters',
-          },
-          recordTypes: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Optional record type filters',
-          },
-          statuses: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Optional lifecycle status filters',
-          },
-          language: stringProp('Optional content language filter', {
-            minLength: 2,
-            maxLength: 16,
-          }),
-          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
-          mode: {
-            type: 'string',
-            enum: ['fts', 'hybrid'],
-            description: 'fts (default) or hybrid when embeddings are enabled',
-          },
-        },
-      },
-    },
-    {
-      name: 'get_knowledge_record',
-      description:
-        'Retrieve a knowledge record including truncated markdown content and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}).',
-      body: {
-        type: 'object',
-        required: ['recordId'],
-        properties: { recordId: uuidProp('Knowledge record id') },
-      },
-    },
-    {
-      name: 'get_record_provenance',
-      description: 'Retrieve verification and source provenance for a knowledge record',
-      body: {
-        type: 'object',
-        required: ['recordId'],
-        properties: { recordId: uuidProp('Knowledge record id') },
-      },
-    },
-    {
-      name: 'list_record_translations',
-      description:
-        'List translation siblings for a knowledge record (same translationGroupId). Prefer English for default work.',
-      body: {
-        type: 'object',
-        required: ['recordId'],
-        properties: { recordId: uuidProp('Knowledge record id') },
-      },
-    },
-    {
-      name: 'list_record_metadata',
-      description:
-        'List knowledge record field guides, allowed recordType values, lifecycle/source-of-truth enums, MCP write constraints, and the workspace media (image embed) workflow. Call before create_knowledge_record.',
-      body: {
-        type: 'object',
-        properties: {},
-      },
-    },
-    {
-      name: 'list_workspace_media',
-      description:
-        'List recent workspace media (JPEG/PNG/WebP/GIF) with urls and markdown snippets for embedding in knowledge records.',
-      body: {
-        type: 'object',
-        required: ['workspaceId'],
-        properties: {
-          workspaceId: uuidProp('Workspace id'),
-          knowledgeRecordId: uuidProp('Optional filter by linked knowledge record'),
-          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
-        },
-      },
-    },
-    {
-      name: 'get_platform_status',
-      description:
-        'Redacted platform health snapshot (ready checks, backup ages, MCP error counts). Requires monitoring:read. No secrets or content.',
-      body: {
-        type: 'object',
-        properties: {},
-      },
-    },
-  ];
-
-  const write: ToolDef[] = [
-    {
-      name: 'begin_workspace_media_upload',
-      description:
-        'REQUIRED default for ChatGPT/LLM image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each chunk, then finalize_workspace_media_upload. Requires knowledge:write.',
-      write: true,
-      body: {
-        type: 'object',
-        required: ['workspaceId', 'contentType'],
-        properties: {
-          workspaceId: uuidProp('Workspace id'),
-          contentType: {
-            type: 'string',
-            enum: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-            description: 'Image MIME type',
-          },
-          filename: stringProp('Optional original filename', { maxLength: 200 }),
-          alt: stringProp('Optional alt text for Markdown', { maxLength: 300 }),
-          knowledgeRecordId: uuidProp('Optional knowledge record to link'),
-          insertIntoRecord: {
-            type: 'boolean',
-            description:
-              'When true, requires knowledgeRecordId; finalize appends media.markdownSnippet to that record',
-          },
-        },
-      },
-    },
-    {
-      name: 'append_workspace_media_upload',
-      description:
-        'Step 2 of image upload (after begin): append one raw base64 chunk (no data: prefix). Use ~8000 characters per call; max 12000. Repeat until the full base64 is sent, then finalize_workspace_media_upload. Requires knowledge:write.',
-      write: true,
-      body: {
-        type: 'object',
-        required: ['uploadId', 'chunkBase64'],
-        properties: {
-          uploadId: uuidProp('Upload session id from begin_workspace_media_upload'),
-          chunkBase64: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 12_000,
-            description:
-              'One raw base64 fragment (no data: URL prefix). Prefer ~8000 chars; max 12000.',
-          },
-          index: {
-            type: 'integer',
-            minimum: 0,
-            description: 'Optional 0-based index; must equal the next expected chunk index',
-          },
-        },
-      },
-    },
-    {
-      name: 'finalize_workspace_media_upload',
-      description:
-        'Step 3 of image upload: assemble chunks, store media, return media.markdownSnippet. Honors insertIntoRecord from begin (appends ![alt](/api/v1/media/{id}) into the record Markdown). Requires knowledge:write.',
-      write: true,
-      body: {
-        type: 'object',
-        required: ['uploadId'],
-        properties: {
-          uploadId: uuidProp('Upload session id from begin_workspace_media_upload'),
-        },
-      },
-    },
-    // Note: single-shot upload_workspace_media is intentionally omitted from OpenAPI /
-    // ChatGPT Actions (large base64 fails). Native MCP still exposes it.
-    {
-      name: 'create_knowledge_record',
-      description:
-        'Create a NEW draft topic (not a locale). Prefer list_record_metadata first. Images: begin→append→finalize + media.markdownSnippet. NEVER use this to add hu/de of an existing record — that creates unlinked duplicates; use create_record_translation instead.',
-      write: true,
-      body: {
-        type: 'object',
-        required: ['workspaceId', 'title', 'recordType', 'contentMarkdown'],
-        properties: {
-          workspaceId: uuidProp('Workspace id'),
-          title: stringProp('Title', { minLength: 1, maxLength: 300 }),
-          recordType: {
-            type: 'string',
-            enum: [...RECORD_TYPES],
-            description:
-              'Record type from list_record_metadata (planning types include business-idea, vision, plan, initiative, note)',
-          },
-          contentMarkdown: stringProp('Markdown body', { maxLength: 500_000 }),
-          summary: stringProp('Optional summary', { maxLength: 1000 }),
-          slug: stringProp('Optional slug', { minLength: 1, maxLength: 96 }),
-          projectId: uuidProp('Optional project id'),
-          systemId: uuidProp('Optional system id'),
-          tags: {
-            type: 'array',
-            items: { type: 'string', minLength: 1, maxLength: 64 },
-            maxItems: 30,
-          },
-          language: stringProp(
-            'Language for a brand-new topic only (default en). Do not use for siblings of an existing record.',
-            { minLength: 2, maxLength: 16 },
-          ),
-          translationGroupId: {
-            type: 'string',
-            format: 'uuid',
-            nullable: true,
-            description:
-              'Repair only. To add a locale sibling, call create_record_translation instead.',
-          },
-          generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
-          sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
-        },
-      },
-    },
-    {
-      name: 'create_record_translation',
-      description:
-        'REQUIRED for locale siblings (hu/de/…). Links via shared translationGroupId. NEVER create_knowledge_record for another language of an existing record. Prefer translateWithAi=true; if AI unavailable/fails, omit it and pass title/summary/contentMarkdown. Do not overwrite EN.',
-      write: true,
-      body: {
-        type: 'object',
-        required: ['recordId', 'language'],
-        properties: {
-          recordId: uuidProp('Source knowledge record id'),
-          language: stringProp('Target language code (e.g. hu, de)', {
-            minLength: 2,
-            maxLength: 16,
-          }),
-          slug: stringProp('Optional slug (defaults to source-slug-lang)', {
-            minLength: 1,
-            maxLength: 96,
-          }),
-          translateWithAi: {
-            type: 'boolean',
-            description:
-              'When true, machine-translate via hub Translation AI provider / VISION_LLM_*. If this errors, retry without it and supply title/summary/contentMarkdown.',
-          },
-          title: stringProp('Translated title (use when AI is off/unavailable)', {
-            minLength: 1,
-            maxLength: 300,
-          }),
-          summary: {
-            type: 'string',
-            nullable: true,
-            maxLength: 1000,
-            description: 'Translated summary (optional)',
-          },
-          contentMarkdown: stringProp(
-            'Translated markdown body (use when AI is off/unavailable)',
-            { maxLength: 500_000 },
-          ),
-        },
-      },
-    },
-    {
-      name: 'update_knowledge_record',
-      description:
-        'Update a knowledge record as draft (requires knowledge:write and a changeMessage). For images: begin → append → finalize_workspace_media_upload; optional insertIntoRecord on begin — never data:image URIs.',
-      write: true,
-      body: {
-        type: 'object',
-        required: ['recordId', 'changeMessage'],
-        properties: {
-          recordId: uuidProp('Knowledge record id'),
-          changeMessage: stringProp('Why this change was made', { minLength: 1, maxLength: 500 }),
-          title: stringProp('Title', { minLength: 1, maxLength: 300 }),
-          summary: { type: 'string', nullable: true, maxLength: 1000 },
-          recordType: {
-            type: 'string',
-            enum: [...RECORD_TYPES],
-            description: 'Record type from list_record_metadata',
-          },
-          contentMarkdown: stringProp('Markdown body', { maxLength: 500_000 }),
-          projectId: { type: 'string', format: 'uuid', nullable: true },
-          systemId: { type: 'string', format: 'uuid', nullable: true },
-          tags: {
-            type: 'array',
-            items: { type: 'string', minLength: 1, maxLength: 64 },
-            maxItems: 30,
-          },
-          language: { type: 'string', nullable: true, minLength: 2, maxLength: 16 },
-          translationGroupId: {
-            type: 'string',
-            format: 'uuid',
-            nullable: true,
-            description: 'Optional shared translation group id',
-          },
-          generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
-          sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
-        },
-      },
-    },
-    {
-      name: 'delete_workspace_media',
-      description:
-        'Soft-delete workspace media and remove stored bytes. Requires knowledge:write.',
-      write: true,
-      body: {
-        type: 'object',
-        required: ['mediaId'],
-        properties: {
-          mediaId: uuidProp('Media id'),
-        },
-      },
-    },
-  ];
-
-  return includeWriteTools ? [...read, ...write] : read;
-}
 
 /**
  * ChatGPT Actions rejects bare `{ type: object, additionalProperties: true }`
@@ -472,7 +93,7 @@ function forChatGptActionsText(text: string): string {
 /** OpenAPI 3.1 for ChatGPT Actions, OpenWebUI OpenAPI tools, and generic OpenAPI clients. */
 export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<string, unknown> {
   const includeWrite = options.includeWriteTools !== false;
-  const tools = toolDefinitions(includeWrite);
+  const tools: LlmToolDef[] = toolDefinitionsForOpenApi(includeWrite);
   const apiBase = apiBaseFromMcpUrl(options.mcpUrl);
   const title = options.serverName ?? 'Project Knowledge Hub';
 
@@ -514,15 +135,13 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
     openapi: '3.1.0',
     info: {
       title,
-      // Bump when tool surface changes — ChatGPT Actions can cache schemas and
-      // return ClientResponseError without ever calling the hub until recreated.
-      version: '0.1.3',
-      // ChatGPT Actions also enforces a 300-char limit on info.description.
+      // Bump when tool surface changes — ChatGPT Actions can cache schemas.
+      version: '0.2.0',
       description: forChatGptActionsText(
-        'OpenAPI facade for Project Knowledge Hub (ChatGPT Actions / OpenAPI clients). ' +
-          'Use the API client bearer token. Writes need knowledge:write. ' +
-          'Images: begin→append→finalize_workspace_media_upload. ' +
-          'Re-import this schema after hub upgrades.',
+        'Knowledge Hub OpenAPI (ChatGPT Actions). Bearer API token. ' +
+          'Knowledge writes: knowledge:write. Delivery tasks/sprints: pm:read/pm:write. ' +
+          'Use create_project_task for delivery work (not knowledge notes). ' +
+          'call_hub_tool reaches extended tools. Re-import after upgrades.',
       ),
     },
     servers: [{ url: apiBase }],
@@ -535,7 +154,7 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'API token',
-          description: 'API client token from Admin → LLM / MCP setup',
+          description: 'API client token from Account → AI connections or Admin MCP setup',
         },
       },
     },
@@ -756,7 +375,7 @@ export function buildGeminiFunctionDeclarations(
   options: LlmSchemaOptions,
 ): Record<string, unknown> {
   const includeWrite = options.includeWriteTools !== false;
-  const tools = toolDefinitions(includeWrite);
+  const tools = toolDefinitionsForGemini(includeWrite);
 
   return {
     functionDeclarations: tools.map((tool) => ({
