@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { workspaces } from '@project-knowledge-hub/database';
 import {
+  AppError,
   milestoneStatusSchema,
   raciRoleSchema,
   taskStatusSchema,
@@ -16,6 +17,8 @@ import {
   requireAuthenticated,
 } from '../plugins/auth.js';
 import { writeAuditEvent } from '../lib/identity.js';
+import { knowledgeExportFilename } from '../lib/knowledge-export.js';
+import { listEpics, listUserStories } from '../lib/project-agile.js';
 import {
   assertProjectNotArchived,
   createMilestone,
@@ -34,6 +37,8 @@ import {
   parseHours,
   upsertProjectCostSnapshot,
 } from '../lib/project-budget.js';
+import { buildBoardPdf } from '../lib/board-export.js';
+import { buildTimelinePdf } from '../lib/timeline-export.js';
 
 async function workspaceOrgId(
   app: FastifyInstance,
@@ -470,4 +475,287 @@ export async function registerProjectDeliveryRoutes(
 
     return { task, raci };
   });
+
+  app.post(
+    '/api/v1/projects/:projectId/timeline/export',
+    async (request, reply) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ projectId: z.string().uuid() })
+        .parse(request.params);
+      const body = z
+        .object({
+          title: z.string().min(1).max(300).optional(),
+          includeEpics: z.boolean().optional(),
+          includeStories: z.boolean().optional(),
+          includeMilestones: z.boolean().optional(),
+          includeTasks: z.boolean().optional(),
+          windowFrom: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .nullable()
+            .optional(),
+          windowTo: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .nullable()
+            .optional(),
+          tagOffsets: z
+            .record(
+              z.string().min(1).max(120),
+              z.object({
+                dx: z.number().finite(),
+                dy: z.number().finite(),
+              }),
+            )
+            .optional(),
+          labels: z
+            .object({
+              epic: z.string().min(1).max(80),
+              story: z.string().min(1).max(80),
+              milestone: z.string().min(1).max(80),
+              task: z.string().min(1).max(80),
+              generated: z.string().min(1).max(80),
+              empty: z.string().min(1).max(200),
+            })
+            .optional(),
+        })
+        .parse(request.body ?? {});
+
+      const { project } = await requireProjectContext(
+        app.database,
+        params.projectId,
+      );
+      requireWorkspaceView(principal, project.workspaceId);
+
+      const filters = {
+        includeEpics: body.includeEpics ?? true,
+        includeStories: body.includeStories ?? true,
+        includeMilestones: body.includeMilestones ?? true,
+        includeTasks: body.includeTasks ?? true,
+      };
+      if (
+        !filters.includeEpics &&
+        !filters.includeStories &&
+        !filters.includeMilestones &&
+        !filters.includeTasks
+      ) {
+        throw new AppError({
+          code: 'TIMELINE_EXPORT_EMPTY',
+          message: 'Select at least one timeline item type to export',
+          statusCode: 400,
+        });
+      }
+
+      const [epics, stories, milestones, tasks] = await Promise.all([
+        listEpics(app.database, project.id),
+        listUserStories(app.database, project.id),
+        listMilestones(app.database, project.id),
+        listTasks(app.database, project.id),
+      ]);
+
+      const title = body.title?.trim() || `${project.name} timeline`;
+      const labels = body.labels ?? {
+        epic: 'Epic',
+        story: 'Story',
+        milestone: 'Milestone',
+        task: 'Task',
+        generated: 'Generated',
+        empty: 'No dated items match the selected filters.',
+      };
+
+      let pdf: Buffer;
+      try {
+        pdf = await buildTimelinePdf({
+          title,
+          projectName: project.name,
+          projectStartDate: project.startDate,
+          projectEndDate: project.endDate,
+          epics,
+          stories,
+          milestones,
+          tasks,
+          filters,
+          windowFrom: body.windowFrom ?? null,
+          windowTo: body.windowTo ?? null,
+          tagOffsets: body.tagOffsets ?? null,
+          labels,
+        });
+      } catch (error) {
+        throw new AppError({
+          code: 'TIMELINE_EXPORT_FAILED',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Failed to export timeline PDF',
+          statusCode: 500,
+        });
+      }
+
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.timeline_exported',
+        entityType: 'project',
+        entityId: project.id,
+        metadata: { format: 'pdf', title, ...filters },
+        ipAddress: request.ip,
+      });
+
+      const filename = knowledgeExportFilename(
+        `${project.slug}-timeline`,
+        'pdf',
+      );
+      reply
+        .header('Content-Type', 'application/pdf')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="${filename.replace(/"/g, '')}"`,
+        );
+      return reply.send(pdf);
+    },
+  );
+
+  app.post(
+    '/api/v1/projects/:projectId/board/export',
+    async (request, reply) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ projectId: z.string().uuid() })
+        .parse(request.params);
+      const body = z
+        .object({
+          title: z.string().min(1).max(300).optional(),
+          showStory: z.boolean().optional(),
+          showMilestone: z.boolean().optional(),
+          showOwner: z.boolean().optional(),
+          showAccountable: z.boolean().optional(),
+          showDueDate: z.boolean().optional(),
+          showStoryPoints: z.boolean().optional(),
+          labels: z
+            .object({
+              story: z.string().min(1).max(80),
+              milestone: z.string().min(1).max(80),
+              owner: z.string().min(1).max(80),
+              accountable: z.string().min(1).max(80),
+              dueDate: z.string().min(1).max(80),
+              storyPoints: z.string().min(1).max(80),
+              generated: z.string().min(1).max(80),
+              empty: z.string().min(1).max(200),
+              status: z.record(z.string(), z.string().min(1).max(80)),
+              milestoneStatus: z.record(z.string(), z.string().min(1).max(80)),
+            })
+            .optional(),
+        })
+        .parse(request.body ?? {});
+
+      const { project } = await requireProjectContext(
+        app.database,
+        params.projectId,
+      );
+      requireWorkspaceView(principal, project.workspaceId);
+
+      const meta = {
+        showStory: body.showStory ?? true,
+        showMilestone: body.showMilestone ?? true,
+        showOwner: body.showOwner ?? true,
+        showAccountable: body.showAccountable ?? true,
+        showDueDate: body.showDueDate ?? true,
+        showStoryPoints: body.showStoryPoints ?? false,
+      };
+
+      const [milestones, tasks] = await Promise.all([
+        listMilestones(app.database, project.id),
+        listTasks(app.database, project.id),
+      ]);
+      const milestoneTitleById = new Map(
+        milestones.map((row) => [row.id, row.title]),
+      );
+
+      const title = body.title?.trim() || `${project.name} board`;
+      const labels = body.labels ?? {
+        story: 'Story',
+        milestone: 'Milestone',
+        owner: 'Current owner',
+        accountable: 'Accountable (A)',
+        dueDate: 'Due date',
+        storyPoints: 'Story points',
+        generated: 'Generated',
+        empty: 'No tasks',
+        status: {
+          todo: 'To do',
+          in_progress: 'In progress',
+          blocked: 'Blocked',
+          done: 'Done',
+          cancelled: 'Cancelled',
+        },
+        milestoneStatus: {},
+      };
+
+      let pdf: Buffer;
+      try {
+        pdf = await buildBoardPdf({
+          title,
+          projectName: project.name,
+          milestones: milestones.map((row) => ({
+            id: row.id,
+            title: row.title,
+            status: row.status,
+            targetDate: row.targetDate,
+          })),
+          tasks: tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            status: task.status,
+            dueDate: task.dueDate,
+            storyPoints: task.storyPoints ?? null,
+            userStoryTitle: task.userStoryTitle ?? null,
+            milestoneTitle: task.milestoneId
+              ? (milestoneTitleById.get(task.milestoneId) ?? null)
+              : null,
+            currentOwnerName:
+              task.currentOwner?.displayName ??
+              task.raci.find((entry) => entry.role === 'R')?.displayName ??
+              null,
+            accountableName:
+              task.raci.find((entry) => entry.role === 'A')?.displayName ?? null,
+          })),
+          meta,
+          labels,
+        });
+      } catch (error) {
+        throw new AppError({
+          code: 'BOARD_EXPORT_FAILED',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Failed to export board PDF',
+          statusCode: 500,
+        });
+      }
+
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.board_exported',
+        entityType: 'project',
+        entityId: project.id,
+        metadata: { format: 'pdf', title, ...meta },
+        ipAddress: request.ip,
+      });
+
+      const filename = knowledgeExportFilename(`${project.slug}-board`, 'pdf');
+      reply
+        .header('Content-Type', 'application/pdf')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="${filename.replace(/"/g, '')}"`,
+        );
+      return reply.send(pdf);
+    },
+  );
 }

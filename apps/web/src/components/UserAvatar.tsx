@@ -5,6 +5,7 @@ import { cn } from '../lib/cn';
 import { userMonogram } from '../lib/monogram';
 
 const sizeClass = {
+  xs: 'size-6 text-[10px]',
   sm: 'size-8 text-xs',
   md: 'size-12 text-sm',
   lg: 'size-20 text-xl',

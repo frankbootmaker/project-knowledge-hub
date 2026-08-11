@@ -39,6 +39,7 @@ type PlanRow = {
 
 type Props = {
   projectId: string;
+  projectName: string;
   workspaceId: string;
   canMutate: boolean;
   definitionOfDone?: string | null;
@@ -51,6 +52,7 @@ type Props = {
 
 export function ProjectScrumView({
   projectId,
+  projectName,
   workspaceId,
   canMutate,
   definitionOfDone = null,
@@ -539,6 +541,8 @@ export function ProjectScrumView({
         <div className="min-w-0 overflow-x-auto">
           {selected ? (
             <ProjectDeliveryBoard
+              projectId={projectId}
+              projectName={projectName}
               tasks={sprintTasks}
               canMutate={canMutate}
               onTaskStatusChange={onTaskStatusChange}

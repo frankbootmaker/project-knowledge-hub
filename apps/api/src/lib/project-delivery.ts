@@ -29,18 +29,21 @@ import {
   getProjectKeyPrefix,
   toHumanKeyFields,
 } from './project-issue-keys.js';
+import { avatarUrlForUser } from './public-user.js';
 
 export type PublicRaciEntry = {
   userId: string;
   displayName: string;
   email: string;
   role: RaciRole;
+  avatarUrl: string | null;
 };
 
 export type PublicTaskOwner = {
   userId: string;
   displayName: string;
   email: string;
+  avatarUrl: string | null;
 };
 
 export type PublicMilestone = {
@@ -206,11 +209,22 @@ async function loadTaskContext(
         userId: users.id,
         displayName: users.displayName,
         email: users.email,
+        avatarContentType: users.avatarContentType,
+        updatedAt: users.updatedAt,
       })
       .from(users)
       .where(inArray(users.id, ownerIds));
     for (const owner of ownerRows) {
-      owners.set(owner.userId, owner);
+      owners.set(owner.userId, {
+        userId: owner.userId,
+        displayName: owner.displayName,
+        email: owner.email,
+        avatarUrl: avatarUrlForUser(
+          owner.userId,
+          owner.avatarContentType ?? null,
+          owner.updatedAt,
+        ),
+      });
     }
   }
 
@@ -366,6 +380,8 @@ async function loadRaciForTasks(
       role: projectTaskRaci.role,
       displayName: users.displayName,
       email: users.email,
+      avatarContentType: users.avatarContentType,
+      updatedAt: users.updatedAt,
     })
     .from(projectTaskRaci)
     .innerJoin(users, eq(projectTaskRaci.userId, users.id))
@@ -377,6 +393,11 @@ async function loadRaciForTasks(
       displayName: row.displayName,
       email: row.email,
       role: raciRoleSchema.parse(row.role),
+      avatarUrl: avatarUrlForUser(
+        row.userId,
+        row.avatarContentType ?? null,
+        row.updatedAt,
+      ),
     };
     const list = map.get(row.taskId) ?? [];
     list.push(entry);

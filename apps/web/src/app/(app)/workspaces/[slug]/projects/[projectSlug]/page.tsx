@@ -491,6 +491,7 @@ export default async function ProjectDetailPage({
 
       <ProjectDeliveryPanel
         projectId={project.id}
+        projectName={project.name}
         workspaceId={workspace.id}
         canMutate={canMutate && !isArchived}
         projectStartDate={project.startDate}

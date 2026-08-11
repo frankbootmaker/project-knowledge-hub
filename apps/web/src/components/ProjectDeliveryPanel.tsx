@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -8,9 +8,15 @@ import {
   type CatalogueListItem,
 } from './CatalogueSection';
 import { CollapsibleSection } from './CollapsibleSection';
-import { ProjectDeliveryBoard } from './ProjectDeliveryBoard';
+import {
+  ProjectDeliveryBoard,
+  type BoardExportHandle,
+} from './ProjectDeliveryBoard';
 import { ProjectDeliveryCalendar } from './ProjectDeliveryCalendar';
-import { ProjectDeliveryTimeline } from './ProjectDeliveryTimeline';
+import {
+  ProjectDeliveryTimeline,
+  type TimelineExportHandle,
+} from './ProjectDeliveryTimeline';
 import { ProjectDeliveryTree } from './ProjectDeliveryTree';
 import { ProjectScrumView } from './ProjectScrumView';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
@@ -78,12 +84,14 @@ type RaciEntry = {
   displayName: string;
   email: string;
   role: 'R' | 'A' | 'C' | 'I';
+  avatarUrl?: string | null;
 };
 
 type TaskOwner = {
   userId: string;
   displayName: string;
   email: string;
+  avatarUrl?: string | null;
 };
 
 type Task = {
@@ -143,6 +151,7 @@ function parseItemId(id: string): { kind: DeliveryKind; entityId: string } | nul
 
 export function ProjectDeliveryPanel({
   projectId,
+  projectName,
   workspaceId,
   canMutate,
   projectStartDate = null,
@@ -157,6 +166,7 @@ export function ProjectDeliveryPanel({
   ratePeople = [],
 }: {
   projectId: string;
+  projectName: string;
   workspaceId: string;
   canMutate: boolean;
   projectStartDate?: string | null;
@@ -202,6 +212,28 @@ export function ProjectDeliveryPanel({
   const [taskResponsible, setTaskResponsible] = useState('');
   const [taskForecastHours, setTaskForecastHours] = useState('');
   const [taskActualHours, setTaskActualHours] = useState('');
+  const timelineExportRef = useRef<TimelineExportHandle | null>(null);
+  const [timelineExportState, setTimelineExportState] = useState<{
+    pending: boolean;
+    canExport: boolean;
+  } | null>(null);
+  const onTimelineExportStateChange = useCallback(
+    (state: { pending: boolean; canExport: boolean } | null) => {
+      setTimelineExportState(state);
+    },
+    [],
+  );
+  const boardExportRef = useRef<BoardExportHandle | null>(null);
+  const [boardExportState, setBoardExportState] = useState<{
+    pending: boolean;
+    canExport: boolean;
+  } | null>(null);
+  const onBoardExportStateChange = useCallback(
+    (state: { pending: boolean; canExport: boolean } | null) => {
+      setBoardExportState(state);
+    },
+    [],
+  );
 
   function changeViewMode(mode: ViewMode) {
     setViewMode(mode);
@@ -412,9 +444,18 @@ export function ProjectDeliveryPanel({
         humanKey: task.humanKey ?? null,
         userStoryTitle: task.userStoryTitle,
         currentOwner: task.currentOwner
-          ? { displayName: task.currentOwner.displayName }
+          ? {
+              userId: task.currentOwner.userId,
+              displayName: task.currentOwner.displayName,
+              avatarUrl: task.currentOwner.avatarUrl ?? null,
+            }
           : null,
-        raci: task.raci,
+        raci: task.raci.map((entry) => ({
+          userId: entry.userId,
+          role: entry.role,
+          displayName: entry.displayName,
+          avatarUrl: entry.avatarUrl ?? null,
+        })),
       })),
     [tasks],
   );
@@ -885,6 +926,36 @@ export function ProjectDeliveryPanel({
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             {viewSwitcher(viewMode)}
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              {viewMode === 'timeline' ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={
+                    !timelineExportState?.canExport ||
+                    Boolean(timelineExportState?.pending)
+                  }
+                  onClick={() => timelineExportRef.current?.exportPdf()}
+                >
+                  {timelineExportState?.pending
+                    ? t('timelineExportingPdf')
+                    : t('timelineExportPdf')}
+                </Button>
+              ) : null}
+              {viewMode === 'board' ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={
+                    !boardExportState?.canExport ||
+                    Boolean(boardExportState?.pending)
+                  }
+                  onClick={() => boardExportRef.current?.exportPdf()}
+                >
+                  {boardExportState?.pending
+                    ? t('boardExportingPdf')
+                    : t('boardExportPdf')}
+                </Button>
+              ) : null}
               {canMutate ? (
                 <Button
                   type="button"
@@ -911,20 +982,31 @@ export function ProjectDeliveryPanel({
         ) : null}
         {viewMode === 'board' ? (
           <ProjectDeliveryBoard
+            projectId={projectId}
+            projectName={projectName}
             tasks={boardTasks}
             milestones={milestones}
             milestoneTitles={milestoneTitleById}
             canMutate={canMutate}
             pending={pending}
+            exportHandleRef={boardExportRef}
+            onExportStateChange={onBoardExportStateChange}
             onTaskStatusChange={(taskId, status) =>
               void updateStatus(`task:${taskId}`, status)
             }
+            onMilestoneStatusChange={(milestoneId, status) =>
+              void updateStatus(`milestone:${milestoneId}`, status)
+            }
             onManageTask={(taskId) => setManageTaskId(taskId)}
+            onManageMilestone={(milestoneId) =>
+              setManageAgile({ kind: 'milestone', id: milestoneId })
+            }
           />
         ) : null}
         {viewMode === 'scrum' ? (
           <ProjectScrumView
             projectId={projectId}
+            projectName={projectName}
             workspaceId={workspaceId}
             canMutate={canMutate}
             definitionOfDone={definitionOfDone}
@@ -972,12 +1054,15 @@ export function ProjectDeliveryPanel({
         {viewMode === 'timeline' ? (
           <ProjectDeliveryTimeline
             projectId={projectId}
+            projectName={projectName}
             projectStartDate={projectStartDate}
             projectEndDate={projectEndDate}
             epics={epics}
             stories={stories}
             milestones={milestones}
             tasks={tasks}
+            exportHandleRef={timelineExportRef}
+            onExportStateChange={onTimelineExportStateChange}
             onManageEpic={(epicId) =>
               setManageAgile({ kind: 'epic', id: epicId })
             }

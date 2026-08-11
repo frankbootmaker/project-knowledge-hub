@@ -9,10 +9,12 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { useTranslations } from 'next-intl';
-import { Badge, Button } from './ui';
+import { Badge, Button, Field, Input, useToast } from './ui';
 import { cn } from '../lib/cn';
+import { downloadAuthenticatedExport } from '../lib/download-export';
 
 type Epic = {
   id: string;
@@ -56,8 +58,254 @@ type AxisMarker = {
 
 type TagOffset = { dx: number; dy: number };
 
+type TimelineFilters = {
+  epics: boolean;
+  stories: boolean;
+  milestones: boolean;
+  tasks: boolean;
+};
+
+type TimelineWindow = {
+  from: string;
+  to: string;
+};
+
 const DEFAULT_RIB_Y = 52;
 const DRAG_CLICK_THRESHOLD = 4;
+const DEFAULT_FILTERS: TimelineFilters = {
+  epics: true,
+  stories: true,
+  milestones: true,
+  tasks: true,
+};
+
+function readFilters(storageKey: string): TimelineFilters {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (!raw) return DEFAULT_FILTERS;
+    const parsed = JSON.parse(raw) as Partial<TimelineFilters>;
+    return {
+      epics: parsed.epics ?? true,
+      stories: parsed.stories ?? true,
+      milestones: parsed.milestones ?? true,
+      tasks: parsed.tasks ?? true,
+    };
+  } catch {
+    return DEFAULT_FILTERS;
+  }
+}
+
+function writeFilters(storageKey: string, filters: TimelineFilters): void {
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(filters));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readWindow(storageKey: string): TimelineWindow {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (!raw) return { from: '', to: '' };
+    const parsed = JSON.parse(raw) as Partial<TimelineWindow>;
+    return {
+      from: typeof parsed.from === 'string' ? parsed.from : '',
+      to: typeof parsed.to === 'string' ? parsed.to : '',
+    };
+  } catch {
+    return { from: '', to: '' };
+  }
+}
+
+function writeWindow(storageKey: string, windowRange: TimelineWindow): void {
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(windowRange));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readGrid(storageKey: string): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (raw === null) return true;
+    return raw === '1';
+  } catch {
+    return true;
+  }
+}
+
+function writeGrid(storageKey: string, enabled: boolean): void {
+  try {
+    window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function todayYmd(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+const ZOOM_FACTOR = 0.7;
+const MIN_ZOOM_SPAN_MS = 3 * 86_400_000;
+
+function buildTimelineTicks(
+  startMs: number,
+  endMs: number,
+): { labelTicks: string[]; gridTicks: string[] } {
+  const spanDays = Math.max(1, Math.round((endMs - startMs) / 86_400_000));
+
+  let gridStepDays: number;
+  if (spanDays <= 16) gridStepDays = 1;
+  else if (spanDays <= 45) gridStepDays = 2;
+  else if (spanDays <= 90) gridStepDays = 7;
+  else if (spanDays <= 180) gridStepDays = 14;
+  else gridStepDays = Math.max(14, Math.ceil(spanDays / 10));
+
+  const gridTicks: string[] = [];
+  for (
+    let ms = startMs;
+    ms <= endMs && gridTicks.length < 62;
+    ms = addDays(ms, gridStepDays)
+  ) {
+    gridTicks.push(formatYmd(ms));
+  }
+  const endLabel = formatYmd(endMs);
+  if (gridTicks[gridTicks.length - 1] !== endLabel) {
+    gridTicks.push(endLabel);
+  }
+
+  const targetLabels = Math.min(12, Math.max(4, gridTicks.length));
+  const labelStride = Math.max(1, Math.ceil(gridTicks.length / targetLabels));
+  const labelTicks = gridTicks.filter(
+    (_, index) =>
+      index === 0 ||
+      index === gridTicks.length - 1 ||
+      index % labelStride === 0,
+  );
+
+  return { labelTicks, gridTicks };
+}
+
+function ZoomInIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className="size-4 shrink-0"
+      fill="none"
+    >
+      <circle
+        cx="11"
+        cy="11"
+        r="6.25"
+        stroke="currentColor"
+        strokeWidth="1.75"
+      />
+      <path
+        d="M15.5 15.5 20 20M11 8.25v5.5M8.25 11h5.5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ZoomOutIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className="size-4 shrink-0"
+      fill="none"
+    >
+      <circle
+        cx="11"
+        cy="11"
+        r="6.25"
+        stroke="currentColor"
+        strokeWidth="1.75"
+      />
+      <path
+        d="M15.5 15.5 20 20M8.25 11h5.5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function GridIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className="size-4 shrink-0"
+      fill="none"
+    >
+      <rect
+        x="4"
+        y="4"
+        width="16"
+        height="16"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+      />
+      <path
+        d="M4 9.5h16M4 14.5h16M9.5 4v16M14.5 4v16"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        opacity={active ? 1 : 0.45}
+      />
+    </svg>
+  );
+}
+
+function ResetViewIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className="size-4 shrink-0"
+      fill="none"
+    >
+      <path
+        d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect
+        x="8"
+        y="8"
+        width="8"
+        height="8"
+        rx="1"
+        stroke="currentColor"
+        strokeWidth="1.75"
+      />
+    </svg>
+  );
+}
+
+/** Inclusive overlap of [start,end] with [winStart, winEnd] in ms. */
+function rangeOverlaps(
+  startMs: number,
+  endMs: number,
+  winStart: number,
+  winEnd: number,
+): boolean {
+  return startMs <= winEnd && endMs >= winStart;
+}
 
 function parseYmd(value: string): number {
   const parts = value.split('-').map(Number);
@@ -144,23 +392,26 @@ function TimelineHintHelp({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="flex flex-wrap items-start gap-2">
-      <button
+    <div className="relative">
+      <Button
         type="button"
-        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-line text-xs font-semibold text-ink-muted hover:bg-brand-soft hover:text-ink"
+        variant={open ? 'secondary' : 'ghost'}
+        className="!px-2.5"
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={t('timelineLegendHelp')}
         title={t('timelineLegendHelp')}
         onClick={() => setOpen((current) => !current)}
       >
-        ?
-      </button>
+        <span className="inline-flex size-4 items-center justify-center text-sm font-semibold leading-none">
+          ?
+        </span>
+      </Button>
       {open ? (
         <div
           id={panelId}
           role="note"
-          className="grid max-w-xl gap-2 rounded-md border border-line bg-panel-solid px-2.5 py-2 text-xs text-ink-muted"
+          className="absolute left-0 top-full z-10 mt-2 grid w-max max-w-xl gap-2 rounded-md border border-line bg-panel-solid px-2.5 py-2 text-xs text-ink-muted shadow-sm"
         >
           <p className="m-0">{t('timelineHint')}</p>
           <p className="m-0">{t('timelineDragHint')}</p>
@@ -286,8 +537,13 @@ function DraggableTag({
   );
 }
 
+export type TimelineExportHandle = {
+  exportPdf: () => void;
+};
+
 export function ProjectDeliveryTimeline({
   projectId,
+  projectName,
   projectStartDate,
   projectEndDate,
   epics,
@@ -298,8 +554,11 @@ export function ProjectDeliveryTimeline({
   onManageStory,
   onManageMilestone,
   onManageTask,
+  exportHandleRef,
+  onExportStateChange,
 }: {
   projectId: string;
+  projectName: string;
   projectStartDate: string | null;
   projectEndDate: string | null;
   epics: Epic[];
@@ -310,12 +569,118 @@ export function ProjectDeliveryTimeline({
   onManageStory: (id: string) => void;
   onManageMilestone: (id: string) => void;
   onManageTask: (id: string) => void;
+  exportHandleRef?: RefObject<TimelineExportHandle | null>;
+  onExportStateChange?: (
+    state: { pending: boolean; canExport: boolean } | null,
+  ) => void;
 }) {
   const t = useTranslations('delivery');
+  const tProjects = useTranslations('projects');
+  const { pushToast } = useToast();
   const storageKey = `kh-timeline-tags:${projectId}`;
+  const filterKey = `kh-timeline-filters:${projectId}`;
+  const windowKey = `kh-timeline-window:${projectId}`;
+  const gridKey = `kh-timeline-grid:${projectId}`;
   const { offsets, updateOffset, resetOffsets } = useTagOffsets(storageKey);
+  const [filters, setFilters] = useState<TimelineFilters>(DEFAULT_FILTERS);
+  const [windowRange, setWindowRange] = useState<TimelineWindow>({
+    from: '',
+    to: '',
+  });
+  const [showGrid, setShowGrid] = useState(true);
+  const [exportPending, setExportPending] = useState(false);
 
-  const { rangeStart, rangeEnd, ticks } = useMemo(() => {
+  useEffect(() => {
+    setFilters(readFilters(filterKey));
+    setWindowRange(readWindow(windowKey));
+    setShowGrid(readGrid(gridKey));
+  }, [filterKey, windowKey, gridKey]);
+
+  function toggleFilter(key: keyof TimelineFilters) {
+    setFilters((current) => {
+      const next = { ...current, [key]: !current[key] };
+      writeFilters(filterKey, next);
+      return next;
+    });
+  }
+
+  function setWindowField(field: keyof TimelineWindow, value: string) {
+    setWindowRange((current) => {
+      const next = { ...current, [field]: value };
+      writeWindow(windowKey, next);
+      return next;
+    });
+  }
+
+  function clearWindow() {
+    const next = { from: '', to: '' };
+    setWindowRange(next);
+    writeWindow(windowKey, next);
+  }
+
+  function applyPreset(kind: 'month' | 'next30' | 'project') {
+    const today = Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth(),
+      new Date().getUTCDate(),
+    );
+    let next: TimelineWindow;
+    if (kind === 'month') {
+      const start = Date.UTC(
+        new Date().getUTCFullYear(),
+        new Date().getUTCMonth(),
+        1,
+      );
+      const end = Date.UTC(
+        new Date().getUTCFullYear(),
+        new Date().getUTCMonth() + 1,
+        0,
+      );
+      next = { from: formatYmd(start), to: formatYmd(end) };
+    } else if (kind === 'next30') {
+      next = { from: formatYmd(today), to: formatYmd(addDays(today, 30)) };
+    } else {
+      next = {
+        from: projectStartDate ?? '',
+        to: projectEndDate ?? '',
+      };
+    }
+    setWindowRange(next);
+    writeWindow(windowKey, next);
+  }
+
+  function toggleGrid() {
+    setShowGrid((current) => {
+      const next = !current;
+      writeGrid(gridKey, next);
+      return next;
+    });
+  }
+
+  function zoomWindow(direction: 'in' | 'out') {
+    if (windowInvalid) return;
+    const factor = direction === 'in' ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
+    const center = (rangeStart + rangeEnd) / 2;
+    const currentSpan = Math.max(MIN_ZOOM_SPAN_MS, rangeEnd - rangeStart);
+    const autoSpan = Math.max(
+      MIN_ZOOM_SPAN_MS,
+      autoRange.endMs - autoRange.startMs,
+    );
+    const maxSpan = Math.max(autoSpan * 4, currentSpan);
+    let nextSpan = clamp(currentSpan * factor, MIN_ZOOM_SPAN_MS, maxSpan);
+    let nextStart = center - nextSpan / 2;
+    let nextEnd = center + nextSpan / 2;
+    nextStart = parseYmd(formatYmd(nextStart));
+    nextEnd = parseYmd(formatYmd(nextEnd));
+    if (nextEnd - nextStart < MIN_ZOOM_SPAN_MS) {
+      nextEnd = addDays(nextStart, 3);
+    }
+    const next = { from: formatYmd(nextStart), to: formatYmd(nextEnd) };
+    setWindowRange(next);
+    writeWindow(windowKey, next);
+  }
+
+  const autoRange = useMemo(() => {
     const candidates: string[] = [];
     if (projectStartDate) candidates.push(projectStartDate);
     if (projectEndDate) candidates.push(projectEndDate);
@@ -335,47 +700,90 @@ export function ProjectDeliveryTimeline({
       if (task.dueDate) candidates.push(task.dueDate);
     }
 
-    let startMs: number;
-    let endMs: number;
     if (candidates.length === 0) {
       const today = Date.UTC(
         new Date().getUTCFullYear(),
         new Date().getUTCMonth(),
         new Date().getUTCDate(),
       );
-      startMs = addDays(today, -14);
-      endMs = addDays(today, 60);
-    } else {
-      const values = candidates.map(parseYmd);
-      startMs = Math.min(...values);
-      endMs = Math.max(...values);
-      if (endMs <= startMs) {
-        endMs = addDays(startMs, 30);
+      return { startMs: addDays(today, -14), endMs: addDays(today, 60) };
+    }
+    const values = candidates.map(parseYmd);
+    let startMs = Math.min(...values);
+    let endMs = Math.max(...values);
+    if (endMs <= startMs) endMs = addDays(startMs, 30);
+    return { startMs, endMs };
+  }, [projectStartDate, projectEndDate, epics, stories, milestones, tasks]);
+
+  const {
+    rangeStart,
+    rangeEnd,
+    labelTicks,
+    gridTicks,
+    windowActive,
+    windowInvalid,
+  } = useMemo(() => {
+    const fromOk = Boolean(windowRange.from);
+    const toOk = Boolean(windowRange.to);
+    let startMs = autoRange.startMs;
+    let endMs = autoRange.endMs;
+    let active = false;
+    let invalid = false;
+
+    if (fromOk || toOk) {
+      const fromMs = fromOk ? parseYmd(windowRange.from) : autoRange.startMs;
+      const toMs = toOk ? parseYmd(windowRange.to) : autoRange.endMs;
+      if (fromMs > toMs) {
+        invalid = true;
+      } else {
+        startMs = fromMs;
+        endMs = toMs;
+        active = true;
+        if (endMs <= startMs) endMs = addDays(startMs, 1);
       }
     }
 
-    const spanDays = Math.max(1, Math.round((endMs - startMs) / 86_400_000));
-    const tickCount = Math.min(8, Math.max(4, Math.ceil(spanDays / 14) + 1));
-    const tickList = Array.from({ length: tickCount }, (_, index) => {
-      const ratio = index / (tickCount - 1);
-      return formatYmd(startMs + (endMs - startMs) * ratio);
-    });
+    const { labelTicks: nextLabels, gridTicks: nextGrid } = buildTimelineTicks(
+      startMs,
+      endMs,
+    );
 
     return {
       rangeStart: startMs,
       rangeEnd: endMs,
-      ticks: tickList,
+      labelTicks: nextLabels,
+      gridTicks: nextGrid,
+      windowActive: active,
+      windowInvalid: invalid,
     };
-  }, [projectStartDate, projectEndDate, epics, stories, milestones, tasks]);
+  }, [autoRange, windowRange.from, windowRange.to]);
 
   const span = Math.max(1, rangeEnd - rangeStart);
+  const currentSpan = rangeEnd - rangeStart;
+  const autoSpan = Math.max(
+    MIN_ZOOM_SPAN_MS,
+    autoRange.endMs - autoRange.startMs,
+  );
+  const maxZoomSpan = Math.max(autoSpan * 4, currentSpan);
+  const canZoomIn =
+    !windowInvalid && currentSpan > MIN_ZOOM_SPAN_MS + 86_400_000;
+  const canZoomOut = !windowInvalid && currentSpan < maxZoomSpan - 86_400_000;
+  const todayDate = todayYmd();
+  const todayInRange =
+    parseYmd(todayDate) >= rangeStart && parseYmd(todayDate) <= rangeEnd;
 
   function barStyle(start: string | null, end: string | null) {
     if (!start && !end) return null;
-    const startMs = parseYmd(start ?? end!);
-    const endMs = parseYmd(end ?? start!);
-    const left = ((startMs - rangeStart) / span) * 100;
-    const width = Math.max(1.2, ((endMs - startMs) / span) * 100);
+    const itemStart = parseYmd(start ?? end!);
+    const itemEnd = parseYmd(end ?? start!);
+    if (!rangeOverlaps(itemStart, itemEnd, rangeStart, rangeEnd)) return null;
+    const clippedStart = Math.max(itemStart, rangeStart);
+    const clippedEnd = Math.min(itemEnd, rangeEnd);
+    const left = ((clippedStart - rangeStart) / span) * 100;
+    const width = Math.max(
+      1.2,
+      ((Math.max(clippedStart, clippedEnd) - clippedStart) / span) * 100,
+    );
     return {
       left: `${clamp(left, 0, 100)}%`,
       width: `${clamp(width, 1.2, 100 - clamp(left, 0, 100))}%`,
@@ -390,56 +798,191 @@ export function ProjectDeliveryTimeline({
     return { left: `${markerLeftPct(date)}%` };
   }
 
+  function dateInWindow(date: string): boolean {
+    const ms = parseYmd(date);
+    return ms >= rangeStart && ms <= rangeEnd;
+  }
+
   const axisMarkers = useMemo(() => {
+    const inWindow = (date: string) => {
+      const ms = parseYmd(date);
+      return ms >= rangeStart && ms <= rangeEnd;
+    };
     const items: AxisMarker[] = [];
-    for (const milestone of milestones) {
-      if (!milestone.targetDate) continue;
-      items.push({
-        id: `milestone:${milestone.id}`,
-        kind: 'milestone',
-        title: milestone.title,
-        date: milestone.targetDate,
-        onOpen: () => onManageMilestone(milestone.id),
-      });
+    if (filters.milestones) {
+      for (const milestone of milestones) {
+        if (!milestone.targetDate || !inWindow(milestone.targetDate)) {
+          continue;
+        }
+        items.push({
+          id: `milestone:${milestone.id}`,
+          kind: 'milestone',
+          title: milestone.title,
+          date: milestone.targetDate,
+          onOpen: () => onManageMilestone(milestone.id),
+        });
+      }
     }
-    for (const task of tasks) {
-      if (!task.dueDate) continue;
-      items.push({
-        id: `task:${task.id}`,
-        kind: 'task',
-        title: task.title,
-        date: task.dueDate,
-        onOpen: () => onManageTask(task.id),
-      });
+    if (filters.tasks) {
+      for (const task of tasks) {
+        if (!task.dueDate || !inWindow(task.dueDate)) continue;
+        items.push({
+          id: `task:${task.id}`,
+          kind: 'task',
+          title: task.title,
+          date: task.dueDate,
+          onOpen: () => onManageTask(task.id),
+        });
+      }
     }
     items.sort(
       (a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title),
     );
     return items;
-  }, [milestones, tasks, onManageMilestone, onManageTask]);
+  }, [
+    filters.milestones,
+    filters.tasks,
+    milestones,
+    tasks,
+    rangeStart,
+    rangeEnd,
+    onManageMilestone,
+    onManageTask,
+  ]);
 
-  const scheduledEpics = epics.filter((epic) => epic.startDate || epic.endDate);
-  const unscheduledEpics = epics.filter(
-    (epic) => !epic.startDate && !epic.endDate,
-  );
-  const unscheduledStories = stories.filter(
-    (story) => !story.startDate && !story.endDate,
-  );
-  const unscheduledMilestones = milestones.filter(
-    (milestone) => !milestone.startDate && !milestone.targetDate,
-  );
+  const scheduledEpics = filters.epics
+    ? epics.filter((epic) => {
+        if (!epic.startDate && !epic.endDate) return false;
+        const start = parseYmd(epic.startDate ?? epic.endDate!);
+        const end = parseYmd(epic.endDate ?? epic.startDate!);
+        return rangeOverlaps(start, end, rangeStart, rangeEnd);
+      })
+    : [];
+  const standaloneStories =
+    filters.stories && !filters.epics
+      ? stories.filter((story) => {
+          if (!story.startDate && !story.endDate) return false;
+          const start = parseYmd(story.startDate ?? story.endDate!);
+          const end = parseYmd(story.endDate ?? story.startDate!);
+          return rangeOverlaps(start, end, rangeStart, rangeEnd);
+        })
+      : [];
+  const unscheduledEpics = filters.epics
+    ? epics.filter((epic) => !epic.startDate && !epic.endDate)
+    : [];
+  const unscheduledStories = filters.stories
+    ? stories.filter((story) => !story.startDate && !story.endDate)
+    : [];
+  const unscheduledMilestones = filters.milestones
+    ? milestones.filter(
+        (milestone) => !milestone.startDate && !milestone.targetDate,
+      )
+    : [];
 
   const above = scheduledEpics.filter((_, index) => index % 2 === 0);
   const below = scheduledEpics.filter((_, index) => index % 2 === 1);
   const hasCustomOffsets = Object.keys(offsets).length > 0;
+  const anyTypeVisible =
+    filters.epics || filters.stories || filters.milestones || filters.tasks;
+
+  const exportTimelinePdf = useCallback(async () => {
+    if (exportPending || !anyTypeVisible) return;
+    setExportPending(true);
+    try {
+      const title = t('timelineExportTitle', { project: projectName });
+      const slug = projectName.replace(/[^\w.-]+/g, '-').toLowerCase();
+      await downloadAuthenticatedExport(
+        `/api/v1/projects/${projectId}/timeline/export`,
+        `${slug}-timeline.pdf`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({
+            title,
+            includeEpics: filters.epics,
+            includeStories: filters.stories,
+            includeMilestones: filters.milestones,
+            includeTasks: filters.tasks,
+            windowFrom: windowActive ? formatYmd(rangeStart) : null,
+            windowTo: windowActive ? formatYmd(rangeEnd) : null,
+            tagOffsets: offsets,
+            labels: {
+              epic: t('kindEpic'),
+              story: t('kindStory'),
+              milestone: t('kindMilestone'),
+              task: t('kindTask'),
+              generated: tProjects('reportGenerated'),
+              empty: t('timelineExportEmpty'),
+            },
+          }),
+        },
+      );
+      pushToast(t('timelineExported'));
+    } catch (err) {
+      pushToast(
+        err instanceof Error ? err.message : t('timelineExportFailed'),
+        'danger',
+      );
+    } finally {
+      setExportPending(false);
+    }
+  }, [
+    anyTypeVisible,
+    exportPending,
+    filters.epics,
+    filters.milestones,
+    filters.stories,
+    filters.tasks,
+    offsets,
+    projectId,
+    projectName,
+    pushToast,
+    rangeEnd,
+    rangeStart,
+    t,
+    tProjects,
+    windowActive,
+  ]);
+
+  useEffect(() => {
+    if (exportHandleRef) {
+      exportHandleRef.current = {
+        exportPdf: () => {
+          void exportTimelinePdf();
+        },
+      };
+    }
+    onExportStateChange?.({
+      pending: exportPending,
+      canExport: anyTypeVisible,
+    });
+    return () => {
+      if (exportHandleRef) exportHandleRef.current = null;
+      onExportStateChange?.(null);
+    };
+  }, [
+    anyTypeVisible,
+    exportHandleRef,
+    exportPending,
+    exportTimelinePdf,
+    onExportStateChange,
+  ]);
 
   function epicLane(epic: Epic, side: 'above' | 'below') {
     const style = barStyle(epic.startDate, epic.endDate);
     if (!style) return null;
-    const epicStories = stories.filter(
-      (story) =>
-        story.epicId === epic.id && (story.startDate || story.endDate),
-    );
+    const epicStories = filters.stories
+      ? stories.filter((story) => {
+          if (story.epicId !== epic.id) return false;
+          if (!story.startDate && !story.endDate) return false;
+          const start = parseYmd(story.startDate ?? story.endDate!);
+          const end = parseYmd(story.endDate ?? story.startDate!);
+          return rangeOverlaps(start, end, rangeStart, rangeEnd);
+        })
+      : [];
     return (
       <div
         key={epic.id}
@@ -526,17 +1069,191 @@ export function ProjectDeliveryTimeline({
     );
   }
 
+  function storyLane(story: Story) {
+    const style = barStyle(story.startDate, story.endDate);
+    if (!style) return null;
+    return (
+      <div key={story.id} className="relative mb-4 min-h-12">
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="border-0 bg-transparent p-0 text-left text-sm font-semibold text-ink underline-offset-2 hover:underline"
+            onClick={() => onManageStory(story.id)}
+          >
+            {story.title}
+          </button>
+          <Badge>{t(`milestoneStatus.${story.status}`)}</Badge>
+        </div>
+        <div className="relative h-8">
+          <button
+            type="button"
+            className={cn(
+              'absolute top-1 h-6 max-w-full rounded border border-line bg-panel-solid px-2 text-left text-xs text-ink',
+              'hover:border-brand/50',
+            )}
+            style={style}
+            title={story.title}
+            onClick={() => onManageStory(story.id)}
+          >
+            <span className="block truncate">{story.title}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4">
-      <TimelineHintHelp
-        onResetPositions={resetOffsets}
-        canReset={hasCustomOffsets}
-      />
+      <fieldset className="m-0 grid gap-2 rounded-md border border-line p-3">
+        <legend className="px-1 text-sm font-semibold">
+          {t('timelineFilterLabel')}
+        </legend>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+          {(
+            [
+              ['epics', 'kindEpic'],
+              ['stories', 'kindStory'],
+              ['milestones', 'kindMilestone'],
+              ['tasks', 'kindTask'],
+            ] as const
+          ).map(([key, labelKey]) => (
+            <label key={key} className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={filters[key]}
+                onChange={() => toggleFilter(key)}
+              />
+              <span>{t(labelKey)}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="m-0 grid gap-3 rounded-md border border-line p-3">
+        <legend className="px-1 text-sm font-semibold">
+          {t('timelineWindowLabel')}
+        </legend>
+        <p className="m-0 text-xs text-ink-muted">{t('timelineWindowHint')}</p>
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <Field label={t('timelineWindowFrom')}>
+            <Input
+              type="date"
+              value={windowRange.from}
+              onChange={(event) => setWindowField('from', event.target.value)}
+            />
+          </Field>
+          <Field label={t('timelineWindowTo')}>
+            <Input
+              type="date"
+              value={windowRange.to}
+              onChange={(event) => setWindowField('to', event.target.value)}
+            />
+          </Field>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!windowRange.from && !windowRange.to}
+            onClick={clearWindow}
+          >
+            {t('timelineWindowClear')}
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => applyPreset('month')}
+          >
+            {t('timelineWindowPresetMonth')}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => applyPreset('next30')}
+          >
+            {t('timelineWindowPresetNext30')}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={!projectStartDate && !projectEndDate}
+            onClick={() => applyPreset('project')}
+          >
+            {t('timelineWindowPresetProject')}
+          </Button>
+        </div>
+        {windowInvalid ? (
+          <p className="m-0 text-sm text-danger">{t('timelineWindowInvalid')}</p>
+        ) : null}
+        {windowActive && !windowInvalid ? (
+          <p className="m-0 text-xs text-ink-muted">
+            {t('timelineWindowActive', {
+              from: formatYmd(rangeStart),
+              to: formatYmd(rangeEnd),
+            })}
+          </p>
+        ) : null}
+      </fieldset>
+
+      {!anyTypeVisible ? (
+        <p className="m-0 text-sm text-ink-muted">{t('timelineFilterEmpty')}</p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          type="button"
+          variant="secondary"
+          className="!px-2.5"
+          disabled={!canZoomOut}
+          onClick={() => zoomWindow('out')}
+          title={t('timelineZoomOut')}
+          aria-label={t('timelineZoomOut')}
+        >
+          <ZoomOutIcon />
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="!px-2.5"
+          disabled={!canZoomIn}
+          onClick={() => zoomWindow('in')}
+          title={t('timelineZoomIn')}
+          aria-label={t('timelineZoomIn')}
+        >
+          <ZoomInIcon />
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="!px-2.5"
+          disabled={!windowRange.from && !windowRange.to}
+          onClick={clearWindow}
+          title={t('timelineResetView')}
+          aria-label={t('timelineResetView')}
+        >
+          <ResetViewIcon />
+        </Button>
+        <Button
+          type="button"
+          variant={showGrid ? 'secondary' : 'ghost'}
+          className="!px-2.5"
+          aria-pressed={showGrid}
+          onClick={toggleGrid}
+          title={t('timelineGridToggle')}
+          aria-label={t('timelineGridToggle')}
+        >
+          <GridIcon active={showGrid} />
+        </Button>
+        <TimelineHintHelp
+          onResetPositions={resetOffsets}
+          canReset={hasCustomOffsets}
+        />
+      </div>
 
       <div className="overflow-x-auto rounded-md border border-line bg-panel-solid p-3">
         <div className="min-w-[48rem]">
           <div className="relative mb-2 h-6">
-            {ticks.map((tick) => (
+            {labelTicks.map((tick) => (
               <div
                 key={tick}
                 className="absolute top-0 -translate-x-1/2 text-[11px] text-ink-muted"
@@ -545,21 +1262,57 @@ export function ProjectDeliveryTimeline({
                 {tick}
               </div>
             ))}
+            {showGrid && todayInRange ? (
+              <div
+                className="absolute top-0 -translate-x-1/2 text-[10px] font-semibold text-danger"
+                style={markerStyle(todayDate)}
+              >
+                {t('timelineToday')}
+              </div>
+            ) : null}
           </div>
 
           <div className="relative">
-            {above.map((epic) => epicLane(epic, 'above'))}
+            {showGrid ? (
+              <div
+                className="pointer-events-none absolute inset-0 z-0"
+                aria-hidden
+              >
+                {gridTicks.map((tick) => (
+                  <div
+                    key={`grid:${tick}`}
+                    className="absolute top-0 bottom-0 w-px bg-line/70"
+                    style={markerStyle(tick)}
+                  />
+                ))}
+                {todayInRange ? (
+                  <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-danger"
+                    style={markerStyle(todayDate)}
+                    title={`${t('timelineToday')}: ${todayDate}`}
+                  />
+                ) : null}
+              </div>
+            ) : null}
 
-            <div className="relative my-2 h-52 overflow-visible">
+            {above.map((epic) => epicLane(epic, 'above'))}
+            {standaloneStories.map((story) => storyLane(story))}
+
+            <div
+              className={cn(
+                'relative z-[1] my-2 overflow-visible',
+                filters.milestones || filters.tasks ? 'h-52' : 'h-8',
+              )}
+            >
               <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-line" />
-              {projectStartDate ? (
+              {projectStartDate && dateInWindow(projectStartDate) ? (
                 <div
                   className="absolute top-0 h-full w-px bg-brand/50"
                   style={markerStyle(projectStartDate)}
                   title={t('timelineProjectStart')}
                 />
               ) : null}
-              {projectEndDate ? (
+              {projectEndDate && dateInWindow(projectEndDate) ? (
                 <div
                   className="absolute top-0 h-full w-px bg-brand/50"
                   style={markerStyle(projectEndDate)}
@@ -632,7 +1385,10 @@ export function ProjectDeliveryTimeline({
 
             {below.map((epic) => epicLane(epic, 'below'))}
 
-            {scheduledEpics.length === 0 ? (
+            {anyTypeVisible &&
+            scheduledEpics.length === 0 &&
+            standaloneStories.length === 0 &&
+            axisMarkers.length === 0 ? (
               <p className="m-0 py-4 text-center text-sm text-ink-muted">
                 {t('timelineNoBars')}
               </p>
