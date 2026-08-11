@@ -402,8 +402,8 @@ export function ProjectAgileManageModal({
       description={modalDescription}
       size="md"
       footer={
-        <div className="flex w-full flex-wrap items-center justify-between gap-2">
-          <div>
+        <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             {canMutate && kind && kind !== 'milestone' ? (
               !confirmDelete ? (
                 <Button
@@ -418,7 +418,7 @@ export function ProjectAgileManageModal({
                   {t('deleteItem')}
                 </Button>
               ) : (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
                   <Button
                     type="button"
                     variant="secondary"
@@ -444,7 +444,7 @@ export function ProjectAgileManageModal({
               )
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <Button type="button" variant="secondary" onClick={onClose}>
               {tCommon('cancel')}
             </Button>

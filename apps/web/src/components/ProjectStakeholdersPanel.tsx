@@ -12,6 +12,7 @@ import { AssistantBrandMark } from './AssistantBrandMark';
 import { ProjectStakeholdersOrgChart } from './ProjectStakeholdersOrgChart';
 import { ProjectResourceUtilizationModal } from './ProjectResourceUtilizationModal';
 import { UserAvatar } from './UserAvatar';
+import { ViewModeIcon } from './ViewModeIcon';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { formatMoney, parseOptionalNumber } from '../lib/project-currency';
 import {
@@ -593,7 +594,7 @@ export function ProjectStakeholdersPanel({
 
   function sectionActions(activeMode: ViewMode) {
     return (
-      <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2">
+      <div className="flex max-w-full items-center justify-end gap-1.5 sm:gap-2">
         <Button
           type="button"
           variant="secondary"
@@ -750,27 +751,33 @@ export function ProjectStakeholdersPanel({
   function viewSwitcher(activeMode: ViewMode) {
     return (
       <div
-        className="inline-flex w-full min-w-0 max-w-full overflow-x-auto rounded-md border border-line p-0.5 sm:w-auto"
+        className="inline-flex max-w-full overflow-x-auto rounded-md border border-line p-0.5"
         role="group"
         aria-label={t('viewModeLabel')}
       >
-        {VIEW_MODES.map((mode) => (
-          <Button
-            key={mode}
-            type="button"
-            variant={activeMode === mode ? 'primary' : 'secondary'}
-            className={cn(
-              'h-8 shrink-0 rounded-sm px-2 text-xs sm:px-2.5',
-              activeMode === mode
-                ? ''
-                : 'border-transparent bg-transparent shadow-none',
-            )}
-            aria-pressed={activeMode === mode}
-            onClick={() => changeViewMode(mode)}
-          >
-            {t(`viewMode.${mode}`)}
-          </Button>
-        ))}
+        {VIEW_MODES.map((mode) => {
+          const label = t(`viewMode.${mode}`);
+          return (
+            <Button
+              key={mode}
+              type="button"
+              variant={activeMode === mode ? 'primary' : 'secondary'}
+              className={cn(
+                'size-8 shrink-0 rounded-sm px-0 md:h-8 md:w-auto md:px-2.5',
+                activeMode === mode
+                  ? ''
+                  : 'border-transparent bg-transparent shadow-none',
+              )}
+              aria-label={label}
+              title={label}
+              aria-pressed={activeMode === mode}
+              onClick={() => changeViewMode(mode)}
+            >
+              <ViewModeIcon mode={mode} className="md:hidden" />
+              <span className="hidden text-xs md:inline">{label}</span>
+            </Button>
+          );
+        })}
       </div>
     );
   }

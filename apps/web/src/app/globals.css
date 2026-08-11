@@ -340,14 +340,21 @@
   }
 
   .kh-toast-viewport {
-    @apply pointer-events-none fixed inset-x-0 bottom-0 flex flex-col items-end gap-2 p-4
-      sm:inset-x-auto sm:right-0 sm:bottom-0 sm:max-w-sm;
+    @apply pointer-events-none fixed inset-x-0 bottom-0 flex flex-col items-stretch gap-2
+      px-3 pt-2 sm:inset-x-auto sm:right-0 sm:bottom-0 sm:max-w-sm sm:items-end sm:p-4;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
     z-index: var(--kh-z-toast);
   }
 
+  @media (min-width: 640px) {
+    .kh-toast-viewport {
+      padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+    }
+  }
+
   .kh-toast {
-    @apply pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-md border px-3.5 py-3
-      shadow-sm backdrop-blur-sm;
+    @apply pointer-events-auto flex w-full max-w-none items-start gap-3 rounded-md border px-3.5 py-3
+      shadow-sm backdrop-blur-sm sm:max-w-sm;
     animation: kh-toast-in var(--kh-motion-enter) var(--kh-ease-out);
   }
 
@@ -364,8 +371,8 @@
   }
 
   .kh-toast-dismiss {
-    @apply -mr-1 -mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md
-      text-current/70 transition hover:bg-panel-solid/50 hover:text-current;
+    @apply -mr-1 -mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-md
+      text-current/70 transition hover:bg-panel-solid/50 hover:text-current sm:size-7;
   }
 
   .kh-shell {
@@ -409,18 +416,45 @@
     animation: kh-backdrop-in var(--kh-motion-base) var(--kh-ease-out);
   }
 
+  /* Mobile: bottom sheet. sm+: centered card. */
   .kh-modal-panel {
-    @apply relative flex max-h-[min(100%,40rem)] w-full max-w-lg flex-col overflow-hidden
-      rounded-t-lg border border-line bg-panel-solid shadow-sm sm:rounded-lg;
-    animation: kh-modal-in var(--kh-motion-enter) var(--kh-ease-out);
+    @apply relative flex w-full max-w-lg min-h-0 flex-col overflow-hidden
+      rounded-t-2xl border border-b-0 border-line bg-panel-solid shadow-sm
+      sm:rounded-lg sm:border-b;
+    max-height: min(92dvh, 100%);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: kh-modal-sheet-in var(--kh-motion-enter) var(--kh-ease-out);
+  }
+
+  @media (min-width: 640px) {
+    .kh-modal-panel {
+      max-height: min(40rem, calc(100dvh - 2rem));
+      padding-bottom: 0;
+      animation: kh-modal-in var(--kh-motion-enter) var(--kh-ease-out);
+    }
   }
 
   .kh-modal-panel-lg {
-    @apply max-w-2xl max-h-[min(100%,44rem)];
+    @apply sm:max-w-2xl;
+  }
+
+  @media (min-width: 640px) {
+    .kh-modal-panel-lg {
+      max-height: min(44rem, calc(100dvh - 2rem));
+    }
   }
 
   .kh-modal-panel-xl {
-    @apply w-full max-w-none max-h-[92dvh] sm:w-[min(90vw,96rem)] sm:max-w-[min(90vw,96rem)] sm:max-h-[90vh];
+    @apply max-w-none;
+    max-height: min(96dvh, 100%);
+  }
+
+  @media (min-width: 640px) {
+    .kh-modal-panel-xl {
+      width: min(90vw, 96rem);
+      max-width: min(90vw, 96rem);
+      max-height: min(90dvh, calc(100dvh - 2rem));
+    }
   }
 
   .kh-modal-panel-xl .kh-modal-body {
@@ -429,8 +463,20 @@
 
   .kh-modal-panel-full {
     @apply h-dvh max-h-dvh w-full max-w-none rounded-none border-0
-      sm:h-[min(96dvh,96rem)] sm:max-h-[96dvh] sm:w-[min(96vw,96rem)]
-      sm:max-w-[min(96vw,96rem)] sm:rounded-lg sm:border;
+      sm:rounded-lg sm:border;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  @media (min-width: 640px) {
+    .kh-modal-panel-full {
+      height: min(96dvh, 96rem);
+      max-height: min(96dvh, 96rem);
+      width: min(96vw, 96rem);
+      max-width: min(96vw, 96rem);
+      padding-top: 0;
+      padding-bottom: 0;
+    }
   }
 
   .kh-modal-panel-full .kh-modal-body {
@@ -438,15 +484,15 @@
   }
 
   .kh-modal-header {
-    @apply flex items-start justify-between gap-3 border-b border-line px-3 py-3 sm:px-4;
+    @apply flex shrink-0 items-start justify-between gap-3 border-b border-line px-3 py-3 sm:px-4;
   }
 
   .kh-modal-title {
-    @apply m-0 text-lg font-semibold tracking-tight text-ink;
+    @apply m-0 text-base font-semibold tracking-tight break-words text-ink sm:text-lg;
   }
 
   .kh-modal-description {
-    @apply mt-1 mb-0 text-sm text-ink-muted;
+    @apply mt-1 mb-0 line-clamp-3 text-sm text-ink-muted sm:line-clamp-none;
   }
 
   .kh-modal-panel-full .kh-modal-description {
@@ -454,11 +500,16 @@
   }
 
   .kh-modal-body {
-    @apply grid flex-1 gap-4 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4;
+    @apply grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4;
   }
 
   .kh-modal-footer {
-    @apply flex flex-wrap items-center justify-end gap-2 border-t border-line px-3 py-3 sm:px-4;
+    @apply flex shrink-0 flex-col-reverse gap-2 border-t border-line px-3 py-3
+      sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:px-4;
+  }
+
+  .kh-modal-footer :is(button, .kh-btn) {
+    @apply w-full justify-center sm:w-auto;
   }
 }
 
@@ -475,6 +526,17 @@
   from {
     opacity: 0;
     transform: translateY(0.4rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kh-modal-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
   }
   to {
     opacity: 1;

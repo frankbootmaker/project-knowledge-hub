@@ -10,6 +10,7 @@ import {
   ErrorText,
   Field,
   Input,
+  Modal,
   useToast,
 } from './ui';
 
@@ -74,15 +75,18 @@ function BurndownChart({
   startDate,
   endDate,
   burndown,
+  variant = 'inline',
 }: {
   bac: number | null;
   startDate: string | null;
   endDate: string | null;
   burndown: CostSnapshotPoint[];
+  /** Wider canvas for mobile landscape / modal viewing. */
+  variant?: 'inline' | 'landscape';
 }) {
   const t = useTranslations('budget');
-  const width = 560;
-  const height = 180;
+  const width = variant === 'landscape' ? 960 : 560;
+  const height = variant === 'landscape' ? 420 : 180;
   const pad = { top: 12, right: 12, bottom: 28, left: 44 };
   const innerW = width - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
@@ -133,7 +137,11 @@ function BurndownChart({
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className="h-auto w-full max-w-full"
+      className={
+        variant === 'landscape'
+          ? 'mx-auto h-auto w-full min-h-[14rem] max-h-[min(70dvh,28rem)]'
+          : 'h-auto w-full max-w-full'
+      }
       role="img"
       aria-label={t('burndownAria')}
     >
@@ -238,6 +246,7 @@ export function ProjectBudgetPanel({
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [burndownOpen, setBurndownOpen] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch(
@@ -308,6 +317,7 @@ export function ProjectBudgetPanel({
   const currency = summary?.currency ?? 'EUR';
 
   return (
+    <>
     <CollapsibleSection
       id="project-budget"
       storageKey={`project:${projectId}:budget`}
@@ -324,8 +334,8 @@ export function ProjectBudgetPanel({
         <p className="m-0 text-sm text-ink-muted">{tCommon('loading')}</p>
       ) : (
         <div className="grid gap-5">
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label={t('approvedBudget')} className="min-w-[12rem] flex-1">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <Field label={t('approvedBudget')} className="w-full max-w-xs">
               <Input
                 type="number"
                 min="0"
@@ -338,6 +348,7 @@ export function ProjectBudgetPanel({
             {canMutate ? (
               <Button
                 type="button"
+                className="w-fit shrink-0 self-start sm:self-auto"
                 disabled={pending}
                 onClick={() => void saveApproved()}
               >
@@ -424,12 +435,27 @@ export function ProjectBudgetPanel({
               {t('burndown')}
             </p>
             <p className="mt-0 mb-2 text-xs text-ink-muted">{t('burndownLegend')}</p>
-            <BurndownChart
-              bac={summary.bac}
-              startDate={summary.startDate}
-              endDate={summary.endDate}
-              burndown={summary.burndown}
-            />
+            <div className="hidden md:block">
+              <BurndownChart
+                bac={summary.bac}
+                startDate={summary.startDate}
+                endDate={summary.endDate}
+                burndown={summary.burndown}
+              />
+            </div>
+            <div className="md:hidden">
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-fit"
+                onClick={() => setBurndownOpen(true)}
+              >
+                {t('burndownOpen')}
+              </Button>
+              <p className="mt-2 mb-0 text-xs text-ink-muted">
+                {t('burndownLandscapeHint')}
+              </p>
+            </div>
           </div>
 
           <div>
@@ -439,46 +465,95 @@ export function ProjectBudgetPanel({
             {summary.epics.length === 0 ? (
               <p className="m-0 text-sm text-ink-muted">{t('epicRollupsEmpty')}</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-muted">
-                      <th className="py-2 pr-3 font-medium">{t('epic')}</th>
-                      <th className="py-2 pr-3 font-medium">
-                        {t('forecastHours')}
-                      </th>
-                      <th className="py-2 pr-3 font-medium">
-                        {t('actualHours')}
-                      </th>
-                      <th className="py-2 pr-3 font-medium">
-                        {t('forecastCost')}
-                      </th>
-                      <th className="py-2 font-medium">{t('actualCost')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.epics.map((epic) => (
-                      <tr key={epic.epicId} className="border-b border-line/70">
-                        <td className="py-2 pr-3 font-medium text-ink">
-                          {epic.title}
-                        </td>
-                        <td className="py-2 pr-3 text-ink-muted">
-                          {epic.forecastHours}
-                        </td>
-                        <td className="py-2 pr-3 text-ink-muted">
-                          {epic.actualHours}
-                        </td>
-                        <td className="py-2 pr-3 text-ink-muted">
-                          {formatMoney(epic.forecastCost, currency, locale)}
-                        </td>
-                        <td className="py-2 text-ink-muted">
-                          {formatMoney(epic.actualCost, currency, locale)}
-                        </td>
+              <>
+                <ul className="m-0 grid list-none gap-2 p-0 md:hidden">
+                  {summary.epics.map((epic) => (
+                    <li
+                      key={epic.epicId}
+                      className="rounded-md border border-line bg-panel-solid p-3"
+                    >
+                      <p className="m-0 text-sm font-semibold text-ink">
+                        {epic.title}
+                      </p>
+                      <dl className="mt-2 mb-0 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                        <div>
+                          <dt className="m-0 font-medium text-ink-muted">
+                            {t('forecastHoursShort')}
+                          </dt>
+                          <dd className="m-0 text-ink">{epic.forecastHours}</dd>
+                        </div>
+                        <div>
+                          <dt className="m-0 font-medium text-ink-muted">
+                            {t('actualHoursShort')}
+                          </dt>
+                          <dd className="m-0 text-ink">{epic.actualHours}</dd>
+                        </div>
+                        <div>
+                          <dt className="m-0 font-medium text-ink-muted">
+                            {t('forecastCostShort')}
+                          </dt>
+                          <dd className="m-0 text-ink">
+                            {formatMoney(epic.forecastCost, currency, locale)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="m-0 font-medium text-ink-muted">
+                            {t('actualCostShort')}
+                          </dt>
+                          <dd className="m-0 text-ink">
+                            {formatMoney(epic.actualCost, currency, locale)}
+                          </dd>
+                        </div>
+                      </dl>
+                    </li>
+                  ))}
+                </ul>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-line uppercase tracking-wide text-ink-muted">
+                        <th className="py-1.5 pr-2 font-medium">{t('epic')}</th>
+                        <th className="py-1.5 pr-2 font-medium whitespace-nowrap">
+                          {t('forecastHoursShort')}
+                        </th>
+                        <th className="py-1.5 pr-2 font-medium whitespace-nowrap">
+                          {t('actualHoursShort')}
+                        </th>
+                        <th className="py-1.5 pr-2 font-medium whitespace-nowrap">
+                          {t('forecastCostShort')}
+                        </th>
+                        <th className="py-1.5 font-medium whitespace-nowrap">
+                          {t('actualCostShort')}
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {summary.epics.map((epic) => (
+                        <tr
+                          key={epic.epicId}
+                          className="border-b border-line/70"
+                        >
+                          <td className="max-w-[14rem] truncate py-1.5 pr-2 font-medium text-ink">
+                            {epic.title}
+                          </td>
+                          <td className="py-1.5 pr-2 whitespace-nowrap text-ink-muted">
+                            {epic.forecastHours}
+                          </td>
+                          <td className="py-1.5 pr-2 whitespace-nowrap text-ink-muted">
+                            {epic.actualHours}
+                          </td>
+                          <td className="py-1.5 pr-2 whitespace-nowrap text-ink-muted">
+                            {formatMoney(epic.forecastCost, currency, locale)}
+                          </td>
+                          <td className="py-1.5 whitespace-nowrap text-ink-muted">
+                            {formatMoney(epic.actualCost, currency, locale)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
 
@@ -488,5 +563,31 @@ export function ProjectBudgetPanel({
         </div>
       )}
     </CollapsibleSection>
+
+    <Modal
+      open={burndownOpen}
+      onClose={() => setBurndownOpen(false)}
+      title={t('burndown')}
+      description={t('burndownLandscapeHint')}
+      size="full"
+      bodyClassName="!block"
+      footer={
+        <Button type="button" variant="secondary" onClick={() => setBurndownOpen(false)}>
+          {tCommon('close')}
+        </Button>
+      }
+    >
+      <p className="mt-0 mb-3 text-xs text-ink-muted">{t('burndownLegend')}</p>
+      {summary ? (
+        <BurndownChart
+          bac={summary.bac}
+          startDate={summary.startDate}
+          endDate={summary.endDate}
+          burndown={summary.burndown}
+          variant="landscape"
+        />
+      ) : null}
+    </Modal>
+    </>
   );
 }

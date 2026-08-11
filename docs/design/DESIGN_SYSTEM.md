@@ -75,7 +75,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Concern | Convention |
 |---------|------------|
 | Breakpoints | `sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px |
-| Viewport | Root layout exports `viewport: { width: 'device-width', initialScale: 1 }` |
+| Viewport | Root layout exports `viewport: { width: 'device-width', initialScale: 1, viewportFit: 'cover' }` |
 | Shell padding / width | `.kh-shell` / `shellClassName` — `max-w-6xl` + `px-4 sm:px-6` |
 | Shell content | `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
 | Primary nav | Desktop: inline `NavLink`s from `md` up (Dashboard, Workspaces, Search, Archive, Admin?). Below `md`: `MobileNav` with the same destinations (never hide nav without a mobile path). Platform Status lives under Admin sidebar |
@@ -84,7 +84,9 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
 | Touch targets | Prefer existing control tokens / header control squares; keep interactive chrome ≥ ~40px |
 | Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
-| Section header actions | `SectionHeader` stacks title then actions below `sm`; from `sm` title left / actions right. Wide action clusters (view mode switchers) use `min-w-0` + `overflow-x-auto` — do not put them in `FunctionHeader` beside open filters |
+| Modals | Below `sm`: bottom sheet (`items-end`, rounded top, `max-h` ≈ 92–96dvh), body scrolls, header/footer fixed; footer actions stack full-width (`flex-col-reverse`). From `sm`: centered card. Respect `safe-area-inset-*`; root `viewportFit: 'cover'` |
+| Toasts | Below `sm`: full-bleed bottom strip with safe-area padding; from `sm`: bottom-right stack (`max-w-sm`). Stay above modals (`--kh-z-toast` > `--kh-z-modal`) |
+| Section header actions | `SectionHeader` keeps title + actions on one row. View mode switchers use icons below `md` (labels from `md`) via `ViewModeIcon` so Delivery/Stakeholders controls fit beside the title |
 | Function header | `.kh-function-header*` stacks controls above actions below `sm`; controls may wrap; from `sm` keep search/filters left and primary actions right |
 
 ### Layout shells
@@ -125,13 +127,13 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `LinkButton` | Navigation that should look like a button |
 | `NavLink` | Header or admin sidebar links (active state included) |
 | `MobileNav` | Primary nav below `sm` (sheet + backdrop; Esc / route change closes) |
-| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer` actions; `size="lg"` for denser forms |
+| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer`; `size` `md`/`lg`/`xl`/`full`. Mobile bottom sheet / desktop card via `.kh-modal*` |
 | `Panel` | `default` / `solid` / `inset` surfaces |
 | `Field`, `Input`, `PasswordInput`, `PasswordStrengthHint`, `Select`, `Textarea`, `ErrorText` | Forms (`PasswordInput` show/hide; strength meter for new passwords) |
 | `FilePicker` | File choose control — secondary **Browse** / **Tallózás** button + filename (hides native file chrome) |
 | `Badge` | Compact status chips (e.g. health “ok”) |
 | `Switch` | On/off toggles |
-| `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`) |
+| `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`); mobile full-width bottom, desktop corner |
 | `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout (`SectionHeader` optional `action` — responsive title/actions split) |
 | `FunctionHeader` | List/admin toolbar: search + filters + primary actions (stacks below `sm`) |
 
@@ -179,6 +181,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-11
 
+* **Responsive modals & toasts** — Modals are bottom sheets below `sm` (scrollable body, sticky header/footer, full-width stacked actions, safe-area padding); centered cards from `sm`. Toasts are full-bleed at the bottom on small screens and corner-stacked from `sm`. Root `viewportFit: 'cover'` for insets.
+* **Icon view switchers** — Delivery / Stakeholders view controls use `ViewModeIcon` below `md` so they stay on the section title row; text labels from `md` up.
 * **Compact mobile header** — Below `md`, brand is the KnowHub mark only (`BrandMark`); wordmark from `md` up. Login/logout are icon controls (same square size as theme). `MobileNav` hamburger sits at the far right after session controls.
 * **Section header actions** — Delivery / Stakeholders view switchers live in `CollapsibleSection` → `SectionHeader` `action` (not in `FunctionHeader`). Below `sm`, title stacks above actions; view clusters use `overflow-x-auto`. `FunctionHeader` stacks controls above actions on small screens so open filters do not collide with create/filter chrome.
 
