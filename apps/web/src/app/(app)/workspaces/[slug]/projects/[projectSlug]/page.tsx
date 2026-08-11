@@ -125,8 +125,10 @@ type KnowledgeRecordSummary = {
 
 export default async function ProjectDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; projectSlug: string }>;
+  searchParams: Promise<{ task?: string | string[] }>;
 }) {
   const session = await requireSession();
   const t = await getTranslations('projects');
@@ -139,6 +141,14 @@ export default async function ProjectDetailPage({
   const tRaid = await getTranslations('raid');
   const tChange = await getTranslations('changes');
   const { slug, projectSlug } = await params;
+  const query = await searchParams;
+  const openTaskRaw = query.task;
+  const initialOpenTaskId =
+    typeof openTaskRaw === 'string'
+      ? openTaskRaw
+      : Array.isArray(openTaskRaw)
+        ? (openTaskRaw[0] ?? null)
+        : null;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
   if (!workspacesResponse.ok) {
@@ -501,6 +511,7 @@ export default async function ProjectDetailPage({
         initialStories={stories}
         initialMilestones={milestones}
         initialTasks={tasks}
+        initialOpenTaskId={initialOpenTaskId}
         members={members}
         currency={project.currency ?? 'EUR'}
         ratePeople={ratePeople}

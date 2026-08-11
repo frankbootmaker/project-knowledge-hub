@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -165,6 +165,7 @@ export function ProjectDeliveryPanel({
   initialStories,
   initialMilestones,
   initialTasks,
+  initialOpenTaskId = null,
   members,
   currency = 'EUR',
   ratePeople = [],
@@ -180,6 +181,8 @@ export function ProjectDeliveryPanel({
   initialStories: UserStory[];
   initialMilestones: Milestone[];
   initialTasks: Task[];
+  /** Open this task's manage modal on mount (e.g. dashboard deep link). */
+  initialOpenTaskId?: string | null;
   members: Member[];
   currency?: string;
   ratePeople?: RatePerson[];
@@ -203,6 +206,25 @@ export function ProjectDeliveryPanel({
     kind: 'epic' | 'story' | 'milestone';
     id: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (!initialOpenTaskId) return;
+    if (!initialTasks.some((task) => task.id === initialOpenTaskId)) return;
+    setManageTaskId(initialOpenTaskId);
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('task')) return;
+      url.searchParams.delete('task');
+      const hash = url.hash || '#project-delivery';
+      window.history.replaceState(
+        null,
+        '',
+        `${url.pathname}${url.search}${hash}`,
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [initialOpenTaskId, initialTasks]);
 
   const [title, setTitle] = useState('');
   const [createKind, setCreateKind] = useState<CreateKind>('task');

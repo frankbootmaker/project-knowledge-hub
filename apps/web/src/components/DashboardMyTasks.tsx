@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
@@ -8,8 +8,7 @@ import {
   type CatalogueListItem,
 } from './CatalogueSection';
 import { CollapsibleSection } from './CollapsibleSection';
-import { ProjectTaskManageModal } from './ProjectTaskManageModal';
-import { Badge, Button } from './ui';
+import { Badge } from './ui';
 import { cn } from '../lib/cn';
 import {
   deliveryScheduleSurfaceClass,
@@ -25,6 +24,10 @@ const RACI_LABEL: Record<DashboardAssignedTask['myRole'], string> = {
   I: 'raciInformed',
 };
 
+function taskHref(task: DashboardAssignedTask): string {
+  return `/workspaces/${task.workspaceSlug}/projects/${task.projectSlug}?task=${encodeURIComponent(task.id)}#project-delivery`;
+}
+
 export function DashboardMyTasks({
   tasks,
 }: {
@@ -33,17 +36,11 @@ export function DashboardMyTasks({
   const t = useTranslations('dashboard');
   const tDelivery = useTranslations('delivery');
   const tWorkspaces = useTranslations('workspaces');
-  const [manageTaskId, setManageTaskId] = useState<string | null>(null);
-  const [visibleTasks, setVisibleTasks] = useState(tasks);
-
-  useEffect(() => {
-    setVisibleTasks(tasks);
-  }, [tasks]);
 
   const items: CatalogueListItem[] = useMemo(
     () =>
-      visibleTasks.map((task) => {
-        const href = `/workspaces/${task.workspaceSlug}/projects/${task.projectSlug}`;
+      tasks.map((task) => {
+        const href = taskHref(task);
         const raciShort = t(RACI_LABEL[task.myRole]);
         return {
           id: task.id,
@@ -86,101 +83,80 @@ export function DashboardMyTasks({
           filterLabel: tDelivery(`taskStatus.${task.status}`),
         };
       }),
-    [visibleTasks, t, tDelivery],
+    [tasks, t, tDelivery],
   );
 
   const taskById = useMemo(() => {
     const map = new Map<string, DashboardAssignedTask>();
-    for (const task of visibleTasks) map.set(task.id, task);
+    for (const task of tasks) map.set(task.id, task);
     return map;
-  }, [visibleTasks]);
+  }, [tasks]);
 
   return (
-    <>
-      <CollapsibleSection
-        storageKey="dashboard:my-tasks"
+    <CollapsibleSection
+      storageKey="dashboard:my-tasks"
+      title={t('myTasks')}
+      defaultOpen
+    >
+      <CatalogueSection
         title={t('myTasks')}
-        defaultOpen
-      >
-        <CatalogueSection
-          title={t('myTasks')}
-          showTitle={false}
-          className="mb-0"
-          items={items}
-          emptyLabel={t('myTasksEmpty')}
-          searchPlaceholder={t('myTasksSearch')}
-          filterLabel={tDelivery('filterStatus')}
-          filterAllLabel={tWorkspaces('sectionFilterAll')}
-          createLabel=""
-          canCreate={false}
-          defaultSort="oldest"
-          renderItem={(item) => {
-            const task = taskById.get(item.id);
-            const scheduleTone = task
-              ? deliveryScheduleTone({
-                  status: task.status,
-                  date: task.dueDate,
-                  today: todayYmd(),
-                })
-              : null;
+        showTitle={false}
+        className="mb-0"
+        items={items}
+        emptyLabel={t('myTasksEmpty')}
+        searchPlaceholder={t('myTasksSearch')}
+        filterLabel={tDelivery('filterStatus')}
+        filterAllLabel={tWorkspaces('sectionFilterAll')}
+        createLabel=""
+        canCreate={false}
+        defaultSort="oldest"
+        renderItem={(item) => {
+          const task = taskById.get(item.id);
+          const scheduleTone = task
+            ? deliveryScheduleTone({
+                status: task.status,
+                date: task.dueDate,
+                today: todayYmd(),
+              })
+            : null;
 
-            return (
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {item.href ? (
-                      <Link href={item.href} className="font-semibold no-underline">
-                        {item.title}
-                      </Link>
-                    ) : (
-                      <span className="font-semibold">{item.title}</span>
+          return (
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                {item.href ? (
+                  <Link href={item.href} className="font-semibold no-underline">
+                    {item.title}
+                  </Link>
+                ) : (
+                  <span className="font-semibold">{item.title}</span>
+                )}
+                {item.secondaryBadge ? (
+                  <Badge tone="brand">{item.secondaryBadge}</Badge>
+                ) : null}
+                {item.primaryBadge ? <Badge>{item.primaryBadge}</Badge> : null}
+                {scheduleTone ? (
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide',
+                      deliveryScheduleSurfaceClass(scheduleTone),
                     )}
-                    {item.secondaryBadge ? (
-                      <Badge tone="brand">{item.secondaryBadge}</Badge>
-                    ) : null}
-                    {item.primaryBadge ? <Badge>{item.primaryBadge}</Badge> : null}
-                    {scheduleTone ? (
-                      <span
-                        className={cn(
-                          'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide',
-                          deliveryScheduleSurfaceClass(scheduleTone),
-                        )}
-                      >
-                        <span className="sm:hidden">
-                          {tDelivery(`scheduleToneShort.${scheduleTone}`)}
-                        </span>
-                        <span className="hidden sm:inline">
-                          {tDelivery(`scheduleTone.${scheduleTone}`)}
-                        </span>
-                      </span>
-                    ) : null}
-                  </div>
-                  {item.subtitle ? (
-                    <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
-                  ) : null}
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full sm:w-auto"
-                  onClick={() => setManageTaskId(item.id)}
-                >
-                  {tDelivery('manage')}
-                </Button>
+                  >
+                    <span className="sm:hidden">
+                      {tDelivery(`scheduleToneShort.${scheduleTone}`)}
+                    </span>
+                    <span className="hidden sm:inline">
+                      {tDelivery(`scheduleTone.${scheduleTone}`)}
+                    </span>
+                  </span>
+                ) : null}
               </div>
-            );
-          }}
-        />
-      </CollapsibleSection>
-      <ProjectTaskManageModal
-        open={Boolean(manageTaskId)}
-        onClose={() => setManageTaskId(null)}
-        taskId={manageTaskId}
-        canMutate
-        onDeleted={(taskId) => {
-          setVisibleTasks((prev) => prev.filter((task) => task.id !== taskId));
+              {item.subtitle ? (
+                <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
+              ) : null}
+            </div>
+          );
         }}
       />
-    </>
+    </CollapsibleSection>
   );
 }
