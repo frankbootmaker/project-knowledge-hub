@@ -492,6 +492,13 @@ export async function registerProjectDeliveryRoutes(
           includeStories: z.boolean().optional(),
           includeMilestones: z.boolean().optional(),
           includeTasks: z.boolean().optional(),
+          colorByStatus: z.boolean().optional(),
+          showDueDates: z.boolean().optional(),
+          showGrid: z.boolean().optional(),
+          today: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .optional(),
           windowFrom: z
             .string()
             .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -519,6 +526,12 @@ export async function registerProjectDeliveryRoutes(
               task: z.string().min(1).max(80),
               generated: z.string().min(1).max(80),
               empty: z.string().min(1).max(200),
+              today: z.string().min(1).max(80).optional(),
+              scheduleOnTrack: z.string().min(1).max(80).optional(),
+              scheduleAtRisk: z.string().min(1).max(80).optional(),
+              scheduleOverdue: z.string().min(1).max(80).optional(),
+              scheduleCompleted: z.string().min(1).max(80).optional(),
+              scheduleNeutral: z.string().min(1).max(80).optional(),
             })
             .optional(),
         })
@@ -578,6 +591,10 @@ export async function registerProjectDeliveryRoutes(
           milestones,
           tasks,
           filters,
+          colorByStatus: body.colorByStatus ?? false,
+          showDueDates: body.showDueDates ?? false,
+          showGrid: body.showGrid ?? true,
+          today: body.today,
           windowFrom: body.windowFrom ?? null,
           windowTo: body.windowTo ?? null,
           tagOffsets: body.tagOffsets ?? null,
@@ -601,7 +618,14 @@ export async function registerProjectDeliveryRoutes(
         action: 'project.timeline_exported',
         entityType: 'project',
         entityId: project.id,
-        metadata: { format: 'pdf', title, ...filters },
+        metadata: {
+          format: 'pdf',
+          title,
+          ...filters,
+          colorByStatus: body.colorByStatus ?? false,
+          showDueDates: body.showDueDates ?? false,
+          showGrid: body.showGrid ?? true,
+        },
         ipAddress: request.ip,
       });
 

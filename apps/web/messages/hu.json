@@ -2041,6 +2041,7 @@
     "timelineResetTags": "Címke pozíciók visszaállítása",
     "timelineFilterLabel": "Megjelenítés az idővonalon",
     "timelineFilterEmpty": "Válassz legalább egy elemtípust az idővonalhoz.",
+    "timelineStatusColors": "Státuszszínek",
     "timelineWindowLabel": "Időszak",
     "timelineWindowHint": "Nagyítsd az időtengelyt egy dátumtartományra, hogy a sűrű szakaszok is átláthatóak legyenek. A széleken átnyúló sávok levágva jelennek meg; a tartományon kívüli jelölők el vannak rejtve.",
     "timelineWindowFrom": "Ettől",

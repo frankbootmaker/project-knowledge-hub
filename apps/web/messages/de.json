@@ -1958,6 +1958,7 @@
     "timelineResetTags": "Label-Positionen zurücksetzen",
     "timelineFilterLabel": "Auf der Zeitachse zeigen",
     "timelineFilterEmpty": "Wähle mindestens einen Elementtyp für die Zeitachse.",
+    "timelineStatusColors": "Statusfarben",
     "timelineWindowLabel": "Zeitraum",
     "timelineWindowHint": "Zoome die Achse auf einen Datumsbereich, damit dichte Phasen lesbar bleiben. Balken an den Rändern werden abgeschnitten; Marker außerhalb des Bereichs bleiben ausgeblendet.",
     "timelineWindowFrom": "Von",

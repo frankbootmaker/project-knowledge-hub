@@ -15,6 +15,12 @@ import { useTranslations } from 'next-intl';
 import { Badge, Button, Field, Input, useToast } from './ui';
 import { cn } from '../lib/cn';
 import { downloadAuthenticatedExport } from '../lib/download-export';
+import {
+  deliveryScheduleSurfaceClass,
+  deliveryScheduleTone,
+  todayYmd,
+  type DeliveryScheduleTone,
+} from '../lib/delivery-schedule';
 
 type Epic = {
   id: string;
@@ -53,6 +59,7 @@ type AxisMarker = {
   kind: 'milestone' | 'task';
   title: string;
   date: string;
+  status: string;
   onOpen: () => void;
 };
 
@@ -70,7 +77,7 @@ type TimelineWindow = {
   to: string;
 };
 
-const DEFAULT_RIB_Y = 52;
+const DEFAULT_RIB_Y = 96;
 const DRAG_CLICK_THRESHOLD = 4;
 const DEFAULT_FILTERS: TimelineFilters = {
   epics: true,
@@ -143,12 +150,59 @@ function writeGrid(storageKey: string, enabled: boolean): void {
   }
 }
 
-function todayYmd(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+function readStatusColors(storageKey: string): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (raw === null) return false;
+    return raw === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeStatusColors(storageKey: string, enabled: boolean): void {
+  try {
+    window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function readDueDates(storageKey: string): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (raw === null) return false;
+    return raw === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeDueDates(storageKey: string, enabled: boolean): void {
+  try {
+    window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function scheduleMarkerDotClass(
+  tone: DeliveryScheduleTone,
+  kind: 'milestone' | 'task',
+): string {
+  const fill =
+    tone === 'completed'
+      ? 'border-brand bg-brand'
+      : tone === 'overdue'
+        ? 'border-danger bg-danger'
+        : tone === 'atRisk'
+          ? 'border-warn bg-warn'
+          : tone === 'onTrack'
+            ? 'border-accent bg-accent'
+            : 'border-line bg-ink-muted';
+  return kind === 'milestone'
+    ? cn('size-3 rotate-45 border', fill)
+    : cn('size-2.5 rounded-full border', fill);
 }
 
 const ZOOM_FACTOR = 0.7;
@@ -581,6 +635,8 @@ export function ProjectDeliveryTimeline({
   const filterKey = `kh-timeline-filters:${projectId}`;
   const windowKey = `kh-timeline-window:${projectId}`;
   const gridKey = `kh-timeline-grid:${projectId}`;
+  const statusColorKey = `kh-timeline-status-colors:${projectId}`;
+  const dueDatesKey = `kh-timeline-due-dates:${projectId}`;
   const { offsets, updateOffset, resetOffsets } = useTagOffsets(storageKey);
   const [filters, setFilters] = useState<TimelineFilters>(DEFAULT_FILTERS);
   const [windowRange, setWindowRange] = useState<TimelineWindow>({
@@ -588,18 +644,39 @@ export function ProjectDeliveryTimeline({
     to: '',
   });
   const [showGrid, setShowGrid] = useState(true);
+  const [colorByStatus, setColorByStatus] = useState(false);
+  const [showDueDates, setShowDueDates] = useState(false);
   const [exportPending, setExportPending] = useState(false);
+  const todayDate = todayYmd();
 
   useEffect(() => {
     setFilters(readFilters(filterKey));
     setWindowRange(readWindow(windowKey));
     setShowGrid(readGrid(gridKey));
-  }, [filterKey, windowKey, gridKey]);
+    setColorByStatus(readStatusColors(statusColorKey));
+    setShowDueDates(readDueDates(dueDatesKey));
+  }, [filterKey, windowKey, gridKey, statusColorKey, dueDatesKey]);
 
   function toggleFilter(key: keyof TimelineFilters) {
     setFilters((current) => {
       const next = { ...current, [key]: !current[key] };
       writeFilters(filterKey, next);
+      return next;
+    });
+  }
+
+  function toggleStatusColors() {
+    setColorByStatus((current) => {
+      const next = !current;
+      writeStatusColors(statusColorKey, next);
+      return next;
+    });
+  }
+
+  function toggleDueDates() {
+    setShowDueDates((current) => {
+      const next = !current;
+      writeDueDates(dueDatesKey, next);
       return next;
     });
   }
@@ -768,7 +845,6 @@ export function ProjectDeliveryTimeline({
   const canZoomIn =
     !windowInvalid && currentSpan > MIN_ZOOM_SPAN_MS + 86_400_000;
   const canZoomOut = !windowInvalid && currentSpan < maxZoomSpan - 86_400_000;
-  const todayDate = todayYmd();
   const todayInRange =
     parseYmd(todayDate) >= rangeStart && parseYmd(todayDate) <= rangeEnd;
 
@@ -819,6 +895,7 @@ export function ProjectDeliveryTimeline({
           kind: 'milestone',
           title: milestone.title,
           date: milestone.targetDate,
+          status: milestone.status,
           onOpen: () => onManageMilestone(milestone.id),
         });
       }
@@ -831,6 +908,7 @@ export function ProjectDeliveryTimeline({
           kind: 'task',
           title: task.title,
           date: task.dueDate,
+          status: task.status,
           onOpen: () => onManageTask(task.id),
         });
       }
@@ -906,6 +984,10 @@ export function ProjectDeliveryTimeline({
             includeStories: filters.stories,
             includeMilestones: filters.milestones,
             includeTasks: filters.tasks,
+            colorByStatus,
+            showDueDates,
+            showGrid,
+            today: todayDate,
             windowFrom: windowActive ? formatYmd(rangeStart) : null,
             windowTo: windowActive ? formatYmd(rangeEnd) : null,
             tagOffsets: offsets,
@@ -916,6 +998,12 @@ export function ProjectDeliveryTimeline({
               task: t('kindTask'),
               generated: tProjects('reportGenerated'),
               empty: t('timelineExportEmpty'),
+              today: t('timelineToday'),
+              scheduleOnTrack: t('scheduleTone.onTrack'),
+              scheduleAtRisk: t('scheduleTone.atRisk'),
+              scheduleOverdue: t('scheduleTone.overdue'),
+              scheduleCompleted: t('scheduleTone.completed'),
+              scheduleNeutral: t('scheduleTone.neutral'),
             },
           }),
         },
@@ -931,6 +1019,7 @@ export function ProjectDeliveryTimeline({
     }
   }, [
     anyTypeVisible,
+    colorByStatus,
     exportPending,
     filters.epics,
     filters.milestones,
@@ -942,8 +1031,11 @@ export function ProjectDeliveryTimeline({
     pushToast,
     rangeEnd,
     rangeStart,
+    showDueDates,
+    showGrid,
     t,
     tProjects,
+    todayDate,
     windowActive,
   ]);
 
@@ -983,6 +1075,13 @@ export function ProjectDeliveryTimeline({
           return rangeOverlaps(start, end, rangeStart, rangeEnd);
         })
       : [];
+    const epicTone = colorByStatus
+      ? deliveryScheduleTone({
+          status: epic.status,
+          date: epic.endDate ?? epic.startDate,
+          today: todayDate,
+        })
+      : null;
     return (
       <div
         key={epic.id}
@@ -998,18 +1097,26 @@ export function ProjectDeliveryTimeline({
           </button>
           <Badge>{t(`milestoneStatus.${epic.status}`)}</Badge>
         </div>
-        <div className="relative h-8">
+        <div className={cn('relative', showDueDates ? 'h-10' : 'h-8')}>
           <button
             type="button"
             className={cn(
-              'absolute top-1 h-6 rounded-md border border-brand/40 bg-brand/20 px-2 text-left text-xs font-medium text-ink',
-              'hover:bg-brand/30',
+              'absolute top-1 rounded-md border px-2 text-left text-xs font-medium',
+              showDueDates && epic.endDate ? 'h-8 py-0.5 leading-tight' : 'h-6',
+              epicTone
+                ? deliveryScheduleSurfaceClass(epicTone)
+                : 'border-brand/40 bg-brand/20 text-ink hover:bg-brand/30',
             )}
             style={style}
             title={`${epic.startDate ?? '…'} → ${epic.endDate ?? '…'}`}
             onClick={() => onManageEpic(epic.id)}
           >
             <span className="block truncate">{epic.title}</span>
+            {showDueDates && epic.endDate ? (
+              <span className="block truncate text-[10px] font-normal opacity-80">
+                {epic.endDate}
+              </span>
+            ) : null}
           </button>
           {epicStories.map((story) => {
             const storyStyle = barStyle(story.startDate, story.endDate);
@@ -1029,6 +1136,14 @@ export function ProjectDeliveryTimeline({
             const ribY = 36 + offset.dy;
             const ribLen = Math.max(1, Math.hypot(ribX, ribY));
             const ribAngle = (Math.atan2(ribY, ribX) * 180) / Math.PI;
+            const storyTone = colorByStatus
+              ? deliveryScheduleTone({
+                  status: story.status,
+                  date: story.endDate ?? story.startDate,
+                  today: todayDate,
+                })
+              : null;
+            const storyDue = story.endDate ?? story.startDate;
 
             return (
               <div
@@ -1050,15 +1165,29 @@ export function ProjectDeliveryTimeline({
                   onOffsetChange={updateOffset}
                   onOpen={() => onManageStory(story.id)}
                   className={cn(
-                    'absolute left-0 top-1 z-[1] h-5 max-w-[14rem] rounded border border-line bg-panel-solid px-1.5 text-left text-[11px] text-ink shadow-sm',
-                    'hover:border-brand/50',
+                    'absolute left-0 top-1 z-[1] max-w-[14rem] rounded border px-1.5 text-left text-[11px] shadow-sm',
+                    showDueDates && storyDue ? 'h-auto min-h-5 py-0.5' : 'h-5',
+                    storyTone
+                      ? deliveryScheduleSurfaceClass(storyTone)
+                      : 'border-line bg-panel-solid text-ink hover:border-brand/50',
                   )}
                   style={{
                     transform: `translate(calc(-50% + ${offset.dx}px), ${36 + offset.dy}px)`,
                   }}
-                  title={story.title}
+                  title={
+                    colorByStatus
+                      ? `${story.title} · ${t(`milestoneStatus.${story.status}`)}${storyDue ? ` (${storyDue})` : ''}`
+                      : storyDue
+                        ? `${story.title} (${storyDue})`
+                        : story.title
+                  }
                 >
                   <span className="block truncate">{story.title}</span>
+                  {showDueDates && storyDue ? (
+                    <span className="block truncate text-[9px] opacity-80">
+                      {storyDue}
+                    </span>
+                  ) : null}
                 </DraggableTag>
               </div>
             );
@@ -1072,6 +1201,14 @@ export function ProjectDeliveryTimeline({
   function storyLane(story: Story) {
     const style = barStyle(story.startDate, story.endDate);
     if (!style) return null;
+    const storyTone = colorByStatus
+      ? deliveryScheduleTone({
+          status: story.status,
+          date: story.endDate ?? story.startDate,
+          today: todayDate,
+        })
+      : null;
+    const storyDue = story.endDate ?? story.startDate;
     return (
       <div key={story.id} className="relative mb-4 min-h-12">
         <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -1084,18 +1221,28 @@ export function ProjectDeliveryTimeline({
           </button>
           <Badge>{t(`milestoneStatus.${story.status}`)}</Badge>
         </div>
-        <div className="relative h-8">
+        <div className={cn('relative', showDueDates ? 'h-10' : 'h-8')}>
           <button
             type="button"
             className={cn(
-              'absolute top-1 h-6 max-w-full rounded border border-line bg-panel-solid px-2 text-left text-xs text-ink',
-              'hover:border-brand/50',
+              'absolute top-1 max-w-full rounded border px-2 text-left text-xs',
+              showDueDates && storyDue ? 'h-8 py-0.5 leading-tight' : 'h-6',
+              storyTone
+                ? deliveryScheduleSurfaceClass(storyTone)
+                : 'border-line bg-panel-solid text-ink hover:border-brand/50',
             )}
             style={style}
-            title={story.title}
+            title={
+              storyDue ? `${story.title} (${storyDue})` : story.title
+            }
             onClick={() => onManageStory(story.id)}
           >
             <span className="block truncate">{story.title}</span>
+            {showDueDates && storyDue ? (
+              <span className="block truncate text-[10px] opacity-80">
+                {storyDue}
+              </span>
+            ) : null}
           </button>
         </div>
       </div>
@@ -1126,6 +1273,22 @@ export function ProjectDeliveryTimeline({
               <span>{t(labelKey)}</span>
             </label>
           ))}
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={colorByStatus}
+              onChange={toggleStatusColors}
+            />
+            <span>{t('timelineStatusColors')}</span>
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showDueDates}
+              onChange={toggleDueDates}
+            />
+            <span>{t('dueDate')}</span>
+          </label>
         </div>
       </fieldset>
 
@@ -1264,7 +1427,7 @@ export function ProjectDeliveryTimeline({
             ))}
             {showGrid && todayInRange ? (
               <div
-                className="absolute top-0 -translate-x-1/2 text-[10px] font-semibold text-danger"
+                className="absolute bottom-0 -translate-x-1/2 text-[10px] font-semibold leading-none text-danger"
                 style={markerStyle(todayDate)}
               >
                 {t('timelineToday')}
@@ -1301,7 +1464,7 @@ export function ProjectDeliveryTimeline({
             <div
               className={cn(
                 'relative z-[1] my-2 overflow-visible',
-                filters.milestones || filters.tasks ? 'h-52' : 'h-8',
+                filters.milestones || filters.tasks ? 'h-80 min-h-[20rem]' : 'h-8',
               )}
             >
               <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-line" />
@@ -1326,12 +1489,26 @@ export function ProjectDeliveryTimeline({
                   marker.kind === 'milestone'
                     ? t('kindMilestone')
                     : t('kindTask');
+                const statusLabel =
+                  marker.kind === 'milestone'
+                    ? t(`milestoneStatus.${marker.status}`)
+                    : t(`taskStatus.${marker.status}`);
+                const tone = colorByStatus
+                  ? deliveryScheduleTone({
+                      status: marker.status,
+                      date: marker.date,
+                      today: todayDate,
+                    })
+                  : null;
                 const offset = offsets[marker.id] ?? { dx: 0, dy: 0 };
                 const baseY = aboveSpine ? -DEFAULT_RIB_Y : DEFAULT_RIB_Y;
                 const ribX = offset.dx;
                 const ribY = baseY + offset.dy;
                 const ribLen = Math.max(1, Math.hypot(ribX, ribY));
                 const ribAngle = (Math.atan2(ribY, ribX) * 180) / Math.PI;
+                const tooltip = colorByStatus
+                  ? `${kindLabel}: ${marker.title} · ${statusLabel} (${marker.date})`
+                  : `${kindLabel}: ${marker.title} (${marker.date})`;
 
                 return (
                   <div
@@ -1353,29 +1530,50 @@ export function ProjectDeliveryTimeline({
                       onOffsetChange={updateOffset}
                       onOpen={marker.onOpen}
                       className={cn(
-                        'absolute left-1/2 top-1/2 z-[2] w-max max-w-[11rem] rounded border border-line bg-panel-solid px-1.5 py-0.5 text-left text-[10px] leading-snug text-ink shadow-sm',
-                        'hover:border-brand/50',
+                        'absolute left-1/2 top-1/2 z-[2] w-max max-w-[11rem] rounded border px-1.5 py-0.5 text-left text-[10px] leading-snug shadow-sm',
+                        tone
+                          ? deliveryScheduleSurfaceClass(tone)
+                          : 'border-line bg-panel-solid text-ink hover:border-brand/50',
                       )}
                       style={{
                         transform: `translate(calc(-50% + ${offset.dx}px), calc(-50% + ${baseY + offset.dy}px))`,
                       }}
-                      title={`${kindLabel}: ${marker.title} (${marker.date})`}
+                      title={tooltip}
                     >
-                      <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide text-ink-muted">
-                        {kindLabel}
+                      <span
+                        className={cn(
+                          'mb-0.5 block text-[9px] font-semibold uppercase tracking-wide',
+                          tone ? 'opacity-80' : 'text-ink-muted',
+                        )}
+                      >
+                        {colorByStatus
+                          ? `${kindLabel} · ${statusLabel}`
+                          : kindLabel}
                       </span>
                       <span className="block truncate">{marker.title}</span>
+                      {showDueDates ? (
+                        <span
+                          className={cn(
+                            'mt-0.5 block truncate text-[9px]',
+                            tone ? 'opacity-80' : 'text-ink-muted',
+                          )}
+                        >
+                          {marker.date}
+                        </span>
+                      ) : null}
                     </DraggableTag>
                     <button
                       type="button"
                       className={cn(
                         'absolute left-1/2 top-1/2 z-[3] -translate-x-1/2 -translate-y-1/2',
-                        marker.kind === 'milestone'
-                          ? 'size-3 rotate-45 border border-warn bg-warn/80'
-                          : 'size-2.5 rounded-full bg-ink-muted',
+                        tone
+                          ? scheduleMarkerDotClass(tone, marker.kind)
+                          : marker.kind === 'milestone'
+                            ? 'size-3 rotate-45 border border-warn bg-warn/80'
+                            : 'size-2.5 rounded-full bg-ink-muted',
                       )}
-                      title={`${kindLabel}: ${marker.title} (${marker.date})`}
-                      aria-label={`${kindLabel}: ${marker.title}`}
+                      title={tooltip}
+                      aria-label={tooltip}
                       onClick={marker.onOpen}
                     />
                   </div>

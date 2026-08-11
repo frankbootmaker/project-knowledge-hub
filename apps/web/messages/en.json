@@ -2047,6 +2047,7 @@
     "timelineResetTags": "Reset tag positions",
     "timelineFilterLabel": "Show on timeline",
     "timelineFilterEmpty": "Select at least one item type to display on the timeline.",
+    "timelineStatusColors": "Status colors",
     "timelineWindowLabel": "Time period",
     "timelineWindowHint": "Zoom the axis to a date range so busy stretches stay readable. Bars that cross the edges are clipped; markers outside the range are hidden.",
     "timelineWindowFrom": "From",
