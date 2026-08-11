@@ -28,6 +28,7 @@ type Epic = {
   status: string;
   startDate: string | null;
   endDate: string | null;
+  humanKey?: string | null;
 };
 
 type Story = {
@@ -37,6 +38,7 @@ type Story = {
   status: string;
   startDate: string | null;
   endDate: string | null;
+  humanKey?: string | null;
 };
 
 type Milestone = {
@@ -45,6 +47,7 @@ type Milestone = {
   status: string;
   startDate: string | null;
   targetDate: string | null;
+  humanKey?: string | null;
 };
 
 type Task = {
@@ -52,6 +55,7 @@ type Task = {
   title: string;
   status: string;
   dueDate: string | null;
+  humanKey?: string | null;
 };
 
 type AxisMarker = {
@@ -60,10 +64,45 @@ type AxisMarker = {
   title: string;
   date: string;
   status: string;
+  humanKey?: string | null;
   onOpen: () => void;
 };
 
 type TagOffset = { dx: number; dy: number };
+
+function ItemMetaRow({
+  issueId,
+  date,
+  showIssueIds,
+  showDueDates,
+  className,
+}: {
+  issueId?: string | null;
+  date?: string | null;
+  showIssueIds: boolean;
+  showDueDates: boolean;
+  className?: string;
+}) {
+  const id = showIssueIds && issueId ? issueId : null;
+  const due = showDueDates && date ? date : null;
+  if (!id && !due) return null;
+  if (id && due) {
+    return (
+      <span
+        className={cn(
+          'flex w-full min-w-0 items-center justify-between gap-1',
+          className,
+        )}
+      >
+        <span className="min-w-0 truncate">{id}</span>
+        <span className="shrink-0 tabular-nums">{due}</span>
+      </span>
+    );
+  }
+  return (
+    <span className={cn('block truncate', className)}>{id ?? due}</span>
+  );
+}
 
 type TimelineFilters = {
   epics: boolean;
@@ -179,6 +218,24 @@ function readDueDates(storageKey: string): boolean {
 }
 
 function writeDueDates(storageKey: string, enabled: boolean): void {
+  try {
+    window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function readIssueIds(storageKey: string): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (raw === null) return true;
+    return raw === '1';
+  } catch {
+    return true;
+  }
+}
+
+function writeIssueIds(storageKey: string, enabled: boolean): void {
   try {
     window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
   } catch {
@@ -637,6 +694,7 @@ export function ProjectDeliveryTimeline({
   const gridKey = `kh-timeline-grid:${projectId}`;
   const statusColorKey = `kh-timeline-status-colors:${projectId}`;
   const dueDatesKey = `kh-timeline-due-dates:${projectId}`;
+  const issueIdsKey = `kh-timeline-issue-ids:${projectId}`;
   const { offsets, updateOffset, resetOffsets } = useTagOffsets(storageKey);
   const [filters, setFilters] = useState<TimelineFilters>(DEFAULT_FILTERS);
   const [windowRange, setWindowRange] = useState<TimelineWindow>({
@@ -646,6 +704,7 @@ export function ProjectDeliveryTimeline({
   const [showGrid, setShowGrid] = useState(true);
   const [colorByStatus, setColorByStatus] = useState(false);
   const [showDueDates, setShowDueDates] = useState(false);
+  const [showIssueIds, setShowIssueIds] = useState(true);
   const [exportPending, setExportPending] = useState(false);
   const todayDate = todayYmd();
 
@@ -655,7 +714,8 @@ export function ProjectDeliveryTimeline({
     setShowGrid(readGrid(gridKey));
     setColorByStatus(readStatusColors(statusColorKey));
     setShowDueDates(readDueDates(dueDatesKey));
-  }, [filterKey, windowKey, gridKey, statusColorKey, dueDatesKey]);
+    setShowIssueIds(readIssueIds(issueIdsKey));
+  }, [filterKey, windowKey, gridKey, statusColorKey, dueDatesKey, issueIdsKey]);
 
   function toggleFilter(key: keyof TimelineFilters) {
     setFilters((current) => {
@@ -677,6 +737,14 @@ export function ProjectDeliveryTimeline({
     setShowDueDates((current) => {
       const next = !current;
       writeDueDates(dueDatesKey, next);
+      return next;
+    });
+  }
+
+  function toggleIssueIds() {
+    setShowIssueIds((current) => {
+      const next = !current;
+      writeIssueIds(issueIdsKey, next);
       return next;
     });
   }
@@ -896,6 +964,7 @@ export function ProjectDeliveryTimeline({
           title: milestone.title,
           date: milestone.targetDate,
           status: milestone.status,
+          humanKey: milestone.humanKey ?? null,
           onOpen: () => onManageMilestone(milestone.id),
         });
       }
@@ -909,6 +978,7 @@ export function ProjectDeliveryTimeline({
           title: task.title,
           date: task.dueDate,
           status: task.status,
+          humanKey: task.humanKey ?? null,
           onOpen: () => onManageTask(task.id),
         });
       }
@@ -986,6 +1056,7 @@ export function ProjectDeliveryTimeline({
             includeTasks: filters.tasks,
             colorByStatus,
             showDueDates,
+            showIssueIds,
             showGrid,
             today: todayDate,
             windowFrom: windowActive ? formatYmd(rangeStart) : null,
@@ -1032,6 +1103,7 @@ export function ProjectDeliveryTimeline({
     rangeEnd,
     rangeStart,
     showDueDates,
+    showIssueIds,
     showGrid,
     t,
     tProjects,
@@ -1082,6 +1154,9 @@ export function ProjectDeliveryTimeline({
           today: todayDate,
         })
       : null;
+    const epicHasMeta =
+      (showIssueIds && Boolean(epic.humanKey)) ||
+      (showDueDates && Boolean(epic.endDate));
     return (
       <div
         key={epic.id}
@@ -1097,12 +1172,12 @@ export function ProjectDeliveryTimeline({
           </button>
           <Badge>{t(`milestoneStatus.${epic.status}`)}</Badge>
         </div>
-        <div className={cn('relative', showDueDates ? 'h-10' : 'h-8')}>
+        <div className={cn('relative', epicHasMeta ? 'h-10' : 'h-8')}>
           <button
             type="button"
             className={cn(
               'absolute top-1 rounded-md border px-2 text-left text-xs font-medium',
-              showDueDates && epic.endDate ? 'h-8 py-0.5 leading-tight' : 'h-6',
+              epicHasMeta ? 'h-8 py-0.5 leading-tight' : 'h-6',
               epicTone
                 ? deliveryScheduleSurfaceClass(epicTone)
                 : 'border-brand/40 bg-brand/20 text-ink hover:bg-brand/30',
@@ -1112,11 +1187,13 @@ export function ProjectDeliveryTimeline({
             onClick={() => onManageEpic(epic.id)}
           >
             <span className="block truncate">{epic.title}</span>
-            {showDueDates && epic.endDate ? (
-              <span className="block truncate text-[10px] font-normal opacity-80">
-                {epic.endDate}
-              </span>
-            ) : null}
+            <ItemMetaRow
+              issueId={epic.humanKey}
+              date={epic.endDate}
+              showIssueIds={showIssueIds}
+              showDueDates={showDueDates}
+              className="text-[10px] font-normal opacity-80"
+            />
           </button>
           {epicStories.map((story) => {
             const storyStyle = barStyle(story.startDate, story.endDate);
@@ -1144,6 +1221,9 @@ export function ProjectDeliveryTimeline({
                 })
               : null;
             const storyDue = story.endDate ?? story.startDate;
+            const storyHasMeta =
+              (showIssueIds && Boolean(story.humanKey)) ||
+              (showDueDates && Boolean(storyDue));
 
             return (
               <div
@@ -1166,7 +1246,7 @@ export function ProjectDeliveryTimeline({
                   onOpen={() => onManageStory(story.id)}
                   className={cn(
                     'absolute left-0 top-1 z-[1] max-w-[14rem] rounded border px-1.5 text-left text-[11px] shadow-sm',
-                    showDueDates && storyDue ? 'h-auto min-h-5 py-0.5' : 'h-5',
+                    storyHasMeta ? 'h-auto min-h-5 py-0.5' : 'h-5',
                     storyTone
                       ? deliveryScheduleSurfaceClass(storyTone)
                       : 'border-line bg-panel-solid text-ink hover:border-brand/50',
@@ -1183,11 +1263,13 @@ export function ProjectDeliveryTimeline({
                   }
                 >
                   <span className="block truncate">{story.title}</span>
-                  {showDueDates && storyDue ? (
-                    <span className="block truncate text-[9px] opacity-80">
-                      {storyDue}
-                    </span>
-                  ) : null}
+                  <ItemMetaRow
+                    issueId={story.humanKey}
+                    date={storyDue}
+                    showIssueIds={showIssueIds}
+                    showDueDates={showDueDates}
+                    className="text-[9px] opacity-80"
+                  />
                 </DraggableTag>
               </div>
             );
@@ -1209,6 +1291,9 @@ export function ProjectDeliveryTimeline({
         })
       : null;
     const storyDue = story.endDate ?? story.startDate;
+    const storyHasMeta =
+      (showIssueIds && Boolean(story.humanKey)) ||
+      (showDueDates && Boolean(storyDue));
     return (
       <div key={story.id} className="relative mb-4 min-h-12">
         <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -1221,12 +1306,12 @@ export function ProjectDeliveryTimeline({
           </button>
           <Badge>{t(`milestoneStatus.${story.status}`)}</Badge>
         </div>
-        <div className={cn('relative', showDueDates ? 'h-10' : 'h-8')}>
+        <div className={cn('relative', storyHasMeta ? 'h-10' : 'h-8')}>
           <button
             type="button"
             className={cn(
               'absolute top-1 max-w-full rounded border px-2 text-left text-xs',
-              showDueDates && storyDue ? 'h-8 py-0.5 leading-tight' : 'h-6',
+              storyHasMeta ? 'h-8 py-0.5 leading-tight' : 'h-6',
               storyTone
                 ? deliveryScheduleSurfaceClass(storyTone)
                 : 'border-line bg-panel-solid text-ink hover:border-brand/50',
@@ -1238,11 +1323,13 @@ export function ProjectDeliveryTimeline({
             onClick={() => onManageStory(story.id)}
           >
             <span className="block truncate">{story.title}</span>
-            {showDueDates && storyDue ? (
-              <span className="block truncate text-[10px] opacity-80">
-                {storyDue}
-              </span>
-            ) : null}
+            <ItemMetaRow
+              issueId={story.humanKey}
+              date={storyDue}
+              showIssueIds={showIssueIds}
+              showDueDates={showDueDates}
+              className="text-[10px] opacity-80"
+            />
           </button>
         </div>
       </div>
@@ -1288,6 +1375,14 @@ export function ProjectDeliveryTimeline({
               onChange={toggleDueDates}
             />
             <span>{t('dueDate')}</span>
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showIssueIds}
+              onChange={toggleIssueIds}
+            />
+            <span>{t('timelineIssueIds')}</span>
           </label>
         </div>
       </fieldset>
@@ -1506,9 +1601,15 @@ export function ProjectDeliveryTimeline({
                 const ribY = baseY + offset.dy;
                 const ribLen = Math.max(1, Math.hypot(ribX, ribY));
                 const ribAngle = (Math.atan2(ribY, ribX) * 180) / Math.PI;
-                const tooltip = colorByStatus
-                  ? `${kindLabel}: ${marker.title} · ${statusLabel} (${marker.date})`
-                  : `${kindLabel}: ${marker.title} (${marker.date})`;
+                const tooltip = [
+                  kindLabel,
+                  marker.title,
+                  colorByStatus ? statusLabel : null,
+                  marker.date,
+                  showIssueIds ? marker.humanKey : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ');
 
                 return (
                   <div
@@ -1551,16 +1652,16 @@ export function ProjectDeliveryTimeline({
                           : kindLabel}
                       </span>
                       <span className="block truncate">{marker.title}</span>
-                      {showDueDates ? (
-                        <span
-                          className={cn(
-                            'mt-0.5 block truncate text-[9px]',
-                            tone ? 'opacity-80' : 'text-ink-muted',
-                          )}
-                        >
-                          {marker.date}
-                        </span>
-                      ) : null}
+                      <ItemMetaRow
+                        issueId={marker.humanKey}
+                        date={marker.date}
+                        showIssueIds={showIssueIds}
+                        showDueDates={showDueDates}
+                        className={cn(
+                          'mt-0.5 text-[9px]',
+                          tone ? 'opacity-80' : 'text-ink-muted',
+                        )}
+                      />
                     </DraggableTag>
                     <button
                       type="button"
@@ -1609,7 +1710,8 @@ export function ProjectDeliveryTimeline({
                 className="flex flex-wrap items-center justify-between gap-2"
               >
                 <span className="text-sm">
-                  <Badge tone="brand">{t('kindEpic')}</Badge> {epic.title}
+                  <Badge tone="brand">{epic.humanKey ?? t('kindEpic')}</Badge>{' '}
+                  {epic.title}
                 </span>
                 <Button
                   type="button"
@@ -1626,7 +1728,8 @@ export function ProjectDeliveryTimeline({
                 className="flex flex-wrap items-center justify-between gap-2"
               >
                 <span className="text-sm">
-                  <Badge tone="brand">{t('kindStory')}</Badge> {story.title}
+                  <Badge tone="brand">{story.humanKey ?? t('kindStory')}</Badge>{' '}
+                  {story.title}
                 </span>
                 <Button
                   type="button"
@@ -1643,7 +1746,9 @@ export function ProjectDeliveryTimeline({
                 className="flex flex-wrap items-center justify-between gap-2"
               >
                 <span className="text-sm">
-                  <Badge tone="brand">{t('kindMilestone')}</Badge>{' '}
+                  <Badge tone="brand">
+                    {milestone.humanKey ?? t('kindMilestone')}
+                  </Badge>{' '}
                   {milestone.title}
                 </span>
                 <Button

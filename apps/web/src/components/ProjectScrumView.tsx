@@ -237,6 +237,7 @@ export function ProjectScrumView({
             includeBurndown: exportIncludeBurndown,
             includeBoard: exportIncludeBoard,
             includeBacklog: exportIncludeBacklog,
+            showIssueId: boardMeta.issueId,
             showStory: boardMeta.story,
             showMilestone: boardMeta.milestone,
             showOwner: boardMeta.owner,

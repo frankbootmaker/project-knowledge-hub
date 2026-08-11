@@ -17,6 +17,7 @@ import {
 } from '../lib/delivery-schedule';
 import { DeliveryScheduleLegend } from './DeliveryScheduleLegend';
 import { downloadAuthenticatedExport } from '../lib/download-export';
+import { UserAvatar } from './UserAvatar';
 
 export type CalendarItem = {
   id: string;
@@ -24,6 +25,11 @@ export type CalendarItem = {
   title: string;
   date: string;
   status: string;
+  humanKey?: string | null;
+  owner?: {
+    displayName: string;
+    avatarUrl?: string | null;
+  } | null;
 };
 
 export type CalendarExportHandle = {
@@ -73,17 +79,42 @@ function CalendarItemChip({
         dense ? 'truncate px-1.5 py-1 text-xs' : 'px-2.5 py-2 text-sm',
         deliveryScheduleSurfaceClass(tone),
       )}
-      title={`${item.title} — ${t(`scheduleTone.${tone}`)}`}
+      title={`${item.humanKey ? `${item.humanKey} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
     >
-      <Badge
-        tone={item.kind === 'milestone' ? 'brand' : 'neutral'}
-        className="mr-1"
-      >
-        {item.kind === 'milestone' ? 'M' : 'T'}
-      </Badge>
-      <span className={cn(dense ? 'text-ink' : 'font-medium text-ink')}>
-        {item.title}
-      </span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        {item.owner ? (
+          <UserAvatar
+            displayName={item.owner.displayName}
+            avatarUrl={item.owner.avatarUrl}
+            size="xs"
+          />
+        ) : (
+          <Badge
+            tone={item.kind === 'milestone' ? 'brand' : 'neutral'}
+            className="shrink-0"
+          >
+            {item.kind === 'milestone' ? 'M' : 'T'}
+          </Badge>
+        )}
+        <span
+          className={cn(
+            'min-w-0 truncate',
+            dense ? 'text-ink' : 'font-medium text-ink',
+          )}
+        >
+          {item.title}
+        </span>
+      </div>
+      {item.humanKey ? (
+        <span
+          className={cn(
+            'mt-0.5 block truncate opacity-80',
+            dense ? 'text-[10px]' : 'text-xs',
+          )}
+        >
+          {item.humanKey}
+        </span>
+      ) : null}
       {!dense ? (
         <span className="mt-1 block text-xs opacity-80">
           {t(`scheduleTone.${tone}`)}

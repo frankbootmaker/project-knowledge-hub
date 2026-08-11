@@ -56,8 +56,12 @@ function taskCardHtml(
   ) {
     tags.push(metaTagHtml(labels.storyPoints, String(task.storyPoints)));
   }
+  const title =
+    meta.showIssueId && task.humanKey
+      ? `${task.humanKey} · ${task.title}`
+      : task.title;
   return `<article class="card">
-  <div class="card-title">${escapeHtml(task.title)}</div>
+  <div class="card-title">${escapeHtml(title)}</div>
   ${tags.length > 0 ? `<div class="tags">${tags.join('')}</div>` : ''}
 </article>`;
 }

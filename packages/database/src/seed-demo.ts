@@ -277,6 +277,7 @@ async function main(): Promise<void> {
           'Tracks how assistants read and write draft knowledge via MCP / OpenAPI Actions.',
         ownerUserId: admin.id,
         keyPrefix: 'AI1',
+        issueCounters: {},
       })
       .returning();
 
@@ -713,6 +714,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         startDate: ymd(-28),
         targetDate: ymd(-14),
         sortOrder: 10,
+        issueKeyType: 'M',
+        issueNumber: 1,
       })
       .returning();
     const [mObservability] = await database.db
@@ -725,6 +728,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         startDate: ymd(-7),
         targetDate: ymd(10),
         sortOrder: 20,
+        issueKeyType: 'M',
+        issueNumber: 2,
       })
       .returning();
     const [mDelivery] = await database.db
@@ -738,6 +743,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         startDate: ymd(0),
         targetDate: ymd(21),
         sortOrder: 30,
+        issueKeyType: 'M',
+        issueNumber: 3,
       })
       .returning();
     const [mDocsDay] = await database.db
@@ -750,6 +757,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         startDate: ymd(28),
         targetDate: ymd(35),
         sortOrder: 40,
+        issueKeyType: 'M',
+        issueNumber: 4,
       })
       .returning();
 
@@ -767,6 +776,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         startDate: ymd(-30),
         endDate: ymd(40),
         sortOrder: 10,
+        issueKeyType: 'E',
+        issueNumber: 1,
       })
       .returning();
     if (!labEpic) {
@@ -783,6 +794,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         startDate: ymd(-28),
         endDate: ymd(-10),
         sortOrder: 10,
+        issueKeyType: 'S',
+        issueNumber: 1,
       })
       .returning();
     const [storyDelivery] = await database.db
@@ -796,6 +809,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         startDate: ymd(-5),
         endDate: ymd(25),
         sortOrder: 20,
+        issueKeyType: 'S',
+        issueNumber: 2,
       })
       .returning();
     if (!storyEdge || !storyDelivery) {
@@ -1069,7 +1084,9 @@ Prefer a tool-capable model; tiny local models often skip tools.
     ];
 
     let handoffDemoTaskId: string | null = null;
+    let labTaskNumber = 0;
     for (const taskSpec of labTasks) {
+      labTaskNumber += 1;
       const ownerUserId =
         taskSpec.raci.find((entry) => entry.role === 'R')?.userId ??
         taskSpec.raci.find((entry) => entry.role === 'A')?.userId ??
@@ -1091,6 +1108,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
           sortOrder: taskSpec.sortOrder,
           createdBy: admin.id,
           currentOwnerUserId: ownerUserId,
+          issueKeyType: 'T',
+          issueNumber: labTaskNumber,
         })
         .returning();
       if (!task) {
@@ -1175,6 +1194,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         ownerUserId: blair.id,
         dueDate: ymd(10),
         sortOrder: 10,
+        issueKeyType: 'RR',
+        issueNumber: 1,
       })
       .returning();
     const [assumptionRaid] = await database.db
@@ -1189,6 +1210,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         ownerUserId: dana.id,
         dueDate: ymd(5),
         sortOrder: 20,
+        issueKeyType: 'RA',
+        issueNumber: 1,
       })
       .returning();
     const [issueRaid] = await database.db
@@ -1203,6 +1226,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         ownerUserId: admin.id,
         dueDate: ymd(7),
         sortOrder: 30,
+        issueKeyType: 'RI',
+        issueNumber: 1,
       })
       .returning();
     const [dependencyRaid] = await database.db
@@ -1216,6 +1241,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
         severity: 'medium',
         ownerUserId: alex.id,
         sortOrder: 40,
+        issueKeyType: 'RD',
+        issueNumber: 1,
       })
       .returning();
 
@@ -1452,7 +1479,20 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         approvedBudget: '52000.00',
         charterRecordId: charterRecord.id,
         initialPlanRecordId: planRecord.id,
-        issueCounters: { SP: 3, RET: 1, REV: 1 },
+        issueCounters: {
+          M: 4,
+          E: 1,
+          S: 2,
+          T: labTaskNumber,
+          SP: 3,
+          RR: 1,
+          RA: 1,
+          RI: 1,
+          RD: 1,
+          C: 2,
+          RET: 1,
+          REV: 1,
+        },
         updatedAt: new Date(),
       })
       .where(eq(projects.id, labProject.id));
@@ -1496,6 +1536,8 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         baselineEndAfter: ymd(45),
         knowledgeRecordId: planRecord.id,
         sortOrder: 10,
+        issueKeyType: 'C',
+        issueNumber: 1,
       })
       .returning();
     const [scopeChange] = await database.db
@@ -1512,6 +1554,8 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         effectiveDate: ymd(-2),
         knowledgeRecordId: charterRecord.id,
         sortOrder: 20,
+        issueKeyType: 'C',
+        issueNumber: 2,
       })
       .returning();
     if (!timelineChange || !scopeChange) {
@@ -1586,6 +1630,8 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         status: 'active',
         targetDate: ymd(8),
         sortOrder: 10,
+        issueKeyType: 'M',
+        issueNumber: 1,
       })
       .returning();
     if (!aiM1) {
@@ -1628,7 +1674,9 @@ Keep public MCP behind Authentik + Tailscale ACL review.
       },
     ];
 
+    let aiTaskNumber = 0;
     for (const taskSpec of aiTasks) {
+      aiTaskNumber += 1;
       const ownerUserId =
         taskSpec.raci.find((entry) => entry.role === 'R')?.userId ??
         taskSpec.raci.find((entry) => entry.role === 'A')?.userId ??
@@ -1646,6 +1694,8 @@ Keep public MCP behind Authentik + Tailscale ACL review.
           sortOrder: taskSpec.sortOrder,
           createdBy: admin.id,
           currentOwnerUserId: ownerUserId,
+          issueKeyType: 'T',
+          issueNumber: aiTaskNumber,
         })
         .returning();
       if (!task) {
@@ -1667,6 +1717,14 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         metadataJson: { title: task.title },
       });
     }
+
+    await database.db
+      .update(projects)
+      .set({
+        issueCounters: { M: 1, T: aiTaskNumber },
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, aiProject.id));
 
     // Stakeholders roster + reporting chain (overlaps RACI users)
     console.log('Seeding project stakeholders…');

@@ -24,6 +24,7 @@ import { ProjectDeliveryTree } from './ProjectDeliveryTree';
 import { ProjectScrumView, type ScrumExportHandle } from './ProjectScrumView';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
+import { UserAvatar } from './UserAvatar';
 import {
   Badge,
   Button,
@@ -404,7 +405,6 @@ export function ProjectDeliveryPanel({
           task.epicTitle,
           task.userStoryTitle,
           task.dueDate ? `${t('dueDate')}: ${task.dueDate}` : null,
-          ownerLabel ? `${t('ownerLabel')}: ${ownerLabel}` : null,
           raciLine,
         ]
           .filter(Boolean)
@@ -442,6 +442,7 @@ export function ProjectDeliveryPanel({
           title: milestone.title,
           date: milestone.targetDate!,
           status: milestone.status,
+          humanKey: milestone.humanKey ?? null,
         })),
       ...tasks
         .filter((task) => task.dueDate)
@@ -451,6 +452,13 @@ export function ProjectDeliveryPanel({
           title: task.title,
           date: task.dueDate!,
           status: task.status,
+          humanKey: task.humanKey ?? null,
+          owner: task.currentOwner
+            ? {
+                displayName: task.currentOwner.displayName,
+                avatarUrl: task.currentOwner.avatarUrl ?? null,
+              }
+            : null,
         })),
     ],
     [milestones, tasks],
@@ -833,9 +841,18 @@ export function ProjectDeliveryPanel({
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{item.title}</span>
                   {item.primaryBadge ? (
                     <Badge tone="brand">{item.primaryBadge}</Badge>
+                  ) : null}
+                  <span className="font-semibold">{item.title}</span>
+                  {task?.currentOwner ? (
+                    <span title={task.currentOwner.displayName}>
+                      <UserAvatar
+                        displayName={task.currentOwner.displayName}
+                        avatarUrl={task.currentOwner.avatarUrl}
+                        size="xs"
+                      />
+                    </span>
                   ) : null}
                   {!canMutate && item.secondaryBadge ? (
                     <Badge>{item.secondaryBadge}</Badge>

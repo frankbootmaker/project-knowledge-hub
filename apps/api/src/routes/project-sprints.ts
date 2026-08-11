@@ -152,6 +152,7 @@ export async function registerProjectSprintRoutes(
           includeBurndown: z.boolean().optional(),
           includeBoard: z.boolean().optional(),
           includeBacklog: z.boolean().optional(),
+          showIssueId: z.boolean().optional(),
           showStory: z.boolean().optional(),
           showMilestone: z.boolean().optional(),
           showOwner: z.boolean().optional(),
@@ -207,6 +208,7 @@ export async function registerProjectSprintRoutes(
       }
 
       const meta = {
+        showIssueId: body.showIssueId ?? true,
         showStory: body.showStory ?? true,
         showMilestone: body.showMilestone ?? true,
         showOwner: body.showOwner ?? true,
@@ -235,6 +237,7 @@ export async function registerProjectSprintRoutes(
         status: task.status,
         dueDate: task.dueDate,
         storyPoints: task.storyPoints ?? null,
+        humanKey: task.humanKey ?? null,
         userStoryTitle: task.userStoryTitle ?? null,
         milestoneTitle: task.milestoneId
           ? (milestoneTitleById.get(task.milestoneId) ?? null)

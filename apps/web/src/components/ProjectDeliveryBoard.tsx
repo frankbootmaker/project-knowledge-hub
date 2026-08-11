@@ -61,9 +61,11 @@ export type BoardMilestone = {
   title: string;
   status: string;
   targetDate: string | null;
+  humanKey?: string | null;
 };
 
 export type BoardMetaFilters = {
+  issueId: boolean;
   story: boolean;
   milestone: boolean;
   owner: boolean;
@@ -77,6 +79,7 @@ export type BoardExportHandle = {
 };
 
 export const DEFAULT_BOARD_META_FILTERS: BoardMetaFilters = {
+  issueId: true,
   story: true,
   milestone: true,
   owner: true,
@@ -113,6 +116,7 @@ function readMetaFilters(storageKey: string): BoardMetaFilters {
     if (!raw) return DEFAULT_META_FILTERS;
     const parsed = JSON.parse(raw) as Partial<BoardMetaFilters>;
     return {
+      issueId: parsed.issueId ?? true,
       story: parsed.story ?? true,
       milestone: parsed.milestone ?? true,
       owner: parsed.owner ?? true,
@@ -241,6 +245,7 @@ function BoardMilestoneCard({
     today,
   });
   const showDue = meta.dueDate && Boolean(milestone.targetDate);
+  const showIssueId = meta.issueId && Boolean(milestone.humanKey);
 
   return (
     <article
@@ -259,7 +264,9 @@ function BoardMilestoneCard({
       )}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <Badge tone="brand">{t('kindMilestone')}</Badge>
+        <Badge tone="brand">
+          {showIssueId ? milestone.humanKey! : t('kindMilestone')}
+        </Badge>
         <p className="m-0 min-w-0 flex-1 text-sm font-medium text-ink">
           {milestone.title}
         </p>
@@ -344,6 +351,7 @@ export function BoardTaskCard({
     meta.storyPoints &&
     task.storyPoints != null &&
     Number.isFinite(task.storyPoints);
+  const showIssueId = meta.issueId && Boolean(task.humanKey);
   const hasMeta =
     showStory ||
     showMilestone ||
@@ -367,7 +375,7 @@ export function BoardTaskCard({
       )}
     >
       <p className="m-0 text-sm font-medium text-ink">
-        {task.humanKey ? (
+        {showIssueId ? (
           <span className="text-ink-muted">{task.humanKey} · </span>
         ) : null}
         {task.title}
@@ -632,6 +640,7 @@ export function ProjectDeliveryBoard({
           },
           body: JSON.stringify({
             title,
+            showIssueId: meta.issueId,
             showStory: meta.story,
             showMilestone: meta.milestone,
             showOwner: meta.owner,
@@ -712,6 +721,7 @@ export function ProjectDeliveryBoard({
     (milestone) => milestoneBoardColumn(milestone.status) === mobileColumn,
   );
   const metaOptions = [
+    ['issueId', 'boardMetaIssueId'],
     ['story', 'kindStory'],
     ['milestone', 'kindMilestone'],
     ['owner', 'currentOwner'],

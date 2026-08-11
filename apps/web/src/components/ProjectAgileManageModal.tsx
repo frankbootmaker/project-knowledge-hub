@@ -42,6 +42,7 @@ type Epic = {
   status: string;
   startDate?: string | null;
   endDate?: string | null;
+  humanKey?: string | null;
 };
 
 type Story = {
@@ -52,6 +53,7 @@ type Story = {
   status: string;
   startDate?: string | null;
   endDate?: string | null;
+  humanKey?: string | null;
 };
 
 type Milestone = {
@@ -61,6 +63,7 @@ type Milestone = {
   status: string;
   startDate?: string | null;
   targetDate?: string | null;
+  humanKey?: string | null;
 };
 
 type LinkedDocument = {
@@ -121,6 +124,7 @@ export function ProjectAgileManageModal({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [targetDate, setTargetDate] = useState('');
+  const [humanKey, setHumanKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -133,6 +137,7 @@ export function ProjectAgileManageModal({
       setDeleteAcknowledged(false);
       setError(null);
       setLinkedDocuments([]);
+      setHumanKey(null);
       return;
     }
     if (kind === 'epic') {
@@ -145,6 +150,7 @@ export function ProjectAgileManageModal({
       setStartDate(epic.startDate ?? '');
       setEndDate(epic.endDate ?? '');
       setTargetDate('');
+      setHumanKey(epic.humanKey ?? null);
     } else if (kind === 'story') {
       const story = stories.find((row) => row.id === itemId);
       if (!story) return;
@@ -155,6 +161,7 @@ export function ProjectAgileManageModal({
       setStartDate(story.startDate ?? '');
       setEndDate(story.endDate ?? '');
       setTargetDate('');
+      setHumanKey(story.humanKey ?? null);
     } else {
       const milestone = milestones.find((row) => row.id === itemId);
       if (!milestone) return;
@@ -165,6 +172,7 @@ export function ProjectAgileManageModal({
       setStartDate(milestone.startDate ?? '');
       setEndDate('');
       setTargetDate(milestone.targetDate ?? '');
+      setHumanKey(milestone.humanKey ?? null);
     }
     setConfirmDelete(false);
     setDeleteAcknowledged(false);
@@ -386,7 +394,11 @@ export function ProjectAgileManageModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={title.trim() || modalTitle}
+      title={
+        humanKey
+          ? `${humanKey} · ${title.trim() || modalTitle}`
+          : title.trim() || modalTitle
+      }
       description={modalDescription}
       size="md"
       footer={

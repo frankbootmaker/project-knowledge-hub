@@ -494,6 +494,7 @@ export async function registerProjectDeliveryRoutes(
           includeTasks: z.boolean().optional(),
           colorByStatus: z.boolean().optional(),
           showDueDates: z.boolean().optional(),
+          showIssueIds: z.boolean().optional(),
           showGrid: z.boolean().optional(),
           today: z
             .string()
@@ -593,6 +594,7 @@ export async function registerProjectDeliveryRoutes(
           filters,
           colorByStatus: body.colorByStatus ?? false,
           showDueDates: body.showDueDates ?? false,
+          showIssueIds: body.showIssueIds ?? true,
           showGrid: body.showGrid ?? true,
           today: body.today,
           windowFrom: body.windowFrom ?? null,
@@ -624,6 +626,7 @@ export async function registerProjectDeliveryRoutes(
           ...filters,
           colorByStatus: body.colorByStatus ?? false,
           showDueDates: body.showDueDates ?? false,
+          showIssueIds: body.showIssueIds ?? true,
           showGrid: body.showGrid ?? true,
         },
         ipAddress: request.ip,
@@ -654,6 +657,7 @@ export async function registerProjectDeliveryRoutes(
       const body = z
         .object({
           title: z.string().min(1).max(300).optional(),
+          showIssueId: z.boolean().optional(),
           showStory: z.boolean().optional(),
           showMilestone: z.boolean().optional(),
           showOwner: z.boolean().optional(),
@@ -684,6 +688,7 @@ export async function registerProjectDeliveryRoutes(
       requireWorkspaceView(principal, project.workspaceId);
 
       const meta = {
+        showIssueId: body.showIssueId ?? true,
         showStory: body.showStory ?? true,
         showMilestone: body.showMilestone ?? true,
         showOwner: body.showOwner ?? true,
@@ -730,6 +735,7 @@ export async function registerProjectDeliveryRoutes(
             title: row.title,
             status: row.status,
             targetDate: row.targetDate,
+            humanKey: row.humanKey ?? null,
           })),
           tasks: tasks.map((task) => ({
             id: task.id,
@@ -737,6 +743,7 @@ export async function registerProjectDeliveryRoutes(
             status: task.status,
             dueDate: task.dueDate,
             storyPoints: task.storyPoints ?? null,
+            humanKey: task.humanKey ?? null,
             userStoryTitle: task.userStoryTitle ?? null,
             milestoneTitle: task.milestoneId
               ? (milestoneTitleById.get(task.milestoneId) ?? null)
@@ -850,6 +857,7 @@ export async function registerProjectDeliveryRoutes(
             title: row.title,
             date: row.targetDate!,
             status: row.status,
+            humanKey: row.humanKey ?? null,
           })),
         ...tasks
           .filter((row) => row.dueDate)
@@ -859,6 +867,11 @@ export async function registerProjectDeliveryRoutes(
             title: row.title,
             date: row.dueDate!,
             status: row.status,
+            humanKey: row.humanKey ?? null,
+            ownerName:
+              row.currentOwner?.displayName ??
+              row.raci.find((entry) => entry.role === 'R')?.displayName ??
+              null,
           })),
       ];
 

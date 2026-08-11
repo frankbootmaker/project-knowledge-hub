@@ -13,6 +13,7 @@ export type TimelineExportEpic = {
   status: string;
   startDate: string | null;
   endDate: string | null;
+  humanKey?: string | null;
 };
 
 export type TimelineExportStory = {
@@ -22,6 +23,7 @@ export type TimelineExportStory = {
   status: string;
   startDate: string | null;
   endDate: string | null;
+  humanKey?: string | null;
 };
 
 export type TimelineExportMilestone = {
@@ -29,6 +31,7 @@ export type TimelineExportMilestone = {
   title: string;
   status: string;
   targetDate: string | null;
+  humanKey?: string | null;
 };
 
 export type TimelineExportTask = {
@@ -36,6 +39,7 @@ export type TimelineExportTask = {
   title: string;
   status: string;
   dueDate: string | null;
+  humanKey?: string | null;
 };
 
 export type TimelineTagOffset = { dx: number; dy: number };
@@ -358,9 +362,20 @@ function ribHtml(dx: number, dy: number): string {
   return `<div class="rib" style="width:${len.toFixed(1)}px;transform:rotate(${angle.toFixed(2)}deg)"></div>`;
 }
 
-function dateSubHtml(date: string | null | undefined, showDueDates: boolean): string {
-  if (!showDueDates || !date) return '';
-  return `<span class="due">${escapeHtml(date)}</span>`;
+function metaRowHtml(input: {
+  humanKey?: string | null;
+  date?: string | null;
+  showIssueIds: boolean;
+  showDueDates: boolean;
+}): string {
+  const id = input.showIssueIds && input.humanKey ? input.humanKey : null;
+  const due = input.showDueDates && input.date ? input.date : null;
+  if (!id && !due) return '';
+  if (id && due) {
+    return `<span class="meta-row"><span class="id">${escapeHtml(id)}</span><span class="due">${escapeHtml(due)}</span></span>`;
+  }
+  if (id) return `<span class="id">${escapeHtml(id)}</span>`;
+  return `<span class="due">${escapeHtml(due!)}</span>`;
 }
 
 function storyTagsHtml(
@@ -370,6 +385,7 @@ function storyTagsHtml(
   offsets: Record<string, TimelineTagOffset>,
   colorByStatus: boolean,
   showDueDates: boolean,
+  showIssueIds: boolean,
   today: string,
 ): string {
   return stories
@@ -399,7 +415,12 @@ function storyTagsHtml(
       const due = story.endDate ?? story.startDate;
       return `<div class="story-anchor" style="left:${anchorLeft.toFixed(2)}%">
   ${ribHtml(ribX, ribY)}
-  <div class="story-tag" style="${styleAttrs}" title="${escapeHtml(story.title)}">${escapeHtml(story.title)}${dateSubHtml(due, showDueDates)}</div>
+  <div class="story-tag" style="${styleAttrs}" title="${escapeHtml(story.title)}">${escapeHtml(story.title)}${metaRowHtml({
+    humanKey: story.humanKey,
+    date: due,
+    showIssueIds,
+    showDueDates,
+  })}</div>
 </div>`;
     })
     .join('');
@@ -413,6 +434,7 @@ function epicLaneHtml(
   offsets: Record<string, TimelineTagOffset>,
   colorByStatus: boolean,
   showDueDates: boolean,
+  showIssueIds: boolean,
   today: string,
 ): string {
   const box = barBox(epic.startDate, epic.endDate, startMs, endMs);
@@ -423,7 +445,7 @@ function epicLaneHtml(
     const offset = getOffset(offsets, `story:${story.id}`);
     tagRoom = Math.max(
       tagRoom,
-      STORY_BASE_Y + offset.dy + (showDueDates ? 40 : 28),
+      STORY_BASE_Y + offset.dy + (showDueDates || showIssueIds ? 40 : 28),
       Math.abs(offset.dx) + 24,
     );
   }
@@ -442,8 +464,13 @@ function epicLaneHtml(
   return `<section class="lane" style="padding-bottom:${Math.max(8, tagRoom)}px">
   <div class="lane-title">${escapeHtml(epic.title)}</div>
   <div class="track">
-    <div class="epic-bar" style="${epicStyle}">${escapeHtml(epic.title)}${dateSubHtml(epic.endDate, showDueDates)}</div>
-    ${storyTagsHtml(stories, startMs, endMs, offsets, colorByStatus, showDueDates, today)}
+    <div class="epic-bar" style="${epicStyle}">${escapeHtml(epic.title)}${metaRowHtml({
+      humanKey: epic.humanKey,
+      date: epic.endDate,
+      showIssueIds,
+      showDueDates,
+    })}</div>
+    ${storyTagsHtml(stories, startMs, endMs, offsets, colorByStatus, showDueDates, showIssueIds, today)}
   </div>
 </section>`;
 }
@@ -460,6 +487,7 @@ export type TimelineExportInput = {
   filters: TimelineExportFilters;
   colorByStatus?: boolean;
   showDueDates?: boolean;
+  showIssueIds?: boolean;
   showGrid?: boolean;
   today?: string;
   windowFrom?: string | null;
@@ -487,6 +515,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
   const generated = new Date().toISOString().slice(0, 10);
   const colorByStatus = Boolean(input.colorByStatus);
   const showDueDates = Boolean(input.showDueDates);
+  const showIssueIds = input.showIssueIds !== false;
   const showGrid = input.showGrid !== false;
   const today = input.today ?? todayYmdUtc();
   const todayMs = parseYmd(today);
@@ -551,6 +580,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       title: row.title,
       date: row.targetDate!,
       status: row.status,
+      humanKey: row.humanKey ?? null,
     })),
     ...taskMarkers.map((row) => ({
       id: `task:${row.id}`,
@@ -558,6 +588,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       title: row.title,
       date: row.dueDate!,
       status: row.status,
+      humanKey: row.humanKey ?? null,
     })),
   ].sort(
     (a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title),
@@ -575,7 +606,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     const offset = getOffset(offsets, marker.id);
     spineHalf = Math.max(
       spineHalf,
-      Math.abs(baseY + offset.dy) + (showDueDates ? 48 : 36),
+      Math.abs(baseY + offset.dy) + (showDueDates || showIssueIds ? 48 : 36),
       Math.abs(offset.dx) + 36,
     );
   }
@@ -622,6 +653,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
           offsets,
           colorByStatus,
           showDueDates,
+          showIssueIds,
           today,
         ),
       )
@@ -645,7 +677,12 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       return `<section class="lane">
   <div class="lane-title">${escapeHtml(story.title)}</div>
   <div class="track alone">
-    <div class="story-bar" style="${style}">${escapeHtml(story.title)}${dateSubHtml(due, showDueDates)}</div>
+    <div class="story-bar" style="${style}">${escapeHtml(story.title)}${metaRowHtml({
+      humanKey: story.humanKey,
+      date: due,
+      showIssueIds,
+      showDueDates,
+    })}</div>
   </div>
 </section>`;
     })
@@ -686,7 +723,12 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       const iconStyle = tone ? ` style="${markerFillStyle(tone)}"` : '';
       return `<div class="marker" style="left:${left.toFixed(2)}%">
   ${ribHtml(ribX, ribY)}
-  <div class="marker-tag" style="${tagStyle}">${escapeHtml(marker.title)}${dateSubHtml(marker.date, showDueDates)}</div>
+  <div class="marker-tag" style="${tagStyle}">${escapeHtml(marker.title)}${metaRowHtml({
+    humanKey: marker.humanKey,
+    date: marker.date,
+    showIssueIds,
+    showDueDates,
+  })}</div>
   <div class="${iconClass}"${iconStyle}></div>
 </div>`;
     })
@@ -857,7 +899,30 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .epic-bar .due, .story-bar .due {
+    .id {
+      display: block;
+      margin-top: 1px;
+      font-size: 7px;
+      opacity: 0.8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.25rem;
+      margin-top: 1px;
+      min-width: 0;
+    }
+    .meta-row .id, .meta-row .due {
+      display: inline;
+      margin-top: 0;
+    }
+    .meta-row .due { flex: 0 0 auto; }
+    .meta-row .id { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .epic-bar .due, .story-bar .due, .epic-bar .id, .story-bar .id {
       font-size: 8px;
     }
     .marker-tag { top: 50%; }

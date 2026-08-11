@@ -59,6 +59,7 @@ type TaskDetail = {
   currentOwner: TaskOwner | null;
   tokensUsed: number | null;
   aiSystemId: string | null;
+  humanKey?: string | null;
   raci: RaciEntry[];
 };
 
@@ -474,7 +475,11 @@ export function ProjectTaskManageModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={task?.title ?? t('manageTask')}
+      title={
+        task?.humanKey
+          ? `${task.humanKey} · ${task.title}`
+          : (task?.title ?? t('manageTask'))
+      }
       description={t('manageTaskDescription')}
       size="xl"
       footer={
@@ -546,6 +551,9 @@ export function ProjectTaskManageModal({
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           <div className="grid gap-3">
             <div className="flex flex-wrap items-center gap-2">
+              {task.humanKey ? (
+                <Badge tone="brand">{task.humanKey}</Badge>
+              ) : null}
               {scheduleTone ? (
                 <span
                   className={cn(

@@ -6,6 +6,8 @@ export type CalendarExportItem = {
   title: string;
   date: string;
   status: string;
+  humanKey?: string | null;
+  ownerName?: string | null;
 };
 
 const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -145,9 +147,12 @@ export function buildCalendarHtml(input: {
             item.kind === 'milestone'
               ? input.labels.milestone
               : input.labels.task;
-          return `<div class="item ${toneClass(tone)}" title="${escapeHtml(item.title)}">
-  <span class="kind">${escapeHtml(kind.slice(0, 1))}</span>
-  <span class="title">${escapeHtml(item.title)}</span>
+          return `<div class="item ${toneClass(tone)}" title="${escapeHtml(item.humanKey ? `${item.humanKey} · ${item.title}` : item.title)}">
+  <div class="item-row">
+    <span class="kind">${escapeHtml(item.ownerName ?? kind.slice(0, 1))}</span>
+    <span class="title">${escapeHtml(item.title)}</span>
+  </div>
+  ${item.humanKey ? `<div class="item-id">${escapeHtml(item.humanKey)}</div>` : ''}
 </div>`;
         })
         .join('');
@@ -226,11 +231,29 @@ export function buildCalendarHtml(input: {
     }
     .item .kind {
       flex: 0 0 auto;
+      max-width: 5.5rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-weight: 700;
       color: #3d4f61;
     }
+    .item-row {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      min-width: 0;
+    }
     .item .title {
       min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .item-id {
+      margin-top: 1px;
+      font-size: 7px;
+      opacity: 0.8;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;

@@ -1,6 +1,7 @@
 import { renderHtmlDocumentToPdf } from './knowledge-export.js';
 
 export type BoardExportMetaFilters = {
+  showIssueId: boolean;
   showStory: boolean;
   showMilestone: boolean;
   showOwner: boolean;
@@ -15,6 +16,7 @@ export type BoardExportTask = {
   status: string;
   dueDate: string | null;
   storyPoints: number | null;
+  humanKey: string | null;
   userStoryTitle: string | null;
   milestoneTitle: string | null;
   currentOwnerName: string | null;
@@ -26,6 +28,7 @@ export type BoardExportMilestone = {
   title: string;
   status: string;
   targetDate: string | null;
+  humanKey: string | null;
 };
 
 const BOARD_COLUMNS = [
@@ -93,8 +96,12 @@ export function buildBoardHtml(input: {
         if (input.meta.showDueDate && milestone.targetDate) {
           tags.push(metaTagHtml(input.labels.dueDate, milestone.targetDate));
         }
+        const title =
+          input.meta.showIssueId && milestone.humanKey
+            ? `${milestone.humanKey} · ${milestone.title}`
+            : milestone.title;
         return `<article class="card milestone-card">
-  <div class="card-title">${escapeHtml(milestone.title)}</div>
+  <div class="card-title">${escapeHtml(title)}</div>
   <div class="tags">${tags.join('')}</div>
 </article>`;
       })
@@ -128,8 +135,12 @@ export function buildBoardHtml(input: {
             metaTagHtml(input.labels.storyPoints, String(task.storyPoints)),
           );
         }
+        const title =
+          input.meta.showIssueId && task.humanKey
+            ? `${task.humanKey} · ${task.title}`
+            : task.title;
         return `<article class="card">
-  <div class="card-title">${escapeHtml(task.title)}</div>
+  <div class="card-title">${escapeHtml(title)}</div>
   ${tags.length > 0 ? `<div class="tags">${tags.join('')}</div>` : ''}
 </article>`;
       })

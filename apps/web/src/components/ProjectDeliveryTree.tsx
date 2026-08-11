@@ -9,12 +9,14 @@ import {
   deliveryScheduleTone,
   todayYmd,
 } from '../lib/delivery-schedule';
+import { UserAvatar } from './UserAvatar';
 
 type TreeEpic = {
   id: string;
   title: string;
   status: string;
   sortOrder: number;
+  humanKey?: string | null;
 };
 
 type TreeStory = {
@@ -23,6 +25,7 @@ type TreeStory = {
   title: string;
   status: string;
   sortOrder: number;
+  humanKey?: string | null;
 };
 
 type TreeTask = {
@@ -31,7 +34,11 @@ type TreeTask = {
   status: string;
   dueDate: string | null;
   userStoryId: string | null;
-  currentOwner: { displayName: string } | null;
+  currentOwner: {
+    displayName: string;
+    avatarUrl?: string | null;
+  } | null;
+  humanKey?: string | null;
 };
 
 function Chevron({ open }: { open: boolean }) {
@@ -192,15 +199,22 @@ export function ProjectDeliveryTree({
         key={task.id}
         open
         depth={depth}
-        badge={t('kindTask')}
+        badge={task.humanKey ?? t('kindTask')}
         label={task.title}
         statusLabel={t(`taskStatus.${task.status}`)}
         meta={
           <div className="flex flex-wrap items-center gap-2">
             {task.dueDate ? <span>{t('dueDate')}: {task.dueDate}</span> : null}
             {task.currentOwner ? (
-              <span>
-                {t('ownerLabel')}: {task.currentOwner.displayName}
+              <span className="inline-flex items-center gap-1.5">
+                <UserAvatar
+                  displayName={task.currentOwner.displayName}
+                  avatarUrl={task.currentOwner.avatarUrl}
+                  size="xs"
+                />
+                <span>
+                  {t('ownerLabel')}: {task.currentOwner.displayName}
+                </span>
               </span>
             ) : null}
             <span
@@ -238,7 +252,7 @@ export function ProjectDeliveryTree({
         open={isOpen(nodeId)}
         onToggle={() => toggle(nodeId)}
         depth={depth}
-        badge={t('kindStory')}
+        badge={story.humanKey ?? t('kindStory')}
         label={story.title}
         statusLabel={t(`milestoneStatus.${story.status}`)}
         meta={t('treeStoryCount', { count: storyTasks.length })}
@@ -291,7 +305,7 @@ export function ProjectDeliveryTree({
               open={isOpen(nodeId)}
               onToggle={() => toggle(nodeId)}
               depth={0}
-              badge={t('kindEpic')}
+              badge={epic.humanKey ?? t('kindEpic')}
               label={epic.title}
               statusLabel={t(`milestoneStatus.${epic.status}`)}
               meta={t('treeEpicCount', {
