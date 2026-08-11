@@ -416,6 +416,9 @@ export function CatalogueSection({
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
+                        {item.primaryBadge ? (
+                          <Badge tone="brand">{item.primaryBadge}</Badge>
+                        ) : null}
                         {item.href ? (
                           <Link href={item.href} className="font-semibold no-underline">
                             {item.title}
@@ -432,9 +435,6 @@ export function CatalogueSection({
                             {badge.label}
                           </Badge>
                         ))}
-                        {item.primaryBadge ? (
-                          <Badge tone="brand">{item.primaryBadge}</Badge>
-                        ) : null}
                         {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
                         {(item.languages?.length ?? 0) > 1 ? (
                           <span

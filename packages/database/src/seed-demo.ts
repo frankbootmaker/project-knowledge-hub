@@ -63,6 +63,32 @@ function ymdAt(offsetDays: number): Date {
 const DEMO_WORKSPACE_SLUG = 'home-infrastructure';
 const DEMO_PASSWORD = 'change-me-demo-pass';
 
+/** Document key codes for record types used in this seed (matches domain catalog). */
+const DOC_KEY_BY_TYPE: Record<string, string> = {
+  architecture: 'ARCH',
+  runbook: 'RB',
+  configuration: 'CFG',
+  note: 'NOTE',
+  'installation-guide': 'INST',
+  'project-charter': 'CHR',
+  'meeting-minutes': 'MM',
+  decision: 'DEC',
+  plan: 'PLN',
+  sprint_retrospective: 'RET',
+  sprint_review: 'REV',
+};
+
+function allocateDocKey(
+  counters: Record<string, number>,
+  recordType: string,
+): { documentKeyType: string; documentNumber: number } | Record<string, never> {
+  const code = DOC_KEY_BY_TYPE[recordType];
+  if (!code) return {};
+  const next = (counters[code] ?? 0) + 1;
+  counters[code] = next;
+  return { documentKeyType: code, documentNumber: next };
+}
+
 /** Extra workspaces kept across re-seeds (membership / role testing). */
 const MEMBERSHIP_DEMO_WORKSPACES = [
   {
@@ -524,7 +550,12 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
     ];
 
+    const labDocCounters: Record<string, number> = {};
+    const aiDocCounters: Record<string, number> = {};
+
     for (const record of records) {
+      const counters =
+        record.projectId === labProject.id ? labDocCounters : aiDocCounters;
       await database.db.insert(knowledgeRecords).values({
         workspaceId: workspace.id,
         projectId: record.projectId,
@@ -541,6 +572,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
           record.lifecycleStatus === 'verified' || record.lifecycleStatus === 'current'
             ? new Date()
             : null,
+        ...allocateDocKey(counters, record.recordType),
       });
     }
 
@@ -1301,6 +1333,7 @@ Operate KnowHub as the shared system of record for lab knowledge and delivery.
 `,
         createdBy: admin.id,
         verifiedAt: new Date(),
+        ...allocateDocKey(labDocCounters, 'project-charter'),
       })
       .returning();
     const [minutesRecord] = await database.db
@@ -1331,6 +1364,7 @@ Blair, Dana, Admin
 - Validate list / board / calendar views
 `,
         createdBy: admin.id,
+        ...allocateDocKey(labDocCounters, 'meeting-minutes'),
       })
       .returning();
     const [decisionRecord] = await database.db
@@ -1361,6 +1395,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
 `,
         createdBy: admin.id,
         verifiedAt: new Date(),
+        ...allocateDocKey(labDocCounters, 'decision'),
       })
       .returning();
 
@@ -1392,6 +1427,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
 `,
         createdBy: admin.id,
         verifiedAt: new Date(),
+        ...allocateDocKey(labDocCounters, 'plan'),
       })
       .returning();
 
@@ -1407,8 +1443,6 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         recordType: 'sprint_retrospective',
         lifecycleStatus: 'verified',
         sourceOfTruthMode: 'hub_managed',
-        documentKeyType: 'RET',
-        documentNumber: 1,
         contentMarkdown: `# Retrospective — Sprint 1
 
 ## Went well
@@ -1426,6 +1460,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
 `,
         createdBy: admin.id,
         verifiedAt: new Date(),
+        ...allocateDocKey(labDocCounters, 'sprint_retrospective'),
       })
       .returning();
     const [reviewRecord] = await database.db
@@ -1440,8 +1475,6 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         recordType: 'sprint_review',
         lifecycleStatus: 'current',
         sourceOfTruthMode: 'hub_managed',
-        documentKeyType: 'REV',
-        documentNumber: 1,
         contentMarkdown: `# Sprint review — Sprint 1
 
 ## Demo
@@ -1455,6 +1488,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
 `,
         createdBy: admin.id,
         verifiedAt: new Date(),
+        ...allocateDocKey(labDocCounters, 'sprint_review'),
       })
       .returning();
 
@@ -1490,8 +1524,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
           RI: 1,
           RD: 1,
           C: 2,
-          RET: 1,
-          REV: 1,
+          ...labDocCounters,
         },
         updatedAt: new Date(),
       })
@@ -1721,7 +1754,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
     await database.db
       .update(projects)
       .set({
-        issueCounters: { M: 1, T: aiTaskNumber },
+        issueCounters: { M: 1, T: aiTaskNumber, ...aiDocCounters },
         updatedAt: new Date(),
       })
       .where(eq(projects.id, aiProject.id));

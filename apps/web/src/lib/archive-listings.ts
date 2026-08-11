@@ -34,6 +34,7 @@ export type ArchivedRecord = {
   id: string;
   title: string;
   slug: string;
+  humanKey?: string | null;
   workspaceId: string;
   workspaceSlug: string;
   workspaceName: string;
@@ -69,6 +70,7 @@ type RecordRow = {
   id: string;
   title: string;
   slug: string;
+  humanKey?: string | null;
   workspaceId: string;
   archivedAt: string | null;
   updatedAt: string;

@@ -174,8 +174,12 @@ export default async function KnowledgeRecordDetailPage({
             {tCommon('knowledge')}
           </>
         }
-        title={record.title}
-        description={`${record.humanKey ? `${record.humanKey} · ` : ''}${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
+        title={
+          record.humanKey
+            ? `${record.humanKey} · ${record.title}`
+            : record.title
+        }
+        description={`${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
       />
 
       <RecordTranslationSwitcher
@@ -196,7 +200,6 @@ export default async function KnowledgeRecordDetailPage({
             <Badge tone={lifecycleTone(record.lifecycleStatus)}>
               {lifecycleLabel(record.lifecycleStatus, t)}
             </Badge>
-            {record.humanKey ? <Badge tone="brand">{record.humanKey}</Badge> : null}
             <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
             {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
             <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>

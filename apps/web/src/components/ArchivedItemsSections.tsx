@@ -139,6 +139,9 @@ export async function ArchivedItemsSections({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {record.humanKey ? (
+                      <Badge tone="brand">{record.humanKey}</Badge>
+                    ) : null}
                     <Link
                       href={`/workspaces/${record.workspaceSlug}/records/${record.slug}`}
                       className="font-semibold no-underline"
