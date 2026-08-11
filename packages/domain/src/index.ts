@@ -3,6 +3,9 @@ import { z } from 'zod';
 export {
   RECORD_TYPES,
   RECORD_TYPE_CATALOG,
+  getDocKeyCode,
+  isDocKeyCode,
+  listDocKeyCodes,
   LIFECYCLE_STATUSES,
   SOURCE_OF_TRUTH_MODES,
   KNOWLEDGE_SOURCE_TYPES,
@@ -84,6 +87,14 @@ export const taskStatusSchema = z.enum([
   'in_progress',
   'blocked',
   'done',
+  'cancelled',
+]);
+
+/** Project Scrum (NF-020): sprint lifecycle. */
+export const sprintStatusSchema = z.enum([
+  'planned',
+  'active',
+  'completed',
   'cancelled',
 ]);
 
@@ -238,6 +249,7 @@ export const deliveryLinkEntityTypeSchema = z.enum([
   'epic',
   'user_story',
   'task',
+  'sprint',
 ]);
 
 /** Change management register kind. */
@@ -465,6 +477,7 @@ export type MembershipRole = z.infer<typeof membershipRoleSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
 export type MilestoneStatus = z.infer<typeof milestoneStatusSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
+export type SprintStatus = z.infer<typeof sprintStatusSchema>;
 export type RaciRole = z.infer<typeof raciRoleSchema>;
 export type EpicStatus = z.infer<typeof epicStatusSchema>;
 export type UserStoryStatus = z.infer<typeof userStoryStatusSchema>;
@@ -495,10 +508,13 @@ export {
   issueKeyTypeSchema,
   KEY_PREFIX_PATTERN,
   HUMAN_KEY_PATTERN,
+  HUMAN_KEY_TYPE_PATTERN,
   keyPrefixSchema,
   isUuid,
   normalizeKeyPrefix,
   isValidKeyPrefix,
+  isValidHumanKeyType,
+  isDeliveryIssueKeyType,
   suggestKeyPrefix,
   parseHumanKey,
   formatHumanKey,

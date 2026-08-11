@@ -19,6 +19,7 @@ import {
   Input,
   Modal,
   Select,
+  Textarea,
   useToast,
 } from './ui';
 
@@ -48,6 +49,7 @@ export type BaselineProject = {
   charterRecord: PinnedRecord | null;
   initialPlanRecordId: string | null;
   initialPlanRecord: PinnedRecord | null;
+  definitionOfDone?: string | null;
   currency?: string;
   initialBudget?: string | number | null;
   approvedBudget?: string | number | null;
@@ -130,6 +132,9 @@ export function ProjectBaselinePanel({
   const [keyPrefix, setKeyPrefix] = useState(
     (project.keyPrefix ?? '').toUpperCase(),
   );
+  const [definitionOfDone, setDefinitionOfDone] = useState(
+    project.definitionOfDone ?? '',
+  );
   const [draftStakeholders, setDraftStakeholders] = useState<DraftStakeholder[]>(
     [],
   );
@@ -162,6 +167,7 @@ export function ProjectBaselinePanel({
       (project.keyPrefix ||
         suggestKeyPrefix(project.slug || project.name || 'PRJ')).toUpperCase(),
     );
+    setDefinitionOfDone(project.definitionOfDone ?? '');
     setDraftStakeholders(
       stakeholders.map((row) => ({
         userId: row.userId,
@@ -210,6 +216,7 @@ export function ProjectBaselinePanel({
           currency,
           initialBudget: parseOptionalNumber(initialBudget) ?? null,
           keyPrefix: keyPrefix.trim().toUpperCase(),
+          definitionOfDone: definitionOfDone.trim() || null,
         }),
       });
       const patchPayload = (await patchResponse.json().catch(() => ({}))) as {
@@ -358,6 +365,14 @@ export function ProjectBaselinePanel({
               )}
             </dd>
           </div>
+          <div className="sm:col-span-2">
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+              {t('definitionOfDone')}
+            </dt>
+            <dd className="m-0 mt-1 whitespace-pre-wrap text-sm text-ink">
+              {project.definitionOfDone?.trim() || tCommon('none')}
+            </dd>
+          </div>
         </dl>
 
         <div className="mt-4">
@@ -476,6 +491,18 @@ export function ProjectBaselinePanel({
               )}
             />
             <p className="mt-1 mb-0 text-xs text-ink-muted">{t('keyPrefixHint')}</p>
+          </Field>
+          <Field label={t('definitionOfDone')}>
+            <Textarea
+              value={definitionOfDone}
+              onChange={(e) => setDefinitionOfDone(e.target.value)}
+              disabled={pending}
+              rows={4}
+              placeholder={t('definitionOfDonePlaceholder')}
+            />
+            <p className="mt-1 mb-0 text-xs text-ink-muted">
+              {t('definitionOfDoneHint')}
+            </p>
           </Field>
           <Field label={t('charter')}>
             <Select

@@ -55,6 +55,7 @@ const createProjectSchema = z.object({
   endDate: dateStringSchema.optional(),
   charterRecordId: z.string().uuid().nullable().optional(),
   initialPlanRecordId: z.string().uuid().nullable().optional(),
+  definitionOfDone: z.string().max(20000).nullable().optional(),
   currency: projectCurrencySchema.optional(),
   initialBudget: z.union([z.number(), z.string()]).nullable().optional(),
   approvedBudget: z.union([z.number(), z.string()]).nullable().optional(),
@@ -75,6 +76,7 @@ const updateProjectSchema = z.object({
   endDate: dateStringSchema.optional(),
   charterRecordId: z.string().uuid().nullable().optional(),
   initialPlanRecordId: z.string().uuid().nullable().optional(),
+  definitionOfDone: z.string().max(20000).nullable().optional(),
   currency: projectCurrencySchema.optional(),
   initialBudget: z.union([z.number(), z.string()]).nullable().optional(),
   approvedBudget: z.union([z.number(), z.string()]).nullable().optional(),
@@ -126,6 +128,7 @@ async function toPublicProject(
     initialPlanRecord: project.initialPlanRecordId
       ? pinned.get(project.initialPlanRecordId) ?? null
       : null,
+    definitionOfDone: project.definitionOfDone,
     currency: projectCurrencySchema.parse(project.currency),
     initialBudget: project.initialBudget,
     approvedBudget: project.approvedBudget,
@@ -246,6 +249,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         endDate: body.endDate ?? null,
         charterRecordId: null,
         initialPlanRecordId: null,
+        definitionOfDone: body.definitionOfDone ?? null,
         currency: body.currency ?? 'EUR',
         initialBudget:
           body.initialBudget === undefined
@@ -504,6 +508,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         endDate: body.endDate === undefined ? project.endDate : body.endDate,
         charterRecordId: nextCharterId,
         initialPlanRecordId: nextPlanId,
+        definitionOfDone:
+          body.definitionOfDone === undefined
+            ? project.definitionOfDone
+            : body.definitionOfDone,
         currency: body.currency ?? project.currency,
         initialBudget:
           body.initialBudget === undefined

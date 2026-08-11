@@ -44,6 +44,7 @@ export type WorkspaceCatalogueRecord = {
   title: string;
   slug: string;
   recordType: string;
+  humanKey?: string | null;
   lifecycleStatus: string;
   language?: string | null;
   translationGroupId?: string | null;
@@ -158,8 +159,10 @@ export function WorkspaceCatalogueSections({
         id: preferred.translationGroupId ?? preferred.id,
         title: preferredVariant.title,
         href: preferredVariant.href,
-        primaryBadge: preferred.recordType,
-        secondaryBadge: preferredVariant.secondaryBadge,
+        primaryBadge: preferred.humanKey ?? preferred.recordType,
+        secondaryBadge: preferred.humanKey
+          ? preferred.recordType
+          : preferredVariant.secondaryBadge,
         subtitle: preferredVariant.subtitle,
         updatedAt: preferredVariant.updatedAt,
         language: preferredVariant.language,
@@ -170,6 +173,7 @@ export function WorkspaceCatalogueSections({
             record.title,
             record.slug,
             record.recordType,
+            record.humanKey ?? '',
             record.lifecycleStatus,
             normalizeContentLanguage(record.language),
             record.summary ?? '',

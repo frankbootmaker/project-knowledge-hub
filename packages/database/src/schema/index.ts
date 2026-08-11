@@ -169,6 +169,8 @@ export const projects = pgTable(
       (): AnyPgColumn => knowledgeRecords.id,
       { onDelete: 'set null' },
     ),
+    /** Scrum Definition of Done checklist / notes (NF-020). */
+    definitionOfDone: text('definition_of_done'),
     /** Project currency for budget and stakeholder rates (no FX). */
     currency: text('currency').notNull().default('EUR'),
     /** Kickoff baseline budget amount in project currency. */
@@ -453,6 +455,9 @@ export const knowledgeRecords = pgTable(
     language: text('language').default('en'),
     /** Shared id for translation siblings (Phase 1 foundation; UI linking later). */
     translationGroupId: uuid('translation_group_id'),
+    /** Document human-key type code (ADR-023); set when project-scoped. */
+    documentKeyType: text('document_key_type'),
+    documentNumber: integer('document_number'),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
     currentVersionNumber: integer('current_version_number').notNull().default(1),
     supersedesRecordId: uuid('supersedes_record_id').references(
@@ -475,6 +480,11 @@ export const knowledgeRecords = pgTable(
   },
   (table) => [
     uniqueIndex('knowledge_records_workspace_slug_uidx').on(table.workspaceId, table.slug),
+    uniqueIndex('knowledge_records_project_doc_key_uidx')
+      .on(table.projectId, table.documentKeyType, table.documentNumber)
+      .where(
+        sql`${table.projectId} IS NOT NULL AND ${table.documentKeyType} IS NOT NULL AND ${table.documentNumber} IS NOT NULL`,
+      ),
     index('knowledge_records_workspace_id_idx').on(table.workspaceId),
     index('knowledge_records_project_id_idx').on(table.projectId),
     index('knowledge_records_system_id_idx').on(table.systemId),
@@ -1090,6 +1100,40 @@ export const projectUserStories = pgTable(
   ],
 );
 
+/** Scrum sprints (NF-020 / ADR-022) — orthogonal to milestones. */
+export const projectSprints = pgTable(
+  'project_sprints',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    goal: text('goal'),
+    status: text('status').notNull().default('planned'),
+    startDate: date('start_date', { mode: 'string' }),
+    endDate: date('end_date', { mode: 'string' }),
+    capacityPoints: integer('capacity_points'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    issueKeyType: text('issue_key_type'),
+    issueNumber: integer('issue_number'),
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    ...timestamps,
+  },
+  (table) => [
+    index('project_sprints_project_id_idx').on(table.projectId),
+    index('project_sprints_project_status_idx').on(table.projectId, table.status),
+    uniqueIndex('project_sprints_project_key_uidx').on(
+      table.projectId,
+      table.issueKeyType,
+      table.issueNumber,
+    ),
+    uniqueIndex('project_sprints_one_active_uidx')
+      .on(table.projectId)
+      .where(sql`${table.status} = 'active' AND ${table.archivedAt} IS NULL`),
+  ],
+);
+
 /** Project delivery tasks (NF-018 / ADR-015). */
 export const projectTasks = pgTable(
   'project_tasks',
@@ -1104,12 +1148,16 @@ export const projectTasks = pgTable(
     userStoryId: uuid('user_story_id').references(() => projectUserStories.id, {
       onDelete: 'set null',
     }),
+    sprintId: uuid('sprint_id').references(() => projectSprints.id, {
+      onDelete: 'set null',
+    }),
     title: text('title').notNull(),
     description: text('description'),
     status: text('status').notNull().default('todo'),
     dueDate: date('due_date', { mode: 'string' }),
     forecastHours: numeric('forecast_hours', { precision: 10, scale: 2 }),
     actualHours: numeric('actual_hours', { precision: 10, scale: 2 }),
+    storyPoints: integer('story_points'),
     sortOrder: integer('sort_order').notNull().default(0),
     createdBy: uuid('created_by').references(() => users.id, {
       onDelete: 'set null',
@@ -1132,6 +1180,7 @@ export const projectTasks = pgTable(
     index('project_tasks_project_id_idx').on(table.projectId),
     index('project_tasks_milestone_id_idx').on(table.milestoneId),
     index('project_tasks_user_story_id_idx').on(table.userStoryId),
+    index('project_tasks_sprint_id_idx').on(table.sprintId),
     index('project_tasks_project_user_story_idx').on(table.projectId, table.userStoryId),
     index('project_tasks_current_owner_user_id_idx').on(table.currentOwnerUserId),
     index('project_tasks_ai_system_id_idx').on(table.aiSystemId),

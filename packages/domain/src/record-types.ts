@@ -39,6 +39,8 @@ export const RECORD_TYPES = [
   'invoice',
   'note',
   'other',
+  'sprint_retrospective',
+  'sprint_review',
 ] as const;
 
 export type RecordType = (typeof RECORD_TYPES)[number];
@@ -58,71 +60,84 @@ export type RecordTypeDefinition = {
   category: RecordTypeCategory;
   label: string;
   description: string;
+  /** 2–4 letter code for project document human keys (ADR-023). */
+  docKeyCode: string;
 };
 
 export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
   {
     value: 'overview',
+    docKeyCode: 'OV',
     category: 'foundation',
     label: 'Overview',
     description: 'High-level description of a workspace, project, or system.',
   },
   {
     value: 'architecture',
+    docKeyCode: 'ARCH',
     category: 'foundation',
     label: 'Architecture',
     description: 'Structure, components, boundaries, and design rationale.',
   },
   {
     value: 'deployment-guide',
+    docKeyCode: 'DEP',
     category: 'delivery',
     label: 'Deployment guide',
     description: 'How to deploy or release the system or service.',
   },
   {
     value: 'installation-guide',
+    docKeyCode: 'INST',
     category: 'delivery',
     label: 'Installation guide',
     description: 'How to install or bootstrap dependencies and runtimes.',
   },
   {
     value: 'configuration',
+    docKeyCode: 'CFG',
     category: 'operations',
     label: 'Configuration',
     description: 'Living configuration documentation (hub-managed or mirrored).',
   },
   {
     value: 'configuration-snapshot',
+    docKeyCode: 'CFGS',
     category: 'operations',
     label: 'Configuration snapshot',
     description: 'Point-in-time captured configuration for audit or recovery.',
   },
   {
     value: 'runbook',
+    docKeyCode: 'RB',
     category: 'operations',
     label: 'Runbook',
     description: 'Operational procedures for routine or emergency tasks.',
   },
   {
     value: 'troubleshooting',
+    docKeyCode: 'TS',
     category: 'operations',
     label: 'Troubleshooting',
     description: 'Diagnostic steps and common failure modes.',
   },
   {
     value: 'incident-resolution',
+    docKeyCode: 'INC',
     category: 'operations',
     label: 'Incident resolution',
     description: 'Post-incident write-up of cause, impact, and remediation.',
   },
   {
     value: 'migration-guide',
+    docKeyCode: 'MIG',
     category: 'delivery',
     label: 'Migration guide',
     description: 'Steps to migrate data, infra, or application versions.',
   },
   {
     value: 'decision',
+    docKeyCode: 'DEC',
     category: 'delivery',
     label: 'Decision / decision-making',
     description:
@@ -130,6 +145,7 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
   },
   {
     value: 'project-charter',
+    docKeyCode: 'CHR',
     category: 'planning',
     label: 'Project charter',
     description:
@@ -137,6 +153,7 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
   },
   {
     value: 'meeting-minutes',
+    docKeyCode: 'MM',
     category: 'reflection',
     label: 'Meeting minutes',
     description:
@@ -144,30 +161,35 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
   },
   {
     value: 'lessons-learned',
+    docKeyCode: 'LL',
     category: 'reflection',
     label: 'Lessons learned',
     description: 'Retrospective insights after delivery or incidents.',
   },
   {
     value: 'command-reference',
+    docKeyCode: 'CMD',
     category: 'operations',
     label: 'Command reference',
     description: 'CLI or API command cheat-sheet with examples.',
   },
   {
     value: 'inventory',
+    docKeyCode: 'INV',
     category: 'foundation',
     label: 'Inventory',
     description: 'Catalogue of assets, hosts, services, or dependencies.',
   },
   {
     value: 'status',
+    docKeyCode: 'STA',
     category: 'operations',
     label: 'Status',
     description: 'Current operational or delivery status snapshot.',
   },
   {
     value: 'management-summary',
+    docKeyCode: 'MSUM',
     category: 'planning',
     label: 'Management summary',
     description:
@@ -175,6 +197,7 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
   },
   {
     value: 'progress-summary',
+    docKeyCode: 'PSUM',
     category: 'planning',
     label: 'Progress summary',
     description:
@@ -182,78 +205,91 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
   },
   {
     value: 'roadmap',
+    docKeyCode: 'RM',
     category: 'planning',
     label: 'Roadmap',
     description: 'Sequenced near-term delivery roadmap and milestones.',
   },
   {
     value: 'recovery-guide',
+    docKeyCode: 'RCV',
     category: 'operations',
     label: 'Recovery guide',
     description: 'Disaster recovery and restore procedures.',
   },
   {
     value: 'backup-guide',
+    docKeyCode: 'BAK',
     category: 'operations',
     label: 'Backup guide',
     description: 'Backup schedules, locations, and verification steps.',
   },
   {
     value: 'security-note',
+    docKeyCode: 'SEC',
     category: 'operations',
     label: 'Security note',
     description: 'Security considerations, threats, or hardening notes.',
   },
   {
     value: 'integration-guide',
+    docKeyCode: 'INTG',
     category: 'delivery',
     label: 'Integration guide',
     description: 'How this system integrates with others.',
   },
   {
     value: 'conversation-summary',
+    docKeyCode: 'CONV',
     category: 'reflection',
     label: 'Conversation summary',
     description: 'Summarized chat or meeting outcome captured into the hub.',
   },
   {
     value: 'research-note',
+    docKeyCode: 'RES',
     category: 'reflection',
     label: 'Research note',
     description: 'Investigation notes, spikes, or technology evaluation.',
   },
   {
     value: 'proposal',
+    docKeyCode: 'PROP',
     category: 'planning',
     label: 'Proposal',
     description: 'Concrete change proposal awaiting decision.',
   },
   {
     value: 'business-idea',
+    docKeyCode: 'IDEA',
     category: 'planning',
     label: 'Business idea',
     description: 'Early business or product idea; not yet a committed plan.',
   },
   {
     value: 'vision',
+    docKeyCode: 'VIS',
     category: 'planning',
     label: 'Vision',
     description: 'Long-range north-star or future-state vision.',
   },
   {
     value: 'plan',
+    docKeyCode: 'PLN',
     category: 'planning',
     label: 'Plan',
     description: 'Actionable plan with scope, approach, and intended outcomes.',
   },
   {
     value: 'initiative',
+    docKeyCode: 'INIT',
     category: 'planning',
     label: 'Initiative',
     description: 'Multi-workstream initiative linking plans, delivery, and ops.',
   },
   {
     value: 'invoice',
+    docKeyCode: 'INVC',
     category: 'operations',
     label: 'Invoice',
     description:
@@ -261,17 +297,67 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
   },
   {
     value: 'note',
+    docKeyCode: 'NOTE',
     category: 'reflection',
     label: 'Note',
     description: 'General working note that does not fit a more specific type.',
   },
   {
     value: 'other',
+    docKeyCode: 'OTH',
     category: 'other',
     label: 'Other',
     description: 'Fallback when no other type fits; prefer a specific type.',
   },
+  {
+    value: 'sprint_retrospective',
+    docKeyCode: 'RET',
+    category: 'reflection',
+    label: 'Sprint retrospective',
+    description: 'Sprint retrospective notes: what went well, improve, actions.',
+  },
+  {
+    value: 'sprint_review',
+    docKeyCode: 'REV',
+    category: 'reflection',
+    label: 'Sprint review',
+    description: 'Sprint review notes: demoed work, feedback, and outcomes.',
+  },
 ];
+
+
+const RESERVED_DELIVERY_KEY_CODES = new Set([
+  'E',
+  'S',
+  'M',
+  'T',
+  'C',
+  'RR',
+  'RI',
+  'RA',
+  'RD',
+  'SP',
+]);
+
+const DOC_KEY_CODE_BY_TYPE = Object.fromEntries(
+  RECORD_TYPE_CATALOG.map((entry) => [entry.value, entry.docKeyCode]),
+) as Record<RecordType, string>;
+
+export function getDocKeyCode(recordType: RecordType | string): string | null {
+  if (!(recordType in DOC_KEY_CODE_BY_TYPE)) return null;
+  return DOC_KEY_CODE_BY_TYPE[recordType as RecordType] ?? null;
+}
+
+export function isDocKeyCode(code: string): boolean {
+  const upper = code.trim().toUpperCase();
+  if (!/^[A-Z]{2,4}$/.test(upper)) return false;
+  if (RESERVED_DELIVERY_KEY_CODES.has(upper)) return false;
+  return Object.values(DOC_KEY_CODE_BY_TYPE).includes(upper);
+}
+
+export function listDocKeyCodes(): string[] {
+  return [...new Set(Object.values(DOC_KEY_CODE_BY_TYPE))].sort();
+}
 
 export const LIFECYCLE_STATUSES = [
   'draft',

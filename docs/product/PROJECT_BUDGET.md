@@ -95,7 +95,7 @@ Resource RAG (utilization): aggregate planned demand vs capacity → amber when 
 ## Out of scope
 
 * Multi-currency / FX  
-* Timesheets and story points  
+* Timesheets (story points are Scrum planning only — [PROJECT_SCRUM.md](./PROJECT_SCRUM.md); never used for AC)  
 * Auto-blocking writes when AI allocation is exceeded  
 * Auto-updating approved budget from change-register `budget` items  
 * Critical-path Gantt  

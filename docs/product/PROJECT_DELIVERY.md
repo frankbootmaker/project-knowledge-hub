@@ -29,7 +29,7 @@ Humans and AI agents work on the **same** project objects so full project contex
 | --- | --- |
 | Milestones under a project; **Timeline** fishbone (duration bars) | Full dependency / critical-path Gantt (RAID **Dependencies** stay a register — see [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BASELINE.md](./PROJECT_BASELINE.md)) |
 | Tasks (optional milestone link) | Subtasks / checklists as separate entities |
-| Due / target dates; task forecast/actual **hours** (costing in [PROJECT_BUDGET.md](./PROJECT_BUDGET.md)) | Timesheets, capacity calendars, story points |
+| Due / target dates; task forecast/actual **hours** (costing in [PROJECT_BUDGET.md](./PROJECT_BUDGET.md)) | Timesheets, capacity calendars (story points live under [PROJECT_SCRUM.md](./PROJECT_SCRUM.md) / NF-020; not used for EVM AC) |
 | RACI matrix per task (`R`/`A`/`C`/`I`) | External contacts without accounts |
 | REST + UI on project page | Notifications / email digests |
 | MCP `pm:read` / `pm:write` (direct commit) | Propose/confirm for PM (keep for catalogue ADR-014) |

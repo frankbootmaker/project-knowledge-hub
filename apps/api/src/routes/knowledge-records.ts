@@ -36,17 +36,28 @@ import {
   listRecordTranslations,
   loadApproverSnapshot,
   loadPrimarySource,
+  loadProjectKeyPrefixMap,
   resolveReviewedByUser,
   toPublicRecord,
   updateKnowledgeRecord,
   updateRecordInputSchema,
   withApprovedByMetadata,
 } from '../lib/knowledge-records-service.js';
+import { resolveKnowledgeRecordId } from '../lib/project-issue-keys.js';
 import {
   auditKnowledgeView,
   resolveWorkspaceOrganizationId,
 } from '../lib/telemetry-audit.js';
 import { formatSseEvent } from '../lib/sse.js';
+
+const recordRefSchema = z.string().min(1).max(80);
+
+async function resolveRecordIdParam(
+  app: FastifyInstance,
+  idOrKey: string,
+): Promise<string> {
+  return resolveKnowledgeRecordId(app.database, { idOrKey });
+}
 
 const restoreSchema = z.object({
   changeMessage: z.string().max(500).optional(),
@@ -95,10 +106,16 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       app.database,
       rows.map((row) => row.id),
     );
+    const keyPrefixMap = await loadProjectKeyPrefixMap(
+      app.database,
+      rows.map((row) => row.projectId),
+    );
 
     return {
       knowledgeRecords: rows.map((row) =>
-        toPublicRecord(row, tagMap.get(row.id) ?? [], null),
+        toPublicRecord(row, tagMap.get(row.id) ?? [], null, {
+          keyPrefix: row.projectId ? keyPrefixMap.get(row.projectId) ?? null : null,
+        }),
       ),
     };
   });
@@ -125,11 +142,12 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
 
   app.get('/api/v1/knowledge-records/:recordId', async (request) => {
     const principal = requireAuthenticated(request);
-    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    const params = z.object({ recordId: recordRefSchema }).parse(request.params);
+    const recordId = await resolveRecordIdParam(app, params.recordId);
     const [record] = await app.database.db
       .select()
       .from(knowledgeRecords)
-      .where(eq(knowledgeRecords.id, params.recordId))
+      .where(eq(knowledgeRecords.id, recordId))
       .limit(1);
 
     if (!record) {
@@ -164,6 +182,9 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       ipAddress: request.ip,
     });
 
+    const keyPrefixMap = await loadProjectKeyPrefixMap(app.database, [
+      record.projectId,
+    ]);
     return {
       knowledgeRecord: toPublicRecord(record, tagMap.get(record.id) ?? [], source, {
         includeHtml: true,
@@ -171,17 +192,21 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
         html: rendered.html,
         toc: rendered.toc,
         reviewedByUser,
+        keyPrefix: record.projectId
+          ? keyPrefixMap.get(record.projectId) ?? null
+          : null,
       }),
     };
   });
 
   app.get('/api/v1/knowledge-records/:recordId/translations', async (request) => {
     const principal = requireAuthenticated(request);
-    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    const params = z.object({ recordId: recordRefSchema }).parse(request.params);
+    const recordId = await resolveRecordIdParam(app, params.recordId);
     const [record] = await app.database.db
       .select({ workspaceId: knowledgeRecords.workspaceId })
       .from(knowledgeRecords)
-      .where(eq(knowledgeRecords.id, params.recordId))
+      .where(eq(knowledgeRecords.id, recordId))
       .limit(1);
     if (!record) {
       throw new AppError({
@@ -191,7 +216,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       });
     }
     requireWorkspaceView(principal, record.workspaceId);
-    return listRecordTranslations(app, params.recordId);
+    return listRecordTranslations(app, recordId);
   });
 
   app.post('/api/v1/knowledge-records/:recordId/translations', async (request) => {
@@ -453,13 +478,14 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
   app.patch('/api/v1/knowledge-records/:recordId', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
-    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    const params = z.object({ recordId: recordRefSchema }).parse(request.params);
+    const recordId = await resolveRecordIdParam(app, params.recordId);
     const body = updateRecordInputSchema.parse(request.body);
 
     const [record] = await app.database.db
       .select()
       .from(knowledgeRecords)
-      .where(eq(knowledgeRecords.id, params.recordId))
+      .where(eq(knowledgeRecords.id, recordId))
       .limit(1);
 
     if (!record) {
@@ -474,7 +500,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
 
     const result = await updateKnowledgeRecord(
       app,
-      params.recordId,
+      recordId,
       body,
       {
         actorType: 'user',

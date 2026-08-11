@@ -12,6 +12,7 @@ import { ProjectDeliveryBoard } from './ProjectDeliveryBoard';
 import { ProjectDeliveryCalendar } from './ProjectDeliveryCalendar';
 import { ProjectDeliveryTimeline } from './ProjectDeliveryTimeline';
 import { ProjectDeliveryTree } from './ProjectDeliveryTree';
+import { ProjectScrumView } from './ProjectScrumView';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
 import {
@@ -93,8 +94,10 @@ type Task = {
   dueDate: string | null;
   forecastHours: string | null;
   actualHours: string | null;
+  storyPoints?: number | null;
   milestoneId: string | null;
   userStoryId: string | null;
+  sprintId?: string | null;
   userStoryTitle: string | null;
   epicId: string | null;
   epicTitle: string | null;
@@ -116,7 +119,7 @@ const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 const EPIC_STATUSES = MILESTONE_STATUSES;
 const STORY_STATUSES = MILESTONE_STATUSES;
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
-const VIEW_MODES = ['list', 'tree', 'board', 'calendar', 'timeline'] as const;
+const VIEW_MODES = ['list', 'tree', 'board', 'calendar', 'timeline', 'scrum'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
 type DeliveryKind = 'epic' | 'story' | 'milestone' | 'task';
@@ -140,9 +143,11 @@ function parseItemId(id: string): { kind: DeliveryKind; entityId: string } | nul
 
 export function ProjectDeliveryPanel({
   projectId,
+  workspaceId,
   canMutate,
   projectStartDate = null,
   projectEndDate = null,
+  definitionOfDone = null,
   initialEpics,
   initialStories,
   initialMilestones,
@@ -156,6 +161,7 @@ export function ProjectDeliveryPanel({
   canMutate: boolean;
   projectStartDate?: string | null;
   projectEndDate?: string | null;
+  definitionOfDone?: string | null;
   initialEpics: Epic[];
   initialStories: UserStory[];
   initialMilestones: Milestone[];
@@ -207,7 +213,10 @@ export function ProjectDeliveryPanel({
   }
 
   const wideModalOpen =
-    viewMode === 'board' || viewMode === 'calendar' || viewMode === 'timeline';
+    viewMode === 'board' ||
+    viewMode === 'calendar' ||
+    viewMode === 'timeline' ||
+    viewMode === 'scrum';
 
   function closeWideModal() {
     changeViewMode('list');
@@ -398,6 +407,9 @@ export function ProjectDeliveryPanel({
         status: task.status,
         dueDate: task.dueDate,
         milestoneId: task.milestoneId,
+        sprintId: task.sprintId ?? null,
+        storyPoints: task.storyPoints ?? null,
+        humanKey: task.humanKey ?? null,
         userStoryTitle: task.userStoryTitle,
         currentOwner: task.currentOwner
           ? { displayName: task.currentOwner.displayName }
@@ -907,6 +919,50 @@ export function ProjectDeliveryPanel({
               void updateStatus(`task:${taskId}`, status)
             }
             onManageTask={(taskId) => setManageTaskId(taskId)}
+          />
+        ) : null}
+        {viewMode === 'scrum' ? (
+          <ProjectScrumView
+            projectId={projectId}
+            workspaceId={workspaceId}
+            canMutate={canMutate}
+            definitionOfDone={definitionOfDone}
+            tasks={boardTasks}
+            onTaskStatusChange={(taskId, status) =>
+              void updateStatus(`task:${taskId}`, status)
+            }
+            onOpenTask={(taskId) => setManageTaskId(taskId)}
+            onAssignToSprint={async (taskId, sprintId) => {
+              setPending(true);
+              setError(null);
+              try {
+                const response = await fetch(`/api/v1/project-tasks/${taskId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ sprintId }),
+                });
+                if (!response.ok) {
+                  const payload = (await response.json().catch(() => null)) as {
+                    message?: string;
+                  } | null;
+                  throw new Error(payload?.message ?? t('failedUpdateTask'));
+                }
+                const payload = (await response.json()) as { task: Task };
+                setTasks((current) =>
+                  current.map((task) =>
+                    task.id === taskId ? { ...task, ...payload.task } : task,
+                  ),
+                );
+                refresh();
+              } catch (err) {
+                setError(
+                  err instanceof Error ? err.message : t('failedUpdateTask'),
+                );
+              } finally {
+                setPending(false);
+              }
+            }}
+            onRefresh={refresh}
           />
         ) : null}
         {viewMode === 'calendar' ? (

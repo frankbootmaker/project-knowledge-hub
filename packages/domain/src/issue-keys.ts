@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 type RaidKind = 'risk' | 'assumption' | 'issue' | 'dependency';
 
-/** Type codes embedded in human-readable issue keys. */
+/** Type codes embedded in delivery/RAID/sprint human-readable issue keys. */
 export const ISSUE_KEY_TYPES = [
   'E',
   'S',
@@ -13,6 +13,7 @@ export const ISSUE_KEY_TYPES = [
   'RI',
   'RA',
   'RD',
+  'SP',
 ] as const;
 
 export type IssueKeyType = (typeof ISSUE_KEY_TYPES)[number];
@@ -22,8 +23,11 @@ export const issueKeyTypeSchema = z.enum(ISSUE_KEY_TYPES);
 /** AAA or AA0 (two letters + digit). */
 export const KEY_PREFIX_PATTERN = /^([A-Z]{3}|[A-Z]{2}[0-9])$/;
 
+/** Type segment: delivery (1–2) or document codes (2–4). */
+export const HUMAN_KEY_TYPE_PATTERN = /^[A-Z]{1,4}$/;
+
 export const HUMAN_KEY_PATTERN =
-  /^([A-Z]{3}|[A-Z]{2}[0-9])-(E|S|M|T|C|RR|RI|RA|RD)-([1-9][0-9]*)$/;
+  /^([A-Z]{3}|[A-Z]{2}[0-9])-([A-Z]{1,4})-([1-9][0-9]*)$/;
 
 export const keyPrefixSchema = z
   .string()
@@ -35,7 +39,7 @@ export const keyPrefixSchema = z
 
 export type ParsedHumanKey = {
   prefix: string;
-  issueKeyType: IssueKeyType;
+  issueKeyType: string;
   issueNumber: number;
 };
 
@@ -52,6 +56,14 @@ export function normalizeKeyPrefix(raw: string): string {
 
 export function isValidKeyPrefix(value: string): boolean {
   return KEY_PREFIX_PATTERN.test(normalizeKeyPrefix(value));
+}
+
+export function isValidHumanKeyType(value: string): boolean {
+  return HUMAN_KEY_TYPE_PATTERN.test(value.trim().toUpperCase());
+}
+
+export function isDeliveryIssueKeyType(value: string): value is IssueKeyType {
+  return issueKeyTypeSchema.safeParse(value).success;
 }
 
 /**
@@ -98,7 +110,7 @@ export function parseHumanKey(raw: string): ParsedHumanKey | null {
   if (!match) return null;
   return {
     prefix: match[1]!,
-    issueKeyType: match[2] as IssueKeyType,
+    issueKeyType: match[2]!,
     issueNumber: Number(match[3]),
   };
 }
@@ -113,8 +125,9 @@ export function formatHumanKey(
   }
   const normalized = normalizeKeyPrefix(prefix);
   if (!KEY_PREFIX_PATTERN.test(normalized)) return null;
-  if (!issueKeyTypeSchema.safeParse(issueKeyType).success) return null;
-  return `${normalized}-${issueKeyType}-${issueNumber}`;
+  const type = issueKeyType.trim().toUpperCase();
+  if (!isValidHumanKeyType(type)) return null;
+  return `${normalized}-${type}-${issueNumber}`;
 }
 
 export function raidKindToIssueKeyType(kind: RaidKind): IssueKeyType {
@@ -149,11 +162,11 @@ export function issueKeyTypeToRaidKind(type: IssueKeyType): RaidKind | null {
   }
 }
 
-export type IssueCounters = Partial<Record<IssueKeyType, number>>;
+export type IssueCounters = Partial<Record<string, number>>;
 
 export function readIssueCounter(
   counters: unknown,
-  type: IssueKeyType,
+  type: string,
 ): number {
   if (!counters || typeof counters !== 'object') return 0;
   const value = (counters as Record<string, unknown>)[type];

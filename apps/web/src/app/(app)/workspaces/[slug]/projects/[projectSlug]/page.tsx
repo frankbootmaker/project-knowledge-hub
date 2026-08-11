@@ -75,6 +75,8 @@ type Project = {
     slug: string;
     recordType: string;
   } | null;
+  definitionOfDone?: string | null;
+  keyPrefix?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -94,6 +96,7 @@ type KnowledgeRecordSummary = {
   title: string;
   slug: string;
   recordType: string;
+  humanKey?: string | null;
   lifecycleStatus: string;
   language?: string | null;
   translationGroupId?: string | null;
@@ -429,6 +432,7 @@ export default async function ProjectDetailPage({
         canMutate={canMutate && !isArchived}
         projectStartDate={project.startDate}
         projectEndDate={project.endDate}
+        definitionOfDone={project.definitionOfDone ?? null}
         initialEpics={epics}
         initialStories={stories}
         initialMilestones={milestones}

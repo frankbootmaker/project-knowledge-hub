@@ -39,6 +39,7 @@ import {
   createKnowledgeRecord,
   createRecordTranslation,
   listRecordTranslations,
+  loadProjectKeyPrefixMap,
   resolveReviewedByUser,
   updateKnowledgeRecord,
 } from './knowledge-records-service.js';
@@ -106,6 +107,7 @@ import {
 import {
   assertUniqueKeyPrefix,
   resolveEntityId,
+  resolveKnowledgeRecordId,
 } from './project-issue-keys.js';
 import {
   assertPinnedKnowledgeRecord,
@@ -433,6 +435,7 @@ export function createMcpToolHandlers(
       endDate?: string | null;
       charterRecordId?: string | null;
       initialPlanRecordId?: string | null;
+      definitionOfDone?: string | null;
       currency?: string;
       initialBudget?: number | string | null;
       approvedBudget?: number | string | null;
@@ -481,6 +484,10 @@ export function createMcpToolHandlers(
             input.endDate === undefined ? project.endDate : input.endDate,
           charterRecordId: nextCharterId,
           initialPlanRecordId: nextPlanId,
+          definitionOfDone:
+            input.definitionOfDone === undefined
+              ? project.definitionOfDone
+              : input.definitionOfDone,
           currency: input.currency
             ? projectCurrencySchema.parse(input.currency)
             : project.currency,
@@ -754,10 +761,13 @@ export function createMcpToolHandlers(
     },
 
     async getKnowledgeRecord({ recordId }) {
+      const resolvedId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: recordId,
+      });
       const [record] = await app.database.db
         .select()
         .from(knowledgeRecords)
-        .where(and(eq(knowledgeRecords.id, recordId), isNull(knowledgeRecords.archivedAt)))
+        .where(and(eq(knowledgeRecords.id, resolvedId), isNull(knowledgeRecords.archivedAt)))
         .limit(1);
       if (!record) {
         throw new AppError({
@@ -788,6 +798,16 @@ export function createMcpToolHandlers(
         knowledgeRecordId: record.id,
         limit: 50,
       });
+      const keyPrefixMap = await loadProjectKeyPrefixMap(app.database, [
+        record.projectId,
+      ]);
+      const keyPrefix = record.projectId
+        ? keyPrefixMap.get(record.projectId) ?? null
+        : null;
+      const humanKey =
+        keyPrefix && record.documentKeyType && record.documentNumber != null
+          ? `${keyPrefix}-${record.documentKeyType}-${record.documentNumber}`
+          : null;
       return {
         knowledgeRecord: {
           id: record.id,
@@ -798,6 +818,9 @@ export function createMcpToolHandlers(
           slug: record.slug,
           summary: record.summary,
           recordType: record.recordType,
+          documentKeyType: record.documentKeyType,
+          documentNumber: record.documentNumber,
+          humanKey,
           lifecycleStatus: record.lifecycleStatus,
           sourceOfTruthMode: record.sourceOfTruthMode,
           contentMarkdown: truncated.content,
@@ -975,6 +998,9 @@ export function createMcpToolHandlers(
           title: result.knowledgeRecord.title,
           slug: result.knowledgeRecord.slug,
           recordType: result.knowledgeRecord.recordType,
+          documentKeyType: result.knowledgeRecord.documentKeyType,
+          documentNumber: result.knowledgeRecord.documentNumber,
+          humanKey: result.knowledgeRecord.humanKey,
           lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
           sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
           currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
@@ -986,11 +1012,14 @@ export function createMcpToolHandlers(
 
     async updateKnowledgeRecord(input) {
       const actingUserId = requireActingUserId(client);
+      const resolvedId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+      });
 
       const [existing] = await app.database.db
         .select()
         .from(knowledgeRecords)
-        .where(and(eq(knowledgeRecords.id, input.recordId), isNull(knowledgeRecords.archivedAt)))
+        .where(and(eq(knowledgeRecords.id, resolvedId), isNull(knowledgeRecords.archivedAt)))
         .limit(1);
       if (!existing) {
         throw new AppError({
@@ -1012,7 +1041,7 @@ export function createMcpToolHandlers(
 
       const result = await updateKnowledgeRecord(
         app,
-        input.recordId,
+        resolvedId,
         {
           title: input.title,
           summary: input.summary,
@@ -1356,9 +1385,20 @@ export function createMcpToolHandlers(
           projectId: input.projectId,
         });
       }
+      let sprintId: string | null | undefined = input.unassignedSprint
+        ? null
+        : input.sprintId;
+      if (typeof sprintId === 'string') {
+        sprintId = await resolveEntityId(app.database, {
+          entityType: 'sprint',
+          idOrKey: sprintId,
+          projectId: input.projectId,
+        });
+      }
       return {
         tasks: await listTasks(app.database, input.projectId, {
           milestoneId,
+          sprintId,
           includeArchived: input.includeArchived,
         }),
       };
@@ -1442,6 +1482,105 @@ export function createMcpToolHandlers(
       return { milestone };
     },
 
+    async listProjectSprints(input) {
+      await requirePmProject(app, client, input.projectId);
+      const { listSprints } = await import('./project-sprints.js');
+      return {
+        sprints: await listSprints(app.database, input.projectId, {
+          includeArchived: input.includeArchived,
+        }),
+      };
+    },
+
+    async createProjectSprint(input) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const { createSprint } = await import('./project-sprints.js');
+      const { sprintStatusSchema } = await import('@project-knowledge-hub/domain');
+      const sprint = await createSprint(app.database, {
+        projectId: project.id,
+        name: input.name,
+        goal: input.goal,
+        status: input.status
+          ? sprintStatusSchema.parse(input.status)
+          : undefined,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        capacityPoints: input.capacityPoints,
+        sortOrder: input.sortOrder,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.sprint_created',
+        entityType: 'project_sprint',
+        entityId: sprint.id,
+        metadata: {
+          projectId: project.id,
+          name: sprint.name,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { sprint };
+    },
+
+    async updateProjectSprint(input) {
+      const actingUserId = requireActingUserId(client);
+      const sprintId = await resolveEntityId(app.database, {
+        entityType: 'sprint',
+        idOrKey: input.sprintId,
+      });
+      const { getSprint, updateSprint } = await import('./project-sprints.js');
+      const { sprintStatusSchema } = await import('@project-knowledge-hub/domain');
+      const existing = await getSprint(app.database, sprintId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      let unfinishedDestination = input.unfinishedDestination;
+      if (
+        unfinishedDestination &&
+        typeof unfinishedDestination === 'object' &&
+        'sprintId' in unfinishedDestination
+      ) {
+        unfinishedDestination = {
+          sprintId: await resolveEntityId(app.database, {
+            entityType: 'sprint',
+            idOrKey: unfinishedDestination.sprintId,
+            projectId: project.id,
+          }),
+        };
+      }
+      const sprint = await updateSprint(app.database, sprintId, {
+        name: input.name,
+        goal: input.goal,
+        status: input.status
+          ? sprintStatusSchema.parse(input.status)
+          : undefined,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        capacityPoints: input.capacityPoints,
+        sortOrder: input.sortOrder,
+        archived: input.archived,
+        unfinishedDestination,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.sprint_updated',
+        entityType: 'project_sprint',
+        entityId: sprint.id,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { sprint };
+    },
+
     async createProjectTask(input) {
       const actingUserId = requireActingUserId(client);
       const project = await requirePmProject(app, client, input.projectId, {
@@ -1463,6 +1602,14 @@ export function createMcpToolHandlers(
               idOrKey: input.userStoryId,
               projectId: project.id,
             });
+      const sprintId =
+        input.sprintId == null
+          ? input.sprintId
+          : await resolveEntityId(app.database, {
+              entityType: 'sprint',
+              idOrKey: input.sprintId,
+              projectId: project.id,
+            });
       const task = await createTask(app.database, {
         projectId: project.id,
         workspaceId: project.workspaceId,
@@ -1482,6 +1629,8 @@ export function createMcpToolHandlers(
         aiSystemId: input.aiSystemId,
         milestoneId,
         userStoryId,
+        sprintId,
+        storyPoints: input.storyPoints,
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         createdBy: actingUserId,
@@ -1542,6 +1691,14 @@ export function createMcpToolHandlers(
               idOrKey: input.userStoryId,
               projectId: project.id,
             });
+      const sprintId =
+        input.sprintId === undefined || input.sprintId === null
+          ? input.sprintId
+          : await resolveEntityId(app.database, {
+              entityType: 'sprint',
+              idOrKey: input.sprintId,
+              projectId: project.id,
+            });
       const task = await updateTask(app.database, taskId, {
         title: input.title,
         description: input.description,
@@ -1559,6 +1716,8 @@ export function createMcpToolHandlers(
         aiSystemId: input.aiSystemId,
         milestoneId,
         userStoryId,
+        sprintId,
+        storyPoints: input.storyPoints,
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         archived: input.archived,

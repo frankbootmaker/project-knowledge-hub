@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { slugify } from '@project-knowledge-hub/auth';
 import {
   knowledgeRecords,
@@ -12,6 +12,7 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  getDocKeyCode,
   knowledgeSourceTypeSchema,
   lifecycleStatusSchema,
   recordTypeSchema,
@@ -32,6 +33,10 @@ import {
   translateRecordFields,
   type TranslationProgressEvent,
 } from './vision-llm.js';
+import {
+  allocateIssueNumber,
+  toDocumentKeyFields,
+} from './project-issue-keys.js';
 
 export const sourceInputSchema = z.object({
   sourceType: knowledgeSourceTypeSchema,
@@ -232,8 +237,14 @@ export function toPublicRecord(
     html?: string;
     toc?: Array<{ id: string; text: string; depth: number }>;
     reviewedByUser?: ReviewedByUser | null;
+    keyPrefix?: string | null;
   },
 ) {
+  const documentKeys = toDocumentKeyFields(
+    options?.keyPrefix,
+    record.documentKeyType,
+    record.documentNumber,
+  );
   return {
     id: record.id,
     workspaceId: record.workspaceId,
@@ -243,6 +254,9 @@ export function toPublicRecord(
     slug: record.slug,
     summary: record.summary,
     recordType: record.recordType,
+    documentKeyType: documentKeys.documentKeyType,
+    documentNumber: documentKeys.documentNumber,
+    humanKey: documentKeys.humanKey,
     lifecycleStatus: record.lifecycleStatus,
     sourceOfTruthMode: record.sourceOfTruthMode,
     contentMarkdown: record.contentMarkdown,
@@ -269,6 +283,32 @@ export function toPublicRecord(
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
+}
+
+export async function loadProjectKeyPrefixMap(
+  database: Database,
+  projectIds: Array<string | null | undefined>,
+): Promise<Map<string, string | null>> {
+  const unique = [...new Set(projectIds.filter((id): id is string => Boolean(id)))];
+  const map = new Map<string, string | null>();
+  if (unique.length === 0) return map;
+  const rows = await database.db
+    .select({ id: projects.id, keyPrefix: projects.keyPrefix })
+    .from(projects)
+    .where(inArray(projects.id, unique));
+  for (const row of rows) {
+    map.set(row.id, row.keyPrefix);
+  }
+  return map;
+}
+
+async function loadProjectKeyPrefix(
+  database: Database,
+  projectId: string | null | undefined,
+): Promise<string | null> {
+  if (!projectId) return null;
+  const map = await loadProjectKeyPrefixMap(database, [projectId]);
+  return map.get(projectId) ?? null;
 }
 
 export async function loadPrimarySource(
@@ -438,6 +478,28 @@ export async function createKnowledgeRecord(
     verifiedAt = now;
   }
 
+  let documentKeyType: string | null = null;
+  let documentNumber: number | null = null;
+  let keyPrefix: string | null = null;
+  if (body.projectId) {
+    const docCode = getDocKeyCode(body.recordType);
+    if (!docCode) {
+      throw new AppError({
+        code: 'DOCUMENT_KEY_TYPE_UNKNOWN',
+        message: `No document key code for record type ${body.recordType}`,
+        statusCode: 400,
+      });
+    }
+    const allocated = await allocateIssueNumber(
+      app.database,
+      body.projectId,
+      docCode,
+    );
+    documentKeyType = allocated.issueKeyType;
+    documentNumber = allocated.issueNumber;
+    keyPrefix = allocated.keyPrefix;
+  }
+
   const [created] = await app.database.db
     .insert(knowledgeRecords)
     .values({
@@ -448,6 +510,8 @@ export async function createKnowledgeRecord(
       slug,
       summary: body.summary ?? null,
       recordType: body.recordType,
+      documentKeyType,
+      documentNumber,
       lifecycleStatus,
       sourceOfTruthMode: body.sourceOfTruthMode ?? 'hub_managed',
       contentMarkdown,
@@ -545,6 +609,7 @@ export async function createKnowledgeRecord(
       html: rendered.html,
       toc: rendered.toc,
       reviewedByUser,
+      keyPrefix,
     }),
     rendered,
   };
@@ -651,12 +716,38 @@ export async function updateKnowledgeRecord(
     nextVersionNumber = record.currentVersionNumber + 1;
   }
 
+  let nextDocumentKeyType = record.documentKeyType;
+  let nextDocumentNumber = record.documentNumber;
+  let keyPrefix: string | null = null;
+  if (nextProjectId && nextDocumentNumber == null) {
+    const docCode = getDocKeyCode(nextRecordType);
+    if (!docCode) {
+      throw new AppError({
+        code: 'DOCUMENT_KEY_TYPE_UNKNOWN',
+        message: `No document key code for record type ${nextRecordType}`,
+        statusCode: 400,
+      });
+    }
+    const allocated = await allocateIssueNumber(
+      app.database,
+      nextProjectId,
+      docCode,
+    );
+    nextDocumentKeyType = allocated.issueKeyType;
+    nextDocumentNumber = allocated.issueNumber;
+    keyPrefix = allocated.keyPrefix;
+  } else if (nextProjectId) {
+    keyPrefix = await loadProjectKeyPrefix(app.database, nextProjectId);
+  }
+
   const [updated] = await app.database.db
     .update(knowledgeRecords)
     .set({
       title: nextTitle,
       summary: nextSummary,
       recordType: nextRecordType,
+      documentKeyType: nextDocumentKeyType,
+      documentNumber: nextDocumentNumber,
       lifecycleStatus,
       sourceOfTruthMode: body.sourceOfTruthMode ?? record.sourceOfTruthMode,
       contentMarkdown: nextContent,
@@ -779,6 +870,7 @@ export async function updateKnowledgeRecord(
       html: rendered.html,
       toc: rendered.toc,
       reviewedByUser,
+      keyPrefix,
     }),
     rendered,
     shouldVersion,

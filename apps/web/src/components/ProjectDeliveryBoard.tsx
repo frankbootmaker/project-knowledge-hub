@@ -18,6 +18,9 @@ export type BoardTask = {
   status: string;
   dueDate: string | null;
   milestoneId: string | null;
+  sprintId?: string | null;
+  storyPoints?: number | null;
+  humanKey?: string | null;
   userStoryTitle?: string | null;
   currentOwner?: { displayName: string } | null;
   raci: Array<{ role: string; displayName: string }>;
@@ -200,18 +203,18 @@ function BoardColumnPanel({
 
 export function ProjectDeliveryBoard({
   tasks,
-  milestones,
-  milestoneTitles,
+  milestones = [],
+  milestoneTitles = new Map(),
   canMutate,
-  pending,
+  pending = false,
   onTaskStatusChange,
   onManageTask,
 }: {
   tasks: BoardTask[];
-  milestones: BoardMilestone[];
-  milestoneTitles: Map<string, string>;
+  milestones?: BoardMilestone[];
+  milestoneTitles?: Map<string, string>;
   canMutate: boolean;
-  pending: boolean;
+  pending?: boolean;
   onTaskStatusChange: (taskId: string, status: string) => void;
   onManageTask?: (taskId: string) => void;
 }) {

@@ -27,6 +27,7 @@ export type McpToolHandlers = {
     endDate?: string | null;
     charterRecordId?: string | null;
     initialPlanRecordId?: string | null;
+    definitionOfDone?: string | null;
     currency?: string;
     initialBudget?: number | string | null;
     approvedBudget?: number | string | null;
@@ -152,6 +153,8 @@ export type McpToolHandlers = {
     projectId: string;
     milestoneId?: string;
     unassignedMilestone?: boolean;
+    sprintId?: string;
+    unassignedSprint?: boolean;
     includeArchived?: boolean;
   }) => Promise<unknown>;
   getProjectTask: (input: { taskId: string }) => Promise<unknown>;
@@ -174,6 +177,32 @@ export type McpToolHandlers = {
     sortOrder?: number;
     archived?: boolean;
   }) => Promise<unknown>;
+  listProjectSprints: (input: {
+    projectId: string;
+    includeArchived?: boolean;
+  }) => Promise<unknown>;
+  createProjectSprint: (input: {
+    projectId: string;
+    name: string;
+    goal?: string | null;
+    status?: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    capacityPoints?: number | null;
+    sortOrder?: number;
+  }) => Promise<unknown>;
+  updateProjectSprint: (input: {
+    sprintId: string;
+    name?: string;
+    goal?: string | null;
+    status?: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    capacityPoints?: number | null;
+    sortOrder?: number;
+    archived?: boolean;
+    unfinishedDestination?: 'backlog' | { sprintId: string };
+  }) => Promise<unknown>;
   createProjectTask: (input: {
     projectId: string;
     title: string;
@@ -186,6 +215,8 @@ export type McpToolHandlers = {
     aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
+    sprintId?: string | null;
+    storyPoints?: number | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     raci?: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
@@ -202,6 +233,8 @@ export type McpToolHandlers = {
     aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
+    sprintId?: string | null;
+    storyPoints?: number | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
@@ -585,7 +618,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_baseline',
-    'Update project baseline window, pinned docs, currency, budgets, and issue key prefix. Requires pm:write.',
+    'Update project baseline window, pinned docs, Definition of Done, currency, budgets, and issue key prefix. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       startDate: z
@@ -600,6 +633,7 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       charterRecordId: z.string().uuid().nullable().optional(),
       initialPlanRecordId: z.string().uuid().nullable().optional(),
+      definitionOfDone: z.string().max(20000).nullable().optional(),
       currency: projectCurrencyEnum.optional(),
       initialBudget: moneyInput.optional(),
       approvedBudget: moneyInput.optional(),
@@ -757,8 +791,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including truncated markdown content and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs.',
-    { recordId: z.string().uuid() },
+    'Retrieve a knowledge record including truncated markdown content and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    { recordId: z.string().min(1).max(80) },
     async (args) =>
       wrap(
         'get_knowledge_record',
@@ -944,9 +978,9 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_knowledge_record',
-    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs.',
+    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     {
-      recordId: z.string().uuid(),
+      recordId: z.string().min(1).max(80),
       changeMessage: z.string().min(1).max(500),
       title: z.string().min(1).max(300).optional(),
       summary: z.string().max(1000).nullable().optional(),
@@ -1023,11 +1057,13 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_tasks',
-    'List tasks for a project (optional milestone filter). Includes RACI. Requires pm:read.',
+    'List tasks for a project (optional milestone/sprint filter). Includes RACI. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       milestoneId: entityRef.optional(),
       unassignedMilestone: z.boolean().optional(),
+      sprintId: entityRef.optional(),
+      unassignedSprint: z.boolean().optional(),
       includeArchived: z.boolean().optional(),
     },
     async (args) =>
@@ -1093,8 +1129,76 @@ export function createKnowledgeHubMcpServer(
   );
 
   server.tool(
+    'list_project_sprints',
+    'List Scrum sprints for a project (committed/done points). Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      includeArchived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_project_sprints',
+        'pm:read',
+        () => handlers.listProjectSprints(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'create_project_sprint',
+    'Create a Scrum sprint (SP human key). At most one active sprint per project. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      name: z.string().min(1).max(200),
+      goal: z.string().max(5000).nullable().optional(),
+      status: z
+        .enum(['planned', 'active', 'completed', 'cancelled'])
+        .optional(),
+      startDate: ymdDate.optional(),
+      endDate: ymdDate.optional(),
+      capacityPoints: z.number().int().min(0).max(100000).nullable().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_project_sprint',
+        'pm:write',
+        () => handlers.createProjectSprint(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'update_project_sprint',
+    'Update a sprint (activate/close). On complete/cancel, unfinishedDestination moves incomplete tasks to backlog or another sprint. sprintId may be UUID or human key (e.g. HL1-SP-1). Requires pm:write. Do not auto-close without a human actor.',
+    {
+      sprintId: entityRef,
+      name: z.string().min(1).max(200).optional(),
+      goal: z.string().max(5000).nullable().optional(),
+      status: z
+        .enum(['planned', 'active', 'completed', 'cancelled'])
+        .optional(),
+      startDate: ymdDate.optional(),
+      endDate: ymdDate.optional(),
+      capacityPoints: z.number().int().min(0).max(100000).nullable().optional(),
+      sortOrder: z.number().int().min(0).max(100000).optional(),
+      archived: z.boolean().optional(),
+      unfinishedDestination: z
+        .union([
+          z.literal('backlog'),
+          z.object({ sprintId: entityRef }),
+        ])
+        .optional(),
+    },
+    async (args) =>
+      wrap('update_project_sprint', 'pm:write', () =>
+        handlers.updateProjectSprint(args),
+      )(),
+  );
+
+  server.tool(
     'create_project_task',
-    'Create a project task with optional RACI, user story, and current owner. Requires pm:write.',
+    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1113,6 +1217,8 @@ export function createKnowledgeHubMcpServer(
       aiSystemId: z.string().uuid().nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
+      sprintId: entityRef.nullable().optional(),
+      storyPoints: z.number().int().min(0).max(1000).nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       raci: z
@@ -1136,7 +1242,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date/story/owner/tokens. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. Requires pm:write.',
+    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1155,6 +1261,8 @@ export function createKnowledgeHubMcpServer(
       aiSystemId: z.string().uuid().nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
+      sprintId: entityRef.nullable().optional(),
+      storyPoints: z.number().int().min(0).max(1000).nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),

@@ -1,10 +1,12 @@
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
+  knowledgeRecords,
   projectChangeItems,
   projectEpics,
   projectMilestones,
   projectRaidItems,
+  projectSprints,
   projectTasks,
   projectUserStories,
   projects,
@@ -12,7 +14,10 @@ import {
 import {
   AppError,
   formatHumanKey,
+  isDeliveryIssueKeyType,
+  isDocKeyCode,
   isUuid,
+  isValidHumanKeyType,
   issueKeyTypeToRaidKind,
   keyPrefixSchema,
   normalizeKeyPrefix,
@@ -23,7 +28,7 @@ import {
 } from '@project-knowledge-hub/domain';
 
 export type AllocatedIssueKey = {
-  issueKeyType: IssueKeyType;
+  issueKeyType: string;
   issueNumber: number;
   keyPrefix: string | null;
   humanKey: string | null;
@@ -35,30 +40,35 @@ export type HumanKeyFields = {
   humanKey: string | null;
 };
 
+export type DocumentKeyFields = {
+  documentKeyType: string | null;
+  documentNumber: number | null;
+  humanKey: string | null;
+};
+
 export function toHumanKeyFields(
   keyPrefix: string | null | undefined,
   issueKeyType: string | null | undefined,
   issueNumber: number | null | undefined,
 ): HumanKeyFields {
   const typed =
-    issueKeyType &&
-    [
-      'E',
-      'S',
-      'M',
-      'T',
-      'C',
-      'RR',
-      'RI',
-      'RA',
-      'RD',
-    ].includes(issueKeyType)
-      ? (issueKeyType as IssueKeyType)
-      : null;
+    issueKeyType && isDeliveryIssueKeyType(issueKeyType) ? issueKeyType : null;
   return {
     issueKeyType: typed,
     issueNumber: issueNumber ?? null,
-    humanKey: formatHumanKey(keyPrefix, typed, issueNumber),
+    humanKey: formatHumanKey(keyPrefix, typed ?? issueKeyType, issueNumber),
+  };
+}
+
+export function toDocumentKeyFields(
+  keyPrefix: string | null | undefined,
+  documentKeyType: string | null | undefined,
+  documentNumber: number | null | undefined,
+): DocumentKeyFields {
+  return {
+    documentKeyType: documentKeyType ?? null,
+    documentNumber: documentNumber ?? null,
+    humanKey: formatHumanKey(keyPrefix, documentKeyType, documentNumber),
   };
 }
 
@@ -148,12 +158,24 @@ export async function allocateUniqueKeyPrefix(
 export async function allocateIssueNumber(
   database: Database,
   projectId: string,
-  issueKeyType: IssueKeyType,
+  issueKeyType: string,
 ): Promise<AllocatedIssueKey> {
+  const type = issueKeyType.trim().toUpperCase();
+  if (!isValidHumanKeyType(type)) {
+    throw new AppError({
+      code: 'ISSUE_KEY_TYPE_INVALID',
+      message: `Invalid issue key type: ${issueKeyType}`,
+      statusCode: 400,
+    });
+  }
+
   return database.db.transaction(async (tx) => {
     const [project] = await tx
       .select({
         id: projects.id,
+        workspaceId: projects.workspaceId,
+        name: projects.name,
+        slug: projects.slug,
         keyPrefix: projects.keyPrefix,
         issueCounters: projects.issueCounters,
       })
@@ -169,24 +191,60 @@ export async function allocateIssueNumber(
       });
     }
 
-    const next = readIssueCounter(project.issueCounters, issueKeyType) + 1;
+    let keyPrefix = project.keyPrefix;
+    if (!keyPrefix) {
+      const base = suggestKeyPrefix(project.slug || project.name);
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        let candidate = base;
+        if (attempt > 0) {
+          const letters = base.replace(/[^A-Z]/g, '').slice(0, 2).padEnd(2, 'X');
+          candidate = `${letters}${attempt % 10}`;
+        }
+        const parsed = keyPrefixSchema.safeParse(candidate);
+        if (!parsed.success) continue;
+        const [taken] = await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(
+            and(
+              eq(projects.workspaceId, project.workspaceId),
+              sql`upper(${projects.keyPrefix}) = ${parsed.data}`,
+            ),
+          )
+          .limit(1);
+        if (!taken) {
+          keyPrefix = parsed.data;
+          break;
+        }
+      }
+      if (!keyPrefix) {
+        throw new AppError({
+          code: 'KEY_PREFIX_ALLOCATE_FAILED',
+          message: 'Could not allocate a unique issue key prefix',
+          statusCode: 500,
+        });
+      }
+    }
+
+    const next = readIssueCounter(project.issueCounters, type) + 1;
     const counters = {
       ...(project.issueCounters ?? {}),
-      [issueKeyType]: next,
+      [type]: next,
     };
     await tx
       .update(projects)
       .set({
+        keyPrefix,
         issueCounters: counters,
         updatedAt: new Date(),
       })
       .where(eq(projects.id, projectId));
 
     return {
-      issueKeyType,
+      issueKeyType: type,
       issueNumber: next,
-      keyPrefix: project.keyPrefix,
-      humanKey: formatHumanKey(project.keyPrefix, issueKeyType, next),
+      keyPrefix,
+      humanKey: formatHumanKey(keyPrefix, type, next),
     };
   });
 }
@@ -196,6 +254,7 @@ export type ResolvableEntityType =
   | 'user_story'
   | 'milestone'
   | 'task'
+  | 'sprint'
   | 'raid'
   | 'change';
 
@@ -231,10 +290,15 @@ export async function resolveEntityId(
         return 'M';
       case 'task':
         return 'T';
+      case 'sprint':
+        return 'SP';
       case 'change':
         return 'C';
       case 'raid':
-        return parsed.issueKeyType.startsWith('R') ? parsed.issueKeyType : null;
+        return isDeliveryIssueKeyType(parsed.issueKeyType) &&
+          parsed.issueKeyType.startsWith('R')
+          ? parsed.issueKeyType
+          : null;
       default:
         return null;
     }
@@ -339,6 +403,20 @@ export async function resolveEntityId(
       .limit(1);
     if (row) return row.id;
   }
+  if (input.entityType === 'sprint' || type === 'SP') {
+    const [row] = await database.db
+      .select({ id: projectSprints.id })
+      .from(projectSprints)
+      .where(
+        and(
+          eq(projectSprints.projectId, project.id),
+          eq(projectSprints.issueKeyType, type),
+          eq(projectSprints.issueNumber, number),
+        ),
+      )
+      .limit(1);
+    if (row) return row.id;
+  }
   if (input.entityType === 'change' || type === 'C') {
     const [row] = await database.db
       .select({ id: projectChangeItems.id })
@@ -353,7 +431,10 @@ export async function resolveEntityId(
       .limit(1);
     if (row) return row.id;
   }
-  if (input.entityType === 'raid' || issueKeyTypeToRaidKind(type)) {
+  if (
+    input.entityType === 'raid' ||
+    (isDeliveryIssueKeyType(type) && issueKeyTypeToRaidKind(type))
+  ) {
     const [row] = await database.db
       .select({ id: projectRaidItems.id })
       .from(projectRaidItems)
@@ -373,4 +454,73 @@ export async function resolveEntityId(
     message: `No ${input.entityType} found for key ${raw}`,
     statusCode: 404,
   });
+}
+
+export async function resolveKnowledgeRecordId(
+  database: Database,
+  input: {
+    idOrKey: string;
+    projectId?: string;
+    workspaceId?: string;
+  },
+): Promise<string> {
+  const raw = input.idOrKey.trim();
+  if (isUuid(raw)) {
+    return raw;
+  }
+
+  const parsed = parseHumanKey(raw);
+  if (!parsed || !isDocKeyCode(parsed.issueKeyType)) {
+    throw new AppError({
+      code: 'ISSUE_KEY_INVALID',
+      message: `Invalid knowledge record id or document key: ${raw}`,
+      statusCode: 400,
+    });
+  }
+
+  const projectConditions = [
+    sql`upper(${projects.keyPrefix}) = ${normalizeKeyPrefix(parsed.prefix)}`,
+  ];
+  if (input.projectId) {
+    projectConditions.push(eq(projects.id, input.projectId));
+  }
+  if (input.workspaceId) {
+    projectConditions.push(eq(projects.workspaceId, input.workspaceId));
+  }
+  const [project] = await database.db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(...projectConditions))
+    .limit(1);
+  if (!project) {
+    throw new AppError({
+      code: 'ISSUE_KEY_NOT_FOUND',
+      message: `No project found for key prefix ${parsed.prefix}`,
+      statusCode: 404,
+    });
+  }
+
+  const conditions = [
+    eq(knowledgeRecords.projectId, project.id),
+    eq(knowledgeRecords.documentKeyType, parsed.issueKeyType),
+    eq(knowledgeRecords.documentNumber, parsed.issueNumber),
+    isNull(knowledgeRecords.archivedAt),
+  ];
+  if (input.workspaceId) {
+    conditions.push(eq(knowledgeRecords.workspaceId, input.workspaceId));
+  }
+
+  const [row] = await database.db
+    .select({ id: knowledgeRecords.id })
+    .from(knowledgeRecords)
+    .where(and(...conditions))
+    .limit(1);
+  if (!row) {
+    throw new AppError({
+      code: 'ISSUE_KEY_NOT_FOUND',
+      message: `No knowledge record found for key ${raw}`,
+      statusCode: 404,
+    });
+  }
+  return row.id;
 }

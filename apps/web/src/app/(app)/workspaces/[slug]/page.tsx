@@ -55,6 +55,7 @@ type KnowledgeRecord = {
   title: string;
   slug: string;
   recordType: string;
+  humanKey?: string | null;
   lifecycleStatus: string;
   language?: string | null;
   translationGroupId?: string | null;

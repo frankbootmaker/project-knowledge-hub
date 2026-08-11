@@ -26,6 +26,7 @@ type KnowledgeRecord = {
   slug: string;
   summary: string | null;
   recordType: string;
+  humanKey?: string | null;
   language?: string | null;
   lifecycleStatus: string;
   sourceOfTruthMode: string;
@@ -174,7 +175,7 @@ export default async function KnowledgeRecordDetailPage({
           </>
         }
         title={record.title}
-        description={`${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
+        description={`${record.humanKey ? `${record.humanKey} · ` : ''}${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
       />
 
       <RecordTranslationSwitcher
@@ -195,6 +196,7 @@ export default async function KnowledgeRecordDetailPage({
             <Badge tone={lifecycleTone(record.lifecycleStatus)}>
               {lifecycleLabel(record.lifecycleStatus, t)}
             </Badge>
+            {record.humanKey ? <Badge tone="brand">{record.humanKey}</Badge> : null}
             <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
             {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
             <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
@@ -226,6 +228,7 @@ export default async function KnowledgeRecordDetailPage({
               slug: record.slug,
               summary: record.summary,
               recordType: record.recordType,
+              humanKey: record.humanKey,
               language: record.language,
               lifecycleStatus: record.lifecycleStatus,
               sourceOfTruthMode: record.sourceOfTruthMode,

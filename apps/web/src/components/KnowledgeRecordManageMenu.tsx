@@ -34,6 +34,7 @@ export type RecordManageDetails = {
   slug: string;
   summary: string | null;
   recordType: string;
+  humanKey?: string | null;
   language?: string | null;
   lifecycleStatus: string;
   sourceOfTruthMode: string;
@@ -723,6 +724,13 @@ export function KnowledgeRecordManageMenu(props: {
           <div className="grid gap-4">
             <dl className="m-0 grid gap-3">
               <ManageDetailRow label={t('detailsId')} value={props.record.id} mono />
+              {props.record.humanKey ? (
+                <ManageDetailRow
+                  label={t('detailsHumanKey')}
+                  value={props.record.humanKey}
+                  mono
+                />
+              ) : null}
               <ManageDetailRow label={t('detailsSlug')} value={props.record.slug} mono />
               <ManageDetailRow
                 label={tCommon('summary')}

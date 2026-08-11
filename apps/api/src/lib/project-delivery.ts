@@ -4,6 +4,7 @@ import {
   memberships,
   projectEpics,
   projectMilestones,
+  projectSprints,
   projectTaskActivities,
   projectTaskRaci,
   projectTasks,
@@ -64,12 +65,14 @@ export type PublicTask = {
   projectId: string;
   milestoneId: string | null;
   userStoryId: string | null;
+  sprintId: string | null;
   title: string;
   description: string | null;
   status: TaskStatus;
   dueDate: string | null;
   forecastHours: string | null;
   actualHours: string | null;
+  storyPoints: number | null;
   tokensUsed: number | null;
   aiSystemId: string | null;
   sortOrder: number;
@@ -147,12 +150,14 @@ function toPublicTask(
     projectId: row.projectId,
     milestoneId: row.milestoneId,
     userStoryId: row.userStoryId,
+    sprintId: row.sprintId,
     title: row.title,
     description: row.description,
     status: taskStatusSchema.parse(row.status),
     dueDate: row.dueDate,
     forecastHours: row.forecastHours,
     actualHours: row.actualHours,
+    storyPoints: row.storyPoints ?? null,
     tokensUsed: row.tokensUsed ?? null,
     aiSystemId: row.aiSystemId ?? null,
     sortOrder: row.sortOrder,
@@ -521,7 +526,11 @@ export async function getMilestone(
 export async function listTasks(
   database: Database,
   projectId: string,
-  options?: { milestoneId?: string | null; includeArchived?: boolean },
+  options?: {
+    milestoneId?: string | null;
+    sprintId?: string | null;
+    includeArchived?: boolean;
+  },
 ): Promise<PublicTask[]> {
   const conditions = [eq(projectTasks.projectId, projectId)];
   if (!options?.includeArchived) {
@@ -532,6 +541,13 @@ export async function listTasks(
       conditions.push(isNull(projectTasks.milestoneId));
     } else {
       conditions.push(eq(projectTasks.milestoneId, options.milestoneId));
+    }
+  }
+  if (options?.sprintId !== undefined) {
+    if (options.sprintId === null) {
+      conditions.push(isNull(projectTasks.sprintId));
+    } else {
+      conditions.push(eq(projectTasks.sprintId, options.sprintId));
     }
   }
 
@@ -717,6 +733,33 @@ async function assertMilestoneInProject(
   }
 }
 
+async function assertSprintInProject(
+  database: Database,
+  projectId: string,
+  sprintId: string | null | undefined,
+): Promise<void> {
+  if (!sprintId) {
+    return;
+  }
+  const [sprint] = await database.db
+    .select()
+    .from(projectSprints)
+    .where(
+      and(
+        eq(projectSprints.id, sprintId),
+        eq(projectSprints.projectId, projectId),
+      ),
+    )
+    .limit(1);
+  if (!sprint) {
+    throw new AppError({
+      code: 'SPRINT_NOT_FOUND',
+      message: 'Sprint not found in this project',
+      statusCode: 400,
+    });
+  }
+}
+
 function validateRaciEntries(entries: Array<{ userId: string; role: RaciRole }>): void {
   const accountable = entries.filter((entry) => entry.role === 'A');
   if (accountable.length > 1) {
@@ -824,6 +867,8 @@ export async function createTask(
     aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
+    sprintId?: string | null;
+    storyPoints?: number | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     createdBy?: string | null;
@@ -832,6 +877,7 @@ export async function createTask(
 ): Promise<PublicTask> {
   await assertMilestoneInProject(database, input.projectId, input.milestoneId);
   await assertUserStoryInProject(database, input.projectId, input.userStoryId);
+  await assertSprintInProject(database, input.projectId, input.sprintId);
   if (input.raci) {
     validateRaciEntries(input.raci);
     await assertWorkspaceMembers(
@@ -857,12 +903,14 @@ export async function createTask(
       projectId: input.projectId,
       milestoneId: input.milestoneId ?? null,
       userStoryId: input.userStoryId ?? null,
+      sprintId: input.sprintId ?? null,
       title: input.title,
       description: input.description ?? null,
       status: input.status ?? 'todo',
       dueDate: input.dueDate ?? null,
       forecastHours: input.forecastHours ?? null,
       actualHours: input.actualHours ?? null,
+      storyPoints: input.storyPoints ?? null,
       tokensUsed: input.tokensUsed ?? null,
       aiSystemId: input.aiSystemId ?? null,
       sortOrder: input.sortOrder ?? 0,
@@ -929,6 +977,8 @@ export async function updateTask(
     aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
+    sprintId?: string | null;
+    storyPoints?: number | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
@@ -954,6 +1004,9 @@ export async function updateTask(
   }
   if (input.userStoryId !== undefined) {
     await assertUserStoryInProject(database, existing.projectId, input.userStoryId);
+  }
+  if (input.sprintId !== undefined) {
+    await assertSprintInProject(database, existing.projectId, input.sprintId);
   }
   if (input.currentOwnerUserId && input.workspaceId) {
     await assertWorkspaceMembers(database, input.workspaceId, [
@@ -991,6 +1044,9 @@ export async function updateTask(
         input.milestoneId !== undefined ? input.milestoneId : existing.milestoneId,
       userStoryId:
         input.userStoryId !== undefined ? input.userStoryId : existing.userStoryId,
+      sprintId: input.sprintId !== undefined ? input.sprintId : existing.sprintId,
+      storyPoints:
+        input.storyPoints !== undefined ? input.storyPoints : existing.storyPoints,
       currentOwnerUserId: nextOwner,
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:

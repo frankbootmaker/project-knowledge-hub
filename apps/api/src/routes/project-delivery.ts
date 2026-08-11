@@ -89,6 +89,8 @@ const createTaskSchema = z.object({
   aiSystemId: z.string().uuid().nullable().optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
+  sprintId: z.string().uuid().nullable().optional(),
+  storyPoints: z.number().int().min(0).max(1000).nullable().optional(),
   currentOwnerUserId: z.string().uuid().nullable().optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   raci: z.array(raciEntrySchema).max(50).optional(),
@@ -105,6 +107,8 @@ const updateTaskSchema = z.object({
   aiSystemId: z.string().uuid().nullable().optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
+  sprintId: z.string().uuid().nullable().optional(),
+  storyPoints: z.number().int().min(0).max(1000).nullable().optional(),
   currentOwnerUserId: z.string().uuid().nullable().optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   archived: z.boolean().optional(),
@@ -210,6 +214,11 @@ export async function registerProjectDeliveryRoutes(
           .enum(['true', 'false'])
           .optional()
           .transform((value) => value === 'true'),
+        sprintId: z.string().uuid().optional(),
+        unassignedSprint: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((value) => value === 'true'),
         includeArchived: z
           .enum(['true', 'false'])
           .optional()
@@ -223,10 +232,12 @@ export async function registerProjectDeliveryRoutes(
     const milestoneId = query.unassignedMilestone
       ? null
       : query.milestoneId;
+    const sprintId = query.unassignedSprint ? null : query.sprintId;
 
     return {
       tasks: await listTasks(app.database, project.id, {
         milestoneId,
+        sprintId,
         includeArchived: query.includeArchived,
       }),
     };
@@ -262,6 +273,8 @@ export async function registerProjectDeliveryRoutes(
       aiSystemId: body.aiSystemId,
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
+      sprintId: body.sprintId,
+      storyPoints: body.storyPoints,
       currentOwnerUserId: body.currentOwnerUserId,
       sortOrder: body.sortOrder,
       raci: body.raci,
@@ -329,6 +342,8 @@ export async function registerProjectDeliveryRoutes(
       aiSystemId: body.aiSystemId,
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
+      sprintId: body.sprintId,
+      storyPoints: body.storyPoints,
       currentOwnerUserId: body.currentOwnerUserId,
       sortOrder: body.sortOrder,
       archived: body.archived,

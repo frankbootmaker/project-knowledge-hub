@@ -4,6 +4,7 @@ import {
   knowledgeRecordDeliveryLinks,
   knowledgeRecords,
   projectEpics,
+  projectSprints,
   projectTasks,
   projectUserStories,
 } from '@project-knowledge-hub/database';
@@ -55,6 +56,17 @@ async function resolveEntityTitle(
       })
       .from(projectUserStories)
       .where(eq(projectUserStories.id, entityId))
+      .limit(1);
+    return row ?? null;
+  }
+  if (entityType === 'sprint') {
+    const [row] = await database.db
+      .select({
+        projectId: projectSprints.projectId,
+        title: projectSprints.name,
+      })
+      .from(projectSprints)
+      .where(eq(projectSprints.id, entityId))
       .limit(1);
     return row ?? null;
   }

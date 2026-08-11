@@ -37,6 +37,17 @@ describe('key prefix / human key', () => {
     });
     expect(formatHumanKey('HL1', 'RR', 3)).toBe('HL1-RR-3');
     expect(parseHumanKey('HL1-T-0')).toBeNull();
+    expect(parseHumanKey('HL1-VIS-2')).toEqual({
+      prefix: 'HL1',
+      issueKeyType: 'VIS',
+      issueNumber: 2,
+    });
+    expect(formatHumanKey('HL1', 'RET', 1)).toBe('HL1-RET-1');
+    expect(parseHumanKey('HL1-SP-3')).toEqual({
+      prefix: 'HL1',
+      issueKeyType: 'SP',
+      issueNumber: 3,
+    });
   });
 
   it('maps raid kinds', () => {
