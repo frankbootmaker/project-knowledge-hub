@@ -9,7 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **Project Delivery (NF-018, local):** milestones, epic → user story → task hierarchy, due/target dates, RACI + current-owner handoffs, task activity timeline, hybrid stakeholders, RAID register, project baseline (dates/charter/plan/initial stakeholders), change-management register, Delivery **Timeline** fishbone, **budgeting/EVM** (currency, BAC, rates, forecast/actual hours, burndown, CPI/SPI), and Timeline/Risks/Financials RAG badges; REST + project page UI; MCP `pm:read` / `pm:write`. Briefs [`PROJECT_DELIVERY.md`](product/PROJECT_DELIVERY.md), [`PROJECT_RAID.md`](product/PROJECT_RAID.md), [`PROJECT_BASELINE.md`](product/PROJECT_BASELINE.md), [`PROJECT_BUDGET.md`](product/PROJECT_BUDGET.md); ADR-015/016/017/018. Branch `feature/project-delivery` — not for Dokploy until local smoke is done.
+* **Project Scrum (NF-020):** `project_sprints`, task `sprint_id` + story points, Delivery view **Scrum** (board, backlog, planning wizard, activate/close), ceremony drafts (RET/REV) linked to sprints, velocity, point burndown, project **Definition of Done**; REST `/project-sprints` + MCP; PDF export for scrum sections. Brief [`PROJECT_SCRUM.md`](product/PROJECT_SCRUM.md); ADR-022. Migrations `0042` / `0043`.
+
+* **Knowledge document keys (NF-021):** project-scoped `{prefix}-{DOCCODE}-{n}` on knowledge records (`documentKeyType` / `documentNumber`); catalog `docKeyCode`; allocate on create; MCP/REST resolve by UUID or human key; keys shown before titles in catalogues, detail, and archive lists; demo seed keys. Brief [`PROJECT_DOC_KEYS.md`](product/PROJECT_DOC_KEYS.md); ADR-023. Migration `0041`.
+
+* **Human-readable issue keys (ADR-019):** delivery/RAID keys `{prefix}-{TYPE}-{n}` (e.g. `HL1-T-12`, `HL1-RR-1`); baseline `keyPrefix`; RAID risk↔issue transfer without breaking typed codes; IDs across list/tree/board/calendar/timeline/scrum (toggleable where relevant).
+
+* **Project Delivery suite (NF-018):** milestones, epic → user story → task hierarchy, due/target dates, RACI + current-owner handoffs, task activity, hybrid stakeholders (org chart, utilization, AI cost modes), RAID register, baseline (dates/charter/plan/initial stakeholders/DoD), change-management register, Delivery views **list / tree / board / calendar / timeline / scrum**, **budgeting/EVM** (currency, BAC, rates, forecast/actual hours, burndown, CPI/SPI), Timeline/Risks/Financials/Overall RAG; REST + project page UI; MCP `pm:read` / `pm:write`. Briefs [`PROJECT_DELIVERY.md`](product/PROJECT_DELIVERY.md), [`PROJECT_RAID.md`](product/PROJECT_RAID.md), [`PROJECT_BASELINE.md`](product/PROJECT_BASELINE.md), [`PROJECT_BUDGET.md`](product/PROJECT_BUDGET.md); ADR-015/016/017/018/019/020. Merged onto `feature/m7-dokploy` for Dokploy Dev smoke (not Prod until validated).
+
+* **Delivery PDF exports:** timeline, board, calendar, and scrum printable PDFs aligned with on-screen filters (IDs, status colors, windows, sections); stakeholder org-chart PDF.
+
+* **Project reports & dashboard insights:** personalized report diagrams; dashboard insight widgets alongside My tasks.
+
+* **Dashboard My tasks deep links:** task titles open the project Delivery section with `?task=` and the manage modal; Manage button removed from the dashboard list.
 
 * **OIDC sign-in (Authentik):** optional OpenID Connect login beside local email/password; operator integration guide; session links IdP subject when configured.
 
@@ -32,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Admin Storage migrate:** **Migrate local files to S3** copies existing `/data` avatars/media/imports/style-packs into the configured bucket (dual-write remains for new uploads).
 
 * **In-app page refresh:** secondary Refresh control next to Manage on workspace / project / system / knowledge-record / import pages (`ManageToolbar` + `router.refresh()`).
+
+### Changed
+
+* **Responsive Delivery / Budgeting UX:** view mode controls use icons below `md` on the section title row; compact mobile header (brand mark, icon auth, menu far right); bottom-sheet modals + full-width toasts on small screens; Budgeting burndown opens on demand in a wide modal below `md`; epic cost rollups use compact cards on mobile and denser tables on desktop; approved-budget field width capped so Save stays visible.
+
+* **German locale (de):** filled missing Scrum / ceremony / DoD / section-nav / document-key strings so DE no longer shows raw message keys.
+
+* **MCP Project Delivery coverage:** sprint burndown + velocity tools; My tasks / dashboard insights; project delivery-document index; ceremony links to `sprint`; human/document keys on more knowledge + change/delivery-link tools; `list_knowledge_records` returns `humanKey`; MCP setup wizards can opt into `pm:read` / `pm:write`.
 
 ### Fixed
 

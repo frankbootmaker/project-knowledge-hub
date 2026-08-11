@@ -22,9 +22,8 @@ import { McpConnectionTroubleshoot } from './McpConnectionTroubleshoot';
 import { McpSetupDonePanel } from './McpSetupDonePanel';
 import { McpSetupStatusRow } from './McpSetupStatusRow';
 import {
-  MCP_READ_SCOPES,
+  buildMcpSetupScopes,
   MCP_SETUP_STEPS,
-  MCP_WRITE_SCOPES,
   type McpSetupStep,
 } from './scopes';
 
@@ -83,6 +82,7 @@ export function UserMcpSetupWizard({
 
   const [llmClient, setLlmClient] = useState<LlmClientId>('cursor');
   const [mode, setMode] = useState<'read' | 'write'>('read');
+  const [includePm, setIncludePm] = useState(false);
   const [name, setName] = useState(defaultClientName('cursor'));
   const [workspaceIds, setWorkspaceIds] = useState<string[]>(
     workspaces[0] ? [workspaces[0].id] : [],
@@ -164,7 +164,7 @@ export function UserMcpSetupWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          scopes: mode === 'write' ? [...MCP_WRITE_SCOPES] : [...MCP_READ_SCOPES],
+          scopes: buildMcpSetupScopes({ mode, includePm }),
           allowedWorkspaceIds: workspaceIds,
         }),
       });
@@ -267,6 +267,7 @@ export function UserMcpSetupWizard({
     setToolNames([]);
     setCopied(false);
     setMode('read');
+    setIncludePm(false);
     setLlmClient('cursor');
     setName(defaultClientName('cursor'));
     setWorkspaceIds(workspaces[0]?.id ? [workspaces[0].id] : []);
@@ -390,6 +391,22 @@ export function UserMcpSetupWizard({
           {mode === 'write' ? (
             <p className="m-0 text-xs text-ink-muted">{tAi('wizardWriteHint')}</p>
           ) : null}
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={includePm}
+              onChange={(e) => setIncludePm(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">{t('mcpWizardIncludePm')}</span>
+              <span className="mt-0.5 block text-xs text-ink-muted">
+                {mode === 'write'
+                  ? t('mcpWizardIncludePmWriteHint')
+                  : t('mcpWizardIncludePmReadHint')}
+              </span>
+            </span>
+          </label>
           <fieldset className="m-0 grid gap-2 border-0 p-0">
             <legend className="mb-1 text-sm font-medium">{tAi('workspaces')}</legend>
             <p className="m-0 text-xs text-ink-muted">{tAi('workspacesAllowlistHint')}</p>

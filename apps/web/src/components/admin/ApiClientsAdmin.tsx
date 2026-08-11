@@ -29,7 +29,11 @@ const MCP_SCOPES = [
 ] as const;
 
 function needsActingUser(scopes: readonly string[]): boolean {
-  return scopes.includes('knowledge:write') || scopes.includes('pm:write');
+  return (
+    scopes.includes('knowledge:write') ||
+    scopes.includes('pm:write') ||
+    scopes.includes('pm:read')
+  );
 }
 
 export type PublicApiClient = {

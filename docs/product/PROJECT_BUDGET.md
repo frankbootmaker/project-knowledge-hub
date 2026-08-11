@@ -1,6 +1,6 @@
 # Project budgeting, effort, and multi-RAG health
 
-**Status:** implemented on `feature/project-delivery`  
+**Status:** implemented on `feature/m7-dokploy` (smoke pending)  
 **Related:** [PROJECT_BASELINE.md](./PROJECT_BASELINE.md), [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), [PROJECT_RAID.md](./PROJECT_RAID.md), ADR-018, ADR-020, [PROJECT_AI_GOVERNANCE.md](./PROJECT_AI_GOVERNANCE.md) (NF-019)  
 **Backlog:** NF-018, NF-019
 

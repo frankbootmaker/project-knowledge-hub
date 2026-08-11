@@ -184,7 +184,8 @@ Record durable UI / design-system changes here (newest first).
 * **Responsive modals & toasts** — Modals are bottom sheets below `sm` (scrollable body, sticky header/footer, full-width stacked actions, safe-area padding); centered cards from `sm`. Toasts are full-bleed at the bottom on small screens and corner-stacked from `sm`. Root `viewportFit: 'cover'` for insets.
 * **Icon view switchers** — Delivery / Stakeholders view controls use `ViewModeIcon` below `md` so they stay on the section title row; text labels from `md` up.
 * **Compact mobile header** — Below `md`, brand is the KnowHub mark only (`BrandMark`); wordmark from `md` up. Login/logout are icon controls (same square size as theme). `MobileNav` hamburger sits at the far right after session controls.
-* **Section header actions** — Delivery / Stakeholders view switchers live in `CollapsibleSection` → `SectionHeader` `action` (not in `FunctionHeader`). Below `sm`, title stacks above actions; view clusters use `overflow-x-auto`. `FunctionHeader` stacks controls above actions on small screens so open filters do not collide with create/filter chrome.
+* **Section header actions** — Delivery / Stakeholders view switchers live in `CollapsibleSection` → `SectionHeader` `action` (not in `FunctionHeader`). Title + actions stay one row; `FunctionHeader` stacks controls above actions on small screens so open filters do not collide with create chrome.
+* **Budgeting mobile** — Burndown chart is on-demand (wide modal) below `md`; epic cost rollups use stacked metric cards on small screens and denser short-header tables from `md`.
 
 ### 2026-07-31
 

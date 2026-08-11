@@ -419,7 +419,7 @@ export function AiConnectionsPanel({
             <p className="m-0 text-sm text-ink-muted">{t('approveHint')}</p>
             <fieldset className="m-0 grid gap-2 border-0 p-0">
               <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
-              {[...MCP_READ_SCOPES, 'knowledge:write'].map((scope) => (
+              {[...MCP_READ_SCOPES, 'knowledge:write', 'pm:read', 'pm:write'].map((scope) => (
                 <label key={scope} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -448,7 +448,8 @@ export function AiConnectionsPanel({
                   ))
                 )}
               </div>
-              {approveScopes.includes('knowledge:write') ? (
+              {approveScopes.includes('knowledge:write') ||
+              approveScopes.includes('pm:write') ? (
                 <p className="m-0 text-xs text-ink-muted">{t('writeNeedsWorkspace')}</p>
               ) : null}
             </fieldset>

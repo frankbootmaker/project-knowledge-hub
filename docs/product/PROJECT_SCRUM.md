@@ -1,6 +1,6 @@
 # Project Scrum / sprints
 
-**Status:** implemented (NF-020) — Phases A–E on local branch  
+**Status:** implemented (NF-020) — Phases A–E on `feature/m7-dokploy` (smoke pending)  
 **Related:** [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), [PROJECT_BUDGET.md](./PROJECT_BUDGET.md), [PROJECT_DOC_KEYS.md](./PROJECT_DOC_KEYS.md), [ADR-022](../adr/ADR-022-project-scrum-sprints.md), [ADR-019](../adr/ADR-019-human-readable-issue-keys.md)  
 **Backlog:** NF-020
 

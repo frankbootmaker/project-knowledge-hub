@@ -203,6 +203,21 @@ export type McpToolHandlers = {
     archived?: boolean;
     unfinishedDestination?: 'backlog' | { sprintId: string };
   }) => Promise<unknown>;
+  getProjectSprintBurndown: (input: { sprintId: string }) => Promise<unknown>;
+  getProjectScrumVelocity: (input: {
+    projectId: string;
+    lastN?: number;
+  }) => Promise<unknown>;
+  listMyProjectTasks: (input: {
+    role?: 'R' | 'A' | 'C' | 'I';
+    includeArchived?: boolean;
+  }) => Promise<unknown>;
+  getMyDashboardInsights: () => Promise<unknown>;
+  listProjectDeliveryDocumentLinks: (input: {
+    projectId: string;
+    entityType?: string;
+    entityId?: string;
+  }) => Promise<unknown>;
   createProjectTask: (input: {
     projectId: string;
     title: string;
@@ -804,8 +819,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_record_provenance',
-    'Retrieve verification and source provenance for a knowledge record',
-    { recordId: z.string().uuid() },
+    'Retrieve verification and source provenance for a knowledge record. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    { recordId: entityRef },
     async (args) =>
       wrap(
         'get_record_provenance',
@@ -817,8 +832,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_record_translations',
-    'List translation siblings for a knowledge record (same translationGroupId). Includes the source record. Prefer English siblings for default work.',
-    { recordId: z.string().uuid() },
+    'List translation siblings for a knowledge record (same translationGroupId). Includes the source record. Prefer English siblings for default work. recordId may be a UUID or project document key.',
+    { recordId: entityRef },
     async (args) =>
       wrap(
         'list_record_translations',
@@ -830,9 +845,9 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_record_translation',
-    'REQUIRED for locale siblings (hu/de/…). Creates a linked draft with shared translationGroupId. NEVER use create_knowledge_record for another language of an existing record — that makes unlinked duplicates. Prefer translateWithAi=true when hub AI is configured; if AI is unavailable or fails, call again WITHOUT translateWithAi and pass title/summary/contentMarkdown yourself. Do not overwrite the EN source.',
+    'REQUIRED for locale siblings (hu/de/…). Creates a linked draft with shared translationGroupId. NEVER use create_knowledge_record for another language of an existing record — that makes unlinked duplicates. Prefer translateWithAi=true when hub AI is configured; if AI is unavailable or fails, call again WITHOUT translateWithAi and pass title/summary/contentMarkdown yourself. Do not overwrite the EN source. recordId may be a UUID or project document key.',
     {
-      recordId: z.string().uuid(),
+      recordId: entityRef,
       language: z.string().min(2).max(16),
       slug: z.string().min(1).max(96).optional(),
       translateWithAi: z.boolean().optional(),
@@ -859,13 +874,13 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'begin_workspace_media_upload',
-    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. Requires knowledge:write.',
+    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. knowledgeRecordId may be UUID or document key. Requires knowledge:write.',
     {
       workspaceId: z.string().uuid(),
       contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
       filename: z.string().min(1).max(200).optional(),
       alt: z.string().max(300).optional(),
-      knowledgeRecordId: z.string().uuid().optional(),
+      knowledgeRecordId: entityRef.optional(),
       insertIntoRecord: z
         .boolean()
         .optional()
@@ -925,7 +940,7 @@ export function createKnowledgeHubMcpServer(
       contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
       filename: z.string().min(1).max(200).optional(),
       alt: z.string().max(300).optional(),
-      knowledgeRecordId: z.string().uuid().optional(),
+      knowledgeRecordId: entityRef.optional(),
       insertIntoRecord: z
         .boolean()
         .optional()
@@ -1002,10 +1017,10 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspace_media',
-    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls and markdown snippets for embedding. Requires knowledge:read.',
+    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls and markdown snippets for embedding. knowledgeRecordId may be UUID or document key. Requires knowledge:read.',
     {
       workspaceId: z.string().uuid(),
-      knowledgeRecordId: z.string().uuid().optional(),
+      knowledgeRecordId: entityRef.optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).default(20),
     },
     async (args) =>
@@ -1193,6 +1208,72 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('update_project_sprint', 'pm:write', () =>
         handlers.updateProjectSprint(args),
+      )(),
+  );
+
+  server.tool(
+    'get_project_sprint_burndown',
+    'Get story-point burndown for a sprint (ideal vs remaining by day). sprintId may be UUID or human key (e.g. HL1-SP-1). Requires pm:read.',
+    { sprintId: entityRef },
+    async (args) =>
+      wrap('get_project_sprint_burndown', 'pm:read', () =>
+        handlers.getProjectSprintBurndown(args),
+      )(),
+  );
+
+  server.tool(
+    'get_project_scrum_velocity',
+    'Average done story points over the last N completed sprints (default 5). Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      lastN: z.number().int().min(1).max(20).optional(),
+    },
+    async (args) =>
+      wrap(
+        'get_project_scrum_velocity',
+        'pm:read',
+        () => handlers.getProjectScrumVelocity(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'list_my_project_tasks',
+    'List tasks where the API client acting user is on RACI (My tasks). Requires pm:read and actingUserId.',
+    {
+      role: z.enum(['R', 'A', 'C', 'I']).optional(),
+      includeArchived: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap('list_my_project_tasks', 'pm:read', () =>
+        handlers.listMyProjectTasks(args),
+      )(),
+  );
+
+  server.tool(
+    'get_my_dashboard_insights',
+    'Dashboard insight rollups for the acting user (task due buckets, project health RAG, open RAID, budget attention). Requires pm:read and actingUserId.',
+    {},
+    async () =>
+      wrap('get_my_dashboard_insights', 'pm:read', () =>
+        handlers.getMyDashboardInsights(),
+      )(),
+  );
+
+  server.tool(
+    'list_project_delivery_document_links',
+    'List knowledge records linked to delivery entities in a project (ceremonies, specs, etc.). Optional entityType/entityId filter; entityId may be UUID or human key. Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      entityType: z.enum(['epic', 'user_story', 'task', 'sprint']).optional(),
+      entityId: entityRef.optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_project_delivery_document_links',
+        'pm:read',
+        () => handlers.listProjectDeliveryDocumentLinks(args),
+        { projectId: args.projectId },
       )(),
   );
 
@@ -1580,7 +1661,6 @@ export function createKnowledgeHubMcpServer(
     'cancelled',
   ]);
   const raidSeverityEnum = z.enum(['low', 'medium', 'high', 'critical']);
-  const deliveryEntityEnum = z.enum(['epic', 'user_story', 'task']);
 
   server.tool(
     'list_project_raid_items',
@@ -1731,13 +1811,13 @@ export function createKnowledgeHubMcpServer(
       baselineStartAfter: ymdDate.optional(),
       baselineEndBefore: ymdDate.optional(),
       baselineEndAfter: ymdDate.optional(),
-      knowledgeRecordId: z.string().uuid().nullable().optional(),
+      knowledgeRecordId: entityRef.nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       deliveryLinks: z
         .array(
           z.object({
             entityType: changeDeliveryEntityEnum,
-            entityId: z.string().uuid(),
+            entityId: entityRef,
           }),
         )
         .max(200)
@@ -1754,7 +1834,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_change_item',
-    'Update a change-management item. Requires pm:write.',
+    'Update a change-management item. changeId and linked entity/knowledge ids may be UUID or human keys. Requires pm:write.',
     {
       changeId: entityRef,
       kind: changeKindEnum.optional(),
@@ -1769,14 +1849,14 @@ export function createKnowledgeHubMcpServer(
       baselineStartAfter: ymdDate.optional(),
       baselineEndBefore: ymdDate.optional(),
       baselineEndAfter: ymdDate.optional(),
-      knowledgeRecordId: z.string().uuid().nullable().optional(),
+      knowledgeRecordId: entityRef.nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
       deliveryLinks: z
         .array(
           z.object({
             entityType: changeDeliveryEntityEnum,
-            entityId: z.string().uuid(),
+            entityId: entityRef,
           }),
         )
         .max(200)
@@ -1788,10 +1868,12 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  const deliveryEntityEnum = z.enum(['epic', 'user_story', 'task', 'sprint']);
+
   server.tool(
     'get_knowledge_record_delivery_links',
-    'List delivery entity links (epic / user story / task) for a knowledge record. Requires knowledge:read.',
-    { recordId: z.string().uuid() },
+    'List delivery entity links (epic / user story / task / sprint) for a knowledge record. recordId may be UUID or document key. Requires knowledge:read.',
+    { recordId: entityRef },
     async (args) =>
       wrap(
         'get_knowledge_record_delivery_links',
@@ -1803,14 +1885,14 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'set_knowledge_record_delivery_links',
-    'Replace delivery entity links for a project-scoped knowledge record. Requires knowledge:write.',
+    'Replace delivery entity links for a project-scoped knowledge record (epic / user story / task / sprint). recordId and entityId may be UUID or human keys. Requires knowledge:write.',
     {
-      recordId: z.string().uuid(),
+      recordId: entityRef,
       links: z
         .array(
           z.object({
             entityType: deliveryEntityEnum,
-            entityId: z.string().uuid(),
+            entityId: entityRef,
           }),
         )
         .max(200),

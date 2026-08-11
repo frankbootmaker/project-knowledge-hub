@@ -1,6 +1,6 @@
 # Project knowledge document human keys
 
-**Status:** partial (NF-021) — Phase A–D implemented locally  
+**Status:** done (NF-021) — schema/allocate/resolve/UI + demo seed on `feature/m7-dokploy` (smoke pending)  
 **Related:** [ADR-019](../adr/ADR-019-human-readable-issue-keys.md), [ADR-023](../adr/ADR-023-knowledge-document-keys.md), [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), [PROJECT_SCRUM.md](./PROJECT_SCRUM.md)  
 **Backlog:** NF-021
 

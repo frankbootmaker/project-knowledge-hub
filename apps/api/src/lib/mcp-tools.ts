@@ -5,6 +5,7 @@ import {
   knowledgeSources,
   projects,
   systems,
+  users,
   workspaces,
 } from '@project-knowledge-hub/database';
 import {
@@ -67,6 +68,7 @@ import {
   createTask,
   getMilestone,
   getTask,
+  listAssignedTasksForUser,
   listMilestones,
   listTasks,
   replaceTaskRaci,
@@ -108,7 +110,20 @@ import {
   assertUniqueKeyPrefix,
   resolveEntityId,
   resolveKnowledgeRecordId,
+  toDocumentKeyFields,
+  type ResolvableEntityType,
 } from './project-issue-keys.js';
+import {
+  getKnowledgeRecordProjectContext,
+  listDeliveryDocumentLinksForProject,
+  listDeliveryLinksForRecord,
+  setDeliveryLinksForRecord,
+} from './knowledge-delivery-links.js';
+import { getDashboardInsights } from './dashboard-insights.js';
+import {
+  getSprintPointBurndown,
+  listSprints,
+} from './project-sprints.js';
 import {
   assertPinnedKnowledgeRecord,
   listInitialStakeholders,
@@ -128,11 +143,6 @@ import {
   parseTokenRate,
   upsertProjectCostSnapshot,
 } from './project-budget.js';
-import {
-  getKnowledgeRecordProjectContext,
-  listDeliveryLinksForRecord,
-  setDeliveryLinksForRecord,
-} from './knowledge-delivery-links.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -169,11 +179,28 @@ function requireActingUserId(client: McpClientContext): string {
     throw new AppError({
       code: 'ACTING_USER_REQUIRED',
       message:
-        'API client is missing actingUserId required for knowledge:write or pm:write',
+        'API client is missing actingUserId required for knowledge:write, pm:write, or personal pm:read tools',
       statusCode: 403,
     });
   }
   return client.actingUserId;
+}
+
+async function resolveDeliveryEntityRef(
+  database: Parameters<typeof resolveEntityId>[0],
+  entityType: ResolvableEntityType,
+  idOrKey: string,
+  projectId?: string,
+): Promise<string> {
+  return resolveEntityId(database, { entityType, idOrKey, projectId });
+}
+
+async function resolveOptionalKnowledgeRecordId(
+  database: Parameters<typeof resolveKnowledgeRecordId>[0],
+  idOrKey: string | null | undefined,
+): Promise<string | null | undefined> {
+  if (idOrKey == null) return idOrKey;
+  return resolveKnowledgeRecordId(database, { idOrKey });
 }
 
 async function requirePmProject(
@@ -682,17 +709,29 @@ export function createMcpToolHandlers(
         .from(knowledgeRecords)
         .where(and(...conditions))
         .limit(limit);
+      const allowed = rows.filter((row) => {
+        try {
+          assertProjectAllowed(client, row.projectId);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      const keyPrefixMap = await loadProjectKeyPrefixMap(
+        app.database,
+        allowed.map((row) => row.projectId),
+      );
       return {
-        knowledgeRecords: rows
-          .filter((row) => {
-            try {
-              assertProjectAllowed(client, row.projectId);
-              return true;
-            } catch {
-              return false;
-            }
-          })
-          .map((row) => ({
+        knowledgeRecords: allowed.map((row) => {
+          const keyPrefix = row.projectId
+            ? keyPrefixMap.get(row.projectId) ?? null
+            : null;
+          const documentKeys = toDocumentKeyFields(
+            keyPrefix,
+            row.documentKeyType,
+            row.documentNumber,
+          );
+          return {
             id: row.id,
             title: row.title,
             slug: row.slug,
@@ -703,9 +742,13 @@ export function createMcpToolHandlers(
             translationGroupId: row.translationGroupId,
             projectId: row.projectId,
             systemId: row.systemId,
+            documentKeyType: documentKeys.documentKeyType,
+            documentNumber: documentKeys.documentNumber,
+            humanKey: documentKeys.humanKey,
             verifiedAt: row.verifiedAt?.toISOString() ?? null,
             updatedAt: row.updatedAt.toISOString(),
-          })),
+          };
+        }),
       };
     },
 
@@ -841,10 +884,13 @@ export function createMcpToolHandlers(
     },
 
     async getRecordProvenance({ recordId }) {
+      const resolvedId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: recordId,
+      });
       const [record] = await app.database.db
         .select()
         .from(knowledgeRecords)
-        .where(and(eq(knowledgeRecords.id, recordId), isNull(knowledgeRecords.archivedAt)))
+        .where(and(eq(knowledgeRecords.id, resolvedId), isNull(knowledgeRecords.archivedAt)))
         .limit(1);
       if (!record) {
         throw new AppError({
@@ -883,10 +929,13 @@ export function createMcpToolHandlers(
     },
 
     async listRecordTranslations({ recordId }) {
+      const resolvedId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: recordId,
+      });
       const [record] = await app.database.db
         .select()
         .from(knowledgeRecords)
-        .where(and(eq(knowledgeRecords.id, recordId), isNull(knowledgeRecords.archivedAt)))
+        .where(and(eq(knowledgeRecords.id, resolvedId), isNull(knowledgeRecords.archivedAt)))
         .limit(1);
       if (!record) {
         throw new AppError({
@@ -897,14 +946,17 @@ export function createMcpToolHandlers(
       }
       assertWorkspaceAllowed(client, record.workspaceId);
       assertProjectAllowed(client, record.projectId);
-      return listRecordTranslations(app, recordId);
+      return listRecordTranslations(app, resolvedId);
     },
 
     async createRecordTranslation(input) {
+      const resolvedId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+      });
       const [record] = await app.database.db
         .select()
         .from(knowledgeRecords)
-        .where(and(eq(knowledgeRecords.id, input.recordId), isNull(knowledgeRecords.archivedAt)))
+        .where(and(eq(knowledgeRecords.id, resolvedId), isNull(knowledgeRecords.archivedAt)))
         .limit(1);
       if (!record) {
         throw new AppError({
@@ -918,7 +970,7 @@ export function createMcpToolHandlers(
       const actingUserId = requireActingUserId(client);
       const result = await createRecordTranslation(
         app,
-        input.recordId,
+        resolvedId,
         {
           language: input.language,
           slug: input.slug,
@@ -1102,6 +1154,11 @@ export function createMcpToolHandlers(
         });
       }
 
+      const knowledgeRecordId = await resolveOptionalKnowledgeRecordId(
+        app.database,
+        input.knowledgeRecordId,
+      );
+
       let buffer: Buffer;
       try {
         buffer = Buffer.from(input.contentBase64, 'base64');
@@ -1123,7 +1180,7 @@ export function createMcpToolHandlers(
       const { store: blobStore } = await app.getBlobStore();
       const row = await createWorkspaceMedia(app.database, {
         workspaceId: input.workspaceId,
-        knowledgeRecordId: input.knowledgeRecordId ?? null,
+        knowledgeRecordId: knowledgeRecordId ?? null,
         contentType: input.contentType,
         buffer,
         originalFilename: input.filename ?? null,
@@ -1153,7 +1210,7 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
 
-      if (!input.insertIntoRecord || !input.knowledgeRecordId) {
+      if (!input.insertIntoRecord || !knowledgeRecordId) {
         return {
           media,
           insertedIntoRecord: false,
@@ -1166,7 +1223,7 @@ export function createMcpToolHandlers(
         client,
         actingUserId,
         media,
-        input.knowledgeRecordId,
+        knowledgeRecordId,
         input.workspaceId,
         ipAddress,
       );
@@ -1184,13 +1241,18 @@ export function createMcpToolHandlers(
         });
       }
 
+      const knowledgeRecordId = await resolveOptionalKnowledgeRecordId(
+        app.database,
+        input.knowledgeRecordId,
+      );
+
       const started = await beginMediaUploadSession(app.redis, {
         clientId: client.id,
         workspaceId: input.workspaceId,
         contentType: input.contentType,
         filename: input.filename ?? null,
         alt: input.alt ?? null,
-        knowledgeRecordId: input.knowledgeRecordId ?? null,
+        knowledgeRecordId: knowledgeRecordId ?? null,
         insertIntoRecord: input.insertIntoRecord,
       });
 
@@ -1308,9 +1370,13 @@ export function createMcpToolHandlers(
 
     async listWorkspaceMedia(input) {
       assertWorkspaceAllowed(client, input.workspaceId);
+      const knowledgeRecordId = await resolveOptionalKnowledgeRecordId(
+        app.database,
+        input.knowledgeRecordId,
+      );
       const rows = await listWorkspaceMedia(app.database, {
         workspaceId: input.workspaceId,
-        knowledgeRecordId: input.knowledgeRecordId,
+        knowledgeRecordId: knowledgeRecordId ?? undefined,
         limit: input.limit,
       });
       return { media: rows.map(toPublicMedia) };
@@ -1579,6 +1645,172 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { sprint };
+    },
+
+    async getProjectSprintBurndown(input) {
+      const sprintId = await resolveEntityId(app.database, {
+        entityType: 'sprint',
+        idOrKey: input.sprintId,
+      });
+      const { getSprint } = await import('./project-sprints.js');
+      const existing = await getSprint(app.database, sprintId);
+      await requirePmProject(app, client, existing.projectId);
+      return {
+        burndown: await getSprintPointBurndown(app.database, sprintId),
+      };
+    },
+
+    async getProjectScrumVelocity(input) {
+      await requirePmProject(app, client, input.projectId);
+      const lastN = input.lastN ?? 5;
+      const sprints = await listSprints(app.database, input.projectId, {
+        includeArchived: false,
+      });
+      const completed = sprints.filter((sprint) => sprint.status === 'completed');
+      const recent = completed.slice(-lastN);
+      const velocity =
+        recent.length === 0
+          ? null
+          : Math.round(
+              (recent.reduce((sum, sprint) => sum + sprint.donePoints, 0) /
+                recent.length) *
+                10,
+            ) / 10;
+      return {
+        projectId: input.projectId,
+        lastN,
+        sampleSize: recent.length,
+        velocity,
+        sprints: recent.map((sprint) => ({
+          id: sprint.id,
+          humanKey: sprint.humanKey,
+          name: sprint.name,
+          donePoints: sprint.donePoints,
+          committedPoints: sprint.committedPoints,
+          endDate: sprint.endDate,
+        })),
+      };
+    },
+
+    async listMyProjectTasks(input) {
+      const actingUserId = requireActingUserId(client);
+      const [user] = await app.database.db
+        .select({
+          id: users.id,
+          isSystemAdmin: users.isSystemAdmin,
+        })
+        .from(users)
+        .where(eq(users.id, actingUserId))
+        .limit(1);
+      if (!user) {
+        throw new AppError({
+          code: 'USER_NOT_FOUND',
+          message: 'Acting user not found',
+          statusCode: 404,
+        });
+      }
+      const tasks = await listAssignedTasksForUser(app.database, actingUserId, {
+        isSystemAdmin: user.isSystemAdmin,
+        includeArchived: input.includeArchived,
+        role: input.role ? raciRoleSchema.parse(input.role) : undefined,
+      });
+      return {
+        tasks: tasks.filter((task) => {
+          try {
+            assertWorkspaceAllowed(client, task.workspaceId);
+            assertProjectAllowed(client, task.projectId);
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      };
+    },
+
+    async getMyDashboardInsights() {
+      const actingUserId = requireActingUserId(client);
+      const [user] = await app.database.db
+        .select({
+          id: users.id,
+          isSystemAdmin: users.isSystemAdmin,
+        })
+        .from(users)
+        .where(eq(users.id, actingUserId))
+        .limit(1);
+      if (!user) {
+        throw new AppError({
+          code: 'USER_NOT_FOUND',
+          message: 'Acting user not found',
+          statusCode: 404,
+        });
+      }
+      const insights = await getDashboardInsights(app.database, {
+        userId: actingUserId,
+        isSystemAdmin: user.isSystemAdmin,
+      });
+      if (client.allowedProjectIds.length === 0) {
+        return { insights };
+      }
+      const allowedProjectIds = new Set(client.allowedProjectIds);
+      return {
+        insights: {
+          ...insights,
+          budgetAttention: insights.budgetAttention.filter((row) =>
+            allowedProjectIds.has(row.projectId),
+          ),
+        },
+      };
+    },
+
+    async listProjectDeliveryDocumentLinks(input) {
+      await requirePmProject(app, client, input.projectId);
+      let entityId = input.entityId;
+      if (entityId && input.entityType) {
+        entityId = await resolveDeliveryEntityRef(
+          app.database,
+          input.entityType as ResolvableEntityType,
+          entityId,
+          input.projectId,
+        );
+      }
+      const documentLinks = await listDeliveryDocumentLinksForProject(
+        app.database,
+        input.projectId,
+        {
+          entityType: input.entityType
+            ? deliveryLinkEntityTypeSchema.parse(input.entityType)
+            : undefined,
+          entityId,
+        },
+      );
+      const keyPrefixMap = await loadProjectKeyPrefixMap(app.database, [
+        input.projectId,
+      ]);
+      const keyPrefix = keyPrefixMap.get(input.projectId) ?? null;
+      const recordIds = [...new Set(documentLinks.map((link) => link.knowledgeRecordId))];
+      const recordRows =
+        recordIds.length === 0
+          ? []
+          : await app.database.db
+              .select({
+                id: knowledgeRecords.id,
+                documentKeyType: knowledgeRecords.documentKeyType,
+                documentNumber: knowledgeRecords.documentNumber,
+              })
+              .from(knowledgeRecords)
+              .where(inArray(knowledgeRecords.id, recordIds));
+      const keysById = new Map(
+        recordRows.map((row) => [
+          row.id,
+          toDocumentKeyFields(keyPrefix, row.documentKeyType, row.documentNumber),
+        ]),
+      );
+      return {
+        documentLinks: documentLinks.map((link) => ({
+          ...link,
+          humanKey: keysById.get(link.knowledgeRecordId)?.humanKey ?? null,
+        })),
+      };
     },
 
     async createProjectTask(input) {
@@ -2458,15 +2690,18 @@ export function createMcpToolHandlers(
     },
 
     async getKnowledgeRecordDeliveryLinks(input) {
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+      });
       const record = await getKnowledgeRecordProjectContext(
         app.database,
-        input.recordId,
+        recordId,
       );
       assertWorkspaceAllowed(client, record.workspaceId);
       return {
         deliveryLinks: await listDeliveryLinksForRecord(
           app.database,
-          input.recordId,
+          recordId,
         ),
       };
     },
@@ -2505,6 +2740,28 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
+      const knowledgeRecordId = await resolveOptionalKnowledgeRecordId(
+        app.database,
+        input.knowledgeRecordId,
+      );
+      const deliveryLinks = input.deliveryLinks
+        ? await Promise.all(
+            input.deliveryLinks.map(async (link) => {
+              const entityType = changeDeliveryEntityTypeSchema.parse(
+                link.entityType,
+              );
+              return {
+                entityType,
+                entityId: await resolveDeliveryEntityRef(
+                  app.database,
+                  entityType,
+                  link.entityId,
+                  project.id,
+                ),
+              };
+            }),
+          )
+        : undefined;
       const changeItem = await createChangeItem(app.database, {
         projectId: project.id,
         workspaceId: project.workspaceId,
@@ -2522,12 +2779,9 @@ export function createMcpToolHandlers(
         baselineStartAfter: input.baselineStartAfter,
         baselineEndBefore: input.baselineEndBefore,
         baselineEndAfter: input.baselineEndAfter,
-        knowledgeRecordId: input.knowledgeRecordId,
+        knowledgeRecordId: knowledgeRecordId ?? null,
         sortOrder: input.sortOrder,
-        deliveryLinks: input.deliveryLinks?.map((link) => ({
-          entityType: changeDeliveryEntityTypeSchema.parse(link.entityType),
-          entityId: link.entityId,
-        })),
+        deliveryLinks,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2575,6 +2829,28 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
+      const knowledgeRecordId = await resolveOptionalKnowledgeRecordId(
+        app.database,
+        input.knowledgeRecordId,
+      );
+      const deliveryLinks = input.deliveryLinks
+        ? await Promise.all(
+            input.deliveryLinks.map(async (link) => {
+              const entityType = changeDeliveryEntityTypeSchema.parse(
+                link.entityType,
+              );
+              return {
+                entityType,
+                entityId: await resolveDeliveryEntityRef(
+                  app.database,
+                  entityType,
+                  link.entityId,
+                  project.id,
+                ),
+              };
+            }),
+          )
+        : undefined;
       const changeItem = await updateChangeItem(app.database, changeId, {
         workspaceId: project.workspaceId,
         kind: input.kind ? changeKindSchema.parse(input.kind) : undefined,
@@ -2591,13 +2867,13 @@ export function createMcpToolHandlers(
         baselineStartAfter: input.baselineStartAfter,
         baselineEndBefore: input.baselineEndBefore,
         baselineEndAfter: input.baselineEndAfter,
-        knowledgeRecordId: input.knowledgeRecordId,
+        knowledgeRecordId:
+          input.knowledgeRecordId === undefined
+            ? undefined
+            : knowledgeRecordId ?? null,
         sortOrder: input.sortOrder,
         archived: input.archived,
-        deliveryLinks: input.deliveryLinks?.map((link) => ({
-          entityType: changeDeliveryEntityTypeSchema.parse(link.entityType),
-          entityId: link.entityId,
-        })),
+        deliveryLinks,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2614,9 +2890,12 @@ export function createMcpToolHandlers(
 
     async setKnowledgeRecordDeliveryLinks(input) {
       const actingUserId = requireActingUserId(client);
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+      });
       const record = await getKnowledgeRecordProjectContext(
         app.database,
-        input.recordId,
+        recordId,
       );
       assertWriteWorkspaceAllowed(client, record.workspaceId);
       if (record.projectId) {
@@ -2626,12 +2905,23 @@ export function createMcpToolHandlers(
         );
         assertProjectNotArchived(project);
       }
+      const links = await Promise.all(
+        input.links.map(async (link) => {
+          const entityType = deliveryLinkEntityTypeSchema.parse(link.entityType);
+          return {
+            entityType,
+            entityId: await resolveDeliveryEntityRef(
+              app.database,
+              entityType,
+              link.entityId,
+              record.projectId ?? undefined,
+            ),
+          };
+        }),
+      );
       const deliveryLinks = await setDeliveryLinksForRecord(app.database, {
-        knowledgeRecordId: input.recordId,
-        links: input.links.map((link) => ({
-          entityType: deliveryLinkEntityTypeSchema.parse(link.entityType),
-          entityId: link.entityId,
-        })),
+        knowledgeRecordId: recordId,
+        links,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2639,7 +2929,7 @@ export function createMcpToolHandlers(
         actorId: client.id,
         action: 'knowledge.delivery_links_set',
         entityType: 'knowledge_record',
-        entityId: input.recordId,
+        entityId: recordId,
         metadata: {
           projectId: record.projectId,
           linkCount: deliveryLinks.length,

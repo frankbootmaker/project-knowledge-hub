@@ -1,6 +1,6 @@
 # Project baseline, change management, and delivery timeline
 
-**Status:** implemented on `feature/project-delivery`  
+**Status:** implemented on `feature/m7-dokploy` (smoke pending)  
 **Related:** [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BUDGET.md](./PROJECT_BUDGET.md), ADR-017, ADR-018
 
 ## Goal

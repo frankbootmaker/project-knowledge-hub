@@ -1,6 +1,6 @@
 # Project Delivery (milestones, tasks, RACI)
 
-**Status:** in progress (local MVP on `feature/project-delivery`)  
+**Status:** partial — suite on `feature/m7-dokploy` (Dokploy Dev smoke pending)  
 **Backlog:** NF-018  
 **Related:** ADR-015, ADR-016, ADR-017, ADR-018; [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BASELINE.md](./PROJECT_BASELINE.md), [PROJECT_BUDGET.md](./PROJECT_BUDGET.md); ADR-013 (knowledge draft writes), ADR-014 (catalogue propose/commit — separate)
 

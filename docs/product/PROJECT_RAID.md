@@ -1,6 +1,6 @@
 # Project RAID + delivery-linked documents
 
-**Status:** implemented on `feature/project-delivery`  
+**Status:** implemented on `feature/m7-dokploy` (smoke pending)  
 **Related:** [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), ADR-015, ADR-013
 
 ## Goal

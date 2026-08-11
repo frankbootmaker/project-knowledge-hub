@@ -486,8 +486,11 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
 
     const scopes = body.scopes ?? [...DEFAULT_MCP_SCOPES];
     const allowedWorkspaceIds = body.allowedWorkspaceIds;
-    const wantsWrite = scopes.includes('knowledge:write');
-    const actingUserId = wantsWrite ? principal.userId : null;
+    const wantsActingUser =
+      scopes.includes('knowledge:write') ||
+      scopes.includes('pm:write') ||
+      scopes.includes('pm:read');
+    const actingUserId = wantsActingUser ? principal.userId : null;
 
     const { organizationId } = await assertUserMemberOfWorkspaces(
       app.database,

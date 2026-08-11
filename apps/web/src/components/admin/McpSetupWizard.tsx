@@ -22,7 +22,7 @@ import {
 import { McpConnectionTroubleshoot } from '../mcp-setup/McpConnectionTroubleshoot';
 import { McpSetupDonePanel } from '../mcp-setup/McpSetupDonePanel';
 import { McpSetupStatusRow } from '../mcp-setup/McpSetupStatusRow';
-import { MCP_SETUP_STEPS, type McpSetupStep } from '../mcp-setup/scopes';
+import { MCP_SETUP_STEPS, buildMcpSetupScopes, type McpSetupStep } from '../mcp-setup/scopes';
 
 type Org = { id: string; name: string; slug: string };
 type Workspace = { id: string; name: string; slug: string; organizationId: string };
@@ -52,16 +52,6 @@ type TestStep = {
   message: string;
 };
 
-const READ_SCOPES = [
-  'projects:read',
-  'systems:read',
-  'knowledge:read',
-  'knowledge:search',
-  'provenance:read',
-] as const;
-
-const WRITE_SCOPES = [...READ_SCOPES, 'knowledge:write'] as const;
-
 export function McpSetupWizard({
   organizations,
   workspaces,
@@ -87,6 +77,7 @@ export function McpSetupWizard({
 
   const [llmClient, setLlmClient] = useState<LlmClientId>('cursor');
   const [mode, setMode] = useState<'read' | 'write'>('read');
+  const [includePm, setIncludePm] = useState(false);
   const [name, setName] = useState(defaultClientName('cursor'));
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
   const [allowedWorkspaceIds, setAllowedWorkspaceIds] = useState<string[]>([]);
@@ -200,10 +191,11 @@ export function McpSetupWizard({
       if (!organizationId || allowedWorkspaceIds.length === 0 || !name.trim()) {
         throw new Error(t('mcpWizardMissingFields'));
       }
-      if (mode === 'write' && !actingUserId) {
+      if ((mode === 'write' || includePm) && !actingUserId) {
         throw new Error(t('mcpWizardActingUserRequired'));
       }
 
+      const scopes = buildMcpSetupScopes({ mode, includePm });
       const response = await fetch('/api/v1/api-clients', {
         method: 'POST',
         credentials: 'include',
@@ -211,9 +203,10 @@ export function McpSetupWizard({
         body: JSON.stringify({
           organizationId,
           name: name.trim(),
-          scopes: mode === 'write' ? [...WRITE_SCOPES] : [...READ_SCOPES],
+          scopes,
           allowedWorkspaceIds,
-          actingUserId: mode === 'write' ? actingUserId : null,
+          actingUserId:
+            mode === 'write' || includePm ? actingUserId : null,
         }),
       });
       const payload = (await response.json()) as {
@@ -307,6 +300,7 @@ export function McpSetupWizard({
     setToolNames([]);
     setCopied(null);
     setMode('read');
+    setIncludePm(false);
     setLlmClient('cursor');
     setName(defaultClientName('cursor'));
     setOrganizationId(organizations[0]?.id ?? '');
@@ -473,6 +467,22 @@ export function McpSetupWizard({
           {mode === 'write' ? (
             <p className="m-0 text-xs text-ink-muted">{t('writeScopeHint')}</p>
           ) : null}
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={includePm}
+              onChange={(e) => setIncludePm(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">{t('mcpWizardIncludePm')}</span>
+              <span className="mt-0.5 block text-xs text-ink-muted">
+                {mode === 'write'
+                  ? t('mcpWizardIncludePmWriteHint')
+                  : t('mcpWizardIncludePmReadHint')}
+              </span>
+            </span>
+          </label>
           <Field label={t('organization')}>
             <Select
               value={organizationId}

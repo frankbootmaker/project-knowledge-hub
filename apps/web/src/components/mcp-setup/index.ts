@@ -8,6 +8,7 @@ export {
 export {
   MCP_READ_SCOPES,
   MCP_WRITE_SCOPES,
+  buildMcpSetupScopes,
   MCP_SETUP_STEPS,
   type McpSetupStep,
 } from './scopes';
