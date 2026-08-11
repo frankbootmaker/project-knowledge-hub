@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Dokploy PDF export (Chromium crashpad):** API entrypoint sets a writable `HOME` / `XDG_*` for `knowledgehub` after `setpriv` (was inheriting `/root`); Puppeteer launch uses `/tmp` user-data + crash-dump flags so Chrome no longer fails with `chrome_crashpad_handler: --database is required`.
+
 * **Long AI translate via Next:** `experimental.proxyTimeout` raised so Next rewrites no longer return opaque HTTP 500 after ~30s while the API/Ollama call is still running. Traefik/Dokploy gateway timeouts documented in `DOKPLOY.md`.
 
 * **AI translation Markdown/JSON:** harden Vision LLM parse (heading restore, unescape, strip `<think>`); unwrap only whole-response fences so fenced code inside `contentMarkdown` is not mistaken for the JSON wrapper. Fast path thinking-off with one thinking-on retry on echo/bad JSON; Details log clears on retry.

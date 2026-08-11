@@ -29,7 +29,7 @@ RUN --mount=type=cache,id=turbo-cache-api,target=/app/.turbo \
 # Heavy apt packages (Chromium + pg client) change rarely — keep ahead of app COPY.
 FROM node:24-bookworm-slim AS runtime-apt
 WORKDIR /app
-RUN useradd --system --uid 1001 knowledgehub \
+RUN useradd --system --uid 1001 --create-home --home-dir /home/knowledgehub knowledgehub \
   && apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
   && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -69,6 +69,10 @@ FROM runtime-apt AS runtime
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Writable paths for Chromium when the process runs as knowledgehub (not root).
+ENV HOME=/home/knowledgehub
+ENV XDG_CONFIG_HOME=/tmp/.chromium
+ENV XDG_CACHE_HOME=/tmp/.chromium
 COPY --from=build /app /app
 COPY infrastructure/docker/api-entrypoint.sh /entrypoint.sh
 COPY infrastructure/docker/migrate-and-seed.sh /migrate-and-seed.sh

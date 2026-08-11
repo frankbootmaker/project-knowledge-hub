@@ -418,14 +418,21 @@ async function getBrowser(): Promise<Browser> {
       process.env.PUPPETEER_EXECUTABLE_PATH ||
       process.env.CHROMIUM_PATH ||
       undefined;
+    // Docker/Dokploy: crashpad needs a writable dump dir; avoid /dev/shm pressure.
+    const userDataDir =
+      process.env.PUPPETEER_USER_DATA_DIR || '/tmp/.puppeteer-profile';
     browserPromise = puppeteer
       .launch({
         headless: true,
         executablePath,
+        userDataDir,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-crash-reporter',
+          '--crash-dumps-dir=/tmp',
           '--font-render-hinting=medium',
         ],
       })
