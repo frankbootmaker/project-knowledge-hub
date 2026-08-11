@@ -9,13 +9,17 @@ import {
   projectTasks,
   projectUserStories,
   projects,
+  systems,
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  aiCostModeSchema,
   projectCurrencySchema,
+  type AiCostMode,
   type ProjectCurrency,
 } from '@project-knowledge-hub/domain';
 import { requireProjectContext } from './project-delivery.js';
+import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
 
 export type ProjectRagStatus = 'red' | 'amber' | 'green';
 
@@ -49,6 +53,18 @@ export type CostSnapshotPoint = {
   ac: number;
 };
 
+export type AiBudgetBreakdown = {
+  systemId: string;
+  name: string;
+  costMode: AiCostMode | null;
+  flatAccruedCost: number;
+  tokenCost: number;
+  noteOnlyTokens: number;
+  billableCost: number;
+  budgetAllocation: number | null;
+  overAllocation: boolean;
+};
+
 export type ProjectBudgetSummary = {
   currency: ProjectCurrency;
   initialBudget: number | null;
@@ -57,6 +73,12 @@ export type ProjectBudgetSummary = {
   pv: number | null;
   ev: number;
   ac: number;
+  /** Person hours × rate only (excludes AI). */
+  personAc: number;
+  /** Billable AI flat + token costs. */
+  aiAc: number;
+  aiNoteOnlyTokens: number;
+  aiSystems: AiBudgetBreakdown[];
   cpi: number | null;
   spi: number | null;
   financialRag: ProjectRagStatus;
@@ -133,6 +155,174 @@ export function computeRiskRag(
   if (open.some((item) => item.severity === 'critical')) return 'red';
   if (open.some((item) => item.severity === 'high')) return 'amber';
   return 'green';
+}
+
+const AVG_DAYS_PER_MONTH = 30.437;
+
+function dayIndex(ymd: string): number {
+  return Math.floor(parseYmd(ymd) / 86_400_000);
+}
+
+/** Inclusive Mon–Sun calendar day count between two YMD dates. */
+export function calendarDaysInclusive(
+  startDate: string,
+  endDate: string,
+): number {
+  const start = dayIndex(startDate);
+  const end = dayIndex(endDate);
+  if (end < start) return 0;
+  return end - start + 1;
+}
+
+/**
+ * Accrue a monthly flat fee over the project window as a calendar-day fraction.
+ * Without a window, one month is treated as accrued.
+ */
+export function accrueFlatMonthlyFee(
+  monthlyFee: number,
+  startDate: string | null,
+  endDate: string | null,
+  today = todayYmd(),
+): number {
+  if (monthlyFee <= 0) return 0;
+  if (!startDate || !endDate) {
+    return Math.round(monthlyFee * 100) / 100;
+  }
+  const totalDays = Math.max(1, calendarDaysInclusive(startDate, endDate));
+  const cappedToday = today < startDate ? startDate : today > endDate ? endDate : today;
+  const elapsedDays =
+    today < startDate ? 0 : calendarDaysInclusive(startDate, cappedToday);
+  const projectMonths = totalDays / AVG_DAYS_PER_MONTH;
+  const accrued = monthlyFee * projectMonths * (elapsedDays / totalDays);
+  return Math.round(accrued * 100) / 100;
+}
+
+export function tokenCostFromUsage(
+  tokensUsed: number,
+  ratePer1k: number,
+): number {
+  if (tokensUsed <= 0 || ratePer1k <= 0) return 0;
+  return Math.round((tokensUsed / 1000) * ratePer1k * 100) / 100;
+}
+
+export async function computeAiBudgetCosts(
+  database: Database,
+  projectId: string,
+  project: {
+    startDate: string | null;
+    endDate: string | null;
+  },
+  today = todayYmd(),
+): Promise<{
+  aiBillableCost: number;
+  aiNoteOnlyTokens: number;
+  aiSystems: AiBudgetBreakdown[];
+}> {
+  const assistantRows = await database.db
+    .select({
+      id: systems.id,
+      name: systems.name,
+      aiCostMode: systems.aiCostMode,
+      aiFlatMonthlyFee: systems.aiFlatMonthlyFee,
+      aiTokenRatePer1k: systems.aiTokenRatePer1k,
+      aiBudgetAllocation: systems.aiBudgetAllocation,
+    })
+    .from(systems)
+    .where(
+      and(
+        eq(systems.projectId, projectId),
+        eq(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
+        isNull(systems.archivedAt),
+      ),
+    );
+
+  const taskRows = await database.db
+    .select({
+      tokensUsed: projectTasks.tokensUsed,
+      aiSystemId: projectTasks.aiSystemId,
+      status: projectTasks.status,
+    })
+    .from(projectTasks)
+    .where(
+      and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)),
+    );
+
+  const tokensBySystem = new Map<string, number>();
+  let orphanTokens = 0;
+  for (const task of taskRows) {
+    if (task.status === 'cancelled') continue;
+    const tokens = task.tokensUsed ?? 0;
+    if (tokens <= 0) continue;
+    if (task.aiSystemId) {
+      tokensBySystem.set(
+        task.aiSystemId,
+        (tokensBySystem.get(task.aiSystemId) ?? 0) + tokens,
+      );
+    } else {
+      orphanTokens += tokens;
+    }
+  }
+
+  const aiSystems: AiBudgetBreakdown[] = [];
+  let aiBillableCost = 0;
+  let aiNoteOnlyTokens = orphanTokens;
+
+  for (const row of assistantRows) {
+    const modeParsed = row.aiCostMode
+      ? aiCostModeSchema.safeParse(row.aiCostMode)
+      : null;
+    const costMode = modeParsed?.success ? modeParsed.data : null;
+    const flatFee = parseNumeric(row.aiFlatMonthlyFee) ?? 0;
+    const tokenRate = parseNumeric(row.aiTokenRatePer1k) ?? 0;
+    const allocation = parseNumeric(row.aiBudgetAllocation);
+    const tokens = tokensBySystem.get(row.id) ?? 0;
+
+    let flatAccruedCost = 0;
+    let tokenCost = 0;
+    let noteOnlyTokens = 0;
+
+    if (costMode === 'flat' || costMode === 'mixed') {
+      flatAccruedCost = accrueFlatMonthlyFee(
+        flatFee,
+        project.startDate,
+        project.endDate,
+        today,
+      );
+    }
+    if (costMode === 'api' || costMode === 'mixed') {
+      tokenCost = tokenCostFromUsage(tokens, tokenRate);
+    }
+    if (costMode === 'note_only') {
+      noteOnlyTokens = tokens;
+    }
+
+    const billableCost =
+      costMode === 'note_only' || costMode == null
+        ? 0
+        : Math.round((flatAccruedCost + tokenCost) * 100) / 100;
+
+    aiBillableCost += billableCost;
+    aiNoteOnlyTokens += noteOnlyTokens;
+
+    aiSystems.push({
+      systemId: row.id,
+      name: row.name,
+      costMode,
+      flatAccruedCost,
+      tokenCost,
+      noteOnlyTokens,
+      billableCost,
+      budgetAllocation: allocation,
+      overAllocation:
+        allocation != null && billableCost > allocation,
+    });
+  }
+
+  return {
+    aiBillableCost: Math.round(aiBillableCost * 100) / 100,
+    aiNoteOnlyTokens,
+    aiSystems,
+  };
 }
 
 async function loadRateMap(
@@ -335,6 +525,26 @@ export function computeEvmFromCosts(
   };
 }
 
+function withAiAc(
+  evm: ReturnType<typeof computeEvmFromCosts>,
+  aiBillableCost: number,
+): ReturnType<typeof computeEvmFromCosts> & {
+  personAc: number;
+  aiAc: number;
+} {
+  const personAc = evm.ac;
+  const ac = Math.round((personAc + aiBillableCost) * 100) / 100;
+  const cpi = ac > 0 ? Math.round((evm.ev / ac) * 1000) / 1000 : null;
+  return {
+    ...evm,
+    ac,
+    cpi,
+    personAc,
+    aiAc: aiBillableCost,
+    financialRag: computeFinancialRag({ bac: evm.bac, ac, cpi }),
+  };
+}
+
 export async function upsertProjectCostSnapshot(
   database: Database,
   projectId: string,
@@ -342,7 +552,9 @@ export async function upsertProjectCostSnapshot(
   const { project } = await requireProjectContext(database, projectId);
   const costs = await listTaskBudgetCosts(database, projectId);
   const evm = computeEvmFromCosts(project, costs);
-  if (evm.bac == null) return;
+  const ai = await computeAiBudgetCosts(database, projectId, project);
+  const merged = withAiAc(evm, ai.aiBillableCost);
+  if (merged.bac == null) return;
 
   const capturedOn = todayYmd();
   const [existing] = await database.db
@@ -360,10 +572,10 @@ export async function upsertProjectCostSnapshot(
     await database.db
       .update(projectCostSnapshots)
       .set({
-        bac: moneyString(evm.bac),
-        pv: evm.pv == null ? null : moneyString(evm.pv),
-        ev: moneyString(evm.ev),
-        ac: moneyString(evm.ac),
+        bac: moneyString(merged.bac),
+        pv: merged.pv == null ? null : moneyString(merged.pv),
+        ev: moneyString(merged.ev),
+        ac: moneyString(merged.ac),
         updatedAt: new Date(),
       })
       .where(eq(projectCostSnapshots.id, existing.id));
@@ -373,10 +585,10 @@ export async function upsertProjectCostSnapshot(
   await database.db.insert(projectCostSnapshots).values({
     projectId,
     capturedOn,
-    bac: moneyString(evm.bac),
-    pv: evm.pv == null ? null : moneyString(evm.pv),
-    ev: moneyString(evm.ev),
-    ac: moneyString(evm.ac),
+    bac: moneyString(merged.bac),
+    pv: merged.pv == null ? null : moneyString(merged.pv),
+    ev: moneyString(merged.ev),
+    ac: moneyString(merged.ac),
   });
 }
 
@@ -387,6 +599,8 @@ export async function getProjectBudgetSummary(
   const { project } = await requireProjectContext(database, projectId);
   const costs = await listTaskBudgetCosts(database, projectId);
   const evm = computeEvmFromCosts(project, costs);
+  const ai = await computeAiBudgetCosts(database, projectId, project);
+  const merged = withAiAc(evm, ai.aiBillableCost);
 
   const raidRows = await database.db
     .select({
@@ -420,7 +634,9 @@ export async function getProjectBudgetSummary(
     .orderBy(asc(projectCostSnapshots.capturedOn));
 
   return {
-    ...evm,
+    ...merged,
+    aiNoteOnlyTokens: ai.aiNoteOnlyTokens,
+    aiSystems: ai.aiSystems,
     riskRag: computeRiskRag(raidRows),
     startDate: project.startDate,
     endDate: project.endDate,
@@ -467,6 +683,22 @@ export function parseHours(
     });
   }
   return moneyString(n);
+}
+
+export function parseTokenRate(
+  value: number | string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n < 0) {
+    throw new AppError({
+      code: 'TOKEN_RATE_INVALID',
+      message: 'Token rate must be a non-negative number',
+      statusCode: 400,
+    });
+  }
+  return n.toFixed(4);
 }
 
 export async function assertProjectCurrency(

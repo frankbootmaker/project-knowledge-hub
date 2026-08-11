@@ -85,6 +85,8 @@ const createTaskSchema = z.object({
   dueDate: dateStringSchema.optional(),
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
+  tokensUsed: z.number().int().min(0).nullable().optional(),
+  aiSystemId: z.string().uuid().nullable().optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
   currentOwnerUserId: z.string().uuid().nullable().optional(),
@@ -99,11 +101,18 @@ const updateTaskSchema = z.object({
   dueDate: dateStringSchema.optional(),
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
+  tokensUsed: z.number().int().min(0).nullable().optional(),
+  aiSystemId: z.string().uuid().nullable().optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
   currentOwnerUserId: z.string().uuid().nullable().optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   archived: z.boolean().optional(),
+});
+
+const reportAiUsageSchema = z.object({
+  tokensUsed: z.number().int().min(0),
+  aiSystemId: z.string().uuid().nullable().optional(),
 });
 
 const replaceRaciSchema = z.object({
@@ -249,6 +258,8 @@ export async function registerProjectDeliveryRoutes(
         body.actualHours === undefined
           ? undefined
           : parseHours(body.actualHours) ?? null,
+      tokensUsed: body.tokensUsed,
+      aiSystemId: body.aiSystemId,
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
       currentOwnerUserId: body.currentOwnerUserId,
@@ -256,7 +267,12 @@ export async function registerProjectDeliveryRoutes(
       raci: body.raci,
     });
 
-    if (body.forecastHours !== undefined || body.actualHours !== undefined) {
+    if (
+      body.forecastHours !== undefined ||
+      body.actualHours !== undefined ||
+      body.tokensUsed !== undefined ||
+      body.aiSystemId !== undefined
+    ) {
       await upsertProjectCostSnapshot(app.database, project.id);
     }
 
@@ -309,6 +325,8 @@ export async function registerProjectDeliveryRoutes(
         body.actualHours === undefined
           ? undefined
           : parseHours(body.actualHours) ?? null,
+      tokensUsed: body.tokensUsed,
+      aiSystemId: body.aiSystemId,
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
       currentOwnerUserId: body.currentOwnerUserId,
@@ -318,7 +336,12 @@ export async function registerProjectDeliveryRoutes(
       workspaceId: project.workspaceId,
     });
 
-    if (body.forecastHours !== undefined || body.actualHours !== undefined) {
+    if (
+      body.forecastHours !== undefined ||
+      body.actualHours !== undefined ||
+      body.tokensUsed !== undefined ||
+      body.aiSystemId !== undefined
+    ) {
       await upsertProjectCostSnapshot(app.database, project.id);
     }
 
@@ -330,6 +353,44 @@ export async function registerProjectDeliveryRoutes(
       entityType: 'project_task',
       entityId: task.id,
       metadata: { projectId: project.id, ...body },
+      ipAddress: request.ip,
+    });
+
+    return { task };
+  });
+
+  app.post('/api/v1/project-tasks/:taskId/ai-usage', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ taskId: z.string().uuid() }).parse(request.params);
+    const body = reportAiUsageSchema.parse(request.body);
+
+    const existing = await getTask(app.database, params.taskId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    const task = await updateTask(app.database, params.taskId, {
+      tokensUsed: body.tokensUsed,
+      aiSystemId:
+        body.aiSystemId === undefined ? existing.aiSystemId : body.aiSystemId,
+      actorUserId: principal.userId,
+      workspaceId: project.workspaceId,
+    });
+    await upsertProjectCostSnapshot(app.database, project.id);
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.task_ai_usage_reported',
+      entityType: 'project_task',
+      entityId: task.id,
+      metadata: {
+        projectId: project.id,
+        tokensUsed: body.tokensUsed,
+        aiSystemId: body.aiSystemId ?? null,
+      },
       ipAddress: request.ip,
     });
 

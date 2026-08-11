@@ -10,6 +10,7 @@ import {
 import { CollapsibleSection } from './CollapsibleSection';
 import { AssistantBrandMark } from './AssistantBrandMark';
 import { ProjectStakeholdersOrgChart } from './ProjectStakeholdersOrgChart';
+import { ProjectResourceUtilizationModal } from './ProjectResourceUtilizationModal';
 import { UserAvatar } from './UserAvatar';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { formatMoney, parseOptionalNumber } from '../lib/project-currency';
@@ -39,6 +40,18 @@ export type Stakeholder = {
   notes: string | null;
   reportsToUserId: string | null;
   hourlyRate: string | null;
+  engagementType: 'employee' | 'contractor' | null;
+  assignmentStart: string | null;
+  assignmentEnd: string | null;
+  allocatedDailyHours: string | null;
+  contractRef: string | null;
+  contractedBudget: string | null;
+  contractStart: string | null;
+  contractEnd: string | null;
+  aiCostMode: 'flat' | 'api' | 'mixed' | 'note_only' | null;
+  aiFlatMonthlyFee: string | null;
+  aiTokenRatePer1k: string | null;
+  aiBudgetAllocation: string | null;
   avatarUrl: string | null;
   assistantBrand: string | null;
   raciRoles: string[];
@@ -69,6 +82,9 @@ const PROJECT_ROLES = [
 
 const VIEW_MODES = ['list', 'org'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
+
+const ENGAGEMENT_TYPES = ['employee', 'contractor'] as const;
+const AI_COST_MODES = ['flat', 'api', 'mixed', 'note_only'] as const;
 
 export function ProjectStakeholdersPanel({
   projectId,
@@ -101,6 +117,8 @@ export function ProjectStakeholdersPanel({
   const [exportPending, setExportPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [manageRow, setManageRow] = useState<Stakeholder | null>(null);
+  const [manageAiRow, setManageAiRow] = useState<Stakeholder | null>(null);
+  const [utilizationOpen, setUtilizationOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
@@ -110,12 +128,33 @@ export function ProjectStakeholdersPanel({
   const [notes, setNotes] = useState('');
   const [reportsToUserId, setReportsToUserId] = useState('');
   const [hourlyRate, setHourlyRate] = useState('');
+  const [engagementType, setEngagementType] = useState('');
+  const [allocatedDailyHours, setAllocatedDailyHours] = useState('');
+  const [assignmentStart, setAssignmentStart] = useState('');
+  const [assignmentEnd, setAssignmentEnd] = useState('');
+  const [contractRef, setContractRef] = useState('');
+  const [contractedBudget, setContractedBudget] = useState('');
+  const [contractStart, setContractStart] = useState('');
+  const [contractEnd, setContractEnd] = useState('');
 
   const [editRole, setEditRole] = useState('stakeholder');
   const [editJobTitle, setEditJobTitle] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editReportsTo, setEditReportsTo] = useState('');
   const [editHourlyRate, setEditHourlyRate] = useState('');
+  const [editEngagementType, setEditEngagementType] = useState('');
+  const [editAllocatedDailyHours, setEditAllocatedDailyHours] = useState('');
+  const [editAssignmentStart, setEditAssignmentStart] = useState('');
+  const [editAssignmentEnd, setEditAssignmentEnd] = useState('');
+  const [editContractRef, setEditContractRef] = useState('');
+  const [editContractedBudget, setEditContractedBudget] = useState('');
+  const [editContractStart, setEditContractStart] = useState('');
+  const [editContractEnd, setEditContractEnd] = useState('');
+
+  const [editAiCostMode, setEditAiCostMode] = useState('');
+  const [editAiFlatMonthlyFee, setEditAiFlatMonthlyFee] = useState('');
+  const [editAiTokenRatePer1k, setEditAiTokenRatePer1k] = useState('');
+  const [editAiBudgetAllocation, setEditAiBudgetAllocation] = useState('');
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -267,6 +306,14 @@ export function ProjectStakeholdersPanel({
     setNotes('');
     setReportsToUserId('');
     setHourlyRate('');
+    setEngagementType('');
+    setAllocatedDailyHours('');
+    setAssignmentStart('');
+    setAssignmentEnd('');
+    setContractRef('');
+    setContractedBudget('');
+    setContractStart('');
+    setContractEnd('');
     setError(null);
   }
 
@@ -282,7 +329,34 @@ export function ProjectStakeholdersPanel({
     setEditNotes(row.notes ?? '');
     setEditReportsTo(row.reportsToUserId ?? '');
     setEditHourlyRate(row.hourlyRate != null ? String(row.hourlyRate) : '');
+    setEditEngagementType(row.engagementType ?? '');
+    setEditAllocatedDailyHours(
+      row.allocatedDailyHours != null ? String(row.allocatedDailyHours) : '',
+    );
+    setEditAssignmentStart(row.assignmentStart ?? '');
+    setEditAssignmentEnd(row.assignmentEnd ?? '');
+    setEditContractRef(row.contractRef ?? '');
+    setEditContractedBudget(
+      row.contractedBudget != null ? String(row.contractedBudget) : '',
+    );
+    setEditContractStart(row.contractStart ?? '');
+    setEditContractEnd(row.contractEnd ?? '');
     setConfirmDelete(false);
+    setError(null);
+  }
+
+  function openManageAi(row: Stakeholder) {
+    setManageAiRow(row);
+    setEditAiCostMode(row.aiCostMode ?? '');
+    setEditAiFlatMonthlyFee(
+      row.aiFlatMonthlyFee != null ? String(row.aiFlatMonthlyFee) : '',
+    );
+    setEditAiTokenRatePer1k(
+      row.aiTokenRatePer1k != null ? String(row.aiTokenRatePer1k) : '',
+    );
+    setEditAiBudgetAllocation(
+      row.aiBudgetAllocation != null ? String(row.aiBudgetAllocation) : '',
+    );
     setError(null);
   }
 
@@ -290,6 +364,37 @@ export function ProjectStakeholdersPanel({
     setManageRow(null);
     setConfirmDelete(false);
     setError(null);
+  }
+
+  function closeManageAi() {
+    setManageAiRow(null);
+    setError(null);
+  }
+
+  function capacityPayload(input: {
+    engagementType: string;
+    allocatedDailyHours: string;
+    assignmentStart: string;
+    assignmentEnd: string;
+    contractRef: string;
+    contractedBudget: string;
+    contractStart: string;
+    contractEnd: string;
+  }) {
+    const parsedEngagement =
+      input.engagementType === 'employee' || input.engagementType === 'contractor'
+        ? input.engagementType
+        : null;
+    return {
+      engagementType: parsedEngagement,
+      allocatedDailyHours: parseOptionalNumber(input.allocatedDailyHours) ?? null,
+      assignmentStart: input.assignmentStart || null,
+      assignmentEnd: input.assignmentEnd || null,
+      contractRef: input.contractRef.trim() || null,
+      contractedBudget: parseOptionalNumber(input.contractedBudget) ?? null,
+      contractStart: input.contractStart || null,
+      contractEnd: input.contractEnd || null,
+    };
   }
 
   async function submitCreate() {
@@ -307,6 +412,16 @@ export function ProjectStakeholdersPanel({
           notes: notes.trim() || null,
           reportsToUserId: reportsToUserId || null,
           hourlyRate: parseOptionalNumber(hourlyRate) ?? null,
+          ...capacityPayload({
+            engagementType,
+            allocatedDailyHours,
+            assignmentStart,
+            assignmentEnd,
+            contractRef,
+            contractedBudget,
+            contractStart,
+            contractEnd,
+          }),
         }),
       });
       if (!response.ok) {
@@ -373,6 +488,16 @@ export function ProjectStakeholdersPanel({
             notes: editNotes.trim() || null,
             reportsToUserId: editReportsTo || null,
             hourlyRate: parseOptionalNumber(editHourlyRate) ?? null,
+            ...capacityPayload({
+              engagementType: editEngagementType,
+              allocatedDailyHours: editAllocatedDailyHours,
+              assignmentStart: editAssignmentStart,
+              assignmentEnd: editAssignmentEnd,
+              contractRef: editContractRef,
+              contractedBudget: editContractedBudget,
+              contractStart: editContractStart,
+              contractEnd: editContractEnd,
+            }),
           }),
         },
       );
@@ -391,6 +516,52 @@ export function ProjectStakeholdersPanel({
       refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedUpdate'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function saveManageAi() {
+    if (!manageAiRow?.systemId || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const parsedMode =
+        editAiCostMode === 'flat' ||
+        editAiCostMode === 'api' ||
+        editAiCostMode === 'mixed' ||
+        editAiCostMode === 'note_only'
+          ? editAiCostMode
+          : null;
+      const response = await fetch(
+        `/api/v1/systems/${manageAiRow.systemId}/ai-cost`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            aiCostMode: parsedMode,
+            aiFlatMonthlyFee: parseOptionalNumber(editAiFlatMonthlyFee) ?? null,
+            aiTokenRatePer1k: parseOptionalNumber(editAiTokenRatePer1k) ?? null,
+            aiBudgetAllocation:
+              parseOptionalNumber(editAiBudgetAllocation) ?? null,
+          }),
+        },
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          message?: string;
+          error?: { message?: string };
+        } | null;
+        throw new Error(
+          payload?.error?.message || payload?.message || t('failedUpdateAiCost'),
+        );
+      }
+      pushToast(t('aiCostUpdated'));
+      closeManageAi();
+      await reloadStakeholders();
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedUpdateAiCost'));
     } finally {
       setPending(false);
     }
@@ -418,6 +589,162 @@ export function ProjectStakeholdersPanel({
       setPending(false);
       setConfirmDelete(false);
     }
+  }
+
+  function sectionActions(activeMode: ViewMode) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-8 shrink-0 px-2 text-xs sm:px-2.5"
+          onClick={() => setUtilizationOpen(true)}
+        >
+          {t('utilization')}
+        </Button>
+        {viewSwitcher(activeMode)}
+      </div>
+    );
+  }
+
+  function renderCapacityFields(input: {
+    engagement: string;
+    setEngagement: (value: string) => void;
+    dailyHours: string;
+    setDailyHours: (value: string) => void;
+    assignStart: string;
+    setAssignStart: (value: string) => void;
+    assignEnd: string;
+    setAssignEnd: (value: string) => void;
+    contractRefValue: string;
+    setContractRefValue: (value: string) => void;
+    contractedBudgetValue: string;
+    setContractedBudgetValue: (value: string) => void;
+    contractStartValue: string;
+    setContractStartValue: (value: string) => void;
+    contractEndValue: string;
+    setContractEndValue: (value: string) => void;
+    disabled: boolean;
+  }) {
+    const isEmployee = input.engagement === 'employee';
+    const isContractor = input.engagement === 'contractor';
+    return (
+      <>
+        <Field label={t('engagementType')}>
+          <Select
+            value={input.engagement}
+            onChange={(event) => input.setEngagement(event.target.value)}
+            disabled={input.disabled}
+          >
+            <option value="">{t('engagementUnset')}</option>
+            {ENGAGEMENT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {t(`engagement.${type}`)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {(isEmployee || isContractor) && (
+          <Field label={t('allocatedDailyHours')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.25"
+              value={input.dailyHours}
+              onChange={(event) => input.setDailyHours(event.target.value)}
+              disabled={input.disabled}
+              placeholder={t('allocatedDailyHoursPlaceholder')}
+            />
+          </Field>
+        )}
+        {isEmployee ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t('assignmentStart')}>
+              <Input
+                type="date"
+                value={input.assignStart}
+                onChange={(event) => input.setAssignStart(event.target.value)}
+                disabled={input.disabled}
+              />
+            </Field>
+            <Field label={t('assignmentEnd')}>
+              <Input
+                type="date"
+                value={input.assignEnd}
+                onChange={(event) => input.setAssignEnd(event.target.value)}
+                disabled={input.disabled}
+              />
+            </Field>
+          </div>
+        ) : null}
+        {isContractor ? (
+          <>
+            <Field label={t('contractRef')}>
+              <Input
+                value={input.contractRefValue}
+                onChange={(event) =>
+                  input.setContractRefValue(event.target.value)
+                }
+                disabled={input.disabled}
+              />
+            </Field>
+            <Field label={t('contractedBudget')}>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={input.contractedBudgetValue}
+                onChange={(event) =>
+                  input.setContractedBudgetValue(event.target.value)
+                }
+                disabled={input.disabled}
+                placeholder={t('contractedBudgetPlaceholder', { currency })}
+              />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t('contractStart')}>
+                <Input
+                  type="date"
+                  value={input.contractStartValue}
+                  onChange={(event) =>
+                    input.setContractStartValue(event.target.value)
+                  }
+                  disabled={input.disabled}
+                />
+              </Field>
+              <Field label={t('contractEnd')}>
+                <Input
+                  type="date"
+                  value={input.contractEndValue}
+                  onChange={(event) =>
+                    input.setContractEndValue(event.target.value)
+                  }
+                  disabled={input.disabled}
+                />
+              </Field>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t('assignmentStart')}>
+                <Input
+                  type="date"
+                  value={input.assignStart}
+                  onChange={(event) => input.setAssignStart(event.target.value)}
+                  disabled={input.disabled}
+                />
+              </Field>
+              <Field label={t('assignmentEnd')}>
+                <Input
+                  type="date"
+                  value={input.assignEnd}
+                  onChange={(event) => input.setAssignEnd(event.target.value)}
+                  disabled={input.disabled}
+                />
+              </Field>
+            </div>
+          </>
+        ) : null}
+      </>
+    );
   }
 
   function viewSwitcher(activeMode: ViewMode) {
@@ -460,7 +787,7 @@ export function ProjectStakeholdersPanel({
         title={t('title')}
         defaultOpen
       >
-      {error && !createOpen && !manageRow && !wideModalOpen ? (
+      {error && !createOpen && !manageRow && !manageAiRow && !wideModalOpen ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
         </div>
@@ -477,7 +804,7 @@ export function ProjectStakeholdersPanel({
         filterAllLabel={tWorkspaces('sectionFilterAll')}
         createLabel={t('addItem')}
         canCreate={canMutate}
-        extraActions={viewSwitcher(wideModalOpen ? 'list' : viewMode)}
+        extraActions={sectionActions(wideModalOpen ? 'list' : viewMode)}
         onCreate={() => {
           resetCreateForm();
           setCreateOpen(true);
@@ -518,6 +845,14 @@ export function ProjectStakeholdersPanel({
                   {row.raciRoles.map((role) => (
                     <Badge key={role}>{role}</Badge>
                   ))}
+                  {!isAi && row.engagementType ? (
+                    <Badge>{t(`engagement.${row.engagementType}`)}</Badge>
+                  ) : null}
+                  {isAi && row.aiCostMode ? (
+                    <Badge tone="brand">
+                      {t(`aiCostMode.${row.aiCostMode}`)}
+                    </Badge>
+                  ) : null}
                   {row.sources.includes('owner') ? (
                     <Badge tone="success">{t('sourceOwner')}</Badge>
                   ) : null}
@@ -548,9 +883,20 @@ export function ProjectStakeholdersPanel({
                 ) : null}
                 </div>
               </div>
-              {canMutate && !isAi ? (
+              {canMutate ? (
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[8rem]">
-                  {row.rosterId ? (
+                  {isAi ? (
+                    row.systemId ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={() => openManageAi(row)}
+                      >
+                        {t('manageAiCost')}
+                      </Button>
+                    ) : null
+                  ) : row.rosterId ? (
                     <Button
                       type="button"
                       variant="secondary"
@@ -737,6 +1083,25 @@ export function ProjectStakeholdersPanel({
               disabled={pending}
             />
           </Field>
+          {renderCapacityFields({
+            engagement: engagementType,
+            setEngagement: setEngagementType,
+            dailyHours: allocatedDailyHours,
+            setDailyHours: setAllocatedDailyHours,
+            assignStart: assignmentStart,
+            setAssignStart: setAssignmentStart,
+            assignEnd: assignmentEnd,
+            setAssignEnd: setAssignmentEnd,
+            contractRefValue: contractRef,
+            setContractRefValue: setContractRef,
+            contractedBudgetValue: contractedBudget,
+            setContractedBudgetValue: setContractedBudget,
+            contractStartValue: contractStart,
+            setContractStartValue: setContractStart,
+            contractEndValue: contractEnd,
+            setContractEndValue: setContractEnd,
+            disabled: pending,
+          })}
         </div>
       </Modal>
 
@@ -874,8 +1239,114 @@ export function ProjectStakeholdersPanel({
               rows={3}
             />
           </Field>
+          {renderCapacityFields({
+            engagement: editEngagementType,
+            setEngagement: setEditEngagementType,
+            dailyHours: editAllocatedDailyHours,
+            setDailyHours: setEditAllocatedDailyHours,
+            assignStart: editAssignmentStart,
+            setAssignStart: setEditAssignmentStart,
+            assignEnd: editAssignmentEnd,
+            setAssignEnd: setEditAssignmentEnd,
+            contractRefValue: editContractRef,
+            setContractRefValue: setEditContractRef,
+            contractedBudgetValue: editContractedBudget,
+            setContractedBudgetValue: setEditContractedBudget,
+            contractStartValue: editContractStart,
+            setContractStartValue: setEditContractStart,
+            contractEndValue: editContractEnd,
+            setContractEndValue: setEditContractEnd,
+            disabled: pending || confirmDelete,
+          })}
         </div>
       </Modal>
+
+      <Modal
+        open={Boolean(manageAiRow)}
+        onClose={closeManageAi}
+        title={t('manageAiCostTitle')}
+        description={t('manageAiCostDescription')}
+        size="md"
+        footer={
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={closeManageAi}
+              disabled={pending}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() => void saveManageAi()}
+            >
+              {tCommon('save')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid gap-3">
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <p className="m-0 text-sm font-semibold">{manageAiRow?.displayName}</p>
+          <Field label={t('aiCostModeLabel')}>
+            <Select
+              value={editAiCostMode}
+              onChange={(event) => setEditAiCostMode(event.target.value)}
+              disabled={pending}
+            >
+              <option value="">{t('aiCostModeUnset')}</option>
+              {AI_COST_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {t(`aiCostMode.${mode}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('aiFlatMonthlyFee')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={editAiFlatMonthlyFee}
+              onChange={(event) => setEditAiFlatMonthlyFee(event.target.value)}
+              disabled={pending}
+              placeholder={t('aiFlatMonthlyFeePlaceholder', { currency })}
+            />
+          </Field>
+          <Field label={t('aiTokenRatePer1k')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.0001"
+              value={editAiTokenRatePer1k}
+              onChange={(event) => setEditAiTokenRatePer1k(event.target.value)}
+              disabled={pending}
+              placeholder={t('aiTokenRatePer1kPlaceholder', { currency })}
+            />
+          </Field>
+          <Field label={t('aiBudgetAllocation')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={editAiBudgetAllocation}
+              onChange={(event) =>
+                setEditAiBudgetAllocation(event.target.value)
+              }
+              disabled={pending}
+              placeholder={t('aiBudgetAllocationPlaceholder', { currency })}
+            />
+          </Field>
+        </div>
+      </Modal>
+
+      <ProjectResourceUtilizationModal
+        open={utilizationOpen}
+        onClose={() => setUtilizationOpen(false)}
+        projectId={projectId}
+      />
     </>
   );
 }

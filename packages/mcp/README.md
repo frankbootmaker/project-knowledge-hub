@@ -11,7 +11,7 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints, **and the image/media embed workflow**
 * `list_workspace_media` — recent workspace images with Markdown snippets
 * `get_platform_status` — redacted health/backup snapshot (requires opt-in `monitoring:read`; not in default scopes)
-* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` — Project Delivery + RAID (requires opt-in `pm:read`)
+* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` / `get_project_budget_summary` / `get_project_resource_utilization` — Project Delivery + RAID + budget/utilization (requires opt-in `pm:read`)
 * `get_knowledge_record_delivery_links` — epic/story/task links for a knowledge record (`knowledge:read`)
 
 Also available as REST: `GET /api/v1/platform/status` with the same scope.
@@ -39,15 +39,19 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 * `create_project_milestone` / `update_project_milestone`
 * `create_project_epic` / `update_project_epic`
 * `create_project_user_story` / `update_project_user_story`
-* `create_project_task` / `update_project_task` (optional story + current owner)
+* `create_project_task` / `update_project_task` (optional story + current owner; optional `tokensUsed` / `aiSystemId`)
+* `report_project_task_ai_usage` — record AI tokens on a task (prefer on completion); refreshes cost snapshot
 * `set_project_task_raci` — replace RACI; workspace members only; at most one Accountable (`A`)
 * `add_project_task_comment` / `handoff_project_task` — activity timeline; handoff moves current owner only
-* `create_project_stakeholder` / `update_project_stakeholder` / `delete_project_stakeholder` — durable roster (+ reports-to)
+* `create_project_stakeholder` / `update_project_stakeholder` / `delete_project_stakeholder` — durable roster (+ reports-to, engagement, capacity, contract)
+* `update_project_ai_assistant_cost` — AI cost mode (`flat`|`api`|`mixed`|`note_only`), fees, soft allocation
 * `create_project_raid_item` / `update_project_raid_item` / `set_project_raid_task_links` — RAID register (+ task links)
 * `transfer_project_raid_item` — move risk↔issue (new key; archives source). Do not use `update_project_raid_item` to change kind between risk and issue.
 * `update_project_baseline` — dates, pins, currency, budgets, and optional `keyPrefix` (workspace-unique `AAA` / `AA0`)
 
 **Human keys:** Delivery, RAID, and change DTOs include `humanKey` (e.g. `HL1-T-12`, `HL1-RR-3`). Get/update tools accept **UUID or human key** for entity ids. `get_project` returns `keyPrefix`.
+
+**AI spend:** When an AI system worked a task, call `report_project_task_ai_usage` (or set `tokensUsed` on update) so `api`/`mixed` modes feed AC; `note_only` records usage at $0.
 
 ## Embedding images in knowledge Markdown
 

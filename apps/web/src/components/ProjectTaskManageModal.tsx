@@ -57,6 +57,8 @@ type TaskDetail = {
   epicTitle: string | null;
   currentOwnerUserId: string | null;
   currentOwner: TaskOwner | null;
+  tokensUsed: number | null;
+  aiSystemId: string | null;
   raci: RaciEntry[];
 };
 
@@ -150,6 +152,8 @@ export function ProjectTaskManageModal({
   const [description, setDescription] = useState('');
   const [milestoneId, setMilestoneId] = useState('');
   const [userStoryId, setUserStoryId] = useState('');
+  const [tokensUsed, setTokensUsed] = useState('');
+  const [aiSystemId, setAiSystemId] = useState('');
   const [linkedRaid, setLinkedRaid] = useState<LinkedRaid[]>([]);
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
   const tRaid = useTranslations('raid');
@@ -193,6 +197,10 @@ export function ProjectTaskManageModal({
       setDescription(loaded.description ?? '');
       setMilestoneId(loaded.milestoneId ?? '');
       setUserStoryId(loaded.userStoryId ?? '');
+      setTokensUsed(
+        loaded.tokensUsed != null ? String(loaded.tokensUsed) : '',
+      );
+      setAiSystemId(loaded.aiSystemId ?? '');
 
       const actPayload = (await actRes.json().catch(() => ({}))) as {
         activities?: Activity[];
@@ -312,6 +320,11 @@ export function ProjectTaskManageModal({
           description: description.trim() || null,
           milestoneId: milestoneId || null,
           userStoryId: userStoryId || null,
+          tokensUsed:
+            tokensUsed.trim() === ''
+              ? null
+              : Math.max(0, Math.floor(Number(tokensUsed))),
+          aiSystemId: aiSystemId.trim() || null,
         }),
       });
       const payload = (await response.json().catch(() => ({}))) as {
@@ -616,6 +629,33 @@ export function ProjectTaskManageModal({
                   : tBudget('rateMissing', { name: ratePerson.displayName })
                 : tBudget('rateUnresolved')}
             </p>
+            {(canMutate ||
+              tokensUsed.trim() !== '' ||
+              task.tokensUsed != null ||
+              aiSystemId.trim() !== '' ||
+              task.aiSystemId) ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t('tokensUsed')}>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={tokensUsed}
+                    onChange={(e) => setTokensUsed(e.target.value)}
+                    disabled={pending || !canMutate}
+                    placeholder={t('tokensUsedPlaceholder')}
+                  />
+                </Field>
+                <Field label={t('aiSystemId')}>
+                  <Input
+                    value={aiSystemId}
+                    onChange={(e) => setAiSystemId(e.target.value)}
+                    disabled={pending || !canMutate}
+                    placeholder={t('aiSystemIdPlaceholder')}
+                  />
+                </Field>
+              </div>
+            ) : null}
             <Field label={t('kindStory')}>
               <Select
                 value={userStoryId}

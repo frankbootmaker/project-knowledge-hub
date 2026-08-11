@@ -217,6 +217,11 @@ export const systems = pgTable(
     environment: text('environment'),
     version: text('version'),
     criticality: text('criticality'),
+    /** AI assistant cost mode: flat | api | mixed | note_only. */
+    aiCostMode: text('ai_cost_mode'),
+    aiFlatMonthlyFee: numeric('ai_flat_monthly_fee', { precision: 14, scale: 2 }),
+    aiTokenRatePer1k: numeric('ai_token_rate_per_1k', { precision: 14, scale: 4 }),
+    aiBudgetAllocation: numeric('ai_budget_allocation', { precision: 14, scale: 2 }),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
     lastValidatedAt: timestamp('last_validated_at', {
       withTimezone: true,
@@ -1113,6 +1118,11 @@ export const projectTasks = pgTable(
     currentOwnerUserId: uuid('current_owner_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
+    /** Tokens consumed by an AI assistant on this task (actuals). */
+    tokensUsed: integer('tokens_used'),
+    aiSystemId: uuid('ai_system_id').references(() => systems.id, {
+      onDelete: 'set null',
+    }),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
@@ -1124,6 +1134,7 @@ export const projectTasks = pgTable(
     index('project_tasks_user_story_id_idx').on(table.userStoryId),
     index('project_tasks_project_user_story_idx').on(table.projectId, table.userStoryId),
     index('project_tasks_current_owner_user_id_idx').on(table.currentOwnerUserId),
+    index('project_tasks_ai_system_id_idx').on(table.aiSystemId),
     index('project_tasks_project_status_idx').on(table.projectId, table.status),
     uniqueIndex('project_tasks_project_key_uidx').on(
       table.projectId,
@@ -1204,6 +1215,18 @@ export const projectStakeholders = pgTable(
     }),
     /** Hourly rate in the project's currency. */
     hourlyRate: numeric('hourly_rate', { precision: 12, scale: 2 }),
+    /** employee | contractor */
+    engagementType: text('engagement_type'),
+    assignmentStart: date('assignment_start', { mode: 'string' }),
+    assignmentEnd: date('assignment_end', { mode: 'string' }),
+    allocatedDailyHours: numeric('allocated_daily_hours', {
+      precision: 6,
+      scale: 2,
+    }),
+    contractRef: text('contract_ref'),
+    contractedBudget: numeric('contracted_budget', { precision: 14, scale: 2 }),
+    contractStart: date('contract_start', { mode: 'string' }),
+    contractEnd: date('contract_end', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
     ...timestamps,
   },

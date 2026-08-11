@@ -31,6 +31,9 @@ apps/api/data/
 .idea
 .vscode
 
+# Licensed PMI member PDF (personal use only — do not redistribute)
+docs/pmi/
+
 # Test artifacts
 playwright-report
 test-results

@@ -8,6 +8,7 @@
     "edit": "Bearbeiten",
     "create": "Erstellen",
     "cancel": "Abbrechen",
+    "close": "Schließen",
     "back": "Zurück",
     "none": "Keine",
     "any": "Alle",
@@ -2034,7 +2035,11 @@
       "neutral": "Abgebrochen"
     },
     "forecastHours": "Prognose-Stunden",
-    "actualHours": "Ist-Stunden"
+    "actualHours": "Ist-Stunden",
+    "tokensUsed": "Verwendete KI-Tokens",
+    "tokensUsedPlaceholder": "z. B. 12000",
+    "aiSystemId": "KI-System-ID",
+    "aiSystemIdPlaceholder": "Optionale UUID des KI-Assistenten-Systems"
   },
   "stakeholders": {
     "title": "Stakeholder",
@@ -2099,7 +2104,76 @@
     "orgChartExportingPdf": "PDF wird exportiert…",
     "orgChartExportTitle": "Org-Chart: {project}",
     "orgChartExported": "Org-Chart-PDF heruntergeladen.",
-    "orgChartExportFailed": "Org-Chart-PDF konnte nicht exportiert werden"
+    "orgChartExportFailed": "Org-Chart-PDF konnte nicht exportiert werden",
+    "utilization": "Auslastung",
+    "engagementType": "Engagement-Typ",
+    "engagementUnset": "Nicht gesetzt",
+    "engagement": {
+      "employee": "Angestellte/r",
+      "contractor": "Auftragnehmer/in",
+      "unset": "Nicht gesetzt"
+    },
+    "allocatedDailyHours": "Zugewiesene Stunden / Tag",
+    "allocatedDailyHoursPlaceholder": "z. B. 6",
+    "assignmentStart": "Einsatzbeginn",
+    "assignmentEnd": "Einsatzende",
+    "contractRef": "Vertragsreferenz",
+    "contractedBudget": "Vertragsbudget",
+    "contractedBudgetPlaceholder": "Betrag in {currency}",
+    "contractStart": "Vertragsbeginn",
+    "contractEnd": "Vertragsende",
+    "manageAiCost": "KI-Kosten verwalten",
+    "manageAiCostTitle": "KI-Kosten verwalten",
+    "manageAiCostDescription": "Legen Sie fest, wie dieser KI-Assistent im Projektbudget abgerechnet wird.",
+    "aiCostModeLabel": "KI-Kostenmodus",
+    "aiCostModeUnset": "Nicht gesetzt",
+    "aiCostMode": {
+      "flat": "Pauschal",
+      "api": "API / Tokens",
+      "mixed": "Gemischt",
+      "note_only": "Nur Notiz"
+    },
+    "aiFlatMonthlyFee": "Monatliche Pauschale",
+    "aiFlatMonthlyFeePlaceholder": "Betrag in {currency}",
+    "aiTokenRatePer1k": "Token-Preis (pro 1k)",
+    "aiTokenRatePer1kPlaceholder": "Betrag in {currency}",
+    "aiBudgetAllocation": "Budget-Zuweisung",
+    "aiBudgetAllocationPlaceholder": "Betrag in {currency}",
+    "aiCostUpdated": "KI-Kosteneinstellungen aktualisiert.",
+    "failedUpdateAiCost": "KI-Kosteneinstellungen konnten nicht aktualisiert werden"
+  },
+  "utilization": {
+    "title": "Ressourcenauslastung",
+    "description": "Vergleichen Sie Team-Kapazität mit geplantem und verbrauchtem Bedarf im Projektzeitraum.",
+    "viewLabel": "Auslastungsansicht",
+    "view": {
+      "planned": "Geplant",
+      "burn": "Verbrauch",
+      "combined": "Kombiniert"
+    },
+    "resourceRag": "Kapazität",
+    "atRiskCallout": "Mindestens eine Person ist in der gewählten Ansicht über der Kapazität.",
+    "capacity": "Kapazität",
+    "plannedDemand": "Geplanter Bedarf",
+    "burnDemand": "Verbrauchter Bedarf",
+    "diagram": "Kapazität vs. Bedarf",
+    "empty": "Noch keine Kapazitätsdaten. Setzen Sie Engagement und Tagesstunden bei Teammitgliedern.",
+    "person": "Person",
+    "demand": "Bedarf",
+    "pct": "Auslastung",
+    "statusLabel": "Status",
+    "status": {
+      "under": "Unter",
+      "on_track": "Im Plan",
+      "over": "Über",
+      "unknown": "Unbekannt"
+    },
+    "engagement": {
+      "employee": "Angestellte/r",
+      "contractor": "Auftragnehmer/in",
+      "unset": "Nicht gesetzt"
+    },
+    "failedLoad": "Auslastung konnte nicht geladen werden"
   },
   "raid": {
     "title": "RAID",
@@ -2277,6 +2351,11 @@
     "rateHint": "Satz von {name} ({rate}) · Prognose {forecast} · Ist {actual}",
     "rateMissing": "{name} hat keinen Stundensatz im Team — Stunden rollen ohne Kosten hoch.",
     "rateUnresolved": "Kein Owner/R/A mit Team-Satz — Stunden rollen ohne Kosten hoch.",
+    "acBreakdown": "AC-Aufteilung: Personen {person} · KI {ai}",
+    "aiNoteOnlyTokens": "{count} reine Notiz-KI-Tokens sind nicht in AC-Geld enthalten.",
+    "aiOverAllocation": "Mindestens ein KI-System überschreitet seine Budget-Zuweisung.",
+    "aiOverAllocationShort": "über Zuweisung",
+    "aiBreakdown": "{name} ({mode}): {cost}",
     "hint": "BAC = genehmigtes Budget (sonst Initial). Kosten: aktueller Owner, sonst RACI R, sonst A.",
     "readOnlyHint": "Budgetierung ist sichtbar; Maintainer und Admins können bearbeiten."
   }

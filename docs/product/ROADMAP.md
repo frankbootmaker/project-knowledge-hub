@@ -35,7 +35,7 @@ Post-milestone ideas (including Doc Factory) live in [`NEXT_FEATURES.md`](NEXT_F
 
 ## Next features
 
-See [`NEXT_FEATURES.md`](NEXT_FEATURES.md) (includes **recommended execution waves A–F**). Doc Factory (NF-001) is **parked** pending a more precise module description. Ops spine: NF-002 → NF-005 → NF-011 (absorbs NF-008) → NF-006/007 → NF-009.
+See [`NEXT_FEATURES.md`](NEXT_FEATURES.md) (includes **recommended execution waves A–F**). Doc Factory (NF-001) is **parked** pending a more precise module description. Ops spine: NF-002 → NF-005 → NF-011 (absorbs NF-008) → NF-006/007 → NF-009. Product delivery: NF-018, then **NF-019** AI governance ([`PROJECT_AI_GOVERNANCE.md`](PROJECT_AI_GOVERNANCE.md), ADR-021).
 
 ## Explicitly deferred until after MVP
 

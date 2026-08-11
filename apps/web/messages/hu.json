@@ -8,6 +8,7 @@
     "edit": "Szerkesztés",
     "create": "Létrehozás",
     "cancel": "Mégse",
+    "close": "Bezárás",
     "back": "Vissza",
     "none": "Nincs",
     "any": "Bármely",
@@ -2034,7 +2035,11 @@
       "neutral": "Törölve"
     },
     "forecastHours": "Előrejelzett órák",
-    "actualHours": "Tényleges órák"
+    "actualHours": "Tényleges órák",
+    "tokensUsed": "Felhasznált AI tokenek",
+    "tokensUsedPlaceholder": "pl. 12000",
+    "aiSystemId": "AI rendszer azonosító",
+    "aiSystemIdPlaceholder": "Opcionális UUID az AI asszisztens rendszerhez"
   },
   "stakeholders": {
     "title": "Stakeholders",
@@ -2099,7 +2104,76 @@
     "orgChartExportingPdf": "PDF exportálása…",
     "orgChartExportTitle": "{project} org chart",
     "orgChartExported": "Org chart PDF letöltve.",
-    "orgChartExportFailed": "Nem sikerült exportálni az org chart PDF-et"
+    "orgChartExportFailed": "Nem sikerült exportálni az org chart PDF-et",
+    "utilization": "Kihasználtság",
+    "engagementType": "Foglalkoztatás típusa",
+    "engagementUnset": "Nincs megadva",
+    "engagement": {
+      "employee": "Alkalmazott",
+      "contractor": "Vállalkozó",
+      "unset": "Nincs megadva"
+    },
+    "allocatedDailyHours": "Napi lefoglalt órák",
+    "allocatedDailyHoursPlaceholder": "pl. 6",
+    "assignmentStart": "Megbízás kezdete",
+    "assignmentEnd": "Megbízás vége",
+    "contractRef": "Szerződés hivatkozás",
+    "contractedBudget": "Szerződött költségvetés",
+    "contractedBudgetPlaceholder": "Összeg ({currency})",
+    "contractStart": "Szerződés kezdete",
+    "contractEnd": "Szerződés vége",
+    "manageAiCost": "AI költség kezelése",
+    "manageAiCostTitle": "AI költség kezelése",
+    "manageAiCostDescription": "Állítsd be, hogyan kerül számlázásra ez az AI asszisztens a projekt költségvetésében.",
+    "aiCostModeLabel": "AI költség mód",
+    "aiCostModeUnset": "Nincs megadva",
+    "aiCostMode": {
+      "flat": "Fix díj",
+      "api": "API / token",
+      "mixed": "Vegyes",
+      "note_only": "Csak jegyzet"
+    },
+    "aiFlatMonthlyFee": "Havi fix díj",
+    "aiFlatMonthlyFeePlaceholder": "Összeg ({currency})",
+    "aiTokenRatePer1k": "Token díj (1k-ra)",
+    "aiTokenRatePer1kPlaceholder": "Összeg ({currency})",
+    "aiBudgetAllocation": "Költségvetési keret",
+    "aiBudgetAllocationPlaceholder": "Összeg ({currency})",
+    "aiCostUpdated": "AI költség beállítások frissítve.",
+    "failedUpdateAiCost": "Nem sikerült frissíteni az AI költség beállításokat"
+  },
+  "utilization": {
+    "title": "Erőforrás-kihasználtság",
+    "description": "Hasonlítsd össze a roster kapacitást a tervezett és elégetett igénnyel a projekt időablakában.",
+    "viewLabel": "Kihasználtság nézet",
+    "view": {
+      "planned": "Tervezett",
+      "burn": "Elégetett",
+      "combined": "Kombinált"
+    },
+    "resourceRag": "Kapacitás",
+    "atRiskCallout": "Legalább egy személy túllépi a kapacitást a kiválasztott nézetben.",
+    "capacity": "Kapacitás",
+    "plannedDemand": "Tervezett igény",
+    "burnDemand": "Elégetett igény",
+    "diagram": "Kapacitás vs. igény",
+    "empty": "Még nincs roster kapacitás adat. Állíts be foglalkoztatást és napi órákat a projektcsapat tagjainál.",
+    "person": "Személy",
+    "demand": "Igény",
+    "pct": "Kihasználtság",
+    "statusLabel": "Státusz",
+    "status": {
+      "under": "Alul",
+      "on_track": "Terv szerint",
+      "over": "Felette",
+      "unknown": "Ismeretlen"
+    },
+    "engagement": {
+      "employee": "Alkalmazott",
+      "contractor": "Vállalkozó",
+      "unset": "Nincs megadva"
+    },
+    "failedLoad": "Nem sikerült betölteni a kihasználtságot"
   },
   "raid": {
     "title": "RAID",
@@ -2277,6 +2351,11 @@
     "rateHint": "Díj: {name} ({rate}) · Előrejelzés {forecast} · Tény {actual}",
     "rateMissing": "{name} nem rendelkezik óradíjjal a rosteren — az órák költség nélkül görgetődnek.",
     "rateUnresolved": "Nincs owner/R/A roster díjjal — az órák költség nélkül görgetődnek.",
+    "acBreakdown": "AC bontás: emberek {person} · AI {ai}",
+    "aiNoteOnlyTokens": "{count} csak jegyzet AI token nincs benne az AC pénzben.",
+    "aiOverAllocation": "Legalább egy AI rendszer túllépi a költségvetési keretét.",
+    "aiOverAllocationShort": "túllépés",
+    "aiBreakdown": "{name} ({mode}): {cost}",
     "hint": "A BAC a jóváhagyott költségvetés (különben a kezdeti). Költség: jelenlegi owner, majd RACI R, majd A.",
     "readOnlyHint": "A költségvetés megtekinthető; a karbantartók és adminok szerkeszthetnek."
   }

@@ -70,6 +70,8 @@ export type PublicTask = {
   dueDate: string | null;
   forecastHours: string | null;
   actualHours: string | null;
+  tokensUsed: number | null;
+  aiSystemId: string | null;
   sortOrder: number;
   createdBy: string | null;
   currentOwnerUserId: string | null;
@@ -151,6 +153,8 @@ function toPublicTask(
     dueDate: row.dueDate,
     forecastHours: row.forecastHours,
     actualHours: row.actualHours,
+    tokensUsed: row.tokensUsed ?? null,
+    aiSystemId: row.aiSystemId ?? null,
     sortOrder: row.sortOrder,
     createdBy: row.createdBy,
     currentOwnerUserId: row.currentOwnerUserId,
@@ -816,6 +820,8 @@ export async function createTask(
     dueDate?: string | null;
     forecastHours?: string | null;
     actualHours?: string | null;
+    tokensUsed?: number | null;
+    aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     currentOwnerUserId?: string | null;
@@ -857,6 +863,8 @@ export async function createTask(
       dueDate: input.dueDate ?? null,
       forecastHours: input.forecastHours ?? null,
       actualHours: input.actualHours ?? null,
+      tokensUsed: input.tokensUsed ?? null,
+      aiSystemId: input.aiSystemId ?? null,
       sortOrder: input.sortOrder ?? 0,
       createdBy: input.createdBy ?? null,
       currentOwnerUserId: ownerUserId,
@@ -917,6 +925,8 @@ export async function updateTask(
     dueDate?: string | null;
     forecastHours?: string | null;
     actualHours?: string | null;
+    tokensUsed?: number | null;
+    aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     currentOwnerUserId?: string | null;
@@ -973,6 +983,10 @@ export async function updateTask(
         input.actualHours !== undefined
           ? input.actualHours
           : existing.actualHours,
+      tokensUsed:
+        input.tokensUsed !== undefined ? input.tokensUsed : existing.tokensUsed,
+      aiSystemId:
+        input.aiSystemId !== undefined ? input.aiSystemId : existing.aiSystemId,
       milestoneId:
         input.milestoneId !== undefined ? input.milestoneId : existing.milestoneId,
       userStoryId:
@@ -1017,6 +1031,8 @@ export async function updateTask(
     'dueDate',
     'forecastHours',
     'actualHours',
+    'tokensUsed',
+    'aiSystemId',
     'milestoneId',
     'userStoryId',
     'sortOrder',

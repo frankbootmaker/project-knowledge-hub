@@ -1,10 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { workspaces } from '@project-knowledge-hub/database';
+import { systems, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
+  aiCostModeSchema,
   projectStakeholderRoleSchema,
+  resourceUtilizationViewSchema,
+  stakeholderEngagementTypeSchema,
 } from '@project-knowledge-hub/domain';
 import {
   requireWorkspaceMaintainer,
@@ -25,10 +28,17 @@ import {
   deleteProjectStakeholder,
   getRosterStakeholder,
   listProjectStakeholders,
+  updateAiAssistantCost,
   updateProjectStakeholder,
   upsertProjectStakeholder,
 } from '../lib/project-stakeholders.js';
-import { parseBudgetAmount } from '../lib/project-budget.js';
+import {
+  parseBudgetAmount,
+  parseHours,
+  parseTokenRate,
+  upsertProjectCostSnapshot,
+} from '../lib/project-budget.js';
+import { getProjectResourceUtilization } from '../lib/project-resource-utilization.js';
 
 async function workspaceOrgId(
   app: FastifyInstance,
@@ -43,6 +53,21 @@ async function workspaceOrgId(
 }
 
 const moneySchema = z.union([z.number(), z.string()]).nullable();
+const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable();
+
+const capacityFields = {
+  engagementType: stakeholderEngagementTypeSchema.nullable().optional(),
+  assignmentStart: dateSchema.optional(),
+  assignmentEnd: dateSchema.optional(),
+  allocatedDailyHours: moneySchema.optional(),
+  contractRef: z.string().max(200).nullable().optional(),
+  contractedBudget: moneySchema.optional(),
+  contractStart: dateSchema.optional(),
+  contractEnd: dateSchema.optional(),
+};
 
 const upsertSchema = z.object({
   userId: z.string().uuid(),
@@ -52,6 +77,7 @@ const upsertSchema = z.object({
   reportsToUserId: z.string().uuid().nullable().optional(),
   hourlyRate: moneySchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
+  ...capacityFields,
 });
 
 const updateSchema = z.object({
@@ -61,7 +87,34 @@ const updateSchema = z.object({
   reportsToUserId: z.string().uuid().nullable().optional(),
   hourlyRate: moneySchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
+  ...capacityFields,
 });
+
+const aiCostSchema = z.object({
+  aiCostMode: aiCostModeSchema.nullable().optional(),
+  aiFlatMonthlyFee: moneySchema.optional(),
+  aiTokenRatePer1k: moneySchema.optional(),
+  aiBudgetAllocation: moneySchema.optional(),
+});
+
+function mapCapacityBody(body: z.infer<typeof upsertSchema> | z.infer<typeof updateSchema>) {
+  return {
+    engagementType: body.engagementType,
+    assignmentStart: body.assignmentStart,
+    assignmentEnd: body.assignmentEnd,
+    allocatedDailyHours:
+      body.allocatedDailyHours === undefined
+        ? undefined
+        : parseHours(body.allocatedDailyHours) ?? null,
+    contractRef: body.contractRef,
+    contractedBudget:
+      body.contractedBudget === undefined
+        ? undefined
+        : parseBudgetAmount(body.contractedBudget) ?? null,
+    contractStart: body.contractStart,
+    contractEnd: body.contractEnd,
+  };
+}
 
 export async function registerProjectStakeholderRoutes(
   app: FastifyInstance,
@@ -76,6 +129,33 @@ export async function registerProjectStakeholderRoutes(
       stakeholders: await listProjectStakeholders(app.database, project.id),
     };
   });
+
+  app.get(
+    '/api/v1/projects/:projectId/resource-utilization',
+    async (request) => {
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ projectId: z.string().uuid() })
+        .parse(request.params);
+      const query = z
+        .object({
+          view: resourceUtilizationViewSchema.optional(),
+        })
+        .parse(request.query);
+      const { project } = await requireProjectContext(
+        app.database,
+        params.projectId,
+      );
+      requireWorkspaceView(principal, project.workspaceId);
+      return {
+        utilization: await getProjectResourceUtilization(
+          app.database,
+          project.id,
+          query.view ?? 'planned',
+        ),
+      };
+    },
+  );
 
   app.post('/api/v1/projects/:projectId/stakeholders', async (request) => {
     assertMutatingOrigin(app, request);
@@ -98,6 +178,7 @@ export async function registerProjectStakeholderRoutes(
           ? undefined
           : parseBudgetAmount(body.hourlyRate) ?? null,
       sortOrder: body.sortOrder,
+      ...mapCapacityBody(body),
     });
 
     await writeAuditEvent(app.database, {
@@ -134,11 +215,16 @@ export async function registerProjectStakeholderRoutes(
       app.database,
       params.stakeholderId,
       {
-        ...body,
+        projectRole: body.projectRole,
+        jobTitle: body.jobTitle,
+        notes: body.notes,
+        reportsToUserId: body.reportsToUserId,
         hourlyRate:
           body.hourlyRate === undefined
             ? undefined
             : parseBudgetAmount(body.hourlyRate) ?? null,
+        sortOrder: body.sortOrder,
+        ...mapCapacityBody(body),
       },
     );
 
@@ -150,6 +236,70 @@ export async function registerProjectStakeholderRoutes(
       entityType: 'project_stakeholder',
       entityId: params.stakeholderId,
       metadata: { projectId: project.id, userId: stakeholder.userId },
+      ipAddress: request.ip,
+    });
+
+    return { stakeholder };
+  });
+
+  app.patch('/api/v1/systems/:systemId/ai-cost', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ systemId: z.string().uuid() }).parse(request.params);
+    const body = aiCostSchema.parse(request.body);
+
+    const [system] = await app.database.db
+      .select({
+        id: systems.id,
+        projectId: systems.projectId,
+        workspaceId: systems.workspaceId,
+      })
+      .from(systems)
+      .where(eq(systems.id, params.systemId))
+      .limit(1);
+    if (!system?.projectId) {
+      throw new AppError({
+        code: 'SYSTEM_NOT_FOUND',
+        message: 'AI assistant system not found',
+        statusCode: 404,
+      });
+    }
+
+    const { project } = await requireProjectContext(
+      app.database,
+      system.projectId,
+    );
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+
+    const stakeholder = await updateAiAssistantCost(
+      app.database,
+      params.systemId,
+      {
+        aiCostMode: body.aiCostMode,
+        aiFlatMonthlyFee:
+          body.aiFlatMonthlyFee === undefined
+            ? undefined
+            : parseBudgetAmount(body.aiFlatMonthlyFee) ?? null,
+        aiTokenRatePer1k:
+          body.aiTokenRatePer1k === undefined
+            ? undefined
+            : parseTokenRate(body.aiTokenRatePer1k) ?? null,
+        aiBudgetAllocation:
+          body.aiBudgetAllocation === undefined
+            ? undefined
+            : parseBudgetAmount(body.aiBudgetAllocation) ?? null,
+      },
+    );
+    await upsertProjectCostSnapshot(app.database, project.id);
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'system.ai_cost_updated',
+      entityType: 'system',
+      entityId: params.systemId,
+      metadata: { projectId: project.id, ...body },
       ipAddress: request.ip,
     });
 

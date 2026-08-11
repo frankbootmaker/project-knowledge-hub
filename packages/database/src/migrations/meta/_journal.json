@@ -281,6 +281,13 @@
       "when": 1786375200000,
       "tag": "0039_project_issue_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786378800000,
+      "tag": "0040_stakeholder_resources_ai_cost",
+      "breakpoints": true
     }
   ]
 }

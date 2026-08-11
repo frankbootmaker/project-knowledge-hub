@@ -21,7 +21,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 | **C — Admin ops UI** | **NF-011** Mon-0 + **Mon-1** done (client leaderboard + catalogue tops). Embedding reindex + archived counts on Monitoring | Fancy charts |
 | **D — Object storage** | **NF-006** BlobStore + **s3** + Admin → Storage + **Ops-2 avatars** done. **NF-013** knowledge media done. Imports/exports still later. **NF-007** Azure on same Storage page **with Entra IdP (NF-012)** | OneDrive/SharePoint |
 | **E — Ops polish** | **NF-009** support dump + ops log export + retention + richer alerts; **NF-014** external status REST/MCP (`monitoring:read`) | Log shipping to external aggregator |
-| **F — Product** | **NF-001** Doc Factory Phase E (style packs) in progress; content templates / forge later. **NF-018** Project Delivery (milestones/tasks/RACI + MCP) on local branch. **NF-004** ChatGPT MCP App, **NF-010** finer ACLs — only with real user jobs | Do not cut in front of A–C for parked items |
+| **F — Product** | **NF-001** Doc Factory Phase E (style packs) in progress; content templates / forge later. **NF-018** Project Delivery (milestones/tasks/RACI + MCP) on local branch. **NF-019** Project AI governance (scope/HITL/RAID tags) after NF-018 smoke. **NF-004** ChatGPT MCP App, **NF-010** finer ACLs — only with real user jobs | Do not cut in front of A–C for parked items |
 
 ### Merge / optimize notes
 
@@ -56,6 +56,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 | NF-016 | **Multilingual knowledge records** — content language + linked translation families | `done` — Phase 1 + Phase 2 + AI translate (`translateWithAi`) via Admin AI Providers / `VISION_LLM_*` | Same-slug URLs / `?lang=`; preferred_locale redirect; locale-aware FTS; re-translate existing sibling | Wave **F**. Distinct slugs per language; group id links siblings. |
 | NF-017 | **OIDC sign-in (Authentik first)** — generic OIDC alongside local passwords; invite/link-only user binding | `partial` — v1 env + login button + PKCE callback | Staging smoke with real Authentik; Admin IdP UI; group→role mapping later | Brief: [`OIDC_IDP.md`](OIDC_IDP.md). Operator guide: [`OIDC_AUTHENTIK_INTEGRATION_GUIDE.md`](OIDC_AUTHENTIK_INTEGRATION_GUIDE.md). Wave **F** / IdP. NF-012 Entra reuses this path. |
 | NF-018 | **Project Delivery** — milestones, epic→story→task, dates, RACI + handoffs, RAID, baseline/change register, delivery Timeline, budgeting/EVM + multi-RAG; REST/UI + MCP `pm:read`/`pm:write` | `partial` — local MVP on `feature/project-delivery` | Local smoke; then merge when stable (not Dokploy until ready) | Briefs: [`PROJECT_DELIVERY.md`](PROJECT_DELIVERY.md), [`PROJECT_RAID.md`](PROJECT_RAID.md), [`PROJECT_BASELINE.md`](PROJECT_BASELINE.md), [`PROJECT_BUDGET.md`](PROJECT_BUDGET.md). ADR-015/016/017/018. Wave **F**. |
+| NF-019 | **Project AI governance** — AI role (tool/deliverable), scope/charter, delivery HITL policy, AI-tagged RAID, AI system life cycle, stakeholder AI expectations, benefits vs AI spend, ethics checklist | `planned` — brief + ADR ready | Finish NF-018 smoke; Phase A baseline AI role/scope first | Brief: [`PROJECT_AI_GOVERNANCE.md`](PROJECT_AI_GOVERNANCE.md). ADR-021. Builds on ADR-013/020. Wave **F**. |
 
 
 ---
@@ -107,6 +108,17 @@ When implementing or extending Project Delivery, follow [`PROJECT_DELIVERY.md`](
 * **Boundaries** — First-class milestones/tasks/RACI; knowledge stays draft-only; delivery commits live
 * **v1 slice** — one Accountable per task; workspace members only; soft cancel via status
 * **Non-goals** — Jira sync, Gantt, notifications, project-level ACLs (NF-010)
+
+---
+
+## Suggested module brief (for NF-019)
+
+When implementing Project AI governance, follow [`PROJECT_AI_GOVERNANCE.md`](PROJECT_AI_GOVERNANCE.md) and ADR-021. At minimum confirm:
+
+* **Surfaces** — Baseline (AI role/scope), HITL policy editor, RAID AI tags, Systems life cycle, Budget benefits footnote
+* **Boundaries** — Extends delivery/RAID/baseline/budget; does not invent a parallel GRC product; no portfolio layer
+* **v1 slice** — Phase A (`aiRole` + charter pin), then B (HITL soft-block for MCP)
+* **Non-goals** — ISO/IEC 42001 certification kit; quoting/shipping PMI standard text in the product; training models on `docs/pmi/`
 
 ---
 

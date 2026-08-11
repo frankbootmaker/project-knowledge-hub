@@ -10,12 +10,16 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  aiCostModeSchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
   resolveAssistantBrand,
+  stakeholderEngagementTypeSchema,
+  type AiCostMode,
   type AssistantBrand,
   type ProjectStakeholderRole,
   type RaciRole,
+  type StakeholderEngagementType,
 } from '@project-knowledge-hub/domain';
 import {
   assertProjectNotArchived,
@@ -43,10 +47,23 @@ export type PublicStakeholder = {
   notes: string | null;
   reportsToUserId: string | null;
   hourlyRate: string | null;
+  engagementType: StakeholderEngagementType | null;
+  assignmentStart: string | null;
+  assignmentEnd: string | null;
+  allocatedDailyHours: string | null;
+  contractRef: string | null;
+  contractedBudget: string | null;
+  contractStart: string | null;
+  contractEnd: string | null;
   /** Profile photo URL for people; null when unset (UI uses monogram). */
   avatarUrl: string | null;
   /** LLM/product brand for AI assistants; null for people. */
   assistantBrand: AssistantBrand | null;
+  /** AI cost mode when kind is ai_assistant. */
+  aiCostMode: AiCostMode | null;
+  aiFlatMonthlyFee: string | null;
+  aiTokenRatePer1k: string | null;
+  aiBudgetAllocation: string | null;
   raciRoles: RaciRole[];
   taskCount: number;
   sources: StakeholderSource[];
@@ -55,6 +72,20 @@ export type PublicStakeholder = {
   systemSlug: string | null;
   systemStatus: string | null;
 };
+
+function parseEngagementType(
+  value: string | null | undefined,
+): StakeholderEngagementType | null {
+  if (!value) return null;
+  const parsed = stakeholderEngagementTypeSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function parseAiCostMode(value: string | null | undefined): AiCostMode | null {
+  if (!value) return null;
+  const parsed = aiCostModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 async function assertWorkspaceMembers(
   database: Database,
@@ -255,6 +286,10 @@ export async function listProjectStakeholders(
       status: systems.status,
       ownerUserId: systems.ownerUserId,
       metadataJson: systems.metadataJson,
+      aiCostMode: systems.aiCostMode,
+      aiFlatMonthlyFee: systems.aiFlatMonthlyFee,
+      aiTokenRatePer1k: systems.aiTokenRatePer1k,
+      aiBudgetAllocation: systems.aiBudgetAllocation,
     })
     .from(systems)
     .where(
@@ -295,8 +330,20 @@ export async function listProjectStakeholders(
       notes: null,
       reportsToUserId: null,
       hourlyRate: null,
+      engagementType: null,
+      assignmentStart: null,
+      assignmentEnd: null,
+      allocatedDailyHours: null,
+      contractRef: null,
+      contractedBudget: null,
+      contractStart: null,
+      contractEnd: null,
       avatarUrl: profile.avatarUrl,
       assistantBrand: null,
+      aiCostMode: null,
+      aiFlatMonthlyFee: null,
+      aiTokenRatePer1k: null,
+      aiBudgetAllocation: null,
       raciRoles: [],
       taskCount: 0,
       sources: [],
@@ -318,6 +365,14 @@ export async function listProjectStakeholders(
     entry.notes = row.notes;
     entry.reportsToUserId = row.reportsToUserId;
     entry.hourlyRate = row.hourlyRate;
+    entry.engagementType = parseEngagementType(row.engagementType);
+    entry.assignmentStart = row.assignmentStart;
+    entry.assignmentEnd = row.assignmentEnd;
+    entry.allocatedDailyHours = row.allocatedDailyHours;
+    entry.contractRef = row.contractRef;
+    entry.contractedBudget = row.contractedBudget;
+    entry.contractStart = row.contractStart;
+    entry.contractEnd = row.contractEnd;
     entry.sortOrder = row.sortOrder;
     if (!entry.sources.includes('roster')) entry.sources.push('roster');
   }
@@ -366,12 +421,24 @@ export async function listProjectStakeholders(
       notes: assistant.summary,
       reportsToUserId: ownerInSet,
       hourlyRate: null,
+      engagementType: null,
+      assignmentStart: null,
+      assignmentEnd: null,
+      allocatedDailyHours: null,
+      contractRef: null,
+      contractedBudget: null,
+      contractStart: null,
+      contractEnd: null,
       avatarUrl: null,
       assistantBrand: resolveAssistantBrand({
         name: assistant.name,
         slug: assistant.slug,
         metadata: assistant.metadataJson,
       }),
+      aiCostMode: parseAiCostMode(assistant.aiCostMode),
+      aiFlatMonthlyFee: assistant.aiFlatMonthlyFee,
+      aiTokenRatePer1k: assistant.aiTokenRatePer1k,
+      aiBudgetAllocation: assistant.aiBudgetAllocation,
       raciRoles: [],
       taskCount: 0,
       sources: ['ai_assistant'] as StakeholderSource[],
@@ -412,6 +479,17 @@ export async function getRosterStakeholder(
   return row;
 }
 
+export type StakeholderCapacityInput = {
+  engagementType?: StakeholderEngagementType | null;
+  assignmentStart?: string | null;
+  assignmentEnd?: string | null;
+  allocatedDailyHours?: string | null;
+  contractRef?: string | null;
+  contractedBudget?: string | null;
+  contractStart?: string | null;
+  contractEnd?: string | null;
+};
+
 export async function upsertProjectStakeholder(
   database: Database,
   input: {
@@ -424,7 +502,7 @@ export async function upsertProjectStakeholder(
     reportsToUserId?: string | null;
     hourlyRate?: string | null;
     sortOrder?: number;
-  },
+  } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
   const { project } = await requireProjectContext(database, input.projectId);
   assertProjectNotArchived(project);
@@ -481,6 +559,38 @@ export async function upsertProjectStakeholder(
             : input.reportsToUserId,
         hourlyRate:
           input.hourlyRate === undefined ? existing.hourlyRate : input.hourlyRate,
+        engagementType:
+          input.engagementType === undefined
+            ? existing.engagementType
+            : input.engagementType,
+        assignmentStart:
+          input.assignmentStart === undefined
+            ? existing.assignmentStart
+            : input.assignmentStart,
+        assignmentEnd:
+          input.assignmentEnd === undefined
+            ? existing.assignmentEnd
+            : input.assignmentEnd,
+        allocatedDailyHours:
+          input.allocatedDailyHours === undefined
+            ? existing.allocatedDailyHours
+            : input.allocatedDailyHours,
+        contractRef:
+          input.contractRef === undefined
+            ? existing.contractRef
+            : input.contractRef,
+        contractedBudget:
+          input.contractedBudget === undefined
+            ? existing.contractedBudget
+            : input.contractedBudget,
+        contractStart:
+          input.contractStart === undefined
+            ? existing.contractStart
+            : input.contractStart,
+        contractEnd:
+          input.contractEnd === undefined
+            ? existing.contractEnd
+            : input.contractEnd,
         sortOrder: input.sortOrder ?? existing.sortOrder,
         updatedAt: new Date(),
       })
@@ -494,6 +604,14 @@ export async function upsertProjectStakeholder(
       notes: input.notes ?? null,
       reportsToUserId: input.reportsToUserId ?? null,
       hourlyRate: input.hourlyRate ?? null,
+      engagementType: input.engagementType ?? null,
+      assignmentStart: input.assignmentStart ?? null,
+      assignmentEnd: input.assignmentEnd ?? null,
+      allocatedDailyHours: input.allocatedDailyHours ?? null,
+      contractRef: input.contractRef ?? null,
+      contractedBudget: input.contractedBudget ?? null,
+      contractStart: input.contractStart ?? null,
+      contractEnd: input.contractEnd ?? null,
       sortOrder: input.sortOrder ?? 0,
     });
   }
@@ -522,7 +640,7 @@ export async function updateProjectStakeholder(
     reportsToUserId?: string | null;
     hourlyRate?: string | null;
     sortOrder?: number;
-  },
+  } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
@@ -565,6 +683,36 @@ export async function updateProjectStakeholder(
       reportsToUserId: nextReportsTo,
       hourlyRate:
         input.hourlyRate === undefined ? existing.hourlyRate : input.hourlyRate,
+      engagementType:
+        input.engagementType === undefined
+          ? existing.engagementType
+          : input.engagementType,
+      assignmentStart:
+        input.assignmentStart === undefined
+          ? existing.assignmentStart
+          : input.assignmentStart,
+      assignmentEnd:
+        input.assignmentEnd === undefined
+          ? existing.assignmentEnd
+          : input.assignmentEnd,
+      allocatedDailyHours:
+        input.allocatedDailyHours === undefined
+          ? existing.allocatedDailyHours
+          : input.allocatedDailyHours,
+      contractRef:
+        input.contractRef === undefined
+          ? existing.contractRef
+          : input.contractRef,
+      contractedBudget:
+        input.contractedBudget === undefined
+          ? existing.contractedBudget
+          : input.contractedBudget,
+      contractStart:
+        input.contractStart === undefined
+          ? existing.contractStart
+          : input.contractStart,
+      contractEnd:
+        input.contractEnd === undefined ? existing.contractEnd : input.contractEnd,
       sortOrder: input.sortOrder ?? existing.sortOrder,
       updatedAt: new Date(),
     })
@@ -576,6 +724,79 @@ export async function updateProjectStakeholder(
     throw new AppError({
       code: 'STAKEHOLDER_NOT_FOUND',
       message: 'Stakeholder was not found after update',
+      statusCode: 500,
+    });
+  }
+  return found;
+}
+
+export async function updateAiAssistantCost(
+  database: Database,
+  systemId: string,
+  input: {
+    aiCostMode?: AiCostMode | null;
+    aiFlatMonthlyFee?: string | null;
+    aiTokenRatePer1k?: string | null;
+    aiBudgetAllocation?: string | null;
+  },
+): Promise<PublicStakeholder> {
+  const [system] = await database.db
+    .select()
+    .from(systems)
+    .where(eq(systems.id, systemId))
+    .limit(1);
+  if (!system || system.archivedAt) {
+    throw new AppError({
+      code: 'SYSTEM_NOT_FOUND',
+      message: 'AI assistant system not found',
+      statusCode: 404,
+    });
+  }
+  if (system.systemType !== AI_ASSISTANT_SYSTEM_TYPE) {
+    throw new AppError({
+      code: 'SYSTEM_NOT_AI_ASSISTANT',
+      message: 'System is not an AI assistant',
+      statusCode: 400,
+    });
+  }
+  if (!system.projectId) {
+    throw new AppError({
+      code: 'SYSTEM_NOT_PROJECT_SCOPED',
+      message: 'AI assistant must be linked to a project',
+      statusCode: 400,
+    });
+  }
+
+  const { project } = await requireProjectContext(database, system.projectId);
+  assertProjectNotArchived(project);
+
+  await database.db
+    .update(systems)
+    .set({
+      aiCostMode:
+        input.aiCostMode === undefined ? system.aiCostMode : input.aiCostMode,
+      aiFlatMonthlyFee:
+        input.aiFlatMonthlyFee === undefined
+          ? system.aiFlatMonthlyFee
+          : input.aiFlatMonthlyFee,
+      aiTokenRatePer1k:
+        input.aiTokenRatePer1k === undefined
+          ? system.aiTokenRatePer1k
+          : input.aiTokenRatePer1k,
+      aiBudgetAllocation:
+        input.aiBudgetAllocation === undefined
+          ? system.aiBudgetAllocation
+          : input.aiBudgetAllocation,
+      updatedAt: new Date(),
+    })
+    .where(eq(systems.id, systemId));
+
+  const list = await listProjectStakeholders(database, system.projectId);
+  const found = list.find((row) => row.systemId === systemId);
+  if (!found) {
+    throw new AppError({
+      code: 'STAKEHOLDER_NOT_FOUND',
+      message: 'AI assistant was not found after cost update',
       statusCode: 500,
     });
   }

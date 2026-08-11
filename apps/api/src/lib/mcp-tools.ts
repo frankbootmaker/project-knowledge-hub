@@ -16,9 +16,11 @@ import {
   deliveryLinkEntityTypeSchema,
   epicStatusSchema,
   milestoneStatusSchema,
+  aiCostModeSchema,
   projectCurrencySchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
+  stakeholderEngagementTypeSchema,
   raidKindSchema,
   raidSeveritySchema,
   raidStatusSchema,
@@ -88,9 +90,11 @@ import {
   deleteProjectStakeholder,
   getRosterStakeholder,
   listProjectStakeholders,
+  updateAiAssistantCost,
   updateProjectStakeholder,
   upsertProjectStakeholder,
 } from './project-stakeholders.js';
+import { getProjectResourceUtilization } from './project-resource-utilization.js';
 import {
   createRaidItem,
   getRaidItem,
@@ -119,6 +123,7 @@ import {
   getProjectBudgetSummary,
   parseBudgetAmount,
   parseHours,
+  parseTokenRate,
   upsertProjectCostSnapshot,
 } from './project-budget.js';
 import {
@@ -551,6 +556,20 @@ export function createMcpToolHandlers(
       await requirePmProject(app, client, input.projectId);
       return {
         budget: await getProjectBudgetSummary(app.database, input.projectId),
+      };
+    },
+
+    async getProjectResourceUtilization(input: {
+      projectId: string;
+      view?: 'planned' | 'burn' | 'combined';
+    }) {
+      await requirePmProject(app, client, input.projectId);
+      return {
+        utilization: await getProjectResourceUtilization(
+          app.database,
+          input.projectId,
+          input.view ?? 'planned',
+        ),
       };
     },
 
@@ -1459,6 +1478,8 @@ export function createMcpToolHandlers(
           input.actualHours === undefined
             ? undefined
             : parseHours(input.actualHours) ?? null,
+        tokensUsed: input.tokensUsed,
+        aiSystemId: input.aiSystemId,
         milestoneId,
         userStoryId,
         currentOwnerUserId: input.currentOwnerUserId,
@@ -1471,7 +1492,9 @@ export function createMcpToolHandlers(
       });
       if (
         input.forecastHours !== undefined ||
-        input.actualHours !== undefined
+        input.actualHours !== undefined ||
+        input.tokensUsed !== undefined ||
+        input.aiSystemId !== undefined
       ) {
         await upsertProjectCostSnapshot(app.database, project.id);
       }
@@ -1532,6 +1555,8 @@ export function createMcpToolHandlers(
           input.actualHours === undefined
             ? undefined
             : parseHours(input.actualHours) ?? null,
+        tokensUsed: input.tokensUsed,
+        aiSystemId: input.aiSystemId,
         milestoneId,
         userStoryId,
         currentOwnerUserId: input.currentOwnerUserId,
@@ -1542,7 +1567,9 @@ export function createMcpToolHandlers(
       });
       if (
         input.forecastHours !== undefined ||
-        input.actualHours !== undefined
+        input.actualHours !== undefined ||
+        input.tokensUsed !== undefined ||
+        input.aiSystemId !== undefined
       ) {
         await upsertProjectCostSnapshot(app.database, project.id);
       }
@@ -1554,6 +1581,45 @@ export function createMcpToolHandlers(
         entityType: 'project_task',
         entityId: task.id,
         metadata: { projectId: project.id, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { task };
+    },
+
+    async reportProjectTaskAiUsage(input) {
+      const actingUserId = requireActingUserId(client);
+      const taskId = await resolveEntityId(app.database, {
+        entityType: 'task',
+        idOrKey: input.taskId,
+      });
+      const existing = await getTask(app.database, taskId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const task = await updateTask(app.database, taskId, {
+        tokensUsed: input.tokensUsed,
+        aiSystemId:
+          input.aiSystemId === undefined
+            ? existing.aiSystemId
+            : input.aiSystemId,
+        actorUserId: actingUserId,
+        workspaceId: project.workspaceId,
+      });
+      await upsertProjectCostSnapshot(app.database, project.id);
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.task_ai_usage_reported',
+        entityType: 'project_task',
+        entityId: task.id,
+        metadata: {
+          projectId: project.id,
+          tokensUsed: input.tokensUsed,
+          aiSystemId: input.aiSystemId ?? null,
+          via: 'mcp',
+          actingUserId,
+        },
         ipAddress: ipAddress ?? null,
       });
       return { task };
@@ -1860,6 +1926,25 @@ export function createMcpToolHandlers(
             ? undefined
             : parseBudgetAmount(input.hourlyRate) ?? null,
         sortOrder: input.sortOrder,
+        engagementType:
+          input.engagementType === undefined
+            ? undefined
+            : input.engagementType == null
+              ? null
+              : stakeholderEngagementTypeSchema.parse(input.engagementType),
+        assignmentStart: input.assignmentStart,
+        assignmentEnd: input.assignmentEnd,
+        allocatedDailyHours:
+          input.allocatedDailyHours === undefined
+            ? undefined
+            : parseHours(input.allocatedDailyHours) ?? null,
+        contractRef: input.contractRef,
+        contractedBudget:
+          input.contractedBudget === undefined
+            ? undefined
+            : parseBudgetAmount(input.contractedBudget) ?? null,
+        contractStart: input.contractStart,
+        contractEnd: input.contractEnd,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -1903,6 +1988,25 @@ export function createMcpToolHandlers(
               : parseBudgetAmount(input.hourlyRate) ?? null,
           reportsToUserId: input.reportsToUserId,
           sortOrder: input.sortOrder,
+          engagementType:
+            input.engagementType === undefined
+              ? undefined
+              : input.engagementType == null
+                ? null
+                : stakeholderEngagementTypeSchema.parse(input.engagementType),
+          assignmentStart: input.assignmentStart,
+          assignmentEnd: input.assignmentEnd,
+          allocatedDailyHours:
+            input.allocatedDailyHours === undefined
+              ? undefined
+              : parseHours(input.allocatedDailyHours) ?? null,
+          contractRef: input.contractRef,
+          contractedBudget:
+            input.contractedBudget === undefined
+              ? undefined
+              : parseBudgetAmount(input.contractedBudget) ?? null,
+          contractStart: input.contractStart,
+          contractEnd: input.contractEnd,
         },
       );
       await writeAuditEvent(app.database, {
@@ -1918,6 +2022,64 @@ export function createMcpToolHandlers(
           via: 'mcp',
           actingUserId,
         },
+        ipAddress: ipAddress ?? null,
+      });
+      return { stakeholder };
+    },
+
+    async updateProjectAiAssistantCost(input) {
+      const actingUserId = requireActingUserId(client);
+      const [system] = await app.database.db
+        .select({
+          id: systems.id,
+          projectId: systems.projectId,
+        })
+        .from(systems)
+        .where(eq(systems.id, input.systemId))
+        .limit(1);
+      if (!system?.projectId) {
+        throw new AppError({
+          code: 'SYSTEM_NOT_FOUND',
+          message: 'AI assistant system not found',
+          statusCode: 404,
+        });
+      }
+      const project = await requirePmProject(app, client, system.projectId, {
+        forWrite: true,
+      });
+      const stakeholder = await updateAiAssistantCost(
+        app.database,
+        input.systemId,
+        {
+          aiCostMode:
+            input.aiCostMode === undefined
+              ? undefined
+              : input.aiCostMode == null
+                ? null
+                : aiCostModeSchema.parse(input.aiCostMode),
+          aiFlatMonthlyFee:
+            input.aiFlatMonthlyFee === undefined
+              ? undefined
+              : parseBudgetAmount(input.aiFlatMonthlyFee) ?? null,
+          aiTokenRatePer1k:
+            input.aiTokenRatePer1k === undefined
+              ? undefined
+              : parseTokenRate(input.aiTokenRatePer1k) ?? null,
+          aiBudgetAllocation:
+            input.aiBudgetAllocation === undefined
+              ? undefined
+              : parseBudgetAmount(input.aiBudgetAllocation) ?? null,
+        },
+      );
+      await upsertProjectCostSnapshot(app.database, project.id);
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'system.ai_cost_updated',
+        entityType: 'system',
+        entityId: input.systemId,
+        metadata: { projectId: project.id, via: 'mcp', actingUserId },
         ipAddress: ipAddress ?? null,
       });
       return { stakeholder };

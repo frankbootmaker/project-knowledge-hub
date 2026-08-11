@@ -122,6 +122,35 @@ export const projectStakeholderRoleSchema = z.enum([
   'other',
 ]);
 
+/** Roster engagement classification for capacity / contracts. */
+export const stakeholderEngagementTypeSchema = z.enum([
+  'employee',
+  'contractor',
+]);
+
+/** AI assistant billing mode against the project budget. */
+export const aiCostModeSchema = z.enum([
+  'flat',
+  'api',
+  'mixed',
+  'note_only',
+]);
+
+/** Resource utilization status for capacity planning. */
+export const resourceUtilizationStatusSchema = z.enum([
+  'under',
+  'on_track',
+  'over',
+  'unknown',
+]);
+
+/** Utilization dashboard view mode. */
+export const resourceUtilizationViewSchema = z.enum([
+  'planned',
+  'burn',
+  'combined',
+]);
+
 /** Project-level currency for budget and hourly rates (no FX). */
 export const projectCurrencySchema = z.enum([
   'EUR',
@@ -441,6 +470,16 @@ export type EpicStatus = z.infer<typeof epicStatusSchema>;
 export type UserStoryStatus = z.infer<typeof userStoryStatusSchema>;
 export type TaskActivityType = z.infer<typeof taskActivityTypeSchema>;
 export type ProjectStakeholderRole = z.infer<typeof projectStakeholderRoleSchema>;
+export type StakeholderEngagementType = z.infer<
+  typeof stakeholderEngagementTypeSchema
+>;
+export type AiCostMode = z.infer<typeof aiCostModeSchema>;
+export type ResourceUtilizationStatus = z.infer<
+  typeof resourceUtilizationStatusSchema
+>;
+export type ResourceUtilizationView = z.infer<
+  typeof resourceUtilizationViewSchema
+>;
 export type ProjectCurrency = z.infer<typeof projectCurrencySchema>;
 export type AssistantBrand = z.infer<typeof assistantBrandSchema>;
 export type RaidKind = z.infer<typeof raidKindSchema>;

@@ -31,6 +31,18 @@ type EpicBudgetRollup = {
   actualCost: number | null;
 };
 
+type AiBudgetBreakdown = {
+  systemId: string;
+  name: string;
+  costMode: 'flat' | 'api' | 'mixed' | 'note_only' | null;
+  flatAccruedCost: number;
+  tokenCost: number;
+  noteOnlyTokens: number;
+  billableCost: number;
+  budgetAllocation: number | null;
+  overAllocation: boolean;
+};
+
 export type ProjectBudgetSummary = {
   currency: string;
   initialBudget: number | null;
@@ -39,6 +51,10 @@ export type ProjectBudgetSummary = {
   pv: number | null;
   ev: number;
   ac: number;
+  personAc: number;
+  aiAc: number;
+  aiNoteOnlyTokens: number;
+  aiSystems: AiBudgetBreakdown[];
   cpi: number | null;
   spi: number | null;
   financialRag: 'red' | 'amber' | 'green';
@@ -213,6 +229,7 @@ export function ProjectBudgetPanel({
   initialSummary?: ProjectBudgetSummary | null;
 }) {
   const t = useTranslations('budget');
+  const tStakeholders = useTranslations('stakeholders');
   const tProjects = useTranslations('projects');
   const tCommon = useTranslations('common');
   const locale = useLocale();
@@ -375,6 +392,41 @@ export function ProjectBudgetPanel({
                 {formatIndex(summary.spi)}
               </p>
             </div>
+          </div>
+
+          <div className="grid gap-1 text-xs text-ink-muted">
+            <p className="m-0">
+              {t('acBreakdown', {
+                person: formatMoney(summary.personAc ?? summary.ac, currency, locale),
+                ai: formatMoney(summary.aiAc ?? 0, currency, locale),
+              })}
+            </p>
+            {(summary.aiNoteOnlyTokens ?? 0) > 0 ? (
+              <p className="m-0">
+                {t('aiNoteOnlyTokens', { count: summary.aiNoteOnlyTokens })}
+              </p>
+            ) : null}
+            {(summary.aiSystems ?? []).some((system) => system.overAllocation) ? (
+              <p className="m-0 text-warn">
+                {t('aiOverAllocation')}
+              </p>
+            ) : null}
+            {(summary.aiSystems ?? []).length > 0 ? (
+              <ul className="m-0 grid list-none gap-1 p-0">
+                {(summary.aiSystems ?? []).map((system) => (
+                  <li key={system.systemId}>
+                    {t('aiBreakdown', {
+                      name: system.name,
+                      mode: system.costMode
+                        ? tStakeholders(`aiCostMode.${system.costMode}`)
+                        : '—',
+                      cost: formatMoney(system.billableCost, currency, locale),
+                    })}
+                    {system.overAllocation ? ` · ${t('aiOverAllocationShort')}` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
 
           <div>

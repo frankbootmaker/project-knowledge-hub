@@ -33,6 +33,10 @@ export type McpToolHandlers = {
     keyPrefix?: string;
   }) => Promise<unknown>;
   getProjectBudgetSummary: (input: { projectId: string }) => Promise<unknown>;
+  getProjectResourceUtilization: (input: {
+    projectId: string;
+    view?: 'planned' | 'burn' | 'combined';
+  }) => Promise<unknown>;
   listProjectInitialStakeholders: (input: {
     projectId: string;
   }) => Promise<unknown>;
@@ -178,6 +182,8 @@ export type McpToolHandlers = {
     dueDate?: string | null;
     forecastHours?: number | string | null;
     actualHours?: number | string | null;
+    tokensUsed?: number | null;
+    aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     currentOwnerUserId?: string | null;
@@ -192,11 +198,18 @@ export type McpToolHandlers = {
     dueDate?: string | null;
     forecastHours?: number | string | null;
     actualHours?: number | string | null;
+    tokensUsed?: number | null;
+    aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
+  }) => Promise<unknown>;
+  reportProjectTaskAiUsage: (input: {
+    taskId: string;
+    tokensUsed: number;
+    aiSystemId?: string | null;
   }) => Promise<unknown>;
   setProjectTaskRaci: (input: {
     taskId: string;
@@ -271,6 +284,14 @@ export type McpToolHandlers = {
     reportsToUserId?: string | null;
     hourlyRate?: number | string | null;
     sortOrder?: number;
+    engagementType?: 'employee' | 'contractor' | null;
+    assignmentStart?: string | null;
+    assignmentEnd?: string | null;
+    allocatedDailyHours?: number | string | null;
+    contractRef?: string | null;
+    contractedBudget?: number | string | null;
+    contractStart?: string | null;
+    contractEnd?: string | null;
   }) => Promise<unknown>;
   updateProjectStakeholder: (input: {
     stakeholderId: string;
@@ -280,6 +301,21 @@ export type McpToolHandlers = {
     reportsToUserId?: string | null;
     hourlyRate?: number | string | null;
     sortOrder?: number;
+    engagementType?: 'employee' | 'contractor' | null;
+    assignmentStart?: string | null;
+    assignmentEnd?: string | null;
+    allocatedDailyHours?: number | string | null;
+    contractRef?: string | null;
+    contractedBudget?: number | string | null;
+    contractStart?: string | null;
+    contractEnd?: string | null;
+  }) => Promise<unknown>;
+  updateProjectAiAssistantCost: (input: {
+    systemId: string;
+    aiCostMode?: 'flat' | 'api' | 'mixed' | 'note_only' | null;
+    aiFlatMonthlyFee?: number | string | null;
+    aiTokenRatePer1k?: number | string | null;
+    aiBudgetAllocation?: number | string | null;
   }) => Promise<unknown>;
   deleteProjectStakeholder: (input: {
     stakeholderId: string;
@@ -584,13 +620,29 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Includes person vs AI AC breakdown. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
         'get_project_budget_summary',
         'pm:read',
         () => handlers.getProjectBudgetSummary(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'get_project_resource_utilization',
+    'Get per-person capacity vs planned/burn demand for roster stakeholders (employee/contractor windows). view=planned|burn|combined. Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      view: z.enum(['planned', 'burn', 'combined']).optional(),
+    },
+    async (args) =>
+      wrap(
+        'get_project_resource_utilization',
+        'pm:read',
+        () => handlers.getProjectResourceUtilization(args),
         { projectId: args.projectId },
       )(),
   );
@@ -1057,6 +1109,8 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
+      tokensUsed: z.number().int().min(0).nullable().optional(),
+      aiSystemId: z.string().uuid().nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
@@ -1082,7 +1136,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date/story/owner. Requires pm:write.',
+    'Update a project task fields/status/due date/story/owner/tokens. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1097,6 +1151,8 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
+      tokensUsed: z.number().int().min(0).nullable().optional(),
+      aiSystemId: z.string().uuid().nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
@@ -1105,6 +1161,20 @@ export function createKnowledgeHubMcpServer(
     },
     async (args) =>
       wrap('update_project_task', 'pm:write', () => handlers.updateProjectTask(args))(),
+  );
+
+  server.tool(
+    'report_project_task_ai_usage',
+    'Record AI token usage on a task (prefer when marking done). Stores tokensUsed and optional aiSystemId, then refreshes the cost snapshot. Billable when the AI system cost mode is flat/api/mixed; note_only records usage at $0. Requires pm:write.',
+    {
+      taskId: entityRef,
+      tokensUsed: z.number().int().min(0),
+      aiSystemId: z.string().uuid().nullable().optional(),
+    },
+    async (args) =>
+      wrap('report_project_task_ai_usage', 'pm:write', () =>
+        handlers.reportProjectTaskAiUsage(args),
+      )(),
   );
 
   server.tool(
@@ -1302,9 +1372,15 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  const engagementEnum = z.enum(['employee', 'contractor']);
+  const ymdNullable = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable();
+
   server.tool(
     'create_project_stakeholder',
-    'Add or upsert a durable project stakeholder roster row (optional hourly rate in project currency). Requires pm:write.',
+    'Add or upsert a durable project stakeholder roster row (hourly rate, engagement, capacity, contract). Requires pm:write.',
     {
       projectId: z.string().uuid(),
       userId: z.string().uuid(),
@@ -1314,6 +1390,14 @@ export function createKnowledgeHubMcpServer(
       hourlyRate: moneyInput.optional(),
       reportsToUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
+      engagementType: engagementEnum.nullable().optional(),
+      assignmentStart: ymdNullable.optional(),
+      assignmentEnd: ymdNullable.optional(),
+      allocatedDailyHours: moneyInput.optional(),
+      contractRef: z.string().max(200).nullable().optional(),
+      contractedBudget: moneyInput.optional(),
+      contractStart: ymdNullable.optional(),
+      contractEnd: ymdNullable.optional(),
     },
     async (args) =>
       wrap(
@@ -1326,7 +1410,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_stakeholder',
-    'Update a durable project stakeholder roster row (optional hourly rate). Requires pm:write.',
+    'Update a durable project stakeholder roster row (rate, engagement, capacity, contract). Requires pm:write.',
     {
       stakeholderId: z.string().uuid(),
       projectRole: stakeholderRoleEnum.optional(),
@@ -1335,10 +1419,37 @@ export function createKnowledgeHubMcpServer(
       hourlyRate: moneyInput.optional(),
       reportsToUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
+      engagementType: engagementEnum.nullable().optional(),
+      assignmentStart: ymdNullable.optional(),
+      assignmentEnd: ymdNullable.optional(),
+      allocatedDailyHours: moneyInput.optional(),
+      contractRef: z.string().max(200).nullable().optional(),
+      contractedBudget: moneyInput.optional(),
+      contractStart: ymdNullable.optional(),
+      contractEnd: ymdNullable.optional(),
     },
     async (args) =>
       wrap('update_project_stakeholder', 'pm:write', () =>
         handlers.updateProjectStakeholder(args),
+      )(),
+  );
+
+  server.tool(
+    'update_project_ai_assistant_cost',
+    'Set AI assistant cost mode (flat|api|mixed|note_only), fees, and soft budget allocation on a project AI system. Requires pm:write.',
+    {
+      systemId: z.string().uuid(),
+      aiCostMode: z
+        .enum(['flat', 'api', 'mixed', 'note_only'])
+        .nullable()
+        .optional(),
+      aiFlatMonthlyFee: moneyInput.optional(),
+      aiTokenRatePer1k: moneyInput.optional(),
+      aiBudgetAllocation: moneyInput.optional(),
+    },
+    async (args) =>
+      wrap('update_project_ai_assistant_cost', 'pm:write', () =>
+        handlers.updateProjectAiAssistantCost(args),
       )(),
   );
 

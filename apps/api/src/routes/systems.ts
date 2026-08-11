@@ -3,7 +3,16 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { slugify } from '@project-knowledge-hub/auth';
 import { projects, systems, workspaces } from '@project-knowledge-hub/database';
-import { AppError, systemStatusSchema } from '@project-knowledge-hub/domain';
+import {
+  AppError,
+  aiCostModeSchema,
+  systemStatusSchema,
+} from '@project-knowledge-hub/domain';
+import {
+  parseBudgetAmount,
+  parseTokenRate,
+  upsertProjectCostSnapshot,
+} from '../lib/project-budget.js';
 import {
   requireWorkspaceAdmin,
   requireWorkspaceMaintainer,
@@ -33,6 +42,8 @@ const createSystemSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
+const moneySchema = z.union([z.number(), z.string()]).nullable();
+
 const updateSystemSchema = z.object({
   projectId: z.string().uuid().nullable().optional(),
   name: z.string().min(1).max(160).optional(),
@@ -47,6 +58,10 @@ const updateSystemSchema = z.object({
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
   archived: z.boolean().optional(),
+  aiCostMode: aiCostModeSchema.nullable().optional(),
+  aiFlatMonthlyFee: moneySchema.optional(),
+  aiTokenRatePer1k: moneySchema.optional(),
+  aiBudgetAllocation: moneySchema.optional(),
 });
 
 function toPublicSystem(
@@ -67,6 +82,10 @@ function toPublicSystem(
     environment: system.environment,
     version: system.version,
     criticality: system.criticality,
+    aiCostMode: system.aiCostMode,
+    aiFlatMonthlyFee: system.aiFlatMonthlyFee,
+    aiTokenRatePer1k: system.aiTokenRatePer1k,
+    aiBudgetAllocation: system.aiBudgetAllocation,
     metadata: system.metadataJson,
     tags: tagList,
     lastValidatedAt: system.lastValidatedAt?.toISOString() ?? null,
@@ -293,6 +312,19 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
       .where(eq(workspaces.id, system.workspaceId))
       .limit(1);
 
+    const nextFlat =
+      body.aiFlatMonthlyFee === undefined
+        ? undefined
+        : parseBudgetAmount(body.aiFlatMonthlyFee) ?? null;
+    const nextTokenRate =
+      body.aiTokenRatePer1k === undefined
+        ? undefined
+        : parseTokenRate(body.aiTokenRatePer1k) ?? null;
+    const nextAllocation =
+      body.aiBudgetAllocation === undefined
+        ? undefined
+        : parseBudgetAmount(body.aiBudgetAllocation) ?? null;
+
     const [updated] = await app.database.db
       .update(systems)
       .set({
@@ -306,6 +338,16 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
         environment: body.environment === undefined ? system.environment : body.environment,
         version: body.version === undefined ? system.version : body.version,
         criticality: body.criticality === undefined ? system.criticality : body.criticality,
+        aiCostMode:
+          body.aiCostMode === undefined ? system.aiCostMode : body.aiCostMode,
+        aiFlatMonthlyFee:
+          nextFlat === undefined ? system.aiFlatMonthlyFee : nextFlat,
+        aiTokenRatePer1k:
+          nextTokenRate === undefined ? system.aiTokenRatePer1k : nextTokenRate,
+        aiBudgetAllocation:
+          nextAllocation === undefined
+            ? system.aiBudgetAllocation
+            : nextAllocation,
         metadataJson: body.metadata === undefined ? system.metadataJson : body.metadata,
         archivedAt:
           body.archived === undefined
@@ -334,6 +376,15 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
         workspace.organizationId,
         body.tags,
       );
+    }
+
+    const aiCostTouched =
+      body.aiCostMode !== undefined ||
+      body.aiFlatMonthlyFee !== undefined ||
+      body.aiTokenRatePer1k !== undefined ||
+      body.aiBudgetAllocation !== undefined;
+    if (aiCostTouched && updated.projectId) {
+      await upsertProjectCostSnapshot(app.database, updated.projectId);
     }
 
     await writeAuditEvent(app.database, {
