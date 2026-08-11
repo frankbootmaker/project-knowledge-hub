@@ -742,7 +742,7 @@ export function ProjectDeliveryPanel({
   function viewSwitcher(activeMode: ViewMode) {
     return (
       <div
-        className="inline-flex max-w-full overflow-x-auto rounded-md border border-line p-0.5"
+        className="inline-flex w-full min-w-0 max-w-full overflow-x-auto rounded-md border border-line p-0.5 sm:w-auto"
         role="group"
         aria-label={t('viewModeLabel')}
       >

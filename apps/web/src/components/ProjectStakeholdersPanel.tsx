@@ -593,7 +593,7 @@ export function ProjectStakeholdersPanel({
 
   function sectionActions(activeMode: ViewMode) {
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2">
         <Button
           type="button"
           variant="secondary"
@@ -750,7 +750,7 @@ export function ProjectStakeholdersPanel({
   function viewSwitcher(activeMode: ViewMode) {
     return (
       <div
-        className="inline-flex max-w-full overflow-x-auto rounded-md border border-line p-0.5"
+        className="inline-flex w-full min-w-0 max-w-full overflow-x-auto rounded-md border border-line p-0.5 sm:w-auto"
         role="group"
         aria-label={t('viewModeLabel')}
       >

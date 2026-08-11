@@ -75,9 +75,9 @@ export function SectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <h2 className="m-0 min-w-0 text-xl font-semibold tracking-tight">{title}</h2>
-      {action ? <div className="max-w-full shrink-0">{action}</div> : null}
+      {action ? <div className="w-full min-w-0 sm:w-auto sm:max-w-full">{action}</div> : null}
     </div>
   );
 }

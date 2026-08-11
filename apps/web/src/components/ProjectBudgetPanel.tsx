@@ -6,7 +6,6 @@ import { useLocale, useTranslations } from 'next-intl';
 import { CollapsibleSection } from './CollapsibleSection';
 import { formatMoney, parseOptionalNumber } from '../lib/project-currency';
 import {
-  Badge,
   Button,
   ErrorText,
   Field,
@@ -213,12 +212,6 @@ function BurndownChart({
   );
 }
 
-function ragTone(rag: 'red' | 'amber' | 'green'): 'danger' | 'warn' | 'success' {
-  if (rag === 'red') return 'danger';
-  if (rag === 'amber') return 'warn';
-  return 'success';
-}
-
 export function ProjectBudgetPanel({
   projectId,
   canMutate,
@@ -230,7 +223,6 @@ export function ProjectBudgetPanel({
 }) {
   const t = useTranslations('budget');
   const tStakeholders = useTranslations('stakeholders');
-  const tProjects = useTranslations('projects');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const router = useRouter();
@@ -352,9 +344,6 @@ export function ProjectBudgetPanel({
                 {pending ? tCommon('saving') : t('saveApproved')}
               </Button>
             ) : null}
-            <Badge tone={ragTone(summary.financialRag)}>
-              {t('financialRag')}: {tProjects(`rag.${summary.financialRag}`)}
-            </Badge>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

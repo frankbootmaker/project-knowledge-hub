@@ -84,12 +84,14 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
 | Touch targets | Prefer existing control tokens / header control squares; keep interactive chrome ≥ ~40px |
 | Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
+| Section header actions | `SectionHeader` stacks title then actions below `sm`; from `sm` title left / actions right. Wide action clusters (view mode switchers) use `min-w-0` + `overflow-x-auto` — do not put them in `FunctionHeader` beside open filters |
+| Function header | `.kh-function-header*` stacks controls above actions below `sm`; controls may wrap; from `sm` keep search/filters left and primary actions right |
 
 ### Layout shells
 
 | Shell | Pattern |
 |-------|---------|
-| App header | Sticky bar; brand + desktop nav (`md+`) + `MobileNav` (`md:hidden` toggle) + theme/locale/session |
+| App header | Sticky bar; brand mark + wordmark from `md`+; desktop nav (`md+`); theme/locale; icon login/logout; `MobileNav` toggle last on the right (`md:hidden`) |
 | App / status content | `shellContentClassName`. Status page: eyebrow + back link on one row; overall health `Badge` beside title; row values use `Badge` tones (no left accent bars) |
 | Admin | Single column until `lg`, then sidebar + main; sidebar uses `NavLink tone="sidebar"` |
 | Account | Same as Admin (`account/layout.tsx`) for Profile and AI connections |
@@ -130,8 +132,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `Badge` | Compact status chips (e.g. health “ok”) |
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`) |
-| `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout |
-| `FunctionHeader` | List/admin toolbar: search + filters + primary actions on one row |
+| `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout (`SectionHeader` optional `action` — responsive title/actions split) |
+| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (stacks below `sm`) |
 
 Shared button classes live in `buttonStyles.ts` and `.kh-btn*` recipes so Button and
 LinkButton stay identical.
@@ -174,6 +176,11 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-08-11
+
+* **Compact mobile header** — Below `md`, brand is the KnowHub mark only (`BrandMark`); wordmark from `md` up. Login/logout are icon controls (same square size as theme). `MobileNav` hamburger sits at the far right after session controls.
+* **Section header actions** — Delivery / Stakeholders view switchers live in `CollapsibleSection` → `SectionHeader` `action` (not in `FunctionHeader`). Below `sm`, title stacks above actions; view clusters use `overflow-x-auto`. `FunctionHeader` stacks controls above actions on small screens so open filters do not collide with create/filter chrome.
 
 ### 2026-07-31
 
