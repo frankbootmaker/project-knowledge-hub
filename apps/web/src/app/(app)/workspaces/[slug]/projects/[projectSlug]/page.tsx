@@ -26,15 +26,21 @@ import {
 } from '../../../../../../components/ProjectStakeholdersPanel';
 import {
   Badge,
+  buttonClassName,
   Page,
   PageHeader,
   Panel,
 } from '../../../../../../components/ui';
+import { cn } from '../../../../../../lib/cn';
 import {
   projectDeliveryRag,
   type ProjectRagStatus,
 } from '../../../../../../lib/delivery-schedule';
-import { computeRiskRag } from '../../../../../../lib/project-health';
+import {
+  computeChangeRag,
+  computeRiskRag,
+  worstProjectRag,
+} from '../../../../../../lib/project-health';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 function ragBadgeTone(
@@ -43,6 +49,19 @@ function ragBadgeTone(
   if (rag === 'red') return 'danger';
   if (rag === 'amber') return 'warn';
   return 'success';
+}
+
+function ragNavClass(rag: ProjectRagStatus | null): string {
+  if (rag === 'red') {
+    return 'border-danger/35 bg-danger-soft text-danger hover:bg-danger-soft';
+  }
+  if (rag === 'amber') {
+    return 'border-warn/40 bg-warn-soft text-warn hover:bg-warn-soft';
+  }
+  if (rag === 'green') {
+    return 'border-accent/35 bg-accent-soft text-accent hover:bg-accent-soft';
+  }
+  return '';
 }
 
 export const dynamic = 'force-dynamic';
@@ -113,6 +132,12 @@ export default async function ProjectDetailPage({
   const t = await getTranslations('projects');
   const tArchive = await getTranslations('archive');
   const tCommon = await getTranslations('common');
+  const tBaseline = await getTranslations('baseline');
+  const tStakeholders = await getTranslations('stakeholders');
+  const tDelivery = await getTranslations('delivery');
+  const tBudget = await getTranslations('budget');
+  const tRaid = await getTranslations('raid');
+  const tChange = await getTranslations('changes');
   const { slug, projectSlug } = await params;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -319,6 +344,24 @@ export default async function ProjectDetailPage({
   ]);
   const riskRag = computeRiskRag(raidItems);
   const financialRag = budgetSummary?.financialRag ?? 'green';
+  const changeRag = computeChangeRag(changeItems);
+  const overallRag = worstProjectRag([timelineRag, riskRag, financialRag]);
+
+  const sectionNav: Array<{
+    id: string;
+    label: string;
+    rag: ProjectRagStatus | null;
+  }> = [
+    { id: 'project-overview', label: t('navOverview'), rag: null },
+    { id: 'project-baseline', label: tBaseline('title'), rag: null },
+    { id: 'project-stakeholders', label: tStakeholders('title'), rag: null },
+    { id: 'project-delivery', label: tDelivery('title'), rag: timelineRag },
+    { id: 'project-budget', label: tBudget('title'), rag: financialRag },
+    { id: 'project-raid', label: tRaid('title'), rag: riskRag },
+    { id: 'project-change', label: tChange('title'), rag: changeRag },
+    { id: 'project-systems', label: t('linkedSystems'), rag: null },
+    { id: 'project-knowledge', label: t('linkedKnowledge'), rag: null },
+  ];
 
   const ratePeople = stakeholders
     .filter((row) => row.kind === 'person' && row.userId)
@@ -357,27 +400,44 @@ export default async function ProjectDetailPage({
           <span className="inline-flex flex-wrap items-center gap-3">
             <span>{project.name}</span>
             <Badge
-              tone={ragBadgeTone(timelineRag)}
-              title={t('ragTimeline')}
-              aria-label={`${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`}
+              tone={ragBadgeTone(overallRag)}
+              title={[
+                `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,
+                `${t('ragRisks')}: ${t(`rag.${riskRag}`)}`,
+                `${t('ragFinancials')}: ${t(`rag.${financialRag}`)}`,
+              ].join(' · ')}
+              aria-label={`${t('ragOverall')}: ${t(`rag.${overallRag}`)}`}
             >
-              {t('ragTimeline')}: {t(`rag.${timelineRag}`)}
-            </Badge>
-            <Badge
-              tone={ragBadgeTone(riskRag)}
-              title={t('ragRisks')}
-              aria-label={`${t('ragRisks')}: ${t(`rag.${riskRag}`)}`}
-            >
-              {t('ragRisks')}: {t(`rag.${riskRag}`)}
-            </Badge>
-            <Badge
-              tone={ragBadgeTone(financialRag)}
-              title={t('ragFinancials')}
-              aria-label={`${t('ragFinancials')}: ${t(`rag.${financialRag}`)}`}
-            >
-              {t('ragFinancials')}: {t(`rag.${financialRag}`)}
+              {t('ragOverall')}: {t(`rag.${overallRag}`)}
             </Badge>
           </span>
+        }
+        nav={
+          <nav
+            aria-label={t('sectionNav')}
+            className="flex flex-wrap items-center gap-2"
+          >
+            {sectionNav.map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                className={cn(
+                  buttonClassName('secondary', '!px-2.5 !py-1 text-xs'),
+                  ragNavClass(item.rag),
+                )}
+                title={
+                  item.rag ? `${item.label}: ${t(`rag.${item.rag}`)}` : undefined
+                }
+                aria-label={
+                  item.rag
+                    ? `${item.label}: ${t(`rag.${item.rag}`)}`
+                    : item.label
+                }
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
         }
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
@@ -397,7 +457,10 @@ export default async function ProjectDetailPage({
         }
       />
 
-      <Panel className="mb-8">
+      <Panel id="project-overview" className="mb-8 scroll-mt-6">
+        <h2 className="mt-0 mb-3 text-xl font-semibold tracking-tight text-ink">
+          {t('navOverview')}
+        </h2>
         <p className="mt-0 mb-3 text-ink-muted">{project.summary || tCommon('noSummary')}</p>
         <p className="m-0 text-ink-muted">{project.description || tCommon('noDescription')}</p>
         {project.tags.length > 0 ? (

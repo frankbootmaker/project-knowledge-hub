@@ -783,6 +783,7 @@ export function ProjectStakeholdersPanel({
   return (
     <>
       <CollapsibleSection
+        id="project-stakeholders"
         storageKey={`project:${projectId}:stakeholders`}
         title={t('title')}
         defaultOpen

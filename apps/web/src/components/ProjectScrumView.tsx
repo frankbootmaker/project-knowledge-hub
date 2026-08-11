@@ -13,6 +13,7 @@ import {
 } from './ui';
 import { ProjectDeliveryBoard, type BoardTask } from './ProjectDeliveryBoard';
 import {
+  BurndownLegendHelp,
   SprintPointBurndownChart,
   type PointBurndownRow,
 } from './SprintPointBurndownChart';
@@ -464,7 +465,10 @@ export function ProjectScrumView({
 
       {selected && burndown ? (
         <div className="rounded-md border border-line p-3">
-          <p className="m-0 mb-2 text-sm font-semibold">{t('scrumBurndown')}</p>
+          <div className="mb-2 flex items-start justify-between gap-3">
+            <p className="m-0 text-sm font-semibold">{t('scrumBurndown')}</p>
+            <BurndownLegendHelp />
+          </div>
           <SprintPointBurndownChart
             committedPoints={burndown.committedPoints}
             startDate={burndown.startDate}
@@ -531,8 +535,8 @@ export function ProjectScrumView({
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_16rem]">
-        <div className="min-w-0">
+      <div className="grid min-w-0 gap-4">
+        <div className="min-w-0 overflow-x-auto">
           {selected ? (
             <ProjectDeliveryBoard
               tasks={sprintTasks}
@@ -544,38 +548,41 @@ export function ProjectScrumView({
             <p className="text-sm text-ink-muted">{t('scrumPickOrCreate')}</p>
           )}
         </div>
-        <aside className="grid gap-2 content-start">
+
+        <section className="grid min-w-0 gap-2 border-t border-line pt-4">
           <h3 className="m-0 text-sm font-semibold">{t('scrumBacklog')}</h3>
           {backlogTasks.length === 0 ? (
             <p className="m-0 text-sm text-ink-muted">{t('scrumBacklogEmpty')}</p>
           ) : (
-            backlogTasks.map((task) => (
-              <div
-                key={task.id}
-                className="grid gap-1 rounded-md border border-line px-2 py-2 text-sm"
-              >
-                <button
-                  type="button"
-                  className="border-0 bg-transparent p-0 text-left font-medium text-ink"
-                  onClick={() => onOpenTask(task.id)}
+            <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2 lg:grid-cols-3">
+              {backlogTasks.map((task) => (
+                <li
+                  key={task.id}
+                  className="grid gap-1 rounded-md border border-line bg-panel-solid px-2 py-2 text-sm"
                 >
-                  {task.humanKey ? `${task.humanKey} · ` : ''}
-                  {task.title}
-                </button>
-                {canMutate && selected && selected.status !== 'completed' ? (
-                  <Button
+                  <button
                     type="button"
-                    variant="secondary"
-                    disabled={pending}
-                    onClick={() => void onAssignToSprint(task.id, selected.id)}
+                    className="border-0 bg-transparent p-0 text-left font-medium text-ink"
+                    onClick={() => onOpenTask(task.id)}
                   >
-                    {t('scrumAddToSprint')}
-                  </Button>
-                ) : null}
-              </div>
-            ))
+                    {task.humanKey ? `${task.humanKey} · ` : ''}
+                    {task.title}
+                  </button>
+                  {canMutate && selected && selected.status !== 'completed' ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => void onAssignToSprint(task.id, selected.id)}
+                    >
+                      {t('scrumAddToSprint')}
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           )}
-        </aside>
+        </section>
       </div>
 
       <Modal

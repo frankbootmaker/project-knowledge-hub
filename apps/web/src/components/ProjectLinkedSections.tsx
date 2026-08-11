@@ -145,6 +145,7 @@ export function ProjectLinkedSections({
   return (
     <>
       <CollapsibleSection
+        id="project-systems"
         storageKey={`project:${projectId}:systems`}
         title={t('linkedSystems')}
         defaultOpen
@@ -164,6 +165,7 @@ export function ProjectLinkedSections({
         />
       </CollapsibleSection>
       <CollapsibleSection
+        id="project-knowledge"
         storageKey={`project:${projectId}:records`}
         title={t('linkedKnowledge')}
         defaultOpen

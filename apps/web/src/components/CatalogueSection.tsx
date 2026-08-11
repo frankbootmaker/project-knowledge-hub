@@ -57,6 +57,13 @@ export type CatalogueLocaleVariant = {
   filterLabel?: string;
 };
 
+export type CatalogueBadgeTone =
+  | 'neutral'
+  | 'brand'
+  | 'success'
+  | 'warn'
+  | 'danger';
+
 export type CatalogueListItem = {
   id: string;
   title: string;
@@ -64,6 +71,12 @@ export type CatalogueListItem = {
   href?: string;
   primaryBadge?: string;
   secondaryBadge?: string;
+  /** Status chips shown immediately after the title (e.g. overall RAG). */
+  statusBadges?: Array<{
+    label: string;
+    tone?: CatalogueBadgeTone;
+    title?: string;
+  }>;
   subtitle?: string | null;
   tagsLine?: string | null;
   /** ISO timestamp shown like dashboard “recently updated”. */
@@ -410,6 +423,15 @@ export function CatalogueSection({
                         ) : (
                           <span className="font-semibold">{item.title}</span>
                         )}
+                        {item.statusBadges?.map((badge) => (
+                          <Badge
+                            key={`${item.id}-${badge.label}`}
+                            tone={badge.tone ?? 'neutral'}
+                            title={badge.title}
+                          >
+                            {badge.label}
+                          </Badge>
+                        ))}
                         {item.primaryBadge ? (
                           <Badge tone="brand">{item.primaryBadge}</Badge>
                         ) : null}

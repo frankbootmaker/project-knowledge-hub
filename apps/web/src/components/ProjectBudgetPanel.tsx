@@ -317,6 +317,7 @@ export function ProjectBudgetPanel({
 
   return (
     <CollapsibleSection
+      id="project-budget"
       storageKey={`project:${projectId}:budget`}
       title={t('title')}
       defaultOpen

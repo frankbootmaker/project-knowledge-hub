@@ -502,6 +502,7 @@ export function ProjectRaidPanel({
   return (
     <>
       <CollapsibleSection
+        id="project-raid"
         storageKey={`project:${projectId}:raid`}
         title={t('title')}
         defaultOpen

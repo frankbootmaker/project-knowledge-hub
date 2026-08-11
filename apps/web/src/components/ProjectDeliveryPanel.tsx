@@ -696,6 +696,7 @@ export function ProjectDeliveryPanel({
   return (
     <>
       <CollapsibleSection
+        id="project-delivery"
         storageKey={`project:${projectId}:delivery`}
         title={t('title')}
         defaultOpen
@@ -970,6 +971,7 @@ export function ProjectDeliveryPanel({
         ) : null}
         {viewMode === 'timeline' ? (
           <ProjectDeliveryTimeline
+            projectId={projectId}
             projectStartDate={projectStartDate}
             projectEndDate={projectEndDate}
             epics={epics}

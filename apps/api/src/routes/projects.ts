@@ -35,6 +35,7 @@ import {
   allocateUniqueKeyPrefix,
   assertUniqueKeyPrefix,
 } from '../lib/project-issue-keys.js';
+import { listProjectOverallRags } from '../lib/project-overall-rag.js';
 
 const dateStringSchema = z
   .string()
@@ -165,16 +166,22 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
           : and(eq(projects.workspaceId, query.workspaceId), isNull(projects.archivedAt)),
       );
 
-    const tagMap = await getProjectTags(
-      app.database,
-      rows.map((row) => row.id),
-    );
+    const projectIds = rows.map((row) => row.id);
+    const [tagMap, overallRagById] = await Promise.all([
+      getProjectTags(app.database, projectIds),
+      listProjectOverallRags(app.database, projectIds),
+    ]);
 
     return {
       projects: await Promise.all(
-        rows.map((row) =>
-          toPublicProject(app.database, row, tagMap.get(row.id) ?? []),
-        ),
+        rows.map(async (row) => ({
+          ...(await toPublicProject(
+            app.database,
+            row,
+            tagMap.get(row.id) ?? [],
+          )),
+          overallRag: overallRagById.get(row.id) ?? 'green',
+        })),
       ),
     };
   });

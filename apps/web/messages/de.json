@@ -1952,7 +1952,10 @@
       "calendar": "Kalender",
       "timeline": "Zeitachse"
     },
-    "timelineHint": "Fishbone-Zeitachse für Epic- und Story-Zeiträume. Meilensteine erscheinen als Rauten auf der Achse; Aufgaben mit Fälligkeit als Markierungen. Ein vollständiges Abhängigkeits-Gantt bleibt außerhalb des Scopes.",
+    "timelineHint": "Fishbone-Zeitachse für Epic- und Story-Zeiträume. Rauten auf der Achse sind Meilensteine; Punkte sind Aufgaben mit Fälligkeit. Beschriftungen sind mit Linien an die Markierungen gebunden. Ein vollständiges Abhängigkeits-Gantt bleibt außerhalb des Scopes.",
+    "timelineLegendHelp": "Zeitachsen-Markierungen erklären",
+    "timelineDragHint": "Ziehe Labels zum Anordnen. Klicke (ohne Ziehen) zum Öffnen. Verbindungslinien bleiben an den Markierungen.",
+    "timelineResetTags": "Label-Positionen zurücksetzen",
     "timelineNoBars": "Noch keine datierten Epics. Setze Start-/Enddaten an Epics und Stories, um das Diagramm zu füllen.",
     "timelineUnscheduled": "Ungeplante Elemente",
     "timelineProjectStart": "Projektstart",
@@ -2005,6 +2008,7 @@
     "wideModalDescription": "Board, Kalender und Zeitachse öffnen in der Vollansicht. Mit Liste kehren Sie zur Seite zurück.",
     "closeWideView": "Zurück zur Liste",
     "scheduleLegendLabel": "Termin-Farben",
+    "scheduleLegendHelp": "Bedeutung der Termin-Farben erklären",
     "scheduleTone": {
       "onTrack": "Im Plan",
       "atRisk": "Gefährdet (bald fällig)",

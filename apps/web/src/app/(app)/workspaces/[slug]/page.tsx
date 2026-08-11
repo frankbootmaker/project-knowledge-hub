@@ -37,6 +37,7 @@ type Project = {
   summary: string | null;
   tags: Array<{ name: string }>;
   updatedAt: string;
+  overallRag?: 'green' | 'amber' | 'red';
 };
 
 type System = {

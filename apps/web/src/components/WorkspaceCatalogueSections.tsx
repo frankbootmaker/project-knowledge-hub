@@ -26,6 +26,7 @@ export type WorkspaceCatalogueProject = {
   summary: string | null;
   tags: Array<{ name: string }>;
   updatedAt: string;
+  overallRag?: 'green' | 'amber' | 'red';
 };
 
 export type WorkspaceCatalogueSystem = {
@@ -90,27 +91,50 @@ export function WorkspaceCatalogueSections({
 }) {
   const t = useTranslations('workspaces');
   const tCommon = useTranslations('common');
+  const tProjects = useTranslations('projects');
   const tRecords = useTranslations('records');
   const locale = useLocale();
 
-  const projectItems: CatalogueListItem[] = projects.map((project) => ({
-    id: project.id,
-    title: project.name,
-    href: `/workspaces/${workspaceSlug}/projects/${project.slug}`,
-    primaryBadge: project.status,
-    subtitle: project.summary,
-    updatedAt: project.updatedAt,
-    tagsLine:
-      project.tags.length > 0
-        ? tCommon('tagsList', {
-            tags: project.tags.map((tag) => tag.name).join(', '),
-          })
-        : null,
-    searchText: [project.name, project.slug, project.summary ?? '', project.status]
-      .join(' ')
-      .toLowerCase(),
-    filterValue: project.status,
-  }));
+  const projectItems: CatalogueListItem[] = projects.map((project) => {
+    const overallRag = project.overallRag ?? 'green';
+    const ragTone =
+      overallRag === 'red'
+        ? ('danger' as const)
+        : overallRag === 'amber'
+          ? ('warn' as const)
+          : ('success' as const);
+    return {
+      id: project.id,
+      title: project.name,
+      href: `/workspaces/${workspaceSlug}/projects/${project.slug}`,
+      statusBadges: [
+        {
+          label: `${tProjects('ragOverall')}: ${tProjects(`rag.${overallRag}`)}`,
+          tone: ragTone,
+          title: tProjects('ragLabel'),
+        },
+      ],
+      primaryBadge: project.status,
+      subtitle: project.summary,
+      updatedAt: project.updatedAt,
+      tagsLine:
+        project.tags.length > 0
+          ? tCommon('tagsList', {
+              tags: project.tags.map((tag) => tag.name).join(', '),
+            })
+          : null,
+      searchText: [
+        project.name,
+        project.slug,
+        project.summary ?? '',
+        project.status,
+        overallRag,
+      ]
+        .join(' ')
+        .toLowerCase(),
+      filterValue: project.status,
+    };
+  });
 
   const systemItems: CatalogueListItem[] = systems.map((system) => ({
     id: system.id,

@@ -232,7 +232,7 @@ export function ProjectDeliveryBoard({
   const mobileTasks = tasks.filter((task) => task.status === mobileColumn);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 max-w-full gap-4">
       <DeliveryScheduleLegend />
 
       {milestones.length > 0 ? (
@@ -312,8 +312,8 @@ export function ProjectDeliveryBoard({
       </div>
 
       {/* Desktop / tablet landscape: horizontal kanban with drag */}
-      <div className="hidden md:block">
-        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 snap-x snap-mandatory">
+      <div className="hidden min-w-0 max-w-full md:block">
+        <div className="flex max-w-full gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
           {BOARD_COLUMNS.map((status) => (
             <BoardColumnPanel
               key={status}

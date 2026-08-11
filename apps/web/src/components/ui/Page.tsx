@@ -39,17 +39,21 @@ export function PageHeader({
   description,
   actions,
   eyebrow,
+  nav,
 }: {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   eyebrow?: ReactNode;
+  /** Quick in-page links shown directly under the title. */
+  nav?: ReactNode;
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0">
         {eyebrow ? <p className="mb-1 text-sm text-ink-muted">{eyebrow}</p> : null}
         <h1 className="m-0 text-3xl font-semibold tracking-tight text-ink">{title}</h1>
+        {nav ? <div className="mt-3">{nav}</div> : null}
         {description ? (
           <p className="mt-1.5 mb-0 text-ink-muted">{description}</p>
         ) : null}

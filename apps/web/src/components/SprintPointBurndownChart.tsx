@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 export type PointBurndownRow = {
@@ -8,6 +8,38 @@ export type PointBurndownRow = {
   idealRemaining: number;
   remaining: number;
 };
+
+/** Compact ? control that reveals chart legend text on click. */
+export function BurndownLegendHelp() {
+  const t = useTranslations('delivery');
+  const legendId = useId();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="grid justify-items-end gap-2">
+      <button
+        type="button"
+        className="inline-flex size-6 items-center justify-center rounded-full border border-line text-xs font-semibold text-ink-muted hover:bg-brand-soft hover:text-ink"
+        aria-expanded={open}
+        aria-controls={legendId}
+        aria-label={t('scrumBurndownHelp')}
+        title={t('scrumBurndownHelp')}
+        onClick={() => setOpen((current) => !current)}
+      >
+        ?
+      </button>
+      {open ? (
+        <p
+          id={legendId}
+          role="note"
+          className="m-0 max-w-md rounded-md border border-line bg-panel-solid px-2.5 py-2 text-left text-xs text-ink-muted"
+        >
+          {t('scrumBurndownLegend')}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function SprintPointBurndownChart({
   committedPoints,
@@ -140,7 +172,6 @@ export function SprintPointBurndownChart({
           {committedPoints}
         </text>
       </svg>
-      <p className="m-0 text-xs text-ink-muted">{t('scrumBurndownLegend')}</p>
     </div>
   );
 }

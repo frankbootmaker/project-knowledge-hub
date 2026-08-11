@@ -30,6 +30,7 @@ import {
   projectMilestones,
   projectRaidItems,
   projectRaidTaskLinks,
+  projectSprints,
   projectStakeholders,
   projectTaskActivities,
   projectTaskRaci,
@@ -49,6 +50,14 @@ function ymd(offsetDays: number): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/** Midday timestamp for activity trails (burndown / handoffs). */
+function ymdAt(offsetDays: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  date.setHours(12, 0, 0, 0);
+  return date;
 }
 
 const DEMO_WORKSPACE_SLUG = 'home-infrastructure';
@@ -249,6 +258,10 @@ async function main(): Promise<void> {
         description:
           'Owns the always-on services that back daily work: Proxmox hosts, Traefik edge, and Project Knowledge Hub itself.',
         ownerUserId: admin.id,
+        keyPrefix: 'HL1',
+        definitionOfDone:
+          '- Acceptance criteria met\n- Linked docs updated\n- RACI owner reviewed\n- No open critical RAID on the item',
+        issueCounters: { SP: 3 },
       })
       .returning();
 
@@ -263,6 +276,7 @@ async function main(): Promise<void> {
         description:
           'Tracks how assistants read and write draft knowledge via MCP / OpenAPI Actions.',
         ownerUserId: admin.id,
+        keyPrefix: 'AI1',
       })
       .returning();
 
@@ -788,9 +802,63 @@ Prefer a tool-capable model; tiny local models often skip tools.
       throw new Error('Failed to create lab user stories');
     }
 
+    console.log('Seeding Homelab Scrum sprints…');
+    const [sprintCompleted] = await database.db
+      .insert(projectSprints)
+      .values({
+        projectId: labProject.id,
+        name: 'Sprint 1 — Edge hardening',
+        goal: 'Ship Traefik → Authentik path and prove public MCP reachability.',
+        status: 'completed',
+        startDate: ymd(-21),
+        endDate: ymd(-8),
+        capacityPoints: 16,
+        sortOrder: 10,
+        issueKeyType: 'SP',
+        issueNumber: 1,
+      })
+      .returning();
+    const [sprintActive] = await database.db
+      .insert(projectSprints)
+      .values({
+        projectId: labProject.id,
+        name: 'Sprint 2 — Observability + Delivery UX',
+        goal: 'Alerts on backups/disk and a usable Delivery board for agents.',
+        status: 'active',
+        startDate: ymd(-7),
+        endDate: ymd(7),
+        capacityPoints: 24,
+        sortOrder: 20,
+        issueKeyType: 'SP',
+        issueNumber: 2,
+      })
+      .returning();
+    const [sprintPlanned] = await database.db
+      .insert(projectSprints)
+      .values({
+        projectId: labProject.id,
+        name: 'Sprint 3 — Docs & restore',
+        goal: 'Restore drill scheduled and Homelab runbook refreshed.',
+        status: 'planned',
+        startDate: ymd(8),
+        endDate: ymd(21),
+        capacityPoints: 18,
+        sortOrder: 30,
+        issueKeyType: 'SP',
+        issueNumber: 3,
+      })
+      .returning();
+    if (!sprintCompleted || !sprintActive || !sprintPlanned) {
+      throw new Error('Failed to create lab sprints');
+    }
+
     type SeedTask = {
       milestoneId: string | null;
       userStoryId?: string | null;
+      sprintId?: string | null;
+      storyPoints?: number | null;
+      /** Offset used for status_changed→done activity (burndown). */
+      doneOnOffset?: number;
       title: string;
       description?: string;
       status: string;
@@ -805,6 +873,9 @@ Prefer a tool-capable model; tiny local models often skip tools.
       {
         milestoneId: mNetwork.id,
         userStoryId: storyEdge.id,
+        sprintId: sprintCompleted.id,
+        storyPoints: 5,
+        doneOnOffset: -16,
         title: 'Document Traefik → Authentik Tailscale route',
         status: 'done',
         dueDate: ymd(-20),
@@ -819,6 +890,9 @@ Prefer a tool-capable model; tiny local models often skip tools.
       {
         milestoneId: mNetwork.id,
         userStoryId: storyEdge.id,
+        sprintId: sprintCompleted.id,
+        storyPoints: 3,
+        doneOnOffset: -11,
         title: 'Verify public MCP URL from mobile data',
         status: 'done',
         dueDate: ymd(-12),
@@ -832,11 +906,14 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mObservability.id,
+        sprintId: sprintActive.id,
+        storyPoints: 5,
+        doneOnOffset: -2,
         title: 'Wire ALERT_WEBHOOK_URL for backup failures',
-        status: 'in_progress',
+        status: 'done',
         dueDate: ymd(3),
         forecastHours: '6',
-        actualHours: '2.5',
+        actualHours: '5.5',
         sortOrder: 1,
         raci: [
           { userId: admin.id, role: 'A' },
@@ -846,6 +923,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mObservability.id,
+        sprintId: sprintActive.id,
+        storyPoints: 3,
         title: 'Add disk-space alert for Postgres volume',
         status: 'todo',
         dueDate: ymd(7),
@@ -858,6 +937,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mObservability.id,
+        sprintId: sprintActive.id,
+        storyPoints: 2,
         title: 'Review Monitoring Mon-2 search telemetry',
         status: 'blocked',
         dueDate: ymd(5),
@@ -873,6 +954,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       {
         milestoneId: mDelivery.id,
         userStoryId: storyDelivery.id,
+        sprintId: sprintActive.id,
+        storyPoints: 5,
         title: 'Seed demo milestones/tasks for UI validation',
         status: 'in_progress',
         dueDate: ymd(0),
@@ -887,6 +970,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       {
         milestoneId: mDelivery.id,
         userStoryId: storyDelivery.id,
+        sprintId: sprintActive.id,
+        storyPoints: 3,
         title: 'Validate list / board / calendar views',
         status: 'todo',
         dueDate: ymd(2),
@@ -901,6 +986,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       {
         milestoneId: mDelivery.id,
         userStoryId: storyDelivery.id,
+        sprintId: sprintActive.id,
+        storyPoints: 2,
         title: 'MCP smoke: create_project_task + set RACI',
         status: 'todo',
         dueDate: ymd(4),
@@ -914,6 +1001,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       {
         milestoneId: mDelivery.id,
         userStoryId: storyDelivery.id,
+        sprintId: sprintPlanned.id,
+        storyPoints: 5,
         title: 'Polish board drag-and-drop affordances',
         status: 'todo',
         dueDate: ymd(12),
@@ -926,6 +1015,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mDocsDay.id,
+        sprintId: sprintPlanned.id,
+        storyPoints: 8,
         title: 'Schedule Postgres restore drill',
         status: 'todo',
         dueDate: ymd(28),
@@ -938,6 +1029,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: mDocsDay.id,
+        sprintId: sprintPlanned.id,
+        storyPoints: 5,
         title: 'Refresh Homelab runbook after Delivery ships',
         status: 'todo',
         dueDate: ymd(30),
@@ -961,6 +1054,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       },
       {
         milestoneId: null,
+        storyPoints: 3,
         title: 'Capture GPU host decision for embeddings',
         status: 'todo',
         dueDate: ymd(14),
@@ -986,6 +1080,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
           projectId: labProject.id,
           milestoneId: taskSpec.milestoneId,
           userStoryId: taskSpec.userStoryId ?? null,
+          sprintId: taskSpec.sprintId ?? null,
+          storyPoints: taskSpec.storyPoints ?? null,
           title: taskSpec.title,
           description: taskSpec.description ?? null,
           status: taskSpec.status,
@@ -1014,7 +1110,19 @@ Prefer a tool-capable model; tiny local models often skip tools.
         actorUserId: admin.id,
         type: 'created',
         metadataJson: { title: task.title },
+        createdAt: ymdAt(
+          taskSpec.doneOnOffset != null ? taskSpec.doneOnOffset - 3 : -10,
+        ),
       });
+      if (taskSpec.status === 'done' && taskSpec.doneOnOffset != null) {
+        await database.db.insert(projectTaskActivities).values({
+          taskId: task.id,
+          actorUserId: admin.id,
+          type: 'status_changed',
+          metadataJson: { from: 'in_progress', to: 'done' },
+          createdAt: ymdAt(taskSpec.doneOnOffset),
+        });
+      }
       if (taskSpec.title === 'Validate list / board / calendar views') {
         handoffDemoTaskId = task.id;
       }
@@ -1260,7 +1368,77 @@ Keep public MCP behind Authentik + Tailscale ACL review.
       })
       .returning();
 
-    if (!charterRecord || !minutesRecord || !decisionRecord || !planRecord) {
+    const [retroRecord] = await database.db
+      .insert(knowledgeRecords)
+      .values({
+        workspaceId: workspace.id,
+        projectId: labProject.id,
+        systemId: knowhub.id,
+        title: 'Retrospective — Sprint 1 — Edge hardening',
+        slug: 'retro-sprint-1-edge-hardening',
+        summary: 'What went well / improve after edge hardening sprint.',
+        recordType: 'sprint_retrospective',
+        lifecycleStatus: 'verified',
+        sourceOfTruthMode: 'hub_managed',
+        documentKeyType: 'RET',
+        documentNumber: 1,
+        contentMarkdown: `# Retrospective — Sprint 1
+
+## Went well
+
+- Traefik → Authentik path documented end-to-end
+- Mobile MCP reachability proven early
+
+## Improve
+
+- Pair on ACL review before the next public exposure
+
+## Actions
+
+- Carry monitoring telemetry review into Sprint 2
+`,
+        createdBy: admin.id,
+        verifiedAt: new Date(),
+      })
+      .returning();
+    const [reviewRecord] = await database.db
+      .insert(knowledgeRecords)
+      .values({
+        workspaceId: workspace.id,
+        projectId: labProject.id,
+        systemId: knowhub.id,
+        title: 'Sprint review — Sprint 1 — Edge hardening',
+        slug: 'review-sprint-1-edge-hardening',
+        summary: 'Demo notes for completed edge hardening sprint.',
+        recordType: 'sprint_review',
+        lifecycleStatus: 'current',
+        sourceOfTruthMode: 'hub_managed',
+        documentKeyType: 'REV',
+        documentNumber: 1,
+        contentMarkdown: `# Sprint review — Sprint 1
+
+## Demo
+
+- Public MCP URL behind Authentik
+- Tailscale route notes in knowledge
+
+## Accepted
+
+- 8 story points completed (capacity 16)
+`,
+        createdBy: admin.id,
+        verifiedAt: new Date(),
+      })
+      .returning();
+
+    if (
+      !charterRecord ||
+      !minutesRecord ||
+      !decisionRecord ||
+      !planRecord ||
+      !retroRecord ||
+      !reviewRecord
+    ) {
       throw new Error('Failed to create delivery-linked demo documents');
     }
 
@@ -1274,6 +1452,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         approvedBudget: '52000.00',
         charterRecordId: charterRecord.id,
         initialPlanRecordId: planRecord.id,
+        issueCounters: { SP: 3, RET: 1, REV: 1 },
         updatedAt: new Date(),
       })
       .where(eq(projects.id, labProject.id));
@@ -1385,6 +1564,16 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         knowledgeRecordId: decisionRecord.id,
         entityType: 'user_story',
         entityId: storyEdge.id,
+      },
+      {
+        knowledgeRecordId: retroRecord.id,
+        entityType: 'sprint',
+        entityId: sprintCompleted.id,
+      },
+      {
+        knowledgeRecordId: reviewRecord.id,
+        entityType: 'sprint',
+        entityId: sprintCompleted.id,
       },
     ]);
 
@@ -1567,6 +1756,9 @@ Keep public MCP behind Authentik + Tailscale ACL review.
     const [taskCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(projectTasks);
+    const [sprintCount] = await database.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(projectSprints);
     const [stakeholderCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(projectStakeholders);
@@ -1590,7 +1782,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
       `  users=${usersCount?.n ?? 0} workspaces=${wsCount?.n ?? 0} knowledge_records=${recCount?.n ?? 0} memberships=${memCount?.n ?? 0}`,
     );
     console.log(
-      `  delivery: milestones=${milestoneCount?.n ?? 0} tasks=${taskCount?.n ?? 0} stakeholders=${stakeholderCount?.n ?? 0}`,
+      `  delivery: milestones=${milestoneCount?.n ?? 0} tasks=${taskCount?.n ?? 0} sprints=${sprintCount?.n ?? 0} stakeholders=${stakeholderCount?.n ?? 0}`,
     );
     console.log(`  Sign in (admin): ${admin.email} / (BOOTSTRAP_ADMIN_PASSWORD)`);
     console.log(`  Demo users password: ${DEMO_PASSWORD}`);
@@ -1603,7 +1795,7 @@ Keep public MCP behind Authentik + Tailscale ACL review.
     }
     console.log(`  Open: /workspaces/${DEMO_WORKSPACE_SLUG} or Admin → Memberships`);
     console.log(
-      '  Try: Homelab Platform → Delivery + Stakeholders (list / org chart; Cursor + KnowHub Ops Agent); AI Assistants has its own board + OpenWebUI/Cursor/ChatGPT.',
+      '  Try: Homelab Platform → Delivery (Scrum view: HL1-SP-1..3, burndown, DoD, retro/review) + Stakeholders; AI Assistants has its own board + OpenWebUI/Cursor/ChatGPT.',
     );
 
   } finally {

@@ -29,6 +29,7 @@ function ChevronIcon({ open }: { open: boolean }) {
 
 /** Collapsible page section with session-persisted open/closed state. */
 export function CollapsibleSection({
+  id,
   storageKey,
   title,
   action,
@@ -36,6 +37,8 @@ export function CollapsibleSection({
   children,
   className,
 }: {
+  /** Anchor target for in-page navigation (`#id`). */
+  id?: string;
   storageKey: string;
   title: ReactNode;
   action?: ReactNode;
@@ -55,7 +58,25 @@ export function CollapsibleSection({
     } catch {
       /* ignore */
     }
-  }, [storageKey]);
+    if (id && window.location.hash === `#${id}`) {
+      setOpen(true);
+    }
+  }, [id, storageKey]);
+
+  useEffect(() => {
+    if (!id) return;
+    function openFromHash() {
+      if (window.location.hash !== `#${id}`) return;
+      setOpen(true);
+      try {
+        window.sessionStorage.setItem(`kh-section:${storageKey}`, 'open');
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener('hashchange', openFromHash);
+    return () => window.removeEventListener('hashchange', openFromHash);
+  }, [id, storageKey]);
 
   function toggle() {
     setOpen((current) => {
@@ -73,7 +94,7 @@ export function CollapsibleSection({
   }
 
   return (
-    <section className={cn('mb-8', className)}>
+    <section id={id} className={cn('mb-8 scroll-mt-6', className)}>
       <SectionHeader
         title={
           <button

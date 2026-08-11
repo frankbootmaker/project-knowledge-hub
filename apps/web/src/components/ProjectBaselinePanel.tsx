@@ -275,6 +275,7 @@ export function ProjectBaselinePanel({
   return (
     <>
       <CollapsibleSection
+        id="project-baseline"
         storageKey={`project:${projectId}:baseline`}
         title={t('title')}
         defaultOpen

@@ -538,6 +538,7 @@ export function ProjectChangePanel({
   return (
     <>
       <CollapsibleSection
+        id="project-change"
         storageKey={`project:${projectId}:changes`}
         title={t('title')}
         defaultOpen
