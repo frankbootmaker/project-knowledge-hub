@@ -2133,6 +2133,16 @@
     "failedCreate": "RAID-Eintrag konnte nicht erstellt werden",
     "failedUpdate": "RAID-Eintrag konnte nicht aktualisiert werden",
     "failedDelete": "RAID-Eintrag konnte nicht gelöscht werden",
+    "failedTransfer": "RAID-Eintrag konnte nicht übertragen werden",
+    "moveToIssue": "Als Issue übernehmen",
+    "moveToRisk": "Als Risiko übernehmen",
+    "confirmMoveToIssue": "Neues Issue aus diesem Risiko erstellen und das Risiko archivieren?",
+    "confirmMoveToRisk": "Neues Risiko aus diesem Issue erstellen und das Issue archivieren?",
+    "transferHint": "Felder und Aufgabenverknüpfungen werden kopiert. Die Quelle wird archiviert und mit dem neuen Schlüssel verknüpft.",
+    "transferred": "{source} → {target} übertragen.",
+    "transferredFromBanner": "Erstellt aus {key}.",
+    "transferredToBanner": "Übertragen nach {key} (dieser Eintrag ist archiviert).",
+    "useTransfer": "Übertragen nutzen",
     "hint": "RAID ist das operative Register für Risiken, Annahmen, Issues und Abhängigkeiten. Verknüpfe Einträge mit Aufgaben, wenn sie die Umsetzung betreffen.",
     "readOnlyHint": "RAID ist sichtbar; Maintainer und Admins können bearbeiten.",
     "kind": {
@@ -2172,7 +2182,9 @@
     "hint": "Die Baseline ist der Kickoff-Snapshot. Live-Stakeholder können sich ändern. Das genehmigte Budget bearbeitest du unter Budgetierung.",
     "readOnlyHint": "Baseline ist sichtbar; Maintainer und Admins können bearbeiten.",
     "currency": "Währung",
-    "initialBudget": "Initialbudget"
+    "initialBudget": "Initialbudget",
+    "keyPrefix": "Issue-Key-Präfix",
+    "keyPrefixHint": "Drei Zeichen: AAA oder AA0 (zwei Buchstaben + Ziffer). Eindeutig im Workspace. Beispiel: HL1-T-12."
   },
   "changes": {
     "title": "Change-Management",

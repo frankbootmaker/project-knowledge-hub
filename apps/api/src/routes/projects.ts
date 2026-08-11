@@ -5,6 +5,7 @@ import { slugify } from '@project-knowledge-hub/auth';
 import { projects, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
+  keyPrefixSchema,
   projectCurrencySchema,
   projectStakeholderRoleSchema,
   projectStatusSchema,
@@ -30,6 +31,10 @@ import {
   loadPinnedRecords,
   setInitialStakeholders,
 } from '../lib/project-baseline.js';
+import {
+  allocateUniqueKeyPrefix,
+  assertUniqueKeyPrefix,
+} from '../lib/project-issue-keys.js';
 
 const dateStringSchema = z
   .string()
@@ -53,6 +58,7 @@ const createProjectSchema = z.object({
   currency: projectCurrencySchema.optional(),
   initialBudget: z.union([z.number(), z.string()]).nullable().optional(),
   approvedBudget: z.union([z.number(), z.string()]).nullable().optional(),
+  keyPrefix: keyPrefixSchema.optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -72,6 +78,7 @@ const updateProjectSchema = z.object({
   currency: projectCurrencySchema.optional(),
   initialBudget: z.union([z.number(), z.string()]).nullable().optional(),
   approvedBudget: z.union([z.number(), z.string()]).nullable().optional(),
+  keyPrefix: keyPrefixSchema.optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
   archived: z.boolean().optional(),
@@ -122,6 +129,7 @@ async function toPublicProject(
     currency: projectCurrencySchema.parse(project.currency),
     initialBudget: project.initialBudget,
     approvedBudget: project.approvedBudget,
+    keyPrefix: project.keyPrefix,
     metadata: project.metadataJson,
     tags: tagList,
     archivedAt: project.archivedAt?.toISOString() ?? null,
@@ -211,6 +219,17 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       });
     }
 
+    const keyPrefix =
+      body.keyPrefix !== undefined
+        ? await assertUniqueKeyPrefix(app.database, {
+            workspaceId: body.workspaceId,
+            keyPrefix: body.keyPrefix,
+          })
+        : await allocateUniqueKeyPrefix(app.database, {
+            workspaceId: body.workspaceId,
+            nameOrSlug: slug || body.name,
+          });
+
     const [created] = await app.database.db
       .insert(projects)
       .values({
@@ -236,6 +255,8 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
           body.approvedBudget === undefined
             ? null
             : parseBudgetAmount(body.approvedBudget) ?? null,
+        keyPrefix,
+        issueCounters: {},
         metadataJson: body.metadata ?? null,
         updatedAt: new Date(),
       })
@@ -459,6 +480,15 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       });
     }
 
+    const nextKeyPrefix =
+      body.keyPrefix === undefined
+        ? project.keyPrefix
+        : await assertUniqueKeyPrefix(app.database, {
+            workspaceId: project.workspaceId,
+            keyPrefix: body.keyPrefix,
+            excludeProjectId: project.id,
+          });
+
     const [updated] = await app.database.db
       .update(projects)
       .set({
@@ -483,6 +513,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
           body.approvedBudget === undefined
             ? project.approvedBudget
             : parseBudgetAmount(body.approvedBudget) ?? null,
+        keyPrefix: nextKeyPrefix,
         metadataJson: body.metadata === undefined ? project.metadataJson : body.metadata,
         archivedAt:
           body.archived === undefined

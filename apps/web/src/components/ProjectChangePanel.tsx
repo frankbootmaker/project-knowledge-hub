@@ -48,6 +48,7 @@ export type ChangeItem = {
   knowledgeRecordId: string | null;
   knowledgeRecordTitle: string | null;
   sortOrder: number;
+  humanKey?: string | null;
   createdAt?: string;
   updatedAt?: string;
   deliveryLinks: ChangeDeliveryLink[];
@@ -175,9 +176,10 @@ export function ProjectChangePanel({
       items.map((item) => ({
         id: item.id,
         title: item.title,
-        primaryBadge: t(`kind.${item.kind}`),
+        primaryBadge: item.humanKey ?? t(`kind.${item.kind}`),
         secondaryBadge: t(`status.${item.status}`),
         subtitle: [
+          t(`kind.${item.kind}`),
           item.requestedBy?.displayName
             ? `${t('requestedBy')}: ${item.requestedBy.displayName}`
             : null,
@@ -196,6 +198,7 @@ export function ProjectChangePanel({
         updatedAt: item.updatedAt ?? item.createdAt ?? null,
         searchText: [
           item.title,
+          item.humanKey ?? '',
           item.description ?? '',
           item.rationale ?? '',
           item.kind,
@@ -566,10 +569,14 @@ export function ProjectChangePanel({
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold">{item.title}</span>
-                    {item.primaryBadge ? (
+                    {change?.humanKey ? (
+                      <Badge tone="brand" className="font-mono">
+                        {change.humanKey}
+                      </Badge>
+                    ) : item.primaryBadge ? (
                       <Badge tone="brand">{item.primaryBadge}</Badge>
                     ) : null}
+                    <span className="font-semibold">{item.title}</span>
                     {item.secondaryBadge ? (
                       <Badge>{item.secondaryBadge}</Badge>
                     ) : null}

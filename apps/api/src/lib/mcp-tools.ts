@@ -96,8 +96,13 @@ import {
   getRaidItem,
   listRaidItems,
   setRaidTaskLinks,
+  transferRaidItem,
   updateRaidItem,
 } from './project-raid.js';
+import {
+  assertUniqueKeyPrefix,
+  resolveEntityId,
+} from './project-issue-keys.js';
 import {
   assertPinnedKnowledgeRecord,
   listInitialStakeholders,
@@ -324,6 +329,7 @@ export function createMcpToolHandlers(
           slug: row.slug,
           status: row.status,
           summary: row.summary,
+          keyPrefix: row.keyPrefix,
         })),
       };
     },
@@ -411,6 +417,7 @@ export function createMcpToolHandlers(
           currency: projectCurrencySchema.parse(project.currency),
           initialBudget: project.initialBudget,
           approvedBudget: project.approvedBudget,
+          keyPrefix: project.keyPrefix,
         },
       };
     },
@@ -424,6 +431,7 @@ export function createMcpToolHandlers(
       currency?: string;
       initialBudget?: number | string | null;
       approvedBudget?: number | string | null;
+      keyPrefix?: string;
     }) {
       const actingUserId = requireActingUserId(client);
       const project = await requirePmProject(app, client, input.projectId, {
@@ -451,6 +459,14 @@ export function createMcpToolHandlers(
           expectedTypes: ['plan'],
         });
       }
+      const nextKeyPrefix =
+        input.keyPrefix === undefined
+          ? project.keyPrefix
+          : await assertUniqueKeyPrefix(app.database, {
+              workspaceId: project.workspaceId,
+              keyPrefix: input.keyPrefix,
+              excludeProjectId: project.id,
+            });
       const [updated] = await app.database.db
         .update(projects)
         .set({
@@ -471,6 +487,7 @@ export function createMcpToolHandlers(
             input.approvedBudget === undefined
               ? project.approvedBudget
               : parseBudgetAmount(input.approvedBudget) ?? null,
+          keyPrefix: nextKeyPrefix,
           updatedAt: new Date(),
         })
         .where(eq(projects.id, project.id))
@@ -525,6 +542,7 @@ export function createMcpToolHandlers(
           currency: projectCurrencySchema.parse(updated.currency),
           initialBudget: updated.initialBudget,
           approvedBudget: updated.approvedBudget,
+          keyPrefix: updated.keyPrefix,
         },
       };
     },
@@ -1309,9 +1327,16 @@ export function createMcpToolHandlers(
 
     async listProjectTasks(input) {
       await requirePmProject(app, client, input.projectId);
-      const milestoneId = input.unassignedMilestone
+      let milestoneId: string | null | undefined = input.unassignedMilestone
         ? null
         : input.milestoneId;
+      if (typeof milestoneId === 'string') {
+        milestoneId = await resolveEntityId(app.database, {
+          entityType: 'milestone',
+          idOrKey: milestoneId,
+          projectId: input.projectId,
+        });
+      }
       return {
         tasks: await listTasks(app.database, input.projectId, {
           milestoneId,
@@ -1321,7 +1346,11 @@ export function createMcpToolHandlers(
     },
 
     async getProjectTask(input) {
-      const task = await getTask(app.database, input.taskId);
+      const taskId = await resolveEntityId(app.database, {
+        entityType: 'task',
+        idOrKey: input.taskId,
+      });
+      const task = await getTask(app.database, taskId);
       await requirePmProject(app, client, task.projectId);
       return { task };
     },
@@ -1362,11 +1391,15 @@ export function createMcpToolHandlers(
 
     async updateProjectMilestone(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getMilestone(app.database, input.milestoneId);
+      const milestoneId = await resolveEntityId(app.database, {
+        entityType: 'milestone',
+        idOrKey: input.milestoneId,
+      });
+      const existing = await getMilestone(app.database, milestoneId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
-      const milestone = await updateMilestone(app.database, input.milestoneId, {
+      const milestone = await updateMilestone(app.database, milestoneId, {
         title: input.title,
         description: input.description,
         status: input.status
@@ -1395,6 +1428,22 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
+      const milestoneId =
+        input.milestoneId == null
+          ? input.milestoneId
+          : await resolveEntityId(app.database, {
+              entityType: 'milestone',
+              idOrKey: input.milestoneId,
+              projectId: project.id,
+            });
+      const userStoryId =
+        input.userStoryId == null
+          ? input.userStoryId
+          : await resolveEntityId(app.database, {
+              entityType: 'user_story',
+              idOrKey: input.userStoryId,
+              projectId: project.id,
+            });
       const task = await createTask(app.database, {
         projectId: project.id,
         workspaceId: project.workspaceId,
@@ -1410,8 +1459,8 @@ export function createMcpToolHandlers(
           input.actualHours === undefined
             ? undefined
             : parseHours(input.actualHours) ?? null,
-        milestoneId: input.milestoneId,
-        userStoryId: input.userStoryId,
+        milestoneId,
+        userStoryId,
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         createdBy: actingUserId,
@@ -1446,11 +1495,31 @@ export function createMcpToolHandlers(
 
     async updateProjectTask(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getTask(app.database, input.taskId);
+      const taskId = await resolveEntityId(app.database, {
+        entityType: 'task',
+        idOrKey: input.taskId,
+      });
+      const existing = await getTask(app.database, taskId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
-      const task = await updateTask(app.database, input.taskId, {
+      const milestoneId =
+        input.milestoneId === undefined || input.milestoneId === null
+          ? input.milestoneId
+          : await resolveEntityId(app.database, {
+              entityType: 'milestone',
+              idOrKey: input.milestoneId,
+              projectId: project.id,
+            });
+      const userStoryId =
+        input.userStoryId === undefined || input.userStoryId === null
+          ? input.userStoryId
+          : await resolveEntityId(app.database, {
+              entityType: 'user_story',
+              idOrKey: input.userStoryId,
+              projectId: project.id,
+            });
+      const task = await updateTask(app.database, taskId, {
         title: input.title,
         description: input.description,
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
@@ -1463,8 +1532,8 @@ export function createMcpToolHandlers(
           input.actualHours === undefined
             ? undefined
             : parseHours(input.actualHours) ?? null,
-        milestoneId: input.milestoneId,
-        userStoryId: input.userStoryId,
+        milestoneId,
+        userStoryId,
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         archived: input.archived,
@@ -1492,12 +1561,16 @@ export function createMcpToolHandlers(
 
     async setProjectTaskRaci(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getTask(app.database, input.taskId);
+      const taskId = await resolveEntityId(app.database, {
+        entityType: 'task',
+        idOrKey: input.taskId,
+      });
+      const existing = await getTask(app.database, taskId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
       const raci = await replaceTaskRaci(app.database, {
-        taskId: input.taskId,
+        taskId,
         workspaceId: project.workspaceId,
         entries: input.entries.map((entry) => ({
           userId: entry.userId,
@@ -1505,7 +1578,7 @@ export function createMcpToolHandlers(
         })),
         actorUserId: actingUserId,
       });
-      const task = await getTask(app.database, input.taskId);
+      const task = await getTask(app.database, taskId);
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -1562,11 +1635,15 @@ export function createMcpToolHandlers(
 
     async updateProjectEpic(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getEpic(app.database, input.epicId);
+      const epicId = await resolveEntityId(app.database, {
+        entityType: 'epic',
+        idOrKey: input.epicId,
+      });
+      const existing = await getEpic(app.database, epicId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
-      const epic = await updateEpic(app.database, input.epicId, {
+      const epic = await updateEpic(app.database, epicId, {
         title: input.title,
         description: input.description,
         status: input.status ? epicStatusSchema.parse(input.status) : undefined,
@@ -1590,9 +1667,16 @@ export function createMcpToolHandlers(
 
     async listProjectUserStories(input) {
       await requirePmProject(app, client, input.projectId);
+      const epicId = input.epicId
+        ? await resolveEntityId(app.database, {
+            entityType: 'epic',
+            idOrKey: input.epicId,
+            projectId: input.projectId,
+          })
+        : undefined;
       return {
         userStories: await listUserStories(app.database, input.projectId, {
-          epicId: input.epicId,
+          epicId,
           includeArchived: input.includeArchived,
         }),
       };
@@ -1603,9 +1687,14 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
+      const epicId = await resolveEntityId(app.database, {
+        entityType: 'epic',
+        idOrKey: input.epicId,
+        projectId: project.id,
+      });
       const userStory = await createUserStory(app.database, {
         projectId: project.id,
-        epicId: input.epicId,
+        epicId,
         title: input.title,
         description: input.description,
         status: input.status
@@ -1630,17 +1719,29 @@ export function createMcpToolHandlers(
 
     async updateProjectUserStory(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getUserStory(app.database, input.storyId);
+      const storyId = await resolveEntityId(app.database, {
+        entityType: 'user_story',
+        idOrKey: input.storyId,
+      });
+      const existing = await getUserStory(app.database, storyId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
-      const userStory = await updateUserStory(app.database, input.storyId, {
+      const epicId =
+        input.epicId === undefined
+          ? undefined
+          : await resolveEntityId(app.database, {
+              entityType: 'epic',
+              idOrKey: input.epicId,
+              projectId: project.id,
+            });
+      const userStory = await updateUserStory(app.database, storyId, {
         title: input.title,
         description: input.description,
         status: input.status
           ? userStoryStatusSchema.parse(input.status)
           : undefined,
-        epicId: input.epicId,
+        epicId,
         startDate: input.startDate,
         endDate: input.endDate,
         sortOrder: input.sortOrder,
@@ -1660,21 +1761,29 @@ export function createMcpToolHandlers(
     },
 
     async listProjectTaskActivities(input) {
-      const task = await getTask(app.database, input.taskId);
+      const taskId = await resolveEntityId(app.database, {
+        entityType: 'task',
+        idOrKey: input.taskId,
+      });
+      const task = await getTask(app.database, taskId);
       await requirePmProject(app, client, task.projectId);
       return {
-        activities: await listTaskActivities(app.database, input.taskId),
+        activities: await listTaskActivities(app.database, taskId),
       };
     },
 
     async addProjectTaskComment(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getTask(app.database, input.taskId);
+      const taskId = await resolveEntityId(app.database, {
+        entityType: 'task',
+        idOrKey: input.taskId,
+      });
+      const existing = await getTask(app.database, taskId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
       const activity = await addTaskComment(app.database, {
-        taskId: input.taskId,
+        taskId,
         actorUserId: actingUserId,
         body: input.body,
       });
@@ -1693,12 +1802,16 @@ export function createMcpToolHandlers(
 
     async handoffProjectTask(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getTask(app.database, input.taskId);
+      const taskId = await resolveEntityId(app.database, {
+        entityType: 'task',
+        idOrKey: input.taskId,
+      });
+      const existing = await getTask(app.database, taskId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
       const task = await handoffTask(app.database, {
-        taskId: input.taskId,
+        taskId,
         workspaceId: project.workspaceId,
         actorUserId: actingUserId,
         toUserId: input.toUserId,
@@ -1855,6 +1968,17 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
+      const taskIds = input.taskIds
+        ? await Promise.all(
+            input.taskIds.map((idOrKey) =>
+              resolveEntityId(app.database, {
+                entityType: 'task',
+                idOrKey,
+                projectId: project.id,
+              }),
+            ),
+          )
+        : undefined;
       const raidItem = await createRaidItem(app.database, {
         projectId: project.id,
         workspaceId: project.workspaceId,
@@ -1870,7 +1994,7 @@ export function createMcpToolHandlers(
         ownerUserId: input.ownerUserId,
         dueDate: input.dueDate,
         sortOrder: input.sortOrder,
-        taskIds: input.taskIds,
+        taskIds,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -1892,11 +2016,15 @@ export function createMcpToolHandlers(
 
     async updateProjectRaidItem(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRaidItem(app.database, input.raidItemId);
+      const raidItemId = await resolveEntityId(app.database, {
+        entityType: 'raid',
+        idOrKey: input.raidItemId,
+      });
+      const existing = await getRaidItem(app.database, raidItemId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
-      const raidItem = await updateRaidItem(app.database, input.raidItemId, {
+      const raidItem = await updateRaidItem(app.database, raidItemId, {
         workspaceId: project.workspaceId,
         kind: input.kind ? raidKindSchema.parse(input.kind) : undefined,
         title: input.title,
@@ -1925,16 +2053,70 @@ export function createMcpToolHandlers(
       return { raidItem };
     },
 
-    async setProjectRaidTaskLinks(input) {
+    async transferProjectRaidItem(input: {
+      raidItemId: string;
+      targetKind: 'issue' | 'risk';
+    }) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRaidItem(app.database, input.raidItemId);
+      const raidItemId = await resolveEntityId(app.database, {
+        entityType: 'raid',
+        idOrKey: input.raidItemId,
+      });
+      const existing = await getRaidItem(app.database, raidItemId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
+      const result = await transferRaidItem(
+        app.database,
+        raidItemId,
+        input.targetKind,
+      );
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action:
+          input.targetKind === 'issue'
+            ? 'raid.transferred_to_issue'
+            : 'raid.transferred_to_risk',
+        entityType: 'project_raid_item',
+        entityId: result.source.id,
+        metadata: {
+          projectId: project.id,
+          sourceHumanKey: result.source.humanKey,
+          targetHumanKey: result.target.humanKey,
+          targetKind: input.targetKind,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return result;
+    },
+
+    async setProjectRaidTaskLinks(input) {
+      const actingUserId = requireActingUserId(client);
+      const raidItemId = await resolveEntityId(app.database, {
+        entityType: 'raid',
+        idOrKey: input.raidItemId,
+      });
+      const existing = await getRaidItem(app.database, raidItemId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const taskIds = await Promise.all(
+        input.taskIds.map((idOrKey) =>
+          resolveEntityId(app.database, {
+            entityType: 'task',
+            idOrKey,
+            projectId: project.id,
+          }),
+        ),
+      );
       const raidItem = await setRaidTaskLinks(app.database, {
-        raidItemId: input.raidItemId,
+        raidItemId,
         projectId: project.id,
-        taskIds: input.taskIds,
+        taskIds,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2064,11 +2246,15 @@ export function createMcpToolHandlers(
       deliveryLinks?: Array<{ entityType: string; entityId: string }>;
     }) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getChangeItem(app.database, input.changeId);
+      const changeId = await resolveEntityId(app.database, {
+        entityType: 'change',
+        idOrKey: input.changeId,
+      });
+      const existing = await getChangeItem(app.database, changeId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
-      const changeItem = await updateChangeItem(app.database, input.changeId, {
+      const changeItem = await updateChangeItem(app.database, changeId, {
         workspaceId: project.workspaceId,
         kind: input.kind ? changeKindSchema.parse(input.kind) : undefined,
         title: input.title,

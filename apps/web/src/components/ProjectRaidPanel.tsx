@@ -18,6 +18,7 @@ import {
   Panel,
   Select,
   Textarea,
+  raidSeverityTone,
   useToast,
 } from './ui';
 
@@ -32,9 +33,20 @@ export type RaidItem = {
   owner: { userId: string; displayName: string; email: string } | null;
   dueDate: string | null;
   sortOrder: number;
+  humanKey?: string | null;
+  transferredToRaidItemId?: string | null;
+  transferredFromRaidItemId?: string | null;
+  transferredToHumanKey?: string | null;
+  transferredFromHumanKey?: string | null;
+  archivedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
-  tasks: Array<{ id: string; title: string; status: string }>;
+  tasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    humanKey?: string | null;
+  }>;
 };
 
 type TaskOption = { id: string; title: string; status: string };
@@ -81,6 +93,9 @@ export function ProjectRaidPanel({
   const [manageId, setManageId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [confirmTransfer, setConfirmTransfer] = useState<
+    'issue' | 'risk' | null
+  >(null);
 
   const [kind, setKind] = useState<string>('risk');
   const [title, setTitle] = useState('');
@@ -110,6 +125,7 @@ export function ProjectRaidPanel({
     setTaskIds(seed?.tasks.map((task) => task.id) ?? []);
     setConfirmDelete(false);
     setDeleteAcknowledged(false);
+    setConfirmTransfer(null);
     setError(null);
   }
 
@@ -124,9 +140,10 @@ export function ProjectRaidPanel({
       items.map((item) => ({
         id: item.id,
         title: item.title,
-        primaryBadge: t(`kind.${item.kind}`),
+        primaryBadge: item.humanKey ?? t(`kind.${item.kind}`),
         secondaryBadge: t(`status.${item.status}`),
         subtitle: [
+          t(`kind.${item.kind}`),
           t(`severity.${item.severity}`),
           item.owner?.displayName
             ? `${t('owner')}: ${item.owner.displayName}`
@@ -141,6 +158,7 @@ export function ProjectRaidPanel({
         updatedAt: item.updatedAt ?? item.createdAt ?? null,
         searchText: [
           item.title,
+          item.humanKey ?? '',
           item.description ?? '',
           item.kind,
           item.status,
@@ -289,10 +307,81 @@ export function ProjectRaidPanel({
     }
   }
 
-  function formFields(disabled: boolean) {
+  async function submitTransfer(targetKind: 'issue' | 'risk') {
+    if (!canMutate || !manageId) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/project-raid-items/${manageId}/transfer`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetKind }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        source?: RaidItem;
+        target?: RaidItem;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.source || !payload.target) {
+        throw new Error(payload.error?.message || t('failedTransfer'));
+      }
+      setItems((prev) => {
+        const withoutSource = prev.filter((item) => item.id !== manageId);
+        return [...withoutSource, payload.target!];
+      });
+      setManageId(payload.target.id);
+      setConfirmTransfer(null);
+      pushToast(
+        t('transferred', {
+          source: payload.source.humanKey ?? payload.source.title,
+          target: payload.target.humanKey ?? payload.target.title,
+        }),
+        'success',
+      );
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedTransfer'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function formFields(disabled: boolean, options?: { managing?: boolean }) {
+    const lockedOpposite =
+      options?.managing && (kind === 'risk' || kind === 'issue')
+        ? kind === 'risk'
+          ? 'issue'
+          : 'risk'
+        : null;
     return (
       <div className="grid gap-3">
         {error ? <ErrorText>{error}</ErrorText> : null}
+        {options?.managing && managing?.humanKey ? (
+          <p className="m-0 font-mono text-sm text-ink-muted">
+            {managing.humanKey}
+          </p>
+        ) : null}
+        {options?.managing && managing?.transferredFromHumanKey ? (
+          <Panel variant="inset" className="border-brand/30 bg-brand/5">
+            <p className="m-0 text-sm text-ink">
+              {t('transferredFromBanner', {
+                key: managing.transferredFromHumanKey,
+              })}
+            </p>
+          </Panel>
+        ) : null}
+        {options?.managing && managing?.transferredToHumanKey ? (
+          <Panel variant="inset" className="border-brand/30 bg-brand/5">
+            <p className="m-0 text-sm text-ink">
+              {t('transferredToBanner', {
+                key: managing.transferredToHumanKey,
+              })}
+            </p>
+          </Panel>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t('kindLabel')}>
             <Select
@@ -301,8 +390,13 @@ export function ProjectRaidPanel({
               disabled={disabled}
             >
               {KINDS.map((value) => (
-                <option key={value} value={value}>
+                <option
+                  key={value}
+                  value={value}
+                  disabled={lockedOpposite === value}
+                >
                   {t(`kind.${value}`)}
+                  {lockedOpposite === value ? ` (${t('useTransfer')})` : ''}
                 </option>
               ))}
             </Select>
@@ -439,15 +533,24 @@ export function ProjectRaidPanel({
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold">{item.title}</span>
-                    {item.primaryBadge ? (
+                    {raid?.humanKey ? (
+                      <Badge tone="brand" className="font-mono">
+                        {raid.humanKey}
+                      </Badge>
+                    ) : item.primaryBadge ? (
                       <Badge tone="brand">{item.primaryBadge}</Badge>
+                    ) : null}
+                    <span className="font-semibold">{item.title}</span>
+                    {raid ? (
+                      <Badge>{t(`kind.${raid.kind}`)}</Badge>
                     ) : null}
                     {item.secondaryBadge ? (
                       <Badge>{item.secondaryBadge}</Badge>
                     ) : null}
                     {raid ? (
-                      <Badge tone="warn">{t(`severity.${raid.severity}`)}</Badge>
+                      <Badge tone={raidSeverityTone(raid.severity)}>
+                        {t(`severity.${raid.severity}`)}
+                      </Badge>
                     ) : null}
                   </div>
                   {item.subtitle ? (
@@ -517,13 +620,30 @@ export function ProjectRaidPanel({
         size="md"
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
+              {canMutate &&
+              managing &&
+              !managing.transferredToRaidItemId &&
+              (managing.kind === 'risk' || managing.kind === 'issue') ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending || confirmDelete || Boolean(confirmTransfer)}
+                  onClick={() =>
+                    setConfirmTransfer(
+                      managing.kind === 'risk' ? 'issue' : 'risk',
+                    )
+                  }
+                >
+                  {managing.kind === 'risk' ? t('moveToIssue') : t('moveToRisk')}
+                </Button>
+              ) : null}
               {canMutate ? (
                 !confirmDelete ? (
                   <Button
                     type="button"
                     variant="danger"
-                    disabled={pending}
+                    disabled={pending || Boolean(confirmTransfer)}
                     onClick={() => {
                       setConfirmDelete(true);
                       setDeleteAcknowledged(false);
@@ -567,7 +687,12 @@ export function ProjectRaidPanel({
               {canMutate ? (
                 <Button
                   type="button"
-                  disabled={pending || !title.trim() || confirmDelete}
+                  disabled={
+                    pending ||
+                    !title.trim() ||
+                    confirmDelete ||
+                    Boolean(confirmTransfer)
+                  }
                   onClick={() => void submitUpdate()}
                 >
                   {t('saveItem')}
@@ -577,6 +702,38 @@ export function ProjectRaidPanel({
           </div>
         }
       >
+        {confirmTransfer ? (
+          <Panel
+            variant="inset"
+            className="mb-3 grid gap-3 border-brand/40 bg-brand/5"
+          >
+            <p className="m-0 text-sm font-semibold text-ink">
+              {confirmTransfer === 'issue'
+                ? t('confirmMoveToIssue')
+                : t('confirmMoveToRisk')}
+            </p>
+            <p className="m-0 text-sm text-ink-muted">{t('transferHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => setConfirmTransfer(null)}
+              >
+                {tCommon('cancel')}
+              </Button>
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => void submitTransfer(confirmTransfer)}
+              >
+                {confirmTransfer === 'issue'
+                  ? t('moveToIssue')
+                  : t('moveToRisk')}
+              </Button>
+            </div>
+          </Panel>
+        ) : null}
         {confirmDelete ? (
           <Panel
             variant="inset"
@@ -600,7 +757,9 @@ export function ProjectRaidPanel({
             </label>
           </Panel>
         ) : null}
-        {formFields(pending || confirmDelete || !canMutate)}
+        {formFields(pending || confirmDelete || Boolean(confirmTransfer) || !canMutate, {
+          managing: true,
+        })}
       </Modal>
     </>
   );

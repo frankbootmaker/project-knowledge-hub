@@ -175,12 +175,22 @@ export const projects = pgTable(
     initialBudget: numeric('initial_budget', { precision: 14, scale: 2 }),
     /** Working BAC; falls back to initialBudget when null. */
     approvedBudget: numeric('approved_budget', { precision: 14, scale: 2 }),
+    /** Workspace-unique 3-char prefix for human issue keys (AAA or AA0). */
+    keyPrefix: text('key_prefix'),
+    /** Per issue-key-type counters: { "T": 12, "RR": 3, ... }. */
+    issueCounters: jsonb('issue_counters')
+      .$type<Record<string, number>>()
+      .notNull()
+      .default({}),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     uniqueIndex('projects_workspace_slug_uidx').on(table.workspaceId, table.slug),
+    uniqueIndex('projects_workspace_key_prefix_uidx')
+      .on(table.workspaceId, sql`upper(${table.keyPrefix})`)
+      .where(sql`${table.keyPrefix} IS NOT NULL`),
     index('projects_workspace_id_idx').on(table.workspaceId),
   ],
 );
@@ -995,12 +1005,19 @@ export const projectMilestones = pgTable(
     startDate: date('start_date', { mode: 'string' }),
     targetDate: date('target_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
+    issueKeyType: text('issue_key_type'),
+    issueNumber: integer('issue_number'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_milestones_project_id_idx').on(table.projectId),
     index('project_milestones_project_status_idx').on(table.projectId, table.status),
+    uniqueIndex('project_milestones_project_key_uidx').on(
+      table.projectId,
+      table.issueKeyType,
+      table.issueNumber,
+    ),
   ],
 );
 
@@ -1018,12 +1035,19 @@ export const projectEpics = pgTable(
     startDate: date('start_date', { mode: 'string' }),
     endDate: date('end_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
+    issueKeyType: text('issue_key_type'),
+    issueNumber: integer('issue_number'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_epics_project_id_idx').on(table.projectId),
     index('project_epics_project_status_idx').on(table.projectId, table.status),
+    uniqueIndex('project_epics_project_key_uidx').on(
+      table.projectId,
+      table.issueKeyType,
+      table.issueNumber,
+    ),
   ],
 );
 
@@ -1044,6 +1068,8 @@ export const projectUserStories = pgTable(
     startDate: date('start_date', { mode: 'string' }),
     endDate: date('end_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
+    issueKeyType: text('issue_key_type'),
+    issueNumber: integer('issue_number'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
@@ -1051,6 +1077,11 @@ export const projectUserStories = pgTable(
     index('project_user_stories_project_id_idx').on(table.projectId),
     index('project_user_stories_epic_id_idx').on(table.epicId),
     index('project_user_stories_project_status_idx').on(table.projectId, table.status),
+    uniqueIndex('project_user_stories_project_key_uidx').on(
+      table.projectId,
+      table.issueKeyType,
+      table.issueNumber,
+    ),
   ],
 );
 
@@ -1082,6 +1113,8 @@ export const projectTasks = pgTable(
     currentOwnerUserId: uuid('current_owner_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
+    issueKeyType: text('issue_key_type'),
+    issueNumber: integer('issue_number'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
@@ -1092,6 +1125,11 @@ export const projectTasks = pgTable(
     index('project_tasks_project_user_story_idx').on(table.projectId, table.userStoryId),
     index('project_tasks_current_owner_user_id_idx').on(table.currentOwnerUserId),
     index('project_tasks_project_status_idx').on(table.projectId, table.status),
+    uniqueIndex('project_tasks_project_key_uidx').on(
+      table.projectId,
+      table.issueKeyType,
+      table.issueNumber,
+    ),
   ],
 );
 
@@ -1197,6 +1235,16 @@ export const projectRaidItems = pgTable(
     }),
     dueDate: date('due_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
+    issueKeyType: text('issue_key_type'),
+    issueNumber: integer('issue_number'),
+    transferredToRaidItemId: uuid('transferred_to_raid_item_id').references(
+      (): AnyPgColumn => projectRaidItems.id,
+      { onDelete: 'set null' },
+    ),
+    transferredFromRaidItemId: uuid('transferred_from_raid_item_id').references(
+      (): AnyPgColumn => projectRaidItems.id,
+      { onDelete: 'set null' },
+    ),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
@@ -1204,6 +1252,11 @@ export const projectRaidItems = pgTable(
     index('project_raid_items_project_id_idx').on(table.projectId),
     index('project_raid_items_project_kind_idx').on(table.projectId, table.kind),
     index('project_raid_items_project_status_idx').on(table.projectId, table.status),
+    uniqueIndex('project_raid_items_project_key_uidx').on(
+      table.projectId,
+      table.issueKeyType,
+      table.issueNumber,
+    ),
   ],
 );
 
@@ -1319,12 +1372,19 @@ export const projectChangeItems = pgTable(
       { onDelete: 'set null' },
     ),
     sortOrder: integer('sort_order').notNull().default(0),
+    issueKeyType: text('issue_key_type'),
+    issueNumber: integer('issue_number'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_change_items_project_id_idx').on(table.projectId),
     index('project_change_items_project_status_idx').on(table.projectId, table.status),
+    uniqueIndex('project_change_items_project_key_uidx').on(
+      table.projectId,
+      table.issueKeyType,
+      table.issueNumber,
+    ),
   ],
 );
 

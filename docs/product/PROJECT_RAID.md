@@ -16,6 +16,8 @@ Give each KnowHub **Project** an operational **RAID** register (Risks, Assumptio
 | Document types | Add `project-charter`, `meeting-minutes`; reuse `decision` for decision-making |
 | Doc ↔ work | Junction `knowledge_record_delivery_links` (epic / user_story / task) |
 | Agents | MCP: RAID under `pm:read` / `pm:write`; delivery links under `knowledge:read` / `knowledge:write` |
+| Human keys | `{prefix}-{RR\|RI\|RA\|RD}-{n}` (see [ADR-019](../adr/ADR-019-human-readable-issue-keys.md)) |
+| Risk ↔ issue | **Transfer** creates a new item with a new key; source is archived and linked — not an in-place kind edit |
 
 ## Entities
 
@@ -34,7 +36,10 @@ knowledge_records
 * `status`: `open` \| `mitigating` \| `accepted` \| `closed` \| `cancelled`
 * `severity`: `low` \| `medium` \| `high` \| `critical`
 * Optional owner (workspace member), due date, description
+* `humanKey` / `issueNumber` / `issueKeyType` (type from kind at create)
+* Transfer links: `transferredToRaidItemId` / `transferredFromRaidItemId` (+ human keys on DTOs)
 * Task links replaced via `PUT .../tasks`
+* Transfer: `POST /api/v1/project-raid-items/:id/transfer` `{ targetKind: "issue" | "risk" }` (MCP: `transfer_project_raid_item`)
 
 ### Boundaries
 

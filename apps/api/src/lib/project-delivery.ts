@@ -23,6 +23,11 @@ import {
   type TaskActivityType,
   type TaskStatus,
 } from '@project-knowledge-hub/domain';
+import {
+  allocateIssueNumber,
+  getProjectKeyPrefix,
+  toHumanKeyFields,
+} from './project-issue-keys.js';
 
 export type PublicRaciEntry = {
   userId: string;
@@ -46,6 +51,9 @@ export type PublicMilestone = {
   startDate: string | null;
   targetDate: string | null;
   sortOrder: number;
+  issueKeyType: string | null;
+  issueNumber: number | null;
+  humanKey: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -69,6 +77,9 @@ export type PublicTask = {
   userStoryTitle: string | null;
   epicId: string | null;
   epicTitle: string | null;
+  issueKeyType: string | null;
+  issueNumber: number | null;
+  humanKey: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -92,7 +103,9 @@ export type ProjectContext = {
 
 function toPublicMilestone(
   row: typeof projectMilestones.$inferSelect,
+  keyPrefix?: string | null,
 ): PublicMilestone {
+  const keys = toHumanKeyFields(keyPrefix, row.issueKeyType, row.issueNumber);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -102,6 +115,9 @@ function toPublicMilestone(
     startDate: row.startDate,
     targetDate: row.targetDate,
     sortOrder: row.sortOrder,
+    issueKeyType: keys.issueKeyType,
+    issueNumber: keys.issueNumber,
+    humanKey: keys.humanKey,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -116,8 +132,14 @@ function toPublicTask(
     userStoryTitle?: string | null;
     epicId?: string | null;
     epicTitle?: string | null;
+    keyPrefix?: string | null;
   },
 ): PublicTask {
+  const keys = toHumanKeyFields(
+    extras?.keyPrefix,
+    row.issueKeyType,
+    row.issueNumber,
+  );
   return {
     id: row.id,
     projectId: row.projectId,
@@ -136,6 +158,9 @@ function toPublicTask(
     userStoryTitle: extras?.userStoryTitle ?? null,
     epicId: extras?.epicId ?? null,
     epicTitle: extras?.epicTitle ?? null,
+    issueKeyType: keys.issueKeyType,
+    issueNumber: keys.issueNumber,
+    humanKey: keys.humanKey,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -215,6 +240,7 @@ function mapTasksWithContext(
   raciMap: Map<string, PublicRaciEntry[]>,
   owners: Map<string, PublicTaskOwner>,
   stories: Map<string, { title: string; epicId: string; epicTitle: string | null }>,
+  keyPrefixByProject: Map<string, string | null>,
 ): PublicTask[] {
   return rows.map((row) => {
     const story = row.userStoryId ? stories.get(row.userStoryId) : undefined;
@@ -225,6 +251,7 @@ function mapTasksWithContext(
       userStoryTitle: story?.title ?? null,
       epicId: story?.epicId ?? null,
       epicTitle: story?.epicTitle ?? null,
+      keyPrefix: keyPrefixByProject.get(row.projectId) ?? null,
     });
   });
 }
@@ -370,7 +397,8 @@ export async function listMilestones(
           ),
     )
     .orderBy(asc(projectMilestones.sortOrder), asc(projectMilestones.targetDate));
-  return rows.map(toPublicMilestone);
+  const keyPrefix = await getProjectKeyPrefix(database, projectId);
+  return rows.map((row) => toPublicMilestone(row, keyPrefix));
 }
 
 export async function createMilestone(
@@ -385,6 +413,7 @@ export async function createMilestone(
     sortOrder?: number;
   },
 ): Promise<PublicMilestone> {
+  const allocated = await allocateIssueNumber(database, input.projectId, 'M');
   const [row] = await database.db
     .insert(projectMilestones)
     .values({
@@ -395,6 +424,8 @@ export async function createMilestone(
       startDate: input.startDate ?? null,
       targetDate: input.targetDate ?? null,
       sortOrder: input.sortOrder ?? 0,
+      issueKeyType: allocated.issueKeyType,
+      issueNumber: allocated.issueNumber,
     })
     .returning();
   if (!row) {
@@ -404,7 +435,7 @@ export async function createMilestone(
       statusCode: 500,
     });
   }
-  return toPublicMilestone(row);
+  return toPublicMilestone(row, allocated.keyPrefix);
 }
 
 export async function updateMilestone(
@@ -460,7 +491,8 @@ export async function updateMilestone(
       statusCode: 500,
     });
   }
-  return toPublicMilestone(row);
+  const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
+  return toPublicMilestone(row, keyPrefix);
 }
 
 export async function getMilestone(
@@ -509,7 +541,14 @@ export async function listTasks(
     rows.map((row) => row.id),
   );
   const { owners, stories } = await loadTaskContext(database, rows);
-  return mapTasksWithContext(rows, raciMap, owners, stories);
+  const keyPrefix = await getProjectKeyPrefix(database, projectId);
+  return mapTasksWithContext(
+    rows,
+    raciMap,
+    owners,
+    stories,
+    new Map([[projectId, keyPrefix]]),
+  );
 }
 
 export async function listAssignedTasksForUser(
@@ -535,6 +574,7 @@ export async function listAssignedTasksForUser(
     myRole: projectTaskRaci.role,
     projectName: projects.name,
     projectSlug: projects.slug,
+    projectKeyPrefix: projects.keyPrefix,
     workspaceId: workspaces.id,
     workspaceName: workspaces.name,
     workspaceSlug: workspaces.slug,
@@ -579,7 +619,17 @@ export async function listAssignedTasksForUser(
 
   const taskRows = rows.map((row) => row.task);
   const { owners, stories } = await loadTaskContext(database, taskRows);
-  const mapped = mapTasksWithContext(taskRows, raciMap, owners, stories);
+  const keyPrefixByProject = new Map<string, string | null>();
+  for (const row of rows) {
+    keyPrefixByProject.set(row.task.projectId, row.projectKeyPrefix);
+  }
+  const mapped = mapTasksWithContext(
+    taskRows,
+    raciMap,
+    owners,
+    stories,
+    keyPrefixByProject,
+  );
   const byId = new Map(mapped.map((task) => [task.id, task]));
 
   const tasks: PublicAssignedTask[] = rows.map((row) => ({
@@ -626,7 +676,14 @@ export async function getTask(
   }
   const raciMap = await loadRaciForTasks(database, [row.id]);
   const { owners, stories } = await loadTaskContext(database, [row]);
-  return mapTasksWithContext([row], raciMap, owners, stories)[0]!;
+  const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
+  return mapTasksWithContext(
+    [row],
+    raciMap,
+    owners,
+    stories,
+    new Map([[row.projectId, keyPrefix]]),
+  )[0]!;
 }
 
 async function assertMilestoneInProject(
@@ -787,6 +844,7 @@ export async function createTask(
     input.currentOwnerUserId ??
     defaultOwnerFromRaci(input.raci ?? [], input.createdBy);
 
+  const allocated = await allocateIssueNumber(database, input.projectId, 'T');
   const [row] = await database.db
     .insert(projectTasks)
     .values({
@@ -802,6 +860,8 @@ export async function createTask(
       sortOrder: input.sortOrder ?? 0,
       createdBy: input.createdBy ?? null,
       currentOwnerUserId: ownerUserId,
+      issueKeyType: allocated.issueKeyType,
+      issueNumber: allocated.issueNumber,
     })
     .returning();
 

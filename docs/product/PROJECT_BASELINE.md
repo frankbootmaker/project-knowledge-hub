@@ -12,6 +12,7 @@ Capture a project’s **planned kickoff baseline** (dates, charter, initial plan
 | Topic | Decision |
 | --- | --- |
 | Baseline location | Fields on `projects` + `project_initial_stakeholders` snapshot |
+| Issue key prefix | Workspace-unique `key_prefix` (`AAA` or `AA0`) on Baseline; used for human keys (ADR-019) |
 | Charter / plan | Nullable FKs to project-scoped knowledge records (`project-charter` / `plan`) |
 | Initial stakeholders | Editable snapshot of workspace user IDs — **not** auto-synced with live Stakeholders |
 | Change management | First-class register (like RAID), not markdown-only |
@@ -23,6 +24,7 @@ Capture a project’s **planned kickoff baseline** (dates, charter, initial plan
 ```text
 projects
   ├── start_date / end_date
+  ├── key_prefix / issue_counters
   ├── charter_record_id → knowledge_records
   ├── initial_plan_record_id → knowledge_records
   └── project_initial_stakeholders

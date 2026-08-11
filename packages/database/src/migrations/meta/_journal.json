@@ -274,6 +274,13 @@
       "when": 1786371600000,
       "tag": "0038_user_display_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1786375200000,
+      "tag": "0039_project_issue_keys",
+      "breakpoints": true
     }
   ]
 }

@@ -44,6 +44,21 @@ export function lifecycleTone(status: string): Tone {
   return 'brand';
 }
 
+/** RAID severity → badge tone (low green → critical red). */
+export function raidSeverityTone(severity: string): Tone {
+  switch (severity) {
+    case 'low':
+      return 'success';
+    case 'high':
+      return 'warn';
+    case 'critical':
+      return 'danger';
+    case 'medium':
+    default:
+      return 'neutral';
+  }
+}
+
 /** Display label for a lifecycle status; maps API value `verified` → Approve wording. */
 export function lifecycleLabel(
   status: string,

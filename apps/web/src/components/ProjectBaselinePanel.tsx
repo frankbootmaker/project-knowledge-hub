@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
+import { suggestKeyPrefix } from '@project-knowledge-hub/domain';
 import { CollapsibleSection } from './CollapsibleSection';
 import {
   PROJECT_CURRENCIES,
@@ -39,6 +40,8 @@ export type InitialStakeholder = {
 
 export type BaselineProject = {
   id: string;
+  name?: string;
+  slug?: string;
   startDate: string | null;
   endDate: string | null;
   charterRecordId: string | null;
@@ -48,6 +51,7 @@ export type BaselineProject = {
   currency?: string;
   initialBudget?: string | number | null;
   approvedBudget?: string | number | null;
+  keyPrefix?: string | null;
 };
 
 type Member = {
@@ -123,6 +127,9 @@ export function ProjectBaselinePanel({
   const [initialBudget, setInitialBudget] = useState(
     project.initialBudget != null ? String(project.initialBudget) : '',
   );
+  const [keyPrefix, setKeyPrefix] = useState(
+    (project.keyPrefix ?? '').toUpperCase(),
+  );
   const [draftStakeholders, setDraftStakeholders] = useState<DraftStakeholder[]>(
     [],
   );
@@ -150,6 +157,10 @@ export function ProjectBaselinePanel({
     setCurrency(project.currency ?? 'EUR');
     setInitialBudget(
       project.initialBudget != null ? String(project.initialBudget) : '',
+    );
+    setKeyPrefix(
+      (project.keyPrefix ||
+        suggestKeyPrefix(project.slug || project.name || 'PRJ')).toUpperCase(),
     );
     setDraftStakeholders(
       stakeholders.map((row) => ({
@@ -198,6 +209,7 @@ export function ProjectBaselinePanel({
           initialPlanRecordId: initialPlanRecordId || null,
           currency,
           initialBudget: parseOptionalNumber(initialBudget) ?? null,
+          keyPrefix: keyPrefix.trim().toUpperCase(),
         }),
       });
       const patchPayload = (await patchResponse.json().catch(() => ({}))) as {
@@ -302,6 +314,14 @@ export function ProjectBaselinePanel({
                 currencyCode,
                 locale,
               )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+              {t('keyPrefix')}
+            </dt>
+            <dd className="m-0 mt-1 font-mono text-sm text-ink">
+              {project.keyPrefix || tCommon('none')}
             </dd>
           </div>
           <div>
@@ -442,6 +462,21 @@ export function ProjectBaselinePanel({
               />
             </Field>
           </div>
+          <Field label={t('keyPrefix')}>
+            <Input
+              value={keyPrefix}
+              onChange={(e) =>
+                setKeyPrefix(e.target.value.toUpperCase().slice(0, 3))
+              }
+              disabled={pending}
+              maxLength={3}
+              className="font-mono uppercase"
+              placeholder={suggestKeyPrefix(
+                project.slug || project.name || 'PRJ',
+              )}
+            />
+            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('keyPrefixHint')}</p>
+          </Field>
           <Field label={t('charter')}>
             <Select
               value={charterRecordId}

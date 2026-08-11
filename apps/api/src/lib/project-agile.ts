@@ -22,6 +22,11 @@ import {
   recordTaskActivity,
   type PublicTask,
 } from './project-delivery.js';
+import {
+  allocateIssueNumber,
+  getProjectKeyPrefix,
+  toHumanKeyFields,
+} from './project-issue-keys.js';
 
 export type PublicEpic = {
   id: string;
@@ -32,6 +37,9 @@ export type PublicEpic = {
   startDate: string | null;
   endDate: string | null;
   sortOrder: number;
+  issueKeyType: string | null;
+  issueNumber: number | null;
+  humanKey: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -47,6 +55,9 @@ export type PublicUserStory = {
   startDate: string | null;
   endDate: string | null;
   sortOrder: number;
+  issueKeyType: string | null;
+  issueNumber: number | null;
+  humanKey: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -64,7 +75,11 @@ export type PublicTaskActivity = {
   createdAt: string;
 };
 
-function toPublicEpic(row: typeof projectEpics.$inferSelect): PublicEpic {
+function toPublicEpic(
+  row: typeof projectEpics.$inferSelect,
+  keyPrefix?: string | null,
+): PublicEpic {
+  const keys = toHumanKeyFields(keyPrefix, row.issueKeyType, row.issueNumber);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -74,6 +89,9 @@ function toPublicEpic(row: typeof projectEpics.$inferSelect): PublicEpic {
     startDate: row.startDate,
     endDate: row.endDate,
     sortOrder: row.sortOrder,
+    issueKeyType: keys.issueKeyType,
+    issueNumber: keys.issueNumber,
+    humanKey: keys.humanKey,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -82,7 +100,9 @@ function toPublicEpic(row: typeof projectEpics.$inferSelect): PublicEpic {
 
 function toPublicUserStory(
   row: typeof projectUserStories.$inferSelect,
+  keyPrefix?: string | null,
 ): PublicUserStory {
+  const keys = toHumanKeyFields(keyPrefix, row.issueKeyType, row.issueNumber);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -93,6 +113,9 @@ function toPublicUserStory(
     startDate: row.startDate,
     endDate: row.endDate,
     sortOrder: row.sortOrder,
+    issueKeyType: keys.issueKeyType,
+    issueNumber: keys.issueNumber,
+    humanKey: keys.humanKey,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -140,7 +163,8 @@ export async function listEpics(
     .from(projectEpics)
     .where(and(...conditions))
     .orderBy(asc(projectEpics.sortOrder), asc(projectEpics.title));
-  return rows.map(toPublicEpic);
+  const keyPrefix = await getProjectKeyPrefix(database, projectId);
+  return rows.map((row) => toPublicEpic(row, keyPrefix));
 }
 
 export async function getEpic(
@@ -159,7 +183,8 @@ export async function getEpic(
       statusCode: 404,
     });
   }
-  return toPublicEpic(row);
+  const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
+  return toPublicEpic(row, keyPrefix);
 }
 
 export async function createEpic(
@@ -174,6 +199,7 @@ export async function createEpic(
     sortOrder?: number;
   },
 ): Promise<PublicEpic> {
+  const allocated = await allocateIssueNumber(database, input.projectId, 'E');
   const [row] = await database.db
     .insert(projectEpics)
     .values({
@@ -184,6 +210,8 @@ export async function createEpic(
       startDate: input.startDate ?? null,
       endDate: input.endDate ?? null,
       sortOrder: input.sortOrder ?? 0,
+      issueKeyType: allocated.issueKeyType,
+      issueNumber: allocated.issueNumber,
     })
     .returning();
   if (!row) {
@@ -193,7 +221,7 @@ export async function createEpic(
       statusCode: 500,
     });
   }
-  return toPublicEpic(row);
+  return toPublicEpic(row, allocated.keyPrefix);
 }
 
 export async function updateEpic(
@@ -248,7 +276,8 @@ export async function updateEpic(
       statusCode: 404,
     });
   }
-  return toPublicEpic(row);
+  const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
+  return toPublicEpic(row, keyPrefix);
 }
 
 export async function listUserStories(
@@ -268,7 +297,8 @@ export async function listUserStories(
     .from(projectUserStories)
     .where(and(...conditions))
     .orderBy(asc(projectUserStories.sortOrder), asc(projectUserStories.title));
-  return rows.map(toPublicUserStory);
+  const keyPrefix = await getProjectKeyPrefix(database, projectId);
+  return rows.map((row) => toPublicUserStory(row, keyPrefix));
 }
 
 export async function getUserStory(
@@ -287,7 +317,8 @@ export async function getUserStory(
       statusCode: 404,
     });
   }
-  return toPublicUserStory(row);
+  const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
+  return toPublicUserStory(row, keyPrefix);
 }
 
 async function assertEpicInProject(
@@ -325,6 +356,7 @@ export async function createUserStory(
   },
 ): Promise<PublicUserStory> {
   await assertEpicInProject(database, input.projectId, input.epicId);
+  const allocated = await allocateIssueNumber(database, input.projectId, 'S');
   const [row] = await database.db
     .insert(projectUserStories)
     .values({
@@ -336,6 +368,8 @@ export async function createUserStory(
       startDate: input.startDate ?? null,
       endDate: input.endDate ?? null,
       sortOrder: input.sortOrder ?? 0,
+      issueKeyType: allocated.issueKeyType,
+      issueNumber: allocated.issueNumber,
     })
     .returning();
   if (!row) {
@@ -345,7 +379,7 @@ export async function createUserStory(
       statusCode: 500,
     });
   }
-  return toPublicUserStory(row);
+  return toPublicUserStory(row, allocated.keyPrefix);
 }
 
 export async function updateUserStory(
@@ -405,7 +439,8 @@ export async function updateUserStory(
       statusCode: 404,
     });
   }
-  return toPublicUserStory(row);
+  const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
+  return toPublicUserStory(row, keyPrefix);
 }
 
 export async function deleteEpic(

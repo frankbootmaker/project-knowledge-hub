@@ -28,6 +28,7 @@ import {
   listRaidItems,
   listRaidItemsForTask,
   setRaidTaskLinks,
+  transferRaidItem,
   updateRaidItem,
 } from '../lib/project-raid.js';
 
@@ -77,6 +78,10 @@ const updateSchema = z.object({
 
 const taskLinksSchema = z.object({
   taskIds: z.array(z.string().uuid()).max(100),
+});
+
+const transferSchema = z.object({
+  targetKind: z.enum(['issue', 'risk']),
 });
 
 export async function registerProjectRaidRoutes(
@@ -210,6 +215,55 @@ export async function registerProjectRaidRoutes(
 
     return { ok: true };
   });
+
+  app.post(
+    '/api/v1/project-raid-items/:raidItemId/transfer',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ raidItemId: z.string().uuid() })
+        .parse(request.params);
+      const body = transferSchema.parse(request.body);
+
+      const existing = await getRaidItem(app.database, params.raidItemId);
+      const { project } = await requireProjectContext(
+        app.database,
+        existing.projectId,
+      );
+      requireWorkspaceMaintainer(principal, project.workspaceId);
+      assertProjectNotArchived(project);
+
+      const result = await transferRaidItem(
+        app.database,
+        params.raidItemId,
+        body.targetKind,
+      );
+
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action:
+          body.targetKind === 'issue'
+            ? 'raid.transferred_to_issue'
+            : 'raid.transferred_to_risk',
+        entityType: 'project_raid_item',
+        entityId: result.source.id,
+        metadata: {
+          projectId: project.id,
+          sourceId: result.source.id,
+          sourceHumanKey: result.source.humanKey,
+          targetId: result.target.id,
+          targetHumanKey: result.target.humanKey,
+          targetKind: body.targetKind,
+        },
+        ipAddress: request.ip,
+      });
+
+      return result;
+    },
+  );
 
   app.put('/api/v1/project-raid-items/:raidItemId/tasks', async (request) => {
     assertMutatingOrigin(app, request);

@@ -9,7 +9,9 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  formatHumanKey,
   raidKindSchema,
+  raidKindToIssueKeyType,
   raidSeveritySchema,
   raidStatusSchema,
   type RaidKind,
@@ -20,11 +22,17 @@ import {
   assertProjectNotArchived,
   requireProjectContext,
 } from './project-delivery.js';
+import {
+  allocateIssueNumber,
+  getProjectKeyPrefix,
+  toHumanKeyFields,
+} from './project-issue-keys.js';
 
 export type PublicRaidTaskLink = {
   id: string;
   title: string;
   status: string;
+  humanKey: string | null;
 };
 
 export type PublicRaidOwner = {
@@ -45,6 +53,13 @@ export type PublicRaidItem = {
   owner: PublicRaidOwner | null;
   dueDate: string | null;
   sortOrder: number;
+  issueKeyType: string | null;
+  issueNumber: number | null;
+  humanKey: string | null;
+  transferredToRaidItemId: string | null;
+  transferredFromRaidItemId: string | null;
+  transferredToHumanKey: string | null;
+  transferredFromHumanKey: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -55,7 +70,13 @@ function toPublicRaidItem(
   row: typeof projectRaidItems.$inferSelect,
   tasks: PublicRaidTaskLink[],
   owner: PublicRaidOwner | null,
+  keyPrefix: string | null,
+  transferKeys?: {
+    transferredToHumanKey?: string | null;
+    transferredFromHumanKey?: string | null;
+  },
 ): PublicRaidItem {
+  const keys = toHumanKeyFields(keyPrefix, row.issueKeyType, row.issueNumber);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -68,6 +89,13 @@ function toPublicRaidItem(
     owner,
     dueDate: row.dueDate,
     sortOrder: row.sortOrder,
+    issueKeyType: keys.issueKeyType,
+    issueNumber: keys.issueNumber,
+    humanKey: keys.humanKey,
+    transferredToRaidItemId: row.transferredToRaidItemId,
+    transferredFromRaidItemId: row.transferredFromRaidItemId,
+    transferredToHumanKey: transferKeys?.transferredToHumanKey ?? null,
+    transferredFromHumanKey: transferKeys?.transferredFromHumanKey ?? null,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -128,6 +156,7 @@ async function loadOwners(
 async function loadTaskLinksByRaidIds(
   database: Database,
   raidIds: string[],
+  keyPrefix: string | null,
 ): Promise<Map<string, PublicRaidTaskLink[]>> {
   const map = new Map<string, PublicRaidTaskLink[]>();
   if (raidIds.length === 0) return map;
@@ -137,6 +166,8 @@ async function loadTaskLinksByRaidIds(
       taskId: projectTasks.id,
       title: projectTasks.title,
       status: projectTasks.status,
+      issueKeyType: projectTasks.issueKeyType,
+      issueNumber: projectTasks.issueNumber,
     })
     .from(projectRaidTaskLinks)
     .innerJoin(projectTasks, eq(projectRaidTaskLinks.taskId, projectTasks.id))
@@ -144,8 +175,58 @@ async function loadTaskLinksByRaidIds(
     .orderBy(asc(projectTasks.title));
   for (const row of rows) {
     const list = map.get(row.raidItemId) ?? [];
-    list.push({ id: row.taskId, title: row.title, status: row.status });
+    list.push({
+      id: row.taskId,
+      title: row.title,
+      status: row.status,
+      humanKey: formatHumanKey(keyPrefix, row.issueKeyType, row.issueNumber),
+    });
     map.set(row.raidItemId, list);
+  }
+  return map;
+}
+
+async function loadTransferHumanKeys(
+  database: Database,
+  rows: Array<typeof projectRaidItems.$inferSelect>,
+  keyPrefix: string | null,
+): Promise<Map<string, { to: string | null; from: string | null }>> {
+  const ids = [
+    ...new Set(
+      rows.flatMap((row) =>
+        [row.transferredToRaidItemId, row.transferredFromRaidItemId].filter(
+          (id): id is string => Boolean(id),
+        ),
+      ),
+    ),
+  ];
+  const keyById = new Map<string, string | null>();
+  if (ids.length > 0) {
+    const related = await database.db
+      .select({
+        id: projectRaidItems.id,
+        issueKeyType: projectRaidItems.issueKeyType,
+        issueNumber: projectRaidItems.issueNumber,
+      })
+      .from(projectRaidItems)
+      .where(inArray(projectRaidItems.id, ids));
+    for (const row of related) {
+      keyById.set(
+        row.id,
+        formatHumanKey(keyPrefix, row.issueKeyType, row.issueNumber),
+      );
+    }
+  }
+  const map = new Map<string, { to: string | null; from: string | null }>();
+  for (const row of rows) {
+    map.set(row.id, {
+      to: row.transferredToRaidItemId
+        ? keyById.get(row.transferredToRaidItemId) ?? null
+        : null,
+      from: row.transferredFromRaidItemId
+        ? keyById.get(row.transferredFromRaidItemId) ?? null
+        : null,
+    });
   }
   return map;
 }
@@ -167,9 +248,11 @@ export async function listRaidItems(
       asc(projectRaidItems.sortOrder),
       asc(projectRaidItems.title),
     );
+  const keyPrefix = await getProjectKeyPrefix(database, projectId);
   const taskMap = await loadTaskLinksByRaidIds(
     database,
     rows.map((row) => row.id),
+    keyPrefix,
   );
   const ownerMap = await loadOwners(
     database,
@@ -177,11 +260,17 @@ export async function listRaidItems(
       .map((row) => row.ownerUserId)
       .filter((id): id is string => Boolean(id)),
   );
+  const transferMap = await loadTransferHumanKeys(database, rows, keyPrefix);
   return rows.map((row) =>
     toPublicRaidItem(
       row,
       taskMap.get(row.id) ?? [],
       row.ownerUserId ? ownerMap.get(row.ownerUserId) ?? null : null,
+      keyPrefix,
+      {
+        transferredToHumanKey: transferMap.get(row.id)?.to ?? null,
+        transferredFromHumanKey: transferMap.get(row.id)?.from ?? null,
+      },
     ),
   );
 }
@@ -202,15 +291,22 @@ export async function getRaidItem(
       statusCode: 404,
     });
   }
-  const taskMap = await loadTaskLinksByRaidIds(database, [row.id]);
+  const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
+  const taskMap = await loadTaskLinksByRaidIds(database, [row.id], keyPrefix);
   const ownerMap = await loadOwners(
     database,
     row.ownerUserId ? [row.ownerUserId] : [],
   );
+  const transferMap = await loadTransferHumanKeys(database, [row], keyPrefix);
   return toPublicRaidItem(
     row,
     taskMap.get(row.id) ?? [],
     row.ownerUserId ? ownerMap.get(row.ownerUserId) ?? null : null,
+    keyPrefix,
+    {
+      transferredToHumanKey: transferMap.get(row.id)?.to ?? null,
+      transferredFromHumanKey: transferMap.get(row.id)?.from ?? null,
+    },
   );
 }
 
@@ -236,6 +332,12 @@ export async function createRaidItem(
     await assertWorkspaceMember(database, input.workspaceId, input.ownerUserId);
   }
 
+  const allocated = await allocateIssueNumber(
+    database,
+    input.projectId,
+    raidKindToIssueKeyType(input.kind),
+  );
+
   const [created] = await database.db
     .insert(projectRaidItems)
     .values({
@@ -248,6 +350,8 @@ export async function createRaidItem(
       ownerUserId: input.ownerUserId ?? null,
       dueDate: input.dueDate ?? null,
       sortOrder: input.sortOrder ?? 0,
+      issueKeyType: allocated.issueKeyType,
+      issueNumber: allocated.issueNumber,
     })
     .returning();
   if (!created) {
@@ -269,6 +373,10 @@ export async function createRaidItem(
   return getRaidItem(database, created.id);
 }
 
+function isRiskIssueKind(kind: RaidKind): kind is 'risk' | 'issue' {
+  return kind === 'risk' || kind === 'issue';
+}
+
 export async function updateRaidItem(
   database: Database,
   raidItemId: string,
@@ -288,6 +396,21 @@ export async function updateRaidItem(
   const existing = await getRaidItem(database, raidItemId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
+
+  if (input.kind !== undefined && input.kind !== existing.kind) {
+    const riskIssueSwap =
+      isRiskIssueKind(existing.kind) &&
+      isRiskIssueKind(input.kind) &&
+      existing.kind !== input.kind;
+    if (riskIssueSwap) {
+      throw new AppError({
+        code: 'RAID_KIND_USE_TRANSFER',
+        message:
+          'Cannot change RAID kind between risk and issue in place; use transfer instead',
+        statusCode: 400,
+      });
+    }
+  }
 
   if (input.ownerUserId) {
     await assertWorkspaceMember(database, input.workspaceId, input.ownerUserId);
@@ -315,6 +438,100 @@ export async function updateRaidItem(
     .where(eq(projectRaidItems.id, raidItemId));
 
   return getRaidItem(database, raidItemId);
+}
+
+export async function transferRaidItem(
+  database: Database,
+  raidItemId: string,
+  targetKind: 'risk' | 'issue',
+): Promise<{ source: PublicRaidItem; target: PublicRaidItem }> {
+  const source = await getRaidItem(database, raidItemId);
+  const { project } = await requireProjectContext(database, source.projectId);
+  assertProjectNotArchived(project);
+
+  if (!isRiskIssueKind(source.kind)) {
+    throw new AppError({
+      code: 'RAID_TRANSFER_UNSUPPORTED',
+      message: 'Only risks and issues can be transferred',
+      statusCode: 400,
+    });
+  }
+  if (source.kind === targetKind) {
+    throw new AppError({
+      code: 'RAID_TRANSFER_SAME_KIND',
+      message: `RAID item is already a ${targetKind}`,
+      statusCode: 400,
+    });
+  }
+  if (source.archivedAt) {
+    throw new AppError({
+      code: 'RAID_TRANSFER_ARCHIVED',
+      message: 'Cannot transfer an archived RAID item',
+      statusCode: 400,
+    });
+  }
+  if (source.transferredToRaidItemId) {
+    throw new AppError({
+      code: 'RAID_TRANSFER_ALREADY',
+      message: 'RAID item has already been transferred',
+      statusCode: 409,
+    });
+  }
+
+  const allocated = await allocateIssueNumber(
+    database,
+    source.projectId,
+    raidKindToIssueKeyType(targetKind),
+  );
+
+  const [created] = await database.db
+    .insert(projectRaidItems)
+    .values({
+      projectId: source.projectId,
+      kind: targetKind,
+      title: source.title,
+      description: source.description,
+      status: source.status,
+      severity: source.severity,
+      ownerUserId: source.ownerUserId,
+      dueDate: source.dueDate,
+      sortOrder: source.sortOrder,
+      issueKeyType: allocated.issueKeyType,
+      issueNumber: allocated.issueNumber,
+      transferredFromRaidItemId: source.id,
+    })
+    .returning();
+  if (!created) {
+    throw new AppError({
+      code: 'RAID_TRANSFER_FAILED',
+      message: 'Failed to create transfer target RAID item',
+      statusCode: 500,
+    });
+  }
+
+  const taskIds = source.tasks.map((task) => task.id);
+  if (taskIds.length > 0) {
+    await setRaidTaskLinks(database, {
+      raidItemId: created.id,
+      projectId: source.projectId,
+      taskIds,
+    });
+  }
+
+  await database.db
+    .update(projectRaidItems)
+    .set({
+      transferredToRaidItemId: created.id,
+      archivedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(projectRaidItems.id, source.id));
+
+  const [nextSource, nextTarget] = await Promise.all([
+    getRaidItem(database, source.id),
+    getRaidItem(database, created.id),
+  ]);
+  return { source: nextSource, target: nextTarget };
 }
 
 export async function deleteRaidItem(

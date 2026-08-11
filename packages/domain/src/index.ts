@@ -451,6 +451,26 @@ export type ChangeKind = z.infer<typeof changeKindSchema>;
 export type ChangeStatus = z.infer<typeof changeStatusSchema>;
 export type ChangeDeliveryEntityType = z.infer<typeof changeDeliveryEntityTypeSchema>;
 
+export {
+  ISSUE_KEY_TYPES,
+  issueKeyTypeSchema,
+  KEY_PREFIX_PATTERN,
+  HUMAN_KEY_PATTERN,
+  keyPrefixSchema,
+  isUuid,
+  normalizeKeyPrefix,
+  isValidKeyPrefix,
+  suggestKeyPrefix,
+  parseHumanKey,
+  formatHumanKey,
+  raidKindToIssueKeyType,
+  issueKeyTypeToRaidKind,
+  readIssueCounter,
+  type IssueKeyType,
+  type ParsedHumanKey,
+  type IssueCounters,
+} from './issue-keys.js';
+
 export class AppError extends Error {
   readonly code: string;
   readonly statusCode: number;

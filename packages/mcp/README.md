@@ -32,7 +32,7 @@ workspace allowlist, and `actingUserId`:
 
 Approve / mark-current remain human/session-API only.
 
-### Project Delivery (`pm:write`) — live state (ADR-015)
+### Project Delivery (`pm:write`) — live state (ADR-015 / ADR-019)
 
 Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge writes, these **commit immediately** (not draft-only):
 
@@ -44,6 +44,10 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 * `add_project_task_comment` / `handoff_project_task` — activity timeline; handoff moves current owner only
 * `create_project_stakeholder` / `update_project_stakeholder` / `delete_project_stakeholder` — durable roster (+ reports-to)
 * `create_project_raid_item` / `update_project_raid_item` / `set_project_raid_task_links` — RAID register (+ task links)
+* `transfer_project_raid_item` — move risk↔issue (new key; archives source). Do not use `update_project_raid_item` to change kind between risk and issue.
+* `update_project_baseline` — dates, pins, currency, budgets, and optional `keyPrefix` (workspace-unique `AAA` / `AA0`)
+
+**Human keys:** Delivery, RAID, and change DTOs include `humanKey` (e.g. `HL1-T-12`, `HL1-RR-3`). Get/update tools accept **UUID or human key** for entity ids. `get_project` returns `keyPrefix`.
 
 ## Embedding images in knowledge Markdown
 

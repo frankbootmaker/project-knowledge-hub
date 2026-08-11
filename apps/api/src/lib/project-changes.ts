@@ -24,6 +24,11 @@ import {
   assertProjectNotArchived,
   requireProjectContext,
 } from './project-delivery.js';
+import {
+  allocateIssueNumber,
+  getProjectKeyPrefix,
+  toHumanKeyFields,
+} from './project-issue-keys.js';
 
 export type PublicChangeDeliveryLink = {
   entityType: ChangeDeliveryEntityType;
@@ -59,6 +64,9 @@ export type PublicChangeItem = {
   knowledgeRecordId: string | null;
   knowledgeRecordTitle: string | null;
   sortOrder: number;
+  issueKeyType: string | null;
+  issueNumber: number | null;
+  humanKey: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -187,7 +195,9 @@ function toPublicChangeItem(
   links: PublicChangeDeliveryLink[],
   people: Map<string, PublicChangePerson>,
   knowledgeTitle: string | null,
+  keyPrefix?: string | null,
 ): PublicChangeItem {
+  const keys = toHumanKeyFields(keyPrefix, row.issueKeyType, row.issueNumber);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -214,6 +224,9 @@ function toPublicChangeItem(
     knowledgeRecordId: row.knowledgeRecordId,
     knowledgeRecordTitle: knowledgeTitle,
     sortOrder: row.sortOrder,
+    issueKeyType: keys.issueKeyType,
+    issueNumber: keys.issueNumber,
+    humanKey: keys.humanKey,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -262,6 +275,7 @@ export async function listChangeItems(
     }
   }
 
+  const keyPrefix = await getProjectKeyPrefix(database, projectId);
   return rows.map((row) =>
     toPublicChangeItem(
       row,
@@ -270,6 +284,7 @@ export async function listChangeItems(
       row.knowledgeRecordId
         ? knowledgeTitles.get(row.knowledgeRecordId) ?? null
         : null,
+      keyPrefix,
     ),
   );
 }
@@ -410,6 +425,7 @@ export async function createChangeItem(
   }
 
   const status = input.status ?? 'proposed';
+  const allocated = await allocateIssueNumber(database, input.projectId, 'C');
   const [created] = await database.db
     .insert(projectChangeItems)
     .values({
@@ -432,6 +448,8 @@ export async function createChangeItem(
       baselineEndAfter: input.baselineEndAfter ?? null,
       knowledgeRecordId: input.knowledgeRecordId ?? null,
       sortOrder: input.sortOrder ?? 0,
+      issueKeyType: allocated.issueKeyType,
+      issueNumber: allocated.issueNumber,
     })
     .returning();
   if (!created) {

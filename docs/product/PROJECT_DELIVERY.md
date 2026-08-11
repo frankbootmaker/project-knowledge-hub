@@ -19,6 +19,7 @@ Humans and AI agents work on the **same** project objects so full project contex
 | --- | --- |
 | SoR | KnowHub is the system of record (not a sync mirror of Jira/Linear in v1) |
 | Agents | Active participants: MCP can create/update delivery state (live, not draft-only) |
+| Human keys | `{prefix}-{E\|S\|M\|T}-{n}`; UUID remains PK; MCP accepts UUID or key (ADR-019) |
 | Identity | RACI parties are **workspace members** only; invite externals first |
 | Accountable | Exactly **one** `A` per task |
 

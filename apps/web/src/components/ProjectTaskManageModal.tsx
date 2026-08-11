@@ -11,6 +11,7 @@ import {
   Modal,
   Select,
   Textarea,
+  raidSeverityTone,
   useToast,
 } from './ui';
 import { cn } from '../lib/cn';
@@ -84,6 +85,7 @@ type LinkedRaid = {
   title: string;
   status: string;
   severity: string;
+  humanKey?: string | null;
 };
 
 type LinkedDocument = {
@@ -662,7 +664,11 @@ export function ProjectTaskManageModal({
               ) : (
                 <div className="flex flex-wrap gap-1">
                   {linkedRaid.map((item) => (
-                    <Badge key={item.id} tone="warn">
+                    <Badge
+                      key={item.id}
+                      tone={raidSeverityTone(item.severity)}
+                    >
+                      {item.humanKey ? `${item.humanKey} · ` : ''}
                       {tRaid(`kind.${item.kind}`)}: {item.title}
                     </Badge>
                   ))}

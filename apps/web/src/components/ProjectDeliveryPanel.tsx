@@ -40,6 +40,7 @@ type Milestone = {
   startDate: string | null;
   targetDate: string | null;
   sortOrder: number;
+  humanKey?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -52,6 +53,7 @@ type Epic = {
   startDate: string | null;
   endDate: string | null;
   sortOrder: number;
+  humanKey?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -65,6 +67,7 @@ type UserStory = {
   startDate: string | null;
   endDate: string | null;
   sortOrder: number;
+  humanKey?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -98,6 +101,7 @@ type Task = {
   currentOwnerUserId: string | null;
   currentOwner: TaskOwner | null;
   raci: RaciEntry[];
+  humanKey?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -233,7 +237,7 @@ export function ProjectDeliveryPanel({
     const epicItems: CatalogueListItem[] = epics.map((epic) => ({
       id: `epic:${epic.id}`,
       title: epic.title,
-      primaryBadge: t('kindEpic'),
+      primaryBadge: epic.humanKey ?? t('kindEpic'),
       secondaryBadge: t(`milestoneStatus.${epic.status}`),
       subtitle:
         epic.startDate || epic.endDate
@@ -242,6 +246,7 @@ export function ProjectDeliveryPanel({
       updatedAt: epic.updatedAt ?? epic.createdAt ?? null,
       searchText: [
         epic.title,
+        epic.humanKey ?? '',
         epic.description ?? '',
         epic.status,
         'epic',
@@ -259,7 +264,7 @@ export function ProjectDeliveryPanel({
       return {
         id: `story:${story.id}`,
         title: story.title,
-        primaryBadge: t('kindStory'),
+        primaryBadge: story.humanKey ?? t('kindStory'),
         secondaryBadge: t(`milestoneStatus.${story.status}`),
         subtitle: [
           epicLabel ? `${t('kindEpic')}: ${epicLabel}` : null,
@@ -272,6 +277,7 @@ export function ProjectDeliveryPanel({
         updatedAt: story.updatedAt ?? story.createdAt ?? null,
         searchText: [
           story.title,
+          story.humanKey ?? '',
           story.description ?? '',
           story.status,
           'story',
@@ -289,7 +295,7 @@ export function ProjectDeliveryPanel({
     const milestoneItems: CatalogueListItem[] = milestones.map((milestone) => ({
       id: `milestone:${milestone.id}`,
       title: milestone.title,
-      primaryBadge: t('kindMilestone'),
+      primaryBadge: milestone.humanKey ?? t('kindMilestone'),
       secondaryBadge: t(`milestoneStatus.${milestone.status}`),
       subtitle: [
         milestone.startDate
@@ -304,6 +310,7 @@ export function ProjectDeliveryPanel({
       updatedAt: milestone.updatedAt ?? milestone.createdAt ?? null,
       searchText: [
         milestone.title,
+        milestone.humanKey ?? '',
         milestone.description ?? '',
         milestone.status,
         'milestone',
@@ -325,7 +332,7 @@ export function ProjectDeliveryPanel({
       return {
         id: `task:${task.id}`,
         title: task.title,
-        primaryBadge: t('kindTask'),
+        primaryBadge: task.humanKey ?? t('kindTask'),
         secondaryBadge: t(`taskStatus.${task.status}`),
         subtitle: [
           task.epicTitle,
@@ -339,6 +346,7 @@ export function ProjectDeliveryPanel({
         updatedAt: task.updatedAt ?? task.createdAt ?? null,
         searchText: [
           task.title,
+          task.humanKey ?? '',
           task.description ?? '',
           task.status,
           'task',

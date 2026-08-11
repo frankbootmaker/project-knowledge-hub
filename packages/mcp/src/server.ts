@@ -30,6 +30,7 @@ export type McpToolHandlers = {
     currency?: string;
     initialBudget?: number | string | null;
     approvedBudget?: number | string | null;
+    keyPrefix?: string;
   }) => Promise<unknown>;
   getProjectBudgetSummary: (input: { projectId: string }) => Promise<unknown>;
   listProjectInitialStakeholders: (input: {
@@ -311,6 +312,10 @@ export type McpToolHandlers = {
     sortOrder?: number;
     archived?: boolean;
   }) => Promise<unknown>;
+  transferProjectRaidItem: (input: {
+    raidItemId: string;
+    targetKind: 'issue' | 'risk';
+  }) => Promise<unknown>;
   setProjectRaidTaskLinks: (input: {
     raidItemId: string;
     taskIds: string[];
@@ -539,9 +544,12 @@ export function createKnowledgeHubMcpServer(
   ]);
   const moneyInput = z.union([z.number(), z.string()]).nullable();
 
+  /** UUID or human key such as HL1-T-12 / HL1-RR-3. */
+  const entityRef = z.string().min(1).max(80);
+
   server.tool(
     'update_project_baseline',
-    'Update project baseline window, pinned docs, currency, and budgets. Requires pm:write.',
+    'Update project baseline window, pinned docs, currency, budgets, and issue key prefix. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       startDate: z
@@ -559,6 +567,11 @@ export function createKnowledgeHubMcpServer(
       currency: projectCurrencyEnum.optional(),
       initialBudget: moneyInput.optional(),
       approvedBudget: moneyInput.optional(),
+      keyPrefix: z
+        .string()
+        .trim()
+        .regex(/^([A-Za-z]{3}|[A-Za-z]{2}[0-9])$/)
+        .optional(),
     },
     async (args) =>
       wrap(
@@ -961,7 +974,7 @@ export function createKnowledgeHubMcpServer(
     'List tasks for a project (optional milestone filter). Includes RACI. Requires pm:read.',
     {
       projectId: z.string().uuid(),
-      milestoneId: z.string().uuid().optional(),
+      milestoneId: entityRef.optional(),
       unassignedMilestone: z.boolean().optional(),
       includeArchived: z.boolean().optional(),
     },
@@ -976,8 +989,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_task',
-    'Get one project task with RACI. Requires pm:read.',
-    { taskId: z.string().uuid() },
+    'Get one project task with RACI. taskId may be a UUID or human key (e.g. HL1-T-12). Requires pm:read.',
+    { taskId: entityRef },
     async (args) =>
       wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
   );
@@ -1010,9 +1023,9 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_milestone',
-    'Update a project milestone (live state). Requires pm:write.',
+    'Update a project milestone (live state). milestoneId may be UUID or human key (e.g. HL1-M-1). Requires pm:write.',
     {
-      milestoneId: z.string().uuid(),
+      milestoneId: entityRef,
       title: z.string().min(1).max(200).optional(),
       description: z.string().max(5000).nullable().optional(),
       status: z.enum(['planned', 'active', 'done', 'cancelled']).optional(),
@@ -1044,8 +1057,8 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
-      milestoneId: z.string().uuid().nullable().optional(),
-      userStoryId: z.string().uuid().nullable().optional(),
+      milestoneId: entityRef.nullable().optional(),
+      userStoryId: entityRef.nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       raci: z
@@ -1071,7 +1084,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_task',
     'Update a project task fields/status/due date/story/owner. Requires pm:write.',
     {
-      taskId: z.string().uuid(),
+      taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
       description: z.string().max(10000).nullable().optional(),
       status: z
@@ -1084,8 +1097,8 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
-      milestoneId: z.string().uuid().nullable().optional(),
-      userStoryId: z.string().uuid().nullable().optional(),
+      milestoneId: entityRef.nullable().optional(),
+      userStoryId: entityRef.nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
@@ -1098,7 +1111,7 @@ export function createKnowledgeHubMcpServer(
     'set_project_task_raci',
     'Replace the RACI set for a task (workspace members only; at most one A). Requires pm:write.',
     {
-      taskId: z.string().uuid(),
+      taskId: entityRef,
       entries: z
         .array(
           z.object({
@@ -1157,7 +1170,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_epic',
     'Update a project epic. Requires pm:write.',
     {
-      epicId: z.string().uuid(),
+      epicId: entityRef,
       title: z.string().min(1).max(200).optional(),
       description: z.string().max(5000).nullable().optional(),
       status: epicStatusEnum.optional(),
@@ -1175,7 +1188,7 @@ export function createKnowledgeHubMcpServer(
     'List user stories for a project (optional epic filter). Requires pm:read.',
     {
       projectId: z.string().uuid(),
-      epicId: z.string().uuid().optional(),
+      epicId: entityRef.optional(),
       includeArchived: z.boolean().optional(),
     },
     async (args) =>
@@ -1192,7 +1205,7 @@ export function createKnowledgeHubMcpServer(
     'Create a user story under an epic. Requires pm:write.',
     {
       projectId: z.string().uuid(),
-      epicId: z.string().uuid(),
+      epicId: entityRef,
       title: z.string().min(1).max(200),
       description: z.string().max(5000).nullable().optional(),
       status: epicStatusEnum.optional(),
@@ -1213,11 +1226,11 @@ export function createKnowledgeHubMcpServer(
     'update_project_user_story',
     'Update a user story. Requires pm:write.',
     {
-      storyId: z.string().uuid(),
+      storyId: entityRef,
       title: z.string().min(1).max(200).optional(),
       description: z.string().max(5000).nullable().optional(),
       status: epicStatusEnum.optional(),
-      epicId: z.string().uuid().optional(),
+      epicId: entityRef.optional(),
       startDate: ymdDate.optional(),
       endDate: ymdDate.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
@@ -1232,7 +1245,7 @@ export function createKnowledgeHubMcpServer(
   server.tool(
     'list_project_task_activities',
     'List activity timeline for a task. Requires pm:read.',
-    { taskId: z.string().uuid() },
+    { taskId: entityRef },
     async (args) =>
       wrap('list_project_task_activities', 'pm:read', () =>
         handlers.listProjectTaskActivities(args),
@@ -1243,7 +1256,7 @@ export function createKnowledgeHubMcpServer(
     'add_project_task_comment',
     'Add a comment to a task activity timeline. Requires pm:write.',
     {
-      taskId: z.string().uuid(),
+      taskId: entityRef,
       body: z.string().min(1).max(10000),
     },
     async (args) =>
@@ -1256,7 +1269,7 @@ export function createKnowledgeHubMcpServer(
     'handoff_project_task',
     'Hand off current owner of a task (does not change RACI). Requires pm:write.',
     {
-      taskId: z.string().uuid(),
+      taskId: entityRef,
       toUserId: z.string().uuid(),
       note: z.string().max(5000).nullable().optional(),
     },
@@ -1383,7 +1396,7 @@ export function createKnowledgeHubMcpServer(
         .nullable()
         .optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
-      taskIds: z.array(z.string().uuid()).max(100).optional(),
+      taskIds: z.array(entityRef).max(100).optional(),
     },
     async (args) =>
       wrap(
@@ -1396,9 +1409,9 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_raid_item',
-    'Update a RAID register item. Requires pm:write.',
+    'Update a RAID register item. raidItemId may be UUID or human key. Do not change kind between risk and issue — use transfer_project_raid_item. Requires pm:write.',
     {
-      raidItemId: z.string().uuid(),
+      raidItemId: entityRef,
       kind: raidKindEnum.optional(),
       title: z.string().min(1).max(300).optional(),
       description: z.string().max(10000).nullable().optional(),
@@ -1420,11 +1433,24 @@ export function createKnowledgeHubMcpServer(
   );
 
   server.tool(
+    'transfer_project_raid_item',
+    'Transfer a RAID risk to a new issue (or issue to a new risk): copies fields and task links, archives the source, and links both via transfer FKs. Requires pm:write.',
+    {
+      raidItemId: entityRef,
+      targetKind: z.enum(['issue', 'risk']),
+    },
+    async (args) =>
+      wrap('transfer_project_raid_item', 'pm:write', () =>
+        handlers.transferProjectRaidItem(args),
+      )(),
+  );
+
+  server.tool(
     'set_project_raid_task_links',
     'Replace the set of delivery tasks linked to a RAID item. Requires pm:write.',
     {
-      raidItemId: z.string().uuid(),
-      taskIds: z.array(z.string().uuid()).max(100),
+      raidItemId: entityRef,
+      taskIds: z.array(entityRef).max(100),
     },
     async (args) =>
       wrap('set_project_raid_task_links', 'pm:write', () =>
@@ -1511,7 +1537,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_change_item',
     'Update a change-management item. Requires pm:write.',
     {
-      changeId: z.string().uuid(),
+      changeId: entityRef,
       kind: changeKindEnum.optional(),
       title: z.string().min(1).max(300).optional(),
       description: z.string().max(10000).nullable().optional(),

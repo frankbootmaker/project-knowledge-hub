@@ -601,9 +601,9 @@
     "detailsCreated": "Létrehozva",
     "ragLabel": "Szállítás állapota",
     "rag": {
-      "green": "Időben",
-      "amber": "Kockázatos",
-      "red": "Csúszik"
+      "green": "Rendben",
+      "amber": "Problémás",
+      "red": "Kritikus"
     },
     "manageReports": "Jelentések",
     "manageReportsHint": "Státusz-, szállítás- vagy stakeholder-jelentés megtekintése, majd export vagy nyomtatás.",
@@ -2005,7 +2005,7 @@
     "closeWideView": "Vissza a listához",
     "scheduleLegendLabel": "Ütemezés színei",
     "scheduleTone": {
-      "onTrack": "Időben",
+      "onTrack": "Rendben",
       "atRisk": "Kockázatos (hamarosan esedékes)",
       "overdue": "Lejárt",
       "completed": "Kész",
@@ -2027,7 +2027,7 @@
       "sun": "V"
     },
     "scheduleToneShort": {
-      "onTrack": "Időben",
+      "onTrack": "Rendben",
       "atRisk": "Kockázatos",
       "overdue": "Lejárt",
       "completed": "Kész",
@@ -2133,6 +2133,16 @@
     "failedCreate": "Nem sikerült létrehozni a RAID tételt",
     "failedUpdate": "Nem sikerült frissíteni a RAID tételt",
     "failedDelete": "Nem sikerült törölni a RAID tételt",
+    "failedTransfer": "Nem sikerült átvinni a RAID tételt",
+    "moveToIssue": "Áthelyezés problémává",
+    "moveToRisk": "Áthelyezés kockázattá",
+    "confirmMoveToIssue": "Új problémát hozol létre ebből a kockázatból, és archiválod a kockázatot?",
+    "confirmMoveToRisk": "Új kockázatot hozol létre ebből a problémából, és archiválod a problémát?",
+    "transferHint": "A mezők és feladatkapcsolatok másolódnak. A forrás archiválódik, és az új kulcshoz kapcsolódik.",
+    "transferred": "Átvitel: {source} → {target}.",
+    "transferredFromBanner": "Innen létrehozva: {key}.",
+    "transferredToBanner": "Átvíve ide: {key} (ez a tétel archiválva).",
+    "useTransfer": "használd az átvitelt",
     "hint": "A RAID az operatív nyilvántartás kockázatokhoz, feltételezésekhez, problémákhoz és függőségekhez. Kapcsold a tételeket feladatokhoz, ha érintik a munkát.",
     "readOnlyHint": "A RAID megtekinthető; a karbantartók és adminok szerkeszthetnek.",
     "kind": {
@@ -2172,7 +2182,9 @@
     "hint": "A baseline a kickoff pillanatkép. Az élő Érintettek változhatnak. A jóváhagyott költségvetést a Költségvetés alatt szerkeszd.",
     "readOnlyHint": "A baseline megtekinthető; a karbantartók és adminok szerkeszthetnek.",
     "currency": "Pénznem",
-    "initialBudget": "Kezdeti költségvetés"
+    "initialBudget": "Kezdeti költségvetés",
+    "keyPrefix": "Issue kulcs előtag",
+    "keyPrefixHint": "Három karakter: AAA vagy AA0 (két betű + számjegy). Egyedi a munkaterületen. Pl. HL1-T-12."
   },
   "changes": {
     "title": "Változáskezelés",
