@@ -20,6 +20,47 @@ export type McpToolHandlers = {
     projectId?: string;
     limit: number;
   }) => Promise<unknown>;
+  createSystem: (input: {
+    workspaceId: string;
+    projectId?: string | null;
+    name: string;
+    slug?: string;
+    summary?: string | null;
+    description?: string | null;
+    systemType?: string | null;
+    status?: string;
+    ownerUserId?: string | null;
+    environment?: string | null;
+    version?: string | null;
+    criticality?: string | null;
+    itDetails?: Record<string, unknown>;
+    itCostMode?: 'flat' | 'one_time' | 'note_only' | null;
+    itFlatMonthlyFee?: number | string | null;
+    itOneTimeCost?: number | string | null;
+    itBudgetAllocation?: number | string | null;
+    tags?: string[];
+    metadata?: Record<string, unknown> | null;
+  }) => Promise<unknown>;
+  updateSystem: (input: {
+    systemId: string;
+    projectId?: string | null;
+    name?: string;
+    summary?: string | null;
+    description?: string | null;
+    systemType?: string | null;
+    status?: string;
+    ownerUserId?: string | null;
+    environment?: string | null;
+    version?: string | null;
+    criticality?: string | null;
+    itDetails?: Record<string, unknown> | null;
+    itCostMode?: 'flat' | 'one_time' | 'note_only' | null;
+    itFlatMonthlyFee?: number | string | null;
+    itOneTimeCost?: number | string | null;
+    itBudgetAllocation?: number | string | null;
+    tags?: string[];
+    metadata?: Record<string, unknown> | null;
+  }) => Promise<unknown>;
   getProject: (input: { projectId: string }) => Promise<unknown>;
   updateProjectBaseline: (input: {
     projectId: string;
@@ -325,11 +366,15 @@ export type McpToolHandlers = {
     note?: string | null;
   }) => Promise<unknown>;
   listProjectStakeholders: (input: { projectId: string }) => Promise<unknown>;
+  listWorkspaceMembers: (input: { workspaceId: string }) => Promise<unknown>;
   createProjectStakeholder: (input: {
     projectId: string;
-    userId: string;
+    /** Omit or null to create an open job role (jobTitle required). */
+    userId?: string | null;
     projectRole: string;
     jobTitle?: string | null;
+    roleDescription?: string | null;
+    competencies?: Array<string | { name: string; skillId?: string | null }>;
     notes?: string | null;
     reportsToUserId?: string | null;
     hourlyRate?: number | string | null;
@@ -347,6 +392,8 @@ export type McpToolHandlers = {
     stakeholderId: string;
     projectRole?: string;
     jobTitle?: string | null;
+    roleDescription?: string | null;
+    competencies?: Array<string | { name: string; skillId?: string | null }>;
     notes?: string | null;
     reportsToUserId?: string | null;
     hourlyRate?: number | string | null;
@@ -359,6 +406,13 @@ export type McpToolHandlers = {
     contractedBudget?: number | string | null;
     contractStart?: string | null;
     contractEnd?: string | null;
+  }) => Promise<unknown>;
+  assignProjectStakeholder: (input: {
+    stakeholderId: string;
+    userId: string;
+  }) => Promise<unknown>;
+  unassignProjectStakeholder: (input: {
+    stakeholderId: string;
   }) => Promise<unknown>;
   updateProjectAiAssistantCost: (input: {
     systemId: string;
@@ -584,9 +638,76 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  const moneyInput = z.union([z.number(), z.string()]).nullable();
+  const systemStatusEnum = z.enum([
+    'proposed',
+    'experimental',
+    'active',
+    'degraded',
+    'maintenance',
+    'deprecated',
+    'retired',
+    'archived',
+  ]);
+  const systemCriticalityEnum = z.enum(['low', 'medium', 'high', 'critical']);
+  const systemItCostModeEnum = z.enum(['flat', 'one_time', 'note_only']);
+  const systemItDetailsObject = z.object({
+    hostname: z.string().max(253).optional(),
+    primaryUrl: z.string().max(2000).optional(),
+    ipAddresses: z.array(z.string().max(80)).max(20).optional(),
+    ports: z
+      .array(
+        z.object({
+          port: z.number().int().min(1).max(65535),
+          protocol: z.string().max(40).optional(),
+          service: z.string().max(80).optional(),
+        }),
+      )
+      .max(40)
+      .optional(),
+    endpoints: z
+      .array(
+        z.object({
+          name: z.string().max(120),
+          url: z.string().max(2000),
+        }),
+      )
+      .max(20)
+      .optional(),
+    networkZone: z.string().max(80).optional(),
+    location: z.string().max(200).optional(),
+    deploymentModel: z
+      .enum([
+        'saas',
+        'paas',
+        'iaas',
+        'on_prem',
+        'vm',
+        'container',
+        'kubernetes',
+        'network',
+        'endpoint',
+        'other',
+      ])
+      .optional(),
+    vendor: z.string().max(120).optional(),
+    product: z.string().max(120).optional(),
+    platform: z.string().max(120).optional(),
+    dataClassification: z
+      .enum(['public', 'internal', 'confidential', 'restricted'])
+      .optional(),
+    backupPolicy: z.string().max(500).optional(),
+    supportContact: z.string().max(200).optional(),
+    documentationUrl: z.string().max(2000).optional(),
+    assetTag: z.string().max(80).optional(),
+    externalId: z.string().max(120).optional(),
+    dependencies: z.array(z.string().max(200)).max(50).optional(),
+    notes: z.string().max(5000).optional(),
+  });
+
   server.tool(
     'list_systems',
-    'List accessible systems in allowed workspaces',
+    'List accessible systems (IT catalogue) with type, environment, criticality, version, and primary URL when set. Requires systems:read.',
     {
       workspaceId: z.string().uuid().optional(),
       projectId: z.string().uuid().optional(),
@@ -600,6 +721,71 @@ export function createKnowledgeHubMcpServer(
           limit: args.limit ?? MCP_MAX_LIST_LIMIT,
         }),
       )(),
+  );
+
+  server.tool(
+    'create_system',
+    'Create a catalogue system (IT resource) in an allowlisted workspace. Prefer linking projectId when the system serves a project. Fill itDetails whenever known. Set itCostMode (flat|one_time|note_only) plus fees so OpEx rolls into project budget AC. Requires catalogue:write.',
+    {
+      workspaceId: z.string().uuid(),
+      projectId: z.string().uuid().nullable().optional(),
+      name: z.string().min(1).max(160),
+      slug: z.string().min(1).max(64).optional(),
+      summary: z.string().max(500).nullable().optional(),
+      description: z.string().max(10000).nullable().optional(),
+      systemType: z.string().max(120).nullable().optional(),
+      status: systemStatusEnum.optional(),
+      ownerUserId: z.string().uuid().nullable().optional(),
+      environment: z.string().max(80).nullable().optional(),
+      version: z.string().max(80).nullable().optional(),
+      criticality: systemCriticalityEnum.nullable().optional(),
+      itDetails: systemItDetailsObject.optional(),
+      itCostMode: systemItCostModeEnum.nullable().optional(),
+      itFlatMonthlyFee: moneyInput.optional(),
+      itOneTimeCost: moneyInput.optional(),
+      itBudgetAllocation: moneyInput.optional(),
+      tags: z.array(z.string().min(1).max(64)).max(30).optional(),
+      metadata: z.record(z.unknown()).nullable().optional(),
+    },
+    async (args) =>
+      wrap(
+        'create_system',
+        'catalogue:write',
+        () => handlers.createSystem(args),
+        {
+          workspaceId: args.workspaceId,
+          projectId: args.projectId ?? undefined,
+        },
+      )(),
+  );
+
+  server.tool(
+    'update_system',
+    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Does not archive/purge. Requires catalogue:write.',
+    {
+      systemId: z.string().uuid(),
+      projectId: z.string().uuid().nullable().optional(),
+      name: z.string().min(1).max(160).optional(),
+      summary: z.string().max(500).nullable().optional(),
+      description: z.string().max(10000).nullable().optional(),
+      systemType: z.string().max(120).nullable().optional(),
+      status: systemStatusEnum.optional(),
+      ownerUserId: z.string().uuid().nullable().optional(),
+      environment: z.string().max(80).nullable().optional(),
+      version: z.string().max(80).nullable().optional(),
+      criticality: systemCriticalityEnum.nullable().optional(),
+      itDetails: systemItDetailsObject.nullable().optional(),
+      itCostMode: systemItCostModeEnum.nullable().optional(),
+      itFlatMonthlyFee: moneyInput.optional(),
+      itOneTimeCost: moneyInput.optional(),
+      itBudgetAllocation: moneyInput.optional(),
+      tags: z.array(z.string().min(1).max(64)).max(30).optional(),
+      metadata: z.record(z.unknown()).nullable().optional(),
+    },
+    async (args) =>
+      wrap('update_system', 'catalogue:write', () => handlers.updateSystem(args), {
+        systemId: args.systemId,
+      })(),
   );
 
   server.tool(
@@ -628,7 +814,6 @@ export function createKnowledgeHubMcpServer(
     'AUD',
     'JPY',
   ]);
-  const moneyInput = z.union([z.number(), z.string()]).nullable();
 
   /** UUID or human key such as HL1-T-12 / HL1-RR-3. */
   const entityRef = z.string().min(1).max(80);
@@ -671,7 +856,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Includes person vs AI AC breakdown. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Includes person vs AI vs IT-system OpEx AC breakdown. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -747,7 +932,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_system',
-    'Get a system by id',
+    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Requires systems:read.',
     { systemId: z.string().uuid() },
     async (args) =>
       wrap('get_system', 'systems:read', () => handlers.getSystem(args), {
@@ -1553,7 +1738,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_stakeholders',
-    'List project stakeholders (roster + owner + RACI-derived) with contact fields. Requires pm:read.',
+    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -1564,20 +1749,43 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  server.tool(
+    'list_workspace_members',
+    'List active workspace members (userId, name, email, role) for staffing assignment. Requires projects:read.',
+    { workspaceId: z.string().uuid() },
+    async (args) =>
+      wrap(
+        'list_workspace_members',
+        'projects:read',
+        () => handlers.listWorkspaceMembers(args),
+        { workspaceId: args.workspaceId },
+      )(),
+  );
+
   const engagementEnum = z.enum(['employee', 'contractor']);
   const ymdNullable = z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullable();
+  const competencyItemSchema = z.union([
+    z.string().trim().min(1).max(80),
+    z.object({
+      name: z.string().trim().min(1).max(80),
+      skillId: z.string().uuid().nullable().optional(),
+    }),
+  ]);
+  const competenciesInput = z.array(competencyItemSchema).max(40).optional();
 
   server.tool(
     'create_project_stakeholder',
-    'Add or upsert a durable project stakeholder roster row (hourly rate, engagement, capacity, contract). Requires pm:write.',
+    'Add or upsert a project stakeholder. Omit userId to create an open job role (jobTitle required). Accepts roleDescription and competency tags. Requires pm:write.',
     {
       projectId: z.string().uuid(),
-      userId: z.string().uuid(),
+      userId: z.string().uuid().nullable().optional(),
       projectRole: stakeholderRoleEnum,
       jobTitle: z.string().max(200).nullable().optional(),
+      roleDescription: z.string().max(10000).nullable().optional(),
+      competencies: competenciesInput,
       notes: z.string().max(5000).nullable().optional(),
       hourlyRate: moneyInput.optional(),
       reportsToUserId: z.string().uuid().nullable().optional(),
@@ -1602,11 +1810,13 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_stakeholder',
-    'Update a durable project stakeholder roster row (rate, engagement, capacity, contract). Requires pm:write.',
+    'Update a project stakeholder roster row (role, description, competencies, rate, capacity). Requires pm:write.',
     {
       stakeholderId: z.string().uuid(),
       projectRole: stakeholderRoleEnum.optional(),
       jobTitle: z.string().max(200).nullable().optional(),
+      roleDescription: z.string().max(10000).nullable().optional(),
+      competencies: competenciesInput,
       notes: z.string().max(5000).nullable().optional(),
       hourlyRate: moneyInput.optional(),
       reportsToUserId: z.string().uuid().nullable().optional(),
@@ -1623,6 +1833,29 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('update_project_stakeholder', 'pm:write', () =>
         handlers.updateProjectStakeholder(args),
+      )(),
+  );
+
+  server.tool(
+    'assign_project_stakeholder',
+    'Fill an open job role by assigning a workspace member (userId). Target must be open. Requires pm:write.',
+    {
+      stakeholderId: z.string().uuid(),
+      userId: z.string().uuid(),
+    },
+    async (args) =>
+      wrap('assign_project_stakeholder', 'pm:write', () =>
+        handlers.assignProjectStakeholder(args),
+      )(),
+  );
+
+  server.tool(
+    'unassign_project_stakeholder',
+    'Reopen a filled roster seat (clear userId; keeps role description and competencies). Requires pm:write.',
+    { stakeholderId: z.string().uuid() },
+    async (args) =>
+      wrap('unassign_project_stakeholder', 'pm:write', () =>
+        handlers.unassignProjectStakeholder(args),
       )(),
   );
 

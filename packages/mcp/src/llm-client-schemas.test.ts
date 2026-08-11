@@ -150,6 +150,26 @@ describe('llm-client-schemas', () => {
     expect(search).toBeTruthy();
     expect(search?.parameters.properties?.workspaceId?.format).toBeUndefined();
     expect(decls.some((d) => d.name === 'list_project_tasks')).toBe(true);
+    expect(decls.some((d) => d.name === 'list_project_stakeholders')).toBe(true);
+    expect(decls.some((d) => d.name === 'list_workspace_members')).toBe(true);
+    expect(decls.some((d) => d.name === 'assign_project_stakeholder')).toBe(false);
     expect(decls.some((d) => d.name === 'call_hub_tool')).toBe(false);
+
+    const withWrite = buildGeminiFunctionDeclarations({
+      ...opts,
+      includeWriteTools: true,
+    });
+    const writeDecls = withWrite.functionDeclarations as Array<{ name: string }>;
+    expect(writeDecls.some((d) => d.name === 'create_project_stakeholder')).toBe(
+      true,
+    );
+    expect(writeDecls.some((d) => d.name === 'assign_project_stakeholder')).toBe(
+      true,
+    );
+    expect(writeDecls.some((d) => d.name === 'unassign_project_stakeholder')).toBe(
+      true,
+    );
+    expect(writeDecls.some((d) => d.name === 'create_system')).toBe(true);
+    expect(writeDecls.some((d) => d.name === 'update_system')).toBe(true);
   });
 });

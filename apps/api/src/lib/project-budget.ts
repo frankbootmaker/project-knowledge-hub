@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne, or } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   projectCostSnapshots,
@@ -15,8 +15,10 @@ import {
   AppError,
   aiCostModeSchema,
   projectCurrencySchema,
+  systemItCostModeSchema,
   type AiCostMode,
   type ProjectCurrency,
+  type SystemItCostMode,
 } from '@project-knowledge-hub/domain';
 import { requireProjectContext } from './project-delivery.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
@@ -65,6 +67,17 @@ export type AiBudgetBreakdown = {
   overAllocation: boolean;
 };
 
+export type SystemItBudgetBreakdown = {
+  systemId: string;
+  name: string;
+  costMode: SystemItCostMode | null;
+  flatAccruedCost: number;
+  oneTimeCost: number;
+  billableCost: number;
+  budgetAllocation: number | null;
+  overAllocation: boolean;
+};
+
 export type ProjectBudgetSummary = {
   currency: ProjectCurrency;
   initialBudget: number | null;
@@ -73,12 +86,15 @@ export type ProjectBudgetSummary = {
   pv: number | null;
   ev: number;
   ac: number;
-  /** Person hours × rate only (excludes AI). */
+  /** Person hours × rate only (excludes AI / IT systems). */
   personAc: number;
   /** Billable AI flat + token costs. */
   aiAc: number;
+  /** Billable non-AI catalogue system OpEx. */
+  systemAc: number;
   aiNoteOnlyTokens: number;
   aiSystems: AiBudgetBreakdown[];
+  itSystems: SystemItBudgetBreakdown[];
   cpi: number | null;
   spi: number | null;
   financialRag: ProjectRagStatus;
@@ -325,6 +341,94 @@ export async function computeAiBudgetCosts(
   };
 }
 
+/**
+ * OpEx for non-AI catalogue systems linked to the project.
+ * AI assistants are handled by {@link computeAiBudgetCosts}.
+ */
+export async function computeSystemItBudgetCosts(
+  database: Database,
+  projectId: string,
+  project: {
+    startDate: string | null;
+    endDate: string | null;
+  },
+  today = todayYmd(),
+): Promise<{
+  systemBillableCost: number;
+  itSystems: SystemItBudgetBreakdown[];
+}> {
+  const rows = await database.db
+    .select({
+      id: systems.id,
+      name: systems.name,
+      itCostMode: systems.itCostMode,
+      itFlatMonthlyFee: systems.itFlatMonthlyFee,
+      itOneTimeCost: systems.itOneTimeCost,
+      itBudgetAllocation: systems.itBudgetAllocation,
+    })
+    .from(systems)
+    .where(
+      and(
+        eq(systems.projectId, projectId),
+        isNull(systems.archivedAt),
+        or(
+          isNull(systems.systemType),
+          ne(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
+        ),
+      ),
+    );
+
+  const itSystems: SystemItBudgetBreakdown[] = [];
+  let systemBillableCost = 0;
+
+  for (const row of rows) {
+    const modeParsed = row.itCostMode
+      ? systemItCostModeSchema.safeParse(row.itCostMode)
+      : null;
+    const costMode = modeParsed?.success ? modeParsed.data : null;
+    const flatFee = parseNumeric(row.itFlatMonthlyFee) ?? 0;
+    const oneTime = parseNumeric(row.itOneTimeCost) ?? 0;
+    const allocation = parseNumeric(row.itBudgetAllocation);
+
+    let flatAccruedCost = 0;
+    let oneTimeCost = 0;
+
+    if (costMode === 'flat') {
+      flatAccruedCost = accrueFlatMonthlyFee(
+        flatFee,
+        project.startDate,
+        project.endDate,
+        today,
+      );
+    }
+    if (costMode === 'one_time') {
+      oneTimeCost = oneTime > 0 ? Math.round(oneTime * 100) / 100 : 0;
+    }
+
+    const billableCost =
+      costMode === 'note_only' || costMode == null
+        ? 0
+        : Math.round((flatAccruedCost + oneTimeCost) * 100) / 100;
+
+    systemBillableCost += billableCost;
+    itSystems.push({
+      systemId: row.id,
+      name: row.name,
+      costMode,
+      flatAccruedCost,
+      oneTimeCost,
+      billableCost,
+      budgetAllocation: allocation,
+      overAllocation: allocation != null && billableCost > allocation,
+    });
+  }
+
+  return {
+    systemBillableCost: Math.round(systemBillableCost * 100) / 100,
+    itSystems,
+  };
+}
+
 async function loadRateMap(
   database: Database,
   projectId: string,
@@ -338,6 +442,7 @@ async function loadRateMap(
     .where(eq(projectStakeholders.projectId, projectId));
   const map = new Map<string, number>();
   for (const row of rows) {
+    if (!row.userId) continue;
     const rate = parseNumeric(row.hourlyRate);
     if (rate != null) map.set(row.userId, rate);
   }
@@ -525,15 +630,18 @@ export function computeEvmFromCosts(
   };
 }
 
-function withAiAc(
+function withNonPersonAc(
   evm: ReturnType<typeof computeEvmFromCosts>,
   aiBillableCost: number,
+  systemBillableCost: number,
 ): ReturnType<typeof computeEvmFromCosts> & {
   personAc: number;
   aiAc: number;
+  systemAc: number;
 } {
   const personAc = evm.ac;
-  const ac = Math.round((personAc + aiBillableCost) * 100) / 100;
+  const ac =
+    Math.round((personAc + aiBillableCost + systemBillableCost) * 100) / 100;
   const cpi = ac > 0 ? Math.round((evm.ev / ac) * 1000) / 1000 : null;
   return {
     ...evm,
@@ -541,6 +649,7 @@ function withAiAc(
     cpi,
     personAc,
     aiAc: aiBillableCost,
+    systemAc: systemBillableCost,
     financialRag: computeFinancialRag({ bac: evm.bac, ac, cpi }),
   };
 }
@@ -553,7 +662,8 @@ export async function upsertProjectCostSnapshot(
   const costs = await listTaskBudgetCosts(database, projectId);
   const evm = computeEvmFromCosts(project, costs);
   const ai = await computeAiBudgetCosts(database, projectId, project);
-  const merged = withAiAc(evm, ai.aiBillableCost);
+  const it = await computeSystemItBudgetCosts(database, projectId, project);
+  const merged = withNonPersonAc(evm, ai.aiBillableCost, it.systemBillableCost);
   if (merged.bac == null) return;
 
   const capturedOn = todayYmd();
@@ -600,7 +710,8 @@ export async function getProjectBudgetSummary(
   const costs = await listTaskBudgetCosts(database, projectId);
   const evm = computeEvmFromCosts(project, costs);
   const ai = await computeAiBudgetCosts(database, projectId, project);
-  const merged = withAiAc(evm, ai.aiBillableCost);
+  const it = await computeSystemItBudgetCosts(database, projectId, project);
+  const merged = withNonPersonAc(evm, ai.aiBillableCost, it.systemBillableCost);
 
   const raidRows = await database.db
     .select({
@@ -637,6 +748,7 @@ export async function getProjectBudgetSummary(
     ...merged,
     aiNoteOnlyTokens: ai.aiNoteOnlyTokens,
     aiSystems: ai.aiSystems,
+    itSystems: it.itSystems,
     riskRag: computeRiskRag(raidRows),
     startDate: project.startDate,
     endDate: project.endDate,

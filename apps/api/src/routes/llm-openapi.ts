@@ -92,7 +92,8 @@ async function invokeNamedTool(
     }
     const includeWrite =
       hasMcpScope(client.scopes, 'knowledge:write') ||
-      hasMcpScope(client.scopes, 'pm:write');
+      hasMcpScope(client.scopes, 'pm:write') ||
+      hasMcpScope(client.scopes, 'catalogue:write');
     return { tools: listHubToolSummaries(includeWrite) };
   }
 

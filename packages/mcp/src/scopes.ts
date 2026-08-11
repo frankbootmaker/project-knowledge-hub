@@ -5,6 +5,11 @@ export const MCP_SCOPES = [
   'knowledge:search',
   'provenance:read',
   'knowledge:write',
+  /**
+   * Catalogue mutations (systems create/update). Opt-in; not in DEFAULT_MCP_SCOPES.
+   * ADR-014 Tier B ships as direct tools first; propose/commit later.
+   */
+  'catalogue:write',
   /** Project Delivery milestones/tasks/RACI (NF-018). Opt-in; not in DEFAULT_MCP_SCOPES. */
   'pm:read',
   'pm:write',

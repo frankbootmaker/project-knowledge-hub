@@ -219,6 +219,16 @@ export const systems = pgTable(
     environment: text('environment'),
     version: text('version'),
     criticality: text('criticality'),
+    /** Structured IT inventory (hostname, URLs, IPs, deployment, etc.). */
+    itDetails: jsonb('it_details')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    /** Non-AI catalogue OpEx: flat | one_time | note_only. */
+    itCostMode: text('it_cost_mode'),
+    itFlatMonthlyFee: numeric('it_flat_monthly_fee', { precision: 14, scale: 2 }),
+    itOneTimeCost: numeric('it_one_time_cost', { precision: 14, scale: 2 }),
+    itBudgetAllocation: numeric('it_budget_allocation', { precision: 14, scale: 2 }),
     /** AI assistant cost mode: flat | api | mixed | note_only. */
     aiCostMode: text('ai_cost_mode'),
     aiFlatMonthlyFee: numeric('ai_flat_monthly_fee', { precision: 14, scale: 2 }),
@@ -1246,6 +1256,11 @@ export const projectTaskRaci = pgTable(
  * Durable project stakeholder roster (hybrid with RACI / owner-derived people).
  * reports_to_user_id is a soft reporting line within the project stakeholder set.
  */
+export type StakeholderCompetencyRow = {
+  name: string;
+  skillId: string | null;
+};
+
 export const projectStakeholders = pgTable(
   'project_stakeholders',
   {
@@ -1253,11 +1268,19 @@ export const projectStakeholders = pgTable(
     projectId: uuid('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Null = open job role (not yet filled by a workspace member). */
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     projectRole: text('project_role').notNull().default('stakeholder'),
     jobTitle: text('job_title'),
+    /** Role / vacancy description (advertised staffing needs). */
+    roleDescription: text('role_description'),
+    /**
+     * Competency tags. `skillId` reserved for a future shared skill catalog.
+     */
+    competencies: jsonb('competencies')
+      .$type<StakeholderCompetencyRow[]>()
+      .notNull()
+      .default([]),
     notes: text('notes'),
     reportsToUserId: uuid('reports_to_user_id').references(() => users.id, {
       onDelete: 'set null',
@@ -1280,10 +1303,9 @@ export const projectStakeholders = pgTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex('project_stakeholders_project_user_uidx').on(
-      table.projectId,
-      table.userId,
-    ),
+    uniqueIndex('project_stakeholders_project_user_uidx')
+      .on(table.projectId, table.userId)
+      .where(sql`${table.userId} IS NOT NULL`),
     index('project_stakeholders_project_id_idx').on(table.projectId),
     index('project_stakeholders_reports_to_idx').on(table.reportsToUserId),
   ],

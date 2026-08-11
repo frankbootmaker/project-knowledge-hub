@@ -1,18 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { slugify } from '@project-knowledge-hub/auth';
-import { projects, systems, workspaces } from '@project-knowledge-hub/database';
+import { systems, workspaces } from '@project-knowledge-hub/database';
 import {
-  AppError,
   aiCostModeSchema,
+  systemCriticalitySchema,
+  systemItCostModeSchema,
+  systemItDetailsSchema,
   systemStatusSchema,
 } from '@project-knowledge-hub/domain';
-import {
-  parseBudgetAmount,
-  parseTokenRate,
-  upsertProjectCostSnapshot,
-} from '../lib/project-budget.js';
 import {
   requireWorkspaceAdmin,
   requireWorkspaceMaintainer,
@@ -23,7 +19,15 @@ import {
   requireAuthenticated,
 } from '../plugins/auth.js';
 import { writeAuditEvent } from '../lib/identity.js';
-import { getSystemTags, setSystemTags } from '../lib/tags.js';
+import { getSystemTags } from '../lib/tags.js';
+import {
+  createSystem,
+  getSystemRow,
+  toPublicSystem,
+  updateSystem,
+} from '../lib/systems.js';
+
+const moneySchema = z.union([z.number(), z.string()]).nullable();
 
 const createSystemSchema = z.object({
   workspaceId: z.string().uuid(),
@@ -37,12 +41,15 @@ const createSystemSchema = z.object({
   ownerUserId: z.string().uuid().nullable().optional(),
   environment: z.string().max(80).optional(),
   version: z.string().max(80).optional(),
-  criticality: z.string().max(80).optional(),
+  criticality: systemCriticalitySchema.nullable().optional(),
+  itDetails: systemItDetailsSchema.optional(),
+  itCostMode: systemItCostModeSchema.nullable().optional(),
+  itFlatMonthlyFee: moneySchema.optional(),
+  itOneTimeCost: moneySchema.optional(),
+  itBudgetAllocation: moneySchema.optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
-
-const moneySchema = z.union([z.number(), z.string()]).nullable();
 
 const updateSystemSchema = z.object({
   projectId: z.string().uuid().nullable().optional(),
@@ -54,7 +61,12 @@ const updateSystemSchema = z.object({
   ownerUserId: z.string().uuid().nullable().optional(),
   environment: z.string().max(80).nullable().optional(),
   version: z.string().max(80).nullable().optional(),
-  criticality: z.string().max(80).nullable().optional(),
+  criticality: systemCriticalitySchema.nullable().optional(),
+  itDetails: systemItDetailsSchema.nullable().optional(),
+  itCostMode: systemItCostModeSchema.nullable().optional(),
+  itFlatMonthlyFee: moneySchema.optional(),
+  itOneTimeCost: moneySchema.optional(),
+  itBudgetAllocation: moneySchema.optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
   archived: z.boolean().optional(),
@@ -63,66 +75,6 @@ const updateSystemSchema = z.object({
   aiTokenRatePer1k: moneySchema.optional(),
   aiBudgetAllocation: moneySchema.optional(),
 });
-
-function toPublicSystem(
-  system: typeof systems.$inferSelect,
-  tagList: Array<{ id: string; name: string; slug: string }>,
-) {
-  return {
-    id: system.id,
-    workspaceId: system.workspaceId,
-    projectId: system.projectId,
-    name: system.name,
-    slug: system.slug,
-    summary: system.summary,
-    description: system.description,
-    systemType: system.systemType,
-    status: system.status,
-    ownerUserId: system.ownerUserId,
-    environment: system.environment,
-    version: system.version,
-    criticality: system.criticality,
-    aiCostMode: system.aiCostMode,
-    aiFlatMonthlyFee: system.aiFlatMonthlyFee,
-    aiTokenRatePer1k: system.aiTokenRatePer1k,
-    aiBudgetAllocation: system.aiBudgetAllocation,
-    metadata: system.metadataJson,
-    tags: tagList,
-    lastValidatedAt: system.lastValidatedAt?.toISOString() ?? null,
-    archivedAt: system.archivedAt?.toISOString() ?? null,
-    createdAt: system.createdAt.toISOString(),
-    updatedAt: system.updatedAt.toISOString(),
-  };
-}
-
-async function assertProjectInWorkspace(
-  app: FastifyInstance,
-  workspaceId: string,
-  projectId: string | null | undefined,
-): Promise<void> {
-  if (!projectId) {
-    return;
-  }
-  const [project] = await app.database.db
-    .select()
-    .from(projects)
-    .where(
-      and(
-        eq(projects.id, projectId),
-        eq(projects.workspaceId, workspaceId),
-        isNull(projects.archivedAt),
-      ),
-    )
-    .limit(1);
-
-  if (!project) {
-    throw new AppError({
-      code: 'PROJECT_NOT_FOUND',
-      message: 'Associated project was not found in this workspace',
-      statusCode: 400,
-    });
-  }
-}
 
 export async function registerSystemRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/systems', async (request) => {
@@ -169,114 +121,43 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
     const body = createSystemSchema.parse(request.body);
     requireWorkspaceMaintainer(principal, body.workspaceId);
 
+    const system = await createSystem(app.database, body, {
+      defaultOwnerUserId: principal.userId,
+    });
+
     const [workspace] = await app.database.db
-      .select()
+      .select({ organizationId: workspaces.organizationId })
       .from(workspaces)
-      .where(and(eq(workspaces.id, body.workspaceId), isNull(workspaces.archivedAt)))
+      .where(eq(workspaces.id, body.workspaceId))
       .limit(1);
-
-    if (!workspace) {
-      throw new AppError({
-        code: 'WORKSPACE_NOT_FOUND',
-        message: 'Workspace not found',
-        statusCode: 404,
-      });
-    }
-
-    await assertProjectInWorkspace(app, body.workspaceId, body.projectId);
-
-    const slug = body.slug ? slugify(body.slug) : slugify(body.name);
-    if (!slug) {
-      throw new AppError({
-        code: 'VALIDATION_ERROR',
-        message: 'System slug is invalid',
-        statusCode: 400,
-      });
-    }
-
-    const [existing] = await app.database.db
-      .select()
-      .from(systems)
-      .where(and(eq(systems.workspaceId, body.workspaceId), eq(systems.slug, slug)))
-      .limit(1);
-
-    if (existing) {
-      throw new AppError({
-        code: 'SYSTEM_SLUG_CONFLICT',
-        message: 'A system with this slug already exists in the workspace',
-        statusCode: 409,
-      });
-    }
-
-    const [created] = await app.database.db
-      .insert(systems)
-      .values({
-        workspaceId: body.workspaceId,
-        projectId: body.projectId ?? null,
-        name: body.name,
-        slug,
-        summary: body.summary ?? null,
-        description: body.description ?? null,
-        systemType: body.systemType ?? null,
-        status: body.status ?? 'proposed',
-        ownerUserId: body.ownerUserId ?? principal.userId,
-        environment: body.environment ?? null,
-        version: body.version ?? null,
-        criticality: body.criticality ?? null,
-        metadataJson: body.metadata ?? null,
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    if (!created) {
-      throw new AppError({
-        code: 'SYSTEM_CREATE_FAILED',
-        message: 'Failed to create system',
-        statusCode: 500,
-      });
-    }
-
-    const tagList = await setSystemTags(
-      app.database,
-      created.id,
-      workspace.organizationId,
-      body.tags ?? [],
-    );
 
     await writeAuditEvent(app.database, {
-      organizationId: workspace.organizationId,
+      organizationId: workspace?.organizationId ?? null,
       actorType: 'user',
       actorId: principal.userId,
       action: 'system.create',
       entityType: 'system',
-      entityId: created.id,
-      metadata: { slug: created.slug, name: created.name, projectId: created.projectId },
+      entityId: system.id,
+      metadata: {
+        slug: system.slug,
+        name: system.name,
+        projectId: system.projectId,
+      },
       ipAddress: request.ip,
     });
 
-    return { system: toPublicSystem(created, tagList) };
+    return { system };
   });
 
   app.get('/api/v1/systems/:systemId', async (request) => {
     const principal = requireAuthenticated(request);
     const params = z.object({ systemId: z.string().uuid() }).parse(request.params);
-    const [system] = await app.database.db
-      .select()
-      .from(systems)
-      .where(eq(systems.id, params.systemId))
-      .limit(1);
-
-    if (!system) {
-      throw new AppError({
-        code: 'SYSTEM_NOT_FOUND',
-        message: 'System not found',
-        statusCode: 404,
-      });
-    }
-
-    requireWorkspaceView(principal, system.workspaceId);
-    const tagMap = await getSystemTags(app.database, [system.id]);
-    return { system: toPublicSystem(system, tagMap.get(system.id) ?? []) };
+    const row = await getSystemRow(app.database, params.systemId, {
+      includeArchived: true,
+    });
+    requireWorkspaceView(principal, row.workspaceId);
+    const tagMap = await getSystemTags(app.database, [row.id]);
+    return { system: toPublicSystem(row, tagMap.get(row.id) ?? []) };
   });
 
   app.patch('/api/v1/systems/:systemId', async (request) => {
@@ -285,107 +166,18 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
     const params = z.object({ systemId: z.string().uuid() }).parse(request.params);
     const body = updateSystemSchema.parse(request.body);
 
-    const [system] = await app.database.db
-      .select()
-      .from(systems)
-      .where(eq(systems.id, params.systemId))
-      .limit(1);
+    const existing = await getSystemRow(app.database, params.systemId, {
+      includeArchived: true,
+    });
+    requireWorkspaceMaintainer(principal, existing.workspaceId);
 
-    if (!system) {
-      throw new AppError({
-        code: 'SYSTEM_NOT_FOUND',
-        message: 'System not found',
-        statusCode: 404,
-      });
-    }
-
-    requireWorkspaceMaintainer(principal, system.workspaceId);
-    await assertProjectInWorkspace(
-      app,
-      system.workspaceId,
-      body.projectId === undefined ? system.projectId : body.projectId,
-    );
+    const system = await updateSystem(app.database, params.systemId, body);
 
     const [workspace] = await app.database.db
-      .select()
+      .select({ organizationId: workspaces.organizationId })
       .from(workspaces)
-      .where(eq(workspaces.id, system.workspaceId))
+      .where(eq(workspaces.id, existing.workspaceId))
       .limit(1);
-
-    const nextFlat =
-      body.aiFlatMonthlyFee === undefined
-        ? undefined
-        : parseBudgetAmount(body.aiFlatMonthlyFee) ?? null;
-    const nextTokenRate =
-      body.aiTokenRatePer1k === undefined
-        ? undefined
-        : parseTokenRate(body.aiTokenRatePer1k) ?? null;
-    const nextAllocation =
-      body.aiBudgetAllocation === undefined
-        ? undefined
-        : parseBudgetAmount(body.aiBudgetAllocation) ?? null;
-
-    const [updated] = await app.database.db
-      .update(systems)
-      .set({
-        projectId: body.projectId === undefined ? system.projectId : body.projectId,
-        name: body.name ?? system.name,
-        summary: body.summary === undefined ? system.summary : body.summary,
-        description: body.description === undefined ? system.description : body.description,
-        systemType: body.systemType === undefined ? system.systemType : body.systemType,
-        status: body.status ?? system.status,
-        ownerUserId: body.ownerUserId === undefined ? system.ownerUserId : body.ownerUserId,
-        environment: body.environment === undefined ? system.environment : body.environment,
-        version: body.version === undefined ? system.version : body.version,
-        criticality: body.criticality === undefined ? system.criticality : body.criticality,
-        aiCostMode:
-          body.aiCostMode === undefined ? system.aiCostMode : body.aiCostMode,
-        aiFlatMonthlyFee:
-          nextFlat === undefined ? system.aiFlatMonthlyFee : nextFlat,
-        aiTokenRatePer1k:
-          nextTokenRate === undefined ? system.aiTokenRatePer1k : nextTokenRate,
-        aiBudgetAllocation:
-          nextAllocation === undefined
-            ? system.aiBudgetAllocation
-            : nextAllocation,
-        metadataJson: body.metadata === undefined ? system.metadataJson : body.metadata,
-        archivedAt:
-          body.archived === undefined
-            ? system.archivedAt
-            : body.archived
-              ? new Date()
-              : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(systems.id, params.systemId))
-      .returning();
-
-    if (!updated) {
-      throw new AppError({
-        code: 'SYSTEM_UPDATE_FAILED',
-        message: 'Failed to update system',
-        statusCode: 500,
-      });
-    }
-
-    let tagList = (await getSystemTags(app.database, [updated.id])).get(updated.id) ?? [];
-    if (body.tags && workspace) {
-      tagList = await setSystemTags(
-        app.database,
-        updated.id,
-        workspace.organizationId,
-        body.tags,
-      );
-    }
-
-    const aiCostTouched =
-      body.aiCostMode !== undefined ||
-      body.aiFlatMonthlyFee !== undefined ||
-      body.aiTokenRatePer1k !== undefined ||
-      body.aiBudgetAllocation !== undefined;
-    if (aiCostTouched && updated.projectId) {
-      await upsertProjectCostSnapshot(app.database, updated.projectId);
-    }
 
     await writeAuditEvent(app.database, {
       organizationId: workspace?.organizationId ?? null,
@@ -393,12 +185,12 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
       actorId: principal.userId,
       action: 'system.update',
       entityType: 'system',
-      entityId: updated.id,
+      entityId: system.id,
       metadata: body,
       ipAddress: request.ip,
     });
 
-    return { system: toPublicSystem(updated, tagList) };
+    return { system };
   });
 
   app.delete('/api/v1/systems/:systemId', async (request) => {
@@ -406,20 +198,7 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
     const principal = requireAuthenticated(request);
     const params = z.object({ systemId: z.string().uuid() }).parse(request.params);
 
-    const [system] = await app.database.db
-      .select()
-      .from(systems)
-      .where(eq(systems.id, params.systemId))
-      .limit(1);
-
-    if (!system || system.archivedAt) {
-      throw new AppError({
-        code: 'SYSTEM_NOT_FOUND',
-        message: 'System not found',
-        statusCode: 404,
-      });
-    }
-
+    const system = await getSystemRow(app.database, params.systemId);
     requireWorkspaceMaintainer(principal, system.workspaceId);
 
     const [archived] = await app.database.db
@@ -446,7 +225,9 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
 
     const tagMap = await getSystemTags(app.database, [system.id]);
     return {
-      system: archived ? toPublicSystem(archived, tagMap.get(archived.id) ?? []) : null,
+      system: archived
+        ? toPublicSystem(archived, tagMap.get(archived.id) ?? [])
+        : null,
     };
   });
 
@@ -457,20 +238,9 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
     const params = z.object({ systemId: z.string().uuid() }).parse(request.params);
     z.object({ confirmDestroy: z.literal(true) }).parse(request.body ?? {});
 
-    const [system] = await app.database.db
-      .select()
-      .from(systems)
-      .where(eq(systems.id, params.systemId))
-      .limit(1);
-
-    if (!system) {
-      throw new AppError({
-        code: 'SYSTEM_NOT_FOUND',
-        message: 'System not found',
-        statusCode: 404,
-      });
-    }
-
+    const system = await getSystemRow(app.database, params.systemId, {
+      includeArchived: true,
+    });
     requireWorkspaceAdmin(principal, system.workspaceId);
 
     const [workspace] = await app.database.db

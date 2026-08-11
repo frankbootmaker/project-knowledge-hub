@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Catalogue system OpEx in project AC:** non-AI systems linked to a project can set `it_cost_mode` (`flat` / `one_time` / `note_only`) with flat monthly, one-time, and soft allocation fields; billable OpEx rolls into Budgeting AC beside people + AI. Migration `0046`. UI create/manage + budget breakdown; MCP `create_system` / `update_system` cost args.
+
+* **Agent catalogue systems + IT details:** opt-in MCP scope `catalogue:write` with direct `create_system` / `update_system` (ChatGPT via `call_hub_tool`); enriched `list_systems` / `get_system`; structured `it_details` jsonb (hostname, URLs, deployment, data class, support, …) plus UI fields for version/criticality/IT inventory. Migration `0045`. ADR-014 Tier B ships as direct tools for systems first (propose/commit later).
+
+* **Open job roles + competencies (staffing):** project roster rows may be open seats (`user_id` null) with required job title, optional `roleDescription`, and competency tags `{ name, skillId }` (`skillId` reserved for a future catalog). Assign/unassign fill the same row; REST `POST …/project-stakeholders/:id/assign|unassign`; UI create toggle + Open badge; MCP `create_project_stakeholder` (optional `userId`), `assign_project_stakeholder`, `unassign_project_stakeholder`, `list_workspace_members` (ChatGPT via `call_hub_tool`). Migration `0044`.
+
 * **Project Scrum (NF-020):** `project_sprints`, task `sprint_id` + story points, Delivery view **Scrum** (board, backlog, planning wizard, activate/close), ceremony drafts (RET/REV) linked to sprints, velocity, point burndown, project **Definition of Done**; REST `/project-sprints` + MCP; PDF export for scrum sections. Brief [`PROJECT_SCRUM.md`](product/PROJECT_SCRUM.md); ADR-022. Migrations `0042` / `0043`.
 
 * **Knowledge document keys (NF-021):** project-scoped `{prefix}-{DOCCODE}-{n}` on knowledge records (`documentKeyType` / `documentNumber`); catalog `docKeyCode`; allocate on create; MCP/REST resolve by UUID or human key; keys shown before titles in catalogues, detail, and archive lists; demo seed keys. Brief [`PROJECT_DOC_KEYS.md`](product/PROJECT_DOC_KEYS.md); ADR-023. Migration `0041`.

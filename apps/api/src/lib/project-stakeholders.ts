@@ -14,12 +14,15 @@ import {
   projectStakeholderRoleSchema,
   raciRoleSchema,
   resolveAssistantBrand,
+  stakeholderCompetenciesSchema,
   stakeholderEngagementTypeSchema,
   type AiCostMode,
   type AssistantBrand,
   type ProjectStakeholderRole,
   type RaciRole,
+  type StakeholderCompetencies,
   type StakeholderEngagementType,
+  type StakeholderStaffingStatus,
 } from '@project-knowledge-hub/domain';
 import {
   assertProjectNotArchived,
@@ -27,7 +30,7 @@ import {
 } from './project-delivery.js';
 import { avatarUrlForUser } from './public-user.js';
 
-export type StakeholderKind = 'person' | 'ai_assistant';
+export type StakeholderKind = 'person' | 'ai_assistant' | 'open_role';
 export type StakeholderSource = 'roster' | 'owner' | 'raci' | 'ai_assistant';
 
 /** Catalogue systems with this type appear as AI-assistant stakeholders (not general Systems). */
@@ -35,7 +38,10 @@ export const AI_ASSISTANT_SYSTEM_TYPE = 'ai_assistant';
 
 export type PublicStakeholder = {
   kind: StakeholderKind;
-  /** Stable id: userId for people, `ai:<systemUuid>` for AI assistants. */
+  /**
+   * Stable id: userId for people, roster uuid for open roles,
+   * `ai:<systemUuid>` for AI assistants.
+   */
   id: string;
   userId: string | null;
   systemId: string | null;
@@ -44,6 +50,9 @@ export type PublicStakeholder = {
   email: string | null;
   projectRole: ProjectStakeholderRole | null;
   jobTitle: string | null;
+  roleDescription: string | null;
+  competencies: StakeholderCompetencies;
+  staffingStatus: StakeholderStaffingStatus | null;
   notes: string | null;
   reportsToUserId: string | null;
   hourlyRate: string | null;
@@ -72,6 +81,68 @@ export type PublicStakeholder = {
   systemSlug: string | null;
   systemStatus: string | null;
 };
+
+function parseCompetencies(value: unknown): StakeholderCompetencies {
+  const parsed = stakeholderCompetenciesSchema.safeParse(value ?? []);
+  return parsed.success ? parsed.data : [];
+}
+
+function emptyPersonFields(): Pick<
+  PublicStakeholder,
+  | 'roleDescription'
+  | 'competencies'
+  | 'staffingStatus'
+  | 'notes'
+  | 'reportsToUserId'
+  | 'hourlyRate'
+  | 'engagementType'
+  | 'assignmentStart'
+  | 'assignmentEnd'
+  | 'allocatedDailyHours'
+  | 'contractRef'
+  | 'contractedBudget'
+  | 'contractStart'
+  | 'contractEnd'
+  | 'avatarUrl'
+  | 'assistantBrand'
+  | 'aiCostMode'
+  | 'aiFlatMonthlyFee'
+  | 'aiTokenRatePer1k'
+  | 'aiBudgetAllocation'
+  | 'raciRoles'
+  | 'taskCount'
+  | 'rosterId'
+  | 'systemSlug'
+  | 'systemStatus'
+> {
+  return {
+    roleDescription: null,
+    competencies: [],
+    staffingStatus: null,
+    notes: null,
+    reportsToUserId: null,
+    hourlyRate: null,
+    engagementType: null,
+    assignmentStart: null,
+    assignmentEnd: null,
+    allocatedDailyHours: null,
+    contractRef: null,
+    contractedBudget: null,
+    contractStart: null,
+    contractEnd: null,
+    avatarUrl: null,
+    assistantBrand: null,
+    aiCostMode: null,
+    aiFlatMonthlyFee: null,
+    aiTokenRatePer1k: null,
+    aiBudgetAllocation: null,
+    raciRoles: [],
+    taskCount: 0,
+    rosterId: null,
+    systemSlug: null,
+    systemStatus: null,
+  };
+}
 
 function parseEngagementType(
   value: string | null | undefined,
@@ -177,7 +248,9 @@ async function collectStakeholderUserIds(
     .select({ userId: projectStakeholders.userId })
     .from(projectStakeholders)
     .where(eq(projectStakeholders.projectId, projectId));
-  for (const row of roster) ids.add(row.userId);
+  for (const row of roster) {
+    if (row.userId) ids.add(row.userId);
+  }
 
   const raciRows = await database.db
     .select({ userId: projectTaskRaci.userId })
@@ -215,7 +288,7 @@ async function assertNoReportsToCycle(
     .from(projectStakeholders)
     .where(eq(projectStakeholders.projectId, projectId));
   for (const row of roster) {
-    edges.set(row.userId, row.reportsToUserId);
+    if (row.userId) edges.set(row.userId, row.reportsToUserId);
   }
   edges.set(userId, reportsToUserId);
 
@@ -302,7 +375,9 @@ export async function listProjectStakeholders(
     .orderBy(asc(systems.name));
 
   const userIds = new Set<string>();
-  for (const row of rosterRows) userIds.add(row.userId);
+  for (const row of rosterRows) {
+    if (row.userId) userIds.add(row.userId);
+  }
   for (const userId of raciByUser.keys()) userIds.add(userId);
   if (project.ownerUserId) userIds.add(project.ownerUserId);
   for (const assistant of aiAssistants) {
@@ -311,6 +386,7 @@ export async function listProjectStakeholders(
 
   const userMap = await loadUserMap(database, [...userIds]);
   const byPerson = new Map<string, PublicStakeholder>();
+  const openRoles: PublicStakeholder[] = [];
 
   const ensurePerson = (userId: string): PublicStakeholder | null => {
     const existing = byPerson.get(userId);
@@ -327,41 +403,24 @@ export async function listProjectStakeholders(
       email: profile.email,
       projectRole: null,
       jobTitle: null,
-      notes: null,
-      reportsToUserId: null,
-      hourlyRate: null,
-      engagementType: null,
-      assignmentStart: null,
-      assignmentEnd: null,
-      allocatedDailyHours: null,
-      contractRef: null,
-      contractedBudget: null,
-      contractStart: null,
-      contractEnd: null,
+      ...emptyPersonFields(),
       avatarUrl: profile.avatarUrl,
-      assistantBrand: null,
-      aiCostMode: null,
-      aiFlatMonthlyFee: null,
-      aiTokenRatePer1k: null,
-      aiBudgetAllocation: null,
-      raciRoles: [],
-      taskCount: 0,
       sources: [],
-      rosterId: null,
       sortOrder: 1000,
-      systemSlug: null,
-      systemStatus: null,
     };
     byPerson.set(userId, entry);
     return entry;
   };
 
-  for (const row of rosterRows) {
-    const entry = ensurePerson(row.userId);
-    if (!entry) continue;
+  const applyRosterFields = (
+    entry: PublicStakeholder,
+    row: typeof projectStakeholders.$inferSelect,
+  ) => {
     entry.rosterId = row.id;
     entry.projectRole = projectStakeholderRoleSchema.parse(row.projectRole);
     entry.jobTitle = row.jobTitle;
+    entry.roleDescription = row.roleDescription;
+    entry.competencies = parseCompetencies(row.competencies);
     entry.notes = row.notes;
     entry.reportsToUserId = row.reportsToUserId;
     entry.hourlyRate = row.hourlyRate;
@@ -375,6 +434,58 @@ export async function listProjectStakeholders(
     entry.contractEnd = row.contractEnd;
     entry.sortOrder = row.sortOrder;
     if (!entry.sources.includes('roster')) entry.sources.push('roster');
+  };
+
+  for (const row of rosterRows) {
+    if (!row.userId) {
+      const roleLabel =
+        row.jobTitle?.trim() ||
+        projectStakeholderRoleSchema.safeParse(row.projectRole).data ||
+        'Open role';
+      openRoles.push({
+        kind: 'open_role',
+        id: row.id,
+        userId: null,
+        systemId: null,
+        displayName: roleLabel,
+        fullName: null,
+        email: null,
+        projectRole: projectStakeholderRoleSchema.parse(row.projectRole),
+        jobTitle: row.jobTitle,
+        roleDescription: row.roleDescription,
+        competencies: parseCompetencies(row.competencies),
+        staffingStatus: 'open',
+        notes: row.notes,
+        reportsToUserId: row.reportsToUserId,
+        hourlyRate: row.hourlyRate,
+        engagementType: parseEngagementType(row.engagementType),
+        assignmentStart: row.assignmentStart,
+        assignmentEnd: row.assignmentEnd,
+        allocatedDailyHours: row.allocatedDailyHours,
+        contractRef: row.contractRef,
+        contractedBudget: row.contractedBudget,
+        contractStart: row.contractStart,
+        contractEnd: row.contractEnd,
+        avatarUrl: null,
+        assistantBrand: null,
+        aiCostMode: null,
+        aiFlatMonthlyFee: null,
+        aiTokenRatePer1k: null,
+        aiBudgetAllocation: null,
+        raciRoles: [],
+        taskCount: 0,
+        sources: ['roster'],
+        rosterId: row.id,
+        sortOrder: row.sortOrder,
+        systemSlug: null,
+        systemStatus: null,
+      });
+      continue;
+    }
+    const entry = ensurePerson(row.userId);
+    if (!entry) continue;
+    applyRosterFields(entry, row);
+    entry.staffingStatus = 'assigned';
   }
 
   if (project.ownerUserId) {
@@ -418,6 +529,9 @@ export async function listProjectStakeholders(
       email: null,
       projectRole: null,
       jobTitle: 'AI assistant',
+      roleDescription: null,
+      competencies: [],
+      staffingStatus: null,
       notes: assistant.summary,
       reportsToUserId: ownerInSet,
       hourlyRate: null,
@@ -449,9 +563,14 @@ export async function listProjectStakeholders(
     };
   });
 
+  const KIND_ORDER: Record<StakeholderKind, number> = {
+    person: 0,
+    open_role: 1,
+    ai_assistant: 2,
+  };
   const RACI_ORDER: RaciRole[] = ['A', 'R', 'C', 'I'];
-  return [...byPerson.values(), ...aiEntries].sort((a, b) => {
-    if (a.kind !== b.kind) return a.kind === 'person' ? -1 : 1;
+  return [...byPerson.values(), ...openRoles, ...aiEntries].sort((a, b) => {
+    if (a.kind !== b.kind) return KIND_ORDER[a.kind] - KIND_ORDER[b.kind];
     if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
     const aRole = a.raciRoles[0] ? RACI_ORDER.indexOf(a.raciRoles[0]) : 99;
     const bRole = b.raciRoles[0] ? RACI_ORDER.indexOf(b.raciRoles[0]) : 99;
@@ -490,14 +609,24 @@ export type StakeholderCapacityInput = {
   contractEnd?: string | null;
 };
 
+function normalizeCompetenciesInput(
+  value: unknown | undefined,
+): StakeholderCompetencies | undefined {
+  if (value === undefined) return undefined;
+  return stakeholderCompetenciesSchema.parse(value ?? []);
+}
+
 export async function upsertProjectStakeholder(
   database: Database,
   input: {
     projectId: string;
     workspaceId: string;
-    userId: string;
+    /** Omit or null to create an open job role (requires jobTitle). */
+    userId?: string | null;
     projectRole: ProjectStakeholderRole;
     jobTitle?: string | null;
+    roleDescription?: string | null;
+    competencies?: StakeholderCompetencies;
     notes?: string | null;
     reportsToUserId?: string | null;
     hourlyRate?: string | null;
@@ -506,7 +635,20 @@ export async function upsertProjectStakeholder(
 ): Promise<PublicStakeholder> {
   const { project } = await requireProjectContext(database, input.projectId);
   assertProjectNotArchived(project);
-  await assertWorkspaceMembers(database, input.workspaceId, [input.userId]);
+
+  const userId = input.userId ?? null;
+  const jobTitle = input.jobTitle?.trim() || null;
+  if (!userId && !jobTitle) {
+    throw new AppError({
+      code: 'STAKEHOLDER_OPEN_ROLE_TITLE_REQUIRED',
+      message: 'Open job roles require a job title',
+      statusCode: 400,
+    });
+  }
+
+  if (userId) {
+    await assertWorkspaceMembers(database, input.workspaceId, [userId]);
+  }
 
   if (input.reportsToUserId) {
     await assertWorkspaceMembers(database, input.workspaceId, [
@@ -517,8 +659,7 @@ export async function upsertProjectStakeholder(
       input.projectId,
       project.ownerUserId,
     );
-    // Allow reporting to the user being added, or anyone already in the set.
-    allowed.add(input.userId);
+    if (userId) allowed.add(userId);
     if (!allowed.has(input.reportsToUserId)) {
       throw new AppError({
         code: 'STAKEHOLDER_REPORTS_TO_UNKNOWN',
@@ -527,99 +668,150 @@ export async function upsertProjectStakeholder(
         statusCode: 400,
       });
     }
-    await assertNoReportsToCycle(
-      database,
-      input.projectId,
-      input.userId,
-      input.reportsToUserId,
-    );
+    if (userId) {
+      await assertNoReportsToCycle(
+        database,
+        input.projectId,
+        userId,
+        input.reportsToUserId,
+      );
+    }
   }
 
-  const [existing] = await database.db
-    .select()
-    .from(projectStakeholders)
-    .where(
-      and(
-        eq(projectStakeholders.projectId, input.projectId),
-        eq(projectStakeholders.userId, input.userId),
-      ),
-    )
-    .limit(1);
+  const competencies =
+    input.competencies === undefined
+      ? undefined
+      : normalizeCompetenciesInput(input.competencies) ?? [];
 
-  if (existing) {
-    await database.db
-      .update(projectStakeholders)
-      .set({
-        projectRole: input.projectRole,
-        jobTitle: input.jobTitle === undefined ? existing.jobTitle : input.jobTitle,
-        notes: input.notes === undefined ? existing.notes : input.notes,
-        reportsToUserId:
-          input.reportsToUserId === undefined
-            ? existing.reportsToUserId
-            : input.reportsToUserId,
-        hourlyRate:
-          input.hourlyRate === undefined ? existing.hourlyRate : input.hourlyRate,
-        engagementType:
-          input.engagementType === undefined
-            ? existing.engagementType
-            : input.engagementType,
-        assignmentStart:
-          input.assignmentStart === undefined
-            ? existing.assignmentStart
-            : input.assignmentStart,
-        assignmentEnd:
-          input.assignmentEnd === undefined
-            ? existing.assignmentEnd
-            : input.assignmentEnd,
-        allocatedDailyHours:
-          input.allocatedDailyHours === undefined
-            ? existing.allocatedDailyHours
-            : input.allocatedDailyHours,
-        contractRef:
-          input.contractRef === undefined
-            ? existing.contractRef
-            : input.contractRef,
-        contractedBudget:
-          input.contractedBudget === undefined
-            ? existing.contractedBudget
-            : input.contractedBudget,
-        contractStart:
-          input.contractStart === undefined
-            ? existing.contractStart
-            : input.contractStart,
-        contractEnd:
-          input.contractEnd === undefined
-            ? existing.contractEnd
-            : input.contractEnd,
-        sortOrder: input.sortOrder ?? existing.sortOrder,
-        updatedAt: new Date(),
-      })
-      .where(eq(projectStakeholders.id, existing.id));
+  let rosterId: string | null = null;
+
+  if (userId) {
+    const [existing] = await database.db
+      .select()
+      .from(projectStakeholders)
+      .where(
+        and(
+          eq(projectStakeholders.projectId, input.projectId),
+          eq(projectStakeholders.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      rosterId = existing.id;
+      await database.db
+        .update(projectStakeholders)
+        .set({
+          projectRole: input.projectRole,
+          jobTitle: input.jobTitle === undefined ? existing.jobTitle : jobTitle,
+          roleDescription:
+            input.roleDescription === undefined
+              ? existing.roleDescription
+              : input.roleDescription,
+          competencies:
+            competencies === undefined ? existing.competencies : competencies,
+          notes: input.notes === undefined ? existing.notes : input.notes,
+          reportsToUserId:
+            input.reportsToUserId === undefined
+              ? existing.reportsToUserId
+              : input.reportsToUserId,
+          hourlyRate:
+            input.hourlyRate === undefined
+              ? existing.hourlyRate
+              : input.hourlyRate,
+          engagementType:
+            input.engagementType === undefined
+              ? existing.engagementType
+              : input.engagementType,
+          assignmentStart:
+            input.assignmentStart === undefined
+              ? existing.assignmentStart
+              : input.assignmentStart,
+          assignmentEnd:
+            input.assignmentEnd === undefined
+              ? existing.assignmentEnd
+              : input.assignmentEnd,
+          allocatedDailyHours:
+            input.allocatedDailyHours === undefined
+              ? existing.allocatedDailyHours
+              : input.allocatedDailyHours,
+          contractRef:
+            input.contractRef === undefined
+              ? existing.contractRef
+              : input.contractRef,
+          contractedBudget:
+            input.contractedBudget === undefined
+              ? existing.contractedBudget
+              : input.contractedBudget,
+          contractStart:
+            input.contractStart === undefined
+              ? existing.contractStart
+              : input.contractStart,
+          contractEnd:
+            input.contractEnd === undefined
+              ? existing.contractEnd
+              : input.contractEnd,
+          sortOrder: input.sortOrder ?? existing.sortOrder,
+          updatedAt: new Date(),
+        })
+        .where(eq(projectStakeholders.id, existing.id));
+    } else {
+      const [inserted] = await database.db
+        .insert(projectStakeholders)
+        .values({
+          projectId: input.projectId,
+          userId,
+          projectRole: input.projectRole,
+          jobTitle,
+          roleDescription: input.roleDescription ?? null,
+          competencies: competencies ?? [],
+          notes: input.notes ?? null,
+          reportsToUserId: input.reportsToUserId ?? null,
+          hourlyRate: input.hourlyRate ?? null,
+          engagementType: input.engagementType ?? null,
+          assignmentStart: input.assignmentStart ?? null,
+          assignmentEnd: input.assignmentEnd ?? null,
+          allocatedDailyHours: input.allocatedDailyHours ?? null,
+          contractRef: input.contractRef ?? null,
+          contractedBudget: input.contractedBudget ?? null,
+          contractStart: input.contractStart ?? null,
+          contractEnd: input.contractEnd ?? null,
+          sortOrder: input.sortOrder ?? 0,
+        })
+        .returning({ id: projectStakeholders.id });
+      rosterId = inserted?.id ?? null;
+    }
   } else {
-    await database.db.insert(projectStakeholders).values({
-      projectId: input.projectId,
-      userId: input.userId,
-      projectRole: input.projectRole,
-      jobTitle: input.jobTitle ?? null,
-      notes: input.notes ?? null,
-      reportsToUserId: input.reportsToUserId ?? null,
-      hourlyRate: input.hourlyRate ?? null,
-      engagementType: input.engagementType ?? null,
-      assignmentStart: input.assignmentStart ?? null,
-      assignmentEnd: input.assignmentEnd ?? null,
-      allocatedDailyHours: input.allocatedDailyHours ?? null,
-      contractRef: input.contractRef ?? null,
-      contractedBudget: input.contractedBudget ?? null,
-      contractStart: input.contractStart ?? null,
-      contractEnd: input.contractEnd ?? null,
-      sortOrder: input.sortOrder ?? 0,
-    });
+    const [inserted] = await database.db
+      .insert(projectStakeholders)
+      .values({
+        projectId: input.projectId,
+        userId: null,
+        projectRole: input.projectRole,
+        jobTitle,
+        roleDescription: input.roleDescription ?? null,
+        competencies: competencies ?? [],
+        notes: input.notes ?? null,
+        reportsToUserId: input.reportsToUserId ?? null,
+        hourlyRate: input.hourlyRate ?? null,
+        engagementType: input.engagementType ?? null,
+        assignmentStart: input.assignmentStart ?? null,
+        assignmentEnd: input.assignmentEnd ?? null,
+        allocatedDailyHours: input.allocatedDailyHours ?? null,
+        contractRef: input.contractRef ?? null,
+        contractedBudget: input.contractedBudget ?? null,
+        contractStart: input.contractStart ?? null,
+        contractEnd: input.contractEnd ?? null,
+        sortOrder: input.sortOrder ?? 0,
+      })
+      .returning({ id: projectStakeholders.id });
+    rosterId = inserted?.id ?? null;
   }
 
   const list = await listProjectStakeholders(database, input.projectId);
-  const found = list.find(
-    (row) => row.kind === 'person' && row.userId === input.userId,
-  );
+  const found = userId
+    ? list.find((row) => row.kind === 'person' && row.userId === userId)
+    : list.find((row) => row.kind === 'open_role' && row.rosterId === rosterId);
   if (!found) {
     throw new AppError({
       code: 'STAKEHOLDER_NOT_FOUND',
@@ -636,6 +828,8 @@ export async function updateProjectStakeholder(
   input: {
     projectRole?: ProjectStakeholderRole;
     jobTitle?: string | null;
+    roleDescription?: string | null;
+    competencies?: StakeholderCompetencies;
     notes?: string | null;
     reportsToUserId?: string | null;
     hourlyRate?: string | null;
@@ -645,6 +839,18 @@ export async function updateProjectStakeholder(
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
+
+  const nextJobTitle =
+    input.jobTitle === undefined
+      ? existing.jobTitle
+      : input.jobTitle?.trim() || null;
+  if (!existing.userId && !nextJobTitle) {
+    throw new AppError({
+      code: 'STAKEHOLDER_OPEN_ROLE_TITLE_REQUIRED',
+      message: 'Open job roles require a job title',
+      statusCode: 400,
+    });
+  }
 
   const nextReportsTo =
     input.reportsToUserId === undefined
@@ -658,6 +864,7 @@ export async function updateProjectStakeholder(
       existing.projectId,
       project.ownerUserId,
     );
+    if (existing.userId) allowed.add(existing.userId);
     if (!allowed.has(nextReportsTo)) {
       throw new AppError({
         code: 'STAKEHOLDER_REPORTS_TO_UNKNOWN',
@@ -666,19 +873,32 @@ export async function updateProjectStakeholder(
         statusCode: 400,
       });
     }
-    await assertNoReportsToCycle(
-      database,
-      existing.projectId,
-      existing.userId,
-      nextReportsTo,
-    );
+    if (existing.userId) {
+      await assertNoReportsToCycle(
+        database,
+        existing.projectId,
+        existing.userId,
+        nextReportsTo,
+      );
+    }
   }
+
+  const competencies =
+    input.competencies === undefined
+      ? undefined
+      : normalizeCompetenciesInput(input.competencies) ?? [];
 
   await database.db
     .update(projectStakeholders)
     .set({
       projectRole: input.projectRole ?? existing.projectRole,
-      jobTitle: input.jobTitle === undefined ? existing.jobTitle : input.jobTitle,
+      jobTitle: nextJobTitle,
+      roleDescription:
+        input.roleDescription === undefined
+          ? existing.roleDescription
+          : input.roleDescription,
+      competencies:
+        competencies === undefined ? existing.competencies : competencies,
       notes: input.notes === undefined ? existing.notes : input.notes,
       reportsToUserId: nextReportsTo,
       hourlyRate:
@@ -724,6 +944,112 @@ export async function updateProjectStakeholder(
     throw new AppError({
       code: 'STAKEHOLDER_NOT_FOUND',
       message: 'Stakeholder was not found after update',
+      statusCode: 500,
+    });
+  }
+  return found;
+}
+
+export async function assignProjectStakeholder(
+  database: Database,
+  rosterId: string,
+  userId: string,
+): Promise<PublicStakeholder> {
+  const existing = await getRosterStakeholder(database, rosterId);
+  const { project } = await requireProjectContext(database, existing.projectId);
+  assertProjectNotArchived(project);
+
+  if (existing.userId) {
+    throw new AppError({
+      code: 'STAKEHOLDER_ALREADY_ASSIGNED',
+      message: 'This roster seat is already filled; unassign first',
+      statusCode: 400,
+    });
+  }
+
+  await assertWorkspaceMembers(database, project.workspaceId, [userId]);
+
+  const [conflict] = await database.db
+    .select({ id: projectStakeholders.id })
+    .from(projectStakeholders)
+    .where(
+      and(
+        eq(projectStakeholders.projectId, existing.projectId),
+        eq(projectStakeholders.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (conflict) {
+    throw new AppError({
+      code: 'STAKEHOLDER_USER_ALREADY_ON_ROSTER',
+      message: 'That workspace member is already on this project roster',
+      statusCode: 409,
+    });
+  }
+
+  if (existing.reportsToUserId) {
+    await assertNoReportsToCycle(
+      database,
+      existing.projectId,
+      userId,
+      existing.reportsToUserId,
+    );
+  }
+
+  await database.db
+    .update(projectStakeholders)
+    .set({ userId, updatedAt: new Date() })
+    .where(eq(projectStakeholders.id, rosterId));
+
+  const list = await listProjectStakeholders(database, existing.projectId);
+  const found = list.find((row) => row.rosterId === rosterId);
+  if (!found) {
+    throw new AppError({
+      code: 'STAKEHOLDER_NOT_FOUND',
+      message: 'Stakeholder was not found after assign',
+      statusCode: 500,
+    });
+  }
+  return found;
+}
+
+export async function unassignProjectStakeholder(
+  database: Database,
+  rosterId: string,
+): Promise<PublicStakeholder> {
+  const existing = await getRosterStakeholder(database, rosterId);
+  const { project } = await requireProjectContext(database, existing.projectId);
+  assertProjectNotArchived(project);
+
+  if (!existing.userId) {
+    throw new AppError({
+      code: 'STAKEHOLDER_ALREADY_OPEN',
+      message: 'This roster seat is already an open role',
+      statusCode: 400,
+    });
+  }
+
+  const jobTitle = existing.jobTitle?.trim();
+  if (!jobTitle) {
+    throw new AppError({
+      code: 'STAKEHOLDER_OPEN_ROLE_TITLE_REQUIRED',
+      message:
+        'Set a job title before unassigning so the open role can be advertised',
+      statusCode: 400,
+    });
+  }
+
+  await database.db
+    .update(projectStakeholders)
+    .set({ userId: null, updatedAt: new Date() })
+    .where(eq(projectStakeholders.id, rosterId));
+
+  const list = await listProjectStakeholders(database, existing.projectId);
+  const found = list.find((row) => row.rosterId === rosterId);
+  if (!found) {
+    throw new AppError({
+      code: 'STAKEHOLDER_NOT_FOUND',
+      message: 'Stakeholder was not found after unassign',
       statusCode: 500,
     });
   }
@@ -806,7 +1132,7 @@ export async function updateAiAssistantCost(
 export async function deleteProjectStakeholder(
   database: Database,
   rosterId: string,
-): Promise<{ projectId: string; userId: string }> {
+): Promise<{ projectId: string; userId: string | null }> {
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);

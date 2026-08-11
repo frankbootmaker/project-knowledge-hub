@@ -43,6 +43,17 @@ type AiBudgetBreakdown = {
   overAllocation: boolean;
 };
 
+type SystemItBudgetBreakdown = {
+  systemId: string;
+  name: string;
+  costMode: 'flat' | 'one_time' | 'note_only' | null;
+  flatAccruedCost: number;
+  oneTimeCost: number;
+  billableCost: number;
+  budgetAllocation: number | null;
+  overAllocation: boolean;
+};
+
 export type ProjectBudgetSummary = {
   currency: string;
   initialBudget: number | null;
@@ -53,8 +64,10 @@ export type ProjectBudgetSummary = {
   ac: number;
   personAc: number;
   aiAc: number;
+  systemAc: number;
   aiNoteOnlyTokens: number;
   aiSystems: AiBudgetBreakdown[];
+  itSystems: SystemItBudgetBreakdown[];
   cpi: number | null;
   spi: number | null;
   financialRag: 'red' | 'amber' | 'green';
@@ -231,6 +244,7 @@ export function ProjectBudgetPanel({
 }) {
   const t = useTranslations('budget');
   const tStakeholders = useTranslations('stakeholders');
+  const tSystems = useTranslations('systems');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const router = useRouter();
@@ -400,6 +414,7 @@ export function ProjectBudgetPanel({
               {t('acBreakdown', {
                 person: formatMoney(summary.personAc ?? summary.ac, currency, locale),
                 ai: formatMoney(summary.aiAc ?? 0, currency, locale),
+                systems: formatMoney(summary.systemAc ?? 0, currency, locale),
               })}
             </p>
             {(summary.aiNoteOnlyTokens ?? 0) > 0 ? (
@@ -410,6 +425,11 @@ export function ProjectBudgetPanel({
             {(summary.aiSystems ?? []).some((system) => system.overAllocation) ? (
               <p className="m-0 text-warn">
                 {t('aiOverAllocation')}
+              </p>
+            ) : null}
+            {(summary.itSystems ?? []).some((system) => system.overAllocation) ? (
+              <p className="m-0 text-warn">
+                {t('systemOverAllocation')}
               </p>
             ) : null}
             {(summary.aiSystems ?? []).length > 0 ? (
@@ -424,6 +444,24 @@ export function ProjectBudgetPanel({
                       cost: formatMoney(system.billableCost, currency, locale),
                     })}
                     {system.overAllocation ? ` · ${t('aiOverAllocationShort')}` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {(summary.itSystems ?? []).length > 0 ? (
+              <ul className="m-0 grid list-none gap-1 p-0">
+                {(summary.itSystems ?? []).map((system) => (
+                  <li key={system.systemId}>
+                    {t('systemBreakdown', {
+                      name: system.name,
+                      mode: system.costMode
+                        ? tSystems(`itCostMode.${system.costMode}`)
+                        : '—',
+                      cost: formatMoney(system.billableCost, currency, locale),
+                    })}
+                    {system.overAllocation
+                      ? ` · ${t('systemOverAllocationShort')}`
+                      : ''}
                   </li>
                 ))}
               </ul>

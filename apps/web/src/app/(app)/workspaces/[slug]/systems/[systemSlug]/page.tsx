@@ -6,6 +6,16 @@ import { Badge, Page, PageHeader, Panel } from '../../../../../../components/ui'
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
+type SystemItDetails = {
+  hostname?: string;
+  primaryUrl?: string;
+  vendor?: string;
+  deploymentModel?: string;
+  supportContact?: string;
+  documentationUrl?: string;
+  dataClassification?: string;
+};
+
 type System = {
   id: string;
   name: string;
@@ -15,6 +25,13 @@ type System = {
   description: string | null;
   systemType: string | null;
   environment: string | null;
+  version: string | null;
+  criticality: string | null;
+  itDetails?: SystemItDetails;
+  itCostMode?: 'flat' | 'one_time' | 'note_only' | null;
+  itFlatMonthlyFee?: string | null;
+  itOneTimeCost?: string | null;
+  itBudgetAllocation?: string | null;
   projectId: string | null;
   tags: Array<{ name: string }>;
   createdAt: string;

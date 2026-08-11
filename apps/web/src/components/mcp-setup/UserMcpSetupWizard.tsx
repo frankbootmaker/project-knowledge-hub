@@ -83,6 +83,7 @@ export function UserMcpSetupWizard({
   const [llmClient, setLlmClient] = useState<LlmClientId>('cursor');
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const [includePm, setIncludePm] = useState(false);
+  const [includeCatalogue, setIncludeCatalogue] = useState(false);
   const [name, setName] = useState(defaultClientName('cursor'));
   const [workspaceIds, setWorkspaceIds] = useState<string[]>(
     workspaces[0] ? [workspaces[0].id] : [],
@@ -164,7 +165,7 @@ export function UserMcpSetupWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          scopes: buildMcpSetupScopes({ mode, includePm }),
+          scopes: buildMcpSetupScopes({ mode, includePm, includeCatalogue }),
           allowedWorkspaceIds: workspaceIds,
         }),
       });
@@ -407,6 +408,22 @@ export function UserMcpSetupWizard({
               </span>
             </span>
           </label>
+          {mode === 'write' ? (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={includeCatalogue}
+                onChange={(e) => setIncludeCatalogue(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">{t('mcpWizardIncludeCatalogue')}</span>
+                <span className="mt-0.5 block text-xs text-ink-muted">
+                  {t('mcpWizardIncludeCatalogueHint')}
+                </span>
+              </span>
+            </label>
+          ) : null}
           <fieldset className="m-0 grid gap-2 border-0 p-0">
             <legend className="mb-1 text-sm font-medium">{tAi('workspaces')}</legend>
             <p className="m-0 text-xs text-ink-muted">{tAi('workspacesAllowlistHint')}</p>

@@ -6,7 +6,7 @@
 
 ## Goal
 
-Track **project currency and BAC**, **stakeholder hourly rates and capacity**, **task forecast/actual hours**, **AI assistant cost modes**, roll costs to stories/epics, show **EVM KPIs + burndown**, and surface **Timeline / Risks / Financials** RAG badges beside the project name.
+Track **project currency and BAC**, **stakeholder hourly rates and capacity**, **task forecast/actual hours**, **AI assistant cost modes**, **catalogue system OpEx**, roll costs to stories/epics, show **EVM KPIs + burndown**, and surface **Timeline / Risks / Financials** RAG badges beside the project name.
 
 ## Decisions
 
@@ -18,14 +18,16 @@ Track **project currency and BAC**, **stakeholder hourly rates and capacity**, *
 | Hours | Decimal `forecast_hours` / `actual_hours` on tasks; actual set = confirmed effort |
 | PV | Linear BAC × calendar progress between project start→end |
 | EV | Σ (`forecast_hours × rate`) for **done** non-cancelled rateable tasks (people only; AI tokens do not create EV in v1) |
-| AC | Person Σ (`actual_hours × rate`) + billable AI (flat accrued + token costs when mode is `flat` / `api` / `mixed`) |
-| AI cost modes | On AI systems: `flat` \| `api` \| `mixed` \| `note_only` (`note_only` records tokens at **$0**) |
-| Flat fee | Monthly amount accrued over project start→end (calendar-day fraction) |
-| Token fee | `(tokens_used / 1000) × ai_token_rate_per_1k` on tasks |
-| AI budget allocation | Optional soft cap in UI; does not block writes in v1 |
+| AC | Person Σ (`actual_hours × rate`) + billable AI + billable non-AI system OpEx |
+| AI cost modes | On AI systems (`system_type = ai_assistant`): `flat` \| `api` \| `mixed` \| `note_only` (`note_only` records tokens at **$0**) |
+| System OpEx modes | On other catalogue systems linked to the project: `flat` \| `one_time` \| `note_only` (`note_only` / unset → **$0**) |
+| Flat fee | Monthly amount accrued over project start→end (calendar-day fraction); shared by AI and IT flat modes |
+| One-time fee | Full `it_one_time_cost` counted in AC when mode is `one_time` |
+| Token fee | `(tokens_used / 1000) × ai_token_rate_per_1k` on tasks (AI only) |
+| Budget allocation | Optional soft caps (`ai_budget_allocation` / `it_budget_allocation`); warn in UI; do not block writes in v1 |
 | Capacity | Employee assignment / contractor contract window × Mon–Fri × `allocated_daily_hours` |
 | Utilization | Views planned / burn / combined; badges under &lt;70%, on_track 70–110%, over &gt;110% |
-| Burndown | Ideal remaining BAC + daily `project_cost_snapshots` (upserted on budget/effort/AI mutations) |
+| Burndown | Ideal remaining BAC + daily `project_cost_snapshots` (upserted on budget/effort/AI/IT-cost mutations) |
 | Change register | `budget` kind stays narrative; approved/initial budgets edited explicitly |
 
 ## Entities
@@ -48,6 +50,12 @@ systems (ai_assistant)
   ├── ai_flat_monthly_fee
   ├── ai_token_rate_per_1k
   └── ai_budget_allocation
+
+systems (non-AI, project-linked)
+  ├── it_cost_mode
+  ├── it_flat_monthly_fee
+  ├── it_one_time_cost
+  └── it_budget_allocation
 
 project_tasks
   ├── forecast_hours / actual_hours
@@ -77,7 +85,7 @@ Resource RAG (utilization): aggregate planned demand vs capacity → amber when 
 2. Baseline (currency + initial budget)  
 3. Stakeholders (rates, engagement/capacity, AI cost manage, Utilization dashboard)  
 4. Delivery (task hours + tokens + story/epic effort rollups)  
-5. **Budgeting** (approved BAC, KPIs, person vs AI AC, burndown, epic table)  
+5. **Budgeting** (approved BAC, KPIs, person vs AI vs systems AC, burndown, epic table)  
 6. RAID  
 7. Change management  
 8. Linked sections  
@@ -88,6 +96,7 @@ Resource RAG (utilization): aggregate planned demand vs capacity → amber when 
 * `PATCH /api/v1/projects/:id/budget`
 * `GET /api/v1/projects/:id/resource-utilization?view=planned|burn|combined`
 * `PATCH /api/v1/systems/:id/ai-cost` (and system PATCH AI fields)
+* System create/update IT OpEx fields (`itCostMode`, `itFlatMonthlyFee`, `itOneTimeCost`, `itBudgetAllocation`)
 * `POST /api/v1/project-tasks/:id/ai-usage`
 * Stakeholder create/update include engagement/capacity/contract fields
 * MCP: `get_project_budget_summary`, `get_project_resource_utilization`, `update_project_ai_assistant_cost`, `report_project_task_ai_usage`, baseline/task/stakeholder money fields (`pm:read` / `pm:write`)

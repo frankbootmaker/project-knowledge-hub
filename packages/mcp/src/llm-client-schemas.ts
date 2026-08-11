@@ -139,7 +139,8 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
       version: '0.2.0',
       description: forChatGptActionsText(
         'Knowledge Hub OpenAPI (ChatGPT Actions). Bearer API token. ' +
-          'Knowledge writes: knowledge:write. Delivery tasks/sprints: pm:read/pm:write. ' +
+          'Knowledge writes: knowledge:write. Catalogue systems: catalogue:write. ' +
+          'Delivery tasks/sprints: pm:read/pm:write. ' +
           'Use create_project_task for delivery work (not knowledge notes). ' +
           'call_hub_tool reaches extended tools. Re-import after upgrades.',
       ),

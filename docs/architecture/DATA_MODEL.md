@@ -49,7 +49,7 @@ Unique: (`workspace_id`, `slug`)
 
 ### `systems`
 
-`id`, `workspace_id`, `project_id`, `name`, `slug`, `summary`, `description`, `system_type`, `status`, `owner_user_id`, `environment`, `version`, `criticality`, `metadata_json`, `last_validated_at`, `archived_at`, `created_at`, `updated_at`  
+`id`, `workspace_id`, `project_id`, `name`, `slug`, `summary`, `description`, `system_type`, `status`, `owner_user_id`, `environment`, `version`, `criticality`, `it_details` (jsonb IT inventory), `it_cost_mode` / `it_flat_monthly_fee` / `it_one_time_cost` / `it_budget_allocation` (non-AI OpEx into project AC), AI cost columns when `system_type = ai_assistant`, `metadata_json`, `last_validated_at`, `archived_at`, `created_at`, `updated_at`  
 Unique: (`workspace_id`, `slug`)
 
 ## Migrations

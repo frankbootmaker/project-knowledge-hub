@@ -1,6 +1,6 @@
 # ADR-014: Elevated API client capabilities (tiered, propose/confirm)
 
-- **Status:** Accepted (design); Tier B not yet implemented
+- **Status:** Accepted (design); Tier B **partially shipped** — systems via direct `create_system` / `update_system` under `catalogue:write` (2026-08); propose/commit and project create still pending
 - **Date:** 2026-07-19
 - **Related:** [ADR-005](ADR-005-read-only-mcp-first.md), [ADR-013](ADR-013-draft-only-write-mcp.md)
 
@@ -22,7 +22,7 @@ Elevate access only through **named opt-in scopes**. Default API client scopes r
 | Tier | Scope(s) | Intent | Status |
 |------|----------|--------|--------|
 | A | `knowledge:write` | Draft create/update knowledge records | **Shipped** (ADR-013) |
-| B | `catalogue:write` | Create/update projects and systems in allowlisted workspaces | **Next** |
+| B | `catalogue:write` | Create/update projects and systems in allowlisted workspaces | **Partial** — systems direct create/update shipped; projects + propose/commit later |
 | C | `workspace:write` | Create/update workspaces within an org allowlist | Later |
 | D | `workspace:archive`, `catalogue:archive` | Soft-delete / archive only (no hard delete) | Later (UI archive/restore shipped for humans; MCP scopes deferred) |
 | E | `org:admin` | Organization create/update — rare, separate client | Later / exceptional |
@@ -37,7 +37,11 @@ Rules for every elevated tier:
 
 ### Propose → confirm → commit (LLM-friendly guardrail)
 
-For Tier B and above, mutating tools use a two-phase protocol:
+**Interim (systems):** agents use direct `create_system` / `update_system` under `catalogue:write` (same gate pattern as `pm:write`) until the proposal store lands. Project catalogue mutations remain human-only.
+
+For the full Tier B design (and future Tier C+), mutating tools use a two-phase protocol:
+
+
 
 1. **`propose_*`** — validate inputs and allowlists; persist a short-lived **proposal** (id + hash of intended mutation); **no side effects** on catalogue rows.
 2. **`commit_*`** — accept `proposalId` (and optional echoed `confirmationToken`); execute exactly that proposal once (idempotent via `clientMutationId` when provided).

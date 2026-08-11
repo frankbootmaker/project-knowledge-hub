@@ -21,7 +21,12 @@ import {
   projectCurrencySchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
+  stakeholderCompetenciesSchema,
   stakeholderEngagementTypeSchema,
+  systemCriticalitySchema,
+  systemItCostModeSchema,
+  systemItDetailsSchema,
+  systemStatusSchema,
   raidKindSchema,
   raidSeveritySchema,
   raidStatusSchema,
@@ -90,13 +95,22 @@ import {
   updateUserStory,
 } from './project-agile.js';
 import {
+  assignProjectStakeholder,
   deleteProjectStakeholder,
   getRosterStakeholder,
   listProjectStakeholders,
+  listWorkspaceMembers as listWorkspaceMembersForStaffing,
+  unassignProjectStakeholder,
   updateAiAssistantCost,
   updateProjectStakeholder,
   upsertProjectStakeholder,
 } from './project-stakeholders.js';
+import {
+  createSystem,
+  getPublicSystem,
+  parseItDetails,
+  updateSystem,
+} from './systems.js';
 import { getProjectResourceUtilization } from './project-resource-utilization.js';
 import {
   createRaidItem,
@@ -179,7 +193,7 @@ function requireActingUserId(client: McpClientContext): string {
     throw new AppError({
       code: 'ACTING_USER_REQUIRED',
       message:
-        'API client is missing actingUserId required for knowledge:write, pm:write, or personal pm:read tools',
+        'API client is missing actingUserId required for knowledge:write, catalogue:write, pm:write, or personal pm:read tools',
       statusCode: 403,
     });
   }
@@ -201,6 +215,21 @@ async function resolveOptionalKnowledgeRecordId(
 ): Promise<string | null | undefined> {
   if (idOrKey == null) return idOrKey;
   return resolveKnowledgeRecordId(database, { idOrKey });
+}
+
+function parseMcpCompetencies(
+  value:
+    | Array<string | { name: string; skillId?: string | null }>
+    | undefined,
+) {
+  if (value === undefined) return undefined;
+  return stakeholderCompetenciesSchema.parse(
+    value.map((item) =>
+      typeof item === 'string'
+        ? { name: item, skillId: null }
+        : { name: item.name, skillId: item.skillId ?? null },
+    ),
+  );
 }
 
 async function requirePmProject(
@@ -398,16 +427,142 @@ export function createMcpToolHandlers(
               return false;
             }
           })
-          .map((row) => ({
-            id: row.id,
-            workspaceId: row.workspaceId,
-            projectId: row.projectId,
-            name: row.name,
-            slug: row.slug,
-            status: row.status,
-            summary: row.summary,
-          })),
+          .map((row) => {
+            const itDetails = parseItDetails(row.itDetails);
+            return {
+              id: row.id,
+              workspaceId: row.workspaceId,
+              projectId: row.projectId,
+              name: row.name,
+              slug: row.slug,
+              status: row.status,
+              summary: row.summary,
+              systemType: row.systemType,
+              environment: row.environment,
+              criticality: row.criticality,
+              version: row.version,
+              ownerUserId: row.ownerUserId,
+              primaryUrl: itDetails.primaryUrl ?? null,
+            };
+          }),
       };
+    },
+
+    async createSystem(input) {
+      const actingUserId = requireActingUserId(client);
+      assertWriteWorkspaceAllowed(client, input.workspaceId);
+      if (input.projectId) {
+        assertProjectAllowed(client, input.projectId);
+      }
+      const system = await createSystem(
+        app.database,
+        {
+          workspaceId: input.workspaceId,
+          projectId: input.projectId,
+          name: input.name,
+          slug: input.slug,
+          summary: input.summary,
+          description: input.description,
+          systemType: input.systemType,
+          status: input.status
+            ? systemStatusSchema.parse(input.status)
+            : undefined,
+          ownerUserId: input.ownerUserId,
+          environment: input.environment,
+          version: input.version,
+          criticality: input.criticality
+            ? systemCriticalitySchema.parse(input.criticality)
+            : input.criticality,
+          itDetails: input.itDetails
+            ? systemItDetailsSchema.parse(input.itDetails)
+            : undefined,
+          itCostMode: input.itCostMode
+            ? systemItCostModeSchema.parse(input.itCostMode)
+            : input.itCostMode,
+          itFlatMonthlyFee: input.itFlatMonthlyFee,
+          itOneTimeCost: input.itOneTimeCost,
+          itBudgetAllocation: input.itBudgetAllocation,
+          tags: input.tags,
+          metadata: input.metadata,
+        },
+        { defaultOwnerUserId: actingUserId },
+      );
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'system.create',
+        entityType: 'system',
+        entityId: system.id,
+        metadata: {
+          slug: system.slug,
+          name: system.name,
+          projectId: system.projectId,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { system };
+    },
+
+    async updateSystem(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getPublicSystem(app.database, input.systemId, {
+        includeArchived: true,
+      });
+      assertWriteWorkspaceAllowed(client, existing.workspaceId);
+      assertProjectAllowed(client, existing.projectId);
+      if (input.projectId) {
+        assertProjectAllowed(client, input.projectId);
+      }
+      const system = await updateSystem(app.database, input.systemId, {
+        projectId: input.projectId,
+        name: input.name,
+        summary: input.summary,
+        description: input.description,
+        systemType: input.systemType,
+        status: input.status
+          ? systemStatusSchema.parse(input.status)
+          : undefined,
+        ownerUserId: input.ownerUserId,
+        environment: input.environment,
+        version: input.version,
+        criticality:
+          input.criticality === undefined
+            ? undefined
+            : input.criticality == null
+              ? null
+              : systemCriticalitySchema.parse(input.criticality),
+        itDetails:
+          input.itDetails === undefined
+            ? undefined
+            : input.itDetails == null
+              ? null
+              : systemItDetailsSchema.parse(input.itDetails),
+        itCostMode:
+          input.itCostMode === undefined
+            ? undefined
+            : input.itCostMode == null
+              ? null
+              : systemItCostModeSchema.parse(input.itCostMode),
+        itFlatMonthlyFee: input.itFlatMonthlyFee,
+        itOneTimeCost: input.itOneTimeCost,
+        itBudgetAllocation: input.itBudgetAllocation,
+        tags: input.tags,
+        metadata: input.metadata,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'system.update',
+        entityType: 'system',
+        entityId: system.id,
+        metadata: { via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { system };
     },
 
     async getProject({ projectId }) {
@@ -658,32 +813,10 @@ export function createMcpToolHandlers(
     },
 
     async getSystem({ systemId }) {
-      const [system] = await app.database.db
-        .select()
-        .from(systems)
-        .where(and(eq(systems.id, systemId), isNull(systems.archivedAt)))
-        .limit(1);
-      if (!system) {
-        throw new AppError({
-          code: 'SYSTEM_NOT_FOUND',
-          message: 'System not found',
-          statusCode: 404,
-        });
-      }
+      const system = await getPublicSystem(app.database, systemId);
       assertWorkspaceAllowed(client, system.workspaceId);
       assertProjectAllowed(client, system.projectId);
-      return {
-        system: {
-          id: system.id,
-          workspaceId: system.workspaceId,
-          projectId: system.projectId,
-          name: system.name,
-          slug: system.slug,
-          status: system.status,
-          summary: system.summary,
-          description: system.description,
-        },
-      };
+      return { system };
     },
 
     async listKnowledgeRecords({ workspaceId, projectId, systemId, language, limit }) {
@@ -2322,6 +2455,33 @@ export function createMcpToolHandlers(
       };
     },
 
+    async listWorkspaceMembers(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      const [workspace] = await app.database.db
+        .select({ id: workspaces.id })
+        .from(workspaces)
+        .where(
+          and(
+            eq(workspaces.id, input.workspaceId),
+            eq(workspaces.organizationId, client.organizationId),
+          ),
+        )
+        .limit(1);
+      if (!workspace) {
+        throw new AppError({
+          code: 'WORKSPACE_NOT_FOUND',
+          message: 'Workspace not found',
+          statusCode: 404,
+        });
+      }
+      return {
+        members: await listWorkspaceMembersForStaffing(
+          app.database,
+          input.workspaceId,
+        ),
+      };
+    },
+
     async createProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
       const project = await requirePmProject(app, client, input.projectId, {
@@ -2333,6 +2493,8 @@ export function createMcpToolHandlers(
         userId: input.userId,
         projectRole: projectStakeholderRoleSchema.parse(input.projectRole),
         jobTitle: input.jobTitle,
+        roleDescription: input.roleDescription,
+        competencies: parseMcpCompetencies(input.competencies),
         notes: input.notes,
         reportsToUserId: input.reportsToUserId,
         hourlyRate:
@@ -2370,6 +2532,7 @@ export function createMcpToolHandlers(
         metadata: {
           projectId: project.id,
           userId: stakeholder.userId,
+          kind: stakeholder.kind,
           via: 'mcp',
           actingUserId,
         },
@@ -2395,6 +2558,8 @@ export function createMcpToolHandlers(
             ? projectStakeholderRoleSchema.parse(input.projectRole)
             : undefined,
           jobTitle: input.jobTitle,
+          roleDescription: input.roleDescription,
+          competencies: parseMcpCompetencies(input.competencies),
           notes: input.notes,
           hourlyRate:
             input.hourlyRate === undefined
@@ -2433,6 +2598,68 @@ export function createMcpToolHandlers(
         metadata: {
           projectId: project.id,
           userId: stakeholder.userId,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { stakeholder };
+    },
+
+    async assignProjectStakeholder(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getRosterStakeholder(
+        app.database,
+        input.stakeholderId,
+      );
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const stakeholder = await assignProjectStakeholder(
+        app.database,
+        input.stakeholderId,
+        input.userId,
+      );
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.stakeholder_assigned',
+        entityType: 'project_stakeholder',
+        entityId: input.stakeholderId,
+        metadata: {
+          projectId: project.id,
+          userId: input.userId,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { stakeholder };
+    },
+
+    async unassignProjectStakeholder(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getRosterStakeholder(
+        app.database,
+        input.stakeholderId,
+      );
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const stakeholder = await unassignProjectStakeholder(
+        app.database,
+        input.stakeholderId,
+      );
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.stakeholder_unassigned',
+        entityType: 'project_stakeholder',
+        entityId: input.stakeholderId,
+        metadata: {
+          projectId: project.id,
           via: 'mcp',
           actingUserId,
         },

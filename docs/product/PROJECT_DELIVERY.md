@@ -68,10 +68,11 @@ Milestones remain **timeboxes**. Agile structure is **Epic → User story → Ta
 ### Stakeholders (hybrid)
 
 * Durable **roster** rows: project role (`sponsor` / `owner` / `product_owner` / `tech_lead` / `contributor` / `stakeholder` / `other`), optional job title, notes, and `reports_to_user_id` (cycle-checked).
+* **Open job roles:** omit `user_id` to create a fill-in-place seat (`kind: open_role`); job title required; optional `roleDescription` + competency tags (`{ name, skillId }` — `skillId` null until a shared catalog exists). Assign a workspace member later on the same row; unassign reopens the seat. Future advertise/hire layer: [`PROJECT_JOB_PORTAL.md`](PROJECT_JOB_PORTAL.md) (NF-022).
 * **Derived** people: project `owner_user_id` and anyone on task RACI appear in the unified list with contact fields even without a roster row.
 * **AI assistants**: catalogue systems with `system_type = ai_assistant` linked to the project appear as `kind: ai_assistant` (not general Systems like Proxmox). Org-chart edge to `owner_user_id` when that person is in the set.
-* Org chart: humans via roster `reports_to`; AI assistants under their owner; unlinked nodes under Ungrouped.
-* Contact surface: people — display name, full name, email, job title/notes; AI assistants — name + summary. General Systems remain in the Systems catalogue.
+* Org chart: humans via roster `reports_to`; open roles may report to a person; AI assistants under their owner; unlinked nodes under Ungrouped. Open roles are excluded from utilization capacity math.
+* Contact surface: people — display name, full name, email, job title/notes; open roles — title + description/tags; AI assistants — name + summary. General Systems remain in the Systems catalogue.
 
 ### Status sets
 
@@ -107,9 +108,11 @@ Append-only `project_task_activities`: `created`, `status_changed`, `comment`, `
 | `GET` | `/api/v1/project-tasks/:taskId/activities` | Timeline |
 | `POST` | `/api/v1/project-tasks/:taskId/comments` | Comment |
 | `POST` | `/api/v1/project-tasks/:taskId/handoff` | `{ toUserId, note? }` |
-| `GET` | `/api/v1/projects/:projectId/stakeholders` | Unified roster + owner + RACI |
-| `POST` | `/api/v1/projects/:projectId/stakeholders` | Upsert roster row |
-| `PATCH` | `/api/v1/project-stakeholders/:id` | Update roster row |
+| `GET` | `/api/v1/projects/:projectId/stakeholders` | Unified roster + open roles + owner + RACI |
+| `POST` | `/api/v1/projects/:projectId/stakeholders` | Upsert roster row (omit `userId` → open role) |
+| `PATCH` | `/api/v1/project-stakeholders/:id` | Update roster row (description/competencies) |
+| `POST` | `/api/v1/project-stakeholders/:id/assign` | Fill open role `{ userId }` |
+| `POST` | `/api/v1/project-stakeholders/:id/unassign` | Reopen seat |
 | `DELETE` | `/api/v1/project-stakeholders/:id` | Remove roster row only |
 | `GET` | `/api/v1/workspaces/:workspaceId/members` | Active members (view) for pickers |
 | `GET` | `/api/v1/me/tasks` | Cross-project tasks where the caller holds a RACI role (`?role=`, `?includeArchived=`) |
@@ -121,7 +124,8 @@ Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archiv
 | Scope | Tools |
 | --- | --- |
 | `pm:read` | milestones/tasks/epics/stories/activities/stakeholders list + `get_project_task` |
-| `pm:write` | create/update milestone, epic, story, task; `set_project_task_raci`; `add_project_task_comment`; `handoff_project_task`; stakeholder CRUD |
+| `projects:read` | `list_workspace_members` (for staffing userId pickers) |
+| `pm:write` | create/update milestone, epic, story, task; `set_project_task_raci`; `add_project_task_comment`; `handoff_project_task`; stakeholder CRUD + assign/unassign open roles |
 
 `pm:write` requires `actingUserId` + non-empty `allowedWorkspaceIds` (same gate pattern as `knowledge:write`). Optional `allowedProjectIds` restricts project scope. Mutations audit as `actorType: api_client`.
 

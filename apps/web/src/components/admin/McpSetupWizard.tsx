@@ -78,6 +78,7 @@ export function McpSetupWizard({
   const [llmClient, setLlmClient] = useState<LlmClientId>('cursor');
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const [includePm, setIncludePm] = useState(false);
+  const [includeCatalogue, setIncludeCatalogue] = useState(false);
   const [name, setName] = useState(defaultClientName('cursor'));
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
   const [allowedWorkspaceIds, setAllowedWorkspaceIds] = useState<string[]>([]);
@@ -191,11 +192,11 @@ export function McpSetupWizard({
       if (!organizationId || allowedWorkspaceIds.length === 0 || !name.trim()) {
         throw new Error(t('mcpWizardMissingFields'));
       }
-      if ((mode === 'write' || includePm) && !actingUserId) {
+      if ((mode === 'write' || includePm || includeCatalogue) && !actingUserId) {
         throw new Error(t('mcpWizardActingUserRequired'));
       }
 
-      const scopes = buildMcpSetupScopes({ mode, includePm });
+      const scopes = buildMcpSetupScopes({ mode, includePm, includeCatalogue });
       const response = await fetch('/api/v1/api-clients', {
         method: 'POST',
         credentials: 'include',
@@ -206,7 +207,9 @@ export function McpSetupWizard({
           scopes,
           allowedWorkspaceIds,
           actingUserId:
-            mode === 'write' || includePm ? actingUserId : null,
+            mode === 'write' || includePm || includeCatalogue
+              ? actingUserId
+              : null,
         }),
       });
       const payload = (await response.json()) as {
@@ -483,6 +486,22 @@ export function McpSetupWizard({
               </span>
             </span>
           </label>
+          {mode === 'write' ? (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={includeCatalogue}
+                onChange={(e) => setIncludeCatalogue(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">{t('mcpWizardIncludeCatalogue')}</span>
+                <span className="mt-0.5 block text-xs text-ink-muted">
+                  {t('mcpWizardIncludeCatalogueHint')}
+                </span>
+              </span>
+            </label>
+          ) : null}
           <Field label={t('organization')}>
             <Select
               value={organizationId}

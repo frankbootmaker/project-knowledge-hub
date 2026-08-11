@@ -309,6 +309,27 @@
       "when": 1786389600000,
       "tag": "0043_project_definition_of_done",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1786393200000,
+      "tag": "0044_stakeholder_open_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1786396800000,
+      "tag": "0045_system_it_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1786400400000,
+      "tag": "0046_system_it_cost",
+      "breakpoints": true
     }
   ]
 }

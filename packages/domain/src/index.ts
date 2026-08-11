@@ -139,11 +139,48 @@ export const stakeholderEngagementTypeSchema = z.enum([
   'contractor',
 ]);
 
+/**
+ * Competency tag on a stakeholder / open role.
+ * `skillId` is reserved for a future shared skill catalog (null today).
+ */
+export const stakeholderCompetencySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  skillId: z.string().uuid().nullable().optional(),
+});
+
+/** Deduped competency list (case-insensitive by name). */
+export const stakeholderCompetenciesSchema = z
+  .array(stakeholderCompetencySchema)
+  .max(40)
+  .transform((items) => {
+    const seen = new Set<string>();
+    const out: Array<{ name: string; skillId: string | null }> = [];
+    for (const item of items) {
+      const key = item.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        name: item.name,
+        skillId: item.skillId ?? null,
+      });
+    }
+    return out;
+  });
+
+export const stakeholderStaffingStatusSchema = z.enum(['open', 'assigned']);
+
 /** AI assistant billing mode against the project budget. */
 export const aiCostModeSchema = z.enum([
   'flat',
   'api',
   'mixed',
+  'note_only',
+]);
+
+/** OpEx billing for non-AI catalogue systems linked to a project. */
+export const systemItCostModeSchema = z.enum([
+  'flat',
+  'one_time',
   'note_only',
 ]);
 
@@ -288,6 +325,90 @@ export const systemStatusSchema = z.enum([
   'retired',
   'archived',
 ]);
+
+/** Business impact / criticality for catalogue systems. */
+export const systemCriticalitySchema = z.enum([
+  'low',
+  'medium',
+  'high',
+  'critical',
+]);
+
+export const systemDeploymentModelSchema = z.enum([
+  'saas',
+  'paas',
+  'iaas',
+  'on_prem',
+  'vm',
+  'container',
+  'kubernetes',
+  'network',
+  'endpoint',
+  'other',
+]);
+
+export const systemDataClassificationSchema = z.enum([
+  'public',
+  'internal',
+  'confidential',
+  'restricted',
+]);
+
+const systemItPortSchema = z.object({
+  port: z.number().int().min(1).max(65535),
+  protocol: z.string().trim().min(1).max(40).optional(),
+  service: z.string().trim().min(1).max(80).optional(),
+});
+
+const systemItEndpointSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  url: z.string().trim().min(1).max(2000),
+});
+
+/**
+ * Structured IT inventory on a catalogue system (`systems.it_details`).
+ * All keys optional; unknown keys stripped.
+ */
+export const systemItDetailsSchema = z
+  .object({
+    hostname: z.string().trim().min(1).max(253).optional(),
+    primaryUrl: z.string().trim().min(1).max(2000).optional(),
+    ipAddresses: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+    ports: z.array(systemItPortSchema).max(40).optional(),
+    endpoints: z.array(systemItEndpointSchema).max(20).optional(),
+    networkZone: z.string().trim().min(1).max(80).optional(),
+    location: z.string().trim().min(1).max(200).optional(),
+    deploymentModel: systemDeploymentModelSchema.optional(),
+    vendor: z.string().trim().min(1).max(120).optional(),
+    product: z.string().trim().min(1).max(120).optional(),
+    platform: z.string().trim().min(1).max(120).optional(),
+    dataClassification: systemDataClassificationSchema.optional(),
+    backupPolicy: z.string().trim().min(1).max(500).optional(),
+    supportContact: z.string().trim().min(1).max(200).optional(),
+    documentationUrl: z.string().trim().min(1).max(2000).optional(),
+    assetTag: z.string().trim().min(1).max(80).optional(),
+    externalId: z.string().trim().min(1).max(120).optional(),
+    dependencies: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+    notes: z.string().trim().min(1).max(5000).optional(),
+  })
+  .strip();
+
+/** Normalize free-text criticality to the enum when possible. */
+export function normalizeSystemCriticality(
+  value: string | null | undefined,
+): z.infer<typeof systemCriticalitySchema> | null {
+  if (value == null || value.trim() === '') return null;
+  const key = value.trim().toLowerCase().replace(/\s+/g, '_');
+  const aliases: Record<string, z.infer<typeof systemCriticalitySchema>> = {
+    low: 'low',
+    medium: 'medium',
+    med: 'medium',
+    high: 'high',
+    critical: 'critical',
+    crit: 'critical',
+  };
+  return aliases[key] ?? null;
+}
 
 export const membershipRoleSchema = z.enum([
   'system_admin',
@@ -473,6 +594,12 @@ export function mergeDisplayPrefs(value: unknown): DisplayPrefs {
 
 export type ProjectStatus = z.infer<typeof projectStatusSchema>;
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
+export type SystemCriticality = z.infer<typeof systemCriticalitySchema>;
+export type SystemDeploymentModel = z.infer<typeof systemDeploymentModelSchema>;
+export type SystemDataClassification = z.infer<
+  typeof systemDataClassificationSchema
+>;
+export type SystemItDetails = z.infer<typeof systemItDetailsSchema>;
 export type MembershipRole = z.infer<typeof membershipRoleSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
 export type MilestoneStatus = z.infer<typeof milestoneStatusSchema>;
@@ -486,7 +613,15 @@ export type ProjectStakeholderRole = z.infer<typeof projectStakeholderRoleSchema
 export type StakeholderEngagementType = z.infer<
   typeof stakeholderEngagementTypeSchema
 >;
+export type StakeholderCompetency = z.infer<typeof stakeholderCompetencySchema>;
+export type StakeholderCompetencies = z.infer<
+  typeof stakeholderCompetenciesSchema
+>;
+export type StakeholderStaffingStatus = z.infer<
+  typeof stakeholderStaffingStatusSchema
+>;
 export type AiCostMode = z.infer<typeof aiCostModeSchema>;
+export type SystemItCostMode = z.infer<typeof systemItCostModeSchema>;
 export type ResourceUtilizationStatus = z.infer<
   typeof resourceUtilizationStatusSchema
 >;

@@ -28,8 +28,13 @@ import {
 } from './ui';
 import { cn } from '../lib/cn';
 
+export type StakeholderCompetency = {
+  name: string;
+  skillId: string | null;
+};
+
 export type Stakeholder = {
-  kind: 'person' | 'ai_assistant';
+  kind: 'person' | 'ai_assistant' | 'open_role';
   id: string;
   userId: string | null;
   systemId: string | null;
@@ -39,6 +44,9 @@ export type Stakeholder = {
   projectRole: string | null;
   jobTitle: string | null;
   notes: string | null;
+  roleDescription: string | null;
+  competencies: StakeholderCompetency[];
+  staffingStatus: 'open' | 'assigned' | null;
   reportsToUserId: string | null;
   hourlyRate: string | null;
   engagementType: 'employee' | 'contractor' | null;
@@ -63,6 +71,18 @@ export type Stakeholder = {
   systemSlug: string | null;
   systemStatus: string | null;
 };
+
+function competenciesToInput(competencies: StakeholderCompetency[] | undefined): string {
+  return (competencies ?? []).map((row) => row.name).join(', ');
+}
+
+function parseCompetenciesInput(raw: string): string[] {
+  return raw
+    .split(/[,;\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 40);
+}
 
 type Member = {
   userId: string;
@@ -123,10 +143,13 @@ export function ProjectStakeholdersPanel({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
+  const [createMode, setCreateMode] = useState<'member' | 'open_role'>('member');
   const [userId, setUserId] = useState('');
   const [projectRole, setProjectRole] = useState<string>('stakeholder');
   const [jobTitle, setJobTitle] = useState('');
   const [notes, setNotes] = useState('');
+  const [roleDescription, setRoleDescription] = useState('');
+  const [competenciesText, setCompetenciesText] = useState('');
   const [reportsToUserId, setReportsToUserId] = useState('');
   const [hourlyRate, setHourlyRate] = useState('');
   const [engagementType, setEngagementType] = useState('');
@@ -141,6 +164,8 @@ export function ProjectStakeholdersPanel({
   const [editRole, setEditRole] = useState('stakeholder');
   const [editJobTitle, setEditJobTitle] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editRoleDescription, setEditRoleDescription] = useState('');
+  const [editCompetenciesText, setEditCompetenciesText] = useState('');
   const [editReportsTo, setEditReportsTo] = useState('');
   const [editHourlyRate, setEditHourlyRate] = useState('');
   const [editEngagementType, setEditEngagementType] = useState('');
@@ -151,6 +176,7 @@ export function ProjectStakeholdersPanel({
   const [editContractedBudget, setEditContractedBudget] = useState('');
   const [editContractStart, setEditContractStart] = useState('');
   const [editContractEnd, setEditContractEnd] = useState('');
+  const [assignUserId, setAssignUserId] = useState('');
 
   const [editAiCostMode, setEditAiCostMode] = useState('');
   const [editAiFlatMonthlyFee, setEditAiFlatMonthlyFee] = useState('');
@@ -236,16 +262,20 @@ export function ProjectStakeholdersPanel({
           ? nameById.get(row.reportsToUserId)
           : null;
         const isAi = row.kind === 'ai_assistant';
+        const isOpenRole = row.kind === 'open_role';
         const roleLabel = isAi
           ? t('kindAiAssistant')
-          : row.projectRole
-            ? t(`projectRole.${row.projectRole}`)
-            : t('derivedOnly');
+          : isOpenRole
+            ? t('kindOpenRole')
+            : row.projectRole
+              ? t(`projectRole.${row.projectRole}`)
+              : t('derivedOnly');
         const raciLabel =
           row.raciRoles.length > 0
             ? `${t('raciLabel')}: ${row.raciRoles.join(', ')}`
             : null;
         const rate = rateLabel(row.hourlyRate);
+        const competencyNames = (row.competencies ?? []).map((c) => c.name);
         return {
           id: row.id,
           title: row.displayName,
@@ -264,6 +294,14 @@ export function ProjectStakeholdersPanel({
               : null,
             rate,
             raciLabel,
+            competencyNames.length > 0
+              ? `${t('competencies')}: ${competencyNames.join(', ')}`
+              : null,
+            row.roleDescription
+              ? row.roleDescription.length > 80
+                ? `${row.roleDescription.slice(0, 80)}…`
+                : row.roleDescription
+              : null,
             row.taskCount > 0 ? t('taskCount', { count: row.taskCount }) : null,
             row.notes,
           ]
@@ -277,9 +315,12 @@ export function ProjectStakeholdersPanel({
             row.systemStatus ?? '',
             row.jobTitle ?? '',
             row.notes ?? '',
+            row.roleDescription ?? '',
+            competencyNames.join(' '),
             row.projectRole ?? '',
             row.kind,
             'ai assistant',
+            'open role',
             row.raciRoles.join(' '),
             reportsTo ?? '',
             row.sources.join(' '),
@@ -289,11 +330,13 @@ export function ProjectStakeholdersPanel({
             .toLowerCase(),
           filterValue: isAi
             ? 'kind:ai_assistant'
-            : row.projectRole
-              ? `role:${row.projectRole}`
-              : row.raciRoles[0]
-                ? `raci:${row.raciRoles[0]}`
-                : 'derived',
+            : isOpenRole
+              ? 'kind:open_role'
+              : row.projectRole
+                ? `role:${row.projectRole}`
+                : row.raciRoles[0]
+                  ? `raci:${row.raciRoles[0]}`
+                  : 'derived',
           filterLabel: roleLabel,
         };
       }),
@@ -301,10 +344,13 @@ export function ProjectStakeholdersPanel({
   );
 
   function resetCreateForm() {
+    setCreateMode('member');
     setUserId('');
     setProjectRole('stakeholder');
     setJobTitle('');
     setNotes('');
+    setRoleDescription('');
+    setCompetenciesText('');
     setReportsToUserId('');
     setHourlyRate('');
     setEngagementType('');
@@ -328,6 +374,8 @@ export function ProjectStakeholdersPanel({
     setEditRole(row.projectRole || 'contributor');
     setEditJobTitle(row.jobTitle ?? '');
     setEditNotes(row.notes ?? '');
+    setEditRoleDescription(row.roleDescription ?? '');
+    setEditCompetenciesText(competenciesToInput(row.competencies));
     setEditReportsTo(row.reportsToUserId ?? '');
     setEditHourlyRate(row.hourlyRate != null ? String(row.hourlyRate) : '');
     setEditEngagementType(row.engagementType ?? '');
@@ -342,6 +390,7 @@ export function ProjectStakeholdersPanel({
     );
     setEditContractStart(row.contractStart ?? '');
     setEditContractEnd(row.contractEnd ?? '');
+    setAssignUserId('');
     setConfirmDelete(false);
     setError(null);
   }
@@ -399,7 +448,13 @@ export function ProjectStakeholdersPanel({
   }
 
   async function submitCreate() {
-    if (!userId || pending) return;
+    const isOpenRole = createMode === 'open_role';
+    if (pending) return;
+    if (isOpenRole && !jobTitle.trim()) {
+      setError(t('openRoleTitleRequired'));
+      return;
+    }
+    if (!isOpenRole && !userId) return;
     setPending(true);
     setError(null);
     try {
@@ -407,10 +462,12 @@ export function ProjectStakeholdersPanel({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
+          ...(isOpenRole ? {} : { userId }),
           projectRole,
           jobTitle: jobTitle.trim() || null,
           notes: notes.trim() || null,
+          roleDescription: roleDescription.trim() || null,
+          competencies: parseCompetenciesInput(competenciesText),
           reportsToUserId: reportsToUserId || null,
           hourlyRate: parseOptionalNumber(hourlyRate) ?? null,
           ...capacityPayload({
@@ -428,11 +485,17 @@ export function ProjectStakeholdersPanel({
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as {
           message?: string;
-          error?: string;
+          error?: string | { message?: string };
         } | null;
-        throw new Error(payload?.message || payload?.error || t('failedCreate'));
+        const errMsg =
+          typeof payload?.error === 'object'
+            ? payload.error.message
+            : typeof payload?.error === 'string'
+              ? payload.error
+              : payload?.message;
+        throw new Error(errMsg || t('failedCreate'));
       }
-      pushToast(t('created'));
+      pushToast(isOpenRole ? t('openRoleCreated') : t('created'));
       closeCreateModal();
       await reloadStakeholders();
       refresh();
@@ -487,6 +550,8 @@ export function ProjectStakeholdersPanel({
             projectRole: editRole,
             jobTitle: editJobTitle.trim() || null,
             notes: editNotes.trim() || null,
+            roleDescription: editRoleDescription.trim() || null,
+            competencies: parseCompetenciesInput(editCompetenciesText),
             reportsToUserId: editReportsTo || null,
             hourlyRate: parseOptionalNumber(editHourlyRate) ?? null,
             ...capacityPayload({
@@ -517,6 +582,68 @@ export function ProjectStakeholdersPanel({
       refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedUpdate'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function assignManage() {
+    if (!manageRow?.rosterId || !assignUserId || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/project-stakeholders/${manageRow.rosterId}/assign`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: assignUserId }),
+        },
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          message?: string;
+          error?: { message?: string };
+        } | null;
+        throw new Error(
+          payload?.error?.message || payload?.message || t('failedAssign'),
+        );
+      }
+      pushToast(t('assigned'));
+      closeManage();
+      await reloadStakeholders();
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedAssign'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function unassignManage() {
+    if (!manageRow?.rosterId || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/project-stakeholders/${manageRow.rosterId}/unassign`,
+        { method: 'POST' },
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          message?: string;
+          error?: { message?: string };
+        } | null;
+        throw new Error(
+          payload?.error?.message || payload?.message || t('failedUnassign'),
+        );
+      }
+      pushToast(t('unassigned'));
+      closeManage();
+      await reloadStakeholders();
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedUnassign'));
     } finally {
       setPending(false);
     }
@@ -821,7 +948,9 @@ export function ProjectStakeholdersPanel({
           const row = stakeholders.find((entry) => entry.id === item.id);
           if (!row) return null;
           const isAi = row.kind === 'ai_assistant';
+          const isOpenRole = row.kind === 'open_role';
           const rate = rateLabel(row.hourlyRate);
+          const competencyNames = (row.competencies ?? []).map((c) => c.name);
           return (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -845,11 +974,16 @@ export function ProjectStakeholdersPanel({
                   <span className="font-semibold">{row.displayName}</span>
                   {isAi ? (
                     <Badge tone="brand">{t('kindAiAssistant')}</Badge>
+                  ) : isOpenRole ? (
+                    <Badge tone="brand">{t('kindOpenRole')}</Badge>
                   ) : row.projectRole ? (
                     <Badge tone="brand">{t(`projectRole.${row.projectRole}`)}</Badge>
                   ) : (
                     <Badge>{t('derivedOnly')}</Badge>
                   )}
+                  {isOpenRole && row.projectRole ? (
+                    <Badge>{t(`projectRole.${row.projectRole}`)}</Badge>
+                  ) : null}
                   {row.raciRoles.map((role) => (
                     <Badge key={role}>{role}</Badge>
                   ))}
@@ -874,7 +1008,7 @@ export function ProjectStakeholdersPanel({
                       {row.email}
                     </a>
                   ) : null}
-                  {!isAi && row.jobTitle ? ` · ${row.jobTitle}` : ''}
+                  {!isAi && !isOpenRole && row.jobTitle ? ` · ${row.jobTitle}` : ''}
                   {row.fullName && row.fullName !== row.displayName
                     ? ` · ${row.fullName}`
                     : ''}
@@ -886,6 +1020,18 @@ export function ProjectStakeholdersPanel({
                     ? ` · ${t('taskCount', { count: row.taskCount })}`
                     : ''}
                 </p>
+                {competencyNames.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {competencyNames.map((name) => (
+                      <Badge key={name}>{name}</Badge>
+                    ))}
+                  </div>
+                ) : null}
+                {row.roleDescription ? (
+                  <p className="mt-1 mb-0 line-clamp-2 text-xs text-ink-muted">
+                    {row.roleDescription}
+                  </p>
+                ) : null}
                 {row.notes ? (
                   <p className="mt-1 mb-0 text-xs text-ink-muted">{row.notes}</p>
                 ) : null}
@@ -911,7 +1057,7 @@ export function ProjectStakeholdersPanel({
                       disabled={pending}
                       onClick={() => openManage(row)}
                     >
-                      {t('manage')}
+                      {isOpenRole ? t('manageOpenRole') : t('manage')}
                     </Button>
                   ) : (
                     <Button
@@ -985,7 +1131,11 @@ export function ProjectStakeholdersPanel({
         open={createOpen}
         onClose={closeCreateModal}
         title={t('addItem')}
-        description={t('modalDescription')}
+        description={
+          createMode === 'open_role'
+            ? t('openRoleModalDescription')
+            : t('modalDescription')
+        }
         size="md"
         footer={
           <>
@@ -999,7 +1149,12 @@ export function ProjectStakeholdersPanel({
             </Button>
             <Button
               type="button"
-              disabled={pending || !userId}
+              disabled={
+                pending ||
+                (createMode === 'open_role'
+                  ? !jobTitle.trim()
+                  : !userId)
+              }
               onClick={() => void submitCreate()}
             >
               {tCommon('save')}
@@ -1009,34 +1164,51 @@ export function ProjectStakeholdersPanel({
       >
         <div className="grid gap-3">
           {error ? <ErrorText>{error}</ErrorText> : null}
-          <Field label={t('member')}>
+          <Field label={t('createModeLabel')}>
             <Select
-              value={userId}
-              onChange={(event) => setUserId(event.target.value)}
+              value={createMode}
+              onChange={(event) => {
+                const next = event.target.value === 'open_role' ? 'open_role' : 'member';
+                setCreateMode(next);
+                if (next === 'open_role') setUserId('');
+              }}
               disabled={pending}
             >
-              <option value="">{t('selectMember')}</option>
-              {[
-                ...memberOptions,
-                ...people
-                  .filter((row) => !row.rosterId && row.userId)
-                  .map((row) => ({
-                    userId: row.userId!,
-                    displayName: row.displayName,
-                    email: row.email ?? '',
-                  })),
-              ]
-                .filter(
-                  (row, index, all) =>
-                    all.findIndex((entry) => entry.userId === row.userId) === index,
-                )
-                .map((row) => (
-                  <option key={row.userId} value={row.userId}>
-                    {row.displayName} ({row.email})
-                  </option>
-                ))}
+              <option value="member">{t('createModeMember')}</option>
+              <option value="open_role">{t('createModeOpenRole')}</option>
             </Select>
           </Field>
+          {createMode === 'member' ? (
+            <Field label={t('member')}>
+              <Select
+                value={userId}
+                onChange={(event) => setUserId(event.target.value)}
+                disabled={pending}
+              >
+                <option value="">{t('selectMember')}</option>
+                {[
+                  ...memberOptions,
+                  ...people
+                    .filter((row) => !row.rosterId && row.userId)
+                    .map((row) => ({
+                      userId: row.userId!,
+                      displayName: row.displayName,
+                      email: row.email ?? '',
+                    })),
+                ]
+                  .filter(
+                    (row, index, all) =>
+                      all.findIndex((entry) => entry.userId === row.userId) ===
+                      index,
+                  )
+                  .map((row) => (
+                    <option key={row.userId} value={row.userId}>
+                      {row.displayName} ({row.email})
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+          ) : null}
           <Field label={t('projectRoleLabel')}>
             <Select
               value={projectRole}
@@ -1050,11 +1222,37 @@ export function ProjectStakeholdersPanel({
               ))}
             </Select>
           </Field>
-          <Field label={t('jobTitle')}>
+          <Field
+            label={
+              createMode === 'open_role' ? t('openRoleTitle') : t('jobTitle')
+            }
+          >
             <Input
               value={jobTitle}
               onChange={(event) => setJobTitle(event.target.value)}
               disabled={pending}
+              placeholder={
+                createMode === 'open_role'
+                  ? t('openRoleTitlePlaceholder')
+                  : undefined
+              }
+            />
+          </Field>
+          <Field label={t('roleDescription')}>
+            <Textarea
+              value={roleDescription}
+              onChange={(event) => setRoleDescription(event.target.value)}
+              disabled={pending}
+              rows={3}
+              placeholder={t('roleDescriptionPlaceholder')}
+            />
+          </Field>
+          <Field label={t('competencies')}>
+            <Input
+              value={competenciesText}
+              onChange={(event) => setCompetenciesText(event.target.value)}
+              disabled={pending}
+              placeholder={t('competenciesPlaceholder')}
             />
           </Field>
           <Field label={t('hourlyRate')}>
@@ -1116,8 +1314,16 @@ export function ProjectStakeholdersPanel({
       <Modal
         open={Boolean(manageRow)}
         onClose={closeManage}
-        title={t('manageTitle')}
-        description={t('manageDescription')}
+        title={
+          manageRow?.kind === 'open_role'
+            ? t('manageOpenRoleTitle')
+            : t('manageTitle')
+        }
+        description={
+          manageRow?.kind === 'open_role'
+            ? t('manageOpenRoleDescription')
+            : t('manageDescription')
+        }
         size="md"
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
@@ -1155,6 +1361,20 @@ export function ProjectStakeholdersPanel({
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {canMutate &&
+              manageRow?.kind === 'person' &&
+              manageRow.userId &&
+              manageRow.rosterId &&
+              !confirmDelete ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() => void unassignManage()}
+                >
+                  {t('unassign')}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="secondary"
@@ -1190,6 +1410,31 @@ export function ProjectStakeholdersPanel({
               </span>
             ) : null}
           </p>
+          {manageRow?.kind === 'open_role' && !confirmDelete ? (
+            <div className="grid gap-2 rounded-md border border-line p-3">
+              <Field label={t('assignColleague')}>
+                <Select
+                  value={assignUserId}
+                  onChange={(event) => setAssignUserId(event.target.value)}
+                  disabled={pending}
+                >
+                  <option value="">{t('selectMember')}</option>
+                  {memberOptions.map((row) => (
+                    <option key={row.userId} value={row.userId}>
+                      {row.displayName} ({row.email})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Button
+                type="button"
+                disabled={pending || !assignUserId}
+                onClick={() => void assignManage()}
+              >
+                {t('assign')}
+              </Button>
+            </div>
+          ) : null}
           <Field label={t('projectRoleLabel')}>
             <Select
               value={editRole}
@@ -1203,11 +1448,32 @@ export function ProjectStakeholdersPanel({
               ))}
             </Select>
           </Field>
-          <Field label={t('jobTitle')}>
+          <Field
+            label={
+              manageRow?.kind === 'open_role' ? t('openRoleTitle') : t('jobTitle')
+            }
+          >
             <Input
               value={editJobTitle}
               onChange={(event) => setEditJobTitle(event.target.value)}
               disabled={pending || confirmDelete}
+            />
+          </Field>
+          <Field label={t('roleDescription')}>
+            <Textarea
+              value={editRoleDescription}
+              onChange={(event) => setEditRoleDescription(event.target.value)}
+              disabled={pending || confirmDelete}
+              rows={3}
+              placeholder={t('roleDescriptionPlaceholder')}
+            />
+          </Field>
+          <Field label={t('competencies')}>
+            <Input
+              value={editCompetenciesText}
+              onChange={(event) => setEditCompetenciesText(event.target.value)}
+              disabled={pending || confirmDelete}
+              placeholder={t('competenciesPlaceholder')}
             />
           </Field>
           <Field label={t('hourlyRate')}>

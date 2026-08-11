@@ -9,7 +9,7 @@ import { cn } from '../lib/cn';
 
 export type OrgChartStakeholder = {
   id: string;
-  kind: 'person' | 'ai_assistant';
+  kind: 'person' | 'ai_assistant' | 'open_role';
   userId: string | null;
   displayName: string;
   fullName: string | null;
@@ -150,6 +150,9 @@ function StakeholderCard({
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
         {isAi ? <Badge tone="brand">{t('kindAiAssistant')}</Badge> : null}
+        {stakeholder.kind === 'open_role' ? (
+          <Badge tone="brand">{t('kindOpenRole')}</Badge>
+        ) : null}
         {stakeholder.projectRole && !isAi ? (
           <Badge tone="brand">{t(`projectRole.${stakeholder.projectRole}`)}</Badge>
         ) : null}

@@ -98,7 +98,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_systems',
-    description: 'List accessible systems in allowed workspaces',
+    description:
+      'List accessible systems (type, environment, criticality, version, primaryUrl). Requires systems:read.',
     scope: 'systems:read',
     openApi: true,
     defaults: { limit: 50 },
@@ -124,7 +125,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'get_system',
-    description: 'Get a system by id',
+    description:
+      'Get a catalogue system including description, tags, owner, and itDetails inventory. Requires systems:read.',
     scope: 'systems:read',
     openApi: true,
     body: {
@@ -657,6 +659,134 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
 
   // —— Extended tools (Gemini + call_hub_tool; not first-class OpenAPI) ——
   {
+    name: 'create_system',
+    description:
+      'Create a catalogue system (IT resource). Fill itDetails when known. Requires catalogue:write. Via call_hub_tool on ChatGPT.',
+    scope: 'catalogue:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['workspaceId', 'name'],
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        projectId: { type: 'string', format: 'uuid', nullable: true },
+        name: stringProp('System name', { minLength: 1, maxLength: 160 }),
+        slug: stringProp('Optional slug', { maxLength: 64 }),
+        summary: { type: 'string', nullable: true, maxLength: 500 },
+        description: { type: 'string', nullable: true, maxLength: 10000 },
+        systemType: { type: 'string', nullable: true, maxLength: 120 },
+        status: {
+          type: 'string',
+          enum: [
+            'proposed',
+            'experimental',
+            'active',
+            'degraded',
+            'maintenance',
+            'deprecated',
+            'retired',
+            'archived',
+          ],
+        },
+        ownerUserId: { type: 'string', format: 'uuid', nullable: true },
+        environment: { type: 'string', nullable: true, maxLength: 80 },
+        version: { type: 'string', nullable: true, maxLength: 80 },
+        criticality: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
+        itDetails: {
+          type: 'object',
+          description: 'Structured IT inventory (hostname, primaryUrl, IPs, deployment, …)',
+          additionalProperties: true,
+          properties: {
+            hostname: { type: 'string' },
+            primaryUrl: { type: 'string' },
+            vendor: { type: 'string' },
+            deploymentModel: {
+              type: 'string',
+              enum: [
+                'saas',
+                'paas',
+                'iaas',
+                'on_prem',
+                'vm',
+                'container',
+                'kubernetes',
+                'network',
+                'endpoint',
+                'other',
+              ],
+            },
+            dataClassification: {
+              type: 'string',
+              enum: ['public', 'internal', 'confidential', 'restricted'],
+            },
+            supportContact: { type: 'string' },
+            documentationUrl: { type: 'string' },
+          },
+        },
+        tags: {
+          type: 'array',
+          maxItems: 30,
+          items: { type: 'string', minLength: 1, maxLength: 64 },
+        },
+      },
+    },
+  },
+  {
+    name: 'update_system',
+    description:
+      'Update a catalogue system / IT inventory. Requires catalogue:write. Via call_hub_tool on ChatGPT.',
+    scope: 'catalogue:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['systemId'],
+      properties: {
+        systemId: uuidProp('System id'),
+        projectId: { type: 'string', format: 'uuid', nullable: true },
+        name: stringProp('System name', { minLength: 1, maxLength: 160 }),
+        summary: { type: 'string', nullable: true, maxLength: 500 },
+        description: { type: 'string', nullable: true, maxLength: 10000 },
+        systemType: { type: 'string', nullable: true, maxLength: 120 },
+        status: {
+          type: 'string',
+          enum: [
+            'proposed',
+            'experimental',
+            'active',
+            'degraded',
+            'maintenance',
+            'deprecated',
+            'retired',
+            'archived',
+          ],
+        },
+        ownerUserId: { type: 'string', format: 'uuid', nullable: true },
+        environment: { type: 'string', nullable: true, maxLength: 80 },
+        version: { type: 'string', nullable: true, maxLength: 80 },
+        criticality: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
+        itDetails: {
+          type: 'object',
+          nullable: true,
+          additionalProperties: true,
+          properties: {},
+        },
+        tags: {
+          type: 'array',
+          maxItems: 30,
+          items: { type: 'string', minLength: 1, maxLength: 64 },
+        },
+      },
+    },
+  },
+  {
     name: 'get_record_provenance',
     description: 'Verification and source provenance for a knowledge record.',
     scope: 'provenance:read',
@@ -864,12 +994,192 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_stakeholders',
-    description: 'List project stakeholders (roster + RACI-derived). Requires pm:read.',
+    description:
+      'List project stakeholders (people, open roles, AI assistants, RACI-derived) with roleDescription and competencies. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
       required: ['projectId'],
       properties: { projectId: uuidProp('Project id') },
+    },
+  },
+  {
+    name: 'list_workspace_members',
+    description:
+      'List active workspace members (userId, name, email, role) for assigning open roles. Requires projects:read. Via call_hub_tool on ChatGPT.',
+    scope: 'projects:read',
+    body: {
+      type: 'object',
+      required: ['workspaceId'],
+      properties: { workspaceId: uuidProp('Workspace id') },
+    },
+  },
+  {
+    name: 'create_project_stakeholder',
+    description:
+      'Add or upsert a stakeholder. Omit userId for an open job role (jobTitle required). Accepts roleDescription and competency tags. Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['projectId', 'projectRole'],
+      properties: {
+        projectId: uuidProp('Project id'),
+        userId: {
+          type: 'string',
+          format: 'uuid',
+          nullable: true,
+          description: 'Workspace member; omit/null for open role',
+        },
+        projectRole: {
+          type: 'string',
+          enum: [
+            'sponsor',
+            'owner',
+            'product_owner',
+            'tech_lead',
+            'contributor',
+            'stakeholder',
+            'other',
+          ],
+        },
+        jobTitle: { type: 'string', nullable: true, maxLength: 200 },
+        roleDescription: { type: 'string', nullable: true, maxLength: 10000 },
+        competencies: {
+          type: 'array',
+          maxItems: 40,
+          items: {
+            oneOf: [
+              { type: 'string', minLength: 1, maxLength: 80 },
+              {
+                type: 'object',
+                required: ['name'],
+                properties: {
+                  name: { type: 'string', minLength: 1, maxLength: 80 },
+                  skillId: { type: 'string', format: 'uuid', nullable: true },
+                },
+              },
+            ],
+          },
+          description: 'Competency tags; skillId reserved for future catalog',
+        },
+        notes: { type: 'string', nullable: true, maxLength: 5000 },
+        reportsToUserId: { type: 'string', format: 'uuid', nullable: true },
+        hourlyRate: money,
+        engagementType: {
+          type: 'string',
+          enum: ['employee', 'contractor'],
+          nullable: true,
+        },
+        assignmentStart: { ...ymd, nullable: true },
+        assignmentEnd: { ...ymd, nullable: true },
+        allocatedDailyHours: money,
+        contractRef: { type: 'string', nullable: true, maxLength: 200 },
+        contractedBudget: money,
+        contractStart: { ...ymd, nullable: true },
+        contractEnd: { ...ymd, nullable: true },
+        sortOrder: { type: 'integer', minimum: 0 },
+      },
+    },
+  },
+  {
+    name: 'update_project_stakeholder',
+    description:
+      'Update stakeholder role, description, competencies, rate, or capacity. Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['stakeholderId'],
+      properties: {
+        stakeholderId: uuidProp('Roster stakeholder id'),
+        projectRole: {
+          type: 'string',
+          enum: [
+            'sponsor',
+            'owner',
+            'product_owner',
+            'tech_lead',
+            'contributor',
+            'stakeholder',
+            'other',
+          ],
+        },
+        jobTitle: { type: 'string', nullable: true, maxLength: 200 },
+        roleDescription: { type: 'string', nullable: true, maxLength: 10000 },
+        competencies: {
+          type: 'array',
+          maxItems: 40,
+          items: {
+            oneOf: [
+              { type: 'string', minLength: 1, maxLength: 80 },
+              {
+                type: 'object',
+                required: ['name'],
+                properties: {
+                  name: { type: 'string', minLength: 1, maxLength: 80 },
+                  skillId: { type: 'string', format: 'uuid', nullable: true },
+                },
+              },
+            ],
+          },
+        },
+        notes: { type: 'string', nullable: true, maxLength: 5000 },
+        reportsToUserId: { type: 'string', format: 'uuid', nullable: true },
+        hourlyRate: money,
+        engagementType: {
+          type: 'string',
+          enum: ['employee', 'contractor'],
+          nullable: true,
+        },
+        assignmentStart: { ...ymd, nullable: true },
+        assignmentEnd: { ...ymd, nullable: true },
+        allocatedDailyHours: money,
+        contractRef: { type: 'string', nullable: true, maxLength: 200 },
+        contractedBudget: money,
+        contractStart: { ...ymd, nullable: true },
+        contractEnd: { ...ymd, nullable: true },
+        sortOrder: { type: 'integer', minimum: 0 },
+      },
+    },
+  },
+  {
+    name: 'assign_project_stakeholder',
+    description:
+      'Fill an open job role with a workspace member. Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['stakeholderId', 'userId'],
+      properties: {
+        stakeholderId: uuidProp('Open-role roster id'),
+        userId: uuidProp('Workspace member to assign'),
+      },
+    },
+  },
+  {
+    name: 'unassign_project_stakeholder',
+    description:
+      'Reopen a filled seat (clear userId; keep role metadata). Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['stakeholderId'],
+      properties: { stakeholderId: uuidProp('Roster stakeholder id') },
+    },
+  },
+  {
+    name: 'delete_project_stakeholder',
+    description:
+      'Remove a durable roster row (RACI-derived people remain). Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['stakeholderId'],
+      properties: { stakeholderId: uuidProp('Roster stakeholder id') },
     },
   },
   {

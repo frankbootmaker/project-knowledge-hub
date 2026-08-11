@@ -8,11 +8,13 @@ describe('mcp scopes and limits', () => {
     expect(DEFAULT_MCP_SCOPES).not.toContain('knowledge:write');
     expect(DEFAULT_MCP_SCOPES).not.toContain('pm:read');
     expect(DEFAULT_MCP_SCOPES).not.toContain('pm:write');
+    expect(DEFAULT_MCP_SCOPES).not.toContain('catalogue:write');
     expect(DEFAULT_MCP_SCOPES).not.toContain('monitoring:read');
     expect(hasMcpScope(DEFAULT_MCP_SCOPES, 'projects:read')).toBe(true);
     expect(hasMcpScope(['projects:read'], 'knowledge:read')).toBe(false);
     expect(hasMcpScope(['monitoring:read'], 'monitoring:read')).toBe(true);
     expect(hasMcpScope(['knowledge:write'], 'knowledge:write')).toBe(true);
+    expect(hasMcpScope(['catalogue:write'], 'catalogue:write')).toBe(true);
     expect(hasMcpScope(['pm:write'], 'pm:write')).toBe(true);
   });
 

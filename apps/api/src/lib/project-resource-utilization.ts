@@ -231,7 +231,9 @@ export async function getProjectResourceUtilization(
     }
   }
 
-  const people: ResourcePersonUtilization[] = rosterRows.map((row) => {
+  const people: ResourcePersonUtilization[] = rosterRows
+    .filter((row): row is typeof row & { userId: string } => row.userId != null)
+    .map((row) => {
     const engagement = row.engagementType
       ? stakeholderEngagementTypeSchema.safeParse(row.engagementType)
       : null;

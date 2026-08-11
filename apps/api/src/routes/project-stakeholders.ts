@@ -7,6 +7,7 @@ import {
   aiCostModeSchema,
   projectStakeholderRoleSchema,
   resourceUtilizationViewSchema,
+  stakeholderCompetenciesSchema,
   stakeholderEngagementTypeSchema,
 } from '@project-knowledge-hub/domain';
 import {
@@ -25,9 +26,11 @@ import {
 } from '../lib/org-chart-export.js';
 import { requireProjectContext } from '../lib/project-delivery.js';
 import {
+  assignProjectStakeholder,
   deleteProjectStakeholder,
   getRosterStakeholder,
   listProjectStakeholders,
+  unassignProjectStakeholder,
   updateAiAssistantCost,
   updateProjectStakeholder,
   upsertProjectStakeholder,
@@ -69,10 +72,29 @@ const capacityFields = {
   contractEnd: dateSchema.optional(),
 };
 
+const competenciesBodySchema = z
+  .union([
+    stakeholderCompetenciesSchema,
+    z.array(z.string().trim().min(1).max(80)).max(40),
+  ])
+  .optional()
+  .transform((value) => {
+    if (value === undefined) return undefined;
+    if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+      return stakeholderCompetenciesSchema.parse(
+        value.map((name) => ({ name, skillId: null })),
+      );
+    }
+    return stakeholderCompetenciesSchema.parse(value);
+  });
+
 const upsertSchema = z.object({
-  userId: z.string().uuid(),
+  /** Omit or null to create an open job role (jobTitle required). */
+  userId: z.string().uuid().nullable().optional(),
   projectRole: projectStakeholderRoleSchema,
   jobTitle: z.string().max(200).nullable().optional(),
+  roleDescription: z.string().max(10000).nullable().optional(),
+  competencies: competenciesBodySchema,
   notes: z.string().max(5000).nullable().optional(),
   reportsToUserId: z.string().uuid().nullable().optional(),
   hourlyRate: moneySchema.optional(),
@@ -83,11 +105,17 @@ const upsertSchema = z.object({
 const updateSchema = z.object({
   projectRole: projectStakeholderRoleSchema.optional(),
   jobTitle: z.string().max(200).nullable().optional(),
+  roleDescription: z.string().max(10000).nullable().optional(),
+  competencies: competenciesBodySchema,
   notes: z.string().max(5000).nullable().optional(),
   reportsToUserId: z.string().uuid().nullable().optional(),
   hourlyRate: moneySchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   ...capacityFields,
+});
+
+const assignSchema = z.object({
+  userId: z.string().uuid(),
 });
 
 const aiCostSchema = z.object({
@@ -171,6 +199,8 @@ export async function registerProjectStakeholderRoutes(
       userId: body.userId,
       projectRole: body.projectRole,
       jobTitle: body.jobTitle,
+      roleDescription: body.roleDescription,
+      competencies: body.competencies,
       notes: body.notes,
       reportsToUserId: body.reportsToUserId,
       hourlyRate:
@@ -192,6 +222,7 @@ export async function registerProjectStakeholderRoutes(
         projectId: project.id,
         userId: stakeholder.userId,
         projectRole: stakeholder.projectRole,
+        kind: stakeholder.kind,
       },
       ipAddress: request.ip,
     });
@@ -217,6 +248,8 @@ export async function registerProjectStakeholderRoutes(
       {
         projectRole: body.projectRole,
         jobTitle: body.jobTitle,
+        roleDescription: body.roleDescription,
+        competencies: body.competencies,
         notes: body.notes,
         reportsToUserId: body.reportsToUserId,
         hourlyRate:
@@ -241,6 +274,86 @@ export async function registerProjectStakeholderRoutes(
 
     return { stakeholder };
   });
+
+  app.post(
+    '/api/v1/project-stakeholders/:stakeholderId/assign',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ stakeholderId: z.string().uuid() })
+        .parse(request.params);
+      const body = assignSchema.parse(request.body);
+
+      const existing = await getRosterStakeholder(
+        app.database,
+        params.stakeholderId,
+      );
+      const { project } = await requireProjectContext(
+        app.database,
+        existing.projectId,
+      );
+      requireWorkspaceMaintainer(principal, project.workspaceId);
+
+      const stakeholder = await assignProjectStakeholder(
+        app.database,
+        params.stakeholderId,
+        body.userId,
+      );
+
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.stakeholder_assigned',
+        entityType: 'project_stakeholder',
+        entityId: params.stakeholderId,
+        metadata: { projectId: project.id, userId: body.userId },
+        ipAddress: request.ip,
+      });
+
+      return { stakeholder };
+    },
+  );
+
+  app.post(
+    '/api/v1/project-stakeholders/:stakeholderId/unassign',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ stakeholderId: z.string().uuid() })
+        .parse(request.params);
+
+      const existing = await getRosterStakeholder(
+        app.database,
+        params.stakeholderId,
+      );
+      const { project } = await requireProjectContext(
+        app.database,
+        existing.projectId,
+      );
+      requireWorkspaceMaintainer(principal, project.workspaceId);
+
+      const stakeholder = await unassignProjectStakeholder(
+        app.database,
+        params.stakeholderId,
+      );
+
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.stakeholder_unassigned',
+        entityType: 'project_stakeholder',
+        entityId: params.stakeholderId,
+        metadata: { projectId: project.id },
+        ipAddress: request.ip,
+      });
+
+      return { stakeholder };
+    },
+  );
 
   app.patch('/api/v1/systems/:systemId/ai-cost', async (request) => {
     assertMutatingOrigin(app, request);

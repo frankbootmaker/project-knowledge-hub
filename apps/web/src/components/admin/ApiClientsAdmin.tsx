@@ -23,6 +23,7 @@ const MCP_SCOPES = [
   'knowledge:search',
   'provenance:read',
   'knowledge:write',
+  'catalogue:write',
   'pm:read',
   'pm:write',
   'monitoring:read',
@@ -31,6 +32,7 @@ const MCP_SCOPES = [
 function needsActingUser(scopes: readonly string[]): boolean {
   return (
     scopes.includes('knowledge:write') ||
+    scopes.includes('catalogue:write') ||
     scopes.includes('pm:write') ||
     scopes.includes('pm:read')
   );
