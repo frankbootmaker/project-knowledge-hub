@@ -45,6 +45,12 @@ const nextConfig: NextConfig = {
     },
   },
   webpack: (config) => {
+    // mcp/schemas aliases to TypeScript sources; sibling ESM imports use `.js`
+    // (e.g. ./llm-tool-catalog.js → llm-tool-catalog.ts).
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.ts', '.tsx', '.js', '.jsx'],
+    };
     config.resolve.alias = {
       ...config.resolve.alias,
       '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
