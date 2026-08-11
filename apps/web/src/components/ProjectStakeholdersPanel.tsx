@@ -786,6 +786,7 @@ export function ProjectStakeholdersPanel({
         id="project-stakeholders"
         storageKey={`project:${projectId}:stakeholders`}
         title={t('title')}
+        action={sectionActions(wideModalOpen ? 'list' : viewMode)}
         defaultOpen
       >
       {error && !createOpen && !manageRow && !manageAiRow && !wideModalOpen ? (
@@ -805,7 +806,6 @@ export function ProjectStakeholdersPanel({
         filterAllLabel={tWorkspaces('sectionFilterAll')}
         createLabel={t('addItem')}
         canCreate={canMutate}
-        extraActions={sectionActions(wideModalOpen ? 'list' : viewMode)}
         onCreate={() => {
           resetCreateForm();
           setCreateOpen(true);

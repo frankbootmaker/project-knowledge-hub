@@ -773,6 +773,7 @@ export function ProjectDeliveryPanel({
         id="project-delivery"
         storageKey={`project:${projectId}:delivery`}
         title={t('title')}
+        action={viewSwitcher(wideModalOpen ? 'list' : viewMode)}
         defaultOpen
       >
       {error && !createOpen && !wideModalOpen && !manageTaskId && !manageAgile ? (
@@ -793,7 +794,6 @@ export function ProjectDeliveryPanel({
         createLabel={t('addItem')}
         canCreate={canMutate}
         showList={viewMode === 'list'}
-        extraActions={viewSwitcher(wideModalOpen ? 'list' : viewMode)}
         onCreate={() => {
           resetCreateForm();
           setCreateOpen(true);
