@@ -1,8 +1,8 @@
 # Project budgeting, effort, and multi-RAG health
 
 **Status:** implemented on `feature/m7-dokploy` (smoke pending)  
-**Related:** [PROJECT_BASELINE.md](./PROJECT_BASELINE.md), [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), [PROJECT_RAID.md](./PROJECT_RAID.md), ADR-018, ADR-020, [PROJECT_AI_GOVERNANCE.md](./PROJECT_AI_GOVERNANCE.md) (NF-019)  
-**Backlog:** NF-018, NF-019
+**Related:** [PROJECT_BASELINE.md](./PROJECT_BASELINE.md), [PROJECT_DELIVERY.md](./PROJECT_DELIVERY.md), [PROJECT_RAID.md](./PROJECT_RAID.md), ADR-018, ADR-020, [PROJECT_AI_GOVERNANCE.md](./PROJECT_AI_GOVERNANCE.md) (NF-019), [PROJECT_PROPOSAL.md](./PROJECT_PROPOSAL.md) (NF-023 commercial margin)  
+**Backlog:** NF-018, NF-019, NF-023
 
 ## Goal
 
@@ -109,3 +109,4 @@ Resource RAG (utilization): aggregate planned demand vs capacity → amber when 
 * Auto-updating approved budget from change-register `budget` items  
 * Critical-path Gantt  
 * AI-assistant **hourly** rates (use flat / API / mixed / note-only modes instead)  
+* Commercial offer / margin on cost prices (see [PROJECT_PROPOSAL.md](./PROJECT_PROPOSAL.md); keep EVM cost separate from priced proposal)  

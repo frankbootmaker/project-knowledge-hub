@@ -60,6 +60,7 @@ Optimize for **M7 Prod readiness** and avoid building overlapping Admin surfaces
 | NF-020 | **Project Scrum / sprints** — `project_sprints`, task `sprint_id` + story points, delivery view `scrum`, planning wizard, ceremony knowledge links, velocity / point burndown, project DoD | `done` — A–E on `feature/m7-dokploy` | Smoke in UI; then unpark NF-019 if desired | Brief: [`PROJECT_SCRUM.md`](PROJECT_SCRUM.md). ADR-022. Wave **F**. |
 | NF-021 | **Knowledge document human keys** — project-scoped `{prefix}-{DOCCODE}-{n}` on knowledge records; catalog `docKeyCode`; MCP/REST resolve UUID or key | `done` — schema/allocate/resolve/UI + demo seed on `feature/m7-dokploy` | Smoke create+MCP get by key | Brief: [`PROJECT_DOC_KEYS.md`](PROJECT_DOC_KEYS.md). ADR-023 (extends ADR-019). Wave **F**. |
 | NF-022 | **Job portal** — advertise open project roles, collect applications, hire into the same roster seat | `parked` — idea brief only | Open-role staffing stable in Prod; skill catalog (`skillId`); publish/apply/hire UX + ACL decisions | Brief: [`PROJECT_JOB_PORTAL.md`](PROJECT_JOB_PORTAL.md). Builds on open roles + competencies. Wave **F** (later). |
+| NF-023 | **Commercial proposal from plan** — generate a `proposal` from plan/forecast costs with a configurable margin % on internal prices | `parked` — idea brief only | Budgeting forecast + system OpEx stable; decide margin scope (people vs AI/systems) and BAC seed rules | Brief: [`PROJECT_PROPOSAL.md`](PROJECT_PROPOSAL.md). Builds on Baseline plan pin + Budgeting. Wave **F** (later). |
 
 
 ---
