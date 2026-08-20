@@ -40,7 +40,9 @@ Before considering UI work done:
 | `--kh-panel` / `--kh-panel-solid` | Surfaces |
 | `--kh-line` / `--kh-line-strong` | Borders |
 | `--kh-accent*` / `--kh-warn*` / `--kh-danger*` | Status |
-| `--kh-radius-*` | `rounded-sm/md/lg` |
+| `--kh-radius-*` | Square Ops Console radii (`3px` / `3px` / `4px`) |
+| `--kh-rail` / `--kh-rail-compact` | Authenticated left rail width (`224px` / `64px`) |
+| `--kh-z-rail` / `--kh-z-header` | Rail and sticky header stacking |
 | `--kh-control-height/width` | Switch and compact controls |
 | `--kh-control-pad-x/y` | Button padding |
 | `--kh-focus-ring` | Focus ring color mix |
@@ -76,11 +78,11 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 |---------|------------|
 | Breakpoints | `sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px |
 | Viewport | Root layout exports `viewport: { width: 'device-width', initialScale: 1, viewportFit: 'cover' }` |
-| Shell padding / width | `.kh-shell` / `shellClassName` — `max-w-6xl` + `px-4 sm:px-6` |
-| Shell content | `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
-| Primary nav | Desktop: inline `NavLink`s from `md` up (Dashboard, Workspaces, Search, Archive, Admin?). Below `md`: `MobileNav` with the same destinations (never hide nav without a mobile path). Platform Status lives under Admin sidebar |
-| Admin sidebar | Stacks above content below `lg` via `lg:grid-cols-[220px_1fr]` in `admin/layout.tsx`. Includes Overview … Audit, then **Status** (`/status`). **Planned (NF-011):** replace Status with **Monitoring** (health + usage); redirect `/status`. Compact horizontal rail is a later enhancement |
-| Account sidebar | Same grid pattern in `account/layout.tsx` for all signed-in users: **Profile**, **Sign-in identity**, **Change password**, **Email notifications**, **AI connections**, then a **Danger zone** divider with **Close account**. Header avatar still links to Profile |
+| Shell padding / width | Authenticated Ops Console: `.kh-ops-view` padding (`24px 28px`, `14px` below `md`). Legacy `.kh-shell` still used on public/auth pages (`max-w-6xl` + `px-4 sm:px-6`) |
+| Shell content | Ops Console `.kh-ops-view`. Legacy `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
+| Primary nav | Left **section-filter rail** (Personal, Delivery & finance, Control, Knowledge, Ops, Admin). Only one section’s items are visible. Compact rail + hover expand from `md`. Below `md`: mobile bar hamburger opens the rail drawer. Account lives in the rail user menu, not the rail list |
+| Admin sidebar | Admin destinations live in the Ops rail Admin section. `admin/layout.tsx` no longer renders a second sidebar |
+| Account sidebar | Same grid pattern in `account/layout.tsx` for signed-in users. Rail user menu also links to the same destinations |
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
 | Touch targets | Prefer existing control tokens / header control squares; keep interactive chrome ≥ ~40px |
 | Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
@@ -93,10 +95,10 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 
 | Shell | Pattern |
 |-------|---------|
-| App header | Sticky bar; brand mark + wordmark from `md`+; desktop nav (`md+`); theme/locale; icon login/logout; `MobileNav` toggle last on the right (`md:hidden`) |
-| App / status content | `shellContentClassName`. Status page: eyebrow + back link on one row; overall health `Badge` beside title; row values use `Badge` tones (no left accent bars) |
-| Admin | Single column until `lg`, then sidebar + main; sidebar uses `NavLink tone="sidebar"` |
-| Account | Same as Admin (`account/layout.tsx`) for Profile and AI connections |
+| App chrome | Ops Console grid: sticky left rail + sticky header (breadcrumbs, title, Create/sync, search, theme segment, language). Mobile bar below `md` |
+| App / status content | `.kh-ops-view` inside the authenticated shell. Status/monitoring live under Admin rail |
+| Admin | Rail Admin section; no second admin sidebar |
+| Account | Account sidebar on account routes; also reachable from the rail user menu |
 
 ## Recipes (`.kh-*`)
 
@@ -115,7 +117,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-page-num` / `.kh-page-num-active` | Pagination digits |
 | `.kh-text-link` | Inline text links |
 | `.kh-toast-viewport` / `.kh-toast` / `.kh-toast-{success,danger,info}` / `.kh-toast-dismiss` | Toasts |
-| `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding |
+| `.kh-ops-shell` / `.kh-ops-rail` / `.kh-ops-subhead` / `.kh-ops-view` | Authenticated Ops Console chrome (rail + header + content) |
+| `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
 | `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
 
@@ -178,6 +181,13 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-08-20
+
+* **Ops Console shell** — Authenticated app uses a left section-filter rail + sticky header (`OpsAppShell`, `.kh-ops-*` in `styles/ops-shell.css`). Sections: Personal, Delivery & finance, Control, Knowledge, Ops, Admin. Account is under the user menu. Compact rail and a mobile drawer match the prototype. Theme controls are `data-theme-choice` buttons (light / dark / system); `data-theme` / `data-brand` live on `<html>` only.
+* **Option A tokens** — `--kh-*` retuned to Ops Console oklch (IBM Plex, green accent, 24px background grid, square `3px` panels). Department palettes (`knowhub`, `bootmaker`, `nethorizon`, `in3`) change accent only via `html[data-brand]`. Primary buttons use ink-on-surface like the prototype.
+* **Brand colours** — Account → Display (`#brand`) maps the prototype Admin brand schemes onto the existing cookie + `data-brand` accent without a new product surface.
+* **Org chart emails** — Stakeholder org-chart addresses wrap only at `.` and `@` so dotted segments stay whole inside the card.
 
 ### 2026-08-11
 

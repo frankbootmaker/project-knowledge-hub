@@ -1,13 +1,16 @@
 import { getTranslations } from 'next-intl/server';
 import type { DisplayPrefs } from '@project-knowledge-hub/domain';
 import { mergeDisplayPrefs } from '@project-knowledge-hub/domain';
+import { BrandPicker } from '../../../../components/BrandPicker';
 import { DisplayPrefsForm } from '../../../../components/DisplayPrefsForm';
 import { PageHeader } from '../../../../components/ui';
+import { getBrandPreference } from '../../../../lib/brand-actions';
 import { apiFetch, requireSession } from '../../../../lib/session';
 
 export default async function AccountDisplayPage() {
   await requireSession();
   const t = await getTranslations('account');
+  const brand = await getBrandPreference();
 
   const response = await apiFetch('/api/v1/me');
   if (!response.ok) {
@@ -24,8 +27,9 @@ export default async function AccountDisplayPage() {
   };
 
   return (
-    <div>
+    <div className="grid gap-6">
       <PageHeader title={t('display')} description={t('displaySubtitle')} />
+      <BrandPicker initialBrand={brand} />
       <DisplayPrefsForm
         initialPrefs={mergeDisplayPrefs(user.displayPrefs)}
       />

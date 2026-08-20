@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   CatalogueSection,
@@ -127,6 +127,7 @@ export function ProjectStakeholdersPanel({
   const tWorkspaces = useTranslations('workspaces');
   const locale = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { pushToast } = useToast();
 
   const [stakeholders, setStakeholders] = useState(initialStakeholders);
@@ -142,6 +143,15 @@ export function ProjectStakeholdersPanel({
   const [utilizationOpen, setUtilizationOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+
+  useEffect(() => {
+    if (searchParams.get('stakeholders') === 'org') {
+      setViewMode('org');
+    }
+    if (searchParams.get('utilization') === '1') {
+      setUtilizationOpen(true);
+    }
+  }, [searchParams]);
 
   const [createMode, setCreateMode] = useState<'member' | 'open_role'>('member');
   const [userId, setUserId] = useState('');
