@@ -1,14 +1,16 @@
 # KnowHub Ops Console (Open Design)
 
-Source of truth for the **feature/new-design** UI: the Open Design Ops Console prototype.
+Source of truth for the **feature/new-design** UI: `knowhub-ops-console.html` in this folder.
+
+Cloud agents should match `apps/web` to this HTML and `brand-spec.md`. The local Open Design daemon is not required once these files are in git.
 
 ## Preview
 
-- Open in **Open Design** (project `knowhub-ui-design-options`), or
-- Open the HTML files locally in a browser (`knowhub-ops-console.html`, `knowhub-design-directions.html`).
+- Open `knowhub-ops-console.html` and `knowhub-design-directions.html` in a browser.
+- Optionally open the same files in Open Design (project `knowhub-ui-design-options`) when working on the LAN.
 
 ## Scope (≈ Aug 2026)
 
-Includes interaction depth, nav IA, theme/locale, delivery list/tree, and calendar range.
+Includes nav IA (section-filter rail), theme/locale/brand palettes, delivery list/tree/board, calendar range, org-chart hierarchy, account/auth, admin, imports, Git sync, Scrum extras, and the remaining shipped-product surfaces sketched for implementation.
 
 Brand notes: `brand-spec.md`. Design directions overview: `knowhub-design-directions.html`.
