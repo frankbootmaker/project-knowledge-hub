@@ -1,57 +1,62 @@
 /**
  * Project Knowledge Hub design tokens.
- * Change values here — Tailwind utilities and UI primitives consume these.
+ * Ops Console (Option A) — IBM Plex, green ops accent, square panels.
  */
 
 :root {
-  /* Typography / ink */
-  --kh-ink: #15202b;
-  --kh-ink-muted: #4b5a68;
-  --kh-on-brand: #ffffff;
+  /* Typography / ink — prototype --fg / --muted */
+  --kh-ink: oklch(22% 0.02 240);
+  --kh-ink-muted: oklch(50% 0.018 240);
+  --kh-on-brand: oklch(100% 0 0);
 
-  /* Surfaces */
-  --kh-surface: #fcfdfe;
-  --kh-panel: rgba(255, 255, 255, 0.92);
-  --kh-panel-solid: #ffffff;
-  --kh-line: rgba(21, 32, 43, 0.08);
-  --kh-line-strong: rgba(21, 32, 43, 0.14);
-  --kh-neutral-soft: #f8f9fa;
+  /* Surfaces — prototype --bg / --surface / --border */
+  --kh-surface: oklch(98% 0.005 250);
+  --kh-panel: oklch(100% 0 0);
+  --kh-panel-solid: oklch(100% 0 0);
+  --kh-line: oklch(90% 0.008 240);
+  --kh-line-strong: oklch(84% 0.01 240);
+  --kh-neutral-soft: oklch(96% 0.006 250);
 
-  /* Brand & status */
-  --kh-brand: #1f4b73;
-  --kh-brand-hover: #183a59;
-  --kh-brand-soft: #f3f7fb;
-  --kh-accent: #145a36;
-  --kh-accent-soft: #e3f6ec;
-  --kh-warn: #8a5a00;
-  --kh-warn-soft: #fff7e6;
-  --kh-danger: #9b1c1c;
-  --kh-danger-soft: #fde8e8;
+  /* Brand & status — KnowHub green ops accent */
+  --kh-brand: oklch(52% 0.14 145);
+  --kh-brand-hover: oklch(46% 0.14 145);
+  --kh-brand-soft: color-mix(in oklch, var(--kh-brand) 12%, var(--kh-panel));
+  --kh-accent: oklch(58% 0.16 145);
+  --kh-accent-soft: color-mix(in oklch, var(--kh-accent) 12%, white);
+  --kh-warn: oklch(68% 0.14 78);
+  --kh-warn-soft: color-mix(in oklch, var(--kh-warn) 14%, white);
+  --kh-danger: oklch(58% 0.18 28);
+  --kh-danger-soft: color-mix(in oklch, var(--kh-danger) 12%, white);
 
-  /* Atmosphere — near-white; barely-there cool wash */
-  --kh-bg-glow-a: #f7fafc;
-  --kh-bg-glow-b: #f9fafb;
-  --kh-bg-base-a: #fcfdfe;
-  --kh-bg-base-b: #f8fafc;
-  --kh-selection: color-mix(in srgb, var(--kh-brand) 22%, white);
+  /* Atmosphere — 24px ops grid */
+  --kh-bg-glow-a: oklch(96% 0.006 250 / 0.74);
+  --kh-bg-glow-b: oklch(96% 0.006 250 / 0.74);
+  --kh-bg-base-a: var(--kh-surface);
+  --kh-bg-base-b: var(--kh-surface);
+  --kh-selection: color-mix(in oklch, var(--kh-accent) 22%, white);
+  --kh-grid-line: oklch(96% 0.006 250 / 0.74);
 
-  /* Geometry */
-  --kh-radius-sm: 0.35rem;
-  --kh-radius-md: 0.55rem;
-  --kh-radius-lg: 0.85rem;
+  /* Geometry — square panels */
+  --kh-radius-sm: 3px;
+  --kh-radius-md: 3px;
+  --kh-radius-lg: 4px;
   --kh-control-height: 1.2rem;
   --kh-control-width: 2.2rem;
-  --kh-control-pad-x: 0.875rem;
-  --kh-control-pad-y: 0.5rem;
-  --kh-focus-ring: color-mix(in srgb, var(--kh-brand) 30%, transparent);
+  --kh-control-pad-x: 0.8rem;
+  --kh-control-pad-y: 0.4rem;
+  --kh-focus-ring: color-mix(in oklch, var(--kh-accent) 30%, transparent);
+  --kh-rail: 224px;
+  --kh-rail-compact: 64px;
 
   /* Feedback / stacking */
   --kh-toast-duration-ms: 4200;
   --kh-z-toast: 50;
   --kh-z-modal: 45;
   --kh-z-mobile-nav: 40;
+  --kh-z-rail: 12;
+  --kh-z-header: 10;
 
-  /* Motion — keep intentional and short; respect prefers-reduced-motion in CSS */
+  /* Motion */
   --kh-motion-fast: 140ms;
   --kh-motion-base: 220ms;
   --kh-motion-enter: 280ms;
@@ -61,34 +66,89 @@
   color-scheme: light;
 }
 
-.dark {
-  --kh-ink: #e7eef5;
-  --kh-ink-muted: #9aabba;
-  --kh-on-brand: #0f161d;
+.dark,
+html[data-theme='dark'] {
+  --kh-ink: oklch(92% 0.008 240);
+  --kh-ink-muted: oklch(68% 0.018 240);
+  --kh-on-brand: oklch(18% 0.018 245);
 
-  --kh-surface: #0f161d;
-  --kh-panel: rgba(22, 31, 41, 0.88);
-  --kh-panel-solid: #1a2430;
-  --kh-line: rgba(231, 238, 245, 0.1);
-  --kh-line-strong: rgba(231, 238, 245, 0.18);
-  --kh-neutral-soft: #243039;
+  --kh-surface: oklch(15% 0.018 245);
+  --kh-panel: oklch(20% 0.018 245);
+  --kh-panel-solid: oklch(20% 0.018 245);
+  --kh-line: oklch(31% 0.018 242);
+  --kh-line-strong: oklch(38% 0.018 242);
+  --kh-neutral-soft: oklch(22% 0.018 245);
 
-  --kh-brand: #4a8ec0;
-  --kh-brand-hover: #6aa6d4;
-  --kh-brand-soft: #1a3348;
-  --kh-accent: #4caf7a;
-  --kh-accent-soft: #163526;
-  --kh-warn: #e0a84a;
-  --kh-warn-soft: #3a2a10;
-  --kh-danger: #e57373;
-  --kh-danger-soft: #3a1818;
+  --kh-brand: oklch(76% 0.14 145);
+  --kh-brand-hover: oklch(82% 0.14 145);
+  --kh-brand-soft: color-mix(in oklch, var(--kh-brand) 18%, var(--kh-panel));
+  --kh-accent: oklch(70% 0.16 145);
+  --kh-accent-soft: color-mix(in oklch, var(--kh-accent) 18%, var(--kh-panel));
+  --kh-warn: oklch(76% 0.13 78);
+  --kh-warn-soft: color-mix(in oklch, var(--kh-warn) 16%, var(--kh-panel));
+  --kh-danger: oklch(70% 0.17 28);
+  --kh-danger-soft: color-mix(in oklch, var(--kh-danger) 16%, var(--kh-panel));
 
-  --kh-bg-glow-a: #1a2b3c;
-  --kh-bg-glow-b: #152029;
-  --kh-bg-base-a: #0f161d;
-  --kh-bg-base-b: #121a22;
-  --kh-selection: color-mix(in srgb, var(--kh-brand) 35%, transparent);
-  --kh-focus-ring: color-mix(in srgb, var(--kh-brand) 35%, transparent);
+  --kh-bg-glow-a: oklch(23% 0.015 245 / 0.5);
+  --kh-bg-glow-b: oklch(23% 0.015 245 / 0.5);
+  --kh-bg-base-a: var(--kh-surface);
+  --kh-bg-base-b: var(--kh-surface);
+  --kh-selection: color-mix(in oklch, var(--kh-accent) 35%, transparent);
+  --kh-grid-line: oklch(23% 0.015 245 / 0.5);
+  --kh-focus-ring: color-mix(in oklch, var(--kh-accent) 35%, transparent);
 
   color-scheme: dark;
+}
+
+/* Department palettes — accent only, layout stays the same. */
+html[data-brand='knowhub'] {
+  --kh-brand: oklch(52% 0.14 145);
+  --kh-brand-hover: oklch(46% 0.14 145);
+  --kh-accent: oklch(58% 0.16 145);
+}
+
+html[data-brand='knowhub'][data-theme='dark'],
+html[data-brand='knowhub'].dark {
+  --kh-brand: oklch(76% 0.14 145);
+  --kh-brand-hover: oklch(82% 0.14 145);
+  --kh-accent: oklch(70% 0.16 145);
+}
+
+html[data-brand='bootmaker'] {
+  --kh-brand: #1e3a8a;
+  --kh-brand-hover: #172554;
+  --kh-accent: #6366f1;
+}
+
+html[data-brand='bootmaker'][data-theme='dark'],
+html[data-brand='bootmaker'].dark {
+  --kh-brand: #60a5fa;
+  --kh-brand-hover: #93c5fd;
+  --kh-accent: #a5b4fc;
+}
+
+html[data-brand='nethorizon'] {
+  --kh-brand: #0f766e;
+  --kh-brand-hover: #115e59;
+  --kh-accent: #14b8a6;
+}
+
+html[data-brand='nethorizon'][data-theme='dark'],
+html[data-brand='nethorizon'].dark {
+  --kh-brand: #2dd4bf;
+  --kh-brand-hover: #5eead4;
+  --kh-accent: #5eead4;
+}
+
+html[data-brand='in3'] {
+  --kh-brand: #4338ca;
+  --kh-brand-hover: #3730a3;
+  --kh-accent: #6366f1;
+}
+
+html[data-brand='in3'][data-theme='dark'],
+html[data-brand='in3'].dark {
+  --kh-brand: #818cf8;
+  --kh-brand-hover: #a5b4fc;
+  --kh-accent: #a5b4fc;
 }

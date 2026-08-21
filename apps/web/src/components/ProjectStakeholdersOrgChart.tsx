@@ -96,7 +96,7 @@ function StakeholderCard({
   return (
     <article
       className={cn(
-        'min-w-[12rem] max-w-[16rem] rounded-lg border p-3 shadow-sm',
+        'min-w-[12.5rem] max-w-[12.5rem] rounded-sm border p-2.5',
         isAi
           ? 'border-brand/30 bg-brand-soft/40'
           : 'border-line bg-panel-solid',
@@ -131,9 +131,16 @@ function StakeholderCard({
           {stakeholder.email ? (
             <a
               href={`mailto:${stakeholder.email}`}
-              className="mt-1 block truncate text-xs text-brand no-underline hover:underline"
+              className="kh-org-email mt-1 block text-[11px] leading-snug text-brand no-underline hover:underline"
             >
-              {stakeholder.email}
+              {stakeholder.email.split(/([.@])/).map((part, index) => (
+                <span
+                  key={`${part}-${index}`}
+                  className={part === '.' || part === '@' ? undefined : 'whitespace-nowrap'}
+                >
+                  {part}
+                </span>
+              ))}
             </a>
           ) : null}
           {!isAi && stakeholder.jobTitle ? (

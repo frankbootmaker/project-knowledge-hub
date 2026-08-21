@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
-import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
+import { IBM_Plex_Mono, IBM_Plex_Sans, IBM_Plex_Sans_Condensed } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeScript } from '../components/ThemeScript';
 import { ToastProvider } from '../components/ui';
+import { getBrandPreference } from '../lib/brand-actions';
 import { getThemePreference } from '../lib/theme-actions';
 import './globals.css';
 
@@ -22,8 +23,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#1F4B73' },
-    { media: '(prefers-color-scheme: dark)', color: '#1F4B73' },
+    { media: '(prefers-color-scheme: light)', color: '#2f9e4f' },
+    { media: '(prefers-color-scheme: dark)', color: '#1b2a22' },
   ],
 };
 
@@ -31,6 +32,13 @@ const sans = IBM_Plex_Sans({
   subsets: ['latin', 'latin-ext'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-ibm-plex-sans',
+  display: 'swap',
+});
+
+const display = IBM_Plex_Sans_Condensed({
+  subsets: ['latin', 'latin-ext'],
+  weight: ['400', '600', '700'],
+  variable: '--font-ibm-plex-sans-condensed',
   display: 'swap',
 });
 
@@ -44,13 +52,16 @@ const mono = IBM_Plex_Mono({
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = await getLocale();
   const messages = await getMessages();
-  const theme = await getThemePreference();
+  const themePreference = await getThemePreference();
+  const brand = await getBrandPreference();
+  const ssrTheme = themePreference === 'dark' ? 'dark' : 'light';
 
   return (
     <html
       lang={locale}
-      className={`${sans.variable} ${mono.variable}${theme === 'dark' ? ' dark' : ''}`}
-      data-theme={theme}
+      className={`${sans.variable} ${display.variable} ${mono.variable}${ssrTheme === 'dark' ? ' dark' : ''}`}
+      data-theme={ssrTheme}
+      data-brand={brand}
       suppressHydrationWarning
     >
       <body className="font-sans">

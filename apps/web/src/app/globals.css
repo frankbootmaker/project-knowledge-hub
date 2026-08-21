@@ -1,9 +1,12 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github.css';
 @import '../styles/tokens.css';
+@import '../styles/ops-shell.css';
 
 @theme {
   --font-sans: var(--font-ibm-plex-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-display: var(--font-ibm-plex-sans-condensed), 'IBM Plex Sans Condensed',
+    'Aptos Narrow', system-ui, sans-serif;
   --font-mono: var(--font-ibm-plex-mono), 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo,
     monospace;
 
@@ -39,11 +42,14 @@
 
   body {
     @apply bg-surface font-sans text-ink antialiased;
+    background-color: var(--kh-surface);
     background-image:
-      radial-gradient(circle at top left, var(--kh-bg-glow-a) 0%, transparent 42%),
-      radial-gradient(circle at bottom right, var(--kh-bg-glow-b) 0%, transparent 46%),
-      linear-gradient(180deg, var(--kh-bg-base-a) 0%, var(--kh-bg-base-b) 100%);
+      linear-gradient(var(--kh-grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--kh-grid-line) 1px, transparent 1px);
+    background-size: 24px 24px;
     background-attachment: fixed;
+    font-size: 14px;
+    line-height: 1.45;
   }
 
   a {
@@ -121,7 +127,7 @@
   }
 
   .kh-panel {
-    @apply rounded-lg border border-line bg-panel p-5 shadow-sm backdrop-blur-sm;
+    @apply rounded-sm border border-line bg-panel-solid p-4;
   }
 
   /* Workspace accent tiles — soft wash + stronger wash on hover */
@@ -244,11 +250,11 @@
   }
 
   .kh-panel-solid {
-    @apply rounded-lg border border-line bg-panel-solid p-5;
+    @apply rounded-sm border border-line bg-panel-solid p-4;
   }
 
   .kh-panel-inset {
-    @apply rounded-md border border-line bg-panel-solid px-3 py-3;
+    @apply rounded-sm border border-line bg-panel-solid px-3 py-3;
   }
 
   .kh-muted {
@@ -256,7 +262,7 @@
   }
 
   .kh-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border text-sm font-medium no-underline
+    @apply inline-flex items-center justify-center gap-2 rounded-sm border text-sm font-medium no-underline
       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30
       disabled:cursor-not-allowed;
     padding: var(--kh-control-pad-y) var(--kh-control-pad-x);
@@ -274,7 +280,7 @@
   }
 
   .kh-btn-primary {
-    @apply border-transparent bg-brand text-on-brand hover:bg-brand-hover disabled:bg-brand/50;
+    @apply border-ink bg-ink text-panel-solid hover:bg-ink/90 disabled:bg-ink/50;
   }
 
   .kh-btn-secondary {

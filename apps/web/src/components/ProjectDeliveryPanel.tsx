@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
   CatalogueSection,
@@ -192,6 +192,7 @@ export function ProjectDeliveryPanel({
   const tCommon = useTranslations('common');
   const tWorkspaces = useTranslations('workspaces');
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { pushToast } = useToast();
 
   const [epics, setEpics] = useState(initialEpics);
@@ -207,6 +208,13 @@ export function ProjectDeliveryPanel({
     kind: 'epic' | 'story' | 'milestone';
     id: string;
   } | null>(null);
+
+  useEffect(() => {
+    const next = searchParams.get('delivery');
+    if (next && (VIEW_MODES as readonly string[]).includes(next)) {
+      setViewMode(next as ViewMode);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!initialOpenTaskId) return;

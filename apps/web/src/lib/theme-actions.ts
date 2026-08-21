@@ -3,13 +3,13 @@
 import { cookies } from 'next/headers';
 import {
   defaultTheme,
-  parseTheme,
+  parseThemePreference,
   themeCookieName,
-  type AppTheme,
+  type ThemePreference,
 } from './theme';
 
 export async function setThemeAction(theme: string): Promise<void> {
-  const nextTheme: AppTheme = parseTheme(theme);
+  const nextTheme: ThemePreference = parseThemePreference(theme);
   const cookieStore = await cookies();
   cookieStore.set(themeCookieName, nextTheme, {
     path: '/',
@@ -18,8 +18,8 @@ export async function setThemeAction(theme: string): Promise<void> {
   });
 }
 
-export async function getThemePreference(): Promise<AppTheme> {
+export async function getThemePreference(): Promise<ThemePreference> {
   const cookieStore = await cookies();
   const value = cookieStore.get(themeCookieName)?.value;
-  return parseTheme(value) || defaultTheme;
+  return parseThemePreference(value) || defaultTheme;
 }

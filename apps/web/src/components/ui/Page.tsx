@@ -24,7 +24,7 @@ export function Page({
           : viewport
             ? 'max-w-[min(90vw,96rem)]'
             : wide
-              ? 'max-w-5xl'
+              ? 'max-w-[min(100%,88rem)]'
               : 'max-w-3xl',
         className,
       )}
@@ -52,7 +52,9 @@ export function PageHeader({
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0">
         {eyebrow ? <p className="mb-1 text-sm text-ink-muted">{eyebrow}</p> : null}
-        <h1 className="m-0 text-3xl font-semibold tracking-tight text-ink">{title}</h1>
+        <h1 className="m-0 font-display text-[clamp(25px,2.4vw,31px)] font-bold tracking-tight text-ink">
+          {title}
+        </h1>
         {nav ? <div className="mt-3">{nav}</div> : null}
         {description ? (
           <p className="mt-1.5 mb-0 text-ink-muted">{description}</p>

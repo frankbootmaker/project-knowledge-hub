@@ -16,8 +16,8 @@ If you add, change, or remove visible UI (layout, chrome, feedback, colors, cont
 2. **Update `docs/design/DESIGN_SYSTEM.md` in the same change** — tables and the Changelog section.
 3. Use `useToast()` / `pushToast` for create/save/delete/wizard confirmations (i18n `admin.toast*` keys).
 4. Keep admin lists newest-first unless product says otherwise (API `orderBy createdAt desc`).
-5. Prefer shell/layout primitives for responsive structure (`.kh-shell*`, `shell.ts`, `MobileNav`). App header: mark-only brand below `md`; hamburger last on the right.
-6. Never hide primary navigation without a mobile path (`MobileNav` or equivalent).
+5. Prefer shell/layout primitives for responsive structure (`.kh-ops-*` authenticated chrome, `.kh-shell*` on public pages). Ops Console: left section-filter rail + sticky header; compact rail / mobile drawer. Theme buttons use `data-theme-choice` only — never `document.documentElement.dataset.themePreference`.
+6. Never hide primary navigation without a mobile path (rail drawer below `md`).
 
 Do not finish a UI task without the design-system doc update.
 
