@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Panel } from './ui';
 
 /**
  * Collapses summary / links / source metadata behind a single disclosure
@@ -27,8 +26,8 @@ export function KnowledgeRecordMoreDetails({
   const [open, setOpen] = useState(false);
 
   return (
-    <Panel className="mb-6">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <section className="kh-ops-panel mb-6">
+      <div className="kh-ops-manage-strip">
         <button
           type="button"
           className="kh-btn kh-btn-secondary inline-flex items-center gap-2 text-sm"
@@ -47,27 +46,27 @@ export function KnowledgeRecordMoreDetails({
         ) : null}
       </div>
       {open ? (
-        <div className="mt-4 grid gap-6">
+        <div className="kh-ops-card-body grid gap-6">
           <div className="grid gap-2">
-            <h2 className="m-0 text-base font-semibold">{t('summaryAndLinks')}</h2>
+            <h2 className="kh-ops-panel-title m-0">{t('summaryAndLinks')}</h2>
             <div className="grid gap-2 text-sm">{summary}</div>
             {links ? <div className="grid gap-2 text-sm">{links}</div> : null}
           </div>
           <div>
-            <h2 className="mt-0 mb-3 text-base font-semibold">
+            <h2 className="kh-ops-panel-title mt-0 mb-2">
               {t('sourceAndVerification')}
             </h2>
-            <dl className="m-0 grid grid-cols-[minmax(7rem,10rem)_1fr] gap-x-3 gap-y-1.5 text-sm">
+            <dl className="kh-ops-keyvals">
               {sourceRows.map((row) => (
                 <div key={row.label} className="contents">
-                  <dt className="text-ink-muted">{row.label}</dt>
-                  <dd className="m-0 min-w-0 break-words">{row.value}</dd>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
                 </div>
               ))}
             </dl>
           </div>
         </div>
       ) : null}
-    </Panel>
+    </section>
   );
 }

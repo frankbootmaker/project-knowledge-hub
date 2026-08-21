@@ -643,7 +643,10 @@
 }
 
 .knowledge-markdown {
-  @apply max-w-full min-w-0 leading-relaxed;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
 }
 
 .knowledge-markdown :is(h1, h2, h3, h4, h5, h6) {
@@ -651,88 +654,154 @@
 }
 
 .knowledge-markdown pre {
-  @apply overflow-x-auto rounded-md bg-ink/5 px-4 py-3;
+  overflow-x: auto;
+  padding: 12px 14px;
+  border-radius: var(--kh-radius-sm);
+  background: color-mix(in oklch, var(--kh-ink) 5%, transparent);
 }
 
 /* Wide spreadsheet-style tables from Excel→Markdown imports. */
 .knowledge-markdown-table-scroll {
-  @apply my-4 max-w-full overflow-x-auto rounded-md border border-line;
+  margin: 16px 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--kh-line);
+  border-radius: var(--kh-radius-sm);
 }
 
 .knowledge-markdown table {
-  @apply w-max min-w-full border-collapse text-sm;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
 }
 
 .knowledge-markdown th,
 .knowledge-markdown td {
-  @apply border border-line px-2.5 py-1.5 align-top whitespace-nowrap;
+  padding: 8px 10px;
+  border: 1px solid var(--kh-line);
+  vertical-align: top;
+  white-space: nowrap;
 }
 
 .knowledge-markdown th {
-  @apply bg-neutral-soft font-semibold text-ink;
+  background: var(--kh-neutral-soft);
+  font-weight: 650;
+  color: var(--kh-ink);
 }
 
 .knowledge-markdown tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--kh-ink) 3%, transparent);
+  background: color-mix(in oklch, var(--kh-ink) 3%, transparent);
 }
 
-.dark .knowledge-markdown pre {
-  @apply bg-ink/10;
+.dark .knowledge-markdown pre,
+html[data-theme='dark'] .knowledge-markdown pre {
+  background: color-mix(in oklch, var(--kh-ink) 10%, transparent);
 }
 
-.dark .knowledge-markdown .hljs {
+.dark .knowledge-markdown .hljs,
+html[data-theme='dark'] .knowledge-markdown .hljs {
   background: transparent;
   color: #d6dee8;
 }
 
 .dark .knowledge-markdown .hljs-comment,
-.dark .knowledge-markdown .hljs-quote {
+.dark .knowledge-markdown .hljs-quote,
+html[data-theme='dark'] .knowledge-markdown .hljs-comment,
+html[data-theme='dark'] .knowledge-markdown .hljs-quote {
   color: #8b9aab;
 }
 
 .dark .knowledge-markdown .hljs-keyword,
 .dark .knowledge-markdown .hljs-selector-tag,
-.dark .knowledge-markdown .hljs-subst {
+.dark .knowledge-markdown .hljs-subst,
+html[data-theme='dark'] .knowledge-markdown .hljs-keyword,
+html[data-theme='dark'] .knowledge-markdown .hljs-selector-tag,
+html[data-theme='dark'] .knowledge-markdown .hljs-subst {
   color: #7eb6e0;
 }
 
 .dark .knowledge-markdown .hljs-string,
 .dark .knowledge-markdown .hljs-doctag,
-.dark .knowledge-markdown .hljs-template-variable {
+.dark .knowledge-markdown .hljs-template-variable,
+html[data-theme='dark'] .knowledge-markdown .hljs-string,
+html[data-theme='dark'] .knowledge-markdown .hljs-doctag,
+html[data-theme='dark'] .knowledge-markdown .hljs-template-variable {
   color: #8fd0a8;
 }
 
 .dark .knowledge-markdown .hljs-number,
-.dark .knowledge-markdown .hljs-literal {
+.dark .knowledge-markdown .hljs-literal,
+html[data-theme='dark'] .knowledge-markdown .hljs-number,
+html[data-theme='dark'] .knowledge-markdown .hljs-literal {
   color: #e0a84a;
 }
 
 .knowledge-markdown code {
-  @apply font-mono text-[0.9em];
+  padding: 2px 4px;
+  background: var(--kh-bg, var(--kh-surface));
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.knowledge-markdown pre code {
+  padding: 0;
+  background: transparent;
 }
 
 .knowledge-markdown pre.mermaid {
-  @apply bg-transparent text-center;
+  background: transparent;
+  text-align: center;
 }
 
 .knowledge-markdown h1,
 .knowledge-markdown h2,
 .knowledge-markdown h3 {
-  @apply mt-6 mb-2 font-semibold tracking-tight text-ink;
+  margin: 22px 0 8px;
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--kh-ink);
+}
+
+.knowledge-markdown h1:first-child,
+.knowledge-markdown h2:first-child,
+.knowledge-markdown h3:first-child {
+  margin-top: 0;
 }
 
 .knowledge-markdown h1 {
-  @apply text-2xl;
+  font-size: 22px;
 }
 
 .knowledge-markdown h2 {
-  @apply text-xl;
+  font-size: 18px;
+}
+
+.knowledge-markdown h3 {
+  font-size: 15px;
+}
+
+.knowledge-markdown p,
+.knowledge-markdown li {
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 .knowledge-markdown p {
-  @apply my-3;
+  margin: 12px 0;
 }
 
 .knowledge-markdown ul {
-  @apply my-3 list-disc pl-5;
+  margin: 12px 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.knowledge-markdown blockquote {
+  margin: 15px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--kh-accent);
+  background: var(--kh-bg, var(--kh-surface));
+  color: var(--kh-ink-muted);
 }

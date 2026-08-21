@@ -111,7 +111,7 @@ function MarkdownBody({
   return (
     <article
       ref={ref}
-      className={cn('knowledge-markdown leading-relaxed break-words', className)}
+      className={cn('knowledge-markdown kh-ops-markdown-view', className)}
       dangerouslySetInnerHTML={markup}
     />
   );
@@ -186,7 +186,7 @@ export function MarkdownDocument({
 
   return (
     <div className="min-w-0 max-w-full">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="kh-ops-manage-strip">
         {toc.length > 0 ? (
           <Button
             type="button"
@@ -210,17 +210,19 @@ export function MarkdownDocument({
 
       <div
         className={cn(
-          'grid min-w-0 gap-6',
+          'grid min-w-0 gap-3',
           toc.length > 0 && tocOpen ? 'lg:grid-cols-[220px_1fr]' : 'grid-cols-1',
         )}
       >
         {toc.length > 0 && tocOpen ? (
           <nav
             aria-label={t('tocLabel')}
-            className="sticky top-4 self-start"
+            className="kh-ops-panel kh-ops-toc self-start"
           >
-            <h2 className="mt-0 mb-3 text-sm font-semibold text-ink">{t('contents')}</h2>
-            <ul className="m-0 grid list-none gap-1.5 p-0">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{t('contents')}</h2>
+            </div>
+            <ul className="kh-ops-toc-list">
               {branches.map((branch) => {
                 const expanded = expandedIds.has(branch.item.id);
                 const hasChildren = branch.children.length > 0;
@@ -228,7 +230,6 @@ export function MarkdownDocument({
                   <li key={branch.item.id} className="grid gap-1">
                     <button
                       type="button"
-                      className="text-left text-sm text-ink-muted no-underline hover:text-brand"
                       style={{
                         paddingLeft: `${Math.max(0, branch.item.depth - 1) * 0.75}rem`,
                       }}
@@ -238,12 +239,11 @@ export function MarkdownDocument({
                       {branch.item.text}
                     </button>
                     {hasChildren && expanded ? (
-                      <ul className="m-0 grid list-none gap-1 p-0">
+                      <ul>
                         {branch.children.map((child) => (
                           <li key={child.id}>
                             <button
                               type="button"
-                              className="text-left text-sm text-ink-muted no-underline hover:text-brand"
                               style={{
                                 paddingLeft: `${Math.max(0, child.depth - 1) * 0.75}rem`,
                               }}

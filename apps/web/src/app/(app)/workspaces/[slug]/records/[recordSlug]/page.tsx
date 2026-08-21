@@ -10,7 +10,6 @@ import {
   Badge,
   Page,
   PageHeader,
-  Panel,
   lifecycleLabel,
   lifecycleTone,
 } from '../../../../../../components/ui';
@@ -193,7 +192,7 @@ export default async function KnowledgeRecordDetailPage({
       />
 
       {record.lifecycleStatus === 'superseded' ? (
-        <p className="mb-4 rounded-md border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
+        <p className="kh-ops-status-row mb-4" data-tone="danger">
           {t('supersededWarning')}
         </p>
       ) : null}
@@ -298,11 +297,13 @@ export default async function KnowledgeRecordDetailPage({
               </p>
             ) : null}
             {record.tags.length > 0 ? (
-              <p className="m-0 text-xs text-ink-muted">
-                {tCommon('tagsList', {
-                  tags: record.tags.map((tag) => tag.name).join(', '),
-                })}
-              </p>
+              <div className="kh-ops-tag-list px-0 py-1">
+                {record.tags.map((tag) => (
+                  <span key={tag.name} className="kh-ops-tag">
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
             ) : null}
           </>
         }
@@ -338,13 +339,13 @@ export default async function KnowledgeRecordDetailPage({
         ]}
       />
 
-      <Panel className="min-w-0 overflow-hidden">
+      <section className="kh-ops-panel min-w-0 overflow-hidden">
         <MarkdownDocument
           html={record.contentHtml ?? ''}
           toc={record.toc ?? []}
           title={record.title}
         />
-      </Panel>
+      </section>
     </Page>
   );
 }

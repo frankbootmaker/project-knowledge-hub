@@ -38,6 +38,7 @@ Before considering UI work done:
 | `--kh-on-brand` | `text-on-brand` (text on primary buttons) |
 | `--kh-ink` / `--kh-ink-muted` | Body and secondary text |
 | `--kh-panel` / `--kh-panel-solid` | Surfaces |
+| `--kh-bg` | Page/strip background (alias of `--kh-surface`; prototype `--bg`) |
 | `--kh-line` / `--kh-line-strong` | Borders |
 | `--kh-accent*` / `--kh-warn*` / `--kh-danger*` | Status |
 | `--kh-radius-*` | Square Ops Console radii (`3px` / `3px` / `4px`) |
@@ -147,6 +148,9 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-storage-choice` / `.kh-ops-provider` | Admin storage provider picker |
 | `.kh-ops-stage-strip` / `.kh-ops-stage-card` | Import progress stages and MCP wizard steps |
 | `.kh-ops-history-list` / `.kh-ops-history-item` | Knowledge version history rows |
+| `.kh-ops-editor-shell` / `.kh-ops-editor-toolbar` / `.kh-ops-markdown-editor` | Knowledge create/edit editor + markdown toolbar |
+| `.kh-ops-manage-strip` / `.kh-ops-keyvals` / `.kh-ops-tag-list` / `.kh-ops-tag` | Record action strip, definition lists, tag chips |
+| `.kh-ops-markdown-view` / `.kh-ops-toc` / `.kh-ops-preview-pane` | Markdown document density, TOC panel, live preview |
 | `.kh-ops-roster-person` | Stakeholder roster avatar + name cell |
 | `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
@@ -219,6 +223,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console knowledge editor** — Create/edit record chrome uses editor-shell, markdown toolbar, manage-strip/action-line, and live preview aside. Existing fields and save/lifecycle actions stay; no owner, generated-key reservation, or version diff is invented. Record detail more-details, tags, markdown viewer, and version snapshot warnings use the same Ops density.
 * **Ops Console leftover forms** — Mail settings, MCP setup wizard (stage strip + client setup cards + schema copy cards), admin overview shortcuts, close-account danger zone, conversation/document import, create workspace/project/system, AI connection tables, change password, and display/notification prefs now use Ops form-grid, action-line, setup-card, dropzone, and danger-zone recipes. Drivers stay console/SMTP/Resend; confirm phrase stays `CLOSE`; no invented SES, FTE, or Azure fields.
 * **Ops Console leftover catalogues** — Project-linked systems/records, workspace picker, account memberships, import details, version history, Git connections, and remaining admin lists (organizations, AI providers, storage picker, style packs) now use Ops data tables, project cards, or provider/stage strips. Task manage dialogs use prototype modal tabs and form grid for existing Details / RACI / Handoff / Activity / Documents sections. No invented FTE, retention, or Azure storage columns.
 * **Ops Console catalogues (slices 1–8)** — Stakeholders (list/org/utilization inline; `?stakeholders=org` / `?utilization=1` unchanged), RAID, change, budget body, baseline, workspace project grid + knowledge/system tables, search groups, archive tables, manage-modal density, and admin/account lists now use `.kh-ops-data-table`, capacity bars, budget layout, baseline grid, and project cards. No invented FTE/cycle-time/budget-impact columns.

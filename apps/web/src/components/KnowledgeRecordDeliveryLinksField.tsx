@@ -168,7 +168,7 @@ export function KnowledgeRecordDeliveryLinksField({
   }
 
   return (
-    <Field label={t('deliveryLinks')} className="sm:col-span-2">
+    <Field label={t('deliveryLinks')} className="kh-ops-field-span">
       <p className="mb-2 mt-0 text-xs text-ink-muted">{t('deliveryLinksHint')}</p>
       {error ? (
         <div className="mb-2">
@@ -180,21 +180,18 @@ export function KnowledgeRecordDeliveryLinksField({
       ) : entities.length === 0 ? (
         <p className="m-0 text-sm text-ink-muted">{t('deliveryLinksEmpty')}</p>
       ) : (
-        <div className="max-h-56 overflow-auto rounded-md border border-line p-2">
+        <div className="grid max-h-56 gap-3 overflow-auto">
           {[...grouped.entries()].map(([group, rows]) => (
-            <div key={group} className="mb-2 last:mb-0">
-              <p className="mb-1 mt-0 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                {group}
-              </p>
+            <div key={group} className="grid gap-1">
+              <p className="kh-ops-panel-meta mb-0 mt-0">{group}</p>
               <ul className="m-0 grid list-none gap-1 p-0">
                 {rows.map((entity) => {
                   const key = linkKey(entity.entityType, entity.entityId);
                   return (
                     <li key={key}>
-                      <label className="flex items-start gap-2 text-sm">
+                      <label className="kh-ops-scope-check">
                         <input
                           type="checkbox"
-                          className="mt-0.5"
                           checked={selected.has(key)}
                           disabled={pending || !canMutate}
                           onChange={() => toggle(entity)}

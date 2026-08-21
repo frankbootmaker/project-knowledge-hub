@@ -7,7 +7,6 @@ import {
   Badge,
   Page,
   PageHeader,
-  Panel,
   lifecycleLabel,
   lifecycleTone,
 } from '../../../../../../../../components/ui';
@@ -124,24 +123,24 @@ export default async function KnowledgeVersionDetailPage({
       />
 
       {version.isHistorical ? (
-        <p className="mb-4 rounded-md border border-warn/20 bg-warn-soft px-4 py-3 text-warn">
+        <p className="kh-ops-status-row mb-3" data-tone="warn">
           {t('historicalWarningDetail')}
         </p>
       ) : null}
 
       {version.changeMessage ? (
-        <p className="mb-4 text-ink-muted">
+        <p className="mb-3 text-ink-muted">
           {t('changeMessageLabel', { message: version.changeMessage })}
         </p>
       ) : null}
 
-      <Panel className="min-w-0 overflow-hidden">
+      <section className="kh-ops-panel min-w-0 overflow-hidden">
         <MarkdownDocument
           html={version.contentHtml ?? ''}
           toc={version.toc ?? []}
           title={version.title}
         />
-      </Panel>
+      </section>
     </Page>
   );
 }
