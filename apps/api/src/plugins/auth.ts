@@ -54,6 +54,72 @@ export function requireAuthenticated(request: FastifyRequest): AuthPrincipal {
   return request.principal;
 }
 
+function firstHeaderValue(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+function originFromUrl(value: string | undefined): string | null {
+  if (!value?.trim()) {
+    return null;
+  }
+  try {
+    return new URL(value.trim()).origin;
+  } catch {
+    return null;
+  }
+}
+
+function forwardedPublicOrigin(request: {
+  headers: FastifyRequest['headers'];
+}): string | null {
+  const host = firstHeaderValue(request.headers['x-forwarded-host'])
+    ?.split(',')[0]
+    ?.trim();
+  if (!host) {
+    return null;
+  }
+  const proto = (
+    firstHeaderValue(request.headers['x-forwarded-proto']) ?? 'https'
+  )
+    .split(',')[0]
+    .trim();
+  return originFromUrl(`${proto}://${host}`);
+}
+
+/** Origins allowed for CSRF + CORS: WEB_URL, API rewrite target, public proxy host. */
+export function allowedOriginsForRequest(
+  env: { WEB_URL: string; API_URL: string },
+  request: { headers: FastifyRequest['headers'] },
+): Set<string> {
+  const allowed = new Set<string>();
+  const web = originFromUrl(env.WEB_URL);
+  if (web) {
+    allowed.add(web);
+  }
+  const api = originFromUrl(env.API_URL);
+  if (api) {
+    allowed.add(api);
+  }
+  const forwarded = forwardedPublicOrigin(request);
+  if (forwarded) {
+    allowed.add(forwarded);
+  }
+  return allowed;
+}
+
+export function isAllowedRequestOrigin(
+  env: { WEB_URL: string; API_URL: string },
+  request: { headers: FastifyRequest['headers'] },
+  origin: string,
+): boolean {
+  return allowedOriginsForRequest(env, request).has(origin);
+}
+
 export function assertMutatingOrigin(app: FastifyInstance, request: FastifyRequest): void {
   const method = request.method.toUpperCase();
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
@@ -68,13 +134,16 @@ export function assertMutatingOrigin(app: FastifyInstance, request: FastifyReque
     return;
   }
 
-  if (origin !== allowed) {
-    throw new AppError({
-      code: 'CSRF_REJECTED',
-      message: 'Request origin is not allowed',
-      statusCode: 403,
-    });
+  if (isAllowedRequestOrigin(app.env, request, origin)) {
+    return;
   }
+
+  throw new AppError({
+    code: 'CSRF_REJECTED',
+    message: `Request origin is not allowed (got ${origin}, expected ${allowed})`,
+    statusCode: 403,
+    details: { origin, expected: allowed },
+  });
 }
 
 export function setSessionCookie(

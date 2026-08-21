@@ -189,6 +189,16 @@ After deploy:
 
 ## Troubleshooting
 
+### Login 403 `Request origin is not allowed`
+
+CSRF compares the browser `Origin` to `WEB_URL`. On the preview app this is almost always a copied live `WEB_URL` or a Dokploy hostname that is not the URL in the address bar.
+
+1. Copy the origin from the browser (scheme + host only, e.g. `https://knowhub-design.example.com`).
+2. Set that exact value as **`WEB_URL`** on the Compose **service** Environment tab (not only project-level).
+3. Redeploy **nd-api** (and **nd-web** if `WEB_URL` is listed there). No trailing slash; `http` ≠ `https`; `www` ≠ apex.
+
+OIDC must use the same origin for `OIDC_REDIRECT_URI` / Authentik callback.
+
 ### Deploy fails: `migrate` exit 1 (api/web never start)
 
 The build log only shows Compose waiting on migrate. **Open the `migrate` service logs** (not the build log). The one-shot runs `/migrate-and-seed.sh` (preflight `psql` + migrate + non-fatal seed).

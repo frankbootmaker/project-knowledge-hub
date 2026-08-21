@@ -20,7 +20,7 @@ import { registerDocFactoryAdminRoutes } from './routes/doc-factory-admin.js';
 import { registerDocFactoryRoutes } from './routes/doc-factory.js';
 import { registerLlmProviderRoutes } from './routes/llm-providers.js';
 import { resolveBlobStore } from './lib/blob-settings.js';
-import { registerAuthHooks } from './plugins/auth.js';
+import { isAllowedRequestOrigin, registerAuthHooks } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerOidcAuthRoutes } from './routes/auth-oidc.js';
 import { registerAvatarRoutes } from './routes/avatars.js';
@@ -123,7 +123,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
 
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;
-    if (origin && origin === new URL(deps.env.WEB_URL).origin) {
+    if (origin && isAllowedRequestOrigin(deps.env, request, origin)) {
       reply.header('Access-Control-Allow-Origin', origin);
       reply.header('Access-Control-Allow-Credentials', 'true');
       reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, MCP-Protocol-Version, MCP-Session-Id');

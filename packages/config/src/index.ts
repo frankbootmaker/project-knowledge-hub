@@ -88,7 +88,10 @@ export const envSchema = z.object({
   APP_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
   WEB_PORT: z.coerce.number().int().positive().default(3100),
   API_PORT: z.coerce.number().int().positive().default(3101),
-  WEB_URL: z.string().url().default('http://localhost:3100'),
+  WEB_URL: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim().replace(/\/+$/, '') : value),
+    z.string().url().default('http://localhost:3100'),
+  ),
   API_URL: z.string().url().default('http://localhost:3101'),
   /** Optional public MCP URL for proxies / split DNS (Cursor client config). */
   MCP_PUBLIC_URL: z.preprocess(
