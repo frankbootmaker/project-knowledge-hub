@@ -14,7 +14,7 @@ export function AuditEventDetails({ metadata }: { metadata: unknown }) {
       <summary className="cursor-pointer text-sm font-medium text-ink-muted hover:text-ink">
         {t('auditMetadata')}
       </summary>
-      <pre className="mt-2 overflow-x-auto rounded-md bg-panel-solid px-3 py-2 font-mono text-xs text-ink-muted">
+      <pre className="kh-ops-code mt-2 mb-0 overflow-x-auto text-ink-muted">
         {JSON.stringify(metadata, null, 2)}
       </pre>
     </details>

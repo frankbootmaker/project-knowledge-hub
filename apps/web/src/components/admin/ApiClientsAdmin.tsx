@@ -11,7 +11,6 @@ import {
   FunctionHeader,
   Input,
   Modal,
-  Panel,
   Select,
   useToast,
 } from '../ui';
@@ -437,12 +436,14 @@ export function ApiClientsAdmin({
   return (
     <div className="grid gap-6">
       {issuedToken ? (
-        <Panel className="border-accent/30 bg-accent-soft/40">
-          <p className="mt-0 mb-2 text-sm font-medium text-accent">{t('tokenOnce')}</p>
-          <code className="block break-all rounded-md bg-panel-solid px-3 py-2 font-mono text-sm">
-            {issuedToken}
-          </code>
-        </Panel>
+        <div className="kh-ops-status-row" data-tone="warn">
+          <div>
+            <p className="font-medium text-accent">{t('tokenOnce')}</p>
+            <code className="kh-ops-code mt-2 block break-all">
+              {issuedToken}
+            </code>
+          </div>
+        </div>
       ) : null}
 
       <FunctionHeader
@@ -550,7 +551,7 @@ export function ApiClientsAdmin({
         </fieldset>
         <fieldset className="m-0 grid gap-2 border-0 p-0">
           <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
-          <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
+          <div className="kh-ops-scope-checks max-h-40 overflow-auto">
             {orgWorkspaces.length === 0 ? (
               <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
             ) : (
@@ -630,7 +631,7 @@ export function ApiClientsAdmin({
             </fieldset>
             <fieldset className="m-0 grid gap-2 border-0 p-0">
               <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
-              <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
+              <div className="kh-ops-scope-checks max-h-40 overflow-auto">
                 {approveOrgWorkspaces.map((workspace) => (
                   <label key={workspace.id} className="flex items-center gap-2 text-sm">
                     <input
@@ -712,7 +713,7 @@ export function ApiClientsAdmin({
             <fieldset className="m-0 grid gap-2 border-0 p-0">
               <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
               <p className="m-0 text-xs text-ink-muted">{t('workspacesAllowlistHint')}</p>
-              <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
+              <div className="kh-ops-scope-checks max-h-40 overflow-auto">
                 {editOrgWorkspaces.length === 0 ? (
                   <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
                 ) : (

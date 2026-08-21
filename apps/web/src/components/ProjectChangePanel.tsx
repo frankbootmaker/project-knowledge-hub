@@ -12,7 +12,6 @@ import {
   Field,
   Input,
   Modal,
-  Panel,
   Select,
   Textarea,
   useToast,
@@ -451,7 +450,7 @@ export function ProjectChangePanel({
           </Select>
         </Field>
         <Field label={t('linkedDelivery')}>
-          <div className="max-h-48 overflow-auto rounded-md border border-line p-2">
+          <div className="kh-ops-scope-checks max-h-48 overflow-auto">
             {deliveryOptions.length === 0 ? (
               <p className="m-0 text-sm text-ink-muted">{t('noDelivery')}</p>
             ) : (
@@ -613,10 +612,7 @@ export function ProjectChangePanel({
         }
       >
         {confirmDelete ? (
-          <Panel
-            variant="inset"
-            className="mb-3 grid gap-3 border-danger/40 bg-danger/5"
-          >
+          <div className="kh-ops-confirm mb-3">
             <p className="m-0 text-sm font-semibold text-danger">
               {t('confirmDeleteTitle', {
                 title: title.trim() || t('title'),
@@ -633,7 +629,7 @@ export function ProjectChangePanel({
               />
               <span>{tArchive('deleteAcknowledge')}</span>
             </label>
-          </Panel>
+          </div>
         ) : null}
         {formFields(pending || confirmDelete || !canMutate)}
       </Modal>

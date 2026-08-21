@@ -1186,7 +1186,7 @@ export function ProjectStakeholdersPanel({
             ) : null}
           </p>
           {manageRow?.kind === 'open_role' && !confirmDelete ? (
-            <div className="grid gap-2 rounded-md border border-line p-3">
+            <div className="kh-ops-inset grid gap-2">
               <Field label={t('assignColleague')}>
                 <Select
                   value={assignUserId}

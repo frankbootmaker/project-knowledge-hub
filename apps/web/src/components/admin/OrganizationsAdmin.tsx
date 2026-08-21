@@ -9,7 +9,6 @@ import {
   Field,
   Input,
   Modal,
-  Panel,
   Select,
   useToast,
 } from '../ui';
@@ -487,7 +486,7 @@ export function OrganizationsAdmin({
                 </Button>
               </div>
             ) : (
-              <Panel variant="inset" className="kh-ops-field-span grid gap-3">
+              <div className="kh-ops-confirm kh-ops-field-span">
                 <p className="m-0 text-sm text-danger">
                   {t('organizationDeleteConfirm', {
                     name: managingOrg.name,
@@ -657,7 +656,7 @@ export function OrganizationsAdmin({
                     </div>
                   </>
                 )}
-              </Panel>
+              </div>
             )}
             {error ? (
               <div className="kh-ops-field-span">

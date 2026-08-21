@@ -9,7 +9,6 @@ import {
   Field,
   Input,
   Modal,
-  Panel,
   Select,
   Textarea,
   useToast,
@@ -476,10 +475,7 @@ export function ProjectAgileManageModal({
         </div>
       ) : null}
       {confirmDelete && kind && kind !== 'milestone' ? (
-        <Panel
-          variant="inset"
-          className="mb-3 grid gap-3 border-danger/40 bg-danger/5"
-        >
+        <div className="kh-ops-confirm mb-3">
           <p className="m-0 text-sm font-semibold text-danger">
             {kind === 'epic'
               ? t('confirmDeleteEpicTitle', {
@@ -502,11 +498,11 @@ export function ProjectAgileManageModal({
             />
             <span>{tArchive('deleteAcknowledge')}</span>
           </label>
-        </Panel>
+        </div>
       ) : null}
       <div className="kh-ops-form-grid">
         {effortRollup ? (
-          <div className="rounded-md border border-line bg-panel-solid p-3 text-sm">
+          <div className="kh-ops-inset text-sm">
             <p className="mt-0 mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
               {tBudget('effortRollup')}
             </p>

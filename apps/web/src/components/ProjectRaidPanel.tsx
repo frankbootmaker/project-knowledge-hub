@@ -11,7 +11,6 @@ import {
   Field,
   Input,
   Modal,
-  Panel,
   Select,
   Textarea,
   useToast,
@@ -320,22 +319,18 @@ export function ProjectRaidPanel({
           </p>
         ) : null}
         {options?.managing && managing?.transferredFromHumanKey ? (
-          <Panel variant="inset" className="border-brand/30 bg-brand/5">
-            <p className="m-0 text-sm text-ink">
-              {t('transferredFromBanner', {
-                key: managing.transferredFromHumanKey,
-              })}
-            </p>
-          </Panel>
+          <p className="kh-ops-status-row m-0">
+            {t('transferredFromBanner', {
+              key: managing.transferredFromHumanKey,
+            })}
+          </p>
         ) : null}
         {options?.managing && managing?.transferredToHumanKey ? (
-          <Panel variant="inset" className="border-brand/30 bg-brand/5">
-            <p className="m-0 text-sm text-ink">
-              {t('transferredToBanner', {
-                key: managing.transferredToHumanKey,
-              })}
-            </p>
-          </Panel>
+          <p className="kh-ops-status-row m-0">
+            {t('transferredToBanner', {
+              key: managing.transferredToHumanKey,
+            })}
+          </p>
         ) : null}
         <div className="kh-ops-form-grid">
           <Field label={t('kindLabel')}>
@@ -424,7 +419,7 @@ export function ProjectRaidPanel({
           />
         </Field>
         <Field label={t('linkedTasks')}>
-          <div className="max-h-48 overflow-auto rounded-md border border-line p-2">
+          <div className="kh-ops-scope-checks max-h-48 overflow-auto">
             {tasks.length === 0 ? (
               <p className="m-0 text-sm text-ink-muted">{t('noTasks')}</p>
             ) : (
@@ -602,10 +597,7 @@ export function ProjectRaidPanel({
         }
       >
         {confirmTransfer ? (
-          <Panel
-            variant="inset"
-            className="mb-3 grid gap-3 border-brand/40 bg-brand/5"
-          >
+          <div className="kh-ops-inset mb-3 grid gap-3">
             <p className="m-0 text-sm font-semibold text-ink">
               {confirmTransfer === 'issue'
                 ? t('confirmMoveToIssue')
@@ -631,13 +623,10 @@ export function ProjectRaidPanel({
                   : t('moveToRisk')}
               </Button>
             </div>
-          </Panel>
+          </div>
         ) : null}
         {confirmDelete ? (
-          <Panel
-            variant="inset"
-            className="mb-3 grid gap-3 border-danger/40 bg-danger/5"
-          >
+          <div className="kh-ops-confirm mb-3">
             <p className="m-0 text-sm font-semibold text-danger">
               {t('confirmDeleteTitle', {
                 title: title.trim() || t('title'),
@@ -654,7 +643,7 @@ export function ProjectRaidPanel({
               />
               <span>{tArchive('deleteAcknowledge')}</span>
             </label>
-          </Panel>
+          </div>
         ) : null}
         {formFields(pending || confirmDelete || Boolean(confirmTransfer) || !canMutate, {
           managing: true,

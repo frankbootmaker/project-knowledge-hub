@@ -24,27 +24,42 @@ export function KnowledgeRecordMoreDetails({
 }) {
   const t = useTranslations('records');
   const [open, setOpen] = useState(false);
+  const hasStrip = Boolean(leading || trailing);
 
   return (
-    <section className="kh-ops-panel mb-6">
-      <div className="kh-ops-manage-strip">
-        <button
-          type="button"
-          className="kh-btn kh-btn-secondary inline-flex items-center gap-2 text-sm"
-          aria-expanded={open}
-          onClick={() => setOpen((current) => !current)}
-        >
-          {open ? t('hideMoreDetails') : t('showMoreDetails')}
-        </button>
-        {leading ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-2">{leading}</div>
-        ) : null}
-        {trailing ? (
-          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
-            {trailing}
-          </div>
-        ) : null}
-      </div>
+    <section className="kh-ops-panel">
+      {hasStrip ? (
+        <div className="kh-ops-manage-strip">
+          <button
+            type="button"
+            className="kh-btn kh-btn-secondary inline-flex items-center gap-2 text-sm"
+            aria-expanded={open}
+            onClick={() => setOpen((current) => !current)}
+          >
+            {open ? t('hideMoreDetails') : t('showMoreDetails')}
+          </button>
+          {leading ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-2">{leading}</div>
+          ) : null}
+          {trailing ? (
+            <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+              {trailing}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('showMoreDetails')}</h2>
+          <button
+            type="button"
+            className="kh-ops-text-btn"
+            aria-expanded={open}
+            onClick={() => setOpen((current) => !current)}
+          >
+            {open ? t('hideMoreDetails') : t('showMoreDetails')}
+          </button>
+        </div>
+      )}
       {open ? (
         <div className="kh-ops-card-body grid gap-6">
           <div className="grid gap-2">

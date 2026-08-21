@@ -9,7 +9,6 @@ import {
   Input,
   Page,
   PageHeader,
-  Panel,
   Select,
   lifecycleLabel,
   lifecycleTone,
@@ -123,7 +122,8 @@ export default async function SearchPage({
     <Page wide>
       <PageHeader title={t('title')} description={t('subtitle')} />
 
-      <Panel className="mb-6">
+      <section className="kh-ops-panel mb-6">
+        <div className="kh-ops-card-body">
         <form method="get" className="grid gap-4">
           <Field label={t('query')}>
             <Input
@@ -231,7 +231,8 @@ export default async function SearchPage({
             {t('searchButton')}
           </Button>
         </form>
-      </Panel>
+        </div>
+      </section>
 
       {searchError ? <ErrorText>{searchError}</ErrorText> : null}
 

@@ -12,7 +12,6 @@ import {
   ErrorText,
   Field,
   Input,
-  Panel,
   Select,
   Textarea,
   lifecycleLabel,
@@ -166,43 +165,47 @@ export function ConversationImportDetail(props: {
   return (
     <div className="grid gap-8">
       {warnings.length > 0 ? (
-        <Panel className="border-danger/40 bg-danger/5">
-          <h2 className="mt-0 mb-2 text-base font-semibold text-ink">
-            {t('secretWarningsTitle')}
-          </h2>
-          <p className="mt-0 mb-3 text-sm text-ink-muted">{t('secretWarningsHelp')}</p>
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {warnings.map((warning) => (
-              <li key={warning.code} className="flex flex-wrap items-center gap-2 text-sm">
-                <Badge tone={warning.severity === 'high' ? 'danger' : 'neutral'}>
-                  {warning.severity}
-                </Badge>
-                <span>
-                  {warning.label} × {warning.count}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+        <div className="kh-ops-status-row" data-tone="danger">
+          <div>
+            <p className="font-medium text-ink">{t('secretWarningsTitle')}</p>
+            <p>{t('secretWarningsHelp')}</p>
+            <ul className="mt-2 mb-0 grid list-none gap-2 p-0">
+              {warnings.map((warning) => (
+                <li key={warning.code} className="flex flex-wrap items-center gap-2 text-sm">
+                  <Badge tone={warning.severity === 'high' ? 'danger' : 'neutral'}>
+                    {warning.severity}
+                  </Badge>
+                  <span>
+                    {warning.label} × {warning.count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       ) : null}
 
-      <Panel>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Badge tone="brand">{props.conversationImport.contentFormat}</Badge>
-          {props.conversationImport.archivedAt ? (
-            <Badge>{t('archivedBadge')}</Badge>
-          ) : null}
-          {props.conversationImport.generatedByModel ? (
-            <span className="text-sm text-ink-muted">
-              {t('modelLabel', { model: props.conversationImport.generatedByModel })}
-            </span>
-          ) : null}
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="brand">{props.conversationImport.contentFormat}</Badge>
+            {props.conversationImport.archivedAt ? (
+              <Badge>{t('archivedBadge')}</Badge>
+            ) : null}
+            {props.conversationImport.generatedByModel ? (
+              <span className="kh-ops-panel-meta">
+                {t('modelLabel', { model: props.conversationImport.generatedByModel })}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <p className="mt-0 mb-2 text-sm text-ink-muted">{t('rawContentHelp')}</p>
-        <pre className="kh-panel-inset m-0 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-sm text-ink">
-          {props.conversationImport.rawContent}
-        </pre>
-      </Panel>
+        <div className="kh-ops-card-body">
+          <p className="mt-0 mb-2 text-sm text-ink-muted">{t('rawContentHelp')}</p>
+          <pre className="kh-ops-code m-0 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words">
+            {props.conversationImport.rawContent}
+          </pre>
+        </div>
+      </section>
 
       <section className="kh-ops-panel">
         <div className="kh-ops-panel-head">
@@ -299,11 +302,11 @@ export function ConversationImportDetail(props: {
       ) : null}
 
       {props.canMutate && !props.conversationImport.archivedAt ? (
-        <section>
-          <h2 className="mt-0 mb-3 text-lg font-semibold text-ink">
-            {t('createDraftTitle')}
-          </h2>
-          <Panel>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('createDraftTitle')}</h2>
+          </div>
+          <div className="kh-ops-card-body">
             <p className="mt-0 mb-4 text-sm text-ink-muted">{t('createDraftHelp')}</p>
             <form onSubmit={onCreateDraft} className="grid gap-4">
               <Field label={tCommon('name')}>
@@ -357,7 +360,7 @@ export function ConversationImportDetail(props: {
                 {pending ? t('creatingDraft') : t('createDraftButton')}
               </Button>
             </form>
-          </Panel>
+          </div>
         </section>
       ) : null}
     </div>

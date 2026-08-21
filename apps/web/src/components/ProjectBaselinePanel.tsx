@@ -562,7 +562,7 @@ export function ProjectBaselinePanel({
             </Select>
           </Field>
           <Field label={t('initialStakeholders')}>
-            <div className="max-h-56 overflow-auto rounded-md border border-line p-2">
+            <div className="kh-ops-scope-checks max-h-56 overflow-auto">
               {members.length === 0 ? (
                 <p className="m-0 text-sm text-ink-muted">{t('noMembers')}</p>
               ) : (

@@ -133,8 +133,7 @@ export function ProfileForm({ initialUser }: { initialUser: ProfileUser }) {
       <div className="kh-ops-panel-head">
         <h2 className="kh-ops-panel-title">{t('title')}</h2>
       </div>
-      <div className="kh-ops-setting-row">
-        <div className="flex flex-wrap items-center gap-4">
+      <div className="kh-ops-profile-photo">
           <UserAvatar
             displayName={displayName}
             fullName={fullName}
@@ -171,7 +170,6 @@ export function ProfileForm({ initialUser }: { initialUser: ProfileUser }) {
               ) : null}
             </div>
           </div>
-        </div>
       </div>
       <div className="kh-ops-setting-row">
         <Field label={t('email')}>

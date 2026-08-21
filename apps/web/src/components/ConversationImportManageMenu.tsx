@@ -9,7 +9,7 @@ import {
   ManageMenuItem,
   ManageToolbar,
 } from './manage-menu-shared';
-import { Button, ErrorText, Modal, Panel } from './ui';
+import { Button, ErrorText, Modal } from './ui';
 
 export type ImportManageDetails = {
   id: string;
@@ -168,7 +168,7 @@ export function ConversationImportManageMenu(props: {
         {section === 'archive' ? (
           <div className="grid gap-4">
             <p className="m-0 text-sm text-ink-muted">{t('manageArchiveHint')}</p>
-            <Panel variant="inset" className="grid w-full max-w-md gap-3">
+            <div className="kh-ops-confirm">
               <p className="m-0 text-sm text-danger">
                 {t('confirmArchive', { name: props.conversationImport.title })}
               </p>
@@ -194,7 +194,7 @@ export function ConversationImportManageMenu(props: {
                   {tCommon('cancel')}
                 </Button>
               </div>
-            </Panel>
+            </div>
             <Button type="button" variant="secondary" onClick={() => setSection('menu')}>
               {tCommon('back')}
             </Button>

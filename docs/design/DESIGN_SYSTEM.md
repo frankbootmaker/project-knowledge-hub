@@ -153,6 +153,14 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-markdown-view` / `.kh-ops-toc` / `.kh-ops-preview-pane` | Markdown document density, TOC panel, live preview |
 | `.kh-ops-roster-person` | Stakeholder roster avatar + name cell |
 | `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |
+| `.kh-ops-detail-grid` / `.kh-ops-record-head` | Knowledge/system read two-column layout + record title block |
+| `.kh-ops-leader-strip` / `.kh-ops-leader` | Monitoring client leaderboard cells |
+| `.kh-ops-connection-row` | Compact on-duty / connection rows |
+| `.kh-ops-stamp-grid` / `.kh-ops-stamp` | Monitoring archived-count stamps |
+| `.kh-ops-profile-photo` | Account profile avatar row |
+| `.kh-ops-lang-chip` | Knowledge translation language chips |
+| `.kh-ops-confirm` / `.kh-ops-inset` | Archive/purge confirms and nested pickers |
+| `.kh-ops-cal-day` | Compact admin audit calendar cells |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
 | `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips, account setting rows |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
@@ -223,6 +231,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console leftover chrome** — Knowledge read, system detail, and project overview use detail-grid, record-head, keyvals, and tags. Monitoring uses health cards, client leader-strip, on-duty connection rows, and archived-count stamps for live data only (no restore-drill UI). Audit uses a compact calendar, form-grid filters, and a Created/Actor/Action/Entity table (IP stays on the actor cell; no invented outcome column). Import details, manage interiors, archive/purge confirms, translation chips, RAID/change/baseline pickers, search/memberships wrappers, account sidebar (restyled, not removed), AI discover, and remaining admin confirm/editor panels match Ops density. No media library, reports studio, MCP agent portal, owner, or generated-key reservation.
 * **Ops Console knowledge editor** — Create/edit record chrome uses editor-shell, markdown toolbar, manage-strip/action-line, and live preview aside. Existing fields and save/lifecycle actions stay; no owner, generated-key reservation, or version diff is invented. Record detail more-details, tags, markdown viewer, and version snapshot warnings use the same Ops density.
 * **Ops Console leftover forms** — Mail settings, MCP setup wizard (stage strip + client setup cards + schema copy cards), admin overview shortcuts, close-account danger zone, conversation/document import, create workspace/project/system, AI connection tables, change password, and display/notification prefs now use Ops form-grid, action-line, setup-card, dropzone, and danger-zone recipes. Drivers stay console/SMTP/Resend; confirm phrase stays `CLOSE`; no invented SES, FTE, or Azure fields.
 * **Ops Console leftover catalogues** — Project-linked systems/records, workspace picker, account memberships, import details, version history, Git connections, and remaining admin lists (organizations, AI providers, storage picker, style packs) now use Ops data tables, project cards, or provider/stage strips. Task manage dialogs use prototype modal tabs and form grid for existing Details / RACI / Handoff / Activity / Documents sections. No invented FTE, retention, or Azure storage columns.

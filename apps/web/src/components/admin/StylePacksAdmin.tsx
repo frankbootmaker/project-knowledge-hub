@@ -10,7 +10,6 @@ import {
   Field,
   FilePicker,
   Input,
-  Panel,
   Select,
   useToast,
 } from '../ui';
@@ -757,7 +756,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
         </ul>
       </section>
 
-      <Panel className="grid gap-4 self-start p-4">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-card-body grid gap-4">
         <p className="m-0 text-sm text-ink-muted">
           {isCreating
             ? t('templatesCreatingBlurb')
@@ -1146,7 +1146,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             </>
           )}
         </div>
-      </Panel>
+        </div>
+      </section>
     </div>
   );
 }

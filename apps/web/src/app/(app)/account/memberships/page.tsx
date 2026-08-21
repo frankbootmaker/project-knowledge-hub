@@ -1,9 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import {
-  PageHeader,
-  Panel,
-} from '../../../../components/ui';
+import { PageHeader } from '../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../lib/session';
 
 type WorkspaceRow = {
@@ -63,9 +60,7 @@ export default async function AccountMembershipsPage() {
       />
 
       {session.user.isSystemAdmin ? (
-        <Panel className="mb-4">
-          <p className="m-0 text-sm text-ink-muted">{t('membershipsSystemAdminNote')}</p>
-        </Panel>
+        <p className="kh-ops-status-row mb-4">{t('membershipsSystemAdminNote')}</p>
       ) : null}
 
       {rows.length === 0 ? (

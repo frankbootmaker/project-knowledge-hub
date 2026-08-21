@@ -11,7 +11,6 @@ import {
   FilePicker,
   Input,
   Modal,
-  Panel,
   Select,
   useToast,
 } from '../ui';
@@ -260,7 +259,7 @@ function StatusRow({
   const useBadge = tone !== 'neutral' || value.length <= 28;
 
   return (
-    <div className="flex items-center justify-between gap-4 px-5 py-3.5">
+    <div className="kh-ops-setting-row px-4 py-3">
       <strong className="text-sm font-medium text-ink">{label}</strong>
       {useBadge ? (
         <Badge tone={badgeTone} className="max-w-[min(100%,20rem)] truncate">
@@ -744,11 +743,11 @@ export function MonitoringDashboard({
 
       {error ? <ErrorText>{error}</ErrorText> : null}
       {data.loadError ? (
-        <Panel variant="inset" className="p-4">
+        <div className="kh-ops-status-row">
           <p className="m-0 text-sm font-medium text-ink">{t('monitoringLoadErrorTitle')}</p>
           <p className="mt-1 mb-0 text-sm text-ink-muted">{data.loadError}</p>
           <p className="mt-2 mb-0 text-xs text-ink-muted">{t('monitoringLoadErrorHint')}</p>
-        </Panel>
+        </div>
       ) : null}
 
       <div className="kh-ops-health-grid">
@@ -786,7 +785,7 @@ export function MonitoringDashboard({
 
       <section id="health" className="grid scroll-mt-6 gap-3">
         <h2 className="m-0 text-lg font-semibold text-ink">{t('monitoringHealthTitle')}</h2>
-        <Panel className="grid gap-0 divide-y divide-line overflow-hidden p-0">
+        <section className="kh-ops-panel overflow-hidden">
           <StatusRow
             label={t('monitoringApi')}
             value={data.health.api}
@@ -839,7 +838,7 @@ export function MonitoringDashboard({
           />
           <StatusRow label={t('monitoringApiUrl')} value={data.app.apiUrl} tone="neutral" />
           <StatusRow label={t('monitoringWebUrl')} value={data.app.webUrl} tone="neutral" />
-        </Panel>
+        </section>
       </section>
 
       <section id="usage" className="grid scroll-mt-6 gap-3">
@@ -878,7 +877,7 @@ export function MonitoringDashboard({
             <p className="kh-ops-stat-value">{data.mcp.toolErrorCount}</p>
           </div>
         </div>
-        <Panel className="p-4">
+        <section className="kh-ops-panel"><div className="kh-ops-card-body">
           <p className="mt-0 mb-2 text-sm font-medium text-ink">{t('monitoringAttention')}</p>
           <div className="flex flex-wrap gap-2">
             <Badge tone={data.attention.pendingUsers > 0 ? 'warn' : 'neutral'}>
@@ -911,6 +910,23 @@ export function MonitoringDashboard({
                   })}
             </Badge>
           </div>
+          {data.attention.onDutyAdmins.length > 0 ? (
+            <div className="mt-3">
+              {data.attention.onDutyAdmins.map((admin) => (
+                <div key={admin.id} className="kh-ops-connection-row">
+                  <span className="kh-ops-code-box" aria-hidden>
+                    {admin.displayName.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="min-w-0">
+                    <b className="block truncate text-sm">{admin.displayName}</b>
+                    <small className="block truncate text-[10px] text-ink-muted">
+                      {admin.email}
+                    </small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {(data.mcp.topTools?.length ?? 0) > 0 ? (
             <>
               <p className="mt-4 mb-2 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
@@ -955,48 +971,36 @@ export function MonitoringDashboard({
           ) : (
             <p className="mt-3 mb-0 text-sm text-ink-muted">{t('monitoringMcpEmpty')}</p>
           )}
-        </Panel>
+        </div></section>
       </section>
 
       <section className="grid gap-3 lg:grid-cols-2">
-        <Panel className="overflow-hidden p-0">
-          <div className="border-b border-line px-5 py-3">
-            <strong className="text-sm font-medium text-ink">
-              {t('monitoringClientsTitle')}
-            </strong>
+        <section className="kh-ops-panel overflow-hidden">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('monitoringClientsTitle')}</h2>
           </div>
           {data.clients.leaderboard.length === 0 ? (
-            <p className="m-0 px-5 py-4 text-sm text-ink-muted">{t('monitoringClientsEmpty')}</p>
+            <p className="kh-ops-empty">{t('monitoringClientsEmpty')}</p>
           ) : (
-            <ul className="m-0 grid list-none gap-0 divide-y divide-line p-0">
+            <div className="kh-ops-leader-strip">
               {data.clients.leaderboard.map((row) => (
-                <li
-                  key={row.actorId}
-                  className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="m-0 truncate text-sm font-medium text-ink">
-                      {row.clientName ?? row.actorId}
-                    </p>
-                    <p className="m-0 truncate font-mono text-xs text-ink-muted">{row.actorId}</p>
-                  </div>
-                  <p className="m-0 text-xs text-ink-muted tabular-nums">
+                <div key={row.actorId} className="kh-ops-leader">
+                  <b>{row.clientName ?? row.actorId}</b>
+                  <small>
                     {t('monitoringClientCounts', {
                       requests: row.requestCount,
                       calls: row.toolCallCount,
                       errors: row.toolErrorCount,
                     })}
-                  </p>
-                </li>
+                  </small>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
-        </Panel>
-        <Panel className="overflow-hidden p-0">
-          <div className="border-b border-line px-5 py-3">
-            <strong className="text-sm font-medium text-ink">
-              {t('monitoringCatalogueTitle')}
-            </strong>
+        </section>
+        <section className="kh-ops-panel overflow-hidden">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('monitoringCatalogueTitle')}</h2>
           </div>
           <div className="grid gap-4 px-5 py-4">
             <CatalogueTopList
@@ -1050,7 +1054,7 @@ export function MonitoringDashboard({
               )}
             </div>
           </div>
-        </Panel>
+        </section>
       </section>
 
       <section id="maintenance" className="grid scroll-mt-6 gap-3">
@@ -1058,7 +1062,7 @@ export function MonitoringDashboard({
           {t('monitoringMaintenanceTitle')}
         </h2>
         <p className="m-0 text-sm text-ink-muted">{t('monitoringMaintenanceBlurb')}</p>
-        <Panel className="grid gap-4 p-5">
+        <section className="kh-ops-panel"><div className="kh-ops-card-body grid gap-4">
           <div className="flex flex-wrap items-end gap-3">
             <Field label={t('monitoringReindexWorkspace')} className="min-w-[14rem]">
               <Select
@@ -1088,27 +1092,39 @@ export function MonitoringDashboard({
               provider: data.maintenance.embeddingProvider,
             })}
           </p>
-          <div className="flex flex-wrap gap-2">
-            <Badge tone="neutral">
-              {t('monitoringArchivedWorkspaces', {
-                count: data.maintenance.archived.workspaces,
-              })}
-            </Badge>
-            <Badge tone="neutral">
-              {t('monitoringArchivedProjects', {
-                count: data.maintenance.archived.projects,
-              })}
-            </Badge>
-            <Badge tone="neutral">
-              {t('monitoringArchivedSystems', {
-                count: data.maintenance.archived.systems,
-              })}
-            </Badge>
-            <Badge tone="neutral">
-              {t('monitoringArchivedRecords', {
-                count: data.maintenance.archived.knowledgeRecords,
-              })}
-            </Badge>
+          <div className="kh-ops-stamp-grid">
+            <div className="kh-ops-stamp">
+              <small>
+                {t('monitoringArchivedWorkspaces', {
+                  count: data.maintenance.archived.workspaces,
+                })}
+              </small>
+              <strong>{data.maintenance.archived.workspaces}</strong>
+            </div>
+            <div className="kh-ops-stamp">
+              <small>
+                {t('monitoringArchivedProjects', {
+                  count: data.maintenance.archived.projects,
+                })}
+              </small>
+              <strong>{data.maintenance.archived.projects}</strong>
+            </div>
+            <div className="kh-ops-stamp">
+              <small>
+                {t('monitoringArchivedSystems', {
+                  count: data.maintenance.archived.systems,
+                })}
+              </small>
+              <strong>{data.maintenance.archived.systems}</strong>
+            </div>
+            <div className="kh-ops-stamp">
+              <small>
+                {t('monitoringArchivedRecords', {
+                  count: data.maintenance.archived.knowledgeRecords,
+                })}
+              </small>
+              <strong>{data.maintenance.archived.knowledgeRecords}</strong>
+            </div>
           </div>
           <p className="m-0 text-sm text-ink-muted">
             {t('monitoringPurgeHint')}{' '}
@@ -1116,13 +1132,13 @@ export function MonitoringDashboard({
               {t('monitoringArchiveLink')}
             </a>
           </p>
-        </Panel>
+        </div></section>
       </section>
 
       <section id="backups" className="grid scroll-mt-6 gap-3">
         <h2 className="m-0 text-lg font-semibold text-ink">{t('monitoringBackupsTitle')}</h2>
         <p className="m-0 text-sm text-ink-muted">{t('monitoringBackupsBlurb')}</p>
-        <Panel className="grid gap-0 divide-y divide-line overflow-hidden p-0">
+        <section className="kh-ops-panel overflow-hidden">
           <StatusRow
             label={t('monitoringLastBackup')}
             value={
@@ -1163,7 +1179,7 @@ export function MonitoringDashboard({
             value={data.backups.dir}
             tone="neutral"
           />
-        </Panel>
+        </section>
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={pending} onClick={() => void runExport()}>
@@ -1179,7 +1195,7 @@ export function MonitoringDashboard({
           </Button>
         </div>
 
-        <Panel className="grid gap-4 p-5">
+        <section className="kh-ops-panel"><div className="kh-ops-card-body grid gap-4">
           <div>
             <strong className="text-sm font-medium text-ink">
               {t('monitoringScheduleTitle')}
@@ -1216,7 +1232,7 @@ export function MonitoringDashboard({
                 <option value="604800">{t('monitoringSchedule7d')}</option>
               </Select>
             </Field>
-            <Panel variant="inset" className="grid gap-2 p-4 text-sm">
+            <div className="kh-ops-inset grid gap-2 text-sm">
               {(() => {
                 const saved = data.backups.schedule;
                 const lastSuccessAt = data.backups.lastSuccess.stamp?.at ?? null;
@@ -1307,16 +1323,16 @@ export function MonitoringDashboard({
                   </>
                 );
               })()}
-            </Panel>
+            </div>
           </div>
           <div>
             <Button type="button" disabled={pending} onClick={() => void saveSchedule()}>
               {t('monitoringScheduleSave')}
             </Button>
           </div>
-        </Panel>
+        </div></section>
 
-        <Panel className="grid gap-4 p-5">
+        <section className="kh-ops-panel"><div className="kh-ops-card-body grid gap-4">
           <div>
             <strong className="text-sm font-medium text-ink">
               {t('monitoringRetentionTitle')}
@@ -1397,9 +1413,9 @@ export function MonitoringDashboard({
               {t('monitoringRotateNow')}
             </Button>
           </div>
-        </Panel>
+        </div></section>
 
-        <Panel className="overflow-hidden p-0">
+        <section className="kh-ops-panel overflow-hidden">
           <div className="border-b border-line px-5 py-3">
             <strong className="text-sm font-medium text-ink">
               {t('monitoringArtifacts')}
@@ -1471,7 +1487,7 @@ export function MonitoringDashboard({
               ))}
             </ul>
           )}
-        </Panel>
+        </section>
         <p className="m-0 text-xs text-ink-muted">{data.backups.toolsHint}</p>
       </section>
 

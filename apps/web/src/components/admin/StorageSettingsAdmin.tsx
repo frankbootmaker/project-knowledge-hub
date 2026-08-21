@@ -9,7 +9,6 @@ import {
   ErrorText,
   Field,
   Input,
-  Panel,
   PasswordInput,
   useToast,
 } from '../ui';
@@ -235,7 +234,8 @@ export function StorageSettingsAdmin({
 
   return (
     <div className="grid gap-6">
-      <Panel className="grid gap-4 p-5">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-card-body grid gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={source === 'override' ? 'brand' : 'neutral'}>
             {source === 'override'
@@ -409,7 +409,8 @@ export function StorageSettingsAdmin({
             {t('storageResetToEnv')}
           </Button>
         </div>
-      </Panel>
+        </div>
+      </section>
     </div>
   );
 }

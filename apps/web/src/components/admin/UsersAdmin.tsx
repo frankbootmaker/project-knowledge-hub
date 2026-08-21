@@ -12,7 +12,6 @@ import {
   FunctionHeader,
   Input,
   Modal,
-  Panel,
   PasswordInput,
   PasswordStrengthHint,
   Select,
@@ -793,7 +792,7 @@ export function UsersAdmin({
                 ) : null}
 
                 {removeStep === 1 ? (
-                  <Panel variant="inset" className="grid gap-3">
+                  <div className="kh-ops-confirm">
                     <p className="m-0 text-sm text-danger">
                       {allowHardDelete &&
                       (removeHardDelete || isClosedAccount(editUser))
@@ -821,11 +820,11 @@ export function UsersAdmin({
                         {tCommon('cancel')}
                       </Button>
                     </div>
-                  </Panel>
+                  </div>
                 ) : null}
 
                 {removeStep === 2 ? (
-                  <Panel variant="inset" className="grid gap-3">
+                  <div className="kh-ops-confirm">
                     <p className="m-0 text-sm text-danger">
                       {allowHardDelete &&
                       (removeHardDelete || isClosedAccount(editUser))
@@ -890,7 +889,7 @@ export function UsersAdmin({
                         {tCommon('cancel')}
                       </Button>
                     </div>
-                  </Panel>
+                  </div>
                 ) : null}
               </div>
             ) : null}

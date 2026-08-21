@@ -29,7 +29,6 @@ import {
   buttonClassName,
   Page,
   PageHeader,
-  Panel,
 } from '../../../../../../components/ui';
 import { cn } from '../../../../../../lib/cn';
 import {
@@ -485,18 +484,28 @@ export default async function ProjectDetailPage({
         </div>
       </div>
 
-      <Panel id="project-overview" className="mb-8 scroll-mt-6">
-        <h2 className="kh-ops-panel-title mt-0 mb-3">
-          {t('navOverview')}
-        </h2>
-        <p className="mt-0 mb-3 text-ink-muted">{project.summary || tCommon('noSummary')}</p>
-        <p className="m-0 text-ink-muted">{project.description || tCommon('noDescription')}</p>
-        {project.tags.length > 0 ? (
-          <p className="mt-3 mb-0 text-xs text-ink-muted">
-            {tCommon('tagsList', { tags: project.tags.map((tag) => tag.name).join(', ') })}
+      <section id="project-overview" className="kh-ops-panel mb-8 scroll-mt-6">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('navOverview')}</h2>
+        </div>
+        <div className="kh-ops-card-body">
+          <p className="mt-0 mb-3 text-ink-muted">
+            {project.summary || tCommon('noSummary')}
           </p>
-        ) : null}
-      </Panel>
+          <p className="m-0 text-ink-muted">
+            {project.description || tCommon('noDescription')}
+          </p>
+          {project.tags.length > 0 ? (
+            <div className="kh-ops-tag-list px-0 pb-0 pt-3">
+              {project.tags.map((tag) => (
+                <span key={tag.name} className="kh-ops-tag">
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       <ProjectBaselinePanel
         projectId={project.id}

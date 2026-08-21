@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
-import { NavLink, Panel } from '../../../components/ui';
+import { NavLink } from '../../../components/ui';
 import { requireSession } from '../../../lib/session';
 
 const links = [
@@ -20,7 +20,7 @@ export default async function AccountLayout({ children }: { children: ReactNode 
   // Same responsive sidebar pattern as admin (DESIGN_SYSTEM.md → Responsive).
   return (
     <div className="grid gap-8 lg:grid-cols-[200px_1fr]">
-      <Panel variant="default" className="h-fit p-0">
+      <aside className="kh-ops-panel h-fit overflow-hidden">
         <p className="kh-ops-eyebrow mb-0 px-3 pt-3">
           {t('title')}
         </p>
@@ -53,7 +53,7 @@ export default async function AccountLayout({ children }: { children: ReactNode 
             </NavLink>
           </nav>
         </div>
-      </Panel>
+      </aside>
       <div className="min-w-0">{children}</div>
     </div>
   );
