@@ -12,8 +12,6 @@ import {
   ErrorText,
   Field,
   Input,
-  ListCard,
-  Panel,
   Select,
   Textarea,
   lifecycleLabel,
@@ -167,68 +165,87 @@ export function ConversationImportDetail(props: {
   return (
     <div className="grid gap-8">
       {warnings.length > 0 ? (
-        <Panel className="border-danger/40 bg-danger/5">
-          <h2 className="mt-0 mb-2 text-base font-semibold text-ink">
-            {t('secretWarningsTitle')}
-          </h2>
-          <p className="mt-0 mb-3 text-sm text-ink-muted">{t('secretWarningsHelp')}</p>
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {warnings.map((warning) => (
-              <li key={warning.code} className="flex flex-wrap items-center gap-2 text-sm">
-                <Badge tone={warning.severity === 'high' ? 'danger' : 'neutral'}>
-                  {warning.severity}
-                </Badge>
-                <span>
-                  {warning.label} × {warning.count}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+        <div className="kh-ops-status-row" data-tone="danger">
+          <div>
+            <p className="font-medium text-ink">{t('secretWarningsTitle')}</p>
+            <p>{t('secretWarningsHelp')}</p>
+            <ul className="kh-ops-stack mt-2 mb-0">
+              {warnings.map((warning) => (
+                <li key={warning.code} className="kh-ops-linked-row">
+                  <Badge tone={warning.severity === 'high' ? 'danger' : 'neutral'}>
+                    {warning.severity}
+                  </Badge>
+                  <span>
+                    {warning.label} × {warning.count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       ) : null}
 
-      <Panel>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Badge tone="brand">{props.conversationImport.contentFormat}</Badge>
-          {props.conversationImport.archivedAt ? (
-            <Badge>{t('archivedBadge')}</Badge>
-          ) : null}
-          {props.conversationImport.generatedByModel ? (
-            <span className="text-sm text-ink-muted">
-              {t('modelLabel', { model: props.conversationImport.generatedByModel })}
-            </span>
-          ) : null}
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="brand">{props.conversationImport.contentFormat}</Badge>
+            {props.conversationImport.archivedAt ? (
+              <Badge>{t('archivedBadge')}</Badge>
+            ) : null}
+            {props.conversationImport.generatedByModel ? (
+              <span className="kh-ops-panel-meta">
+                {t('modelLabel', { model: props.conversationImport.generatedByModel })}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <p className="mt-0 mb-2 text-sm text-ink-muted">{t('rawContentHelp')}</p>
-        <pre className="kh-panel-inset m-0 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-sm text-ink">
-          {props.conversationImport.rawContent}
-        </pre>
-      </Panel>
+        <div className="kh-ops-card-body">
+          <p className="mt-0 mb-2 text-sm text-ink-muted">{t('rawContentHelp')}</p>
+          <pre className="kh-ops-code m-0 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words">
+            {props.conversationImport.rawContent}
+          </pre>
+        </div>
+      </section>
 
-      <section>
-        <h2 className="mt-0 mb-3 text-lg font-semibold text-ink">{t('linkedDrafts')}</h2>
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {props.conversationImport.linkedRecords.map((record) => (
-            <ListCard key={record.knowledgeRecordId}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/workspaces/${props.workspaceSlug}/records/${record.slug}`}
-                  className="font-semibold no-underline"
-                >
-                  {record.title}
-                </Link>
-                <Badge tone="brand">{record.recordType}</Badge>
-                <Badge>{lifecycleLabel(record.lifecycleStatus, tRecords)}</Badge>
-              </div>
-              {record.excerptNote ? (
-                <p className="mt-2 mb-0 text-sm text-ink-muted">{record.excerptNote}</p>
-              ) : null}
-            </ListCard>
-          ))}
-          {props.conversationImport.linkedRecords.length === 0 ? (
-            <li className="kh-muted list-none">{t('noLinkedDrafts')}</li>
-          ) : null}
-        </ul>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('linkedDrafts')}</h2>
+        </div>
+        {props.conversationImport.linkedRecords.length === 0 ? (
+          <p className="kh-ops-empty">{t('noLinkedDrafts')}</p>
+        ) : (
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{tCommon('title')}</th>
+                  <th>{tRecords('recordType')}</th>
+                  <th>{tCommon('status')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {props.conversationImport.linkedRecords.map((record) => (
+                  <tr key={record.knowledgeRecordId}>
+                    <td className="kh-ops-primary-cell">
+                      <Link
+                        href={`/workspaces/${props.workspaceSlug}/records/${record.slug}`}
+                        className="no-underline"
+                      >
+                        {record.title}
+                      </Link>
+                    </td>
+                    <td>
+                      <span className="kh-ops-type-chip">{record.recordType}</span>
+                    </td>
+                    <td>
+                      {lifecycleLabel(record.lifecycleStatus, tRecords)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {props.canMutate &&
@@ -239,46 +256,57 @@ export function ConversationImportDetail(props: {
             {t('autoSplitTitle')}
           </h2>
           <p className="mt-0 mb-3 text-sm text-ink-muted">{t('autoSplitHelp')}</p>
-          <ul className="m-0 grid list-none gap-3 p-0">
-            {suggestedChunks.map((chunk) => (
-              <ListCard key={chunk.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <strong className="text-sm text-ink">{chunk.title}</strong>
-                    <p className="mt-1 mb-0 line-clamp-3 whitespace-pre-wrap text-sm text-ink-muted">
-                      {chunk.contentMarkdown}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={pending}
-                      onClick={() => applyChunk(chunk)}
-                    >
-                      {t('autoSplitUse')}
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={pending || (hasHigh && !acknowledgeSecrets)}
-                      onClick={() => void onCreateChunkDraft(chunk)}
-                    >
-                      {t('autoSplitCreate')}
-                    </Button>
-                  </div>
-                </div>
-              </ListCard>
-            ))}
-          </ul>
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{tCommon('title')}</th>
+                  <th>{t('draftContent')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {suggestedChunks.map((chunk) => (
+                  <tr key={chunk.id}>
+                    <td className="kh-ops-primary-cell">{chunk.title}</td>
+                    <td className="max-w-xl whitespace-normal">
+                      <p className="m-0 line-clamp-3 whitespace-pre-wrap text-ink-muted">
+                        {chunk.contentMarkdown}
+                      </p>
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={pending}
+                          onClick={() => applyChunk(chunk)}
+                        >
+                          {t('autoSplitUse')}
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={pending || (hasHigh && !acknowledgeSecrets)}
+                          onClick={() => void onCreateChunkDraft(chunk)}
+                        >
+                          {t('autoSplitCreate')}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 
       {props.canMutate && !props.conversationImport.archivedAt ? (
-        <section>
-          <h2 className="mt-0 mb-3 text-lg font-semibold text-ink">
-            {t('createDraftTitle')}
-          </h2>
-          <Panel>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('createDraftTitle')}</h2>
+          </div>
+          <div className="kh-ops-card-body">
             <p className="mt-0 mb-4 text-sm text-ink-muted">{t('createDraftHelp')}</p>
             <form onSubmit={onCreateDraft} className="grid gap-4">
               <Field label={tCommon('name')}>
@@ -332,7 +360,7 @@ export function ConversationImportDetail(props: {
                 {pending ? t('creatingDraft') : t('createDraftButton')}
               </Button>
             </form>
-          </Panel>
+          </div>
         </section>
       ) : null}
     </div>

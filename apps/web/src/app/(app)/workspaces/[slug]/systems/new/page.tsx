@@ -13,7 +13,6 @@ import {
   Input,
   Page,
   PageHeader,
-  Panel,
   Select,
   Textarea,
 } from '../../../../../../components/ui';
@@ -151,9 +150,9 @@ export default function NewSystemPage() {
   }
 
   return (
-    <Page narrow>
+    <Page>
       <PageHeader title={t('createTitle')} />
-      <p className="mt-0 mb-6">
+      <p className="mt-0 mb-4">
         <Link
           href={`/workspaces/${workspaceSlug}`}
           className="text-sm text-ink-muted no-underline hover:text-ink"
@@ -161,195 +160,215 @@ export default function NewSystemPage() {
           {t('backToWorkspace')}
         </Link>
       </p>
-      <Panel>
-        <form onSubmit={onSubmit} className="grid gap-4">
-          <Field label={tCommon('name')}>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required />
-          </Field>
-          <Field label={t('projectOptional')}>
-            <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">{t('independentNoProject')}</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={tCommon('summary')}>
-            <Input value={summary} onChange={(e) => setSummary(e.target.value)} />
-          </Field>
-          <Field label={tCommon('description')}>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
-          </Field>
-          <Field label={tCommon('status')}>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="proposed">proposed</option>
-              <option value="experimental">experimental</option>
-              <option value="active">active</option>
-              <option value="degraded">degraded</option>
-              <option value="maintenance">maintenance</option>
-              <option value="deprecated">deprecated</option>
-              <option value="retired">retired</option>
-              <option value="archived">archived</option>
-            </Select>
-          </Field>
-          <Field label={t('systemType')}>
-            <Input value={systemType} onChange={(e) => setSystemType(e.target.value)} />
-          </Field>
-          <Field label={t('environment')}>
-            <Input value={environment} onChange={(e) => setEnvironment(e.target.value)} />
-          </Field>
-          <Field label={t('version')}>
-            <Input value={version} onChange={(e) => setVersion(e.target.value)} />
-          </Field>
-          <Field label={t('criticality')}>
-            <Select
-              value={criticality}
-              onChange={(e) => setCriticality(e.target.value)}
-            >
-              <option value="">{t('criticalityUnset')}</option>
-              <option value="low">{t('criticalityOption.low')}</option>
-              <option value="medium">{t('criticalityOption.medium')}</option>
-              <option value="high">{t('criticalityOption.high')}</option>
-              <option value="critical">{t('criticalityOption.critical')}</option>
-            </Select>
-          </Field>
-          <div className="grid gap-3 rounded-md border border-line p-3">
-            <div>
-              <p className="m-0 text-sm font-medium">{t('itSection')}</p>
-              <p className="mt-1 mb-0 text-xs text-ink-muted">{t('itSectionHint')}</p>
-            </div>
-            <Field label={t('primaryUrl')}>
-              <Input
-                value={primaryUrl}
-                onChange={(e) => setPrimaryUrl(e.target.value)}
-              />
-            </Field>
-            <Field label={t('hostname')}>
-              <Input
-                value={hostname}
-                onChange={(e) => setHostname(e.target.value)}
-              />
-            </Field>
-            <Field label={t('vendor')}>
-              <Input value={vendor} onChange={(e) => setVendor(e.target.value)} />
-            </Field>
-            <Field label={t('deploymentModel')}>
-              <Select
-                value={deploymentModel}
-                onChange={(e) => setDeploymentModel(e.target.value)}
-              >
-                <option value="">{t('deploymentUnset')}</option>
-                {(
-                  [
-                    'saas',
-                    'paas',
-                    'iaas',
-                    'on_prem',
-                    'vm',
-                    'container',
-                    'kubernetes',
-                    'network',
-                    'endpoint',
-                    'other',
-                  ] as const
-                ).map((value) => (
-                  <option key={value} value={value}>
-                    {t(`deploymentOption.${value}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={t('dataClassification')}>
-              <Select
-                value={dataClassification}
-                onChange={(e) => setDataClassification(e.target.value)}
-              >
-                <option value="">{t('dataClassUnset')}</option>
-                <option value="public">{t('dataClassOption.public')}</option>
-                <option value="internal">{t('dataClassOption.internal')}</option>
-                <option value="confidential">
-                  {t('dataClassOption.confidential')}
-                </option>
-                <option value="restricted">
-                  {t('dataClassOption.restricted')}
-                </option>
-              </Select>
-            </Field>
-            <Field label={t('supportContact')}>
-              <Input
-                value={supportContact}
-                onChange={(e) => setSupportContact(e.target.value)}
-              />
-            </Field>
-            <Field label={t('documentationUrl')}>
-              <Input
-                value={documentationUrl}
-                onChange={(e) => setDocumentationUrl(e.target.value)}
-              />
-            </Field>
-          </div>
-          {systemType.trim() !== 'ai_assistant' ? (
-            <div className="grid gap-3 rounded-md border border-line p-3">
-              <div>
-                <p className="m-0 text-sm font-medium">{t('itCostSection')}</p>
-                <p className="mt-1 mb-0 text-xs text-ink-muted">
-                  {t('itCostSectionHint')}
-                </p>
-              </div>
-              <Field label={t('itCostModeLabel')}>
-                <Select
-                  value={itCostMode}
-                  onChange={(e) => setItCostMode(e.target.value)}
-                >
-                  <option value="">{t('itCostModeUnset')}</option>
-                  <option value="flat">{t('itCostMode.flat')}</option>
-                  <option value="one_time">{t('itCostMode.one_time')}</option>
-                  <option value="note_only">{t('itCostMode.note_only')}</option>
+      <section className="kh-ops-panel">
+        <form onSubmit={onSubmit}>
+          <div className="kh-ops-card-body">
+            <div className="kh-ops-form-grid">
+              <Field label={tCommon('name')}>
+                <Input value={name} onChange={(e) => setName(e.target.value)} required />
+              </Field>
+              <Field label={t('projectOptional')}>
+                <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                  <option value="">{t('independentNoProject')}</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
                 </Select>
               </Field>
-              <Field label={t('itFlatMonthlyFee')}>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={itFlatMonthlyFee}
-                  onChange={(e) => setItFlatMonthlyFee(e.target.value)}
-                  placeholder={t('itFlatMonthlyFeePlaceholder')}
+              <Field label={tCommon('summary')}>
+                <Input value={summary} onChange={(e) => setSummary(e.target.value)} />
+              </Field>
+              <Field label={tCommon('status')}>
+                <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="proposed">proposed</option>
+                  <option value="experimental">experimental</option>
+                  <option value="active">active</option>
+                  <option value="degraded">degraded</option>
+                  <option value="maintenance">maintenance</option>
+                  <option value="deprecated">deprecated</option>
+                  <option value="retired">retired</option>
+                  <option value="archived">archived</option>
+                </Select>
+              </Field>
+              <Field className="kh-ops-field-span" label={tCommon('description')}>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
                 />
               </Field>
-              <Field label={t('itOneTimeCost')}>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={itOneTimeCost}
-                  onChange={(e) => setItOneTimeCost(e.target.value)}
-                  placeholder={t('itOneTimeCostPlaceholder')}
-                />
+              <Field label={t('systemType')}>
+                <Input value={systemType} onChange={(e) => setSystemType(e.target.value)} />
               </Field>
-              <Field label={t('itBudgetAllocation')}>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={itBudgetAllocation}
-                  onChange={(e) => setItBudgetAllocation(e.target.value)}
-                  placeholder={t('itBudgetAllocationPlaceholder')}
-                />
+              <Field label={t('environment')}>
+                <Input value={environment} onChange={(e) => setEnvironment(e.target.value)} />
               </Field>
+              <Field label={t('version')}>
+                <Input value={version} onChange={(e) => setVersion(e.target.value)} />
+              </Field>
+              <Field label={t('criticality')}>
+                <Select
+                  value={criticality}
+                  onChange={(e) => setCriticality(e.target.value)}
+                >
+                  <option value="">{t('criticalityUnset')}</option>
+                  <option value="low">{t('criticalityOption.low')}</option>
+                  <option value="medium">{t('criticalityOption.medium')}</option>
+                  <option value="high">{t('criticalityOption.high')}</option>
+                  <option value="critical">{t('criticalityOption.critical')}</option>
+                </Select>
+              </Field>
+              <div className="kh-ops-field-span kh-ops-inset grid gap-3">
+                <div>
+                  <p className="m-0 text-sm font-medium">{t('itSection')}</p>
+                  <p className="mt-1 mb-0 text-xs text-ink-muted">{t('itSectionHint')}</p>
+                </div>
+                <div className="kh-ops-form-grid">
+                  <Field label={t('primaryUrl')}>
+                    <Input
+                      value={primaryUrl}
+                      onChange={(e) => setPrimaryUrl(e.target.value)}
+                    />
+                  </Field>
+                  <Field label={t('hostname')}>
+                    <Input
+                      value={hostname}
+                      onChange={(e) => setHostname(e.target.value)}
+                    />
+                  </Field>
+                  <Field label={t('vendor')}>
+                    <Input value={vendor} onChange={(e) => setVendor(e.target.value)} />
+                  </Field>
+                  <Field label={t('deploymentModel')}>
+                    <Select
+                      value={deploymentModel}
+                      onChange={(e) => setDeploymentModel(e.target.value)}
+                    >
+                      <option value="">{t('deploymentUnset')}</option>
+                      {(
+                        [
+                          'saas',
+                          'paas',
+                          'iaas',
+                          'on_prem',
+                          'vm',
+                          'container',
+                          'kubernetes',
+                          'network',
+                          'endpoint',
+                          'other',
+                        ] as const
+                      ).map((value) => (
+                        <option key={value} value={value}>
+                          {t(`deploymentOption.${value}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t('dataClassification')}>
+                    <Select
+                      value={dataClassification}
+                      onChange={(e) => setDataClassification(e.target.value)}
+                    >
+                      <option value="">{t('dataClassUnset')}</option>
+                      <option value="public">{t('dataClassOption.public')}</option>
+                      <option value="internal">{t('dataClassOption.internal')}</option>
+                      <option value="confidential">
+                        {t('dataClassOption.confidential')}
+                      </option>
+                      <option value="restricted">
+                        {t('dataClassOption.restricted')}
+                      </option>
+                    </Select>
+                  </Field>
+                  <Field label={t('supportContact')}>
+                    <Input
+                      value={supportContact}
+                      onChange={(e) => setSupportContact(e.target.value)}
+                    />
+                  </Field>
+                  <Field className="kh-ops-field-span" label={t('documentationUrl')}>
+                    <Input
+                      value={documentationUrl}
+                      onChange={(e) => setDocumentationUrl(e.target.value)}
+                    />
+                  </Field>
+                </div>
+              </div>
+              {systemType.trim() !== 'ai_assistant' ? (
+                <div className="kh-ops-field-span kh-ops-inset grid gap-3">
+                  <div>
+                    <p className="m-0 text-sm font-medium">{t('itCostSection')}</p>
+                    <p className="mt-1 mb-0 text-xs text-ink-muted">
+                      {t('itCostSectionHint')}
+                    </p>
+                  </div>
+                  <div className="kh-ops-form-grid">
+                    <Field label={t('itCostModeLabel')}>
+                      <Select
+                        value={itCostMode}
+                        onChange={(e) => setItCostMode(e.target.value)}
+                      >
+                        <option value="">{t('itCostModeUnset')}</option>
+                        <option value="flat">{t('itCostMode.flat')}</option>
+                        <option value="one_time">{t('itCostMode.one_time')}</option>
+                        <option value="note_only">{t('itCostMode.note_only')}</option>
+                      </Select>
+                    </Field>
+                    <Field label={t('itFlatMonthlyFee')}>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={itFlatMonthlyFee}
+                        onChange={(e) => setItFlatMonthlyFee(e.target.value)}
+                        placeholder={t('itFlatMonthlyFeePlaceholder')}
+                      />
+                    </Field>
+                    <Field label={t('itOneTimeCost')}>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={itOneTimeCost}
+                        onChange={(e) => setItOneTimeCost(e.target.value)}
+                        placeholder={t('itOneTimeCostPlaceholder')}
+                      />
+                    </Field>
+                    <Field label={t('itBudgetAllocation')}>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={itBudgetAllocation}
+                        onChange={(e) => setItBudgetAllocation(e.target.value)}
+                        placeholder={t('itBudgetAllocationPlaceholder')}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              ) : null}
+              <Field className="kh-ops-field-span" label={tCommon('tagsHint')}>
+                <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+              </Field>
+              {error ? (
+                <div className="kh-ops-field-span">
+                  <ErrorText>{error}</ErrorText>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-          <Field label={tCommon('tagsHint')}>
-            <Input value={tags} onChange={(e) => setTags(e.target.value)} />
-          </Field>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <Button type="submit" disabled={pending}>
-            {pending ? t('creating') : t('createButton')}
-          </Button>
+          </div>
+          <div className="kh-ops-action-line">
+            <span className="kh-ops-panel-meta">{t('createTitle')}</span>
+            <Button type="submit" disabled={pending}>
+              {pending ? t('creating') : t('createButton')}
+            </Button>
+          </div>
         </form>
-      </Panel>
+      </section>
     </Page>
   );
 }
+

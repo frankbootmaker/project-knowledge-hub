@@ -4,14 +4,12 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
-  Badge,
   Button,
   ErrorText,
   Field,
   FunctionHeader,
   Input,
   Modal,
-  Panel,
   Select,
   useToast,
 } from '../ui';
@@ -380,60 +378,46 @@ export function MembershipsAdmin({
         {error ? <ErrorText>{error}</ErrorText> : null}
       </Modal>
 
-      <div className="grid gap-3">
+      <section className="kh-ops-panel">
         {groupedMemberships.length === 0 ? (
-          <p className="kh-muted">
+          <p className="kh-ops-empty">
             {initialMemberships.length === 0
               ? t('emptyMemberships')
               : t('emptyMembershipsFiltered')}
           </p>
         ) : (
-          groupedMemberships.map((group) => {
-            const takenCount = initialMemberships.filter(
-              (membership) => membership.userId === group.userId,
-            ).length;
-            const canAddWorkspace = takenCount < workspaces.length;
-
-            return (
-              <Panel key={group.userId} className="grid gap-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <strong>{group.displayName}</strong>
-                      <Badge tone="neutral">
-                        {t('membershipWorkspaceCount', {
-                          count: group.memberships.length,
-                        })}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 mb-0 text-sm text-ink-muted">{group.email}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={pending || !canAddWorkspace}
-                    onClick={() => openAddWorkspaceForUser(group.userId)}
-                  >
-                    {t('addUserToWorkspace')}
-                  </Button>
-                </div>
-                <ul className="m-0 grid list-none gap-2 p-0">
-                  {group.memberships.map((membership) => (
-                    <li
-                      key={membership.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-panel-solid px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="m-0 font-medium text-ink">
-                          {membership.workspace.name}
-                        </p>
-                        <p className="m-0 text-xs text-ink-muted">
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('colName')}</th>
+                  <th>{t('colEmail')}</th>
+                  <th>{t('colWorkspace')}</th>
+                  <th>{t('colRole')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedMemberships.flatMap((group) => {
+                  const takenCount = initialMemberships.filter(
+                    (membership) => membership.userId === group.userId,
+                  ).length;
+                  const canAddWorkspace = takenCount < workspaces.length;
+                  return group.memberships.map((membership, index) => (
+                    <tr key={membership.id}>
+                      <td className="kh-ops-primary-cell">
+                        {index === 0 ? group.displayName : ''}
+                      </td>
+                      <td>{index === 0 ? group.email : ''}</td>
+                      <td>
+                        {membership.workspace.name}
+                        <div className="font-mono text-[11px] text-ink-muted">
                           {membership.workspace.slug}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                        </div>
+                      </td>
+                      <td>
                         <Select
-                          className="w-auto"
+                          className="h-9 min-h-9 w-auto py-0 text-xs"
                           value={membership.role}
                           disabled={pending}
                           aria-label={t('role')}
@@ -447,23 +431,41 @@ export function MembershipsAdmin({
                             </option>
                           ))}
                         </Select>
-                        <Button
-                          type="button"
-                          variant="danger"
-                          disabled={pending}
-                          onClick={() => void removeMembership(membership.id)}
-                        >
-                          {t('remove')}
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            );
-          })
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap gap-2">
+                          {index === 0 ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="h-8 min-h-8 px-2 text-xs"
+                              disabled={pending || !canAddWorkspace}
+                              onClick={() =>
+                                openAddWorkspaceForUser(group.userId)
+                              }
+                            >
+                              {t('addUserToWorkspace')}
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="danger"
+                            className="h-8 min-h-8 px-2 text-xs"
+                            disabled={pending}
+                            onClick={() => void removeMembership(membership.id)}
+                          >
+                            {t('remove')}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ));
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

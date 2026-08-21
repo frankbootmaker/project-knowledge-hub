@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import {
-  CatalogueSection,
-  type CatalogueListItem,
-} from './CatalogueSection';
+import { useLocale, useTranslations } from 'next-intl';
 import { CollapsibleSection } from './CollapsibleSection';
 import {
   ProjectDeliveryBoard,
@@ -17,6 +13,11 @@ import {
   type CalendarExportHandle,
 } from './ProjectDeliveryCalendar';
 import {
+  ProjectDeliveryList,
+  type DeliveryListKind,
+  type DeliveryListRow,
+} from './ProjectDeliveryList';
+import {
   ProjectDeliveryTimeline,
   type TimelineExportHandle,
 } from './ProjectDeliveryTimeline';
@@ -24,10 +25,7 @@ import { ProjectDeliveryTree } from './ProjectDeliveryTree';
 import { ProjectScrumView, type ScrumExportHandle } from './ProjectScrumView';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
-import { UserAvatar } from './UserAvatar';
-import { ViewModeIcon } from './ViewModeIcon';
 import {
-  Badge,
   Button,
   ErrorText,
   Field,
@@ -36,13 +34,14 @@ import {
   Select,
   useToast,
 } from './ui';
-import { cn } from '../lib/cn';
+import { formatMoney } from '../lib/project-currency';
 import {
-  deliveryScheduleSurfaceClass,
-  deliveryScheduleTone,
-  todayYmd,
-} from '../lib/delivery-schedule';
-import { parseHoursInput, type RatePerson } from '../lib/task-costing';
+  hoursCost,
+  parseHoursInput,
+  resolveRatePerson,
+  toHours,
+  type RatePerson,
+} from '../lib/task-costing';
 
 type Milestone = {
   id: string;
@@ -128,11 +127,7 @@ type Member = {
   email: string;
 };
 
-const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
-const EPIC_STATUSES = MILESTONE_STATUSES;
-const STORY_STATUSES = MILESTONE_STATUSES;
-const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
-const VIEW_MODES = ['list', 'tree', 'board', 'calendar', 'timeline', 'scrum'] as const;
+const VIEW_MODES = ['board', 'list', 'tree', 'calendar', 'timeline', 'scrum'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
 type DeliveryKind = 'epic' | 'story' | 'milestone' | 'task';
@@ -190,7 +185,7 @@ export function ProjectDeliveryPanel({
 }) {
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
-  const tWorkspaces = useTranslations('workspaces');
+  const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { pushToast } = useToast();
@@ -208,6 +203,9 @@ export function ProjectDeliveryPanel({
     kind: 'epic' | 'story' | 'milestone';
     id: string;
   } | null>(null);
+  const [sprintLabels, setSprintLabels] = useState<
+    Array<{ id: string; name: string; humanKey?: string | null }>
+  >([]);
 
   useEffect(() => {
     const next = searchParams.get('delivery');
@@ -215,6 +213,24 @@ export function ProjectDeliveryPanel({
       setViewMode(next as ViewMode);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`/api/v1/projects/${projectId}/sprints`)
+      .then(async (response) => {
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          sprints: Array<{ id: string; name: string; humanKey?: string | null }>;
+        };
+        if (!cancelled) setSprintLabels(payload.sprints);
+      })
+      .catch(() => {
+        /* list/tree sprint labels stay empty */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     if (!initialOpenTaskId) return;
@@ -299,16 +315,14 @@ export function ProjectDeliveryPanel({
     } catch {
       /* ignore */
     }
-  }
-
-  const wideModalOpen =
-    viewMode === 'board' ||
-    viewMode === 'calendar' ||
-    viewMode === 'timeline' ||
-    viewMode === 'scrum';
-
-  function closeWideModal() {
-    changeViewMode('list');
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('delivery', mode);
+      url.hash = 'project-delivery';
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      /* ignore */
+    }
   }
 
   const refresh = useCallback(() => {
@@ -331,16 +345,30 @@ export function ProjectDeliveryPanel({
     return map;
   }, [epics]);
 
-  const items: CatalogueListItem[] = useMemo(() => {
-    const epicItems: CatalogueListItem[] = epics.map((epic) => ({
+  const sprintTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const sprint of sprintLabels) {
+      map.set(
+        sprint.id,
+        sprint.humanKey ? `${sprint.humanKey} · ${sprint.name}` : sprint.name,
+      );
+    }
+    return map;
+  }, [sprintLabels]);
+
+  const listRows: DeliveryListRow[] = useMemo(() => {
+    const epicRows: DeliveryListRow[] = epics.map((epic) => ({
       id: `epic:${epic.id}`,
+      kind: 'epic',
+      entityId: epic.id,
+      humanKey: epic.humanKey ?? null,
       title: epic.title,
-      primaryBadge: epic.humanKey ?? t('kindEpic'),
-      secondaryBadge: t(`milestoneStatus.${epic.status}`),
-      subtitle:
-        epic.startDate || epic.endDate
-          ? `${t('startDate')}: ${epic.startDate ?? '…'} · ${t('endDate')}: ${epic.endDate ?? '…'}`
-          : null,
+      status: epic.status,
+      owner: null,
+      sprint: null,
+      forecastHours: null,
+      actualHours: null,
+      storyPoints: null,
       updatedAt: epic.updatedAt ?? epic.createdAt ?? null,
       searchText: [
         epic.title,
@@ -348,30 +376,25 @@ export function ProjectDeliveryPanel({
         epic.description ?? '',
         epic.status,
         'epic',
-        epic.startDate ?? '',
-        epic.endDate ?? '',
       ]
         .join(' ')
         .toLowerCase(),
-      filterValue: `epic:${epic.status}`,
-      filterLabel: `${t('kindEpic')} · ${t(`milestoneStatus.${epic.status}`)}`,
     }));
 
-    const storyItems: CatalogueListItem[] = stories.map((story) => {
-      const epicLabel = epicTitleById.get(story.epicId) ?? null;
+    const storyRows: DeliveryListRow[] = stories.map((story) => {
+      const epicLabel = epicTitleById.get(story.epicId) ?? '';
       return {
         id: `story:${story.id}`,
+        kind: 'story',
+        entityId: story.id,
+        humanKey: story.humanKey ?? null,
         title: story.title,
-        primaryBadge: story.humanKey ?? t('kindStory'),
-        secondaryBadge: t(`milestoneStatus.${story.status}`),
-        subtitle: [
-          epicLabel ? `${t('kindEpic')}: ${epicLabel}` : null,
-          story.startDate || story.endDate
-            ? `${t('startDate')}: ${story.startDate ?? '…'} · ${t('endDate')}: ${story.endDate ?? '…'}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(' · ') || null,
+        status: story.status,
+        owner: null,
+        sprint: null,
+        forecastHours: null,
+        actualHours: null,
+        storyPoints: null,
         updatedAt: story.updatedAt ?? story.createdAt ?? null,
         searchText: [
           story.title,
@@ -379,32 +402,25 @@ export function ProjectDeliveryPanel({
           story.description ?? '',
           story.status,
           'story',
-          epicLabel ?? '',
-          story.startDate ?? '',
-          story.endDate ?? '',
+          epicLabel,
         ]
           .join(' ')
           .toLowerCase(),
-        filterValue: `story:${story.status}`,
-        filterLabel: `${t('kindStory')} · ${t(`milestoneStatus.${story.status}`)}`,
       };
     });
 
-    const milestoneItems: CatalogueListItem[] = milestones.map((milestone) => ({
+    const milestoneRows: DeliveryListRow[] = milestones.map((milestone) => ({
       id: `milestone:${milestone.id}`,
+      kind: 'milestone',
+      entityId: milestone.id,
+      humanKey: milestone.humanKey ?? null,
       title: milestone.title,
-      primaryBadge: milestone.humanKey ?? t('kindMilestone'),
-      secondaryBadge: t(`milestoneStatus.${milestone.status}`),
-      subtitle: [
-        milestone.startDate
-          ? `${t('startDate')}: ${milestone.startDate}`
-          : null,
-        milestone.targetDate
-          ? `${t('targetDate')}: ${milestone.targetDate}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(' · ') || null,
+      status: milestone.status,
+      owner: null,
+      sprint: null,
+      forecastHours: null,
+      actualHours: null,
+      storyPoints: null,
       updatedAt: milestone.updatedAt ?? milestone.createdAt ?? null,
       searchText: [
         milestone.title,
@@ -412,34 +428,28 @@ export function ProjectDeliveryPanel({
         milestone.description ?? '',
         milestone.status,
         'milestone',
-        milestone.startDate ?? '',
-        milestone.targetDate ?? '',
       ]
         .join(' ')
         .toLowerCase(),
-      filterValue: `milestone:${milestone.status}`,
-      filterLabel: `${t('kindMilestone')} · ${t(`milestoneStatus.${milestone.status}`)}`,
     }));
 
-    const taskItems: CatalogueListItem[] = tasks.map((task) => {
-      const raciLine =
-        task.raci.length > 0
-          ? task.raci.map((entry) => `${entry.role}: ${entry.displayName}`).join(' · ')
-          : null;
+    const taskRows: DeliveryListRow[] = tasks.map((task) => {
       const ownerLabel = task.currentOwner?.displayName ?? null;
+      const sprintLabel = task.sprintId
+        ? (sprintTitleById.get(task.sprintId) ?? null)
+        : null;
       return {
         id: `task:${task.id}`,
+        kind: 'task',
+        entityId: task.id,
+        humanKey: task.humanKey ?? null,
         title: task.title,
-        primaryBadge: task.humanKey ?? t('kindTask'),
-        secondaryBadge: t(`taskStatus.${task.status}`),
-        subtitle: [
-          task.epicTitle,
-          task.userStoryTitle,
-          task.dueDate ? `${t('dueDate')}: ${task.dueDate}` : null,
-          raciLine,
-        ]
-          .filter(Boolean)
-          .join(' · ') || null,
+        status: task.status,
+        owner: ownerLabel,
+        sprint: sprintLabel,
+        forecastHours: task.forecastHours,
+        actualHours: task.actualHours,
+        storyPoints: task.storyPoints ?? null,
         updatedAt: task.updatedAt ?? task.createdAt ?? null,
         searchText: [
           task.title,
@@ -447,21 +457,18 @@ export function ProjectDeliveryPanel({
           task.description ?? '',
           task.status,
           'task',
-          task.dueDate ?? '',
+          ownerLabel ?? '',
+          sprintLabel ?? '',
           task.epicTitle ?? '',
           task.userStoryTitle ?? '',
-          ownerLabel ?? '',
-          raciLine ?? '',
         ]
           .join(' ')
           .toLowerCase(),
-        filterValue: `task:${task.status}`,
-        filterLabel: `${t('kindTask')} · ${t(`taskStatus.${task.status}`)}`,
       };
     });
 
-    return [...epicItems, ...storyItems, ...milestoneItems, ...taskItems];
-  }, [epics, stories, milestones, tasks, epicTitleById, t]);
+    return [...epicRows, ...storyRows, ...milestoneRows, ...taskRows];
+  }, [epics, stories, milestones, tasks, epicTitleById, sprintTitleById]);
 
   const calendarItems = useMemo(
     () => [
@@ -502,11 +509,14 @@ export function ProjectDeliveryPanel({
         title: task.title,
         status: task.status,
         dueDate: task.dueDate,
+        forecastHours: task.forecastHours,
+        actualHours: task.actualHours,
         milestoneId: task.milestoneId,
         sprintId: task.sprintId ?? null,
         storyPoints: task.storyPoints ?? null,
         humanKey: task.humanKey ?? null,
         userStoryTitle: task.userStoryTitle,
+        currentOwnerUserId: task.currentOwnerUserId,
         currentOwner: task.currentOwner
           ? {
               userId: task.currentOwner.userId,
@@ -523,6 +533,43 @@ export function ProjectDeliveryPanel({
       })),
     [tasks],
   );
+
+  const deliveryStats = useMemo(() => {
+    const rates = new Map(ratePeople.map((person) => [person.userId, person]));
+    const openStatuses = new Set(['todo', 'in_progress', 'blocked']);
+    let openWork = 0;
+    let inProgress = 0;
+    let plannedHours = 0;
+    let remaining = 0;
+    let cost: number | null = null;
+    for (const task of tasks) {
+      if (task.status === 'cancelled') continue;
+      const forecast = toHours(task.forecastHours) ?? 0;
+      const actual = toHours(task.actualHours) ?? 0;
+      plannedHours += forecast;
+      if (openStatuses.has(task.status)) {
+        openWork += 1;
+        remaining += Math.max(0, forecast - actual);
+        if (task.status === 'in_progress') inProgress += 1;
+      }
+      const person = resolveRatePerson(
+        task.currentOwnerUserId,
+        task.raci,
+        rates,
+      );
+      const itemCost = hoursCost(forecast || null, person?.hourlyRate);
+      if (itemCost != null) {
+        cost = (cost ?? 0) + itemCost;
+      }
+    }
+    return {
+      openWork,
+      inProgress,
+      plannedHours: Math.round(plannedHours * 10) / 10,
+      remainingHours: Math.round(remaining * 10) / 10,
+      cost: cost == null ? null : Math.round(cost * 100) / 100,
+    };
+  }, [ratePeople, tasks]);
 
   function resetCreateForm() {
     setTitle('');
@@ -770,39 +817,20 @@ export function ProjectDeliveryPanel({
     return t('addTask');
   }
 
-  function viewSwitcher(activeMode: ViewMode) {
-    return (
-      <div
-        className="inline-flex max-w-full overflow-x-auto rounded-md border border-line p-0.5"
-        role="group"
-        aria-label={t('viewModeLabel')}
-      >
-        {VIEW_MODES.map((mode) => {
-          const label = t(`viewMode.${mode}`);
-          return (
-            <Button
-              key={mode}
-              type="button"
-              variant={activeMode === mode ? 'primary' : 'secondary'}
-              className={cn(
-                'size-8 shrink-0 rounded-sm px-0 md:h-8 md:w-auto md:px-2.5',
-                activeMode === mode
-                  ? ''
-                  : 'border-transparent bg-transparent shadow-none',
-              )}
-              aria-label={label}
-              title={label}
-              aria-pressed={activeMode === mode}
-              onClick={() => changeViewMode(mode)}
-            >
-              <ViewModeIcon mode={mode} className="md:hidden" />
-              <span className="hidden text-xs md:inline">{label}</span>
-            </Button>
-          );
-        })}
-      </div>
-    );
+  function formatHoursLabel(value: number): string {
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}h`;
   }
+
+  function onListManage(kind: DeliveryListKind, entityId: string) {
+    if (kind === 'task') {
+      setManageTaskId(entityId);
+      return;
+    }
+    setManageAgile({ kind, id: entityId });
+  }
+
+  const showDeliveryStats =
+    viewMode === 'board' || viewMode === 'list' || viewMode === 'tree';
 
   return (
     <>
@@ -810,181 +838,280 @@ export function ProjectDeliveryPanel({
         id="project-delivery"
         storageKey={`project:${projectId}:delivery`}
         title={t('title')}
-        action={viewSwitcher(wideModalOpen ? 'list' : viewMode)}
         defaultOpen
       >
-      {error && !createOpen && !wideModalOpen && !manageTaskId && !manageAgile ? (
+      {error && !createOpen && !manageTaskId && !manageAgile ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
 
-      <CatalogueSection
-        className="mb-2"
-        title={t('title')}
-        showTitle={false}
-        items={items}
-        emptyLabel={t('empty')}
-        searchPlaceholder={t('searchPlaceholder')}
-        filterLabel={t('filterStatus')}
-        filterAllLabel={tWorkspaces('sectionFilterAll')}
-        createLabel={t('addItem')}
-        canCreate={canMutate}
-        showList={viewMode === 'list'}
-        onCreate={() => {
-          resetCreateForm();
-          setCreateOpen(true);
-        }}
-        renderItem={(item) => {
-          const parsed = parseItemId(item.id);
-          const statusOptions =
-            parsed?.kind === 'task'
-              ? TASK_STATUSES
-              : parsed?.kind === 'milestone'
-                ? MILESTONE_STATUSES
-                : parsed?.kind === 'epic'
-                  ? EPIC_STATUSES
-                  : parsed?.kind === 'story'
-                    ? STORY_STATUSES
-                    : [];
-          const epic =
-            parsed?.kind === 'epic'
-              ? epics.find((row) => row.id === parsed.entityId)
-              : undefined;
-          const story =
-            parsed?.kind === 'story'
-              ? stories.find((row) => row.id === parsed.entityId)
-              : undefined;
-          const milestone =
-            parsed?.kind === 'milestone'
-              ? milestones.find((row) => row.id === parsed.entityId)
-              : undefined;
-          const task =
-            parsed?.kind === 'task'
-              ? tasks.find((row) => row.id === parsed.entityId)
-              : undefined;
-          const currentStatus =
-            epic?.status ?? story?.status ?? milestone?.status ?? task?.status;
-          const scheduleTone =
-            milestone || task
-              ? deliveryScheduleTone({
-                  status: (milestone ?? task)!.status,
-                  date: milestone?.targetDate ?? task?.dueDate,
-                  today: todayYmd(),
-                })
-              : null;
-
-          return (
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  {item.primaryBadge ? (
-                    <Badge tone="brand">{item.primaryBadge}</Badge>
-                  ) : null}
-                  <span className="font-semibold">{item.title}</span>
-                  {task?.currentOwner ? (
-                    <span title={task.currentOwner.displayName}>
-                      <UserAvatar
-                        displayName={task.currentOwner.displayName}
-                        avatarUrl={task.currentOwner.avatarUrl}
-                        size="xs"
-                      />
-                    </span>
-                  ) : null}
-                  {!canMutate && item.secondaryBadge ? (
-                    <Badge>{item.secondaryBadge}</Badge>
-                  ) : null}
-                  {scheduleTone ? (
-                    <span
-                      className={cn(
-                        'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide',
-                        deliveryScheduleSurfaceClass(scheduleTone),
-                      )}
-                    >
-                      <span className="sm:hidden">{t(`scheduleToneShort.${scheduleTone}`)}</span>
-                      <span className="hidden sm:inline">
-                        {t(`scheduleTone.${scheduleTone}`)}
-                      </span>
-                    </span>
-                  ) : null}
-                </div>
-                {item.subtitle ? (
-                  <p className="mt-2 mb-0 text-sm break-words text-ink-muted">
-                    {item.subtitle}
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-                {parsed?.kind === 'task' ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full sm:w-auto"
-                    onClick={() => setManageTaskId(parsed.entityId)}
-                  >
-                    {t('manage')}
-                  </Button>
-                ) : null}
-                {parsed?.kind === 'epic' ||
-                parsed?.kind === 'story' ||
-                parsed?.kind === 'milestone' ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full sm:w-auto"
-                    onClick={() => {
-                      if (
-                        parsed.kind !== 'epic' &&
-                        parsed.kind !== 'story' &&
-                        parsed.kind !== 'milestone'
-                      ) {
-                        return;
-                      }
-                      setManageAgile({
-                        kind: parsed.kind,
-                        id: parsed.entityId,
-                      });
-                    }}
-                  >
-                    {t('manage')}
-                  </Button>
-                ) : null}
-                {canMutate && parsed && currentStatus ? (
-                  <Select
-                    className="w-full sm:w-auto sm:max-w-[11rem]"
-                    value={currentStatus}
-                    disabled={pending}
-                    aria-label={t('filterStatus')}
-                    onChange={(e) => void updateStatus(item.id, e.target.value)}
-                  >
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {parsed.kind === 'task'
-                          ? t(`taskStatus.${status}`)
-                          : t(`milestoneStatus.${status}`)}
-                      </option>
-                    ))}
-                  </Select>
-                ) : null}
-              </div>
+      {showDeliveryStats ? (
+        <div className="kh-ops-stats">
+          <article className="kh-ops-stat">
+            <div className="kh-ops-stat-label">{t('statsOpenWork')}</div>
+            <div className="kh-ops-stat-value">{deliveryStats.openWork}</div>
+            <div className="kh-ops-stat-note">
+              {t('statsOpenWorkNote', { count: deliveryStats.inProgress })}
             </div>
-          );
-        }}
-      />
+          </article>
+          <article className="kh-ops-stat">
+            <div className="kh-ops-stat-label">{t('statsPlannedHours')}</div>
+            <div className="kh-ops-stat-value">
+              {formatHoursLabel(deliveryStats.plannedHours)}
+            </div>
+            <div className="kh-ops-stat-note">
+              {t('statsRemainingHours', {
+                hours: formatHoursLabel(deliveryStats.remainingHours),
+              })}
+            </div>
+          </article>
+          {deliveryStats.cost != null ? (
+            <article className="kh-ops-stat">
+              <div className="kh-ops-stat-label">{t('statsDeliveryCost')}</div>
+              <div className="kh-ops-stat-value">
+                {formatMoney(deliveryStats.cost, currency, locale)}
+              </div>
+              <div className="kh-ops-stat-note">{t('statsDeliveryCostNote')}</div>
+            </article>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div
+        className="kh-ops-delivery-modes"
+        role="group"
+        aria-label={t('viewModeLabel')}
+      >
+        {VIEW_MODES.map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            aria-pressed={viewMode === mode}
+            onClick={() => changeViewMode(mode)}
+          >
+            {t(`viewMode.${mode}`)}
+          </button>
+        ))}
+      </div>
+
+      <div className="kh-ops-toolbar">
+        <div className="flex flex-wrap items-center gap-2">
+          {viewMode === 'timeline' ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={
+                !timelineExportState?.canExport ||
+                Boolean(timelineExportState?.pending)
+              }
+              onClick={() => timelineExportRef.current?.exportPdf()}
+            >
+              {timelineExportState?.pending
+                ? t('timelineExportingPdf')
+                : t('timelineExportPdf')}
+            </Button>
+          ) : null}
+          {viewMode === 'board' ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={
+                !boardExportState?.canExport ||
+                Boolean(boardExportState?.pending)
+              }
+              onClick={() => boardExportRef.current?.exportPdf()}
+            >
+              {boardExportState?.pending
+                ? t('boardExportingPdf')
+                : t('boardExportPdf')}
+            </Button>
+          ) : null}
+          {viewMode === 'calendar' ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={
+                !calendarExportState?.canExport ||
+                Boolean(calendarExportState?.pending)
+              }
+              onClick={() => calendarExportRef.current?.exportPdf()}
+            >
+              {calendarExportState?.pending
+                ? t('calendarExportingPdf')
+                : t('calendarExportPdf')}
+            </Button>
+          ) : null}
+          {viewMode === 'scrum' ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={
+                !scrumExportState?.canExport ||
+                Boolean(scrumExportState?.pending)
+              }
+              onClick={() => scrumExportRef.current?.exportPdf()}
+            >
+              {scrumExportState?.pending
+                ? t('scrumExportingPdf')
+                : t('scrumExportPdf')}
+            </Button>
+          ) : null}
+        </div>
+        {canMutate ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              resetCreateForm();
+              setCreateOpen(true);
+            }}
+          >
+            {t('addItem')}
+          </Button>
+        ) : null}
+      </div>
+
+      {viewMode === 'list' ? (
+        <ProjectDeliveryList
+          rows={listRows}
+          canMutate={canMutate}
+          pending={pending}
+          onManage={onListManage}
+          onStatusChange={(kind, entityId, status) =>
+            void updateStatus(`${kind}:${entityId}`, status)
+          }
+        />
+      ) : null}
 
       {viewMode === 'tree' ? (
-        <div className="mt-3">
-          <ProjectDeliveryTree
-            epics={epics}
-            stories={stories}
-            tasks={tasks}
-            onManageTask={(taskId) => setManageTaskId(taskId)}
-            onManageEpic={(epicId) => setManageAgile({ kind: 'epic', id: epicId })}
-            onManageStory={(storyId) =>
-              setManageAgile({ kind: 'story', id: storyId })
+        <ProjectDeliveryTree
+          epics={epics}
+          stories={stories}
+          tasks={tasks.map((task) => ({
+            ...task,
+            sprintLabel: task.sprintId
+              ? (sprintTitleById.get(task.sprintId) ?? null)
+              : null,
+          }))}
+          onManageTask={(taskId) => setManageTaskId(taskId)}
+          onManageEpic={(epicId) => setManageAgile({ kind: 'epic', id: epicId })}
+          onManageStory={(storyId) =>
+            setManageAgile({ kind: 'story', id: storyId })
+          }
+        />
+      ) : null}
+
+      {viewMode === 'board' ? (
+        <ProjectDeliveryBoard
+          projectId={projectId}
+          projectName={projectName}
+          tasks={boardTasks}
+          milestones={milestones}
+          milestoneTitles={milestoneTitleById}
+          canMutate={canMutate}
+          pending={pending}
+          currency={currency}
+          ratePeople={ratePeople}
+          exportHandleRef={boardExportRef}
+          onExportStateChange={onBoardExportStateChange}
+          onTaskStatusChange={(taskId, status) =>
+            void updateStatus(`task:${taskId}`, status)
+          }
+          onMilestoneStatusChange={(milestoneId, status) =>
+            void updateStatus(`milestone:${milestoneId}`, status)
+          }
+          onManageTask={(taskId) => setManageTaskId(taskId)}
+          onManageMilestone={(milestoneId) =>
+            setManageAgile({ kind: 'milestone', id: milestoneId })
+          }
+        />
+      ) : null}
+
+      {viewMode === 'scrum' ? (
+        <ProjectScrumView
+          projectId={projectId}
+          projectName={projectName}
+          workspaceId={workspaceId}
+          canMutate={canMutate}
+          definitionOfDone={definitionOfDone}
+          tasks={boardTasks}
+          milestoneTitles={milestoneTitleById}
+          currency={currency}
+          ratePeople={ratePeople}
+          exportHandleRef={scrumExportRef}
+          onExportStateChange={onScrumExportStateChange}
+          onTaskStatusChange={(taskId, status) =>
+            void updateStatus(`task:${taskId}`, status)
+          }
+          onOpenTask={(taskId) => setManageTaskId(taskId)}
+          onAssignToSprint={async (taskId, sprintId) => {
+            setPending(true);
+            setError(null);
+            try {
+              const response = await fetch(`/api/v1/project-tasks/${taskId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sprintId }),
+              });
+              if (!response.ok) {
+                const payload = (await response.json().catch(() => null)) as {
+                  message?: string;
+                } | null;
+                throw new Error(payload?.message ?? t('failedUpdateTask'));
+              }
+              const payload = (await response.json()) as { task: Task };
+              setTasks((current) =>
+                current.map((task) =>
+                  task.id === taskId ? { ...task, ...payload.task } : task,
+                ),
+              );
+              refresh();
+            } catch (err) {
+              setError(
+                err instanceof Error ? err.message : t('failedUpdateTask'),
+              );
+            } finally {
+              setPending(false);
             }
-          />
-        </div>
+          }}
+          onRefresh={refresh}
+        />
+      ) : null}
+
+      {viewMode === 'calendar' ? (
+        <ProjectDeliveryCalendar
+          projectId={projectId}
+          projectName={projectName}
+          items={calendarItems}
+          exportHandleRef={calendarExportRef}
+          onExportStateChange={onCalendarExportStateChange}
+        />
+      ) : null}
+
+      {viewMode === 'timeline' ? (
+        <ProjectDeliveryTimeline
+          projectId={projectId}
+          projectName={projectName}
+          projectStartDate={projectStartDate}
+          projectEndDate={projectEndDate}
+          epics={epics}
+          stories={stories}
+          milestones={milestones}
+          tasks={tasks}
+          exportHandleRef={timelineExportRef}
+          onExportStateChange={onTimelineExportStateChange}
+          onManageEpic={(epicId) =>
+            setManageAgile({ kind: 'epic', id: epicId })
+          }
+          onManageStory={(storyId) =>
+            setManageAgile({ kind: 'story', id: storyId })
+          }
+          onManageMilestone={(milestoneId) =>
+            setManageAgile({ kind: 'milestone', id: milestoneId })
+          }
+          onManageTask={(taskId) => setManageTaskId(taskId)}
+        />
       ) : null}
 
       {viewMode === 'list' ? (
@@ -993,207 +1120,6 @@ export function ProjectDeliveryPanel({
         </p>
       ) : null}
       </CollapsibleSection>
-
-      <Modal
-        open={wideModalOpen}
-        onClose={closeWideModal}
-        title={t('title')}
-        description={t('wideModalDescription')}
-        size="full"
-        bodyClassName="!block overflow-auto"
-        footer={
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            {viewSwitcher(viewMode)}
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              {viewMode === 'timeline' ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={
-                    !timelineExportState?.canExport ||
-                    Boolean(timelineExportState?.pending)
-                  }
-                  onClick={() => timelineExportRef.current?.exportPdf()}
-                >
-                  {timelineExportState?.pending
-                    ? t('timelineExportingPdf')
-                    : t('timelineExportPdf')}
-                </Button>
-              ) : null}
-              {viewMode === 'board' ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={
-                    !boardExportState?.canExport ||
-                    Boolean(boardExportState?.pending)
-                  }
-                  onClick={() => boardExportRef.current?.exportPdf()}
-                >
-                  {boardExportState?.pending
-                    ? t('boardExportingPdf')
-                    : t('boardExportPdf')}
-                </Button>
-              ) : null}
-              {viewMode === 'calendar' ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={
-                    !calendarExportState?.canExport ||
-                    Boolean(calendarExportState?.pending)
-                  }
-                  onClick={() => calendarExportRef.current?.exportPdf()}
-                >
-                  {calendarExportState?.pending
-                    ? t('calendarExportingPdf')
-                    : t('calendarExportPdf')}
-                </Button>
-              ) : null}
-              {viewMode === 'scrum' ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={
-                    !scrumExportState?.canExport ||
-                    Boolean(scrumExportState?.pending)
-                  }
-                  onClick={() => scrumExportRef.current?.exportPdf()}
-                >
-                  {scrumExportState?.pending
-                    ? t('scrumExportingPdf')
-                    : t('scrumExportPdf')}
-                </Button>
-              ) : null}
-              {canMutate ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    resetCreateForm();
-                    setCreateOpen(true);
-                  }}
-                >
-                  {t('addItem')}
-                </Button>
-              ) : null}
-              <Button type="button" variant="secondary" onClick={closeWideModal}>
-                {t('closeWideView')}
-              </Button>
-            </div>
-          </div>
-        }
-      >
-        {error ? (
-          <div className="mb-3">
-            <ErrorText>{error}</ErrorText>
-          </div>
-        ) : null}
-        {viewMode === 'board' ? (
-          <ProjectDeliveryBoard
-            projectId={projectId}
-            projectName={projectName}
-            tasks={boardTasks}
-            milestones={milestones}
-            milestoneTitles={milestoneTitleById}
-            canMutate={canMutate}
-            pending={pending}
-            exportHandleRef={boardExportRef}
-            onExportStateChange={onBoardExportStateChange}
-            onTaskStatusChange={(taskId, status) =>
-              void updateStatus(`task:${taskId}`, status)
-            }
-            onMilestoneStatusChange={(milestoneId, status) =>
-              void updateStatus(`milestone:${milestoneId}`, status)
-            }
-            onManageTask={(taskId) => setManageTaskId(taskId)}
-            onManageMilestone={(milestoneId) =>
-              setManageAgile({ kind: 'milestone', id: milestoneId })
-            }
-          />
-        ) : null}
-        {viewMode === 'scrum' ? (
-          <ProjectScrumView
-            projectId={projectId}
-            projectName={projectName}
-            workspaceId={workspaceId}
-            canMutate={canMutate}
-            definitionOfDone={definitionOfDone}
-            tasks={boardTasks}
-            milestoneTitles={milestoneTitleById}
-            exportHandleRef={scrumExportRef}
-            onExportStateChange={onScrumExportStateChange}
-            onTaskStatusChange={(taskId, status) =>
-              void updateStatus(`task:${taskId}`, status)
-            }
-            onOpenTask={(taskId) => setManageTaskId(taskId)}
-            onAssignToSprint={async (taskId, sprintId) => {
-              setPending(true);
-              setError(null);
-              try {
-                const response = await fetch(`/api/v1/project-tasks/${taskId}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ sprintId }),
-                });
-                if (!response.ok) {
-                  const payload = (await response.json().catch(() => null)) as {
-                    message?: string;
-                  } | null;
-                  throw new Error(payload?.message ?? t('failedUpdateTask'));
-                }
-                const payload = (await response.json()) as { task: Task };
-                setTasks((current) =>
-                  current.map((task) =>
-                    task.id === taskId ? { ...task, ...payload.task } : task,
-                  ),
-                );
-                refresh();
-              } catch (err) {
-                setError(
-                  err instanceof Error ? err.message : t('failedUpdateTask'),
-                );
-              } finally {
-                setPending(false);
-              }
-            }}
-            onRefresh={refresh}
-          />
-        ) : null}
-        {viewMode === 'calendar' ? (
-          <ProjectDeliveryCalendar
-            projectId={projectId}
-            projectName={projectName}
-            items={calendarItems}
-            exportHandleRef={calendarExportRef}
-            onExportStateChange={onCalendarExportStateChange}
-          />
-        ) : null}
-        {viewMode === 'timeline' ? (
-          <ProjectDeliveryTimeline
-            projectId={projectId}
-            projectName={projectName}
-            projectStartDate={projectStartDate}
-            projectEndDate={projectEndDate}
-            epics={epics}
-            stories={stories}
-            milestones={milestones}
-            tasks={tasks}
-            exportHandleRef={timelineExportRef}
-            onExportStateChange={onTimelineExportStateChange}
-            onManageEpic={(epicId) =>
-              setManageAgile({ kind: 'epic', id: epicId })
-            }
-            onManageStory={(storyId) =>
-              setManageAgile({ kind: 'story', id: storyId })
-            }
-            onManageMilestone={(milestoneId) =>
-              setManageAgile({ kind: 'milestone', id: milestoneId })
-            }
-            onManageTask={(taskId) => setManageTaskId(taskId)}
-          />
-        ) : null}
-      </Modal>
 
       <Modal
         open={createOpen}
@@ -1244,7 +1170,7 @@ export function ProjectDeliveryPanel({
             />
           </Field>
           {createKind === 'milestone' ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={t('startDate')}>
                 <Input
                   type="date"
@@ -1264,7 +1190,7 @@ export function ProjectDeliveryPanel({
             </div>
           ) : null}
           {createKind === 'epic' ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={t('startDate')}>
                 <Input
                   type="date"
@@ -1299,7 +1225,7 @@ export function ProjectDeliveryPanel({
                   ))}
                 </Select>
               </Field>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="kh-ops-form-grid">
                 <Field label={t('startDate')}>
                   <Input
                     type="date"
@@ -1329,7 +1255,7 @@ export function ProjectDeliveryPanel({
                   disabled={pending}
                 />
               </Field>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="kh-ops-form-grid">
                 <Field label={t('forecastHours')}>
                   <Input
                     type="number"

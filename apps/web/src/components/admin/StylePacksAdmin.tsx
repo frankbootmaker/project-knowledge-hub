@@ -10,7 +10,6 @@ import {
   Field,
   FilePicker,
   Input,
-  Panel,
   Select,
   useToast,
 } from '../ui';
@@ -91,7 +90,7 @@ function StylePackTokenHints(props: {
             disabled={props.disabled}
             title={t(item.descKey)}
             aria-label={`${item.token}: ${t(item.descKey)}`}
-            className="rounded border border-line bg-panel-solid px-2 py-0.5 font-mono text-xs text-ink transition hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-60"
+            className="kh-ops-type-chip disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => props.onInsert(item.token)}
           >
             {item.token}
@@ -708,24 +707,23 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
   }
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[240px_1fr]">
-      <Panel className="grid gap-3 self-start p-4">
-        <p className="m-0 text-sm font-semibold text-ink">{t('templatesList')}</p>
-        <ul className="m-0 grid list-none gap-2 p-0">
+    <div className="grid items-start gap-6">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <p className="kh-ops-panel-title">{t('templatesList')}</p>
+        </div>
+        <ul className="kh-ops-project-grid m-0 list-none px-0">
           {packs.map((pack) => {
             const active = !isCreating && selectedId === pack.id;
             return (
               <li key={pack.id}>
                 <button
                   type="button"
-                  className={`flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm ${
-                    active
-                      ? 'border-accent bg-accent/10'
-                      : 'border-line bg-surface'
+                  className={`kh-ops-project-card w-full text-left${
+                    active ? ' selected' : ''
                   }`}
                   onClick={() => loadPackIntoForm(pack)}
                 >
-                  <span className="min-w-0 truncate">{pack.label}</span>
                   <Badge
                     tone={
                       pack.builtin
@@ -737,14 +735,29 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
                   >
                     {pack.builtin ? t('templatesBuiltin') : pack.status}
                   </Badge>
+                  <h3>{pack.label}</h3>
+                  <p>
+                    {[
+                      pack.typography.headingFont,
+                      pack.typography.bodyFont,
+                      pack.formats.join(' · '),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  <div className="kh-ops-project-card-foot">
+                    <span>{pack.slug}</span>
+                    <span>{tCommon('edit')}</span>
+                  </div>
                 </button>
               </li>
             );
           })}
         </ul>
-      </Panel>
+      </section>
 
-      <Panel className="grid gap-4 self-start p-4">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-card-body grid gap-4">
         <p className="m-0 text-sm text-ink-muted">
           {isCreating
             ? t('templatesCreatingBlurb')
@@ -754,7 +767,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
         </p>
         {error ? <ErrorText>{error}</ErrorText> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="kh-ops-form-grid">
           <Field label={t('templatesLabel')}>
             <Input
               value={form.label}
@@ -933,8 +946,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
           </p>
         </Field>
 
-        <div className="flex flex-wrap gap-4 text-sm">
-          <label className="flex items-center gap-2">
+        <div className="kh-ops-scope-checks">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={form.showLogo}
@@ -948,7 +961,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             />
             {t('templatesShowLogo')}
           </label>
-          <label className="flex items-center gap-2">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={form.showCoverBrand}
@@ -962,7 +975,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             />
             {t('templatesShowCoverBrand')}
           </label>
-          <label className="flex items-center gap-2">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={form.showCoverTitle}
@@ -976,7 +989,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             />
             {t('templatesShowCoverTitle')}
           </label>
-          <label className="flex items-center gap-2">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={form.showCoverDetails}
@@ -1011,7 +1024,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
                 {t('templatesUploadLogo')}
               </Button>
             </div>
-            <div className="grid gap-3 border-t border-line pt-4">
+            <div className="kh-ops-inset grid gap-3">
               <p className="m-0 text-sm font-semibold text-ink">
                 {t('templatesDocxShell')}
               </p>
@@ -1070,7 +1083,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
+        <div className="kh-ops-action-line">
+          <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="secondary"
@@ -1132,8 +1146,10 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
               </Button>
             </>
           )}
+          </div>
         </div>
-      </Panel>
+        </div>
+      </section>
     </div>
   );
 }

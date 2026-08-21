@@ -110,6 +110,7 @@ export default async function AdminMonitoringPage({
   return (
     <div>
       <PageHeader
+        eyebrow={t('monitoringEyebrow')}
         title={t('monitoring')}
         description={t('monitoringBlurb')}
       />

@@ -1,18 +1,17 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { CollapsibleSection } from '../../../components/CollapsibleSection';
 import { DashboardInsightWidgets } from '../../../components/DashboardInsightWidgets';
 import { DashboardMyTasks } from '../../../components/DashboardMyTasks';
+import { OpsCountStrip } from '../../../components/ops/OpsCountStrip';
 import {
+  Badge,
   LinkButton,
   Page,
   PageHeader,
-  Panel,
 } from '../../../components/ui';
 import { loadDashboardData } from '../../../lib/dashboard';
 import { requireSession } from '../../../lib/session';
 import { workspaceTileClassName } from '../../../lib/workspace-colors';
-import { cn } from '../../../lib/cn';
 
 function roleLabel(
   role: string | null,
@@ -45,165 +44,175 @@ export default async function DashboardPage() {
     0,
     data.workspaceTotal - data.workspaces.length,
   );
+  const openTasks = data.myTasks.filter(
+    (task) => task.status !== 'done' && task.status !== 'cancelled',
+  );
+  const blockedCount = data.myTasks.filter((task) => task.status === 'blocked').length;
+  const dueSoon = data.insights.tasksByDue.dueSoon;
+  const overdue = data.insights.tasksByDue.overdue;
+  const queueTone = overdue > 0 ? 'danger' : dueSoon > 0 ? 'warn' : 'success';
 
   return (
     <Page wide>
       <PageHeader
+        eyebrow={t('eyebrow', { name: session.user.displayName })}
         title={t('title')}
         description={
           <>
-            {t('welcome', { name: session.user.displayName })}{' '}
+            {t('subtitle')}{' '}
             {t('signedInAs', { email: session.user.email })}
             {session.user.isSystemAdmin ? ` ${t('systemAdmin')}` : ''}.
           </>
         }
         actions={
-          <div className="flex flex-wrap gap-2">
-            <LinkButton href="/workspaces" variant="secondary">
-              {t('browseWorkspaces')}
-            </LinkButton>
-            {session.user.isSystemAdmin ? (
-              <LinkButton href="/workspaces/new">{t('createWorkspace')}</LinkButton>
-            ) : null}
-          </div>
+          <Badge tone={queueTone}>
+            {t('dueThisWeekBadge', { count: dueSoon })}
+          </Badge>
         }
       />
+
+      <OpsCountStrip
+        items={[
+          { label: t('countAssigned'), value: openTasks.length },
+          { label: t('countDueThisWeek'), value: dueSoon },
+          { label: t('countBlocked'), value: blockedCount },
+          { label: t('countOverdue'), value: overdue },
+          { label: t('countOpenRaid'), value: data.insights.openRaid.total },
+        ]}
+      />
+
+      <DashboardMyTasks tasks={data.myTasks} />
 
       <DashboardInsightWidgets
         insights={data.insights}
         prefs={data.displayPrefs.dashboardWidgets}
       />
 
-      <CollapsibleSection
-        storageKey="dashboard:workspaces"
-        title={t('myWorkspaces')}
-        defaultOpen
-        action={
-          data.workspaceTotal > 0 ? (
-            <Link href="/workspaces" className="kh-text-link">
-              {t('viewAllWorkspaces')}
-            </Link>
-          ) : null
-        }
-      >
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('myWorkspaces')}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {data.workspaceTotal > 0 ? (
+              <Link href="/workspaces" className="kh-text-link text-xs">
+                {t('viewAllWorkspaces')}
+              </Link>
+            ) : null}
+            {session.user.isSystemAdmin ? (
+              <LinkButton href="/workspaces/new">{t('createWorkspace')}</LinkButton>
+            ) : null}
+          </div>
+        </div>
         {data.workspaces.length === 0 ? (
-          <Panel>
-            <p className="m-0 text-sm text-ink-muted">{t('emptyWorkspaces')}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
+          <div>
+            <p className="kh-ops-empty">{t('emptyWorkspaces')}</p>
+            <div className="kh-ops-action-line">
               <LinkButton href="/workspaces" variant="secondary">
                 {t('browseWorkspaces')}
               </LinkButton>
-              {session.user.isSystemAdmin ? (
-                <LinkButton href="/workspaces/new">{t('createWorkspace')}</LinkButton>
-              ) : null}
             </div>
-          </Panel>
+          </div>
         ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {data.workspaces.map((workspace) => {
-                const role = roleLabel(workspace.role, t);
-                return (
-                  <Link
-                    key={workspace.id}
-                    href={`/workspaces/${workspace.slug}`}
-                    className={cn(
-                      'kh-panel block no-underline transition hover:border-brand/35',
-                      workspaceTileClassName(workspace.color, workspace.id),
-                    )}
-                  >
-                    <p className="m-0 text-base font-semibold text-ink">
+          <div className="kh-ops-project-grid">
+            {data.workspaces.map((workspace) => {
+              const role = roleLabel(workspace.role, t);
+              return (
+                <article
+                  key={workspace.id}
+                  className={`kh-ops-project-card ${workspaceTileClassName(
+                    workspace.color,
+                    workspace.id,
+                  )}`}
+                >
+                  {role ? (
+                    <span className="kh-ops-type-chip">{role}</span>
+                  ) : null}
+                  <h3>
+                    <Link href={`/workspaces/${workspace.slug}`}>
                       {workspace.name}
-                    </p>
-                    {role ? (
-                      <p className="mt-1 mb-0 text-sm text-ink-muted">{role}</p>
-                    ) : null}
-                    <p className="mt-3 mb-0 text-xs text-ink-muted">
-                      {t('workspaceCounts', {
-                        projects: workspace.projectCount,
-                        systems: workspace.systemCount,
-                        records: workspace.recordCount,
-                      })}
-                    </p>
-                  </Link>
-                );
-              })}
-            </div>
-            {hiddenWorkspaceCount > 0 ? (
-              <p className="mt-3 mb-0 text-sm text-ink-muted">
-                {t('moreWorkspaces', { count: hiddenWorkspaceCount })}
-              </p>
-            ) : null}
-          </>
+                    </Link>
+                  </h3>
+                  <p>
+                    {t('workspaceCounts', {
+                      projects: workspace.projectCount,
+                      systems: workspace.systemCount,
+                      records: workspace.recordCount,
+                    })}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
         )}
-      </CollapsibleSection>
+        {hiddenWorkspaceCount > 0 ? (
+          <p className="kh-ops-card-foot m-0">{t('moreWorkspaces', { count: hiddenWorkspaceCount })}</p>
+        ) : null}
+      </section>
 
-      <section className="mb-8 grid gap-4 sm:grid-cols-2">
-        <Link
-          href={searchHref}
-          className="kh-panel block no-underline transition hover:border-brand/35 hover:bg-brand-soft/40"
-        >
-          <p className="m-0 text-base font-semibold text-ink">{t('searchTitle')}</p>
-          <p className="mt-1 mb-0 text-sm text-ink-muted">{t('searchBlurb')}</p>
+      <section className="kh-ops-admin-link-grid mb-3">
+        <Link href={searchHref} className="kh-ops-admin-link-card">
+          <div>
+            <strong>{t('searchTitle')}</strong>
+            <small>{t('searchBlurb')}</small>
+          </div>
         </Link>
         {session.user.isSystemAdmin ? (
-          <Link
-            href="/admin"
-            className="kh-panel block no-underline transition hover:border-brand/35 hover:bg-brand-soft/40"
-          >
-            <p className="m-0 text-base font-semibold text-ink">{t('adminTitle')}</p>
-            <p className="mt-1 mb-0 text-sm text-ink-muted">{t('adminBlurb')}</p>
+          <Link href="/admin" className="kh-ops-admin-link-card">
+            <div>
+              <strong>{t('adminTitle')}</strong>
+              <small>{t('adminBlurb')}</small>
+            </div>
           </Link>
         ) : (
-          <Link
-            href="/workspaces"
-            className="kh-panel block no-underline transition hover:border-brand/35 hover:bg-brand-soft/40"
-          >
-            <p className="m-0 text-base font-semibold text-ink">
-              {t('browseWorkspaces')}
-            </p>
-            <p className="mt-1 mb-0 text-sm text-ink-muted">{t('browseBlurb')}</p>
+          <Link href="/workspaces" className="kh-ops-admin-link-card">
+            <div>
+              <strong>{t('browseWorkspaces')}</strong>
+              <small>{t('browseBlurb')}</small>
+            </div>
           </Link>
         )}
       </section>
 
-      <DashboardMyTasks tasks={data.myTasks} />
-
-      <CollapsibleSection
-        storageKey="dashboard:recent"
-        title={t('recentTitle')}
-        defaultOpen
-      >
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('recentTitle')}</h2>
+        </div>
         {data.recent.length === 0 ? (
-          <p className="m-0 text-sm text-ink-muted">{t('recentEmpty')}</p>
+          <p className="kh-ops-empty">{t('recentEmpty')}</p>
         ) : (
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {data.recent.map((item) => (
-              <li key={`${item.kind}-${item.id}`}>
-                <Link
-                  href={item.href}
-                  className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-line bg-panel-solid px-4 py-3 no-underline transition hover:border-brand/35 hover:bg-brand-soft/40"
-                >
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-ink">
-                      {item.title}
-                    </span>
-                    <span className="mt-0.5 block text-xs text-ink-muted">
-                      {kindLabel(item.kind, t)} · {item.workspaceName}
-                    </span>
-                  </span>
-                  <time
-                    className="shrink-0 text-xs text-ink-muted"
-                    dateTime={item.updatedAt}
-                  >
-                    {new Date(item.updatedAt).toLocaleString()}
-                  </time>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('colWorkItem')}</th>
+                  <th>{t('colKind')}</th>
+                  <th>{t('colWorkspace')}</th>
+                  <th>{t('colUpdated')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recent.map((item) => (
+                  <tr key={`${item.kind}-${item.id}`}>
+                    <td className="kh-ops-primary-cell">
+                      <Link href={item.href} className="no-underline">
+                        {item.title}
+                      </Link>
+                    </td>
+                    <td>
+                      <span className="kh-ops-type-chip">{kindLabel(item.kind, t)}</span>
+                    </td>
+                    <td>{item.workspaceName}</td>
+                    <td>
+                      <time dateTime={item.updatedAt}>
+                        {new Date(item.updatedAt).toLocaleString()}
+                      </time>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </CollapsibleSection>
+      </section>
     </Page>
   );
 }

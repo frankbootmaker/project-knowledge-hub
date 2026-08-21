@@ -4,8 +4,8 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { Button, ErrorText, Page, Panel } from '../../components/ui';
+import { AuthCard } from '../../components/ops/AuthCard';
+import { Button, ErrorText } from '../../components/ui';
 
 function ConfirmEmailForm() {
   const t = useTranslations('confirmEmail');
@@ -93,46 +93,39 @@ function ConfirmEmailForm() {
   }
 
   return (
-    <Page narrow className="px-4 py-16">
-      <div className="mb-4 flex justify-end">
-        <LanguageSwitcher />
-      </div>
-      <div className="mb-6">
-        <p className="mb-1 text-xs font-semibold tracking-[0.14em] text-ink-muted uppercase">
-          {tCommon('brandName')}
-        </p>
-        <h1 className="m-0 text-3xl font-semibold tracking-tight">{t('title')}</h1>
-        <p className="mt-2 text-ink-muted">{t('subtitle')}</p>
-      </div>
-      <Panel>
-        {checking ? (
-          <p className="m-0 text-ink-muted">{tCommon('loading')}</p>
-        ) : previewError ? (
-          <div className="grid gap-4">
-            <ErrorText>{previewError}</ErrorText>
-            <Link href="/register" className="text-sm text-brand underline-offset-2 hover:underline">
-              {t('backToRegister')}
-            </Link>
-            <Link href="/login" className="text-sm text-ink-muted underline-offset-2 hover:underline">
-              {t('backToLogin')}
-            </Link>
+    <AuthCard
+      brand={t('accessBrand')}
+      eyebrow={t('eyebrow')}
+      title={t('title')}
+      subtitle={t('subtitle')}
+    >
+      {checking ? (
+        <p className="mt-4 mb-0 text-ink-muted">{tCommon('loading')}</p>
+      ) : previewError ? (
+        <div className="mt-4 grid gap-4">
+          <ErrorText>{previewError}</ErrorText>
+          <div className="kh-ops-auth-links">
+            <Link href="/register">{t('backToRegister')}</Link>
+            <Link href="/login">{t('backToLogin')}</Link>
           </div>
-        ) : done ? (
-          <div className="grid gap-4">
-            <p className="m-0 text-ink">{t('success')}</p>
-            <p className="m-0 text-sm text-ink-muted">{t('successHint')}</p>
-            <Link href="/login" className="text-sm text-brand underline-offset-2 hover:underline">
-              {t('backToLogin')}
-            </Link>
+        </div>
+      ) : done ? (
+        <div className="mt-4 grid gap-4">
+          <p className="m-0 text-ink">{t('success')}</p>
+          <p className="m-0 text-sm text-ink-muted">{t('successHint')}</p>
+          <div className="kh-ops-auth-links">
+            <Link href="/login">{t('backToLogin')}</Link>
           </div>
-        ) : (
-          <div className="grid gap-4">
-            {emailHint ? (
-              <p className="m-0 text-sm text-ink-muted">
-                {t('forEmail', { email: emailHint })}
-              </p>
-            ) : null}
-            {error ? <ErrorText>{error}</ErrorText> : null}
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-4">
+          {emailHint ? (
+            <p className="m-0 text-sm text-ink-muted">
+              {t('forEmail', { email: emailHint })}
+            </p>
+          ) : null}
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <div className="kh-ops-auth-actions">
             <Button
               type="button"
               disabled={confirming}
@@ -142,9 +135,9 @@ function ConfirmEmailForm() {
               {confirming ? t('confirming') : t('confirm')}
             </Button>
           </div>
-        )}
-      </Panel>
-    </Page>
+        </div>
+      )}
+    </AuthCard>
   );
 }
 

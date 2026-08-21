@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Button, ErrorText, Field, Input, Panel, useToast } from './ui';
+import { Button, ErrorText, Field, Input, useToast } from './ui';
 
 const CLOSE_PHRASE = 'CLOSE';
 
@@ -56,89 +56,103 @@ export function CloseAccountPanel() {
   }
 
   return (
-    <Panel className="grid gap-3">
-      {closeStep === 0 ? (
-        <div>
+    <section className="kh-ops-panel kh-ops-danger-zone">
+      <div className="kh-ops-panel-head">
+        <h2 className="kh-ops-panel-title">{t('closeTitle')}</h2>
+        <span className="kh-ops-panel-meta">{t('closeTitle')}</span>
+      </div>
+      <div className="kh-ops-danger-copy grid gap-3">
+        {closeStep === 0 ? (
+          <>
+            <p className="m-0">{t('closeBlurb')}</p>
+            <div>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={pending}
+                onClick={() => {
+                  setCloseStep(1);
+                  setClosePhrase('');
+                  setCloseAcknowledged(false);
+                  setCloseError(null);
+                }}
+              >
+                {t('closeStart')}
+              </Button>
+            </div>
+          </>
+        ) : null}
+
+        {closeStep === 1 ? (
+          <>
+            <p className="m-0 text-danger">{t('closeWarning1')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="danger"
+                disabled={pending}
+                onClick={() => {
+                  setCloseStep(2);
+                  setClosePhrase('');
+                  setCloseAcknowledged(false);
+                }}
+              >
+                {t('closeContinue')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={resetCloseFlow}
+              >
+                {tCommon('cancel')}
+              </Button>
+            </div>
+          </>
+        ) : null}
+
+        {closeStep === 2 ? (
+          <>
+            <p className="m-0 text-danger">{t('closeWarning2')}</p>
+            <div className="kh-ops-form-grid">
+              <Field
+                className="kh-ops-field-span"
+                label={t('closePhraseLabel', { phrase: CLOSE_PHRASE })}
+              >
+                <Input
+                  value={closePhrase}
+                  onChange={(e) => setClosePhrase(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={pending}
+                  data-modal-initial-focus
+                />
+              </Field>
+              <label className="kh-ops-field-span flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={closeAcknowledged}
+                  disabled={pending}
+                  onChange={(e) => setCloseAcknowledged(e.target.checked)}
+                />
+                <span>{t('closeAcknowledge')}</span>
+              </label>
+            </div>
+            {closeError ? <ErrorText>{closeError}</ErrorText> : null}
+          </>
+        ) : null}
+      </div>
+      {closeStep === 2 ? (
+        <div className="kh-ops-action-line">
           <Button
             type="button"
-            variant="danger"
+            variant="secondary"
             disabled={pending}
-            onClick={() => {
-              setCloseStep(1);
-              setClosePhrase('');
-              setCloseAcknowledged(false);
-              setCloseError(null);
-            }}
+            onClick={resetCloseFlow}
           >
-            {t('closeStart')}
+            {tCommon('cancel')}
           </Button>
-        </div>
-      ) : null}
-
-      {closeStep === 1 ? (
-        <Panel variant="inset" className="grid gap-3">
-          <p className="m-0 text-sm text-danger">{t('closeWarning1')}</p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="danger"
-              disabled={pending}
-              onClick={() => {
-                setCloseStep(2);
-                setClosePhrase('');
-                setCloseAcknowledged(false);
-              }}
-            >
-              {t('closeContinue')}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={resetCloseFlow}
-            >
-              {tCommon('cancel')}
-            </Button>
-          </div>
-        </Panel>
-      ) : null}
-
-      {closeStep === 2 ? (
-        <Panel variant="inset" className="grid gap-3">
-          <p className="m-0 text-sm text-danger">{t('closeWarning2')}</p>
-          <Field label={t('closePhraseLabel', { phrase: CLOSE_PHRASE })}>
-            <Input
-              value={closePhrase}
-              onChange={(e) => setClosePhrase(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={pending}
-              data-modal-initial-focus
-            />
-          </Field>
-          <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={closeAcknowledged}
-              disabled={pending}
-              onChange={(e) => setCloseAcknowledged(e.target.checked)}
-            />
-            <span>{t('closeAcknowledge')}</span>
-          </label>
-          {closeError ? <ErrorText>{closeError}</ErrorText> : null}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="danger"
-              disabled={
-                pending ||
-                closePhrase.trim() !== CLOSE_PHRASE ||
-                !closeAcknowledged
-              }
-              onClick={() => void onCloseAccount()}
-            >
-              {t('closeConfirmFinal')}
-            </Button>
             <Button
               type="button"
               variant="secondary"
@@ -153,15 +167,19 @@ export function CloseAccountPanel() {
             </Button>
             <Button
               type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={resetCloseFlow}
+              variant="danger"
+              disabled={
+                pending ||
+                closePhrase.trim() !== CLOSE_PHRASE ||
+                !closeAcknowledged
+              }
+              onClick={() => void onCloseAccount()}
             >
-              {tCommon('cancel')}
+              {t('closeConfirmFinal')}
             </Button>
           </div>
-        </Panel>
+        </div>
       ) : null}
-    </Panel>
+    </section>
   );
 }

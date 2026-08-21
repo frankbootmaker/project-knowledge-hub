@@ -12,7 +12,6 @@ import {
   Input,
   Page,
   PageHeader,
-  Panel,
   Select,
   Textarea,
 } from '../../../../../../components/ui';
@@ -81,9 +80,9 @@ export default function NewProjectPage() {
   }
 
   return (
-    <Page narrow>
+    <Page>
       <PageHeader title={t('createTitle')} />
-      <p className="mt-0 mb-6">
+      <p className="mt-0 mb-4">
         <Link
           href={`/workspaces/${workspaceSlug}`}
           className="text-sm text-ink-muted no-underline hover:text-ink"
@@ -91,37 +90,52 @@ export default function NewProjectPage() {
           {t('backToWorkspace')}
         </Link>
       </p>
-      <Panel>
-        <form onSubmit={onSubmit} className="grid gap-4">
-          <Field label={tCommon('name')}>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required />
-          </Field>
-          <Field label={tCommon('summary')}>
-            <Input value={summary} onChange={(e) => setSummary(e.target.value)} />
-          </Field>
-          <Field label={tCommon('description')}>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
-          </Field>
-          <Field label={tCommon('status')}>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="idea">idea</option>
-              <option value="planned">planned</option>
-              <option value="active">active</option>
-              <option value="maintenance">maintenance</option>
-              <option value="paused">paused</option>
-              <option value="completed">completed</option>
-              <option value="archived">archived</option>
-            </Select>
-          </Field>
-          <Field label={tCommon('tagsHint')}>
-            <Input value={tags} onChange={(e) => setTags(e.target.value)} />
-          </Field>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <Button type="submit" disabled={pending}>
-            {pending ? t('creating') : t('createButton')}
-          </Button>
+      <section className="kh-ops-panel kh-ops-narrow-form">
+        <form onSubmit={onSubmit}>
+          <div className="kh-ops-card-body">
+            <div className="kh-ops-form-grid">
+              <Field label={tCommon('name')}>
+                <Input value={name} onChange={(e) => setName(e.target.value)} required />
+              </Field>
+              <Field label={tCommon('summary')}>
+                <Input value={summary} onChange={(e) => setSummary(e.target.value)} />
+              </Field>
+              <Field className="kh-ops-field-span" label={tCommon('description')}>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
+                />
+              </Field>
+              <Field label={tCommon('status')}>
+                <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="idea">idea</option>
+                  <option value="planned">planned</option>
+                  <option value="active">active</option>
+                  <option value="maintenance">maintenance</option>
+                  <option value="paused">paused</option>
+                  <option value="completed">completed</option>
+                  <option value="archived">archived</option>
+                </Select>
+              </Field>
+              <Field label={tCommon('tagsHint')}>
+                <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+              </Field>
+              {error ? (
+                <div className="kh-ops-field-span">
+                  <ErrorText>{error}</ErrorText>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="kh-ops-action-line">
+            <span className="kh-ops-panel-meta">{t('createTitle')}</span>
+            <Button type="submit" disabled={pending}>
+              {pending ? t('creating') : t('createButton')}
+            </Button>
+          </div>
         </form>
-      </Panel>
+      </section>
     </Page>
   );
 }

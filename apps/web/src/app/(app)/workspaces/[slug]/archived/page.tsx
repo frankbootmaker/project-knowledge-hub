@@ -2,13 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ArchiveEntityButton } from '../../../../../components/ArchiveEntityButton';
-import {
-  Badge,
-  ListCard,
-  Page,
-  PageHeader,
-  SectionHeader,
-} from '../../../../../components/ui';
+import { Badge, Page, PageHeader } from '../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../lib/session';
 
 type Workspace = {
@@ -110,119 +104,168 @@ export default async function WorkspaceArchivedPage({
         description={t('workspaceBlurb')}
       />
 
-      <section className="mb-8">
-        <SectionHeader title={tWorkspaces('projects')} />
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {projects.map((project) => (
-            <ListCard key={project.id}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
-                      className="font-semibold no-underline"
-                    >
-                      {project.name}
-                    </Link>
-                    <Badge tone="warn">{t('archivedBadge')}</Badge>
-                  </div>
-                  <p className="mt-1 mb-0 text-xs text-ink-muted">
-                    {new Date(project.updatedAt).toLocaleString()}
-                  </p>
-                </div>
-                {canManage ? (
-                  <ArchiveEntityButton
-                    kind="project"
-                    entityId={project.id}
-                    entityName={project.name}
-                    archived
-                  />
-                ) : null}
-              </div>
-            </ListCard>
-          ))}
+      <div className="grid gap-4">
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{tWorkspaces('projects')}</h2>
+          </div>
           {projects.length === 0 ? (
-            <li className="kh-muted list-none">{t('emptyProjects')}</li>
-          ) : null}
-        </ul>
-      </section>
+            <p className="kh-ops-empty">{t('emptyProjects')}</p>
+          ) : (
+            <div className="kh-ops-table-wrap">
+              <table className="kh-ops-data-table">
+                <thead>
+                  <tr>
+                    <th>{t('colItem')}</th>
+                    <th>{t('colKind')}</th>
+                    <th>{t('colDate')}</th>
+                    <th>{t('colRestore')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projects.map((project) => (
+                    <tr key={project.id}>
+                      <td className="kh-ops-primary-cell">
+                        <Link
+                          href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
+                          className="no-underline"
+                        >
+                          {project.name}
+                        </Link>
+                      </td>
+                      <td>
+                        <span className="kh-ops-type-chip">{t('kindProject')}</span>
+                      </td>
+                      <td>{new Date(project.updatedAt).toLocaleString()}</td>
+                      <td>
+                        {canManage ? (
+                          <ArchiveEntityButton
+                            kind="project"
+                            entityId={project.id}
+                            entityName={project.name}
+                            archived
+                          />
+                        ) : (
+                          <Badge tone="warn">{t('archivedBadge')}</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
-      <section className="mb-8">
-        <SectionHeader title={tWorkspaces('systems')} />
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {systems.map((system) => (
-            <ListCard key={system.id}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
-                      className="font-semibold no-underline"
-                    >
-                      {system.name}
-                    </Link>
-                    <Badge tone="warn">{t('archivedBadge')}</Badge>
-                  </div>
-                  <p className="mt-1 mb-0 text-xs text-ink-muted">
-                    {new Date(system.updatedAt).toLocaleString()}
-                  </p>
-                </div>
-                {canManage ? (
-                  <ArchiveEntityButton
-                    kind="system"
-                    entityId={system.id}
-                    entityName={system.name}
-                    archived
-                  />
-                ) : null}
-              </div>
-            </ListCard>
-          ))}
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{tWorkspaces('systems')}</h2>
+          </div>
           {systems.length === 0 ? (
-            <li className="kh-muted list-none">{t('emptySystems')}</li>
-          ) : null}
-        </ul>
-      </section>
+            <p className="kh-ops-empty">{t('emptySystems')}</p>
+          ) : (
+            <div className="kh-ops-table-wrap">
+              <table className="kh-ops-data-table">
+                <thead>
+                  <tr>
+                    <th>{t('colItem')}</th>
+                    <th>{t('colKind')}</th>
+                    <th>{t('colDate')}</th>
+                    <th>{t('colRestore')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {systems.map((system) => (
+                    <tr key={system.id}>
+                      <td className="kh-ops-primary-cell">
+                        <Link
+                          href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
+                          className="no-underline"
+                        >
+                          {system.name}
+                        </Link>
+                      </td>
+                      <td>
+                        <span className="kh-ops-type-chip">{t('kindSystem')}</span>
+                      </td>
+                      <td>{new Date(system.updatedAt).toLocaleString()}</td>
+                      <td>
+                        {canManage ? (
+                          <ArchiveEntityButton
+                            kind="system"
+                            entityId={system.id}
+                            entityName={system.name}
+                            archived
+                          />
+                        ) : (
+                          <Badge tone="warn">{t('archivedBadge')}</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
-      <section>
-        <SectionHeader title={tWorkspaces('knowledgeRecords')} />
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {records.map((record) => (
-            <ListCard key={record.id}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {record.humanKey ? (
-                      <Badge tone="brand">{record.humanKey}</Badge>
-                    ) : null}
-                    <Link
-                      href={`/workspaces/${workspace.slug}/records/${record.slug}`}
-                      className="font-semibold no-underline"
-                    >
-                      {record.title}
-                    </Link>
-                    <Badge tone="warn">{t('archivedBadge')}</Badge>
-                  </div>
-                  <p className="mt-1 mb-0 text-xs text-ink-muted">
-                    {new Date(record.updatedAt).toLocaleString()}
-                  </p>
-                </div>
-                {canManage ? (
-                  <ArchiveEntityButton
-                    kind="record"
-                    entityId={record.id}
-                    entityName={record.title}
-                    archived
-                  />
-                ) : null}
-              </div>
-            </ListCard>
-          ))}
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{tWorkspaces('knowledgeRecords')}</h2>
+          </div>
           {records.length === 0 ? (
-            <li className="kh-muted list-none">{t('emptyRecords')}</li>
-          ) : null}
-        </ul>
-      </section>
+            <p className="kh-ops-empty">{t('emptyRecords')}</p>
+          ) : (
+            <div className="kh-ops-table-wrap">
+              <table className="kh-ops-data-table">
+                <thead>
+                  <tr>
+                    <th>{t('colItem')}</th>
+                    <th>{t('colKind')}</th>
+                    <th>{t('colDate')}</th>
+                    <th>{t('colRestore')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((record) => (
+                    <tr key={record.id}>
+                      <td className="kh-ops-primary-cell">
+                        {record.humanKey ? (
+                          <span className="kh-ops-type-chip mr-2">
+                            {record.humanKey}
+                          </span>
+                        ) : null}
+                        <Link
+                          href={`/workspaces/${workspace.slug}/records/${record.slug}`}
+                          className="no-underline"
+                        >
+                          {record.title}
+                        </Link>
+                      </td>
+                      <td>
+                        <span className="kh-ops-type-chip">{t('kindRecord')}</span>
+                      </td>
+                      <td>{new Date(record.updatedAt).toLocaleString()}</td>
+                      <td>
+                        {canManage ? (
+                          <ArchiveEntityButton
+                            kind="record"
+                            entityId={record.id}
+                            entityName={record.title}
+                            archived
+                          />
+                        ) : (
+                          <Badge tone="warn">{t('archivedBadge')}</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </Page>
   );
 }

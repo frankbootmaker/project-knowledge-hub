@@ -9,7 +9,6 @@ import {
   Field,
   Input,
   Modal,
-  Panel,
   Select,
   Textarea,
   useToast,
@@ -476,10 +475,7 @@ export function ProjectAgileManageModal({
         </div>
       ) : null}
       {confirmDelete && kind && kind !== 'milestone' ? (
-        <Panel
-          variant="inset"
-          className="mb-3 grid gap-3 border-danger/40 bg-danger/5"
-        >
+        <div className="kh-ops-confirm mb-3">
           <p className="m-0 text-sm font-semibold text-danger">
             {kind === 'epic'
               ? t('confirmDeleteEpicTitle', {
@@ -502,11 +498,11 @@ export function ProjectAgileManageModal({
             />
             <span>{tArchive('deleteAcknowledge')}</span>
           </label>
-        </Panel>
+        </div>
       ) : null}
-      <div className="grid gap-3">
+      <div className="kh-ops-form-grid">
         {effortRollup ? (
-          <div className="rounded-md border border-line bg-panel-solid p-3 text-sm">
+          <div className="kh-ops-inset text-sm">
             <p className="mt-0 mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
               {tBudget('effortRollup')}
             </p>
@@ -574,7 +570,7 @@ export function ProjectAgileManageModal({
           </Select>
         </Field>
         {kind === 'milestone' ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('startDate')}>
               <Input
                 type="date"
@@ -593,7 +589,7 @@ export function ProjectAgileManageModal({
             </Field>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('startDate')}>
               <Input
                 type="date"
@@ -620,7 +616,7 @@ export function ProjectAgileManageModal({
             rows={4}
           />
         </Field>
-        <div className="rounded-md border border-line bg-panel-solid p-3">
+        <div className="kh-ops-inset">
           <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
           {linkedDocuments.length === 0 ? (
             <p className="m-0 text-sm text-ink-muted">{t('linkedDocumentsEmpty')}</p>

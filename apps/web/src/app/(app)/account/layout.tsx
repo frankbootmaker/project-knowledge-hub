@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
-import { NavLink, Panel } from '../../../components/ui';
+import { NavLink } from '../../../components/ui';
 import { requireSession } from '../../../lib/session';
 
 const links = [
@@ -19,12 +19,12 @@ export default async function AccountLayout({ children }: { children: ReactNode 
 
   // Same responsive sidebar pattern as admin (DESIGN_SYSTEM.md → Responsive).
   return (
-    <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
-      <Panel variant="default" className="h-fit p-3">
-        <p className="mb-3 px-2 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
+    <div className="grid gap-8 lg:grid-cols-[200px_1fr]">
+      <aside className="kh-ops-panel h-fit overflow-hidden">
+        <p className="kh-ops-eyebrow mb-0 px-3 pt-3">
           {t('title')}
         </p>
-        <nav className="grid gap-1" aria-label={t('title')}>
+        <nav className="grid gap-1 px-2 pb-2" aria-label={t('title')}>
           {links.map((link) => (
             <NavLink
               key={link.href}
@@ -37,8 +37,8 @@ export default async function AccountLayout({ children }: { children: ReactNode 
           ))}
         </nav>
 
-        <div className="mt-4 border-t border-line pt-4">
-          <p className="mb-2 px-2 text-xs font-semibold tracking-[0.12em] text-danger uppercase">
+        <div className="border-t border-line px-2 pt-3 pb-2">
+          <p className="kh-ops-eyebrow mb-2 text-danger">
             {t('dangerZone')}
           </p>
           <nav className="grid gap-1" aria-label={t('dangerZone')}>
@@ -53,7 +53,7 @@ export default async function AccountLayout({ children }: { children: ReactNode 
             </NavLink>
           </nav>
         </div>
-      </Panel>
+      </aside>
       <div className="min-w-0">{children}</div>
     </div>
   );

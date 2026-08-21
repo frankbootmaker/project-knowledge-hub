@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { SystemManageMenu } from '../../../../../../components/SystemManageMenu';
-import { Badge, Page, PageHeader, Panel } from '../../../../../../components/ui';
+import { Badge, Page, PageHeader } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -147,32 +147,67 @@ export default async function SystemDetailPage({
         }
       />
 
-      <Panel>
-        <p className="mt-0 mb-3 text-ink-muted">{system.summary || tCommon('noSummary')}</p>
-        <p className="m-0 text-ink-muted">{system.description || tCommon('noDescription')}</p>
-        <p className="mt-3 mb-0 text-sm text-ink-muted">
-          {t('type')}: {system.systemType || t('unspecified')}
-          {project ? (
-            <>
-              {' '}
-              · {tCommon('project')}:{' '}
-              <Link
-                href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
-                className="text-brand no-underline hover:text-brand-hover"
-              >
-                {project.name}
-              </Link>
-            </>
-          ) : (
-            ` · ${t('independentSystem')}`
-          )}
-        </p>
-        {system.tags.length > 0 ? (
-          <p className="mt-3 mb-0 text-xs text-ink-muted">
-            {tCommon('tagsList', { tags: system.tags.map((tag) => tag.name).join(', ') })}
-          </p>
-        ) : null}
-      </Panel>
+      <div className="kh-ops-detail-grid">
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{tCommon('summary')}</h2>
+          </div>
+          <div className="kh-ops-card-body">
+            <p className="mt-0 mb-3 text-ink-muted">
+              {system.summary || tCommon('noSummary')}
+            </p>
+            <p className="m-0 text-ink-muted">
+              {system.description || tCommon('noDescription')}
+            </p>
+          </div>
+        </section>
+        <aside className="kh-ops-editor-stack">
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{tCommon('status')}</h2>
+            </div>
+            <dl className="kh-ops-keyvals">
+              <dt>{tCommon('status')}</dt>
+              <dd>{system.status}</dd>
+              <dt>{t('type')}</dt>
+              <dd>{system.systemType || t('unspecified')}</dd>
+              {system.environment ? (
+                <>
+                  <dt>{t('environment')}</dt>
+                  <dd>{system.environment}</dd>
+                </>
+              ) : null}
+              <dt>{tCommon('project')}</dt>
+              <dd>
+                {project ? (
+                  <Link
+                    href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
+                    className="text-brand no-underline hover:text-brand-hover"
+                  >
+                    {project.name}
+                  </Link>
+                ) : (
+                  t('independentSystem')
+                )}
+              </dd>
+            </dl>
+          </section>
+          {system.tags.length > 0 ? (
+            <section className="kh-ops-panel">
+              <div className="kh-ops-panel-head">
+                <h2 className="kh-ops-panel-title">{tCommon('tags')}</h2>
+              </div>
+              <div className="kh-ops-tag-list">
+                {system.tags.map((tag) => (
+                  <span key={tag.name} className="kh-ops-tag">
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </aside>
+      </div>
     </Page>
   );
 }

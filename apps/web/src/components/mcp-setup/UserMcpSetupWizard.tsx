@@ -8,7 +8,6 @@ import {
   ErrorText,
   Field,
   Input,
-  Panel,
   Select,
   useToast,
 } from '../ui';
@@ -21,9 +20,9 @@ import {
 import { McpConnectionTroubleshoot } from './McpConnectionTroubleshoot';
 import { McpSetupDonePanel } from './McpSetupDonePanel';
 import { McpSetupStatusRow } from './McpSetupStatusRow';
+import { McpWizardStepStrip } from './McpWizardStepStrip';
 import {
   buildMcpSetupScopes,
-  MCP_SETUP_STEPS,
   type McpSetupStep,
 } from './scopes';
 
@@ -237,7 +236,6 @@ export function UserMcpSetupWizard({
   }
 
   const mcpUrl = preflight?.endpoints.mcpUrl ?? 'http://localhost:3100/mcp';
-  const stepIndex = MCP_SETUP_STEPS.indexOf(step);
   const preflightOk = Boolean(preflight?.health.ok && preflight.ready.ok);
 
   async function copyToken() {
@@ -277,78 +275,55 @@ export function UserMcpSetupWizard({
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <div>
-        <h2 className="mt-0 mb-1 text-lg font-semibold">{tAi('wizardTitle')}</h2>
-        <p className="m-0 text-sm text-ink-muted">{tAi('wizardBlurb')}</p>
+        <h2 className="kh-ops-panel-title m-0">{tAi('wizardTitle')}</h2>
+        <p className="mt-1 mb-0 text-sm text-ink-muted">{tAi('wizardBlurb')}</p>
       </div>
 
-      <ol className="m-0 flex list-none flex-wrap gap-2 p-0">
-        {MCP_SETUP_STEPS.map((item, index) => {
-          const active = item === step;
-          const done = index < stepIndex;
-          return (
-            <li key={item}>
-              <button
-                type="button"
-                disabled={
-                  (item === 'create' && !token) ||
-                  (item === 'test' && !token) ||
-                  (item === 'schema' && !token) ||
-                  (item === 'done' && !token) ||
-                  (item === 'configure' && !preflightOk)
-                }
-                onClick={() => setStep(item)}
-                className={[
-                  'kh-step',
-                  active ? 'kh-step-active' : done ? 'kh-step-done' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              >
-                {index + 1}. {t(`mcpWizardStep_${item}`)}
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+      <McpWizardStepStrip
+        step={step}
+        token={token}
+        preflightOk={preflightOk}
+        onSelect={setStep}
+      />
 
       {step === 'preflight' ? (
-        <Panel className="grid gap-4">
-          <div>
-            <h3 className="mt-0 mb-1 text-base font-semibold">
-              {t('mcpWizardPreflightTitle')}
-            </h3>
-            <p className="m-0 text-sm text-ink-muted">{tAi('wizardPreflightBlurb')}</p>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h3 className="kh-ops-panel-title">{t('mcpWizardPreflightTitle')}</h3>
           </div>
-          {preflightError ? <ErrorText>{preflightError}</ErrorText> : null}
-          {preflight ? (
-            <div className="grid gap-3">
-              <McpSetupStatusRow
-                ok={preflight.health.ok}
-                label={t('mcpWizardHealth')}
-                detail={
-                  preflight.health.ok ? 'ok' : `HTTP ${preflight.health.statusCode}`
-                }
-              />
-              <McpSetupStatusRow
-                ok={preflight.ready.ok}
-                label={t('mcpWizardReady')}
-                detail={
-                  preflight.ready.ok
-                    ? 'ok'
-                    : Object.entries(preflight.ready.body?.checks ?? {})
-                        .map(([key, value]) => `${key}: ${value}`)
-                        .join(', ') || `HTTP ${preflight.ready.statusCode}`
-                }
-              />
-              <p className="m-0 flex flex-wrap items-center gap-2 text-sm">
-                <span className="text-ink-muted">{t('mcpWizardPublicUrlEffective')}:</span>
-                <code className="font-mono text-xs">{preflight.endpoints.mcpUrl}</code>
-              </p>
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="kh-ops-card-body grid gap-4">
+            <p className="m-0 text-sm text-ink-muted">{tAi('wizardPreflightBlurb')}</p>
+            {preflightError ? <ErrorText>{preflightError}</ErrorText> : null}
+            {preflight ? (
+              <div className="grid gap-3">
+                <McpSetupStatusRow
+                  ok={preflight.health.ok}
+                  label={t('mcpWizardHealth')}
+                  detail={
+                    preflight.health.ok ? 'ok' : `HTTP ${preflight.health.statusCode}`
+                  }
+                />
+                <McpSetupStatusRow
+                  ok={preflight.ready.ok}
+                  label={t('mcpWizardReady')}
+                  detail={
+                    preflight.ready.ok
+                      ? 'ok'
+                      : Object.entries(preflight.ready.body?.checks ?? {})
+                          .map(([key, value]) => `${key}: ${value}`)
+                          .join(', ') || `HTTP ${preflight.ready.statusCode}`
+                  }
+                />
+                <p className="m-0 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-ink-muted">{t('mcpWizardPublicUrlEffective')}:</span>
+                  <code className="font-mono text-xs">{preflight.endpoints.mcpUrl}</code>
+                </p>
+              </div>
+            ) : null}
+          </div>
+          <div className="kh-ops-action-line">
             <Button
               type="button"
               variant="secondary"
@@ -365,96 +340,99 @@ export function UserMcpSetupWizard({
               {t('mcpWizardContinue')}
             </Button>
           </div>
-        </Panel>
+        </section>
       ) : null}
 
       {step === 'configure' ? (
-        <Panel className="grid gap-4">
-          <div>
-            <h3 className="mt-0 mb-1 text-base font-semibold">
-              {t('mcpWizardConfigureTitle')}
-            </h3>
-            <p className="m-0 text-sm text-ink-muted">{tAi('wizardConfigureBlurb')}</p>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h3 className="kh-ops-panel-title">{t('mcpWizardConfigureTitle')}</h3>
           </div>
-          <LlmClientPicker value={llmClient} onChange={selectLlmClient} />
-          <Field label={tCommon('name')}>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required />
-          </Field>
-          <Field label={t('mcpWizardAccessMode')}>
-            <Select
-              value={mode}
-              onChange={(e) => setMode(e.target.value === 'write' ? 'write' : 'read')}
-            >
-              <option value="read">{t('mcpWizardModeRead')}</option>
-              <option value="write">{t('mcpWizardModeWrite')}</option>
-            </Select>
-          </Field>
-          {mode === 'write' ? (
-            <p className="m-0 text-xs text-ink-muted">{tAi('wizardWriteHint')}</p>
-          ) : null}
-          <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={includePm}
-              onChange={(e) => setIncludePm(e.target.checked)}
-            />
-            <span>
-              <span className="font-medium">{t('mcpWizardIncludePm')}</span>
-              <span className="mt-0.5 block text-xs text-ink-muted">
-                {mode === 'write'
-                  ? t('mcpWizardIncludePmWriteHint')
-                  : t('mcpWizardIncludePmReadHint')}
-              </span>
-            </span>
-          </label>
-          {mode === 'write' ? (
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={includeCatalogue}
-                onChange={(e) => setIncludeCatalogue(e.target.checked)}
-              />
-              <span>
-                <span className="font-medium">{t('mcpWizardIncludeCatalogue')}</span>
-                <span className="mt-0.5 block text-xs text-ink-muted">
-                  {t('mcpWizardIncludeCatalogueHint')}
+          <div className="kh-ops-card-body grid gap-4">
+            <p className="m-0 text-sm text-ink-muted">{tAi('wizardConfigureBlurb')}</p>
+            <LlmClientPicker value={llmClient} onChange={selectLlmClient} />
+            <div className="kh-ops-form-grid">
+              <Field label={tCommon('name')}>
+                <Input value={name} onChange={(e) => setName(e.target.value)} required />
+              </Field>
+              <Field label={t('mcpWizardAccessMode')}>
+                <Select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value === 'write' ? 'write' : 'read')}
+                >
+                  <option value="read">{t('mcpWizardModeRead')}</option>
+                  <option value="write">{t('mcpWizardModeWrite')}</option>
+                </Select>
+              </Field>
+              {mode === 'write' ? (
+                <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+                  {tAi('wizardWriteHint')}
+                </p>
+              ) : null}
+              <label className="kh-ops-scope-check kh-ops-field-span">
+                <input
+                  type="checkbox"
+                  checked={includePm}
+                  onChange={(e) => setIncludePm(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">{t('mcpWizardIncludePm')}</span>
+                  <span className="mt-0.5 block text-xs text-ink-muted">
+                    {mode === 'write'
+                      ? t('mcpWizardIncludePmWriteHint')
+                      : t('mcpWizardIncludePmReadHint')}
+                  </span>
                 </span>
-              </span>
-            </label>
-          ) : null}
-          <fieldset className="m-0 grid gap-2 border-0 p-0">
-            <legend className="mb-1 text-sm font-medium">{tAi('workspaces')}</legend>
-            <p className="m-0 text-xs text-ink-muted">{tAi('workspacesAllowlistHint')}</p>
-            <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
-              {workspaces.length === 0 ? (
-                <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
-              ) : (
-                workspaces.map((workspace) => (
-                  <label
-                    key={workspace.id}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={workspaceIds.includes(workspace.id)}
-                      onChange={() => {
-                        setWorkspaceIds((current) =>
-                          current.includes(workspace.id)
-                            ? current.filter((id) => id !== workspace.id)
-                            : [...current, workspace.id],
-                        );
-                      }}
-                    />
-                    {workspace.name}
-                  </label>
-                ))
-              )}
+              </label>
+              {mode === 'write' ? (
+                <label className="kh-ops-scope-check kh-ops-field-span">
+                  <input
+                    type="checkbox"
+                    checked={includeCatalogue}
+                    onChange={(e) => setIncludeCatalogue(e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-medium">{t('mcpWizardIncludeCatalogue')}</span>
+                    <span className="mt-0.5 block text-xs text-ink-muted">
+                      {t('mcpWizardIncludeCatalogueHint')}
+                    </span>
+                  </span>
+                </label>
+              ) : null}
+              <fieldset className="kh-ops-field-span m-0 grid gap-2 border-0 p-0">
+                <legend className="mb-1 text-sm font-medium">{tAi('workspaces')}</legend>
+                <p className="m-0 text-xs text-ink-muted">{tAi('workspacesAllowlistHint')}</p>
+                <div className="kh-ops-scope-checks max-h-40 overflow-auto">
+                  {workspaces.length === 0 ? (
+                    <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
+                  ) : (
+                    workspaces.map((workspace) => (
+                      <label key={workspace.id} className="kh-ops-scope-check">
+                        <input
+                          type="checkbox"
+                          checked={workspaceIds.includes(workspace.id)}
+                          onChange={() => {
+                            setWorkspaceIds((current) =>
+                              current.includes(workspace.id)
+                                ? current.filter((id) => id !== workspace.id)
+                                : [...current, workspace.id],
+                            );
+                          }}
+                        />
+                        {workspace.name}
+                      </label>
+                    ))
+                  )}
+                </div>
+              </fieldset>
+              {error ? (
+                <div className="kh-ops-field-span">
+                  <ErrorText>{error}</ErrorText>
+                </div>
+              ) : null}
             </div>
-          </fieldset>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <div className="flex flex-wrap gap-2">
+          </div>
+          <div className="kh-ops-action-line">
             <Button
               type="button"
               variant="secondary"
@@ -470,67 +448,70 @@ export function UserMcpSetupWizard({
               {t('mcpWizardCreateClient')}
             </Button>
           </div>
-        </Panel>
+        </section>
       ) : null}
 
       {step === 'create' && token ? (
-        <Panel className="grid gap-4">
-          <div>
-            <h3 className="mt-0 mb-1 text-base font-semibold">
-              {t('mcpWizardCreateTitle')}
-            </h3>
-            <p className="m-0 text-sm text-ink-muted">{t('tokenOnce')}</p>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h3 className="kh-ops-panel-title">{t('mcpWizardCreateTitle')}</h3>
           </div>
-          <p className="m-0 text-sm">
-            {t('mcpWizardClientCreated', { name: clientName ?? name })}
-          </p>
-          <code className="block break-all rounded-md bg-panel-solid px-3 py-2 font-mono text-sm">
-            {token}
-          </code>
-          <div className="flex flex-wrap gap-2">
+          <div className="kh-ops-card-body grid gap-4">
+            <p className="m-0 text-sm text-ink-muted">{t('tokenOnce')}</p>
+            <p className="m-0 text-sm">
+              {t('mcpWizardClientCreated', { name: clientName ?? name })}
+            </p>
+            <code className="kh-ops-code">{token}</code>
+          </div>
+          <div className="kh-ops-action-line">
             <Button type="button" variant="secondary" onClick={() => void copyToken()}>
               {copied ? t('mcpWizardCopied') : t('mcpWizardCopyToken')}
             </Button>
-            <Button type="button" disabled={pending} onClick={() => void runTests()}>
-              {t('mcpWizardRunTests')}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setStep('schema')}
-            >
-              {t('mcpWizardSkipToSchema')}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setStep('schema')}
+              >
+                {t('mcpWizardSkipToSchema')}
+              </Button>
+              <Button type="button" disabled={pending} onClick={() => void runTests()}>
+                {t('mcpWizardRunTests')}
+              </Button>
+            </div>
           </div>
-        </Panel>
+        </section>
       ) : null}
 
       {step === 'test' ? (
-        <Panel className="grid gap-4">
-          <div>
-            <h3 className="mt-0 mb-1 text-base font-semibold">
-              {t('mcpWizardTestTitle')}
-            </h3>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h3 className="kh-ops-panel-title">{t('mcpWizardTestTitle')}</h3>
+          </div>
+          <div className="kh-ops-card-body grid gap-4">
             <p className="m-0 text-sm text-ink-muted">{t('mcpWizardTestBlurb')}</p>
+            {error ? <ErrorText>{error}</ErrorText> : null}
+            <div className="grid gap-2">
+              {testSteps.map((item) => (
+                <McpSetupStatusRow
+                  key={item.id}
+                  ok={item.ok}
+                  skipped={item.skipped}
+                  label={item.id}
+                  detail={item.message}
+                />
+              ))}
+            </div>
+            {toolNames.length > 0 ? (
+              <p className="m-0 text-xs text-ink-muted">
+                {t('mcpWizardTools')}: {toolNames.join(', ')}
+              </p>
+            ) : null}
+            {testOk === false ? (
+              <McpConnectionTroubleshoot variant="user" mcpUrl={mcpUrl} defaultOpen />
+            ) : null}
           </div>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <div className="grid gap-2">
-            {testSteps.map((item) => (
-              <McpSetupStatusRow
-                key={item.id}
-                ok={item.ok}
-                skipped={item.skipped}
-                label={item.id}
-                detail={item.message}
-              />
-            ))}
-          </div>
-          {toolNames.length > 0 ? (
-            <p className="m-0 text-xs text-ink-muted">
-              {t('mcpWizardTools')}: {toolNames.join(', ')}
-            </p>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="kh-ops-action-line">
             <Button
               type="button"
               variant="secondary"
@@ -547,25 +528,24 @@ export function UserMcpSetupWizard({
               {testOk === true ? t('mcpWizardContinue') : t('mcpWizardSkipToSchema')}
             </Button>
           </div>
-          {testOk === false ? (
-            <McpConnectionTroubleshoot variant="user" mcpUrl={mcpUrl} defaultOpen />
-          ) : null}
-        </Panel>
+        </section>
       ) : null}
 
       {step === 'schema' && token ? (
-        <Panel className="grid gap-4">
-          <McpClientSchemas
-            client={llmClient}
-            mcpUrl={mcpUrl}
-            token={token}
-            includeWriteTools={mode === 'write'}
-            onBack={() => setStep(testSteps.length > 0 ? 'test' : 'create')}
-            onFinish={finishSetup}
-            onChangeClient={selectLlmClient}
-          />
-          <McpConnectionTroubleshoot variant="user" mcpUrl={mcpUrl} />
-        </Panel>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-card-body grid gap-4">
+            <McpClientSchemas
+              client={llmClient}
+              mcpUrl={mcpUrl}
+              token={token}
+              includeWriteTools={mode === 'write'}
+              onBack={() => setStep(testSteps.length > 0 ? 'test' : 'create')}
+              onFinish={finishSetup}
+              onChangeClient={selectLlmClient}
+            />
+            <McpConnectionTroubleshoot variant="user" mcpUrl={mcpUrl} />
+          </div>
+        </section>
       ) : null}
 
       {step === 'done' ? (

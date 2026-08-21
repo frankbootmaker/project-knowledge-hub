@@ -22,7 +22,6 @@ import {
   ErrorText,
   Field,
   Modal,
-  Panel,
   Select,
   lifecycleLabel,
   useToast,
@@ -507,7 +506,7 @@ export function KnowledgeRecordManageMenu(props: {
 
         {section === 'export' ? (
           <ul className="m-0 grid list-none gap-2 p-0">
-            <li className="grid gap-1 rounded-md border border-line bg-surface px-3 py-2">
+            <li className="kh-ops-inset grid gap-1">
               <label
                 className="text-xs font-medium text-ink-muted"
                 htmlFor="export-style-pack"
@@ -516,7 +515,7 @@ export function KnowledgeRecordManageMenu(props: {
               </label>
               <select
                 id="export-style-pack"
-                className="rounded border border-line bg-canvas px-2 py-1.5 text-sm text-ink"
+                className="kh-input"
                 value={stylePackId}
                 disabled={exportPending}
                 onChange={(event) => setStylePackId(event.target.value)}
@@ -628,7 +627,7 @@ export function KnowledgeRecordManageMenu(props: {
                   </p>
                 )}
                 {translatePending ? (
-                  <div className="grid gap-2 rounded-md border border-line bg-canvas-muted/40 p-3">
+                  <div className="kh-ops-inset grid gap-2">
                     <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
                       <span className="font-medium text-ink">
                         {translateStage
@@ -670,7 +669,7 @@ export function KnowledgeRecordManageMenu(props: {
                         {translateDetailsOpen ? (
                           <pre
                             ref={translateLogRef}
-                            className="m-0 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-canvas p-2 font-mono text-xs text-ink"
+                            className="kh-ops-code m-0 max-h-48 overflow-auto whitespace-pre-wrap break-words"
                           >
                             {translateLog || t('translateDetailsEmpty')}
                           </pre>
@@ -687,7 +686,7 @@ export function KnowledgeRecordManageMenu(props: {
                         <summary className="cursor-pointer font-medium text-ink">
                           {t('translateDetailsShow')}
                         </summary>
-                        <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-canvas p-2 font-mono text-xs text-ink">
+                        <pre className="kh-ops-code mt-1 max-h-48 overflow-auto whitespace-pre-wrap">
                           {translateLog}
                         </pre>
                       </details>
@@ -857,7 +856,7 @@ export function KnowledgeRecordManageMenu(props: {
                     const lang = siblingLanguageLabel(item.language);
                     return (
                       <li key={item.id}>
-                        <label className="flex items-start gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink">
+                        <label className="kh-ops-scope-check">
                           <input
                             type="checkbox"
                             className="mt-0.5"
@@ -921,7 +920,7 @@ export function KnowledgeRecordManageMenu(props: {
                     {t('manageDeleteSelected')}
                   </Button>
                 ) : (
-                  <Panel variant="inset" className="grid w-full gap-3">
+                  <div className="kh-ops-confirm">
                     <p className="m-0 text-sm text-danger">
                       {t('manageDeleteConfirmSelected', {
                         count: deleteSelectedIds.length,
@@ -971,7 +970,7 @@ export function KnowledgeRecordManageMenu(props: {
                         {tCommon('cancel')}
                       </Button>
                     </div>
-                  </Panel>
+                  </div>
                 )}
               </>
             ) : (

@@ -504,25 +504,22 @@ function TimelineHintHelp({
 
   return (
     <div className="relative">
-      <Button
+      <button
         type="button"
-        variant={open ? 'secondary' : 'ghost'}
-        className="!px-2.5"
+        className="kh-ops-help-btn"
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={t('timelineLegendHelp')}
         title={t('timelineLegendHelp')}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="inline-flex size-4 items-center justify-center text-sm font-semibold leading-none">
-          ?
-        </span>
-      </Button>
+        ?
+      </button>
       {open ? (
         <div
           id={panelId}
           role="note"
-          className="absolute left-0 top-full z-10 mt-2 grid w-max max-w-xl gap-2 rounded-md border border-line bg-panel-solid px-2.5 py-2 text-xs text-ink-muted shadow-sm"
+          className="kh-ops-popover max-w-xl"
         >
           <p className="m-0">{t('timelineHint')}</p>
           <p className="m-0">{t('timelineDragHint')}</p>
@@ -1176,12 +1173,10 @@ export function ProjectDeliveryTimeline({
           <button
             type="button"
             className={cn(
-              'absolute top-1 rounded-md border px-2 text-left text-xs font-medium',
+              'kh-ops-time-bar absolute top-1 text-left',
               epicHasMeta ? 'h-8 py-0.5 leading-tight' : 'h-6',
-              epicTone
-                ? deliveryScheduleSurfaceClass(epicTone)
-                : 'border-brand/40 bg-brand/20 text-ink hover:bg-brand/30',
             )}
+            data-tone={epicTone ?? undefined}
             style={style}
             title={`${epic.startDate ?? '…'} → ${epic.endDate ?? '…'}`}
             onClick={() => onManageEpic(epic.id)}
@@ -1245,7 +1240,7 @@ export function ProjectDeliveryTimeline({
                   onOffsetChange={updateOffset}
                   onOpen={() => onManageStory(story.id)}
                   className={cn(
-                    'absolute left-0 top-1 z-[1] max-w-[14rem] rounded border px-1.5 text-left text-[11px] shadow-sm',
+                    'absolute left-0 top-1 z-[1] max-w-[14rem] border px-1.5 text-left text-[11px] shadow-sm',
                     storyHasMeta ? 'h-auto min-h-5 py-0.5' : 'h-5',
                     storyTone
                       ? deliveryScheduleSurfaceClass(storyTone)
@@ -1268,7 +1263,7 @@ export function ProjectDeliveryTimeline({
                     date={storyDue}
                     showIssueIds={showIssueIds}
                     showDueDates={showDueDates}
-                    className="text-[9px] opacity-80"
+                    className="text-[10px] opacity-80"
                   />
                 </DraggableTag>
               </div>
@@ -1310,12 +1305,10 @@ export function ProjectDeliveryTimeline({
           <button
             type="button"
             className={cn(
-              'absolute top-1 max-w-full rounded border px-2 text-left text-xs',
+              'kh-ops-time-bar absolute top-1 max-w-full text-left',
               storyHasMeta ? 'h-8 py-0.5 leading-tight' : 'h-6',
-              storyTone
-                ? deliveryScheduleSurfaceClass(storyTone)
-                : 'border-line bg-panel-solid text-ink hover:border-brand/50',
             )}
+            data-tone={storyTone ?? undefined}
             style={style}
             title={
               storyDue ? `${story.title} (${storyDue})` : story.title
@@ -1338,7 +1331,7 @@ export function ProjectDeliveryTimeline({
 
   return (
     <div className="grid gap-4">
-      <fieldset className="m-0 grid gap-2 rounded-md border border-line p-3">
+      <fieldset className="kh-ops-panel m-0 grid gap-2 p-3">
         <legend className="px-1 text-sm font-semibold">
           {t('timelineFilterLabel')}
         </legend>
@@ -1387,7 +1380,7 @@ export function ProjectDeliveryTimeline({
         </div>
       </fieldset>
 
-      <fieldset className="m-0 grid gap-3 rounded-md border border-line p-3">
+      <fieldset className="kh-ops-panel m-0 grid gap-3 p-3">
         <legend className="px-1 text-sm font-semibold">
           {t('timelineWindowLabel')}
         </legend>
@@ -1508,8 +1501,8 @@ export function ProjectDeliveryTimeline({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-line bg-panel-solid p-3">
-        <div className="min-w-[48rem]">
+      <div className="kh-ops-panel kh-ops-timeline-scroll">
+        <div className="kh-ops-timeline-chart">
           <div className="relative mb-2 h-6">
             {labelTicks.map((tick) => (
               <div
@@ -1631,7 +1624,7 @@ export function ProjectDeliveryTimeline({
                       onOffsetChange={updateOffset}
                       onOpen={marker.onOpen}
                       className={cn(
-                        'absolute left-1/2 top-1/2 z-[2] w-max max-w-[11rem] rounded border px-1.5 py-0.5 text-left text-[10px] leading-snug shadow-sm',
+                        'absolute left-1/2 top-1/2 z-[2] w-max max-w-[11rem] border px-1.5 py-0.5 text-left text-[10px] leading-snug shadow-sm',
                         tone
                           ? deliveryScheduleSurfaceClass(tone)
                           : 'border-line bg-panel-solid text-ink hover:border-brand/50',
@@ -1643,7 +1636,7 @@ export function ProjectDeliveryTimeline({
                     >
                       <span
                         className={cn(
-                          'mb-0.5 block text-[9px] font-semibold uppercase tracking-wide',
+                          'mb-0.5 block text-[10px] font-semibold uppercase tracking-wide',
                           tone ? 'opacity-80' : 'text-ink-muted',
                         )}
                       >
@@ -1658,7 +1651,7 @@ export function ProjectDeliveryTimeline({
                         showIssueIds={showIssueIds}
                         showDueDates={showDueDates}
                         className={cn(
-                          'mt-0.5 text-[9px]',
+                          'mt-0.5 text-[10px]',
                           tone ? 'opacity-80' : 'text-ink-muted',
                         )}
                       />
@@ -1699,7 +1692,7 @@ export function ProjectDeliveryTimeline({
       {unscheduledEpics.length > 0 ||
       unscheduledStories.length > 0 ||
       unscheduledMilestones.length > 0 ? (
-        <div className="rounded-md border border-line p-3">
+        <div className="kh-ops-panel p-3">
           <p className="mt-0 mb-2 text-sm font-semibold">
             {t('timelineUnscheduled')}
           </p>

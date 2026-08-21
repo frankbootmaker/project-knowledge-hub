@@ -94,12 +94,12 @@ export function CollapsibleSection({
   }
 
   return (
-    <section id={id} className={cn('mb-8 scroll-mt-6', className)}>
+    <section id={id} className={cn('mb-6 scroll-mt-6', className)}>
       <SectionHeader
         title={
           <button
             type="button"
-            className="inline-flex items-center gap-2 border-0 bg-transparent p-0 text-left text-xl font-semibold tracking-tight text-ink"
+            className="inline-flex items-center gap-2 border-0 bg-transparent p-0 text-left font-display text-[13px] font-bold tracking-tight text-ink"
             aria-expanded={open}
             aria-controls={panelId}
             onClick={toggle}

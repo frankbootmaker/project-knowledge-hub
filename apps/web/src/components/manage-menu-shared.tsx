@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { PageRefreshButton } from './PageRefreshButton';
 
 export const manageMenuItemClass =
-  'kh-panel-inset flex w-full cursor-pointer items-center justify-between gap-3 border border-line bg-panel-solid text-left transition hover:border-brand/35';
+  'kh-ops-choice';
 
 export const manageMenuLinkClass =
-  'kh-panel-inset flex items-center justify-between gap-3 no-underline transition hover:border-brand/35';
+  'kh-ops-choice';
 
 /** Refresh + Manage (or other page actions) on the same toolbar row. */
 export function ManageToolbar({ children }: { children?: ReactNode }) {
@@ -55,11 +55,11 @@ export function ManageMenuItem(props: {
         disabled={props.disabled}
         onClick={props.onClick}
       >
-        <span>
-          <span className="block font-medium text-ink">{props.title}</span>
-          <span className="mt-0.5 block text-sm text-ink-muted">{props.hint}</span>
+        <span className="kh-ops-choice-copy">
+          <strong>{props.title}</strong>
+          <span>{props.hint}</span>
         </span>
-        <span className="text-ink-muted" aria-hidden>
+        <span aria-hidden>
           →
         </span>
       </button>
@@ -76,11 +76,11 @@ export function ManageMenuLink(props: {
   return (
     <li>
       <Link href={props.href} className={manageMenuLinkClass} onClick={props.onClick}>
-        <span>
-          <span className="block font-medium text-ink">{props.title}</span>
-          <span className="mt-0.5 block text-sm text-ink-muted">{props.hint}</span>
+        <span className="kh-ops-choice-copy">
+          <strong>{props.title}</strong>
+          <span>{props.hint}</span>
         </span>
-        <span className="text-ink-muted" aria-hidden>
+        <span aria-hidden>
           →
         </span>
       </Link>

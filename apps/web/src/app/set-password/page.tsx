@@ -6,8 +6,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { evaluatePasswordStrength } from '@project-knowledge-hub/domain';
-import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { Button, ErrorText, Field, Page, Panel, PasswordInput, PasswordStrengthHint } from '../../components/ui';
+import { AuthCard } from '../../components/ops/AuthCard';
+import { Button, ErrorText, Field, PasswordInput, PasswordStrengthHint } from '../../components/ui';
 
 function SetPasswordForm() {
   const t = useTranslations('setPassword');
@@ -108,62 +108,57 @@ function SetPasswordForm() {
   }
 
   return (
-    <Page narrow className="px-4 py-16">
-      <div className="mb-4 flex justify-end">
-        <LanguageSwitcher />
-      </div>
-      <div className="mb-6">
-        <p className="mb-1 text-xs font-semibold tracking-[0.14em] text-ink-muted uppercase">
-          {tCommon('appName')}
-        </p>
-        <h1 className="m-0 text-3xl font-semibold tracking-tight">{t('title')}</h1>
-        <p className="mt-2 text-ink-muted">{t('subtitle')}</p>
-        {emailHint ? (
-          <p className="mt-1 mb-0 text-sm text-ink-muted">{t('forEmail', { email: emailHint })}</p>
-        ) : null}
-      </div>
-      <Panel>
-        {checking ? (
-          <p className="m-0 text-ink-muted">{tCommon('loading')}</p>
-        ) : previewError ? (
-          <div className="grid gap-4">
-            <ErrorText>{previewError}</ErrorText>
-            <Link href="/forgot-password" className="text-sm text-brand underline-offset-2 hover:underline">
-              {t('requestNew')}
-            </Link>
-            <Link href="/login" className="text-sm text-ink-muted underline-offset-2 hover:underline">
-              {t('backToLogin')}
-            </Link>
+    <AuthCard
+      brand={t('accessBrand')}
+      eyebrow={t('eyebrow')}
+      title={t('title')}
+      subtitle={
+        <>
+          {t('subtitle')}
+          {emailHint ? ` ${t('forEmail', { email: emailHint })}` : null}
+        </>
+      }
+    >
+      {checking ? (
+        <p className="mt-4 mb-0 text-ink-muted">{tCommon('loading')}</p>
+      ) : previewError ? (
+        <div className="mt-4 grid gap-4">
+          <ErrorText>{previewError}</ErrorText>
+          <div className="kh-ops-auth-links">
+            <Link href="/forgot-password">{t('requestNew')}</Link>
+            <Link href="/login">{t('backToLogin')}</Link>
           </div>
-        ) : (
-          <form onSubmit={onSubmit} className="grid gap-4">
-            <Field label={t('password')}>
-              <PasswordInput
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </Field>
-            <PasswordStrengthHint value={password} />
-            <Field label={t('confirmPassword')}>
-              <PasswordInput
-                value={confirm}
-                onChange={(event) => setConfirm(event.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </Field>
-            {error ? <ErrorText>{error}</ErrorText> : null}
-            <Button type="submit" disabled={pending} className="mt-1 w-full py-2.5">
+        </div>
+      ) : (
+        <form onSubmit={onSubmit} className="mt-4 grid gap-4">
+          <Field label={t('password')}>
+            <PasswordInput
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </Field>
+          <PasswordStrengthHint value={password} />
+          <Field label={t('confirmPassword')}>
+            <PasswordInput
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </Field>
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <div className="kh-ops-auth-actions">
+            <Button type="submit" disabled={pending} className="w-full py-2.5">
               {pending ? t('saving') : t('submit')}
             </Button>
-          </form>
-        )}
-      </Panel>
-    </Page>
+          </div>
+        </form>
+      )}
+    </AuthCard>
   );
 }
 

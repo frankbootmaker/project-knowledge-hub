@@ -10,7 +10,6 @@ import {
   Badge,
   Page,
   PageHeader,
-  Panel,
   lifecycleLabel,
   lifecycleTone,
 } from '../../../../../../components/ui';
@@ -171,7 +170,7 @@ export default async function KnowledgeRecordDetailPage({
               {workspace.name}
             </Link>
             {' / '}
-            {tCommon('knowledge')}
+            {t('eyebrow')}
           </>
         }
         title={
@@ -180,29 +179,32 @@ export default async function KnowledgeRecordDetailPage({
             : record.title
         }
         description={`${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
+        actions={
+          <Badge tone={lifecycleTone(record.lifecycleStatus)}>
+            {lifecycleLabel(record.lifecycleStatus, t)}
+          </Badge>
+        }
       />
-
-      <RecordTranslationSwitcher
-        workspaceSlug={workspace.slug}
-        currentRecordId={record.id}
-        translations={translations}
-      />
-
       {record.lifecycleStatus === 'superseded' ? (
-        <p className="mb-4 rounded-md border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
+        <p className="kh-ops-status-row mb-3" data-tone="danger">
           {t('supersededWarning')}
         </p>
       ) : null}
-
-      <KnowledgeRecordMoreDetails
-        leading={
-          <>
+      <div className="kh-ops-detail-grid">
+        <article className="kh-ops-panel min-w-0 overflow-hidden">
+          <div className="kh-ops-record-head">
+            <div className="kh-ops-history-meta">
+              <span>{record.humanKey || record.slug}</span>
+              <span>{record.recordType}</span>
+              <span>v{record.currentVersionNumber}</span>
+              <span>{record.language ?? 'en'}</span>
+            </div>
+            <h1>{record.title}</h1>
             <Badge tone={lifecycleTone(record.lifecycleStatus)}>
               {lifecycleLabel(record.lifecycleStatus, t)}
             </Badge>
-            <Badge tone="brand">{record.sourceOfTruthMode}</Badge>
-            {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
-            <span className="text-sm text-ink-muted">v{record.currentVersionNumber}</span>
+          </div>
+          <div className="kh-ops-manage-strip">
             {canMutate && !isArchived && !gitManaged ? (
               <RecordLifecycleActions
                 recordId={record.id}
@@ -214,133 +216,168 @@ export default async function KnowledgeRecordDetailPage({
                 href={record.source.sourceUri}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
+                className="kh-ops-text-btn no-underline"
               >
                 {t('viewOnGitHub')}
               </a>
             ) : null}
-          </>
-        }
-        trailing={
-          <KnowledgeRecordDetailActions
-            workspaceSlug={workspace.slug}
-            workspaceId={workspace.id}
-            record={{
-              id: record.id,
-              title: record.title,
-              slug: record.slug,
-              summary: record.summary,
-              recordType: record.recordType,
-              humanKey: record.humanKey,
-              language: record.language,
-              lifecycleStatus: record.lifecycleStatus,
-              sourceOfTruthMode: record.sourceOfTruthMode,
-              currentVersionNumber: record.currentVersionNumber,
-              updatedAt: record.updatedAt,
-              archivedAt: record.archivedAt,
-              tags: record.tags,
-              projectName: project?.name ?? null,
-              systemName: system?.name ?? null,
-              verifiedAt: record.verifiedAt,
-              reviewedBy: record.reviewedBy,
-              reviewedByUser: record.reviewedByUser,
-              lastValidatedAt: record.lastValidatedAt,
-              source: record.source,
-            }}
-            editorInitial={{
-              id: record.id,
-              title: record.title,
-              summary: record.summary,
-              recordType: record.recordType,
-              lifecycleStatus: record.lifecycleStatus,
-              sourceOfTruthMode: record.sourceOfTruthMode,
-              contentMarkdown: record.contentMarkdown,
-              language: record.language,
-              projectId: record.projectId,
-              systemId: record.systemId,
-              tags: record.tags,
-              source: record.source,
-            }}
-            projects={projects}
-            systems={systems}
-            canMutate={canMutate}
-            canPurge={canPurge}
-            visionConfigured={translationConfigured}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <KnowledgeRecordDetailActions
+                workspaceSlug={workspace.slug}
+                workspaceId={workspace.id}
+                record={{
+                  id: record.id,
+                  title: record.title,
+                  slug: record.slug,
+                  summary: record.summary,
+                  recordType: record.recordType,
+                  humanKey: record.humanKey,
+                  language: record.language,
+                  lifecycleStatus: record.lifecycleStatus,
+                  sourceOfTruthMode: record.sourceOfTruthMode,
+                  currentVersionNumber: record.currentVersionNumber,
+                  updatedAt: record.updatedAt,
+                  archivedAt: record.archivedAt,
+                  tags: record.tags,
+                  projectName: project?.name ?? null,
+                  systemName: system?.name ?? null,
+                  verifiedAt: record.verifiedAt,
+                  reviewedBy: record.reviewedBy,
+                  reviewedByUser: record.reviewedByUser,
+                  lastValidatedAt: record.lastValidatedAt,
+                  source: record.source,
+                }}
+                editorInitial={{
+                  id: record.id,
+                  title: record.title,
+                  summary: record.summary,
+                  recordType: record.recordType,
+                  lifecycleStatus: record.lifecycleStatus,
+                  sourceOfTruthMode: record.sourceOfTruthMode,
+                  contentMarkdown: record.contentMarkdown,
+                  language: record.language,
+                  projectId: record.projectId,
+                  systemId: record.systemId,
+                  tags: record.tags,
+                  source: record.source,
+                }}
+                projects={projects}
+                systems={systems}
+                canMutate={canMutate}
+                canPurge={canPurge}
+                visionConfigured={translationConfigured}
+              />
+            </div>
+          </div>
+          <MarkdownDocument
+            html={record.contentHtml ?? ''}
+            toc={record.toc ?? []}
+            title={record.title}
           />
-        }
-        summary={<p className="m-0">{record.summary || tCommon('noSummary')}</p>}
-        links={
-          <>
-            {project ? (
-              <p className="m-0 text-ink-muted">
-                {tCommon('project')}:{' '}
-                <Link
-                  href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
-                  className="text-brand no-underline hover:text-brand-hover"
-                >
-                  {project.name}
-                </Link>
-              </p>
-            ) : null}
-            {system ? (
-              <p className="m-0 text-ink-muted">
-                {tCommon('system')}:{' '}
-                <Link
-                  href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
-                  className="text-brand no-underline hover:text-brand-hover"
-                >
-                  {system.name}
-                </Link>
-              </p>
-            ) : null}
-            {record.tags.length > 0 ? (
-              <p className="m-0 text-xs text-ink-muted">
-                {tCommon('tagsList', {
-                  tags: record.tags.map((tag) => tag.name).join(', '),
-                })}
-              </p>
-            ) : null}
-          </>
-        }
-        sourceRows={[
-          {
-            label: t('contentLanguage'),
-            value: record.language ?? 'en',
-          },
-          { label: t('sourceType'), value: record.source?.sourceType ?? dash },
-          { label: t('sourceTitle'), value: record.source?.sourceTitle ?? dash },
-          { label: t('provider'), value: record.source?.sourceProvider ?? dash },
-          { label: t('reference'), value: record.source?.sourceReference ?? dash },
-          {
-            label: t('uri'),
-            value: record.source?.sourceUri ? (
-              <a href={record.source.sourceUri}>{record.source.sourceUri}</a>
-            ) : (
-              dash
-            ),
-          },
-          { label: t('model'), value: record.source?.generatedByModel ?? dash },
-          { label: t('verifiedAt'), value: record.verifiedAt ?? dash },
-          {
-            label: t('reviewedBy'),
-            value: record.reviewedByUser
-              ? record.reviewedByUser.email
-                ? `${record.reviewedByUser.displayName} (${record.reviewedByUser.email})`
-                : record.reviewedByUser.displayName
-              : (record.reviewedBy ?? dash),
-          },
-          { label: t('lastValidated'), value: record.lastValidatedAt ?? dash },
-          { label: tCommon('updated'), value: record.updatedAt },
-        ]}
-      />
+        </article>
 
-      <Panel className="min-w-0 overflow-hidden">
-        <MarkdownDocument
-          html={record.contentHtml ?? ''}
-          toc={record.toc ?? []}
-          title={record.title}
-        />
-      </Panel>
+        <aside className="kh-ops-editor-stack">
+          <RecordTranslationSwitcher
+            workspaceSlug={workspace.slug}
+            currentRecordId={record.id}
+            translations={translations}
+          />
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{tCommon('status')}</h2>
+            </div>
+            <dl className="kh-ops-keyvals">
+              <dt>{t('lifecycleStatus')}</dt>
+              <dd>{lifecycleLabel(record.lifecycleStatus, t)}</dd>
+              <dt>{t('sourceOfTruth')}</dt>
+              <dd>{record.sourceOfTruthMode}</dd>
+              <dt>{t('contentLanguage')}</dt>
+              <dd>{record.language ?? 'en'}</dd>
+              <dt>{tCommon('updated')}</dt>
+              <dd>{record.updatedAt}</dd>
+              {isArchived ? (
+                <>
+                  <dt>{tArchive('archivedBadge')}</dt>
+                  <dd>{record.archivedAt}</dd>
+                </>
+              ) : null}
+            </dl>
+          </section>
+          {record.tags.length > 0 ? (
+            <section className="kh-ops-panel">
+              <div className="kh-ops-panel-head">
+                <h2 className="kh-ops-panel-title">{tCommon('tags')}</h2>
+              </div>
+              <div className="kh-ops-tag-list">
+                {record.tags.map((tag) => (
+                  <span key={tag.name} className="kh-ops-tag">
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          <KnowledgeRecordMoreDetails
+            summary={<p className="m-0">{record.summary || tCommon('noSummary')}</p>}
+            links={
+              <>
+                {project ? (
+                  <p className="m-0 text-ink-muted">
+                    {tCommon('project')}:{' '}
+                    <Link
+                      href={`/workspaces/${workspace.slug}/projects/${project.slug}`}
+                      className="text-brand no-underline hover:text-brand-hover"
+                    >
+                      {project.name}
+                    </Link>
+                  </p>
+                ) : null}
+                {system ? (
+                  <p className="m-0 text-ink-muted">
+                    {tCommon('system')}:{' '}
+                    <Link
+                      href={`/workspaces/${workspace.slug}/systems/${system.slug}`}
+                      className="text-brand no-underline hover:text-brand-hover"
+                    >
+                      {system.name}
+                    </Link>
+                  </p>
+                ) : null}
+              </>
+            }
+            sourceRows={[
+              {
+                label: t('contentLanguage'),
+                value: record.language ?? 'en',
+              },
+              { label: t('sourceType'), value: record.source?.sourceType ?? dash },
+              { label: t('sourceTitle'), value: record.source?.sourceTitle ?? dash },
+              { label: t('provider'), value: record.source?.sourceProvider ?? dash },
+              { label: t('reference'), value: record.source?.sourceReference ?? dash },
+              {
+                label: t('uri'),
+                value: record.source?.sourceUri ? (
+                  <a href={record.source.sourceUri}>{record.source.sourceUri}</a>
+                ) : (
+                  dash
+                ),
+              },
+              { label: t('model'), value: record.source?.generatedByModel ?? dash },
+              { label: t('verifiedAt'), value: record.verifiedAt ?? dash },
+              {
+                label: t('reviewedBy'),
+                value: record.reviewedByUser
+                  ? record.reviewedByUser.email
+                    ? `${record.reviewedByUser.displayName} (${record.reviewedByUser.email})`
+                    : record.reviewedByUser.displayName
+                  : (record.reviewedBy ?? dash),
+              },
+              { label: t('lastValidated'), value: record.lastValidatedAt ?? dash },
+              { label: tCommon('updated'), value: record.updatedAt },
+            ]}
+          />
+        </aside>
+      </div>
     </Page>
   );
 }

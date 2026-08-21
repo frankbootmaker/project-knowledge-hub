@@ -16,6 +16,7 @@ import {
 import { ProjectDeliveryPanel } from '../../../../../../components/ProjectDeliveryPanel';
 import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
+import { ProjectReportsPanel } from '../../../../../../components/ProjectReportsPanel';
 import {
   ProjectRaidPanel,
   type RaidItem,
@@ -29,7 +30,6 @@ import {
   buttonClassName,
   Page,
   PageHeader,
-  Panel,
 } from '../../../../../../components/ui';
 import { cn } from '../../../../../../lib/cn';
 import {
@@ -363,6 +363,7 @@ export default async function ProjectDetailPage({
     rag: ProjectRagStatus | null;
   }> = [
     { id: 'project-overview', label: t('navOverview'), rag: null },
+    { id: 'project-reports', label: t('manageReports'), rag: null },
     { id: 'project-baseline', label: tBaseline('title'), rag: null },
     { id: 'project-stakeholders', label: tStakeholders('title'), rag: null },
     { id: 'project-delivery', label: tDelivery('title'), rag: timelineRag },
@@ -406,22 +407,7 @@ export default async function ProjectDetailPage({
             {t('breadcrumb')}
           </>
         }
-        title={
-          <span className="inline-flex flex-wrap items-center gap-3">
-            <span>{project.name}</span>
-            <Badge
-              tone={ragBadgeTone(overallRag)}
-              title={[
-                `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,
-                `${t('ragRisks')}: ${t(`rag.${riskRag}`)}`,
-                `${t('ragFinancials')}: ${t(`rag.${financialRag}`)}`,
-              ].join(' · ')}
-              aria-label={`${t('ragOverall')}: ${t(`rag.${overallRag}`)}`}
-            >
-              {t('ragOverall')}: {t(`rag.${overallRag}`)}
-            </Badge>
-          </span>
-        }
+        title={project.name}
         nav={
           <nav
             aria-label={t('sectionNav')}
@@ -451,34 +437,79 @@ export default async function ProjectDetailPage({
         }
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
-            <span>{project.slug}</span>
+            <span>{project.summary || project.slug}</span>
             <Badge tone="brand">{project.status}</Badge>
             {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
           </span>
         }
         actions={
-          <ProjectManageMenu
-            workspaceSlug={workspace.slug}
-            project={project}
-            canMutate={canMutate}
-            canPurge={canPurge}
-            knowledgeRecords={knowledgeRecords}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              tone={ragBadgeTone(overallRag)}
+              title={[
+                `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,
+                `${t('ragRisks')}: ${t(`rag.${riskRag}`)}`,
+                `${t('ragFinancials')}: ${t(`rag.${financialRag}`)}`,
+              ].join(' · ')}
+              aria-label={`${t('ragOverall')}: ${t(`rag.${overallRag}`)}`}
+            >
+              {t('ragOverall')} · {t(`rag.${overallRag}`)}
+            </Badge>
+            <ProjectManageMenu
+              workspaceSlug={workspace.slug}
+              project={project}
+              canMutate={canMutate}
+              canPurge={canPurge}
+              knowledgeRecords={knowledgeRecords}
+            />
+          </div>
         }
       />
 
-      <Panel id="project-overview" className="mb-8 scroll-mt-6">
-        <h2 className="mt-0 mb-3 text-xl font-semibold tracking-tight text-ink">
-          {t('navOverview')}
-        </h2>
-        <p className="mt-0 mb-3 text-ink-muted">{project.summary || tCommon('noSummary')}</p>
-        <p className="m-0 text-ink-muted">{project.description || tCommon('noDescription')}</p>
-        {project.tags.length > 0 ? (
-          <p className="mt-3 mb-0 text-xs text-ink-muted">
-            {tCommon('tagsList', { tags: project.tags.map((tag) => tag.name).join(', ') })}
+      <div className="kh-ops-stats">
+        <div className="kh-ops-stat">
+          <p className="kh-ops-stat-label m-0">{t('countTasks')}</p>
+          <p className="kh-ops-stat-value">{tasks.length}</p>
+        </div>
+        <div className="kh-ops-stat">
+          <p className="kh-ops-stat-label m-0">{t('countMilestones')}</p>
+          <p className="kh-ops-stat-value">{milestones.length}</p>
+        </div>
+        <div className="kh-ops-stat">
+          <p className="kh-ops-stat-label m-0">{t('countRaid')}</p>
+          <p className="kh-ops-stat-value">{raidItems.length}</p>
+          <p className="kh-ops-stat-note">{t(`rag.${riskRag}`)}</p>
+        </div>
+        <div className="kh-ops-stat">
+          <p className="kh-ops-stat-label m-0">{t('countStakeholders')}</p>
+          <p className="kh-ops-stat-value">{stakeholders.length}</p>
+        </div>
+      </div>
+
+      <section id="project-overview" className="kh-ops-panel mb-8 scroll-mt-6">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('navOverview')}</h2>
+        </div>
+        <div className="kh-ops-card-body">
+          <p className="mt-0 mb-3 text-ink-muted">
+            {project.summary || tCommon('noSummary')}
           </p>
-        ) : null}
-      </Panel>
+          <p className="m-0 text-ink-muted">
+            {project.description || tCommon('noDescription')}
+          </p>
+          {project.tags.length > 0 ? (
+            <div className="kh-ops-tag-list px-0 pb-0 pt-3">
+              {project.tags.map((tag) => (
+                <span key={tag.name} className="kh-ops-tag">
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <ProjectReportsPanel project={project} />
 
       <ProjectBaselinePanel
         projectId={project.id}

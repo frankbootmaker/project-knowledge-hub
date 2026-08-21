@@ -9,7 +9,6 @@ import {
   ErrorText,
   Field,
   Input,
-  Panel,
   Select,
   Textarea,
 } from './ui';
@@ -78,97 +77,108 @@ export function ConversationImportForm(props: {
   }
 
   return (
-    <Panel>
-      <form onSubmit={onSubmit} className="grid gap-4">
-        <Field label={tCommon('name')}>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            maxLength={300}
-          />
-        </Field>
-        <Field label={t('contentFormat')}>
-          <Select
-            value={contentFormat}
-            onChange={(e) =>
-              setContentFormat(
-                e.target.value as
-                  | 'markdown'
-                  | 'plain_text'
-                  | 'chatgpt_export'
-                  | 'open_webui'
-                  | 'generic_json',
-              )
-            }
-          >
-            <option value="markdown">{t('formatMarkdown')}</option>
-            <option value="plain_text">{t('formatPlainText')}</option>
-            <option value="chatgpt_export">{t('formatChatgpt')}</option>
-            <option value="open_webui">{t('formatOpenWebui')}</option>
-            <option value="generic_json">{t('formatGenericJson')}</option>
-          </Select>
-        </Field>
-        <Field label={t('rawContent')}>
-          {(contentFormat === 'chatgpt_export' ||
-            contentFormat === 'open_webui' ||
-            contentFormat === 'generic_json') && (
-            <p className="m-0 mb-2 text-sm text-ink-muted">{t('rawContentJsonHint')}</p>
-          )}
-          <Textarea
-            value={rawContent}
-            onChange={(e) => setRawContent(e.target.value)}
-            rows={16}
-            required
-            className="font-mono text-sm"
-            placeholder={
-              contentFormat === 'chatgpt_export' ||
-              contentFormat === 'open_webui' ||
-              contentFormat === 'generic_json'
-                ? t('rawContentJsonPlaceholder')
-                : undefined
-            }
-          />
-        </Field>
-        <Field label={t('projectOptional')}>
-          <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">{tCommon('none')}</option>
-            {props.projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('systemOptional')}>
-          <Select value={systemId} onChange={(e) => setSystemId(e.target.value)}>
-            <option value="">{tCommon('none')}</option>
-            {props.systems.map((system) => (
-              <option key={system.id} value={system.id}>
-                {system.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('generatedByModel')}>
-          <Input
-            value={generatedByModel}
-            onChange={(e) => setGeneratedByModel(e.target.value)}
-            placeholder={t('generatedByModelPlaceholder')}
-          />
-        </Field>
-        <Field label={t('sourceProvider')}>
-          <Input
-            value={sourceProvider}
-            onChange={(e) => setSourceProvider(e.target.value)}
-            placeholder={t('sourceProviderPlaceholder')}
-          />
-        </Field>
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <Button type="submit" disabled={pending}>
-          {pending ? t('creating') : t('createButton')}
-        </Button>
+    <section className="kh-ops-panel kh-ops-narrow-form">
+      <form onSubmit={onSubmit}>
+        <div className="kh-ops-card-body">
+          <div className="kh-ops-form-grid">
+            <Field label={tCommon('name')}>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+                maxLength={300}
+              />
+            </Field>
+            <Field label={t('contentFormat')}>
+              <Select
+                value={contentFormat}
+                onChange={(e) =>
+                  setContentFormat(
+                    e.target.value as
+                      | 'markdown'
+                      | 'plain_text'
+                      | 'chatgpt_export'
+                      | 'open_webui'
+                      | 'generic_json',
+                  )
+                }
+              >
+                <option value="markdown">{t('formatMarkdown')}</option>
+                <option value="plain_text">{t('formatPlainText')}</option>
+                <option value="chatgpt_export">{t('formatChatgpt')}</option>
+                <option value="open_webui">{t('formatOpenWebui')}</option>
+                <option value="generic_json">{t('formatGenericJson')}</option>
+              </Select>
+            </Field>
+            <Field className="kh-ops-field-span" label={t('rawContent')}>
+              {(contentFormat === 'chatgpt_export' ||
+                contentFormat === 'open_webui' ||
+                contentFormat === 'generic_json') && (
+                <p className="m-0 mb-2 text-sm text-ink-muted">{t('rawContentJsonHint')}</p>
+              )}
+              <Textarea
+                value={rawContent}
+                onChange={(e) => setRawContent(e.target.value)}
+                rows={16}
+                required
+                className="kh-ops-paste-area font-mono text-sm"
+                placeholder={
+                  contentFormat === 'chatgpt_export' ||
+                  contentFormat === 'open_webui' ||
+                  contentFormat === 'generic_json'
+                    ? t('rawContentJsonPlaceholder')
+                    : undefined
+                }
+              />
+            </Field>
+            <Field label={t('projectOptional')}>
+              <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                <option value="">{tCommon('none')}</option>
+                {props.projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t('systemOptional')}>
+              <Select value={systemId} onChange={(e) => setSystemId(e.target.value)}>
+                <option value="">{tCommon('none')}</option>
+                {props.systems.map((system) => (
+                  <option key={system.id} value={system.id}>
+                    {system.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t('generatedByModel')}>
+              <Input
+                value={generatedByModel}
+                onChange={(e) => setGeneratedByModel(e.target.value)}
+                placeholder={t('generatedByModelPlaceholder')}
+              />
+            </Field>
+            <Field label={t('sourceProvider')}>
+              <Input
+                value={sourceProvider}
+                onChange={(e) => setSourceProvider(e.target.value)}
+                placeholder={t('sourceProviderPlaceholder')}
+              />
+            </Field>
+            {error ? (
+              <div className="kh-ops-field-span">
+                <ErrorText>{error}</ErrorText>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="kh-ops-action-line">
+          <span className="kh-ops-panel-meta">{t('createButton')}</span>
+          <Button type="submit" disabled={pending}>
+            {pending ? t('creating') : t('createButton')}
+          </Button>
+        </div>
       </form>
-    </Panel>
+    </section>
   );
 }

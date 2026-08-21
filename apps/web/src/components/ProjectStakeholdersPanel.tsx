@@ -2,21 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import {
-  CatalogueSection,
-  type CatalogueListItem,
-} from './CatalogueSection';
-import { CollapsibleSection } from './CollapsibleSection';
-import { AssistantBrandMark } from './AssistantBrandMark';
-import { ProjectStakeholdersOrgChart } from './ProjectStakeholdersOrgChart';
-import { ProjectResourceUtilizationModal } from './ProjectResourceUtilizationModal';
-import { UserAvatar } from './UserAvatar';
-import { ViewModeIcon } from './ViewModeIcon';
-import { downloadAuthenticatedExport } from '../lib/download-export';
-import { formatMoney, parseOptionalNumber } from '../lib/project-currency';
-import {
-  Badge,
   Button,
   ErrorText,
   Field,
@@ -26,7 +13,13 @@ import {
   Textarea,
   useToast,
 } from './ui';
-import { cn } from '../lib/cn';
+import { CollapsibleSection } from './CollapsibleSection';
+import { OpsCountStrip } from './ops/OpsCountStrip';
+import { ProjectStakeholdersList } from './ProjectStakeholdersList';
+import { ProjectStakeholdersOrgChart } from './ProjectStakeholdersOrgChart';
+import { ProjectResourceUtilizationView } from './ProjectResourceUtilizationModal';
+import { downloadAuthenticatedExport } from '../lib/download-export';
+import { parseOptionalNumber } from '../lib/project-currency';
 
 export type StakeholderCompetency = {
   name: string;
@@ -101,7 +94,7 @@ const PROJECT_ROLES = [
   'other',
 ] as const;
 
-const VIEW_MODES = ['list', 'org'] as const;
+const VIEW_MODES = ['list', 'org', 'utilization'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
 const ENGAGEMENT_TYPES = ['employee', 'contractor'] as const;
@@ -124,8 +117,6 @@ export function ProjectStakeholdersPanel({
 }) {
   const t = useTranslations('stakeholders');
   const tCommon = useTranslations('common');
-  const tWorkspaces = useTranslations('workspaces');
-  const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { pushToast } = useToast();
@@ -140,17 +131,19 @@ export function ProjectStakeholdersPanel({
   const [createOpen, setCreateOpen] = useState(false);
   const [manageRow, setManageRow] = useState<Stakeholder | null>(null);
   const [manageAiRow, setManageAiRow] = useState<Stakeholder | null>(null);
-  const [utilizationOpen, setUtilizationOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   useEffect(() => {
+    if (searchParams.get('utilization') === '1') {
+      setViewMode('utilization');
+      return;
+    }
     if (searchParams.get('stakeholders') === 'org') {
       setViewMode('org');
+      return;
     }
-    if (searchParams.get('utilization') === '1') {
-      setUtilizationOpen(true);
-    }
+    setViewMode('list');
   }, [searchParams]);
 
   const [createMode, setCreateMode] = useState<'member' | 'open_role'>('member');
@@ -209,12 +202,23 @@ export function ProjectStakeholdersPanel({
 
   function changeViewMode(mode: ViewMode) {
     setViewMode(mode);
-  }
-
-  const wideModalOpen = viewMode === 'org';
-
-  function closeWideModal() {
-    changeViewMode('list');
+    try {
+      const url = new URL(window.location.href);
+      if (mode === 'org') {
+        url.searchParams.set('stakeholders', 'org');
+        url.searchParams.delete('utilization');
+      } else if (mode === 'utilization') {
+        url.searchParams.delete('stakeholders');
+        url.searchParams.set('utilization', '1');
+      } else {
+        url.searchParams.delete('stakeholders');
+        url.searchParams.delete('utilization');
+      }
+      url.hash = 'project-stakeholders';
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      /* ignore */
+    }
   }
 
   async function exportOrgChartPdf() {
@@ -257,101 +261,6 @@ export function ProjectStakeholdersPanel({
     const payload = (await response.json()) as { stakeholders: Stakeholder[] };
     setStakeholders(payload.stakeholders);
   }
-
-  function rateLabel(rate: string | null | undefined): string | null {
-    if (rate == null || rate === '') return null;
-    const n = Number(rate);
-    if (!Number.isFinite(n)) return null;
-    return t('hourlyRateValue', { amount: formatMoney(n, currency, locale) });
-  }
-
-  const items: CatalogueListItem[] = useMemo(
-    () =>
-      stakeholders.map((row) => {
-        const reportsTo = row.reportsToUserId
-          ? nameById.get(row.reportsToUserId)
-          : null;
-        const isAi = row.kind === 'ai_assistant';
-        const isOpenRole = row.kind === 'open_role';
-        const roleLabel = isAi
-          ? t('kindAiAssistant')
-          : isOpenRole
-            ? t('kindOpenRole')
-            : row.projectRole
-              ? t(`projectRole.${row.projectRole}`)
-              : t('derivedOnly');
-        const raciLabel =
-          row.raciRoles.length > 0
-            ? `${t('raciLabel')}: ${row.raciRoles.join(', ')}`
-            : null;
-        const rate = rateLabel(row.hourlyRate);
-        const competencyNames = (row.competencies ?? []).map((c) => c.name);
-        return {
-          id: row.id,
-          title: row.displayName,
-          primaryBadge: roleLabel,
-          secondaryBadge: isAi
-            ? (row.systemStatus ?? undefined)
-            : row.raciRoles.length > 0
-              ? row.raciRoles.join(' · ')
-              : undefined,
-          subtitle: [
-            row.email,
-            isAi ? null : row.jobTitle,
-            row.fullName && row.fullName !== row.displayName ? row.fullName : null,
-            reportsTo
-              ? `${isAi ? t('aiOwner') : t('reportsTo')}: ${reportsTo}`
-              : null,
-            rate,
-            raciLabel,
-            competencyNames.length > 0
-              ? `${t('competencies')}: ${competencyNames.join(', ')}`
-              : null,
-            row.roleDescription
-              ? row.roleDescription.length > 80
-                ? `${row.roleDescription.slice(0, 80)}…`
-                : row.roleDescription
-              : null,
-            row.taskCount > 0 ? t('taskCount', { count: row.taskCount }) : null,
-            row.notes,
-          ]
-            .filter(Boolean)
-            .join(' · '),
-          searchText: [
-            row.displayName,
-            row.fullName ?? '',
-            row.email ?? '',
-            row.systemSlug ?? '',
-            row.systemStatus ?? '',
-            row.jobTitle ?? '',
-            row.notes ?? '',
-            row.roleDescription ?? '',
-            competencyNames.join(' '),
-            row.projectRole ?? '',
-            row.kind,
-            'ai assistant',
-            'open role',
-            row.raciRoles.join(' '),
-            reportsTo ?? '',
-            row.sources.join(' '),
-            row.hourlyRate ?? '',
-          ]
-            .join(' ')
-            .toLowerCase(),
-          filterValue: isAi
-            ? 'kind:ai_assistant'
-            : isOpenRole
-              ? 'kind:open_role'
-              : row.projectRole
-                ? `role:${row.projectRole}`
-                : row.raciRoles[0]
-                  ? `raci:${row.raciRoles[0]}`
-                  : 'derived',
-          filterLabel: roleLabel,
-        };
-      }),
-    [stakeholders, nameById, t, currency, locale],
-  );
 
   function resetCreateForm() {
     setCreateMode('member');
@@ -729,22 +638,6 @@ export function ProjectStakeholdersPanel({
     }
   }
 
-  function sectionActions(activeMode: ViewMode) {
-    return (
-      <div className="flex max-w-full items-center justify-end gap-1.5 sm:gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-8 shrink-0 px-2 text-xs sm:px-2.5"
-          onClick={() => setUtilizationOpen(true)}
-        >
-          {t('utilization')}
-        </Button>
-        {viewSwitcher(activeMode)}
-      </div>
-    );
-  }
-
   function renderCapacityFields(input: {
     engagement: string;
     setEngagement: (value: string) => void;
@@ -796,7 +689,7 @@ export function ProjectStakeholdersPanel({
           </Field>
         )}
         {isEmployee ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('assignmentStart')}>
               <Input
                 type="date"
@@ -839,7 +732,7 @@ export function ProjectStakeholdersPanel({
                 placeholder={t('contractedBudgetPlaceholder', { currency })}
               />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={t('contractStart')}>
                 <Input
                   type="date"
@@ -861,7 +754,7 @@ export function ProjectStakeholdersPanel({
                 />
               </Field>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={t('assignmentStart')}>
                 <Input
                   type="date"
@@ -885,40 +778,6 @@ export function ProjectStakeholdersPanel({
     );
   }
 
-  function viewSwitcher(activeMode: ViewMode) {
-    return (
-      <div
-        className="inline-flex max-w-full overflow-x-auto rounded-md border border-line p-0.5"
-        role="group"
-        aria-label={t('viewModeLabel')}
-      >
-        {VIEW_MODES.map((mode) => {
-          const label = t(`viewMode.${mode}`);
-          return (
-            <Button
-              key={mode}
-              type="button"
-              variant={activeMode === mode ? 'primary' : 'secondary'}
-              className={cn(
-                'size-8 shrink-0 rounded-sm px-0 md:h-8 md:w-auto md:px-2.5',
-                activeMode === mode
-                  ? ''
-                  : 'border-transparent bg-transparent shadow-none',
-              )}
-              aria-label={label}
-              title={label}
-              aria-pressed={activeMode === mode}
-              onClick={() => changeViewMode(mode)}
-            >
-              <ViewModeIcon mode={mode} className="md:hidden" />
-              <span className="hidden text-xs md:inline">{label}</span>
-            </Button>
-          );
-        })}
-      </div>
-    );
-  }
-
   const memberOptions = members.filter(
     (member) =>
       !people.some((row) => row.userId === member.userId && row.rosterId),
@@ -930,212 +789,118 @@ export function ProjectStakeholdersPanel({
         id="project-stakeholders"
         storageKey={`project:${projectId}:stakeholders`}
         title={t('title')}
-        action={sectionActions(wideModalOpen ? 'list' : viewMode)}
         defaultOpen
       >
-      {error && !createOpen && !manageRow && !manageAiRow && !wideModalOpen ? (
+      {error && !createOpen && !manageRow && !manageAiRow ? (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
 
-      <CatalogueSection
-        className="mb-2"
-        title={t('title')}
-        showTitle={false}
-        items={items}
-        emptyLabel={t('empty')}
-        searchPlaceholder={t('searchPlaceholder')}
-        filterLabel={t('filterRole')}
-        filterAllLabel={tWorkspaces('sectionFilterAll')}
-        createLabel={t('addItem')}
-        canCreate={canMutate}
-        onCreate={() => {
-          resetCreateForm();
-          setCreateOpen(true);
-        }}
-        renderItem={(item) => {
-          const row = stakeholders.find((entry) => entry.id === item.id);
-          if (!row) return null;
-          const isAi = row.kind === 'ai_assistant';
-          const isOpenRole = row.kind === 'open_role';
-          const rate = rateLabel(row.hourlyRate);
-          const competencyNames = (row.competencies ?? []).map((c) => c.name);
-          return (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex min-w-0 flex-1 items-start gap-3">
-                {isAi ? (
-                  <AssistantBrandMark
-                    brand={row.assistantBrand}
-                    name={row.displayName}
-                    slug={row.systemSlug}
-                    size="sm"
-                  />
-                ) : (
-                  <UserAvatar
-                    displayName={row.displayName}
-                    fullName={row.fullName}
-                    avatarUrl={row.avatarUrl}
-                    size="sm"
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{row.displayName}</span>
-                  {isAi ? (
-                    <Badge tone="brand">{t('kindAiAssistant')}</Badge>
-                  ) : isOpenRole ? (
-                    <Badge tone="brand">{t('kindOpenRole')}</Badge>
-                  ) : row.projectRole ? (
-                    <Badge tone="brand">{t(`projectRole.${row.projectRole}`)}</Badge>
-                  ) : (
-                    <Badge>{t('derivedOnly')}</Badge>
-                  )}
-                  {isOpenRole && row.projectRole ? (
-                    <Badge>{t(`projectRole.${row.projectRole}`)}</Badge>
-                  ) : null}
-                  {row.raciRoles.map((role) => (
-                    <Badge key={role}>{role}</Badge>
-                  ))}
-                  {!isAi && row.engagementType ? (
-                    <Badge>{t(`engagement.${row.engagementType}`)}</Badge>
-                  ) : null}
-                  {isAi && row.aiCostMode ? (
-                    <Badge tone="brand">
-                      {t(`aiCostMode.${row.aiCostMode}`)}
-                    </Badge>
-                  ) : null}
-                  {row.sources.includes('owner') ? (
-                    <Badge tone="success">{t('sourceOwner')}</Badge>
-                  ) : null}
-                </div>
-                <p className="mt-2 mb-0 text-sm break-words text-ink-muted">
-                  {row.email ? (
-                    <a
-                      href={`mailto:${row.email}`}
-                      className="text-brand no-underline hover:underline"
-                    >
-                      {row.email}
-                    </a>
-                  ) : null}
-                  {!isAi && !isOpenRole && row.jobTitle ? ` · ${row.jobTitle}` : ''}
-                  {row.fullName && row.fullName !== row.displayName
-                    ? ` · ${row.fullName}`
-                    : ''}
-                  {row.reportsToUserId
-                    ? ` · ${isAi ? t('aiOwner') : t('reportsTo')}: ${nameById.get(row.reportsToUserId) ?? '—'}`
-                    : ''}
-                  {rate ? ` · ${rate}` : ''}
-                  {row.taskCount > 0
-                    ? ` · ${t('taskCount', { count: row.taskCount })}`
-                    : ''}
-                </p>
-                {competencyNames.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {competencyNames.map((name) => (
-                      <Badge key={name}>{name}</Badge>
-                    ))}
-                  </div>
-                ) : null}
-                {row.roleDescription ? (
-                  <p className="mt-1 mb-0 line-clamp-2 text-xs text-ink-muted">
-                    {row.roleDescription}
-                  </p>
-                ) : null}
-                {row.notes ? (
-                  <p className="mt-1 mb-0 text-xs text-ink-muted">{row.notes}</p>
-                ) : null}
-                </div>
-              </div>
-              {canMutate ? (
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[8rem]">
-                  {isAi ? (
-                    row.systemId ? (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={pending}
-                        onClick={() => openManageAi(row)}
-                      >
-                        {t('manageAiCost')}
-                      </Button>
-                    ) : null
-                  ) : row.rosterId ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={pending}
-                      onClick={() => openManage(row)}
-                    >
-                      {isOpenRole ? t('manageOpenRole') : t('manage')}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={pending}
-                      onClick={() => void addDerivedToRoster(row)}
-                    >
-                      {t('addToRoster')}
-                    </Button>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          );
-        }}
+      <OpsCountStrip
+        items={[
+          {
+            label: t('countPeople'),
+            value: stakeholders.filter((row) => row.kind === 'person').length,
+          },
+          {
+            label: t('countAi'),
+            value: stakeholders.filter((row) => row.kind === 'ai_assistant').length,
+          },
+          {
+            label: t('countOpenRoles'),
+            value: stakeholders.filter((row) => row.kind === 'open_role').length,
+          },
+          {
+            label: t('countAssigned'),
+            value: stakeholders.filter((row) => row.staffingStatus === 'assigned').length,
+          },
+          {
+            label: t('countTotal'),
+            value: stakeholders.length,
+          },
+        ]}
+      />
+
+      <div
+        className="kh-ops-delivery-modes"
+        role="group"
+        aria-label={t('viewModeLabel')}
+      >
+        {VIEW_MODES.map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            aria-pressed={viewMode === mode}
+            onClick={() => changeViewMode(mode)}
+          >
+            {t(`viewMode.${mode}`)}
+          </button>
+        ))}
+      </div>
+
+      {viewMode === 'org' ? (
+        <div className="kh-ops-toolbar">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={exportPending || stakeholders.length === 0}
+            onClick={() => void exportOrgChartPdf()}
+          >
+            {exportPending ? t('orgChartExportingPdf') : t('orgChartExportPdf')}
+          </Button>
+          {canMutate ? (
+            <Button
+              type="button"
+              onClick={() => {
+                resetCreateForm();
+                setCreateOpen(true);
+              }}
+            >
+              {t('addItem')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {viewMode === 'list' ? (
+        <ProjectStakeholdersList
+          stakeholders={stakeholders}
+          canMutate={canMutate}
+          pending={pending}
+          nameById={nameById}
+          currency={currency}
+          onManage={openManage}
+          onManageAi={openManageAi}
+          onAddDerived={(row) => void addDerivedToRoster(row)}
+          onCreate={() => {
+            resetCreateForm();
+            setCreateOpen(true);
+          }}
+        />
+      ) : null}
+
+      {viewMode === 'org' ? (
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('viewMode.org')}</h2>
+            <span className="kh-ops-panel-meta">{t('orgChartHint')}</span>
+          </div>
+          <div className="p-3">
+            <ProjectStakeholdersOrgChart stakeholders={stakeholders} />
+          </div>
+        </section>
+      ) : null}
+
+      <ProjectResourceUtilizationView
+        projectId={projectId}
+        active={viewMode === 'utilization'}
       />
 
       <p className="mt-3 mb-0 text-xs text-ink-muted">
         {canMutate ? t('hint') : t('readOnlyHint')}
       </p>
       </CollapsibleSection>
-
-      <Modal
-        open={wideModalOpen}
-        onClose={closeWideModal}
-        title={t('title')}
-        description={t('wideModalDescription')}
-        size="full"
-        bodyClassName="!block overflow-auto"
-        footer={
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            {viewSwitcher(viewMode)}
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={exportPending || stakeholders.length === 0}
-                onClick={() => void exportOrgChartPdf()}
-              >
-                {exportPending ? t('orgChartExportingPdf') : t('orgChartExportPdf')}
-              </Button>
-              {canMutate ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    resetCreateForm();
-                    setCreateOpen(true);
-                  }}
-                >
-                  {t('addItem')}
-                </Button>
-              ) : null}
-              <Button type="button" variant="secondary" onClick={closeWideModal}>
-                {t('closeWideView')}
-              </Button>
-            </div>
-          </div>
-        }
-      >
-        {error ? (
-          <div className="mb-3">
-            <ErrorText>{error}</ErrorText>
-          </div>
-        ) : null}
-        <ProjectStakeholdersOrgChart stakeholders={stakeholders} />
-      </Modal>
 
       <Modal
         open={createOpen}
@@ -1421,7 +1186,7 @@ export function ProjectStakeholdersPanel({
             ) : null}
           </p>
           {manageRow?.kind === 'open_role' && !confirmDelete ? (
-            <div className="grid gap-2 rounded-md border border-line p-3">
+            <div className="kh-ops-inset grid gap-2">
               <Field label={t('assignColleague')}>
                 <Select
                   value={assignUserId}
@@ -1625,12 +1390,6 @@ export function ProjectStakeholdersPanel({
           </Field>
         </div>
       </Modal>
-
-      <ProjectResourceUtilizationModal
-        open={utilizationOpen}
-        onClose={() => setUtilizationOpen(false)}
-        projectId={projectId}
-      />
     </>
   );
 }

@@ -12,7 +12,6 @@ import {
   Input,
   Page,
   PageHeader,
-  Panel,
   Textarea,
 } from '../../../../components/ui';
 import { WORKSPACE_DESCRIPTION_MAX_LENGTH } from '@project-knowledge-hub/domain';
@@ -61,43 +60,54 @@ export default function NewWorkspacePage() {
   }
 
   return (
-    <Page narrow>
+    <Page>
       <PageHeader title={t('createTitle')} />
-      <Panel>
-        <form onSubmit={onSubmit} className="grid gap-4">
-          <Field label={tCommon('name')}>
-            <Input value={name} onChange={(event) => setName(event.target.value)} required />
-          </Field>
-          <Field label={tCommon('description')}>
-            <Textarea
-              value={description}
-              maxLength={WORKSPACE_DESCRIPTION_MAX_LENGTH}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={3}
-              placeholder={t('descriptionPlaceholder')}
-            />
-            <p className="m-0 text-xs text-ink-muted">
-              {t('descriptionLimit', {
-                count: description.length,
-                max: WORKSPACE_DESCRIPTION_MAX_LENGTH,
-              })}
-            </p>
-          </Field>
-          <Field label={t('colorLabel')}>
-            <p className="mb-2 mt-0 text-sm text-ink-muted">{t('colorHint')}</p>
-            <WorkspaceColorPicker
-              value={color}
-              seed={name || 'workspace'}
-              onChange={setColor}
-              allowAuto
-            />
-          </Field>
-          {error ? <ErrorText>{error}</ErrorText> : null}
-          <Button type="submit" disabled={pending}>
-            {pending ? t('creating') : t('createButton')}
-          </Button>
+      <section className="kh-ops-panel kh-ops-narrow-form">
+        <form onSubmit={onSubmit}>
+          <div className="kh-ops-card-body">
+            <div className="kh-ops-form-grid">
+              <Field className="kh-ops-field-span" label={tCommon('name')}>
+                <Input value={name} onChange={(event) => setName(event.target.value)} required />
+              </Field>
+              <Field className="kh-ops-field-span" label={tCommon('description')}>
+                <Textarea
+                  value={description}
+                  maxLength={WORKSPACE_DESCRIPTION_MAX_LENGTH}
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={3}
+                  placeholder={t('descriptionPlaceholder')}
+                />
+                <p className="m-0 text-xs text-ink-muted">
+                  {t('descriptionLimit', {
+                    count: description.length,
+                    max: WORKSPACE_DESCRIPTION_MAX_LENGTH,
+                  })}
+                </p>
+              </Field>
+              <Field className="kh-ops-field-span" label={t('colorLabel')}>
+                <p className="mb-2 mt-0 text-sm text-ink-muted">{t('colorHint')}</p>
+                <WorkspaceColorPicker
+                  value={color}
+                  seed={name || 'workspace'}
+                  onChange={setColor}
+                  allowAuto
+                />
+              </Field>
+              {error ? (
+                <div className="kh-ops-field-span">
+                  <ErrorText>{error}</ErrorText>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="kh-ops-action-line">
+            <span className="kh-ops-panel-meta">{t('createTitle')}</span>
+            <Button type="submit" disabled={pending}>
+              {pending ? t('creating') : t('createButton')}
+            </Button>
+          </div>
         </form>
-      </Panel>
+      </section>
     </Page>
   );
 }

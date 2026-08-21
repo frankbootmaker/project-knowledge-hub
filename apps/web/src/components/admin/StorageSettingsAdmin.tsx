@@ -9,9 +9,7 @@ import {
   ErrorText,
   Field,
   Input,
-  Panel,
   PasswordInput,
-  Select,
   useToast,
 } from '../ui';
 
@@ -236,7 +234,8 @@ export function StorageSettingsAdmin({
 
   return (
     <div className="grid gap-6">
-      <Panel className="grid gap-4 p-5">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-card-body grid gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={source === 'override' ? 'brand' : 'neutral'}>
             {source === 'override'
@@ -249,18 +248,30 @@ export function StorageSettingsAdmin({
         </div>
         <p className="m-0 text-sm text-ink-muted">{t('storageSettingsBlurb')}</p>
 
-        <Field label={t('storageProvider')}>
-          <Select
-            value={provider}
+        <div className="kh-ops-storage-choice">
+          <button
+            type="button"
+            className={`kh-ops-provider${provider === 'disabled' ? ' selected' : ''}`}
             disabled={pending}
-            onChange={(event) =>
-              setProvider(event.target.value as 'disabled' | 's3')
-            }
+            onClick={() => setProvider('disabled')}
           >
-            <option value="disabled">{t('storageProviderDisabled')}</option>
-            <option value="s3">{t('storageProviderS3')}</option>
-          </Select>
-        </Field>
+            <strong>{t('storageProviderDisabled')}</strong>
+            <small>{t('storageDisabledHint')}</small>
+          </button>
+          <button
+            type="button"
+            className={`kh-ops-provider${provider === 's3' ? ' selected' : ''}`}
+            disabled={pending}
+            onClick={() => setProvider('s3')}
+          >
+            <strong>{t('storageProviderS3')}</strong>
+            <small>
+              {s3Bucket.trim() || s3Region.trim()
+                ? [s3Bucket, s3Region].filter(Boolean).join(' · ')
+                : t('storageS3Hint')}
+            </small>
+          </button>
+        </div>
 
         <label className="flex items-center gap-2 text-sm text-ink">
           <input
@@ -273,8 +284,8 @@ export function StorageSettingsAdmin({
         </label>
 
         {provider === 's3' ? (
-          <div className="grid gap-3">
-            <p className="m-0 text-sm text-ink-muted">{t('storageS3Hint')}</p>
+          <div className="kh-ops-form-grid">
+            <p className="kh-ops-field-span m-0 text-sm text-ink-muted">{t('storageS3Hint')}</p>
             <Field label={t('storageS3Bucket')}>
               <Input
                 value={s3Bucket}
@@ -283,7 +294,7 @@ export function StorageSettingsAdmin({
                 autoComplete="off"
               />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid kh-ops-field-span">
               <Field label={t('storageS3Region')}>
                 <Input
                   value={s3Region}
@@ -398,7 +409,8 @@ export function StorageSettingsAdmin({
             {t('storageResetToEnv')}
           </Button>
         </div>
-      </Panel>
+        </div>
+      </section>
     </div>
   );
 }

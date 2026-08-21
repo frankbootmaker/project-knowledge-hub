@@ -38,6 +38,7 @@ Before considering UI work done:
 | `--kh-on-brand` | `text-on-brand` (text on primary buttons) |
 | `--kh-ink` / `--kh-ink-muted` | Body and secondary text |
 | `--kh-panel` / `--kh-panel-solid` | Surfaces |
+| `--kh-bg` | Page/strip background (alias of `--kh-surface`; prototype `--bg`) |
 | `--kh-line` / `--kh-line-strong` | Borders |
 | `--kh-accent*` / `--kh-warn*` / `--kh-danger*` | Status |
 | `--kh-radius-*` | Square Ops Console radii (`3px` / `3px` / `4px`) |
@@ -88,14 +89,14 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
 | Modals | Below `sm`: bottom sheet (`items-end`, rounded top, `max-h` ≈ 92–96dvh), body scrolls, header/footer fixed; footer actions stack full-width (`flex-col-reverse`). From `sm`: centered card. Respect `safe-area-inset-*`; root `viewportFit: 'cover'` |
 | Toasts | Below `sm`: full-bleed bottom strip with safe-area padding; from `sm`: bottom-right stack (`max-w-sm`). Stay above modals (`--kh-z-toast` > `--kh-z-modal`) |
-| Section header actions | `SectionHeader` keeps title + actions on one row. View mode switchers use icons below `md` (labels from `md`) via `ViewModeIcon` so Delivery/Stakeholders controls fit beside the title |
+| Section header actions | `SectionHeader` keeps title + actions on one row. Delivery view modes are a full-width `.kh-ops-delivery-modes` strip (text labels, overflow-x). Stakeholders view switchers still use icons below `md` via `ViewModeIcon` |
 | Function header | `.kh-function-header*` stacks controls above actions below `sm`; controls may wrap; from `sm` keep search/filters left and primary actions right |
 
 ### Layout shells
 
 | Shell | Pattern |
 |-------|---------|
-| App chrome | Ops Console grid: sticky left rail + sticky header (breadcrumbs, title, Create/sync, search, theme segment, language). Mobile bar below `md` |
+| App chrome | Ops Console grid: sticky left rail + sticky header. Page bodies use view-intro, count strips, square panels, and data tables. Mobile bar below `md` |
 | App / status content | `.kh-ops-view` inside the authenticated shell. Status/monitoring live under Admin rail |
 | Admin | Rail Admin section; no second admin sidebar |
 | Account | Account sidebar on account routes; also reachable from the rail user menu |
@@ -107,8 +108,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-input` / `.kh-label` | Form controls |
 | `.kh-function-header` / `-controls` / `-actions` | List toolbar (search/filters + primary actions) |
 | `.kh-panel` / `.kh-panel-solid` / `.kh-panel-inset` | Surfaces |
-| `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (soft wash + hover; no left bar); palette keys from domain |
-| `.kh-workspace-swatch` / `.kh-workspace-swatch-btn*` | Color picker swatches |
+| `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (3px inset stripe, not a wash); palette keys from domain |
+| `.kh-workspace-swatch` / `.kh-workspace-swatch-btn*` | Square workspace colour picker swatches |
 | `.kh-muted` | Secondary text |
 | `.kh-btn` + `.kh-btn-{primary,secondary,ghost,success,danger}` | Buttons / link-buttons |
 | `.kh-nav-link` / `.kh-nav-link-active` | Header nav |
@@ -118,6 +119,57 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-text-link` | Inline text links |
 | `.kh-toast-viewport` / `.kh-toast` / `.kh-toast-{success,danger,info}` / `.kh-toast-dismiss` | Toasts |
 | `.kh-ops-shell` / `.kh-ops-rail` / `.kh-ops-subhead` / `.kh-ops-view` | Authenticated Ops Console chrome (rail + header + content) |
+| `.kh-ops-view-intro` / `.kh-ops-eyebrow` / `.kh-ops-page-title` / `.kh-ops-subtitle` | Page intro (used by `PageHeader`) |
+| `.kh-ops-count-strip` / `.kh-ops-count-item` | Horizontal count strip |
+| `.kh-ops-stats` / `.kh-ops-stat` / `.kh-ops-stat-label` / `.kh-ops-stat-value` / `.kh-ops-progress` | KPI / insight stat cards |
+| `.kh-ops-panel` / `.kh-ops-panel-head` / `.kh-ops-panel-title` / `.kh-ops-panel-meta` | Square panel with 13px display header |
+| `.kh-ops-toolbar` | List/admin search+filter chrome (also on `FunctionHeader`) |
+| `.kh-ops-data-table` / `.kh-ops-table-wrap` / `.kh-ops-data-item` / `.kh-ops-stack` | Dense tables and catalogue rows |
+| `.kh-ops-delivery-modes` / `.kh-ops-board` / `.kh-ops-lane` / `.kh-ops-task-card` | Delivery view strip, kanban lanes, and task cards |
+| `.kh-ops-delivery-list` / `.kh-ops-delivery-tree-*` / `.kh-ops-tree-*` | Sortable delivery table and work-breakdown tree |
+| `.kh-ops-sprint-head` / `.kh-ops-scrum-board` | Scrum sprint metrics + board density |
+| `.kh-ops-calendar-layout` / `.kh-ops-month` / `.kh-ops-day` / `.kh-ops-event-dot` | Delivery calendar month + day list |
+| `.kh-ops-timeline-scroll` / `.kh-ops-time-bar` | Timeline chart chrome and epic/story bars |
+| `.kh-ops-empty-state` / `.kh-ops-empty-mark` | Empty delivery panes |
+| `.kh-ops-capacity-row` / `.kh-ops-capacity-track` | Utilization planned (ink) + burn (accent) bars |
+| `.kh-ops-budget-layout` / `.kh-ops-cost-split` / `.kh-ops-cost-part` | Budget burndown + people/AI/systems split |
+| `.kh-ops-baseline-grid` / `.kh-ops-field-cell` / `.kh-ops-pinned` | Baseline field cells and pinned records |
+| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack / dashboard workspace / account brand cards; `button.kh-ops-project-card` for report launchers and brand schemes. Workspace colour is a 3px inset stripe (`kh-workspace-tile`), not a wash. Selected brand uses `.selected` (ink border + 3px accent inset). |
+| `.kh-ops-media-grid` / `.kh-ops-media-card` / `.kh-ops-media-preview` / `.kh-ops-media-info` | Workspace media catalogue (4 / 3 / 1 columns) |
+| `.kh-ops-form-grid` / `.kh-ops-field-span` | Dense two-column modal and admin forms |
+| `.kh-ops-card-body` / `.kh-ops-card-foot` / `.kh-ops-action-line` | Panel interior padding, card footer, save/test action row |
+| `.kh-ops-setup-grid` / `.kh-ops-setup-card` / `.kh-ops-setup-step` | MCP / AI client setup cards |
+| `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card` | Admin overview setup shortcuts and dashboard search/admin jump tiles (`a.kh-ops-admin-link-card`) |
+| `.kh-ops-danger-zone` / `.kh-ops-danger-copy` | Close-account irreversible panel |
+| `.kh-ops-dropzone` / `.kh-ops-paste-area` / `.kh-ops-narrow-form` | Document dropzone, conversation paste, 840px create forms |
+| `.kh-ops-scope-list` / `.kh-ops-scope-checks` / `.kh-ops-scope-check` | Scope tags and checkbox chips |
+| `.kh-ops-code` / `.kh-ops-status-row` | Token/schema blocks and MCP preflight rows |
+| `.kh-ops-modal-tabs` / `.kh-ops-modal-pane` | Manage-dialog tab strip (existing product tabs only) |
+| `.kh-ops-activity-item` / `.kh-ops-linked-row` / `.kh-ops-text-btn` | Task activity thread, linked rows, quiet actions |
+| `.kh-ops-storage-choice` / `.kh-ops-provider` | Admin storage provider picker |
+| `.kh-ops-stage-strip` / `.kh-ops-stage-card` | Import progress stages and MCP wizard steps |
+| `.kh-ops-history-list` / `.kh-ops-history-item` | Knowledge version history rows |
+| `.kh-ops-editor-shell` / `.kh-ops-editor-toolbar` / `.kh-ops-markdown-editor` | Knowledge create/edit editor + markdown toolbar |
+| `.kh-ops-manage-strip` / `.kh-ops-keyvals` / `.kh-ops-tag-list` / `.kh-ops-tag` | Record action strip, definition lists, tag chips |
+| `.kh-ops-markdown-view` / `.kh-ops-toc` / `.kh-ops-preview-pane` | Markdown document density, TOC panel, live preview |
+| `.kh-ops-roster-person` | Stakeholder roster avatar + name cell |
+| `.kh-ops-org-tree` / `.kh-ops-org-card` / `.kh-ops-org-ungrouped-grid` | Stakeholder org chart (tree connectors, 200px cards, ungrouped grid) |
+| `.kh-ops-help-btn` / `.kh-ops-popover` | Compact `?` help control and square legend/tooltip panel |
+| `.kh-ops-choice` / `.kh-ops-check-list` / `.kh-ops-plan-row` | Manage/import/git pickers, attendee check lists, scrum plan rows |
+| `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |
+| `.kh-ops-detail-grid` / `.kh-ops-record-head` | Knowledge/system read two-column layout + record title block |
+| `.kh-ops-leader-strip` / `.kh-ops-leader` | Monitoring client leaderboard cells |
+| `.kh-ops-connection-row` | Compact on-duty / connection rows |
+| `.kh-ops-stamp-grid` / `.kh-ops-stamp` | Monitoring archived-count stamps |
+| `.kh-ops-profile-photo` | Account profile avatar row |
+| `.kh-ops-lang-chip` | Knowledge translation language chips |
+| `.kh-ops-confirm` / `.kh-ops-inset` | Archive/purge confirms and nested pickers |
+| `.kh-ops-cal-day` | Compact admin audit calendar cells |
+| `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
+| `.kh-ops-empty` / `.kh-ops-type-chip` | Empty states, type chips (`aria-pressed` for filters; `data-tone` for delivery schedule; also style-pack token insert) |
+| `.kh-ops-setting-row` | Account setting rows (`small` label + `strong` value) |
+| `.kh-ops-color-swatch` / `.kh-ops-color-input` | Square colour chips and native colour input (style-pack picker) |
+| `.kh-ops-meta-chip` | Compact delivery board label/value tags |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
 | `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
@@ -130,15 +182,17 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `LinkButton` | Navigation that should look like a button |
 | `NavLink` | Header or admin sidebar links (active state included) |
 | `MobileNav` | Primary nav below `sm` (sheet + backdrop; Esc / route change closes) |
-| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer`; `size` `md`/`lg`/`xl`/`full`. Mobile bottom sheet / desktop card via `.kh-modal*` |
+| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer`; `size` `md`/`lg`/`xl`/`full`. Mobile bottom sheet / desktop card via `.kh-modal*` (sticky 13px/11px header, 3px radii) |
 | `Panel` | `default` / `solid` / `inset` surfaces |
 | `Field`, `Input`, `PasswordInput`, `PasswordStrengthHint`, `Select`, `Textarea`, `ErrorText` | Forms (`PasswordInput` show/hide; strength meter for new passwords) |
 | `FilePicker` | File choose control — secondary **Browse** / **Tallózás** button + filename (hides native file chrome) |
 | `Badge` | Compact status chips (e.g. health “ok”) |
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`); mobile full-width bottom, desktop corner |
-| `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout (`SectionHeader` optional `action` — responsive title/actions split) |
-| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (stacks below `sm`) |
+| `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout. `PageHeader` is the Ops Console view-intro (eyebrow + condensed title + subtitle + actions). `ListCard` is a dense catalogue row inside `.kh-ops-panel` |
+| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (`.kh-ops-toolbar`; stacks below `sm`) |
+| `OpsCountStrip` | Horizontal count strip for live totals (dashboard, workspace, git, imports, stakeholders) |
+| `AuthCard` | Bordered login/register/reset/confirm card with KH mark |
 
 Shared button classes live in `buttonStyles.ts` and `.kh-btn*` recipes so Button and
 LinkButton stay identical.
@@ -181,6 +235,22 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-08-21
+
+* **Ops Console leftover form grids** — Remaining date/hours field pairs, Git connect/manage fields, API-client scope chips, style-pack cover checks, and backup schedule fields use `.kh-ops-form-grid` / `.kh-ops-scope-check`. Style-pack DOCX shell uses inset + action-line. Display/notification blurbs and catalogue pager use setting-row / card-foot. Translation chips and DoD copy use card-body. Import secret warnings use linked-row.
+* **Ops Console leftover filters/meta** — Search filters use form-grid + scope-check chips and an action-line submit. Board lane meta tags use `.kh-ops-meta-chip`. Document-import extracted images use linked-row. MCP troubleshoot body uses card-body. Account identity uses setting-row `small`/`strong`. Dashboard extra-workspace count uses card-foot. Workspace colour picker active state is an ink border + 3px stripe, not a wash.
+* **Ops Console leftover chips/insets** — Delivery schedule chips use `.kh-ops-type-chip[data-tone]`. Remaining nested form boxes use `.kh-ops-inset`. Calendar selected-day rows use data-item. Timeline/board meta type is ≥10px. Workspace colour picker swatches are square.
+* **Ops Console leftover dashboard/brand chrome** — Dashboard workspace tiles use `.kh-ops-project-grid` / `.kh-ops-project-card` (colour stripe unchanged). Search/admin jump tiles use `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card`. Account brand schemes use project cards with `.selected`. Style-pack token insert uses type chips; colour picker swatches/native input are square (`.kh-ops-color-swatch` / `.kh-ops-color-input`).
+* **Ops Console leftover polish** — Org chart uses org-tree / org-card / ungrouped-grid. Manage, Git provider, and import-type pickers use `.kh-ops-choice`. Scrum attendee lists, plan rows, DoD inset, guest chips, and delivery `?` legends/popovers use Ops recipes. Workspace colour is a 3px inset stripe instead of a soft wash.
+* **Ops Console media + reports** — Workspace media catalogue (`/workspaces/{slug}/media`) lists existing image assets (jpeg/png/webp/gif) from `GET/POST /api/v1/workspaces/:workspaceId/media` with optional PATCH link and DELETE. Ops rail **Media library** points there (document import stays `/imports`). Project **Reports** rail and section `#project-reports` open the existing status / delivery / stakeholder markdown preview (no insight widgets). Viewer loading/footer use Ops empty + action-line recipes.
+* **Ops Console leftover chrome** — Knowledge read, system detail, and project overview use detail-grid, record-head, keyvals, and tags. Monitoring uses health cards, client leader-strip, on-duty connection rows, and archived-count stamps for live data only (no restore-drill UI). Audit uses a compact calendar, form-grid filters, and a Created/Actor/Action/Entity table (IP stays on the actor cell; no invented outcome column). Import details, manage interiors, archive/purge confirms, translation chips, RAID/change/baseline pickers, search/memberships wrappers, account sidebar (restyled, not removed), AI discover, and remaining admin confirm/editor panels match Ops density. No media library, reports studio, MCP agent portal, owner, or generated-key reservation.
+* **Ops Console knowledge editor** — Create/edit record chrome uses editor-shell, markdown toolbar, manage-strip/action-line, and live preview aside. Existing fields and save/lifecycle actions stay; no owner, generated-key reservation, or version diff is invented. Record detail more-details, tags, markdown viewer, and version snapshot warnings use the same Ops density.
+* **Ops Console leftover forms** — Mail settings, MCP setup wizard (stage strip + client setup cards + schema copy cards), admin overview shortcuts, close-account danger zone, conversation/document import, create workspace/project/system, AI connection tables, change password, and display/notification prefs now use Ops form-grid, action-line, setup-card, dropzone, and danger-zone recipes. Drivers stay console/SMTP/Resend; confirm phrase stays `CLOSE`; no invented SES, FTE, or Azure fields.
+* **Ops Console leftover catalogues** — Project-linked systems/records, workspace picker, account memberships, import details, version history, Git connections, and remaining admin lists (organizations, AI providers, storage picker, style packs) now use Ops data tables, project cards, or provider/stage strips. Task manage dialogs use prototype modal tabs and form grid for existing Details / RACI / Handoff / Activity / Documents sections. No invented FTE, retention, or Azure storage columns.
+* **Ops Console catalogues (slices 1–8)** — Stakeholders (list/org/utilization inline; `?stakeholders=org` / `?utilization=1` unchanged), RAID, change, budget body, baseline, workspace project grid + knowledge/system tables, search groups, archive tables, manage-modal density, and admin/account lists now use `.kh-ops-data-table`, capacity bars, budget layout, baseline grid, and project cards. No invented FTE/cycle-time/budget-impact columns.
+* **Ops Console delivery** — Project delivery matches the prototype board/list/tree/scrum/calendar/timeline chrome in place (`?delivery=` hash routes unchanged). Mode strip, live open-work / hours / cost stats, sortable list table, lane task cards, work-breakdown tree, sprint-head, month+day calendar, and timeline bars use `.kh-ops-delivery-*` recipes. Board statuses stay `todo|in_progress|blocked|done|cancelled`; cycle time is not invented.
+* **Ops Console views** — Remaining high-traffic surfaces match the prototype density: `PageHeader` is `.kh-ops-view-intro`; catalogues sit in square panels with row items; dashboards/admin/git/imports use count strips and data tables; auth uses the bordered `AuthCard`. Shared recipes live in `styles/ops-shell.css` (`OpsCountStrip`, `.kh-ops-stats`, `.kh-ops-health-grid`, `.kh-ops-data-table`).
 
 ### 2026-08-20
 

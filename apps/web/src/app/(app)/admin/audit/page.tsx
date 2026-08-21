@@ -2,14 +2,12 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { AuditEventDetails } from '../../../../components/admin/AuditEventDetails';
 import {
-  Badge,
   Button,
   buttonClassName,
   Field,
   Input,
   LinkButton,
   PageHeader,
-  Panel,
   Select,
 } from '../../../../components/ui';
 import {
@@ -123,31 +121,31 @@ export default async function AdminAuditPage({
 
       <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
         <div className="grid gap-4 self-start">
-          <Panel>
-            <div className="mb-3 flex items-center justify-between gap-2">
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
               <Link
                 href={hrefFor(query, {
                   month: shiftMonth(month, -1),
                   day: '',
                   page: 1,
                 })}
-                className="rounded-md px-2 py-1 text-sm text-ink-muted no-underline hover:bg-brand-soft hover:text-ink"
+                className="kh-ops-text-btn no-underline"
               >
                 ←
               </Link>
-              <h2 className="m-0 text-base font-semibold tracking-tight">{month}</h2>
+              <h2 className="kh-ops-panel-title">{month}</h2>
               <Link
                 href={hrefFor(query, {
                   month: shiftMonth(month, 1),
                   day: '',
                   page: 1,
                 })}
-                className="rounded-md px-2 py-1 text-sm text-ink-muted no-underline hover:bg-brand-soft hover:text-ink"
+                className="kh-ops-text-btn no-underline"
               >
                 →
               </Link>
             </div>
-
+            <div className="kh-ops-card-body">
             <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-ink-muted">
               {weekdays.map((label) => (
                 <span key={label}>{label}</span>
@@ -171,26 +169,17 @@ export default async function AdminAuditPage({
                       month,
                       page: 1,
                     })}
-                    className={[
-                      'flex aspect-square flex-col items-center justify-center rounded-md text-xs no-underline transition',
-                      selected
-                        ? 'bg-brand text-white'
-                        : eventCount > 0
-                          ? 'bg-brand-soft text-ink hover:bg-brand/20'
-                          : 'text-ink-muted hover:bg-panel-solid',
-                    ].join(' ')}
+                    className="kh-ops-cal-day"
+                    data-events={eventCount > 0 ? 'true' : undefined}
+                    data-selected={selected ? 'true' : undefined}
                     title={
                       eventCount > 0
                         ? t('auditDayCount', { count: eventCount })
                         : t('auditDayEmpty')
                     }
                   >
-                    <span className="font-semibold">{dayNumber}</span>
-                    {eventCount > 0 ? (
-                      <span className={selected ? 'text-white/80' : 'text-brand'}>
-                        {eventCount}
-                      </span>
-                    ) : null}
+                    <span>{dayNumber}</span>
+                    {eventCount > 0 ? <small>{eventCount}</small> : null}
                   </Link>
                 );
               })}
@@ -207,15 +196,17 @@ export default async function AdminAuditPage({
                 </Link>
               </p>
             ) : null}
-          </Panel>
+            </div>
+          </section>
 
-          <Panel>
-            <form method="get" className="grid gap-3">
+          <section className="kh-ops-panel">
+            <div className="kh-ops-card-body">
+            <form method="get" className="kh-ops-form-grid">
               <input type="hidden" name="month" value={month} />
               {query.day ? <input type="hidden" name="day" value={query.day} /> : null}
               <input type="hidden" name="page" value="1" />
 
-              <Field label={t('auditSearch')}>
+              <Field label={t('auditSearch')} className="kh-ops-field-span">
                 <Input
                   name="q"
                   defaultValue={query.q}
@@ -223,70 +214,69 @@ export default async function AdminAuditPage({
                 />
               </Field>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <Field label={t('action')}>
-                  <Select name="action" defaultValue={query.action}>
-                    <option value="">{tCommon('any')}</option>
-                    {payload.facets.actions.map((action) => (
-                      <option key={action} value={action}>
-                        {action}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={t('entity')}>
-                  <Select name="entityType" defaultValue={query.entityType}>
-                    <option value="">{tCommon('any')}</option>
-                    {payload.facets.entityTypes.map((entityType) => (
-                      <option key={entityType} value={entityType}>
-                        {entityType}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={t('actor')}>
-                  <Select name="actorType" defaultValue={query.actorType}>
-                    <option value="">{tCommon('any')}</option>
-                    {payload.facets.actorTypes.map((actorType) => (
-                      <option key={actorType} value={actorType}>
-                        {actorType}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={t('auditPageSize')}>
-                  <Select name="pageSize" defaultValue={String(query.pageSize)}>
-                    <option value="5">5</option>
-                    <option value="15">15</option>
-                    <option value="25">25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </Select>
-                </Field>
-              </div>
+              <Field label={t('action')}>
+                <Select name="action" defaultValue={query.action}>
+                  <option value="">{tCommon('any')}</option>
+                  {payload.facets.actions.map((action) => (
+                    <option key={action} value={action}>
+                      {action}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t('entity')}>
+                <Select name="entityType" defaultValue={query.entityType}>
+                  <option value="">{tCommon('any')}</option>
+                  {payload.facets.entityTypes.map((entityType) => (
+                    <option key={entityType} value={entityType}>
+                      {entityType}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t('actor')}>
+                <Select name="actorType" defaultValue={query.actorType}>
+                  <option value="">{tCommon('any')}</option>
+                  {payload.facets.actorTypes.map((actorType) => (
+                    <option key={actorType} value={actorType}>
+                      {actorType}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t('auditPageSize')}>
+                <Select name="pageSize" defaultValue={String(query.pageSize)}>
+                  <option value="5">5</option>
+                  <option value="15">15</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </Select>
+              </Field>
 
               {!query.day ? (
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <>
                   <Field label={t('auditFrom')}>
                     <Input type="date" name="from" defaultValue={query.from} />
                   </Field>
                   <Field label={t('auditTo')}>
                     <Input type="date" name="to" defaultValue={query.to} />
                   </Field>
-                </div>
+                </>
               ) : null}
 
-              <div className="flex flex-wrap gap-2">
+              <div className="kh-ops-action-line kh-ops-field-span">
                 <Button type="submit">{t('auditApplyFilters')}</Button>
                 <Link
                   href="/admin/audit"
-                  className="inline-flex items-center rounded-md border border-line-strong bg-panel-solid px-3.5 py-2 text-sm font-medium text-ink no-underline transition hover:bg-brand-soft"
+                  className={buttonClassName('secondary')}
                 >
                   {t('auditResetFilters')}
                 </Link>
               </div>
             </form>
-          </Panel>
+            </div>
+          </section>
         </div>
 
         <div className="min-w-0">
@@ -345,39 +335,61 @@ export default async function AdminAuditPage({
           ) : (
             <div className="grid gap-6">
               {grouped.map(([day, events]) => (
-                <section key={day} className="grid gap-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="m-0 text-sm font-semibold tracking-wide text-ink-muted uppercase">
-                      {day}
-                    </h3>
-                    <Badge>{t('auditDayCount', { count: events.length })}</Badge>
+                <section key={day} className="kh-ops-panel overflow-hidden">
+                  <div className="kh-ops-panel-head">
+                    <h3 className="kh-ops-panel-title">{day}</h3>
+                    <span className="kh-ops-panel-meta">
+                      {t('auditDayCount', { count: events.length })}
+                    </span>
                   </div>
-                  {events.map((event) => (
-                    <Panel key={event.id} className="grid gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone="brand">{event.action}</Badge>
-                        <span className="text-sm text-ink-muted">
-                          {new Date(event.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="m-0 text-sm">
-                        <span className="text-ink-muted">{t('entity')}: </span>
-                        {event.entityType}
-                        {event.entityId ? (
-                          <span className="font-mono text-xs"> · {event.entityId}</span>
-                        ) : null}
-                      </p>
-                      <p className="m-0 text-sm">
-                        <span className="text-ink-muted">{t('actor')}: </span>
-                        {event.actorType}
-                        {event.actorId ? (
-                          <span className="font-mono text-xs"> · {event.actorId}</span>
-                        ) : null}
-                        {event.ipAddress ? ` · ${event.ipAddress}` : ''}
-                      </p>
-                      <AuditEventDetails metadata={event.metadata} />
-                    </Panel>
-                  ))}
+                  <div className="kh-ops-table-wrap">
+                    <table className="kh-ops-data-table">
+                      <thead>
+                        <tr>
+                          <th>{t('created')}</th>
+                          <th>{t('actor')}</th>
+                          <th>{t('action')}</th>
+                          <th>{t('entity')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {events.map((event) => (
+                          <tr key={event.id}>
+                            <td>
+                              {new Date(event.createdAt).toLocaleString()}
+                            </td>
+                            <td>
+                              {event.actorType}
+                              {event.actorId ? (
+                                <span className="block font-mono text-[10px] text-ink-muted">
+                                  {event.actorId}
+                                </span>
+                              ) : null}
+                              {event.ipAddress ? (
+                                <span className="block font-mono text-[10px] text-ink-muted">
+                                  {event.ipAddress}
+                                </span>
+                              ) : null}
+                            </td>
+                            <td>
+                              <span className="kh-ops-type-chip">
+                                {event.action}
+                              </span>
+                            </td>
+                            <td>
+                              {event.entityType}
+                              {event.entityId ? (
+                                <span className="block font-mono text-[10px] text-ink-muted">
+                                  {event.entityId}
+                                </span>
+                              ) : null}
+                              <AuditEventDetails metadata={event.metadata} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </section>
               ))}
             </div>

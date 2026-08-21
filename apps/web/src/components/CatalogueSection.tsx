@@ -406,8 +406,8 @@ export function CatalogueSection({
       />
 
       {showList ? (
-        <>
-          <ul className="m-0 grid list-none gap-3 p-0">
+        <div className="kh-ops-panel mb-0">
+          <ul className="kh-ops-stack">
             {pageItems.map((item) => (
               <ListCard key={item.id}>
                 {renderItem ? (
@@ -438,7 +438,7 @@ export function CatalogueSection({
                         {item.secondaryBadge ? <Badge>{item.secondaryBadge}</Badge> : null}
                         {(item.languages?.length ?? 0) > 1 ? (
                           <span
-                            className="text-xs font-medium tracking-wide text-ink-muted uppercase"
+                            className="kh-ops-type-chip"
                             title={t('sectionLanguages')}
                           >
                             {item.languages!.map((code) => code.toUpperCase()).join(' · ')}
@@ -446,10 +446,10 @@ export function CatalogueSection({
                         ) : null}
                       </div>
                       {item.subtitle ? (
-                        <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
+                        <p className="mt-1 mb-0 text-xs text-ink-muted">{item.subtitle}</p>
                       ) : null}
                       {item.tagsLine ? (
-                        <p className="mt-2 mb-0 text-xs text-ink-muted">{item.tagsLine}</p>
+                        <p className="mt-1 mb-0 text-xs text-ink-muted">{item.tagsLine}</p>
                       ) : null}
                     </div>
                     {item.updatedAt ? (
@@ -464,15 +464,15 @@ export function CatalogueSection({
               </ListCard>
             ))}
             {filtered.length === 0 ? (
-              <li className="kh-muted list-none">
+              <li className="kh-ops-empty list-none">
                 {items.length === 0 ? emptyLabel : t('sectionEmptyFiltered')}
               </li>
             ) : null}
           </ul>
 
           {filtered.length > 0 ? (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="m-0 text-sm text-ink-muted">
+            <div className="kh-ops-card-foot">
+              <p className="m-0 text-xs text-ink-muted">
                 {t('sectionShowing', {
                   from: rangeFrom,
                   to: rangeTo,
@@ -507,7 +507,7 @@ export function CatalogueSection({
               ) : null}
             </div>
           ) : null}
-        </>
+        </div>
       ) : null}
     </section>
   );

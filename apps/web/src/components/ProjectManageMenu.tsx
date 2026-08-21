@@ -2,13 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
-import {
-  ProjectReportViewer,
-  type ProjectReportKind,
-} from './ProjectReportViewer';
 import {
   ManageDetailRow,
   ManageMenuItem,
@@ -24,14 +20,7 @@ import {
   Textarea,
   useToast,
 } from './ui';
-import {
-  buildDeliveryStatusReport,
-  buildProjectStatusReport,
-  buildStakeholdersReport,
-  computeReportRags,
-  fetchProjectReportData,
-  fetchReportDiagramPrefs,
-} from '../lib/project-reports';
+import { useProjectReportPreview } from '../lib/use-project-report-preview';
 
 export type ProjectManageDetails = {
   id: string;
@@ -80,12 +69,7 @@ export function ProjectManageMenu(props: {
 }) {
   const t = useTranslations('projects');
   const tBaseline = useTranslations('baseline');
-  const tBudget = useTranslations('budget');
-  const tRaid = useTranslations('raid');
   const tCommon = useTranslations('common');
-  const tStakeholders = useTranslations('stakeholders');
-  const tDelivery = useTranslations('delivery');
-  const locale = useLocale();
   const router = useRouter();
   const { pushToast } = useToast();
   const [open, setOpen] = useState(false);
@@ -114,12 +98,15 @@ export function ProjectManageMenu(props: {
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportKind, setReportKind] = useState<ProjectReportKind | null>(null);
-  const [reportTitle, setReportTitle] = useState('');
-  const [reportMarkdown, setReportMarkdown] = useState('');
-  const [reportLoading, setReportLoading] = useState(false);
-  const [reportError, setReportError] = useState<string | null>(null);
+  const { openReport, reportLoading, reportViewer } = useProjectReportPreview(
+    props.project,
+    {
+      onOpen: () => {
+        setOpen(false);
+        setSection('menu');
+      },
+    },
+  );
 
   const archived = Boolean(props.project.archivedAt);
   const redirectParent = `/workspaces/${props.workspaceSlug}`;
@@ -140,15 +127,6 @@ export function ProjectManageMenu(props: {
     setOpen(false);
     setSection('menu');
     setError(null);
-  }
-
-  function closeReport() {
-    setReportOpen(false);
-    setReportKind(null);
-    setReportTitle('');
-    setReportMarkdown('');
-    setReportError(null);
-    setReportLoading(false);
   }
 
   function sectionTitle(): string {
@@ -204,142 +182,6 @@ export function ProjectManageMenu(props: {
       setError(err instanceof Error ? err.message : t('failedUpdate'));
     } finally {
       setPending(false);
-    }
-  }
-
-  async function openReport(kind: ProjectReportKind) {
-    const titles: Record<ProjectReportKind, string> = {
-      delivery: t('reportDeliveryTitle'),
-      stakeholders: t('reportStakeholdersTitle'),
-      status: t('reportStatusTitle'),
-    };
-    setReportKind(kind);
-    setReportTitle(titles[kind]);
-    setReportMarkdown('');
-    setReportError(null);
-    setReportLoading(true);
-    setReportOpen(true);
-    setOpen(false);
-    setSection('menu');
-
-    try {
-      const [data, diagrams] = await Promise.all([
-        fetchProjectReportData(props.project.id),
-        fetchReportDiagramPrefs(),
-      ]);
-      const rags = computeReportRags(data);
-      const timelineRagValue = t(`rag.${rags.timelineRag}`);
-      const riskRagValue = t(`rag.${rags.riskRag}`);
-      const financialRagValue = t(`rag.${rags.financialRag}`);
-      const currency = data.budget?.currency ?? 'EUR';
-      const diagramLabels = {
-        orgHierarchy: t('reportDiagramOrg'),
-        raidBreakdown: t('reportDiagramRaid'),
-        deliveryTimeline: t('reportDiagramDelivery'),
-        budgetBurndown: t('reportDiagramBudget'),
-        milestonesSection: tDelivery('kindMilestone'),
-        tasksSection: tDelivery('kindTask'),
-      };
-
-      let markdown = '';
-      if (kind === 'delivery') {
-        markdown = buildDeliveryStatusReport({
-          projectName: props.project.name,
-          projectSlug: props.project.slug,
-          projectStatus: props.project.status,
-          milestones: data.milestones,
-          tasks: data.tasks,
-          diagrams,
-          diagramLabels,
-          labels: {
-            title: t('reportDeliveryTitle'),
-            generated: t('reportGenerated'),
-            timelineRag: t('ragTimeline'),
-            timelineRagValue,
-            milestones: tDelivery('kindMilestone'),
-            tasks: tDelivery('kindTask'),
-            none: tCommon('none'),
-            forecastHours: tDelivery('forecastHours'),
-            actualHours: tDelivery('actualHours'),
-          },
-        });
-      } else if (kind === 'stakeholders') {
-        markdown = buildStakeholdersReport({
-          projectName: props.project.name,
-          projectSlug: props.project.slug,
-          stakeholders: data.stakeholders,
-          currency,
-          locale,
-          diagrams,
-          diagramLabels,
-          labels: {
-            title: t('reportStakeholdersTitle'),
-            generated: t('reportGenerated'),
-            people: t('reportPeople'),
-            aiAssistants: tStakeholders('kindAiAssistant'),
-            none: tCommon('none'),
-            reportsTo: tStakeholders('reportsTo'),
-            hourlyRate: tStakeholders('hourlyRate'),
-          },
-        });
-      } else {
-        markdown = buildProjectStatusReport({
-          projectName: props.project.name,
-          projectSlug: props.project.slug,
-          projectStatus: props.project.status,
-          summary: props.project.summary,
-          milestones: data.milestones,
-          tasks: data.tasks,
-          stakeholders: data.stakeholders,
-          raidItems: data.raidItems,
-          budget: data.budget,
-          locale,
-          diagrams,
-          diagramLabels,
-          labels: {
-            statusTitle: t('reportStatusTitle'),
-            deliveryTitle: t('reportDeliveryTitle'),
-            stakeholdersTitle: t('reportStakeholdersTitle'),
-            budgetTitle: tBudget('title'),
-            raidTitle: tRaid('title'),
-            generated: t('reportGenerated'),
-            timelineRag: t('ragTimeline'),
-            timelineRagValue,
-            riskRag: t('ragRisks'),
-            riskRagValue,
-            financialRag: t('ragFinancials'),
-            financialRagValue,
-            milestones: tDelivery('kindMilestone'),
-            tasks: tDelivery('kindTask'),
-            people: t('reportPeople'),
-            aiAssistants: tStakeholders('kindAiAssistant'),
-            none: tCommon('none'),
-            reportsTo: tStakeholders('reportsTo'),
-            hourlyRate: tStakeholders('hourlyRate'),
-            summary: tCommon('summary'),
-            forecastHours: tDelivery('forecastHours'),
-            actualHours: tDelivery('actualHours'),
-            currency: tBaseline('currency'),
-            initialBudget: tBaseline('initialBudget'),
-            approvedBudget: tBudget('approvedBudget'),
-            bac: tBudget('kpi.bac'),
-            ev: tBudget('kpi.ev'),
-            ac: tBudget('kpi.ac'),
-            pv: t('reportPv'),
-            cpi: tBudget('kpi.cpi'),
-            spi: tBudget('kpi.spi'),
-          },
-          kindLabel: (kindValue) => tRaid(`kind.${kindValue}`),
-          statusLabel: (statusValue) => tRaid(`status.${statusValue}`),
-          severityLabel: (severityValue) => tRaid(`severity.${severityValue}`),
-        });
-      }
-
-      setReportMarkdown(markdown);
-    } catch (err) {
-      setReportError(err instanceof Error ? err.message : t('reportFailed'));
-    } finally {
-      setReportLoading(false);
     }
   }
 
@@ -515,7 +357,7 @@ export function ProjectManageMenu(props: {
             <Field label={tCommon('tagsHint')}>
               <Input value={tags} onChange={(e) => setTags(e.target.value)} />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={tBaseline('startDate')}>
                 <Input
                   type="date"
@@ -611,17 +453,7 @@ export function ProjectManageMenu(props: {
         ) : null}
       </Modal>
 
-      <ProjectReportViewer
-        open={reportOpen}
-        onClose={closeReport}
-        projectName={props.project.name}
-        projectId={props.project.id}
-        kind={reportKind}
-        title={reportTitle}
-        markdown={reportMarkdown}
-        loading={reportLoading}
-        error={reportError}
-      />
+      {reportViewer}
     </>
   );
 }

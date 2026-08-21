@@ -21,10 +21,11 @@ import {
   Input,
   Page,
   PageHeader,
-  Panel,
   Select,
   Textarea,
 } from './ui';
+
+type MarkdownFormat = 'h1' | 'h2' | 'bold' | 'link' | 'list' | 'code';
 
 type Option = { id: string; name: string; slug: string };
 
@@ -157,6 +158,51 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
     requestAnimationFrame(() => {
       const pos = start + snippet.length;
       el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  function applyMarkdownFormat(kind: MarkdownFormat) {
+    const el = markdownRef.current;
+    const start = el?.selectionStart ?? contentMarkdown.length;
+    const end = el?.selectionEnd ?? contentMarkdown.length;
+    const selected = contentMarkdown.slice(start, end);
+    let snippet = '';
+    switch (kind) {
+      case 'h1':
+        snippet = selected ? `# ${selected}` : '# Heading';
+        break;
+      case 'h2':
+        snippet = selected ? `## ${selected}` : '## Heading';
+        break;
+      case 'bold':
+        snippet = `**${selected || 'bold'}**`;
+        break;
+      case 'link':
+        snippet = `[${selected || 'text'}](url)`;
+        break;
+      case 'list':
+        snippet = selected
+          ? selected
+              .split('\n')
+              .map((line) => (line.trim() ? `- ${line}` : line))
+              .join('\n')
+          : '- item';
+        break;
+      case 'code': {
+        const useFence = !selected || selected.includes('\n');
+        snippet = useFence
+          ? `\`\`\`\n${selected || 'code'}\n\`\`\``
+          : `\`${selected}\``;
+        break;
+      }
+    }
+    const next = contentMarkdown.slice(0, start) + snippet + contentMarkdown.slice(end);
+    setContentMarkdown(next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const pos = start + snippet.length;
       el.setSelectionRange(pos, pos);
     });
   }
@@ -332,292 +378,417 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
 
   const gitManaged = props.initial?.sourceOfTruthMode === 'git_managed';
   const showCancel = Boolean(props.onCancel) || layout === 'page';
-  const previewMinClass = layout === 'modal' ? 'min-h-[min(50vh,28rem)]' : 'min-h-[420px]';
+  const isEdit = props.mode === 'edit';
+  const showManageStrip = isEdit && layout === 'page' && !gitManaged;
+  const showActionLine = !showManageStrip;
+  const editorLocked = pending || gitManaged;
+  const tagNames = tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
   const textareaRows = layout === 'modal' ? 18 : 22;
+  const markdownEditorClass = layout === 'modal'
+    ? 'kh-ops-markdown-editor kh-ops-markdown-editor-compact'
+    : 'kh-ops-markdown-editor';
+
+  const titleField = (
+    <Field label={tCommon('title')}>
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        required
+        disabled={gitManaged}
+        data-modal-initial-focus={layout === 'modal' ? true : undefined}
+      />
+    </Field>
+  );
+
+  const summaryField = (
+    <Field label={tCommon('summary')} className={isEdit ? undefined : 'kh-ops-field-span'}>
+      <Input
+        value={summary}
+        onChange={(e) => setSummary(e.target.value)}
+        disabled={gitManaged}
+      />
+    </Field>
+  );
+
+  const stateFields = (
+    <>
+      <Field label={t('recordType')}>
+        <Select
+          value={recordType}
+          onChange={(e) => setRecordType(e.target.value)}
+          disabled={gitManaged}
+        >
+          {RECORD_TYPE_CATALOG.map((entry) => (
+            <option key={entry.value} value={entry.value} title={entry.description}>
+              {t(`typeLabels.${entry.value}`)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label={t('lifecycleStatus')}>
+        <Select
+          value={lifecycleStatus}
+          onChange={(e) => setLifecycleStatus(e.target.value)}
+          disabled={gitManaged}
+        >
+          {LIFECYCLE_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {t(`lifecycleLabels.${status}`)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label={t('sourceOfTruth')}>
+        <Select
+          value={sourceOfTruthMode}
+          onChange={(e) => setSourceOfTruthMode(e.target.value)}
+          disabled={gitManaged}
+        >
+          {SOURCE_OF_TRUTH_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {mode}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label={t('contentLanguage')}>
+        <Select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          disabled={gitManaged}
+        >
+          {locales.map((code) => (
+            <option key={code} value={code}>
+              {localeLabels[code]} ({code})
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label={t('projectOptional')}>
+        <Select
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value)}
+          disabled={gitManaged}
+        >
+          <option value="">{tCommon('none')}</option>
+          {props.projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label={t('systemOptional')}>
+        <Select
+          value={systemId}
+          onChange={(e) => setSystemId(e.target.value)}
+          disabled={gitManaged}
+        >
+          <option value="">{tCommon('none')}</option>
+          {props.systems.map((system) => (
+            <option key={system.id} value={system.id}>
+              {system.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    </>
+  );
+
+  const tagsField = (
+    <Field label={tCommon('tagsHint')} className="kh-ops-field-span">
+      <Input value={tags} onChange={(e) => setTags(e.target.value)} disabled={gitManaged} />
+    </Field>
+  );
+
+  const saveActions = (
+    <>
+      {showCancel ? (
+        <Button type="button" variant="secondary" disabled={pending} onClick={handleCancel}>
+          {tCommon('cancel')}
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={editorLocked}
+        onClick={() => void save('draft')}
+      >
+        {t('saveDraft')}
+      </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={editorLocked}
+        onClick={() => void save('review_required')}
+      >
+        {t('markForReview')}
+      </Button>
+      <Button
+        type="button"
+        variant="success"
+        disabled={editorLocked}
+        onClick={() => void save('verified')}
+      >
+        {t('markVerified')}
+      </Button>
+      <Button
+        type="button"
+        variant="success"
+        disabled={editorLocked}
+        onClick={() => void save('current')}
+      >
+        {t('markCurrent')}
+      </Button>
+      <Button type="submit" disabled={editorLocked}>
+        {pending ? tCommon('saving') : tCommon('save')}
+      </Button>
+    </>
+  );
 
   const form = (
-    <form onSubmit={onSubmit} className="grid gap-4">
+    <form onSubmit={onSubmit} className="grid gap-3">
       {gitManaged ? (
-        <Panel>
-          <p className="m-0 text-sm text-ink-muted">{t('gitManagedReadOnly')}</p>
-        </Panel>
-      ) : null}
-
-      <Panel className="grid gap-4 sm:grid-cols-2">
-        <Field label={tCommon('title')}>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            data-modal-initial-focus={layout === 'modal' ? true : undefined}
-          />
-        </Field>
-        <Field label={t('recordType')}>
-          <Select
-            value={recordType}
-            onChange={(e) => setRecordType(e.target.value)}
-          >
-            {RECORD_TYPE_CATALOG.map((entry) => (
-              <option key={entry.value} value={entry.value} title={entry.description}>
-                {t(`typeLabels.${entry.value}`)}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('lifecycleStatus')}>
-          <Select
-            value={lifecycleStatus}
-            onChange={(e) => setLifecycleStatus(e.target.value)}
-          >
-            {LIFECYCLE_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {t(`lifecycleLabels.${status}`)}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('sourceOfTruth')}>
-          <Select
-            value={sourceOfTruthMode}
-            onChange={(e) => setSourceOfTruthMode(e.target.value)}
-          >
-            {SOURCE_OF_TRUTH_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('contentLanguage')}>
-          <Select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-          >
-            {locales.map((code) => (
-              <option key={code} value={code}>
-                {localeLabels[code]} ({code})
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('projectOptional')}>
-          <Select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-          >
-            <option value="">{tCommon('none')}</option>
-            {props.projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('systemOptional')}>
-          <Select
-            value={systemId}
-            onChange={(e) => setSystemId(e.target.value)}
-          >
-            <option value="">{tCommon('none')}</option>
-            {props.systems.map((system) => (
-              <option key={system.id} value={system.id}>
-                {system.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={tCommon('summary')} className="sm:col-span-2">
-          <Input
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-          />
-        </Field>
-        <Field label={tCommon('tagsHint')} className="sm:col-span-2">
-          <Input value={tags} onChange={(e) => setTags(e.target.value)} />
-        </Field>
-        {props.mode === 'edit' && props.initial?.id && projectId ? (
-          <KnowledgeRecordDeliveryLinksField
-            recordId={props.initial.id}
-            projectId={projectId}
-            canMutate
-          />
-        ) : null}
-      </Panel>
-
-      <Panel>
-        <h2 className="mt-0 mb-3 text-base font-semibold">{t('provenance')}</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('sourceTitle')}>
-            <Input
-              value={sourceTitle}
-              onChange={(e) => setSourceTitle(e.target.value)}
-            />
-          </Field>
-          <Field label={t('sourceProvider')}>
-            <Input
-              value={sourceProvider}
-              onChange={(e) => setSourceProvider(e.target.value)}
-            />
-          </Field>
-          <Field label={t('sourceReference')}>
-            <Input
-              value={sourceReference}
-              onChange={(e) => setSourceReference(e.target.value)}
-            />
-          </Field>
-          <Field label={t('sourceUri')}>
-            <Input
-              value={sourceUri}
-              onChange={(e) => setSourceUri(e.target.value)}
-            />
-          </Field>
-          <Field label={t('generatedByModel')} className="sm:col-span-2">
-            <Input
-              value={generatedByModel}
-              onChange={(e) => setGeneratedByModel(e.target.value)}
-            />
-          </Field>
+        <div className="kh-ops-status-row">
+          <p>{t('gitManagedReadOnly')}</p>
         </div>
-      </Panel>
-
-      {props.mode === 'edit' ? (
-        <Panel>
-          <Field label={t('changeMessage')}>
-            <Input
-              value={changeMessage}
-              onChange={(e) => setChangeMessage(e.target.value)}
-              placeholder={t('changeMessagePlaceholder')}
-            />
-          </Field>
-        </Panel>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="grid gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="kh-label m-0">
-              <span>{t('markdown')}</span>
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void uploadMediaFile(file);
-                }}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={pending || mediaBusy || gitManaged}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {mediaBusy ? t('mediaUploading') : t('mediaInsert')}
-              </Button>
+      {showManageStrip ? (
+        <div className="kh-ops-manage-strip is-standalone">{saveActions}</div>
+      ) : null}
+
+      <div className="kh-ops-editor-shell">
+        <section className="kh-ops-panel">
+          <div className="kh-ops-card-body">
+            <div className="kh-ops-form-grid">
+              {titleField}
+              {summaryField}
+              {isEdit ? null : (
+                <>
+                  {stateFields}
+                  {tagsField}
+                </>
+              )}
             </div>
+          </div>
+          <div className="kh-ops-editor-toolbar">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void uploadMediaFile(file);
+              }}
+            />
+            <button
+              type="button"
+              disabled={editorLocked}
+              onClick={() => applyMarkdownFormat('h1')}
+            >
+              H1
+            </button>
+            <button
+              type="button"
+              disabled={editorLocked}
+              onClick={() => applyMarkdownFormat('h2')}
+            >
+              H2
+            </button>
+            <button
+              type="button"
+              disabled={editorLocked}
+              onClick={() => applyMarkdownFormat('bold')}
+            >
+              Bold
+            </button>
+            <button
+              type="button"
+              disabled={editorLocked}
+              onClick={() => applyMarkdownFormat('link')}
+            >
+              Link
+            </button>
+            <button
+              type="button"
+              disabled={editorLocked}
+              onClick={() => applyMarkdownFormat('list')}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              disabled={editorLocked}
+              onClick={() => applyMarkdownFormat('code')}
+            >
+              Code
+            </button>
+            <button
+              type="button"
+              disabled={pending || mediaBusy || gitManaged}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {mediaBusy ? t('mediaUploading') : t('mediaInsert')}
+            </button>
           </div>
           <Textarea
             ref={markdownRef}
             value={contentMarkdown}
             onChange={(e) => setContentMarkdown(e.target.value)}
             rows={textareaRows}
-            className={`${previewMinClass} font-mono text-sm`}
+            disabled={gitManaged}
+            aria-label={t('markdown')}
+            className={markdownEditorClass}
           />
           {mediaItems.length > 0 ? (
-            <Panel className="p-3">
-              <p className="m-0 mb-2 text-xs font-semibold tracking-[0.08em] text-ink-muted uppercase">
-                {t('mediaRecent')}
-              </p>
-              <ul className="m-0 grid list-none gap-2 p-0">
+            <div className="kh-ops-media-recent">
+              <p className="kh-ops-panel-meta m-0 mb-2">{t('mediaRecent')}</p>
+              <ul className="m-0 grid list-none gap-0 p-0">
                 {mediaItems.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                  >
-                    <span className="min-w-0 truncate text-ink">
+                  <li key={item.id} className="kh-ops-linked-row">
+                    <span className="min-w-0 truncate">
                       {item.originalFilename ?? item.altText ?? item.id}
                     </span>
                     <span className="flex flex-wrap gap-2">
-                      <Button
+                      <button
                         type="button"
-                        variant="secondary"
+                        className="kh-ops-text-btn"
                         disabled={pending || mediaBusy || gitManaged}
                         onClick={() => insertMarkdownSnippet(item.markdownSnippet)}
                       >
                         {t('mediaInsertExisting')}
-                      </Button>
-                      <Button
+                      </button>
+                      <button
                         type="button"
-                        variant="secondary"
+                        className="kh-ops-text-btn"
                         disabled={pending || mediaBusy || gitManaged}
                         onClick={() => void deleteMedia(item.id)}
                       >
                         {t('mediaDelete')}
-                      </Button>
+                      </button>
                     </span>
                   </li>
                 ))}
               </ul>
-            </Panel>
+            </div>
           ) : null}
-        </div>
-        <div>
-          <p className="kh-label mb-2">
-            <span>{t('safePreview')}</span>
-          </p>
-          <Panel className={`${previewMinClass} overflow-auto`}>
-            <MarkdownDocument html={previewHtml} toc={previewToc} />
-          </Panel>
-        </div>
+        </section>
+
+        <aside className="kh-ops-editor-stack">
+          {isEdit ? (
+            <section className="kh-ops-panel">
+              <div className="kh-ops-panel-head">
+                <h2 className="kh-ops-panel-title">{tCommon('status')}</h2>
+              </div>
+              <div className="kh-ops-card-body">
+                <div className="kh-ops-form-grid">{stateFields}</div>
+              </div>
+            </section>
+          ) : null}
+          {isEdit ? (
+            <section className="kh-ops-panel">
+              <div className="kh-ops-panel-head">
+                <h2 className="kh-ops-panel-title">{tCommon('tags')}</h2>
+              </div>
+              {tagNames.length > 0 ? (
+                <div className="kh-ops-tag-list">
+                  {tagNames.map((tag) => (
+                    <span key={tag} className="kh-ops-tag">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="kh-ops-card-body">{tagsField}</div>
+            </section>
+          ) : null}
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{t('safePreview')}</h2>
+            </div>
+            <div className="kh-ops-preview-pane">
+              <MarkdownDocument html={previewHtml} toc={previewToc} />
+            </div>
+          </section>
+        </aside>
       </div>
+
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('provenance')}</h2>
+        </div>
+        <div className="kh-ops-card-body">
+          <div className="kh-ops-form-grid">
+            <Field label={t('sourceTitle')}>
+              <Input
+                value={sourceTitle}
+                onChange={(e) => setSourceTitle(e.target.value)}
+                disabled={gitManaged}
+              />
+            </Field>
+            <Field label={t('sourceProvider')}>
+              <Input
+                value={sourceProvider}
+                onChange={(e) => setSourceProvider(e.target.value)}
+                disabled={gitManaged}
+              />
+            </Field>
+            <Field label={t('sourceReference')}>
+              <Input
+                value={sourceReference}
+                onChange={(e) => setSourceReference(e.target.value)}
+                disabled={gitManaged}
+              />
+            </Field>
+            <Field label={t('sourceUri')}>
+              <Input
+                value={sourceUri}
+                onChange={(e) => setSourceUri(e.target.value)}
+                disabled={gitManaged}
+              />
+            </Field>
+            <Field label={t('generatedByModel')} className="kh-ops-field-span">
+              <Input
+                value={generatedByModel}
+                onChange={(e) => setGeneratedByModel(e.target.value)}
+                disabled={gitManaged}
+              />
+            </Field>
+            {isEdit ? (
+              <Field label={t('changeMessage')} className="kh-ops-field-span">
+                <Input
+                  value={changeMessage}
+                  onChange={(e) => setChangeMessage(e.target.value)}
+                  placeholder={t('changeMessagePlaceholder')}
+                  disabled={gitManaged}
+                />
+              </Field>
+            ) : null}
+            {isEdit && props.initial?.id && projectId ? (
+              <KnowledgeRecordDeliveryLinksField
+                recordId={props.initial.id}
+                projectId={projectId}
+                canMutate={!gitManaged}
+              />
+            ) : null}
+          </div>
+        </div>
+        {showActionLine ? (
+          <div className="kh-ops-action-line">
+            <span className="kh-ops-panel-meta">
+              {isEdit ? t('editTitle') : t('createTitle')}
+            </span>
+            <span className="flex flex-wrap gap-2">{saveActions}</span>
+          </div>
+        ) : null}
+      </section>
 
       {error ? <ErrorText>{error}</ErrorText> : null}
-
-      <div className="flex flex-wrap gap-2">
-        {showCancel ? (
-          <Button type="button" variant="secondary" disabled={pending} onClick={handleCancel}>
-            {tCommon('cancel')}
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={pending || gitManaged}
-          onClick={() => void save('draft')}
-        >
-          {t('saveDraft')}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={pending || gitManaged}
-          onClick={() => void save('review_required')}
-        >
-          {t('markForReview')}
-        </Button>
-        <Button
-          type="button"
-          variant="success"
-          disabled={pending || gitManaged}
-          onClick={() => void save('verified')}
-        >
-          {t('markVerified')}
-        </Button>
-        <Button
-          type="button"
-          variant="success"
-          disabled={pending || gitManaged}
-          onClick={() => void save('current')}
-        >
-          {t('markCurrent')}
-        </Button>
-        <Button type="submit" disabled={pending}>
-          {pending ? tCommon('saving') : tCommon('save')}
-        </Button>
-      </div>
     </form>
   );
 
@@ -627,15 +798,18 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
 
   return (
     <Page viewport>
-      <PageHeader title={props.mode === 'create' ? t('createTitle') : t('editTitle')} />
-      <p className="mt-0 mb-6">
-        <Link
-          href={`/workspaces/${props.workspaceSlug}`}
-          className="text-sm text-ink-muted no-underline hover:text-ink"
-        >
-          {t('backToWorkspace')}
-        </Link>
-      </p>
+      <PageHeader
+        eyebrow={t('eyebrow')}
+        title={isEdit ? t('editTitle') : t('createTitle')}
+        description={
+          <Link
+            href={`/workspaces/${props.workspaceSlug}`}
+            className="text-ink-muted no-underline hover:text-ink"
+          >
+            {t('backToWorkspace')}
+          </Link>
+        }
+      />
       {form}
     </Page>
   );

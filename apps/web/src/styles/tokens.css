@@ -11,6 +11,7 @@
 
   /* Surfaces — prototype --bg / --surface / --border */
   --kh-surface: oklch(98% 0.005 250);
+  --kh-bg: var(--kh-surface);
   --kh-panel: oklch(100% 0 0);
   --kh-panel-solid: oklch(100% 0 0);
   --kh-line: oklch(90% 0.008 240);
@@ -73,6 +74,7 @@ html[data-theme='dark'] {
   --kh-on-brand: oklch(18% 0.018 245);
 
   --kh-surface: oklch(15% 0.018 245);
+  --kh-bg: var(--kh-surface);
   --kh-panel: oklch(20% 0.018 245);
   --kh-panel-solid: oklch(20% 0.018 245);
   --kh-line: oklch(31% 0.018 242);

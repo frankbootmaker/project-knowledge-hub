@@ -3,10 +3,7 @@
 import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { cn } from '../lib/cn';
-import {
-  deliveryScheduleSurfaceClass,
-  type DeliveryScheduleTone,
-} from '../lib/delivery-schedule';
+import { type DeliveryScheduleTone } from '../lib/delivery-schedule';
 
 const LEGEND: DeliveryScheduleTone[] = [
   'onTrack',
@@ -24,7 +21,7 @@ export function DeliveryScheduleLegend({ className }: { className?: string }) {
     <div className={cn('flex flex-wrap items-start gap-2', className)}>
       <button
         type="button"
-        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-line text-xs font-semibold text-ink-muted hover:bg-brand-soft hover:text-ink"
+        className="kh-ops-help-btn"
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={t('scheduleLegendHelp')}
@@ -42,14 +39,12 @@ export function DeliveryScheduleLegend({ className }: { className?: string }) {
           {LEGEND.map((tone) => (
             <li
               key={tone}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium',
-                deliveryScheduleSurfaceClass(tone),
-              )}
+              className="kh-ops-type-chip"
+              data-tone={tone}
             >
               <span
                 className={cn(
-                  'size-2 shrink-0 rounded-full',
+                  'size-1.5 shrink-0',
                   tone === 'onTrack' && 'bg-accent',
                   tone === 'atRisk' && 'bg-warn',
                   tone === 'overdue' && 'bg-danger',

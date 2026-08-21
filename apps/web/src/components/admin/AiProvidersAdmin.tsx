@@ -9,7 +9,7 @@ import {
   ErrorText,
   Field,
   Input,
-  Panel,
+  Modal,
   PasswordInput,
   Select,
   useToast,
@@ -85,6 +85,7 @@ export function AiProvidersAdmin({
   const [draft, setDraft] = useState<DraftProvider>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<DraftProvider | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [bindingDraft, setBindingDraft] = useState(() =>
     Object.fromEntries(
       initialBindings.map((row) => [
@@ -136,6 +137,7 @@ export function AiProvidersAdmin({
         );
       }
       setDraft(emptyDraft());
+      setCreateOpen(false);
       pushToast(t('aiProviderCreated'));
       router.refresh();
     } catch (err) {
@@ -301,204 +303,155 @@ export function AiProvidersAdmin({
     }
   }
 
+  const editingProvider = providers.find((row) => row.id === editingId) ?? null;
+
   return (
     <div className="grid gap-6">
-      <Panel className="grid gap-4 p-5">
-        <p className="m-0 text-sm text-ink-muted">{t('aiProvidersBlurb')}</p>
-        {error ? <ErrorText>{error}</ErrorText> : null}
-      </Panel>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="m-0 max-w-xl text-sm text-ink-muted">{t('aiProvidersBlurb')}</p>
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            setError(null);
+            setCreateOpen(true);
+          }}
+        >
+          {t('aiProviderCreate')}
+        </Button>
+      </div>
+      {error ? <ErrorText>{error}</ErrorText> : null}
 
-      <Panel className="grid gap-4 p-5">
-        <h2 className="m-0 text-base font-semibold text-ink">
-          {t('aiProvidersListTitle')}
-        </h2>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('aiProvidersListTitle')}</h2>
+        </div>
         {providers.length === 0 ? (
-          <p className="m-0 text-sm text-ink-muted">{t('aiProvidersEmpty')}</p>
+          <p className="kh-ops-empty">{t('aiProvidersEmpty')}</p>
         ) : (
-          <ul className="m-0 grid list-none gap-3 p-0">
-            {providers.map((provider) => {
-              const editing = editingId === provider.id;
-              return (
-                <li
-                  key={provider.id}
-                  className="grid gap-3 rounded-md border border-line bg-surface px-4 py-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <strong className="text-ink">{provider.name}</strong>
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('aiProviderName')}</th>
+                  <th>{t('aiProviderBaseUrl')}</th>
+                  <th>{t('aiProviderModel')}</th>
+                  <th>{t('aiProviderSecret')}</th>
+                  <th>{t('colStatus')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {providers.map((provider) => (
+                  <tr key={provider.id}>
+                    <td className="kh-ops-primary-cell">{provider.name}</td>
+                    <td className="max-w-xs truncate font-mono text-xs">
+                      {provider.baseUrl}
+                    </td>
+                    <td>{provider.defaultModel}</td>
+                    <td>
+                      <span className="kh-ops-type-chip">
+                        {provider.hasApiKey
+                          ? t('aiProviderSecretSet')
+                          : t('aiProviderSecretMissing')}
+                      </span>
+                    </td>
+                    <td>
                       <Badge
-                        tone={provider.status === 'active' ? 'brand' : 'neutral'}
+                        tone={provider.status === 'active' ? 'success' : 'neutral'}
                       >
                         {provider.status}
                       </Badge>
-                      <span className="text-sm text-ink-muted">
-                        {provider.defaultModel}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={pending}
-                        onClick={() => void testProvider(provider.id)}
-                      >
-                        {t('aiProviderTest')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={pending}
-                        onClick={() => {
-                          if (editing) {
-                            setEditingId(null);
-                            setEditDraft(null);
-                            return;
-                          }
-                          setEditingId(provider.id);
-                          setEditDraft({
-                            name: provider.name,
-                            baseUrl: provider.baseUrl,
-                            defaultModel: provider.defaultModel,
-                            apiKey: '',
-                            timeoutMs:
-                              provider.timeoutMs != null
-                                ? String(provider.timeoutMs)
-                                : '',
-                            status:
-                              provider.status === 'disabled'
-                                ? 'disabled'
-                                : 'active',
-                          });
-                        }}
-                      >
-                        {editing ? tCommon('cancel') : tCommon('edit')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={pending}
-                        onClick={() => void removeProvider(provider.id)}
-                      >
-                        {t('aiProviderDelete')}
-                      </Button>
-                    </div>
-                  </div>
-                  <p className="m-0 font-mono text-xs text-ink-muted break-all">
-                    {provider.baseUrl}
-                  </p>
-                  {editing && editDraft ? (
-                    <div className="grid gap-3 border-t border-line pt-3 md:grid-cols-2">
-                      <Field label={t('aiProviderName')}>
-                        <Input
-                          value={editDraft.name}
-                          disabled={pending}
-                          onChange={(e) =>
-                            setEditDraft({ ...editDraft, name: e.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label={t('aiProviderModel')}>
-                        <Input
-                          value={editDraft.defaultModel}
-                          disabled={pending}
-                          onChange={(e) =>
-                            setEditDraft({
-                              ...editDraft,
-                              defaultModel: e.target.value,
-                            })
-                          }
-                        />
-                      </Field>
-                      <Field label={t('aiProviderBaseUrl')}>
-                        <Input
-                          value={editDraft.baseUrl}
-                          disabled={pending}
-                          onChange={(e) =>
-                            setEditDraft({
-                              ...editDraft,
-                              baseUrl: e.target.value,
-                            })
-                          }
-                        />
-                      </Field>
-                      <div className="grid gap-1">
-                        <Field label={t('aiProviderApiKey')}>
-                          <PasswordInput
-                            value={editDraft.apiKey}
-                            disabled={pending}
-                            onChange={(e) =>
-                              setEditDraft({
-                                ...editDraft,
-                                apiKey: e.target.value,
-                              })
-                            }
-                            autoComplete="new-password"
-                          />
-                        </Field>
-                        {provider.hasApiKey ? (
-                          <p className="m-0 text-xs text-ink-muted">
-                            {t('aiProviderApiKeyKeepHint')}
-                          </p>
-                        ) : null}
-                      </div>
-                      <Field label={t('aiProviderStatus')}>
-                        <Select
-                          value={editDraft.status}
-                          disabled={pending}
-                          onChange={(e) =>
-                            setEditDraft({
-                              ...editDraft,
-                              status: e.target.value as 'active' | 'disabled',
-                            })
-                          }
-                        >
-                          <option value="active">{t('aiProviderStatusActive')}</option>
-                          <option value="disabled">
-                            {t('aiProviderStatusDisabled')}
-                          </option>
-                        </Select>
-                      </Field>
-                      <Field label={t('aiProviderTimeout')}>
-                        <Input
-                          value={editDraft.timeoutMs}
-                          disabled={pending}
-                          placeholder="120000"
-                          onChange={(e) =>
-                            setEditDraft({
-                              ...editDraft,
-                              timeoutMs: e.target.value,
-                            })
-                          }
-                        />
-                      </Field>
-                      <div className="md:col-span-2">
-                        <Button
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap gap-2">
+                        <button
                           type="button"
+                          className="kh-ops-text-btn"
                           disabled={pending}
-                          onClick={() => void saveEdit()}
+                          onClick={() => void testProvider(provider.id)}
                         >
-                          {tCommon('save')}
-                        </Button>
+                          {t('aiProviderTest')}
+                        </button>
+                        <button
+                          type="button"
+                          className="kh-ops-text-btn"
+                          disabled={pending}
+                          onClick={() => {
+                            setEditingId(provider.id);
+                            setEditDraft({
+                              name: provider.name,
+                              baseUrl: provider.baseUrl,
+                              defaultModel: provider.defaultModel,
+                              apiKey: '',
+                              timeoutMs:
+                                provider.timeoutMs != null
+                                  ? String(provider.timeoutMs)
+                                  : '',
+                              status:
+                                provider.status === 'disabled'
+                                  ? 'disabled'
+                                  : 'active',
+                            });
+                          }}
+                        >
+                          {tCommon('edit')}
+                        </button>
+                        <button
+                          type="button"
+                          className="kh-ops-text-btn"
+                          disabled={pending}
+                          onClick={() => void removeProvider(provider.id)}
+                        >
+                          {t('aiProviderDelete')}
+                        </button>
                       </div>
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </Panel>
+      </section>
 
-      <Panel className="grid gap-4 p-5">
-        <h2 className="m-0 text-base font-semibold text-ink">
-          {t('aiProviderCreateTitle')}
-        </h2>
-        <div className="grid gap-3 md:grid-cols-2">
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title={t('aiProviderCreateTitle')}
+        size="lg"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setCreateOpen(false)}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                pending ||
+                !draft.name.trim() ||
+                !draft.baseUrl.trim() ||
+                !draft.defaultModel.trim()
+              }
+              onClick={() => void createProvider()}
+            >
+              {t('aiProviderCreate')}
+            </Button>
+          </>
+        }
+      >
+        <div className="kh-ops-form-grid">
           <Field label={t('aiProviderName')}>
             <Input
               value={draft.name}
               disabled={pending}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              data-modal-initial-focus
             />
           </Field>
           <Field label={t('aiProviderModel')}>
@@ -510,14 +463,14 @@ export function AiProvidersAdmin({
               }
             />
           </Field>
-          <Field label={t('aiProviderBaseUrl')}>
+          <Field className="kh-ops-field-span" label={t('aiProviderBaseUrl')}>
             <Input
               value={draft.baseUrl}
               disabled={pending}
               onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })}
             />
           </Field>
-          <Field label={t('aiProviderApiKey')}>
+          <Field className="kh-ops-field-span" label={t('aiProviderApiKey')}>
             <PasswordInput
               value={draft.apiKey}
               disabled={pending}
@@ -526,96 +479,205 @@ export function AiProvidersAdmin({
             />
           </Field>
         </div>
-        <div>
-          <Button
-            type="button"
-            disabled={
-              pending ||
-              !draft.name.trim() ||
-              !draft.baseUrl.trim() ||
-              !draft.defaultModel.trim()
-            }
-            onClick={() => void createProvider()}
-          >
-            {t('aiProviderCreate')}
-          </Button>
-        </div>
-      </Panel>
+      </Modal>
 
-      <Panel className="grid gap-4 p-5">
-        <h2 className="m-0 text-base font-semibold text-ink">
-          {t('aiBindingsTitle')}
-        </h2>
-        <p className="m-0 text-sm text-ink-muted">{t('aiBindingsBlurb')}</p>
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {bindings.map((row) => {
-            const draftRow = bindingDraft[row.service] ?? {
-              providerId: '',
-              modelOverride: '',
-            };
-            return (
-              <li
-                key={row.service}
-                className="grid gap-3 rounded-md border border-line bg-surface px-4 py-3 md:grid-cols-[1fr_1.2fr_1fr_auto]"
+      <Modal
+        open={Boolean(editingProvider && editDraft)}
+        onClose={() => {
+          setEditingId(null);
+          setEditDraft(null);
+        }}
+        title={tCommon('edit')}
+        size="lg"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => {
+                setEditingId(null);
+                setEditDraft(null);
+              }}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() => void saveEdit()}
+            >
+              {tCommon('save')}
+            </Button>
+          </>
+        }
+      >
+        {editDraft ? (
+          <div className="kh-ops-form-grid">
+            <Field label={t('aiProviderName')}>
+              <Input
+                value={editDraft.name}
+                disabled={pending}
+                onChange={(e) =>
+                  setEditDraft({ ...editDraft, name: e.target.value })
+                }
+                data-modal-initial-focus
+              />
+            </Field>
+            <Field label={t('aiProviderModel')}>
+              <Input
+                value={editDraft.defaultModel}
+                disabled={pending}
+                onChange={(e) =>
+                  setEditDraft({
+                    ...editDraft,
+                    defaultModel: e.target.value,
+                  })
+                }
+              />
+            </Field>
+            <Field className="kh-ops-field-span" label={t('aiProviderBaseUrl')}>
+              <Input
+                value={editDraft.baseUrl}
+                disabled={pending}
+                onChange={(e) =>
+                  setEditDraft({ ...editDraft, baseUrl: e.target.value })
+                }
+              />
+            </Field>
+            <Field className="kh-ops-field-span" label={t('aiProviderApiKey')}>
+              <PasswordInput
+                value={editDraft.apiKey}
+                disabled={pending}
+                onChange={(e) =>
+                  setEditDraft({
+                    ...editDraft,
+                    apiKey: e.target.value,
+                  })
+                }
+                autoComplete="new-password"
+              />
+            </Field>
+            {editingProvider?.hasApiKey ? (
+              <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+                {t('aiProviderApiKeyKeepHint')}
+              </p>
+            ) : null}
+            <Field label={t('aiProviderStatus')}>
+              <Select
+                value={editDraft.status}
+                disabled={pending}
+                onChange={(e) =>
+                  setEditDraft({
+                    ...editDraft,
+                    status: e.target.value as 'active' | 'disabled',
+                  })
+                }
               >
-                <div>
-                  <strong className="text-ink">{serviceLabel(row.service, t)}</strong>
-                  <p className="m-0 mt-1 text-xs text-ink-muted">
-                    {row.active
-                      ? t('aiBindingSource', { source: row.source })
-                      : t('aiBindingLater')}
-                  </p>
-                </div>
-                <Field label={t('aiBindingProvider')}>
-                  <Select
-                    value={draftRow.providerId}
-                    disabled={pending || !row.active}
-                    onChange={(e) =>
-                      setBindingDraft((prev) => ({
-                        ...prev,
-                        [row.service]: {
-                          ...draftRow,
-                          providerId: e.target.value,
-                        },
-                      }))
-                    }
-                  >
-                    <option value="">{t('aiBindingEnvFallback')}</option>
-                    {activeProviders.map((provider) => (
-                      <option key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={t('aiBindingModelOverride')}>
-                  <Input
-                    value={draftRow.modelOverride}
-                    disabled={pending || !row.active}
-                    placeholder={t('aiBindingModelOverridePlaceholder')}
-                    onChange={(e) =>
-                      setBindingDraft((prev) => ({
-                        ...prev,
-                        [row.service]: {
-                          ...draftRow,
-                          modelOverride: e.target.value,
-                        },
-                      }))
-                    }
-                  />
-                </Field>
-                <div className="flex items-end">
-                  <Badge tone={row.available ? 'brand' : 'neutral'}>
-                    {row.available
-                      ? t('aiBindingAvailable')
-                      : t('aiBindingUnavailable')}
-                  </Badge>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        <div>
+                <option value="active">{t('aiProviderStatusActive')}</option>
+                <option value="disabled">{t('aiProviderStatusDisabled')}</option>
+              </Select>
+            </Field>
+            <Field label={t('aiProviderTimeout')}>
+              <Input
+                value={editDraft.timeoutMs}
+                disabled={pending}
+                placeholder="120000"
+                onChange={(e) =>
+                  setEditDraft({
+                    ...editDraft,
+                    timeoutMs: e.target.value,
+                  })
+                }
+              />
+            </Field>
+          </div>
+        ) : null}
+      </Modal>
+
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('aiBindingsTitle')}</h2>
+        </div>
+        <p className="m-0 px-4 pt-3 text-sm text-ink-muted">{t('aiBindingsBlurb')}</p>
+        <div className="kh-ops-table-wrap">
+          <table className="kh-ops-data-table">
+            <thead>
+              <tr>
+                <th>{t('aiBindingService')}</th>
+                <th>{t('aiBindingProvider')}</th>
+                <th>{t('aiBindingModelOverride')}</th>
+                <th>{t('colStatus')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bindings.map((row) => {
+                const draftRow = bindingDraft[row.service] ?? {
+                  providerId: '',
+                  modelOverride: '',
+                };
+                return (
+                  <tr key={row.service}>
+                    <td className="kh-ops-primary-cell">
+                      {serviceLabel(row.service, t)}
+                      <p className="m-0 mt-1 text-xs text-ink-muted">
+                        {row.active
+                          ? t('aiBindingSource', { source: row.source })
+                          : t('aiBindingLater')}
+                      </p>
+                    </td>
+                    <td>
+                      <Select
+                        value={draftRow.providerId}
+                        disabled={pending || !row.active}
+                        onChange={(e) =>
+                          setBindingDraft((prev) => ({
+                            ...prev,
+                            [row.service]: {
+                              ...draftRow,
+                              providerId: e.target.value,
+                            },
+                          }))
+                        }
+                      >
+                        <option value="">{t('aiBindingEnvFallback')}</option>
+                        {activeProviders.map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {provider.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </td>
+                    <td>
+                      <Input
+                        value={draftRow.modelOverride}
+                        disabled={pending || !row.active}
+                        placeholder={t('aiBindingModelOverridePlaceholder')}
+                        onChange={(e) =>
+                          setBindingDraft((prev) => ({
+                            ...prev,
+                            [row.service]: {
+                              ...draftRow,
+                              modelOverride: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td>
+                      <Badge tone={row.available ? 'success' : 'neutral'}>
+                        {row.available
+                          ? t('aiBindingAvailable')
+                          : t('aiBindingUnavailable')}
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-4">
           <Button
             type="button"
             disabled={pending}
@@ -624,7 +686,7 @@ export function AiProvidersAdmin({
             {t('aiBindingsSave')}
           </Button>
         </div>
-      </Panel>
+      </section>
     </div>
   );
 }

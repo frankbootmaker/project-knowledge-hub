@@ -287,122 +287,150 @@ export function ProjectBaselinePanel({
           ) : null
         }
       >
-        <dl className="m-0 grid gap-3 sm:grid-cols-2">
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('startDate')}
-            </dt>
-            <dd className="m-0 mt-1 text-sm text-ink">
-              {project.startDate || tCommon('none')}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('endDate')}
-            </dt>
-            <dd className="m-0 mt-1 text-sm text-ink">
-              {project.endDate || tCommon('none')}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('currency')}
-            </dt>
-            <dd className="m-0 mt-1 text-sm text-ink">{currencyCode}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('initialBudget')}
-            </dt>
-            <dd className="m-0 mt-1 text-sm text-ink">
-              {formatMoney(
-                Number.isFinite(initialBudgetNumber as number)
-                  ? (initialBudgetNumber as number)
-                  : null,
-                currencyCode,
-                locale,
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('keyPrefix')}
-            </dt>
-            <dd className="m-0 mt-1 font-mono text-sm text-ink">
-              {project.keyPrefix || tCommon('none')}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('charter')}
-            </dt>
-            <dd className="m-0 mt-1 text-sm">
-              {project.charterRecord ? (
-                <Link
-                  href={recordHref(project.charterRecord)}
-                  className="text-brand no-underline hover:text-brand-hover"
-                >
-                  {project.charterRecord.title}
-                </Link>
-              ) : (
-                <span className="text-ink-muted">{tCommon('none')}</span>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('initialPlan')}
-            </dt>
-            <dd className="m-0 mt-1 text-sm">
-              {project.initialPlanRecord ? (
-                <Link
-                  href={recordHref(project.initialPlanRecord)}
-                  className="text-brand no-underline hover:text-brand-hover"
-                >
-                  {project.initialPlanRecord.title}
-                </Link>
-              ) : (
-                <span className="text-ink-muted">{tCommon('none')}</span>
-              )}
-            </dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('definitionOfDone')}
-            </dt>
-            <dd className="m-0 mt-1 whitespace-pre-wrap text-sm text-ink">
-              {project.definitionOfDone?.trim() || tCommon('none')}
-            </dd>
-          </div>
-        </dl>
+        <div className="grid gap-3">
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{t('fieldsTitle')}</h2>
+            </div>
+            <div className="kh-ops-baseline-grid">
+              <div className="kh-ops-field-cell">
+                <small>{t('startDate')}</small>
+                <strong>{project.startDate || tCommon('none')}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('endDate')}</small>
+                <strong>{project.endDate || tCommon('none')}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('currency')}</small>
+                <strong>{currencyCode}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('initialBudget')}</small>
+                <strong>
+                  {formatMoney(
+                    Number.isFinite(initialBudgetNumber as number)
+                      ? (initialBudgetNumber as number)
+                      : null,
+                    currencyCode,
+                    locale,
+                  )}
+                </strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('keyPrefix')}</small>
+                <strong>{project.keyPrefix || tCommon('none')}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('definitionOfDone')}</small>
+                <strong>
+                  {project.definitionOfDone?.trim()
+                    ? project.definitionOfDone.trim().split('\n')[0]
+                    : tCommon('none')}
+                </strong>
+              </div>
+            </div>
+            {project.definitionOfDone?.trim() ? (
+              <p className="kh-ops-card-body m-0 whitespace-pre-wrap text-xs text-ink-muted">
+                {project.definitionOfDone}
+              </p>
+            ) : null}
+          </section>
 
-        <div className="mt-4">
-          <p className="m-0 mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
-            {t('initialStakeholders')}
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{t('pinnedRecords')}</h2>
+            </div>
+            {project.charterRecord ? (
+              <div className="kh-ops-pinned">
+                <span className="kh-ops-code-box">CH</span>
+                <div>
+                  <h3>
+                    <Link
+                      href={recordHref(project.charterRecord)}
+                      className="text-inherit no-underline hover:underline"
+                    >
+                      {project.charterRecord.title}
+                    </Link>
+                  </h3>
+                  <p>{t('charter')}</p>
+                </div>
+                <Badge>{t('pinnedBadge')}</Badge>
+              </div>
+            ) : (
+              <div className="kh-ops-pinned">
+                <span className="kh-ops-code-box">CH</span>
+                <div>
+                  <h3>{t('charter')}</h3>
+                  <p>{tCommon('none')}</p>
+                </div>
+              </div>
+            )}
+            {project.initialPlanRecord ? (
+              <div className="kh-ops-pinned">
+                <span className="kh-ops-code-box">PL</span>
+                <div>
+                  <h3>
+                    <Link
+                      href={recordHref(project.initialPlanRecord)}
+                      className="text-inherit no-underline hover:underline"
+                    >
+                      {project.initialPlanRecord.title}
+                    </Link>
+                  </h3>
+                  <p>{t('initialPlan')}</p>
+                </div>
+                <Badge>{t('pinnedBadge')}</Badge>
+              </div>
+            ) : (
+              <div className="kh-ops-pinned">
+                <span className="kh-ops-code-box">PL</span>
+                <div>
+                  <h3>{t('initialPlan')}</h3>
+                  <p>{tCommon('none')}</p>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{t('initialStakeholders')}</h2>
+            </div>
+            {stakeholders.length === 0 ? (
+              <p className="kh-ops-empty">{t('noInitialStakeholders')}</p>
+            ) : (
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('colPerson')}</th>
+                      <th>{t('colRole')}</th>
+                      <th>{t('colEmail')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stakeholders.map((row) => (
+                      <tr key={row.id}>
+                        <td className="kh-ops-primary-cell">{row.displayName}</td>
+                        <td>
+                          <Badge tone="brand">
+                            {tStakeholders(`projectRole.${row.projectRole}`)}
+                          </Badge>
+                        </td>
+                        <td>{row.email}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <p className="m-0 text-xs text-ink-muted">
+            {canMutate ? t('hint') : t('readOnlyHint')}
           </p>
-          {stakeholders.length === 0 ? (
-            <p className="m-0 text-sm text-ink-muted">{t('noInitialStakeholders')}</p>
-          ) : (
-            <ul className="m-0 grid list-none gap-2 p-0">
-              {stakeholders.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex flex-wrap items-center gap-2 text-sm"
-                >
-                  <span className="font-medium">{row.displayName}</span>
-                  <Badge tone="brand">
-                    {tStakeholders(`projectRole.${row.projectRole}`)}
-                  </Badge>
-                  <span className="text-ink-muted">{row.email}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
-
-        <p className="mt-3 mb-0 text-xs text-ink-muted">
-          {canMutate ? t('hint') : t('readOnlyHint')}
-        </p>
       </CollapsibleSection>
 
       <Modal
@@ -433,7 +461,7 @@ export function ProjectBaselinePanel({
       >
         <div className="grid gap-3">
           {error ? <ErrorText>{error}</ErrorText> : null}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('startDate')}>
               <Input
                 type="date"
@@ -452,7 +480,7 @@ export function ProjectBaselinePanel({
               />
             </Field>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('currency')}>
               <Select
                 value={currency}
@@ -534,7 +562,7 @@ export function ProjectBaselinePanel({
             </Select>
           </Field>
           <Field label={t('initialStakeholders')}>
-            <div className="max-h-56 overflow-auto rounded-md border border-line p-2">
+            <div className="kh-ops-scope-checks max-h-56 overflow-auto">
               {members.length === 0 ? (
                 <p className="m-0 text-sm text-ink-muted">{t('noMembers')}</p>
               ) : (

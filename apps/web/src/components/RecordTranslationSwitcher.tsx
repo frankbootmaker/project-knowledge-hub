@@ -34,34 +34,38 @@ export async function RecordTranslationSwitcher({
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="text-sm text-ink-muted">{t('translationsLabel')}</span>
-      {translations.map((item) => {
-        const code = item.language ?? 'en';
-        const active = item.id === currentRecordId;
-        const label = languageLabel(code);
-        if (active) {
+    <section className="kh-ops-panel">
+      <div className="kh-ops-panel-head">
+        <h2 className="kh-ops-panel-title">{t('translationsLabel')}</h2>
+      </div>
+      <div className="kh-ops-card-body">
+        {translations.map((item) => {
+          const code = item.language ?? 'en';
+          const active = item.id === currentRecordId;
+          const label = languageLabel(code);
+          if (active) {
+            return (
+              <span
+                key={item.id}
+                className="kh-ops-lang-chip"
+                aria-current="page"
+              >
+                {label} ({code})
+              </span>
+            );
+          }
           return (
-            <span
+            <Link
               key={item.id}
-              className="inline-flex items-center rounded-md border border-brand/40 bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand"
-              aria-current="page"
+              href={`/workspaces/${workspaceSlug}/records/${item.slug}`}
+              className="kh-ops-lang-chip"
+              title={item.title}
             >
               {label} ({code})
-            </span>
+            </Link>
           );
-        }
-        return (
-          <Link
-            key={item.id}
-            href={`/workspaces/${workspaceSlug}/records/${item.slug}`}
-            className="inline-flex items-center rounded-md border border-line bg-panel-solid px-2.5 py-1 text-sm text-ink no-underline transition hover:border-brand/35"
-            title={item.title}
-          >
-            {label} ({code})
-          </Link>
-        );
-      })}
-    </div>
+        })}
+      </div>
+    </section>
   );
 }

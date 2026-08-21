@@ -12,8 +12,6 @@ import {
   ErrorText,
   Field,
   Input,
-  ListCard,
-  Panel,
   Select,
   Textarea,
   lifecycleLabel,
@@ -219,9 +217,10 @@ export function DocumentImportDetail(props: {
 
   return (
     <div className="grid gap-6">
-      <Panel>
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="m-0 text-lg font-medium">{doc.title}</h2>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="kh-ops-panel-title m-0">{doc.title}</h2>
           <Badge
             tone={
               doc.status === 'ready'
@@ -239,13 +238,15 @@ export function DocumentImportDetail(props: {
           doc.ocrEngine === 'tesseract' ? (
             <Badge tone="neutral">{t(`ocrEngine_${doc.ocrEngine}`)}</Badge>
           ) : null}
-          {doc.ocrLang === 'eng' ||
-          doc.ocrLang === 'deu' ||
-          doc.ocrLang === 'hun' ? (
-            <Badge tone="neutral">{t(`ocrLang_${doc.ocrLang}`)}</Badge>
-          ) : null}
+            {doc.ocrLang === 'eng' ||
+            doc.ocrLang === 'deu' ||
+            doc.ocrLang === 'hun' ? (
+              <Badge tone="neutral">{t(`ocrLang_${doc.ocrLang}`)}</Badge>
+            ) : null}
+          </div>
         </div>
-        <p className="mt-2 mb-0 text-sm text-ink-muted">
+        <div className="kh-ops-card-body">
+        <p className="mt-0 mb-0 text-sm text-ink-muted">
           {doc.originalFilename} · {Math.round(doc.byteSize / 1024)} KB ·{' '}
           {doc.contentType}
         </p>
@@ -260,34 +261,47 @@ export function DocumentImportDetail(props: {
           </ul>
         ) : null}
         {inProgress ? (
-          <div className="mt-4 grid gap-2 rounded-md border border-line bg-canvas-muted/40 p-3">
+          <div className="mt-4 grid gap-3">
+            <div className="kh-ops-stage-strip">
+              {PROGRESS_STAGES.map((stage, index) => {
+                const currentIndex = isProgressStage(doc.progressStage)
+                  ? PROGRESS_STAGES.indexOf(doc.progressStage)
+                  : 0;
+                const state =
+                  index < currentIndex
+                    ? 'done'
+                    : index === currentIndex
+                      ? 'active'
+                      : '';
+                return (
+                  <article
+                    key={stage}
+                    className={`kh-ops-stage-card ${state}`.trim()}
+                  >
+                    <small>
+                      {String(index + 1).padStart(2, '0')} / {t(`progressStage_${stage}`)}
+                    </small>
+                    <strong>
+                      {index === currentIndex
+                        ? doc.progressMessage || stageLabel
+                        : index < currentIndex
+                          ? t(`progressStage_${stage}`)
+                          : t('progressQueued')}
+                    </strong>
+                  </article>
+                );
+              })}
+            </div>
             <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-              <span className="font-medium text-ink">
-                {stageLabel}
-                {doc.progressMessage ? (
-                  <span className="font-normal text-ink-muted">
-                    {' '}
-                    · {doc.progressMessage}
-                  </span>
-                ) : null}
-              </span>
+              <span className="font-medium text-ink">{stageLabel}</span>
               <span className="tabular-nums text-ink-muted">
                 {t('progressElapsed', { seconds: elapsedSec })}
               </span>
             </div>
-            <div
-              className="kh-translate-progress"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={stageLabel}
-            >
-              <div className="kh-translate-progress-bar" />
-            </div>
             <div className="grid gap-1.5">
               <button
                 type="button"
-                className="justify-self-start text-left text-sm font-medium text-ink underline-offset-2 hover:underline"
+                className="kh-ops-text-btn justify-self-start text-left"
                 onClick={() => setDetailsOpen((open) => !open)}
               >
                 {detailsOpen ? t('progressDetailsHide') : t('progressDetailsShow')}
@@ -295,7 +309,7 @@ export function DocumentImportDetail(props: {
               {detailsOpen ? (
                 <pre
                   ref={detailsLogRef}
-                  className="m-0 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas p-2 font-mono text-xs text-ink-muted"
+                  className="kh-ops-code m-0 max-h-48 overflow-auto whitespace-pre-wrap text-ink-muted"
                 >
                   {doc.progressLog?.trim() || t('progressDetailsEmpty')}
                 </pre>
@@ -303,63 +317,87 @@ export function DocumentImportDetail(props: {
             </div>
           </div>
         ) : null}
-      </Panel>
+        </div>
+      </section>
 
       {doc.media.length > 0 ? (
-        <Panel>
-          <h3 className="mt-0 mb-2 text-base font-medium">{t('extractedImages')}</h3>
-          <ul className="m-0 grid list-none gap-2 p-0">
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h3 className="kh-ops-panel-title">{t('extractedImages')}</h3>
+          </div>
+          <ul className="kh-ops-stack m-0">
             {doc.media.map((m) => (
-              <li key={m.workspaceMediaId}>
-                <a href={m.url} className="text-sm text-brand no-underline">
+              <li key={m.workspaceMediaId} className="kh-ops-linked-row">
+                <a href={m.url} className="kh-text-link text-sm">
                   {m.originalFilename ?? m.workspaceMediaId}
                 </a>
               </li>
             ))}
           </ul>
-        </Panel>
+        </section>
       ) : null}
 
       {warnings.length > 0 ? (
-        <Panel>
-          <h3 className="mt-0 mb-2 text-base font-medium">{t('secretWarnings')}</h3>
-          <ul className="m-0 grid list-none gap-1 p-0 text-sm">
+        <div className="kh-ops-status-row" data-tone="danger">
+          <div>
+            <p className="font-medium">{t('secretWarnings')}</p>
+            <ul className="kh-ops-stack mt-2 mb-0">
             {warnings.map((w) => (
-              <li key={w.code}>
+              <li key={w.code} className="kh-ops-linked-row">
                 <Badge tone={w.severity === 'high' ? 'danger' : 'warn'}>
                   {w.severity}
-                </Badge>{' '}
-                {w.label} × {w.count}
+                </Badge>
+                <span>{w.label} × {w.count}</span>
               </li>
             ))}
-          </ul>
-        </Panel>
+            </ul>
+          </div>
+        </div>
       ) : null}
 
       {doc.linkedRecords.length > 0 ? (
-        <Panel>
-          <h3 className="mt-0 mb-2 text-base font-medium">{t('linkedDrafts')}</h3>
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {doc.linkedRecords.map((r) => (
-              <ListCard key={r.knowledgeRecordId}>
-                <Link
-                  href={`/workspaces/${props.workspaceSlug}/records/${r.slug}`}
-                  className="font-medium text-ink no-underline"
-                >
-                  {r.title}
-                </Link>
-                <p className="m-0 mt-1 text-sm text-ink-muted">
-                  {r.recordType} · {lifecycleLabel(r.lifecycleStatus, tRecords)}
-                </p>
-              </ListCard>
-            ))}
-          </ul>
-        </Panel>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h3 className="kh-ops-panel-title">{t('linkedDrafts')}</h3>
+          </div>
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{tCommon('title')}</th>
+                  <th>{tRecords('recordType')}</th>
+                  <th>{tCommon('status')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {doc.linkedRecords.map((r) => (
+                  <tr key={r.knowledgeRecordId}>
+                    <td className="kh-ops-primary-cell">
+                      <Link
+                        href={`/workspaces/${props.workspaceSlug}/records/${r.slug}`}
+                        className="no-underline"
+                      >
+                        {r.title}
+                      </Link>
+                    </td>
+                    <td>
+                      <span className="kh-ops-type-chip">{r.recordType}</span>
+                    </td>
+                    <td>{lifecycleLabel(r.lifecycleStatus, tRecords)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
 
       {props.canMutate && ready && !doc.archivedAt ? (
-        <Panel>
-          <h3 className="mt-0 mb-3 text-base font-medium">{t('createDraft')}</h3>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h3 className="kh-ops-panel-title">{t('createDraft')}</h3>
+          </div>
+          <div className="kh-ops-card-body">
           <form className="grid gap-4" onSubmit={onCreateDraft}>
             <Field label={tCommon('title')}>
               <Input
@@ -417,7 +455,8 @@ export function DocumentImportDetail(props: {
               </Link>
             </div>
           </form>
-        </Panel>
+          </div>
+        </section>
       ) : null}
     </div>
   );

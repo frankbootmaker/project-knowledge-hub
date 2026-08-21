@@ -8,7 +8,6 @@ import {
   Button,
   ErrorText,
   Modal,
-  Panel,
   useToast,
 } from './ui';
 import { UserMcpSetupWizard } from './mcp-setup';
@@ -242,149 +241,188 @@ export function AiConnectionsPanel({
         </div>
 
       {issuedToken ? (
-        <Panel className="border-accent/30 bg-accent-soft/40">
-          <p className="mt-0 mb-2 text-sm font-medium text-accent">{t('tokenOnce')}</p>
-          <code className="block break-all rounded-md bg-panel-solid px-3 py-2 font-mono text-sm">
-            {issuedToken}
-          </code>
-          <p className="mt-2 mb-0 text-xs text-ink-muted">{t('tokenOnceHint')}</p>
-          <p className="mt-2 mb-0 text-xs text-ink-muted">{t('tokenWizardHint')}</p>
-        </Panel>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-card-body grid gap-2">
+            <p className="m-0 text-sm font-medium text-accent">{t('tokenOnce')}</p>
+            <code className="kh-ops-code">{issuedToken}</code>
+            <p className="m-0 text-xs text-ink-muted">{t('tokenOnceHint')}</p>
+            <p className="m-0 text-xs text-ink-muted">{t('tokenWizardHint')}</p>
+          </div>
+        </section>
       ) : null}
 
-      <Panel className="grid gap-3">
-        <h2 className="m-0 text-base font-semibold">{t('pairingTitle')}</h2>
-        <p className="m-0 text-sm text-ink-muted">{t('pairingBlurb')}</p>
-        <div>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('pairingTitle')}</h2>
+        </div>
+        <div className="kh-ops-card-body grid gap-3">
+          <p className="m-0 text-sm text-ink-muted">{t('pairingBlurb')}</p>
+          {pairingCode ? (
+            <div className="kh-ops-inset grid gap-2">
+              <p className="m-0 text-sm font-medium">{t('yourCode')}</p>
+              <code className="kh-ops-code text-lg tracking-wider">{pairingCode}</code>
+              {pairingExpiresAt ? (
+                <p className="m-0 text-xs text-ink-muted">
+                  {t('expiresAt', {
+                    time: new Date(pairingExpiresAt).toLocaleString(),
+                  })}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void copyText(pairingCode, 'copiedCode')}
+                >
+                  {t('copyCode')}
+                </Button>
+                {discoverUrl ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void copyText(discoverUrl, 'copiedUrl')}
+                  >
+                    {t('copyDiscoverUrl')}
+                  </Button>
+                ) : null}
+              </div>
+              {discoverUrl ? (
+                <p className="m-0 text-xs text-ink-muted">
+                  {t('pasteHint', { url: discoverUrl })}
+                </p>
+              ) : null}
+              {apiDiscoverUrl ? (
+                <p className="m-0 text-xs text-ink-muted">
+                  {t('apiDiscoverHint', { url: apiDiscoverUrl })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {error ? <ErrorText>{error}</ErrorText> : null}
+        </div>
+        <div className="kh-ops-action-line">
+          <span className="kh-ops-panel-meta">{t('pairingTitle')}</span>
           <Button type="button" disabled={pending} onClick={() => void mintPairingCode()}>
             {t('generateCode')}
           </Button>
         </div>
-        {pairingCode ? (
-          <Panel variant="inset" className="grid gap-2">
-            <p className="m-0 text-sm font-medium">{t('yourCode')}</p>
-            <code className="block break-all font-mono text-lg tracking-wider">
-              {pairingCode}
-            </code>
-            {pairingExpiresAt ? (
-              <p className="m-0 text-xs text-ink-muted">
-                {t('expiresAt', {
-                  time: new Date(pairingExpiresAt).toLocaleString(),
-                })}
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void copyText(pairingCode, 'copiedCode')}
-              >
-                {t('copyCode')}
-              </Button>
-              {discoverUrl ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void copyText(discoverUrl, 'copiedUrl')}
-                >
-                  {t('copyDiscoverUrl')}
-                </Button>
-              ) : null}
-            </div>
-            {discoverUrl ? (
-              <p className="m-0 text-xs text-ink-muted">
-                {t('pasteHint', { url: discoverUrl })}
-              </p>
-            ) : null}
-            {apiDiscoverUrl ? (
-              <p className="m-0 text-xs text-ink-muted">
-                {t('apiDiscoverHint', { url: apiDiscoverUrl })}
-              </p>
-            ) : null}
-          </Panel>
-        ) : null}
-        {error ? <ErrorText>{error}</ErrorText> : null}
-      </Panel>
+      </section>
 
-      <section className="grid gap-3">
-        <h2 className="m-0 text-base font-semibold">{t('pendingTitle')}</h2>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('pendingTitle')}</h2>
+        </div>
         {pendingClients.length === 0 ? (
-          <p className="kh-muted m-0">{t('emptyPending')}</p>
+          <p className="kh-ops-empty">{t('emptyPending')}</p>
         ) : (
-          pendingClients.map((client) => (
-            <Panel key={client.id} className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <strong>{client.name}</strong>
-                  <Badge tone="brand">{t('statusPending')}</Badge>
-                  {client.agentLabel ? (
-                    <Badge tone="neutral">{client.agentLabel}</Badge>
-                  ) : null}
-                </div>
-                <p className="mt-1 mb-0 font-mono text-xs text-ink-muted">
-                  {client.scopes.join(', ')}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => openApprove(client)}
-                >
-                  {t('approve')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="danger"
-                  disabled={pending}
-                  onClick={() => void rejectPending(client.id)}
-                >
-                  {t('reject')}
-                </Button>
-              </div>
-            </Panel>
-          ))
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{tCommon('name')}</th>
+                  <th>{tCommon('status')}</th>
+                  <th>{t('scopes')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingClients.map((client) => (
+                  <tr key={client.id}>
+                    <td className="kh-ops-primary-cell">
+                      {client.name}
+                      {client.agentLabel ? (
+                        <div className="text-[11px] font-normal text-ink-muted">
+                          {client.agentLabel}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>
+                      <Badge tone="brand">{t('statusPending')}</Badge>
+                    </td>
+                    <td className="font-mono text-[11px]">{client.scopes.join(', ')}</td>
+                    <td>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="kh-ops-text-btn"
+                          disabled={pending}
+                          onClick={() => openApprove(client)}
+                        >
+                          {t('approve')}
+                        </button>
+                        <button
+                          type="button"
+                          className="kh-ops-text-btn"
+                          disabled={pending}
+                          onClick={() => void rejectPending(client.id)}
+                        >
+                          {t('reject')}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
-      <section className="grid gap-3">
-        <h2 className="m-0 text-base font-semibold">{t('activeTitle')}</h2>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('activeTitle')}</h2>
+        </div>
         {activeClients.length === 0 ? (
-          <p className="kh-muted m-0">{t('emptyActive')}</p>
+          <p className="kh-ops-empty">{t('emptyActive')}</p>
         ) : (
-          activeClients.map((client) => (
-            <Panel key={client.id} className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <strong>{client.name}</strong>
-                  <Badge tone={client.status === 'active' ? 'success' : 'danger'}>
-                    {client.status === 'active'
-                      ? t('statusActive')
-                      : t('statusRejected')}
-                  </Badge>
-                </div>
-                {client.tokenPrefix ? (
-                  <p className="mt-1 mb-0 text-sm text-ink-muted">
-                    {t('tokenPrefix')}:{' '}
-                    <span className="font-mono">{client.tokenPrefix}</span>
-                  </p>
-                ) : null}
-                <p className="mt-1 mb-0 font-mono text-xs text-ink-muted">
-                  {client.scopes.join(', ')}
-                </p>
-              </div>
-              {client.status === 'active' ? (
-                <Button
-                  type="button"
-                  variant="danger"
-                  disabled={pending}
-                  onClick={() => void revokeClient(client.id)}
-                >
-                  {t('revoke')}
-                </Button>
-              ) : null}
-            </Panel>
-          ))
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{tCommon('name')}</th>
+                  <th>{tCommon('status')}</th>
+                  <th>{t('scopes')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeClients.map((client) => (
+                  <tr key={client.id}>
+                    <td className="kh-ops-primary-cell">
+                      {client.name}
+                      {client.tokenPrefix ? (
+                        <div className="text-[11px] font-normal text-ink-muted">
+                          {t('tokenPrefix')}: {client.tokenPrefix}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>
+                      <Badge tone={client.status === 'active' ? 'success' : 'danger'}>
+                        {client.status === 'active'
+                          ? t('statusActive')
+                          : t('statusRejected')}
+                      </Badge>
+                    </td>
+                    <td className="font-mono text-[11px]">{client.scopes.join(', ')}</td>
+                    <td>
+                      {client.status === 'active' ? (
+                        <button
+                          type="button"
+                          className="kh-ops-text-btn"
+                          disabled={pending}
+                          onClick={() => void revokeClient(client.id)}
+                        >
+                          {t('revoke')}
+                        </button>
+                      ) : (
+                        tCommon('emDash')
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
@@ -419,31 +457,33 @@ export function AiConnectionsPanel({
             <p className="m-0 text-sm text-ink-muted">{t('approveHint')}</p>
             <fieldset className="m-0 grid gap-2 border-0 p-0">
               <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
-              {[
-                ...MCP_READ_SCOPES,
-                'knowledge:write',
-                'catalogue:write',
-                'pm:read',
-                'pm:write',
-              ].map((scope) => (
-                <label key={scope} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={approveScopes.includes(scope)}
-                    onChange={() => toggleScope(scope)}
-                  />
-                  <span className="font-mono text-xs">{scope}</span>
-                </label>
-              ))}
+              <div className="kh-ops-scope-checks">
+                {[
+                  ...MCP_READ_SCOPES,
+                  'knowledge:write',
+                  'catalogue:write',
+                  'pm:read',
+                  'pm:write',
+                ].map((scope) => (
+                  <label key={scope} className="kh-ops-scope-check">
+                    <input
+                      type="checkbox"
+                      checked={approveScopes.includes(scope)}
+                      onChange={() => toggleScope(scope)}
+                    />
+                    <span>{scope}</span>
+                  </label>
+                ))}
+              </div>
             </fieldset>
             <fieldset className="m-0 grid gap-2 border-0 p-0">
               <legend className="mb-1 text-sm font-medium">{t('workspaces')}</legend>
-              <div className="grid max-h-40 gap-2 overflow-auto rounded-md border border-line p-3">
+              <div className="kh-ops-scope-checks max-h-40 overflow-auto">
                 {workspaces.length === 0 ? (
                   <p className="m-0 text-sm text-ink-muted">{t('noWorkspaces')}</p>
                 ) : (
                   workspaces.map((workspace) => (
-                    <label key={workspace.id} className="flex items-center gap-2 text-sm">
+                    <label key={workspace.id} className="kh-ops-scope-check">
                       <input
                         type="checkbox"
                         checked={approveWorkspaces.includes(workspace.id)}

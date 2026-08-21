@@ -9,7 +9,6 @@ import {
   FunctionHeader,
   Input,
   LinkButton,
-  ListCard,
   Select,
 } from './ui';
 
@@ -85,36 +84,47 @@ export function WorkspacesList({
         }
       />
 
-      <ul className="m-0 grid list-none gap-3 p-0">
-        {filtered.map((workspace) => {
-          const archived = Boolean(workspace.archivedAt);
-          return (
-            <ListCard
-              key={workspace.id}
-              className={workspaceTileClassName(workspace.color, workspace.id)}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href={`/workspaces/${workspace.slug}`}
-                  className="text-lg font-semibold no-underline"
-                >
-                  {workspace.name}
-                </Link>
-                {archived ? <Badge tone="neutral">{t('statusArchived')}</Badge> : null}
-              </div>
-              <div className="mt-1 text-sm text-ink-muted">{workspace.slug}</div>
-              {workspace.description ? (
-                <p className="mt-2 mb-0 text-ink-muted">{workspace.description}</p>
-              ) : null}
-            </ListCard>
-          );
-        })}
-        {filtered.length === 0 ? (
-          <li className="kh-muted list-none">
-            {workspaces.length === 0 ? t('empty') : t('emptyFiltered')}
-          </li>
-        ) : null}
-      </ul>
+      {filtered.length === 0 ? (
+        <p className="kh-ops-empty">
+          {workspaces.length === 0 ? t('empty') : t('emptyFiltered')}
+        </p>
+      ) : (
+        <div className="kh-ops-project-grid px-0">
+          {filtered.map((workspace) => {
+            const archived = Boolean(workspace.archivedAt);
+            return (
+              <article
+                key={workspace.id}
+                className={`kh-ops-project-card ${workspaceTileClassName(
+                  workspace.color,
+                  workspace.id,
+                )}`}
+              >
+                {archived ? (
+                  <Badge tone="neutral">{t('statusArchived')}</Badge>
+                ) : (
+                  <Badge tone="success">{t('statusHealthy')}</Badge>
+                )}
+                <h3>
+                  <Link href={`/workspaces/${workspace.slug}`}>
+                    {workspace.name}
+                  </Link>
+                </h3>
+                <p>{workspace.description || t('noDescription')}</p>
+                <div className="kh-ops-project-card-foot">
+                  <span>{workspace.slug}</span>
+                  <Link
+                    href={`/workspaces/${workspace.slug}`}
+                    className="kh-ops-text-btn no-underline"
+                  >
+                    {t('openWorkspace')}
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

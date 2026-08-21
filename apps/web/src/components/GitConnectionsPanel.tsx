@@ -17,7 +17,6 @@ import {
   Field,
   Input,
   Modal,
-  Panel,
   PasswordInput,
   Select,
   Textarea,
@@ -401,57 +400,80 @@ export function GitConnectionsPanel(props: {
         </div>
       ) : null}
 
-      <div className="grid gap-4">
-        <h2 className="m-0 text-lg font-semibold">{t('connectionsTitle')}</h2>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('connectionsTitle')}</h2>
+        </div>
         {connections.length === 0 ? (
-          <p className="kh-muted">{t('empty')}</p>
+          <p className="kh-ops-empty">{t('empty')}</p>
         ) : (
-          connections.map((connection) => {
-            const canSync = isSyncProviderSupported(connection.provider);
-            return (
-              <Panel key={connection.id} className="grid gap-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone="brand">{t(providerLabelKey(connection.provider))}</Badge>
-                      <p className="m-0 font-semibold">
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('colRepository')}</th>
+                  <th>{t('branch')}</th>
+                  <th>{t('overallHealth')}</th>
+                  <th>{t('colStatus')}</th>
+                  <th>{t('colLastSync')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {connections.map((connection) => {
+                  const canSync = isSyncProviderSupported(connection.provider);
+                  return (
+                    <tr key={connection.id}>
+                      <td className="kh-ops-primary-cell">
+                        <span className="kh-ops-type-chip">
+                          {t(providerLabelKey(connection.provider))}
+                        </span>{' '}
                         {connection.owner}/{connection.repo}
-                      </p>
-                      {connection.syncHealth ? (
-                        <Badge
-                          tone={healthTone(connection.syncHealth.status)}
-                          title={connection.syncHealth.message}
+                        {!canSync ? (
+                          <p className="m-0 mt-1 text-xs text-warn">
+                            {t('providerComingSoon')}
+                          </p>
+                        ) : null}
+                        {connection.lastError ? (
+                          <p className="m-0 mt-1 text-xs text-danger">
+                            {connection.lastError}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td>{connection.branch}</td>
+                      <td>
+                        {connection.syncHealth ? (
+                          <Badge
+                            tone={healthTone(connection.syncHealth.status)}
+                            title={connection.syncHealth.message}
+                          >
+                            {t(`health_${connection.syncHealth.status}`)}
+                          </Badge>
+                        ) : (
+                          tCommon('emDash')
+                        )}
+                      </td>
+                      <td>
+                        <span className="kh-ops-type-chip">{connection.status}</span>
+                      </td>
+                      <td>{formatLastSync(connection.lastSyncedAt)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="kh-ops-text-btn"
+                          onClick={() => openManage(connection)}
                         >
-                          {t(`health_${connection.syncHealth.status}`)}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 mb-0 text-sm text-ink-muted">
-                      {t('branchLabel', { branch: connection.branch })} · {connection.status}
-                    </p>
-                    <p className="mt-1 mb-0 text-sm text-ink-muted">
-                      {t('lastSynced', { when: formatLastSync(connection.lastSyncedAt) })}
-                    </p>
-                    {connection.lastError ? (
-                      <p className="mt-1 mb-0 text-sm text-danger">{connection.lastError}</p>
-                    ) : null}
-                    {!canSync ? (
-                      <p className="mt-1 mb-0 text-sm text-warn">{t('providerComingSoon')}</p>
-                    ) : null}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => openManage(connection)}
-                  >
-                    {t('manage')}
-                  </Button>
-                </div>
-              </Panel>
-            );
-          })
+                          {t('manage')}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </section>
 
       <Modal
         open={addOpen}
@@ -467,7 +489,7 @@ export function GitConnectionsPanel(props: {
         size="lg"
       >
         {addStep === 'provider' ? (
-          <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
+          <ul className="kh-ops-storage-choice m-0 list-none p-0">
             {SYNC_PROVIDER_CATALOG.map((provider) => {
               const supported = provider.syncSupported;
               return (
@@ -475,7 +497,7 @@ export function GitConnectionsPanel(props: {
                   <button
                     type="button"
                     disabled={!supported}
-                    className="kh-panel-inset flex w-full cursor-pointer flex-col items-start gap-1 border border-line bg-panel-solid text-left transition hover:border-brand/35 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="kh-ops-choice kh-ops-choice-stack h-full"
                     onClick={() => {
                       if (!supported) return;
                       setSelectedProvider(provider.id);
@@ -483,9 +505,11 @@ export function GitConnectionsPanel(props: {
                       setError(null);
                     }}
                   >
-                    <span className="font-medium text-ink">{t(provider.labelKey)}</span>
-                    <span className="text-sm text-ink-muted">
-                      {supported ? t('providerAvailable') : t('providerComingSoon')}
+                    <span className="kh-ops-choice-copy">
+                      <strong>{t(provider.labelKey)}</strong>
+                      <span>
+                        {supported ? t('providerAvailable') : t('providerComingSoon')}
+                      </span>
                     </span>
                   </button>
                 </li>
@@ -498,7 +522,7 @@ export function GitConnectionsPanel(props: {
               {t(`connectBlurb_${selectedProvider}`)}
             </p>
             <p className="m-0 text-sm text-ink-muted">{t('safetySweepHint')}</p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={fieldLabel(selectedProvider, 'owner')}>
                 <Input
                   autoFocus
@@ -534,7 +558,7 @@ export function GitConnectionsPanel(props: {
                       ? t('baseUrlRequiredLabel')
                       : t('baseUrlOptional')
                   }
-                  className="sm:col-span-2"
+                  className="kh-ops-field-span"
                 >
                   <Input
                     value={baseUrl}
@@ -544,7 +568,7 @@ export function GitConnectionsPanel(props: {
                   />
                 </Field>
               ) : null}
-              <Field label={fieldLabel(selectedProvider, 'token')} className="sm:col-span-2">
+              <Field label={fieldLabel(selectedProvider, 'token')} className="kh-ops-field-span">
                 <PasswordInput
                   value={accessToken}
                   onChange={(e) => setAccessToken(e.target.value)}
@@ -552,7 +576,7 @@ export function GitConnectionsPanel(props: {
                   autoComplete="off"
                 />
               </Field>
-              <Field label={t('webhookSecret')} className="sm:col-span-2">
+              <Field label={t('webhookSecret')} className="kh-ops-field-span">
                 <PasswordInput
                   value={webhookSecret}
                   onChange={(e) => setWebhookSecret(e.target.value)}
@@ -560,12 +584,12 @@ export function GitConnectionsPanel(props: {
                   autoComplete="off"
                 />
               </Field>
-              <p className="m-0 sm:col-span-2 text-sm text-ink-muted">
+              <p className="kh-ops-field-span m-0 text-sm text-ink-muted">
                 {t('webhookPathHint', {
                   path: webhookPathForProvider(selectedProvider),
                 })}
               </p>
-              <Field label={t('includePaths')} className="sm:col-span-2">
+              <Field label={t('includePaths')} className="kh-ops-field-span">
                 <Textarea
                   rows={4}
                   value={includePaths}
@@ -631,7 +655,7 @@ export function GitConnectionsPanel(props: {
             </div>
 
             {props.canManage && isSyncProviderSupported(manageConnection.provider) ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="kh-ops-form-grid">
                 <Field label={t('branch')}>
                   <Input
                     value={manageBranch}
@@ -649,7 +673,7 @@ export function GitConnectionsPanel(props: {
                     <option value="paused">{t('statusPaused')}</option>
                   </Select>
                 </Field>
-                <Field label={t('projectOptional')} className="sm:col-span-2">
+                <Field label={t('projectOptional')} className="kh-ops-field-span">
                   <Select
                     value={manageProjectId}
                     onChange={(e) => setManageProjectId(e.target.value)}
@@ -669,7 +693,7 @@ export function GitConnectionsPanel(props: {
                         ? t('baseUrlRequiredLabel')
                         : t('baseUrlOptional')
                     }
-                    className="sm:col-span-2"
+                    className="kh-ops-field-span"
                   >
                     <Input
                       value={manageBaseUrl}
@@ -681,7 +705,7 @@ export function GitConnectionsPanel(props: {
                     />
                   </Field>
                 ) : null}
-                <Field label={t('accessToken')} className="sm:col-span-2">
+                <Field label={t('accessToken')} className="kh-ops-field-span">
                   <PasswordInput
                     value={manageToken}
                     onChange={(e) => setManageToken(e.target.value)}
@@ -691,7 +715,7 @@ export function GitConnectionsPanel(props: {
                     autoComplete="off"
                   />
                 </Field>
-                <Field label={t('webhookSecret')} className="sm:col-span-2">
+                <Field label={t('webhookSecret')} className="kh-ops-field-span">
                   <PasswordInput
                     value={manageWebhook}
                     onChange={(e) => setManageWebhook(e.target.value)}
@@ -703,14 +727,14 @@ export function GitConnectionsPanel(props: {
                     autoComplete="off"
                   />
                 </Field>
-                <p className="m-0 sm:col-span-2 text-sm text-ink-muted">
+                <p className="kh-ops-field-span m-0 text-sm text-ink-muted">
                   {t('webhookPathHint', {
                     path: webhookPathForProvider(
                       manageConnection.provider as SyncProvider,
                     ),
                   })}
                 </p>
-                <Field label={t('includePaths')} className="sm:col-span-2">
+                <Field label={t('includePaths')} className="kh-ops-field-span">
                   <Textarea
                     rows={4}
                     value={manageIncludePaths}

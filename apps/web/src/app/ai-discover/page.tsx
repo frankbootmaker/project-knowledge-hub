@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { LinkButton, Page, Panel } from '../../components/ui';
+import { LinkButton, Page } from '../../components/ui';
 
 /** Server-side fetch target (may be internal Compose DNS like http://api:3101). */
 const internalApiUrl =
@@ -68,8 +68,11 @@ export default async function AiDiscoverPage() {
       </div>
 
       <div className="grid gap-4">
-        <Panel className="grid gap-3">
-          <h2 className="m-0 text-base font-semibold">{t('forAgents')}</h2>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('forAgents')}</h2>
+          </div>
+          <div className="kh-ops-card-body grid gap-3">
           <p className="m-0 text-sm text-ink-muted">{t('forAgentsBlurb')}</p>
           <ul className="m-0 grid list-disc gap-1 pl-5 text-sm">
             <li>
@@ -91,11 +94,14 @@ export default async function AiDiscoverPage() {
               <code className="text-xs">{discover.defaultScopes.join(', ')}</code>
             </p>
           ) : null}
-        </Panel>
+          </div>
+        </section>
 
-        <Panel className="grid gap-3">
-          <h2 className="m-0 text-base font-semibold">{t('stepsTitle')}</h2>
-          <ol className="m-0 grid list-decimal gap-2 pl-5 text-sm">
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('stepsTitle')}</h2>
+          </div>
+          <ol className="kh-ops-card-body m-0 grid list-decimal gap-2 pl-8 text-sm">
             <li>{t('step1')}</li>
             <li>{t('step2')}</li>
             <li>{t('step3')}</li>
@@ -103,12 +109,15 @@ export default async function AiDiscoverPage() {
             <li>{t('step5')}</li>
             <li>{t('step6')}</li>
           </ol>
-        </Panel>
+        </section>
 
-        <Panel className="grid gap-3">
-          <h2 className="m-0 text-base font-semibold">{t('requestTitle')}</h2>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('requestTitle')}</h2>
+          </div>
+          <div className="kh-ops-card-body grid gap-3">
           <p className="m-0 text-sm text-ink-muted">{t('requestBlurb')}</p>
-          <pre className="m-0 overflow-x-auto rounded-md bg-panel-solid p-3 text-xs">
+          <pre className="kh-ops-code m-0 overflow-x-auto">
             {`POST ${createRequestUrl}
 Content-Type: application/json
 
@@ -120,16 +129,20 @@ Content-Type: application/json
 }`}
           </pre>
           <p className="m-0 text-sm text-ink-muted">{t('pollBlurb')}</p>
-          <pre className="m-0 overflow-x-auto rounded-md bg-panel-solid p-3 text-xs">
+          <pre className="kh-ops-code m-0 overflow-x-auto">
             {`GET ${claimOrPollUrl}`}
           </pre>
           <p className="m-0 text-xs text-ink-muted">
             agentLabel examples: cursor | chatgpt | claude | antigravity | gemini | openwebui
           </p>
-        </Panel>
+          </div>
+        </section>
 
-        <Panel className="grid gap-3">
-          <h2 className="m-0 text-base font-semibold">{t('forHumans')}</h2>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('forHumans')}</h2>
+          </div>
+          <div className="kh-ops-card-body grid gap-3">
           <p className="m-0 text-sm text-ink-muted">{t('forHumansBlurb')}</p>
           <div className="flex flex-wrap gap-2">
             <LinkButton href="/register" variant="secondary">
@@ -145,7 +158,8 @@ Content-Type: application/json
           <p className="m-0 text-xs text-ink-muted">
             {t('siteHint', { url: publicOrigin })}
           </p>
-        </Panel>
+          </div>
+        </section>
 
         <p className="m-0 text-center text-sm text-ink-muted">
           <Link href="/login" className="underline-offset-2 hover:underline">

@@ -77,7 +77,7 @@ export function StylePackColorField(props: {
         aria-label={t('templatesPickColor', { label: props.label })}
       >
         <span
-          className="size-6 shrink-0 rounded border border-line"
+          className="kh-ops-color-swatch"
           style={{ backgroundColor: display }}
           aria-hidden
         />
@@ -116,7 +116,7 @@ export function StylePackColorField(props: {
                 setDraft(next);
                 setHexText(next);
               }}
-              className="h-12 w-16 cursor-pointer rounded border border-line bg-transparent p-1"
+              className="kh-ops-color-input"
               aria-label={props.label}
             />
             <label className="grid min-w-[10rem] flex-1 gap-1 text-sm">
@@ -150,10 +150,7 @@ export function StylePackColorField(props: {
                     title={color}
                     aria-label={color}
                     aria-pressed={active}
-                    className={cn(
-                      'size-8 rounded border border-line transition',
-                      active && 'ring-2 ring-brand/50 ring-offset-2 ring-offset-surface',
-                    )}
+                    className="kh-ops-color-swatch"
                     style={{ backgroundColor: color }}
                     onClick={() => {
                       setDraft(color);

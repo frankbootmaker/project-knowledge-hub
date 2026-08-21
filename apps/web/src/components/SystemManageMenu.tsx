@@ -453,7 +453,7 @@ export function SystemManageMenu(props: {
                 <option value="critical">{t('criticalityOption.critical')}</option>
               </Select>
             </Field>
-            <div className="grid gap-3 rounded-md border border-line p-3">
+            <div className="kh-ops-inset grid gap-3">
               <div>
                 <p className="m-0 text-sm font-medium">{t('itSection')}</p>
                 <p className="mt-1 mb-0 text-xs text-ink-muted">{t('itSectionHint')}</p>
@@ -516,7 +516,7 @@ export function SystemManageMenu(props: {
               </Field>
             </div>
             {showItCost ? (
-              <div className="grid gap-3 rounded-md border border-line p-3">
+              <div className="kh-ops-inset grid gap-3">
                 <div>
                   <p className="m-0 text-sm font-medium">{t('itCostSection')}</p>
                   <p className="mt-1 mb-0 text-xs text-ink-muted">

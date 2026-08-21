@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import { AssistantBrandMark } from './AssistantBrandMark';
 import { UserAvatar } from './UserAvatar';
 import { Badge } from './ui';
-import { cn } from '../lib/cn';
 
 export type OrgChartStakeholder = {
   id: string;
@@ -92,51 +91,47 @@ function StakeholderCard({
 }) {
   const t = useTranslations('stakeholders');
   const isAi = stakeholder.kind === 'ai_assistant';
+  const isOpen = stakeholder.kind === 'open_role';
 
   return (
-    <article
-      className={cn(
-        'min-w-[12.5rem] max-w-[12.5rem] rounded-sm border p-2.5',
-        isAi
-          ? 'border-brand/30 bg-brand-soft/40'
-          : 'border-line bg-panel-solid',
-      )}
-    >
-      <div className="flex items-start gap-3">
-        {isAi ? (
-          <AssistantBrandMark
-            brand={stakeholder.assistantBrand}
-            name={stakeholder.displayName}
-            slug={stakeholder.systemSlug}
-            size="md"
-          />
-        ) : (
-          <UserAvatar
-            displayName={stakeholder.displayName}
-            fullName={stakeholder.fullName}
-            avatarUrl={stakeholder.avatarUrl}
-            size="md"
-          />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="m-0 text-sm font-semibold text-ink">
-            {stakeholder.displayName}
-          </p>
+    <article className="kh-ops-org-card" data-kind={stakeholder.kind}>
+      <div className="kh-ops-org-card-head">
+        <span className="kh-ops-org-photo">
+          {isAi ? (
+            <AssistantBrandMark
+              brand={stakeholder.assistantBrand}
+              name={stakeholder.displayName}
+              slug={stakeholder.systemSlug}
+              size="md"
+            />
+          ) : isOpen && !stakeholder.avatarUrl ? (
+            '?'
+          ) : (
+            <UserAvatar
+              displayName={stakeholder.displayName}
+              fullName={stakeholder.fullName}
+              avatarUrl={stakeholder.avatarUrl}
+              size="md"
+            />
+          )}
+        </span>
+        <div className="kh-ops-org-card-copy">
+          <strong>{stakeholder.displayName}</strong>
           {stakeholder.fullName &&
           stakeholder.fullName !== stakeholder.displayName ? (
-            <p className="mt-0.5 mb-0 text-xs text-ink-muted">
-              {stakeholder.fullName}
-            </p>
+            <small>{stakeholder.fullName}</small>
           ) : null}
           {stakeholder.email ? (
             <a
               href={`mailto:${stakeholder.email}`}
-              className="kh-org-email mt-1 block text-[11px] leading-snug text-brand no-underline hover:underline"
+              className="kh-org-email"
             >
               {stakeholder.email.split(/([.@])/).map((part, index) => (
                 <span
                   key={`${part}-${index}`}
-                  className={part === '.' || part === '@' ? undefined : 'whitespace-nowrap'}
+                  className={
+                    part === '.' || part === '@' ? undefined : 'whitespace-nowrap'
+                  }
                 >
                   {part}
                 </span>
@@ -144,22 +139,16 @@ function StakeholderCard({
             </a>
           ) : null}
           {!isAi && stakeholder.jobTitle ? (
-            <p className="mt-1 mb-0 text-xs text-ink-muted">
-              {stakeholder.jobTitle}
-            </p>
+            <small>{stakeholder.jobTitle}</small>
           ) : null}
           {isAi && stakeholder.notes ? (
-            <p className="mt-1 mb-0 line-clamp-2 text-xs text-ink-muted">
-              {stakeholder.notes}
-            </p>
+            <small className="line-clamp-2">{stakeholder.notes}</small>
           ) : null}
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap gap-1">
+      <div className="kh-ops-org-badges">
         {isAi ? <Badge tone="brand">{t('kindAiAssistant')}</Badge> : null}
-        {stakeholder.kind === 'open_role' ? (
-          <Badge tone="brand">{t('kindOpenRole')}</Badge>
-        ) : null}
+        {isOpen ? <Badge tone="brand">{t('kindOpenRole')}</Badge> : null}
         {stakeholder.projectRole && !isAi ? (
           <Badge tone="brand">{t(`projectRole.${stakeholder.projectRole}`)}</Badge>
         ) : null}
@@ -171,80 +160,22 @@ function StakeholderCard({
   );
 }
 
-/** Vertical stem between parent and the children row / next card. */
-function ConnectorStem({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn('w-px shrink-0 bg-line', className ?? 'h-4')}
-      aria-hidden
-    />
-  );
-}
-
 function TreeBranch({ node }: { node: TreeNode }) {
   const hasChildren = node.children.length > 0;
-  const multi = node.children.length > 1;
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="kh-ops-org-branch">
       <StakeholderCard stakeholder={node.stakeholder} />
-
       {hasChildren ? (
         <>
-          <ConnectorStem />
-          <ul
-            className={cn(
-              'm-0 flex list-none p-0',
-              // Mobile: stacked with left rail
-              'w-full flex-col items-stretch gap-0 pl-6',
-              // Desktop: side-by-side with classic org connectors
-              'md:w-auto md:flex-row md:items-start md:justify-center md:gap-0 md:pl-0',
-            )}
-          >
-            {node.children.map((child, index) => {
-              const isFirst = index === 0;
-              const isLast = index === node.children.length - 1;
-              return (
-                <li
-                  key={child.stakeholder.id}
-                  className={cn(
-                    'relative flex list-none flex-col',
-                    // Mobile left-rail elbow
-                    'border-l border-line pl-4 pt-3',
-                    'md:border-l-0 md:px-3 md:pl-3 md:pt-0 md:items-center',
-                  )}
-                >
-                  {/* Mobile: horizontal stub from rail into card */}
-                  <span
-                    className="absolute left-0 top-6 h-px w-4 bg-line md:hidden"
-                    aria-hidden
-                  />
-
-                  {/* Desktop: horizontal bar segments across siblings */}
-                  {multi ? (
-                    <>
-                      {!isFirst ? (
-                        <span
-                          className="absolute left-0 right-1/2 top-0 hidden h-px bg-line md:block"
-                          aria-hidden
-                        />
-                      ) : null}
-                      {!isLast ? (
-                        <span
-                          className="absolute left-1/2 right-0 top-0 hidden h-px bg-line md:block"
-                          aria-hidden
-                        />
-                      ) : null}
-                    </>
-                  ) : null}
-
-                  {/* Desktop: stem from bar down to card */}
-                  <ConnectorStem className="hidden h-4 md:block" />
-
-                  <TreeBranch node={child} />
-                </li>
-              );
-            })}
+          <div className="kh-ops-org-stem" aria-hidden />
+          <ul className="kh-ops-org-children">
+            {node.children.map((child) => (
+              <li key={child.stakeholder.id} className="kh-ops-org-child">
+                <div className="kh-ops-org-stem" aria-hidden />
+                <TreeBranch node={child} />
+              </li>
+            ))}
           </ul>
         </>
       ) : null}
@@ -264,33 +195,29 @@ export function ProjectStakeholdersOrgChart({
   );
 
   if (stakeholders.length === 0) {
-    return (
-      <div className="rounded-lg border border-line px-4 py-10 text-center text-sm text-ink-muted">
-        {t('empty')}
-      </div>
-    );
+    return <p className="kh-ops-empty">{t('empty')}</p>;
   }
 
   return (
-    <div className="grid gap-6">
-      <p className="m-0 text-xs text-ink-muted">{t('orgChartHint')}</p>
+    <div>
+      <p className="kh-ops-org-hint">{t('orgChartHint')}</p>
 
       {roots.length > 0 ? (
-        <div className="overflow-x-auto pb-2">
-          <div className="m-0 flex min-w-min flex-col items-stretch gap-10 p-1 md:items-center md:px-4">
+        <div className="kh-ops-org-tree-wrap">
+          <div className="kh-ops-org-tree">
             {roots.map((root) => (
               <TreeBranch key={root.stakeholder.id} node={root} />
             ))}
           </div>
         </div>
       ) : (
-        <p className="m-0 text-sm text-ink-muted">{t('orgChartNoHierarchy')}</p>
+        <p className="kh-ops-empty">{t('orgChartNoHierarchy')}</p>
       )}
 
       {ungrouped.length > 0 ? (
-        <div className="grid gap-3">
-          <h3 className="m-0 text-sm font-semibold">{t('orgChartUngrouped')}</h3>
-          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="kh-ops-org-ungrouped">
+          <h3>{t('orgChartUngrouped')}</h3>
+          <ul className="kh-ops-org-ungrouped-grid">
             {ungrouped.map((row) => (
               <li key={row.id}>
                 <StakeholderCard stakeholder={row} />

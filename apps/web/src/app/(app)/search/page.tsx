@@ -7,11 +7,8 @@ import {
   ErrorText,
   Field,
   Input,
-  ListCard,
   Page,
   PageHeader,
-  Panel,
-  SectionHeader,
   Select,
   lifecycleLabel,
   lifecycleTone,
@@ -125,7 +122,8 @@ export default async function SearchPage({
     <Page wide>
       <PageHeader title={t('title')} description={t('subtitle')} />
 
-      <Panel className="mb-6">
+      <section className="kh-ops-panel mb-6">
+        <div className="kh-ops-card-body">
         <form method="get" className="grid gap-4">
           <Field label={t('query')}>
             <Input
@@ -136,7 +134,7 @@ export default async function SearchPage({
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('workspace')}>
               <Select name="workspaceId" defaultValue={activeWorkspaceId}>
                 {workspaces.map((workspace) => (
@@ -188,8 +186,8 @@ export default async function SearchPage({
             </Field>
           </div>
 
-          <div className="flex flex-wrap gap-4 text-sm text-ink">
-            <label className="inline-flex items-center gap-2">
+          <div className="kh-ops-scope-checks">
+            <label className="kh-ops-scope-check">
               <input
                 type="checkbox"
                 name="verifiedOnly"
@@ -198,7 +196,7 @@ export default async function SearchPage({
               />
               {t('verifiedOnly')}
             </label>
-            <label className="inline-flex items-center gap-2">
+            <label className="kh-ops-scope-check">
               <input
                 type="checkbox"
                 name="currentOnly"
@@ -207,7 +205,7 @@ export default async function SearchPage({
               />
               {t('currentOnly')}
             </label>
-            <label className="inline-flex items-center gap-2">
+            <label className="kh-ops-scope-check">
               <input
                 type="checkbox"
                 name="includeHistorical"
@@ -217,7 +215,7 @@ export default async function SearchPage({
               {t('includeHistorical')}
             </label>
             {hybridAvailable ? (
-              <label className="inline-flex items-center gap-2">
+              <label className="kh-ops-scope-check">
                 <input
                   type="checkbox"
                   name="hybrid"
@@ -229,57 +227,85 @@ export default async function SearchPage({
             ) : null}
           </div>
 
-          <Button type="submit" className="justify-self-start">
-            {t('searchButton')}
-          </Button>
+          <div className="kh-ops-action-line px-0">
+            <span className="kh-ops-panel-meta">{t('title')}</span>
+            <Button type="submit">{t('searchButton')}</Button>
+          </div>
         </form>
-      </Panel>
+        </div>
+      </section>
 
       {searchError ? <ErrorText>{searchError}</ErrorText> : null}
 
       {query ? (
-        <section className="mt-6">
-          <SectionHeader
-            title={results.length ? t('resultsCount', { count: results.length }) : t('results')}
-          />
-          <ul className="m-0 grid list-none gap-3 p-0">
-            {results.map((result) => {
-              const href = activeWorkspace
-                ? `/workspaces/${activeWorkspace.slug}/records/${result.slug}`
-                : '#';
-              return (
-                <ListCard key={result.id}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <Link href={href} className="font-semibold no-underline">
-                        {result.title}
-                      </Link>
-                      <p className="mt-1 mb-0 text-sm text-ink-muted">
-                        {result.recordType}
-                        {result.project?.name ? ` · ${result.project.name}` : ''}
-                        {result.system?.name ? ` · ${result.system.name}` : ''}
-                      </p>
-                    </div>
-                    <Badge tone={lifecycleTone(result.lifecycleStatus)}>
-                      {lifecycleLabel(result.lifecycleStatus, tRecords)}
-                    </Badge>
-                  </div>
-                  {result.excerpt ? (
-                    <p className="mt-3 mb-0 text-sm text-ink-muted">{result.excerpt}</p>
-                  ) : null}
-                  {result.tags.length > 0 ? (
-                    <p className="mt-2 mb-0 text-xs text-ink-muted">
-                      {t('tagsLabel', { tags: result.tags.join(', ') })}
-                    </p>
-                  ) : null}
-                </ListCard>
-              );
-            })}
-            {results.length === 0 && !searchError ? (
-              <li className="kh-muted list-none">{t('noMatches')}</li>
-            ) : null}
-          </ul>
-        </section>
+        <div className="mt-6 grid gap-4">
+          {results.length === 0 && !searchError ? (
+            <p className="kh-ops-empty">{t('noMatches')}</p>
+          ) : null}
+          {Object.entries(
+            results.reduce<Record<string, SearchResult[]>>((groups, result) => {
+              const key = result.recordType || 'other';
+              groups[key] = groups[key] ?? [];
+              groups[key].push(result);
+              return groups;
+            }, {}),
+          ).map(([recordTypeKey, group]) => (
+            <section key={recordTypeKey} className="kh-ops-search-group kh-ops-panel">
+              <div className="kh-ops-panel-head">
+                <h2 className="kh-ops-panel-title">{recordTypeKey}</h2>
+                <span className="kh-ops-panel-meta">{group.length}</span>
+              </div>
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('colTitle')}</th>
+                      <th>{t('colType')}</th>
+                      <th>{t('colLifecycle')}</th>
+                      <th>{t('colProject')}</th>
+                      <th>{t('colUpdated')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.map((result) => {
+                      const href = activeWorkspace
+                        ? `/workspaces/${activeWorkspace.slug}/records/${result.slug}`
+                        : '#';
+                      return (
+                        <tr key={result.id}>
+                          <td className="kh-ops-primary-cell">
+                            <Link href={href} className="no-underline">
+                              {result.title}
+                            </Link>
+                            {result.excerpt ? (
+                              <div className="max-w-[28rem] truncate text-[11px] font-normal text-ink-muted">
+                                {result.excerpt}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td>
+                            <span className="kh-ops-type-chip">
+                              {result.recordType}
+                            </span>
+                          </td>
+                          <td>
+                            <Badge tone={lifecycleTone(result.lifecycleStatus)}>
+                              {lifecycleLabel(result.lifecycleStatus, tRecords)}
+                            </Badge>
+                          </td>
+                          <td>{result.project?.name ?? '—'}</td>
+                          <td>
+                            {new Date(result.updatedAt).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
+        </div>
       ) : null}
     </Page>
   );

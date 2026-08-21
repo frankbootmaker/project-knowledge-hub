@@ -1,11 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import {
-  Badge,
-  ListCard,
-  PageHeader,
-  Panel,
-} from '../../../../components/ui';
+import { PageHeader } from '../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../lib/session';
 
 type WorkspaceRow = {
@@ -14,12 +9,6 @@ type WorkspaceRow = {
   slug: string;
   archivedAt: string | null;
 };
-
-function roleTone(role: string): 'brand' | 'success' | 'neutral' {
-  if (role === 'workspace_admin') return 'brand';
-  if (role === 'maintainer') return 'success';
-  return 'neutral';
-}
 
 export default async function AccountMembershipsPage() {
   const session = await requireSession();
@@ -71,39 +60,51 @@ export default async function AccountMembershipsPage() {
       />
 
       {session.user.isSystemAdmin ? (
-        <Panel className="mb-4">
-          <p className="m-0 text-sm text-ink-muted">{t('membershipsSystemAdminNote')}</p>
-        </Panel>
+        <p className="kh-ops-status-row mb-4">{t('membershipsSystemAdminNote')}</p>
       ) : null}
 
       {rows.length === 0 ? (
-        <Panel>
-          <p className="m-0 text-sm text-ink-muted">{t('membershipsEmpty')}</p>
-        </Panel>
+        <p className="kh-ops-empty">{t('membershipsEmpty')}</p>
       ) : (
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {rows.map((row) => (
-            <ListCard key={row.id}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <Link
-                    href={`/workspaces/${row.slug}`}
-                    className="font-semibold text-ink no-underline hover:text-brand"
-                  >
-                    {row.name}
-                  </Link>
-                  <p className="m-0 mt-0.5 text-sm text-ink-muted">{row.slug}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {row.archivedAt ? (
-                    <Badge tone="warn">{t('membershipsArchived')}</Badge>
-                  ) : null}
-                  <Badge tone={roleTone(row.role)}>{roleLabel(row.role)}</Badge>
-                </div>
-              </div>
-            </ListCard>
-          ))}
-        </ul>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{tAdmin('colWorkspace')}</th>
+                  <th>{tAdmin('colRole')}</th>
+                  <th>{tAdmin('colStatus')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="kh-ops-primary-cell">
+                      <Link
+                        href={`/workspaces/${row.slug}`}
+                        className="no-underline"
+                      >
+                        {row.name}
+                      </Link>
+                    </td>
+                    <td>
+                      <span className="kh-ops-type-chip">{roleLabel(row.role)}</span>
+                    </td>
+                    <td>
+                      {row.archivedAt ? (
+                        <span className="kh-ops-type-chip">
+                          {t('membershipsArchived')}
+                        </span>
+                      ) : (
+                        t('membershipsActive')
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       <p className="mt-4 mb-0 text-sm text-ink-muted">{t('membershipsHelp')}</p>

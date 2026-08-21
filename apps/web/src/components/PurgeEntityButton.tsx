@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Button, ErrorText, Panel } from './ui';
+import { Button, ErrorText } from './ui';
 
 export type PurgeEntityKind =
   | 'workspace'
@@ -106,7 +106,7 @@ export function PurgeEntityButton({
   }
 
   return (
-    <Panel variant="inset" className="grid w-full max-w-md gap-3">
+    <div className="kh-ops-confirm">
       <p className="m-0 text-sm text-danger">
         {t('confirmDelete', { name: entityName })}
       </p>
@@ -146,6 +146,6 @@ export function PurgeEntityButton({
           {tCommon('cancel')}
         </Button>
       </div>
-    </Panel>
+    </div>
   );
 }

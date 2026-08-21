@@ -107,7 +107,7 @@
   }
 
   .kh-function-header {
-    @apply mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between;
+    @apply mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between;
   }
 
   .kh-function-header-controls {
@@ -130,36 +130,27 @@
     @apply rounded-sm border border-line bg-panel-solid p-4;
   }
 
-  /* Workspace accent tiles — soft wash + stronger wash on hover */
+  /* Workspace accent — 3px Ops stripe, not a soft wash */
   .kh-workspace-accent-bar {
-    height: 0.375rem;
-    border-radius: 999px;
+    height: 3px;
+    border-radius: 0;
     background: var(--kh-workspace-accent);
   }
 
   .kh-workspace-tile {
-    background: linear-gradient(
-      105deg,
-      color-mix(in srgb, var(--kh-workspace-accent) 14%, var(--kh-panel)) 0%,
-      var(--kh-panel) 42%
-    );
+    box-shadow: inset 0 3px var(--kh-workspace-accent);
   }
 
   .kh-workspace-tile:hover {
-    background: linear-gradient(
-      105deg,
-      color-mix(in srgb, var(--kh-workspace-accent) 22%, var(--kh-panel)) 0%,
-      color-mix(in srgb, var(--kh-workspace-accent) 6%, var(--kh-panel)) 55%
-    );
+    box-shadow: inset 0 3px var(--kh-workspace-accent);
   }
 
   .kh-workspace-swatch {
     display: inline-block;
     width: 1.35rem;
     height: 1.35rem;
-    border-radius: 999px;
+    border: 1px solid var(--kh-line);
     background: var(--kh-workspace-accent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kh-ink) 18%, transparent);
   }
 
   .kh-workspace-swatch-btn {
@@ -179,12 +170,9 @@
   }
 
   .kh-workspace-swatch-btn-active {
-    border-color: var(--kh-workspace-accent, var(--kh-brand));
-    background: color-mix(
-      in srgb,
-      var(--kh-workspace-accent, var(--kh-brand)) 12%,
-      transparent
-    );
+    border-color: var(--kh-ink);
+    background: transparent;
+    box-shadow: inset 0 3px var(--kh-workspace-accent, var(--kh-brand));
   }
 
   .kh-workspace-color-ocean {
@@ -318,8 +306,9 @@
   }
 
   .kh-step {
-    @apply rounded-md border border-line bg-panel-solid px-3 py-1.5 text-sm font-medium
+    @apply rounded-[3px] border border-line bg-panel-solid px-3 py-1.5 text-xs font-medium
       text-ink-muted transition disabled:cursor-not-allowed disabled:opacity-50;
+    font-family: var(--font-mono), ui-monospace, monospace;
   }
 
   .kh-step-active {
@@ -425,8 +414,8 @@
   /* Mobile: bottom sheet. sm+: centered card. */
   .kh-modal-panel {
     @apply relative flex w-full max-w-lg min-h-0 flex-col overflow-hidden
-      rounded-t-2xl border border-b-0 border-line bg-panel-solid shadow-sm
-      sm:rounded-lg sm:border-b;
+      rounded-t-[3px] border border-b-0 border-line bg-panel-solid shadow-sm
+      sm:rounded-[3px] sm:border-b;
     max-height: min(92dvh, 100%);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: kh-modal-sheet-in var(--kh-motion-enter) var(--kh-ease-out);
@@ -490,15 +479,22 @@
   }
 
   .kh-modal-header {
-    @apply flex shrink-0 items-start justify-between gap-3 border-b border-line px-3 py-3 sm:px-4;
+    @apply sticky top-0 z-[1] flex shrink-0 items-start justify-between gap-3
+      border-b border-line bg-panel-solid px-3 py-2 sm:px-4;
   }
 
   .kh-modal-title {
-    @apply m-0 text-base font-semibold tracking-tight break-words text-ink sm:text-lg;
+    margin: 0;
+    font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+    color: var(--kh-ink);
   }
 
   .kh-modal-description {
-    @apply mt-1 mb-0 line-clamp-3 text-sm text-ink-muted sm:line-clamp-none;
+    @apply mt-1 mb-0 line-clamp-3 text-[11px] text-ink-muted sm:line-clamp-none;
   }
 
   .kh-modal-panel-full .kh-modal-description {
@@ -635,7 +631,10 @@
 }
 
 .knowledge-markdown {
-  @apply max-w-full min-w-0 leading-relaxed;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
 }
 
 .knowledge-markdown :is(h1, h2, h3, h4, h5, h6) {
@@ -643,88 +642,154 @@
 }
 
 .knowledge-markdown pre {
-  @apply overflow-x-auto rounded-md bg-ink/5 px-4 py-3;
+  overflow-x: auto;
+  padding: 12px 14px;
+  border-radius: var(--kh-radius-sm);
+  background: color-mix(in oklch, var(--kh-ink) 5%, transparent);
 }
 
 /* Wide spreadsheet-style tables from Excel→Markdown imports. */
 .knowledge-markdown-table-scroll {
-  @apply my-4 max-w-full overflow-x-auto rounded-md border border-line;
+  margin: 16px 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--kh-line);
+  border-radius: var(--kh-radius-sm);
 }
 
 .knowledge-markdown table {
-  @apply w-max min-w-full border-collapse text-sm;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
 }
 
 .knowledge-markdown th,
 .knowledge-markdown td {
-  @apply border border-line px-2.5 py-1.5 align-top whitespace-nowrap;
+  padding: 8px 10px;
+  border: 1px solid var(--kh-line);
+  vertical-align: top;
+  white-space: nowrap;
 }
 
 .knowledge-markdown th {
-  @apply bg-neutral-soft font-semibold text-ink;
+  background: var(--kh-neutral-soft);
+  font-weight: 650;
+  color: var(--kh-ink);
 }
 
 .knowledge-markdown tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--kh-ink) 3%, transparent);
+  background: color-mix(in oklch, var(--kh-ink) 3%, transparent);
 }
 
-.dark .knowledge-markdown pre {
-  @apply bg-ink/10;
+.dark .knowledge-markdown pre,
+html[data-theme='dark'] .knowledge-markdown pre {
+  background: color-mix(in oklch, var(--kh-ink) 10%, transparent);
 }
 
-.dark .knowledge-markdown .hljs {
+.dark .knowledge-markdown .hljs,
+html[data-theme='dark'] .knowledge-markdown .hljs {
   background: transparent;
   color: #d6dee8;
 }
 
 .dark .knowledge-markdown .hljs-comment,
-.dark .knowledge-markdown .hljs-quote {
+.dark .knowledge-markdown .hljs-quote,
+html[data-theme='dark'] .knowledge-markdown .hljs-comment,
+html[data-theme='dark'] .knowledge-markdown .hljs-quote {
   color: #8b9aab;
 }
 
 .dark .knowledge-markdown .hljs-keyword,
 .dark .knowledge-markdown .hljs-selector-tag,
-.dark .knowledge-markdown .hljs-subst {
+.dark .knowledge-markdown .hljs-subst,
+html[data-theme='dark'] .knowledge-markdown .hljs-keyword,
+html[data-theme='dark'] .knowledge-markdown .hljs-selector-tag,
+html[data-theme='dark'] .knowledge-markdown .hljs-subst {
   color: #7eb6e0;
 }
 
 .dark .knowledge-markdown .hljs-string,
 .dark .knowledge-markdown .hljs-doctag,
-.dark .knowledge-markdown .hljs-template-variable {
+.dark .knowledge-markdown .hljs-template-variable,
+html[data-theme='dark'] .knowledge-markdown .hljs-string,
+html[data-theme='dark'] .knowledge-markdown .hljs-doctag,
+html[data-theme='dark'] .knowledge-markdown .hljs-template-variable {
   color: #8fd0a8;
 }
 
 .dark .knowledge-markdown .hljs-number,
-.dark .knowledge-markdown .hljs-literal {
+.dark .knowledge-markdown .hljs-literal,
+html[data-theme='dark'] .knowledge-markdown .hljs-number,
+html[data-theme='dark'] .knowledge-markdown .hljs-literal {
   color: #e0a84a;
 }
 
 .knowledge-markdown code {
-  @apply font-mono text-[0.9em];
+  padding: 2px 4px;
+  background: var(--kh-bg, var(--kh-surface));
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.knowledge-markdown pre code {
+  padding: 0;
+  background: transparent;
 }
 
 .knowledge-markdown pre.mermaid {
-  @apply bg-transparent text-center;
+  background: transparent;
+  text-align: center;
 }
 
 .knowledge-markdown h1,
 .knowledge-markdown h2,
 .knowledge-markdown h3 {
-  @apply mt-6 mb-2 font-semibold tracking-tight text-ink;
+  margin: 22px 0 8px;
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--kh-ink);
+}
+
+.knowledge-markdown h1:first-child,
+.knowledge-markdown h2:first-child,
+.knowledge-markdown h3:first-child {
+  margin-top: 0;
 }
 
 .knowledge-markdown h1 {
-  @apply text-2xl;
+  font-size: 22px;
 }
 
 .knowledge-markdown h2 {
-  @apply text-xl;
+  font-size: 18px;
+}
+
+.knowledge-markdown h3 {
+  font-size: 15px;
+}
+
+.knowledge-markdown p,
+.knowledge-markdown li {
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 .knowledge-markdown p {
-  @apply my-3;
+  margin: 12px 0;
 }
 
 .knowledge-markdown ul {
-  @apply my-3 list-disc pl-5;
+  margin: 12px 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.knowledge-markdown blockquote {
+  margin: 15px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--kh-accent);
+  background: var(--kh-bg, var(--kh-surface));
+  color: var(--kh-ink-muted);
 }
