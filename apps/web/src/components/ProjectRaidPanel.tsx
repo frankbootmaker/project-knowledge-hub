@@ -337,7 +337,7 @@ export function ProjectRaidPanel({
             </p>
           </Panel>
         ) : null}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="kh-ops-form-grid">
           <Field label={t('kindLabel')}>
             <Select
               value={kind}
@@ -378,7 +378,7 @@ export function ProjectRaidPanel({
             data-modal-initial-focus
           />
         </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="kh-ops-form-grid">
           <Field label={t('severityLabel')}>
             <Select
               value={severity}

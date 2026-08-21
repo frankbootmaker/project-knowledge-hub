@@ -504,7 +504,7 @@ export function ProjectAgileManageModal({
           </label>
         </Panel>
       ) : null}
-      <div className="grid gap-3">
+      <div className="kh-ops-form-grid">
         {effortRollup ? (
           <div className="rounded-md border border-line bg-panel-solid p-3 text-sm">
             <p className="mt-0 mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
@@ -574,7 +574,7 @@ export function ProjectAgileManageModal({
           </Select>
         </Field>
         {kind === 'milestone' ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('startDate')}>
               <Input
                 type="date"
@@ -593,7 +593,7 @@ export function ProjectAgileManageModal({
             </Field>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('startDate')}>
               <Input
                 type="date"

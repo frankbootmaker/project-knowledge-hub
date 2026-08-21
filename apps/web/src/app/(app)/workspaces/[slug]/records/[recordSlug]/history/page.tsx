@@ -4,11 +4,9 @@ import { getTranslations } from 'next-intl/server';
 import { VersionRestoreButton } from '../../../../../../../components/VersionRestoreButton';
 import {
   Badge,
-  ListCard,
   Page,
   PageHeader,
   lifecycleLabel,
-  lifecycleTone,
 } from '../../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../../lib/session';
 
@@ -109,40 +107,38 @@ export default async function KnowledgeRecordHistoryPage({
         })}
       />
 
-      <ul className="m-0 grid list-none gap-3 p-0">
-        {versionsPayload.versions.map((version) => {
-          const isCurrent = version.versionNumber === versionsPayload.currentVersionNumber;
-          const isHistorical = !isCurrent;
-          return (
-            <ListCard key={version.versionNumber}>
-              <div className="flex justify-between gap-4">
+      <section className="kh-ops-panel">
+        <ul className="kh-ops-history-list">
+          {versionsPayload.versions.map((version) => {
+            const isCurrent =
+              version.versionNumber === versionsPayload.currentVersionNumber;
+            const isHistorical = !isCurrent;
+            return (
+              <li key={version.versionNumber} className="kh-ops-history-item">
+                <span className="kh-ops-code-box">{version.versionNumber}</span>
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <strong>v{version.versionNumber}</strong>
-                    {isCurrent ? (
-                      <Badge tone="success">{t('current')}</Badge>
-                    ) : (
-                      <Badge tone="warn">{t('historical')}</Badge>
-                    )}
-                    <Badge tone={lifecycleTone(version.lifecycleStatus)}>
-                      {lifecycleLabel(version.lifecycleStatus, t)}
-                    </Badge>
+                  <h3>{version.title}</h3>
+                  <div className="kh-ops-history-meta">
+                    <span>{version.createdAt}</span>
+                    {version.changeMessage ? (
+                      <span>{version.changeMessage}</span>
+                    ) : null}
                   </div>
-                  <p className="mt-2 mb-0 text-ink">{version.title}</p>
-                  <p className="mt-1 mb-0 text-sm text-ink-muted">{version.createdAt}</p>
-                  {version.changeMessage ? (
-                    <p className="mt-2 mb-0 text-sm">{version.changeMessage}</p>
-                  ) : null}
                   {isHistorical ? (
-                    <p className="mt-3 mb-0 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn">
+                    <p className="mt-2 mb-0 text-xs text-warn">
                       {t('historicalWarningList')}
                     </p>
                   ) : null}
                 </div>
-                <div className="grid shrink-0 content-start gap-2">
+                <div className="grid shrink-0 justify-items-end gap-2">
+                  {isCurrent ? (
+                    <Badge tone="success">{t('current')}</Badge>
+                  ) : (
+                    <Badge tone="warn">{t('historical')}</Badge>
+                  )}
                   <Link
                     href={`/workspaces/${workspace.slug}/records/${record.slug}/history/${version.versionNumber}`}
-                    className="text-sm font-medium text-brand no-underline hover:text-brand-hover"
+                    className="kh-ops-text-btn no-underline"
                   >
                     {t('view')}
                   </Link>
@@ -155,11 +151,11 @@ export default async function KnowledgeRecordHistoryPage({
                     />
                   ) : null}
                 </div>
-              </div>
-            </ListCard>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
     </Page>
   );
 }

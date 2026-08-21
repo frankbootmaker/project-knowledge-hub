@@ -133,7 +133,13 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-capacity-row` / `.kh-ops-capacity-track` | Utilization planned (ink) + burn (accent) bars |
 | `.kh-ops-budget-layout` / `.kh-ops-cost-split` / `.kh-ops-cost-part` | Budget burndown + people/AI/systems split |
 | `.kh-ops-baseline-grid` / `.kh-ops-field-cell` / `.kh-ops-pinned` | Baseline field cells and pinned records |
-| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace project cards with RAG |
+| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack cards |
+| `.kh-ops-form-grid` / `.kh-ops-field-span` | Dense two-column modal and admin forms |
+| `.kh-ops-modal-tabs` / `.kh-ops-modal-pane` | Manage-dialog tab strip (existing product tabs only) |
+| `.kh-ops-activity-item` / `.kh-ops-linked-row` / `.kh-ops-text-btn` | Task activity thread, linked rows, quiet actions |
+| `.kh-ops-storage-choice` / `.kh-ops-provider` | Admin storage provider picker |
+| `.kh-ops-stage-strip` / `.kh-ops-stage-card` | Document-import progress stages |
+| `.kh-ops-history-list` / `.kh-ops-history-item` | Knowledge version history rows |
 | `.kh-ops-roster-person` | Stakeholder roster avatar + name cell |
 | `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
@@ -206,6 +212,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console leftover catalogues** — Project-linked systems/records, workspace picker, account memberships, import details, version history, Git connections, and remaining admin lists (organizations, AI providers, storage picker, style packs) now use Ops data tables, project cards, or provider/stage strips. Task manage dialogs use prototype modal tabs and form grid for existing Details / RACI / Handoff / Activity / Documents sections. No invented FTE, retention, or Azure storage columns.
 * **Ops Console catalogues (slices 1–8)** — Stakeholders (list/org/utilization inline; `?stakeholders=org` / `?utilization=1` unchanged), RAID, change, budget body, baseline, workspace project grid + knowledge/system tables, search groups, archive tables, manage-modal density, and admin/account lists now use `.kh-ops-data-table`, capacity bars, budget layout, baseline grid, and project cards. No invented FTE/cycle-time/budget-impact columns.
 * **Ops Console delivery** — Project delivery matches the prototype board/list/tree/scrum/calendar/timeline chrome in place (`?delivery=` hash routes unchanged). Mode strip, live open-work / hours / cost stats, sortable list table, lane task cards, work-breakdown tree, sprint-head, month+day calendar, and timeline bars use `.kh-ops-delivery-*` recipes. Board statuses stay `todo|in_progress|blocked|done|cancelled`; cycle time is not invented.
 * **Ops Console views** — Remaining high-traffic surfaces match the prototype density: `PageHeader` is `.kh-ops-view-intro`; catalogues sit in square panels with row items; dashboards/admin/git/imports use count strips and data tables; auth uses the bordered `AuthCard`. Shared recipes live in `styles/ops-shell.css` (`OpsCountStrip`, `.kh-ops-stats`, `.kh-ops-health-grid`, `.kh-ops-data-table`).

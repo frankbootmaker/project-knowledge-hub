@@ -310,7 +310,7 @@ export function ProjectChangePanel({
     return (
       <div className="grid gap-3">
         {error ? <ErrorText>{error}</ErrorText> : null}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="kh-ops-form-grid">
           <Field label={t('kindLabel')}>
             <Select
               value={kind}
@@ -362,7 +362,7 @@ export function ProjectChangePanel({
             rows={3}
           />
         </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="kh-ops-form-grid">
           <Field label={t('requestedBy')}>
             <Select
               value={requestedByUserId}
@@ -401,7 +401,7 @@ export function ProjectChangePanel({
           />
         </Field>
         {kind === 'timeline' ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('baselineStartBefore')}>
               <Input
                 type="date"

@@ -42,6 +42,7 @@ export function OrganizationsAdmin({
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
   const [createSlug, setCreateSlug] = useState('');
+  const [managingId, setManagingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState<'transfer' | 'destroy'>('transfer');
   const [destroyStep, setDestroyStep] = useState<1 | 2>(1);
@@ -114,6 +115,12 @@ export function OrganizationsAdmin({
     setCreateOpen(false);
     setCreateName('');
     setCreateSlug('');
+    setError(null);
+  }
+
+  function closeManageModal() {
+    setManagingId(null);
+    resetDeleteFlow();
     setError(null);
   }
 
@@ -231,6 +238,7 @@ export function OrganizationsAdmin({
         throw new Error(payload.error?.message ?? t('failed'));
       }
       resetDeleteFlow();
+      setManagingId(null);
       if (payload.mode === 'destroy') {
         pushToast(
           t('toastOrganizationDeletedDestroyed', { name: org.name }),
@@ -261,6 +269,26 @@ export function OrganizationsAdmin({
   }
 
   const canDeleteAny = initialOrganizations.length > 1;
+  const managingOrg =
+    initialOrganizations.find((org) => org.id === managingId) ?? null;
+  const managingDraft = managingOrg ? draftFor(managingOrg) : null;
+  const managingDirty = Boolean(
+    managingOrg &&
+      managingDraft &&
+      (managingDraft.name.trim() !== managingOrg.name ||
+        managingDraft.slug.trim() !== managingOrg.slug),
+  );
+  const managingConfirming = managingOrg
+    ? confirmDeleteId === managingOrg.id
+    : false;
+  const managingWorkspaceCount = managingOrg?.workspaceCount ?? 0;
+  const managingOthers = managingOrg
+    ? otherOrganizations(managingOrg.id)
+    : [];
+  const managingTransferTo = managingOrg
+    ? (transferTargets[managingOrg.id] ?? managingOthers[0]?.id ?? '')
+    : '';
+  const managingTransferLocked = managingOthers.length === 1;
 
   return (
     <div className="grid gap-6">
@@ -323,267 +351,322 @@ export function OrganizationsAdmin({
         {error ? <ErrorText>{error}</ErrorText> : null}
       </Modal>
 
-      <div className="grid gap-3">
-        {initialOrganizations.length === 0 ? (
-          <p className="kh-muted">{t('emptyOrganizations')}</p>
-        ) : (
-          initialOrganizations.map((org) => {
-            const draft = draftFor(org);
-            const dirty =
-              draft.name.trim() !== org.name || draft.slug.trim() !== org.slug;
-            const confirming = confirmDeleteId === org.id;
-            const workspaceCount = org.workspaceCount ?? 0;
-            const others = otherOrganizations(org.id);
-            const transferTo = transferTargets[org.id] ?? others[0]?.id ?? '';
-            const transferLocked = others.length === 1;
-            return (
-              <Panel key={org.id} className="grid gap-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="m-0 text-sm font-semibold">{org.name}</p>
-                    <p className="mt-1 mb-0 font-mono text-xs text-ink-muted">{org.id}</p>
-                    <p className="mt-1 mb-0 text-xs text-ink-muted">
-                      {t('organizationWorkspaceCount', { count: workspaceCount })}
-                    </p>
-                  </div>
-                  <p className="m-0 text-xs text-ink-muted">
-                    {t('updatedAt')}: {new Date(org.updatedAt).toLocaleString()}
-                  </p>
-                </div>
-                <Field label={tCommon('name')}>
-                  <Input
-                    value={draft.name}
-                    onChange={(e) => setDraft(org.id, { name: e.target.value })}
-                    maxLength={160}
-                    disabled={pending}
-                  />
-                </Field>
-                <Field label={t('slug')}>
-                  <Input
-                    value={draft.slug}
-                    onChange={(e) => setDraft(org.id, { slug: e.target.value })}
-                    maxLength={64}
-                    disabled={pending}
-                  />
-                </Field>
-                <p className="m-0 text-xs text-ink-muted">{t('organizationSlugHint')}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    disabled={pending || !dirty || !draft.name.trim() || !draft.slug.trim()}
-                    onClick={() => void saveOrganization(org)}
-                  >
-                    {t('saveOrganization')}
-                  </Button>
-                  {dirty ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
+      {initialOrganizations.length === 0 ? (
+        <p className="kh-ops-empty">{t('emptyOrganizations')}</p>
+      ) : (
+        <div className="kh-ops-project-grid px-0">
+          {initialOrganizations.map((org) => (
+            <article key={org.id} className="kh-ops-project-card">
+              <h3>{org.name}</h3>
+              <p>
+                {t('organizationWorkspaceCount', {
+                  count: org.workspaceCount ?? 0,
+                })}
+              </p>
+              <div className="kh-ops-project-card-foot">
+                <span>{org.slug}</span>
+                <button
+                  type="button"
+                  className="kh-ops-text-btn"
+                  onClick={() => {
+                    setError(null);
+                    resetDeleteFlow();
+                    setManagingId(org.id);
+                  }}
+                >
+                  {t('manageOrganization')}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <Modal
+        open={Boolean(managingOrg && managingDraft)}
+        onClose={closeManageModal}
+        title={managingOrg?.name ?? t('manageOrganization')}
+        description={t('organizationsBlurb')}
+        size="lg"
+        footer={
+          managingOrg && managingDraft ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={closeManageModal}
+              >
+                {tCommon('cancel')}
+              </Button>
+              <Button
+                type="button"
+                disabled={
+                  pending ||
+                  !managingDirty ||
+                  !managingDraft.name.trim() ||
+                  !managingDraft.slug.trim()
+                }
+                onClick={() => void saveOrganization(managingOrg)}
+              >
+                {t('saveOrganization')}
+              </Button>
+            </>
+          ) : null
+        }
+      >
+        {managingOrg && managingDraft ? (
+          <div className="kh-ops-form-grid">
+            <p className="kh-ops-field-span m-0 font-mono text-xs text-ink-muted">
+              {managingOrg.id}
+            </p>
+            <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+              {t('organizationWorkspaceCount', {
+                count: managingWorkspaceCount,
+              })}{' '}
+              · {t('updatedAt')}: {new Date(managingOrg.updatedAt).toLocaleString()}
+            </p>
+            <Field label={tCommon('name')}>
+              <Input
+                value={managingDraft.name}
+                onChange={(e) =>
+                  setDraft(managingOrg.id, { name: e.target.value })
+                }
+                maxLength={160}
+                disabled={pending}
+                data-modal-initial-focus
+              />
+            </Field>
+            <Field label={t('slug')}>
+              <Input
+                value={managingDraft.slug}
+                onChange={(e) =>
+                  setDraft(managingOrg.id, { slug: e.target.value })
+                }
+                maxLength={64}
+                disabled={pending}
+              />
+            </Field>
+            <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+              {t('organizationSlugHint')}
+            </p>
+            {managingDirty ? (
+              <div className="kh-ops-field-span">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() =>
+                    setDraft(managingOrg.id, {
+                      name: managingOrg.name,
+                      slug: managingOrg.slug,
+                    })
+                  }
+                >
+                  {t('resetDraft')}
+                </Button>
+              </div>
+            ) : null}
+            {!managingConfirming ? (
+              <div className="kh-ops-field-span">
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={pending || !canDeleteAny}
+                  title={
+                    canDeleteAny ? undefined : t('organizationDeleteLastHint')
+                  }
+                  onClick={() => {
+                    setDeleteMode('transfer');
+                    setDestroyStep(1);
+                    setDestroyAcknowledged(false);
+                    setConfirmDeleteId(managingOrg.id);
+                  }}
+                >
+                  {t('deleteOrganization')}
+                </Button>
+              </div>
+            ) : (
+              <Panel variant="inset" className="kh-ops-field-span grid gap-3">
+                <p className="m-0 text-sm text-danger">
+                  {t('organizationDeleteConfirm', {
+                    name: managingOrg.name,
+                    count: managingWorkspaceCount,
+                  })}
+                </p>
+                <fieldset className="m-0 grid gap-2 border-0 p-0">
+                  <legend className="mb-1 text-sm font-medium">
+                    {t('organizationDeleteDisposition')}
+                  </legend>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name={`org-delete-mode-${managingOrg.id}`}
+                      checked={deleteMode === 'transfer'}
                       disabled={pending}
-                      onClick={() =>
-                        setDraft(org.id, { name: org.name, slug: org.slug })
-                      }
-                    >
-                      {t('resetDraft')}
-                    </Button>
-                  ) : null}
-                  {!confirming ? (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      disabled={pending || !canDeleteAny}
-                      title={
-                        canDeleteAny ? undefined : t('organizationDeleteLastHint')
-                      }
-                      onClick={() => {
+                      onChange={() => {
                         setDeleteMode('transfer');
                         setDestroyStep(1);
                         setDestroyAcknowledged(false);
-                        setConfirmDeleteId(org.id);
                       }}
-                    >
-                      {t('deleteOrganization')}
-                    </Button>
-                  ) : null}
-                </div>
-                {confirming ? (
-                  <Panel variant="inset" className="grid gap-3">
+                    />
+                    <span>{t('organizationDeleteModeTransfer')}</span>
+                  </label>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name={`org-delete-mode-${managingOrg.id}`}
+                      checked={deleteMode === 'destroy'}
+                      disabled={pending}
+                      onChange={() => {
+                        setDeleteMode('destroy');
+                        setDestroyStep(1);
+                        setDestroyAcknowledged(false);
+                      }}
+                    />
+                    <span>{t('organizationDeleteModeDestroy')}</span>
+                  </label>
+                </fieldset>
+                {deleteMode === 'transfer' ? (
+                  <>
+                    {managingOthers.length > 0 ? (
+                      <Field label={t('organizationTransferTarget')}>
+                        <Select
+                          value={managingTransferTo}
+                          disabled={pending || managingTransferLocked}
+                          onChange={(e) =>
+                            setTransferTargets((current) => ({
+                              ...current,
+                              [managingOrg.id]: e.target.value,
+                            }))
+                          }
+                        >
+                          {managingOthers.map((target) => (
+                            <option key={target.id} value={target.id}>
+                              {target.name} ({target.slug})
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    ) : null}
+                    <p className="m-0 text-xs text-ink-muted">
+                      {managingTransferLocked
+                        ? t('organizationTransferAutoHint', {
+                            target: managingOthers[0]?.name ?? '',
+                          })
+                        : t('organizationTransferHint')}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        disabled={
+                          pending ||
+                          (managingWorkspaceCount > 0 && !managingTransferTo)
+                        }
+                        onClick={() => void deleteOrganization(managingOrg)}
+                      >
+                        {t('confirmDeleteOrganization')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={resetDeleteFlow}
+                      >
+                        {tCommon('cancel')}
+                      </Button>
+                    </div>
+                  </>
+                ) : destroyStep === 1 ? (
+                  <>
                     <p className="m-0 text-sm text-danger">
-                      {t('organizationDeleteConfirm', {
-                        name: org.name,
-                        count: workspaceCount,
+                      {t('organizationDestroyWarning1', {
+                        name: managingOrg.name,
+                        count: managingWorkspaceCount,
                       })}
                     </p>
-                    <fieldset className="m-0 grid gap-2 border-0 p-0">
-                      <legend className="mb-1 text-sm font-medium">
-                        {t('organizationDeleteDisposition')}
-                      </legend>
-                      <label className="flex items-start gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name={`org-delete-mode-${org.id}`}
-                          checked={deleteMode === 'transfer'}
-                          disabled={pending}
-                          onChange={() => {
-                            setDeleteMode('transfer');
-                            setDestroyStep(1);
-                            setDestroyAcknowledged(false);
-                          }}
-                        />
-                        <span>{t('organizationDeleteModeTransfer')}</span>
-                      </label>
-                      <label className="flex items-start gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name={`org-delete-mode-${org.id}`}
-                          checked={deleteMode === 'destroy'}
-                          disabled={pending}
-                          onChange={() => {
-                            setDeleteMode('destroy');
-                            setDestroyStep(1);
-                            setDestroyAcknowledged(false);
-                          }}
-                        />
-                        <span>{t('organizationDeleteModeDestroy')}</span>
-                      </label>
-                    </fieldset>
-
-                    {deleteMode === 'transfer' ? (
-                      <>
-                        {others.length > 0 ? (
-                          <Field label={t('organizationTransferTarget')}>
-                            <Select
-                              value={transferTo}
-                              disabled={pending || transferLocked}
-                              onChange={(e) =>
-                                setTransferTargets((current) => ({
-                                  ...current,
-                                  [org.id]: e.target.value,
-                                }))
-                              }
-                            >
-                              {others.map((target) => (
-                                <option key={target.id} value={target.id}>
-                                  {target.name} ({target.slug})
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                        ) : null}
-                        <p className="m-0 text-xs text-ink-muted">
-                          {transferLocked
-                            ? t('organizationTransferAutoHint', {
-                                target: others[0]?.name ?? '',
-                              })
-                            : t('organizationTransferHint')}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="danger"
-                            disabled={
-                              pending || (workspaceCount > 0 && !transferTo)
-                            }
-                            onClick={() => void deleteOrganization(org)}
-                          >
-                            {t('confirmDeleteOrganization')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={pending}
-                            onClick={resetDeleteFlow}
-                          >
-                            {tCommon('cancel')}
-                          </Button>
-                        </div>
-                      </>
-                    ) : destroyStep === 1 ? (
-                      <>
-                        <p className="m-0 text-sm text-danger">
-                          {t('organizationDestroyWarning1', {
-                            name: org.name,
-                            count: workspaceCount,
-                          })}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="danger"
-                            disabled={pending}
-                            onClick={() => {
-                              setDestroyStep(2);
-                              setDestroyAcknowledged(false);
-                            }}
-                          >
-                            {t('organizationDestroyContinue')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={pending}
-                            onClick={resetDeleteFlow}
-                          >
-                            {tCommon('cancel')}
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <p className="m-0 text-sm text-danger">
-                          {t('organizationDestroyWarning2', {
-                            name: org.name,
-                          })}
-                        </p>
-                        <label className="flex items-start gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={destroyAcknowledged}
-                            disabled={pending}
-                            onChange={(e) =>
-                              setDestroyAcknowledged(e.target.checked)
-                            }
-                          />
-                          <span>{t('organizationDestroyAcknowledge')}</span>
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="danger"
-                            disabled={pending || !destroyAcknowledged}
-                            onClick={() => void deleteOrganization(org)}
-                          >
-                            {t('organizationDestroyConfirmFinal')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={pending}
-                            onClick={() => {
-                              setDestroyStep(1);
-                              setDestroyAcknowledged(false);
-                            }}
-                          >
-                            {t('organizationDestroyBack')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={pending}
-                            onClick={resetDeleteFlow}
-                          >
-                            {tCommon('cancel')}
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </Panel>
-                ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        disabled={pending}
+                        onClick={() => {
+                          setDestroyStep(2);
+                          setDestroyAcknowledged(false);
+                        }}
+                      >
+                        {t('organizationDestroyContinue')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={resetDeleteFlow}
+                      >
+                        {tCommon('cancel')}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="m-0 text-sm text-danger">
+                      {t('organizationDestroyWarning2', {
+                        name: managingOrg.name,
+                      })}
+                    </p>
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={destroyAcknowledged}
+                        disabled={pending}
+                        onChange={(e) =>
+                          setDestroyAcknowledged(e.target.checked)
+                        }
+                      />
+                      <span>{t('organizationDestroyAcknowledge')}</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="danger"
+                        disabled={pending || !destroyAcknowledged}
+                        onClick={() => void deleteOrganization(managingOrg)}
+                      >
+                        {t('organizationDestroyConfirmFinal')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={() => {
+                          setDestroyStep(1);
+                          setDestroyAcknowledged(false);
+                        }}
+                      >
+                        {t('organizationDestroyBack')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={resetDeleteFlow}
+                      >
+                        {tCommon('cancel')}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </Panel>
-            );
-          })
-        )}
-      </div>
+            )}
+            {error ? (
+              <div className="kh-ops-field-span">
+                <ErrorText>{error}</ErrorText>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

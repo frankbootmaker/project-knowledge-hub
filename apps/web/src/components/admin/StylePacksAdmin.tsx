@@ -708,24 +708,23 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
   }
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[240px_1fr]">
-      <Panel className="grid gap-3 self-start p-4">
-        <p className="m-0 text-sm font-semibold text-ink">{t('templatesList')}</p>
-        <ul className="m-0 grid list-none gap-2 p-0">
+    <div className="grid items-start gap-6">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <p className="kh-ops-panel-title">{t('templatesList')}</p>
+        </div>
+        <ul className="kh-ops-project-grid m-0 list-none px-0">
           {packs.map((pack) => {
             const active = !isCreating && selectedId === pack.id;
             return (
               <li key={pack.id}>
                 <button
                   type="button"
-                  className={`flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm ${
-                    active
-                      ? 'border-accent bg-accent/10'
-                      : 'border-line bg-surface'
+                  className={`kh-ops-project-card w-full text-left${
+                    active ? ' selected' : ''
                   }`}
                   onClick={() => loadPackIntoForm(pack)}
                 >
-                  <span className="min-w-0 truncate">{pack.label}</span>
                   <Badge
                     tone={
                       pack.builtin
@@ -737,12 +736,26 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
                   >
                     {pack.builtin ? t('templatesBuiltin') : pack.status}
                   </Badge>
+                  <h3>{pack.label}</h3>
+                  <p>
+                    {[
+                      pack.typography.headingFont,
+                      pack.typography.bodyFont,
+                      pack.formats.join(' · '),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  <div className="kh-ops-project-card-foot">
+                    <span>{pack.slug}</span>
+                    <span>{tCommon('edit')}</span>
+                  </div>
                 </button>
               </li>
             );
           })}
         </ul>
-      </Panel>
+      </section>
 
       <Panel className="grid gap-4 self-start p-4">
         <p className="m-0 text-sm text-ink-muted">
@@ -754,7 +767,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
         </p>
         {error ? <ErrorText>{error}</ErrorText> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="kh-ops-form-grid">
           <Field label={t('templatesLabel')}>
             <Input
               value={form.label}
