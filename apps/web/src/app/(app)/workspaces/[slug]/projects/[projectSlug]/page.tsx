@@ -16,6 +16,7 @@ import {
 import { ProjectDeliveryPanel } from '../../../../../../components/ProjectDeliveryPanel';
 import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
+import { ProjectReportsPanel } from '../../../../../../components/ProjectReportsPanel';
 import {
   ProjectRaidPanel,
   type RaidItem,
@@ -362,6 +363,7 @@ export default async function ProjectDetailPage({
     rag: ProjectRagStatus | null;
   }> = [
     { id: 'project-overview', label: t('navOverview'), rag: null },
+    { id: 'project-reports', label: t('manageReports'), rag: null },
     { id: 'project-baseline', label: tBaseline('title'), rag: null },
     { id: 'project-stakeholders', label: tStakeholders('title'), rag: null },
     { id: 'project-delivery', label: tDelivery('title'), rag: timelineRag },
@@ -506,6 +508,8 @@ export default async function ProjectDetailPage({
           ) : null}
         </div>
       </section>
+
+      <ProjectReportsPanel project={project} />
 
       <ProjectBaselinePanel
         projectId={project.id}

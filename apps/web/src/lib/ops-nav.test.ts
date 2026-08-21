@@ -39,6 +39,13 @@ describe('ops nav', () => {
         'project-raid',
       ),
     ).toBe('control');
+    expect(inferNavSection('/workspaces/platform/media')).toBe('knowledge');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal',
+        'project-reports',
+      ),
+    ).toBe('ops');
   });
 
   it('rejects unknown stored sections', () => {
@@ -103,5 +110,45 @@ describe('ops nav', () => {
       '/dashboard',
     );
     expect(item?.id).toBe('my-work');
+  });
+
+  it('points media library at the workspace media catalogue', () => {
+    const media = NAV_SECTIONS
+      .flatMap((section) => section.items)
+      .find((item) => item.id === 'media');
+    expect(media).toBeTruthy();
+    expect(media!.href(ctx)).toBe('/workspaces/platform/media');
+    expect(
+      matchNavItem(media!, ctx, '/workspaces/platform/media'),
+    ).toBe(true);
+    expect(
+      matchNavItem(media!, ctx, '/workspaces/platform/document-imports/new'),
+    ).toBe(false);
+  });
+
+  it('points reports at the project reports section', () => {
+    const reports = NAV_SECTIONS
+      .flatMap((section) => section.items)
+      .find((item) => item.id === 'reports');
+    expect(reports).toBeTruthy();
+    expect(reports!.href(ctx)).toBe(
+      '/workspaces/platform/projects/renewal#project-reports',
+    );
+    expect(
+      matchNavItem(
+        reports!,
+        ctx,
+        '/workspaces/platform/projects/renewal',
+        'project-reports',
+      ),
+    ).toBe(true);
+    expect(
+      matchNavItem(
+        reports!,
+        ctx,
+        '/workspaces/platform/projects/renewal',
+        'project-overview',
+      ),
+    ).toBe(false);
   });
 });

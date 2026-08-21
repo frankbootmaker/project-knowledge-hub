@@ -259,7 +259,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'media',
         icon: 'media',
         labelKey: 'mediaLibrary',
-        href: (ctx) => workspaceHref(ctx, '/document-imports/new'),
+        href: (ctx) => workspaceHref(ctx, '/media'),
       },
       {
         id: 'archive',
@@ -291,7 +291,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'reports',
         icon: 'reports',
         labelKey: 'reports',
-        href: (ctx) => projectHref(ctx, '#project-overview'),
+        href: (ctx) => projectHref(ctx, '#project-reports'),
       },
     ],
   },
@@ -470,6 +470,9 @@ export function inferNavSection(
   if (pathname.includes('/imports') || pathname.includes('/document-imports')) {
     return 'knowledge';
   }
+  if (pathname.includes('/media')) {
+    return 'knowledge';
+  }
   if (pathname.includes('/records')) {
     return 'knowledge';
   }
@@ -491,6 +494,9 @@ export function inferNavSection(
     }
     if (hash === 'project-knowledge') {
       return 'knowledge';
+    }
+    if (hash === 'project-reports') {
+      return 'ops';
     }
     if (hash === 'project-budget' || hash === 'project-delivery'
       || params.has('delivery')) {
@@ -548,7 +554,7 @@ export function matchNavItem(
     return pathname.includes('/imports') && !pathname.includes('/document-imports');
   }
   if (item.id === 'media') {
-    return pathname.includes('/document-imports');
+    return /\/media(?:\/|$)/.test(pathname);
   }
   if (item.id === 'agents') {
     return pathname.startsWith('/account/ai-connections');

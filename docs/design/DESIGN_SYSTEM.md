@@ -134,7 +134,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-capacity-row` / `.kh-ops-capacity-track` | Utilization planned (ink) + burn (accent) bars |
 | `.kh-ops-budget-layout` / `.kh-ops-cost-split` / `.kh-ops-cost-part` | Budget burndown + people/AI/systems split |
 | `.kh-ops-baseline-grid` / `.kh-ops-field-cell` / `.kh-ops-pinned` | Baseline field cells and pinned records |
-| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack cards |
+| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack cards; `button.kh-ops-project-card` for report launchers |
+| `.kh-ops-media-grid` / `.kh-ops-media-card` / `.kh-ops-media-preview` / `.kh-ops-media-info` | Workspace media catalogue (4 / 3 / 1 columns) |
 | `.kh-ops-form-grid` / `.kh-ops-field-span` | Dense two-column modal and admin forms |
 | `.kh-ops-card-body` / `.kh-ops-card-foot` / `.kh-ops-action-line` | Panel interior padding, card footer, save/test action row |
 | `.kh-ops-setup-grid` / `.kh-ops-setup-card` / `.kh-ops-setup-step` | MCP / AI client setup cards |
@@ -162,7 +163,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-confirm` / `.kh-ops-inset` | Archive/purge confirms and nested pickers |
 | `.kh-ops-cal-day` | Compact admin audit calendar cells |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
-| `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips, account setting rows |
+| `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips (`aria-pressed` for filters), account setting rows |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
 | `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
@@ -231,6 +232,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console media + reports** — Workspace media catalogue (`/workspaces/{slug}/media`) lists existing image assets (jpeg/png/webp/gif) from `GET/POST /api/v1/workspaces/:workspaceId/media` with optional PATCH link and DELETE. Ops rail **Media library** points there (document import stays `/imports`). Project **Reports** rail and section `#project-reports` open the existing status / delivery / stakeholder markdown preview (no insight widgets). Viewer loading/footer use Ops empty + action-line recipes.
 * **Ops Console leftover chrome** — Knowledge read, system detail, and project overview use detail-grid, record-head, keyvals, and tags. Monitoring uses health cards, client leader-strip, on-duty connection rows, and archived-count stamps for live data only (no restore-drill UI). Audit uses a compact calendar, form-grid filters, and a Created/Actor/Action/Entity table (IP stays on the actor cell; no invented outcome column). Import details, manage interiors, archive/purge confirms, translation chips, RAID/change/baseline pickers, search/memberships wrappers, account sidebar (restyled, not removed), AI discover, and remaining admin confirm/editor panels match Ops density. No media library, reports studio, MCP agent portal, owner, or generated-key reservation.
 * **Ops Console knowledge editor** — Create/edit record chrome uses editor-shell, markdown toolbar, manage-strip/action-line, and live preview aside. Existing fields and save/lifecycle actions stay; no owner, generated-key reservation, or version diff is invented. Record detail more-details, tags, markdown viewer, and version snapshot warnings use the same Ops density.
 * **Ops Console leftover forms** — Mail settings, MCP setup wizard (stage strip + client setup cards + schema copy cards), admin overview shortcuts, close-account danger zone, conversation/document import, create workspace/project/system, AI connection tables, change password, and display/notification prefs now use Ops form-grid, action-line, setup-card, dropzone, and danger-zone recipes. Drivers stay console/SMTP/Resend; confirm phrase stays `CLOSE`; no invented SES, FTE, or Azure fields.

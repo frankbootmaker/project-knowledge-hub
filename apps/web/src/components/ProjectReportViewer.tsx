@@ -144,7 +144,7 @@ export function ProjectReportViewer({
       size="full"
       bodyClassName="!block overflow-auto"
       footer={
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="kh-ops-action-line w-full border-0 p-0">
           <p className="m-0 text-xs text-ink-muted">{t('reportViewerHint')}</p>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <Button
@@ -184,9 +184,7 @@ export function ProjectReportViewer({
         </div>
       ) : null}
       {loading ? (
-        <div className="rounded-lg border border-line px-4 py-10 text-center text-sm text-ink-muted">
-          {t('reportLoading')}
-        </div>
+        <p className="kh-ops-empty">{t('reportLoading')}</p>
       ) : html ? (
         <div ref={printRef} className="project-report-print-root">
           <MarkdownDocument html={html} toc={toc} title={title} />
