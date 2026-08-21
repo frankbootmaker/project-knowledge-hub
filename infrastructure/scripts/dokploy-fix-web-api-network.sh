@@ -3,8 +3,8 @@
 # but /login still works (web cannot reach api over Docker DNS).
 set -euo pipefail
 
-WEB_MATCHES="$(docker ps --format '{{.Names}}' | grep -E 'knowledge-hub.*-web-' || true)"
-API_MATCHES="$(docker ps --format '{{.Names}}' | grep -E 'knowledge-hub.*-api-' || true)"
+WEB_MATCHES="$(docker ps --format '{{.Names}}' | grep -E 'knowledge-hub.*-web-|kh-nd-web$' || true)"
+API_MATCHES="$(docker ps --format '{{.Names}}' | grep -E 'knowledge-hub.*-api-|kh-nd-api$' || true)"
 # Two apps deploying this stack duplicate every service name. Connecting networks
 # across them would wire web to the wrong api/postgres, so require an explicit pick.
 EXPLICIT_PICK=0
@@ -47,8 +47,9 @@ for net in $(docker inspect "$WEB" --format '{{range $k,$v := .NetworkSettings.N
 done
 
 echo
+API_HOST="${API_HOST:-nd-api}"
 echo "DNS from web:"
-docker exec "$WEB" getent hosts api || docker exec "$WEB" sh -c 'ping -c1 api 2>/dev/null || true'
+docker exec "$WEB" getent hosts "$API_HOST" || docker exec "$WEB" sh -c "ping -c1 $API_HOST 2>/dev/null || true"
 echo
-echo "Health from web → http://api:3101/health :"
-docker exec "$WEB" node -e "fetch('http://api:3101/health').then(async r=>console.log(r.status, await r.text())).catch(e=>{console.error(String(e)); process.exit(1)})"
+echo "Health from web → http://${API_HOST}:3101/health :"
+docker exec "$WEB" node -e "fetch('http://${API_HOST}:3101/health').then(async r=>console.log(r.status, await r.text())).catch(e=>{console.error(String(e)); process.exit(1)})"

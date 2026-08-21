@@ -5,21 +5,38 @@
 **Env template:** [`.env.dokploy.example`](../../.env.dokploy.example)  
 **Git branch for Dev:** `feature/m7-dokploy` (ongoing M7 work). Promote Dev-proven slices to `master` via PR — see [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md).
 
+## Parallel `feature/new-design` preview
+
+This branch’s Compose file is **not** the live KnowHub stack. On the same Dokploy host, create a **new** Compose service (new project or new app), point Git at `feature/new-design`, and attach domains to **`nd-web`** (port **3100**), not `web`.
+
+All identifiers are prefixed so they cannot collide with live KnowHub:
+
+| Kind | Live stack | This preview |
+| --- | --- | --- |
+| Public services on `dokploy-network` | `web`, `api` | `nd-web`, `nd-api` |
+| DB / Redis / MarkItDown | `kh-postgres`, `kh-redis`, `kh-markitdown` | `nd-postgres`, `nd-redis`, `nd-markitdown` |
+| Image tags | `knowledge-hub-*:dokploy` | `knowledge-hub-*:dokploy-nd` |
+| Container names | Dokploy project prefix | `kh-nd-*` |
+| Volumes | `knowledge_hub_*` | `nd_knowledge_hub_*` |
+| Blob prefix (shared bucket) | (unset / live) | `new-design/` |
+
+Use a **different** `WEB_URL`, `SESSION_SECRET`, and `POSTGRES_PASSWORD` than live. Traefik/OIDC callback must match the preview domain.
+
 Production cutover and registry automation are **out of scope** for this slice. Admin ops log export lives on Monitoring (`ops-log-export`); raw container stdout remains in the Dokploy UI.
 
 ## Architecture
 
 ```text
-Browser ──HTTPS──► web:3100
+Browser ──HTTPS──► nd-web:3100
                       │  Next rewrites (baked at image build)
-                      ├── /api/v1/* ──► api:3101
-                      └── /mcp      ──► api:3101
-api / worker ──► postgres (pgvector/pgvector:pg16)
-api / worker ──► redis
+                      ├── /api/v1/* ──► nd-api:3101
+                      └── /mcp      ──► nd-api:3101
+nd-api / nd-worker ──► nd-postgres (pgvector/pgvector:pg16)
+nd-api / nd-worker ──► nd-redis
 ```
 
-* Public traffic should hit **only the web** origin (`WEB_URL`).
-* Next rewrites are baked at **web image build** via `NEXT_REWRITE_API_ORIGIN=http://api:3101`.  
+* Public traffic should hit **only the nd-web** origin (`WEB_URL`).
+* Next rewrites are baked at **web image build** via `NEXT_REWRITE_API_ORIGIN=http://nd-api:3101`.  
   **Never** set `API_URL=http://localhost:3101` (or `127.0.0.1`) in Dokploy env — that value is for laptop `pnpm dev` only and will make `/api/v1` proxy to the web container itself (`ECONNREFUSED 127.0.0.1:3101`).
 * Postgres and Redis are **not** published to the host in `compose.dokploy.yaml` (Compose network only).
 * Set public `WEB_URL=https://<dev-domain>` at runtime for cookies, mail links, and AI discover.
@@ -29,11 +46,11 @@ api / worker ──► redis
 
 | Service | Dockerfile | Image tag |
 | --- | --- | --- |
-| api (+ migrate one-shot reuses this image) | `infrastructure/docker/api.Dockerfile` | `knowledge-hub-api:dokploy` |
-| worker | `infrastructure/docker/worker.Dockerfile` | `knowledge-hub-worker:dokploy` |
-| web | `infrastructure/docker/web.Dockerfile` (`ARG NEXT_REWRITE_API_ORIGIN`) | `knowledge-hub-web:dokploy` |
+| nd-api (+ nd-migrate one-shot reuses this image) | `infrastructure/docker/api.Dockerfile` | `knowledge-hub-api:dokploy-nd` |
+| nd-worker | `infrastructure/docker/worker.Dockerfile` | `knowledge-hub-worker:dokploy-nd` |
+| nd-web | `infrastructure/docker/web.Dockerfile` (`ARG NEXT_REWRITE_API_ORIGIN`) | `knowledge-hub-web:dokploy-nd` |
 
-`migrate` has **no** `build:` — only `image: knowledge-hub-api:dokploy` + `pull_policy: never`, so Compose builds the API Dockerfile once (via `api`), then runs migrate from that tag.
+`nd-migrate` has **no** `build:` — only `image: knowledge-hub-api:dokploy-nd` + `pull_policy: never`, so Compose builds the API Dockerfile once (via `nd-api`), then runs migrate from that tag.
 
 Build validation (local):
 
@@ -53,9 +70,9 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | Variable | Where | Notes |
 | --- | --- | --- |
 | `WEB_URL` | runtime | Public HTTPS origin |
-| (web rewrite target) | **build** (web) | Hardcoded `http://api:3101` — do not override with localhost |
-| `POSTGRES_*` | runtime | Compose builds `DATABASE_URL` via host `kh-postgres` |
-| (Redis) | runtime | Fixed `redis://kh-redis:6379` on the Compose network |
+| (web rewrite target) | **build** (nd-web) | Hardcoded `http://nd-api:3101` — do not override with localhost |
+| `POSTGRES_*` | runtime | Compose builds `DATABASE_URL` via host `nd-postgres` |
+| (Redis) | runtime | Fixed `redis://nd-redis:6379` on the Compose network |
 | `SESSION_SECRET` | runtime | Long random secret |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | runtime | Authentik (or generic OIDC). Set all three to enable SSO; omit or leave empty to hide the button. Optional: `OIDC_BUTTON_LABEL`, `OIDC_IDP_SOURCE=authentik`, `OIDC_REDIRECT_URI` (default `{WEB_URL}/api/v1/auth/oidc/callback`) |
 | `APP_ENV` | runtime | Use `staging` for Dev/UAT |
@@ -65,8 +82,8 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | `MAIL_DRIVER` | runtime | `console` (default), `smtp`, or `resend` (Resend / Freeresend-compatible) |
 | `SMTP_*` / `RESEND_API_KEY` / `RESEND_BASE_URL` / `MCP_PUBLIC_URL` | runtime | Set only when used — omit empty values. `RESEND_BASE_URL` optional (default `https://api.resend.com`) |
 | `BOOTSTRAP_ADMIN_*` | migrate one-shot (seed step) | Optional first admin |
-| `MARKITDOWN_URL` | runtime | Default `http://kh-markitdown:8080` (document/image import) |
-| `VISION_LLM_*` | runtime + `kh-markitdown` | Optional env fallback for vision OCR / AI translation when Admin → AI providers has no binding for that service |
+| `MARKITDOWN_URL` | runtime | Default `http://nd-markitdown:8080` (document/image import) |
+| `VISION_LLM_*` | runtime + `nd-markitdown` | Optional env fallback for vision OCR / AI translation when Admin → AI providers has no binding for that service |
 
 **Warnings**
 
@@ -81,12 +98,12 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 2. Set Compose file path to `compose.dokploy.yaml`.
 3. Put required env vars on the **Compose service Environment** tab (`KEY=value`).  
    **Project-level Environment alone is not enough** — Compose interpolates from the `.env` Dokploy writes next to the compose file, which is fed by the service Environment. Missing `WEB_URL` / `POSTGRES_PASSWORD` fails before containers start.
-4. Point a domain at the **web** service (port **3100**); enable HTTPS.
+4. Point a domain at the **nd-web** service (port **3100**); enable HTTPS.
 5. Set `WEB_URL` to that HTTPS origin. Do not expose Postgres or Redis.
 
 **AI translation / long LLM calls return non-JSON / `Internal Server Error` in the browser:** the UI expected JSON but got HTML, empty body, or plain-text `Internal Server Error`. Two common causes while the API waits on the model (often 60–120s+ for local Ollama):
 
-1. **Next.js rewrite proxy** defaults to **30s** (`experimental.proxyTimeout`). KnowHub sets this to **600s** in `apps/web/next.config.ts` — rebuild/redeploy **web** after pulling that change. Local `pnpm run dev` must restart so Next reloads the config.
+1. **Next.js rewrite proxy** defaults to **30s** (`experimental.proxyTimeout`). KnowHub sets this to **600s** in `apps/web/next.config.ts` — rebuild/redeploy **nd-web** after pulling that change. Local `pnpm run dev` must restart so Next reloads the config.
 2. **Traefik gateway timeout** (default ~60s). Raise entrypoint timeouts on the Dokploy host (`/etc/dokploy/traefik/traefik.yml`), then reload Traefik:
 
 ```yaml
@@ -109,18 +126,18 @@ Also confirm **Admin → AI Providers** has an active Translation binding whose 
 
 **Manage → Add translation** uses `POST /api/v1/knowledge-records/:id/translations/stream` (SSE) for staged progress and optional live model Details. That stream still goes through the Next rewrite (`proxyTimeout: 600s`) and Traefik — the same timeout guidance above applies. MCP/OpenAPI keep the non-streaming JSON `POST .../translations`.
 
-**Networking:** Only `web` and `api` join external `dokploy-network` (Traefik). Postgres/Redis/worker/db-backup/`kh-markitdown` stay on the project `default` network with unique hostnames (`kh-postgres`, `kh-redis`, `kh-markitdown`). If `/api/v1/*` returns a plain-text `Internal Server Error` while `/login` works, `web` cannot reach `api`. Redeploy after pulling this compose, or on the Dokploy host temporarily:
+**Networking:** Only `nd-web` and `nd-api` join external `dokploy-network` (Traefik). Postgres/Redis/worker/db-backup/`nd-markitdown` stay on the project `default` network with unique hostnames (`nd-postgres`, `nd-redis`, `nd-markitdown`). If `/api/v1/*` returns a plain-text `Internal Server Error` while `/login` works, `nd-web` cannot reach `nd-api`. Redeploy after pulling this compose, or on the Dokploy host temporarily:
 
 ```bash
 # Inspect which networks each container has, then bridge them, e.g.:
-docker network connect knowledge_hub_net knowledge-hub-dev-vru1om-web-1
+docker network connect <preview-project>_default kh-nd-web
 # and/or:
-docker network connect dokploy-network knowledge-hub-dev-vru1om-api-1
+docker network connect dokploy-network kh-nd-api
 ```
 
 **Build dies mid-turbo with no TypeScript error:** almost always **host RAM**. Symptoms: log stops during `tsc` / Next compile; Dokploy shows cancelled/stuck “running”. Mitigations in this repo:
 
-1. `migrate` **reuses** `knowledge-hub-api:dokploy` (no second `api.Dockerfile` build).
+1. `nd-migrate` **reuses** `knowledge-hub-api:dokploy-nd` (no second `api.Dockerfile` build).
 2. Dockerfiles use `turbo ... --concurrency=1` to cut peak memory **inside** each image build.
 3. Compose still builds **api + web + worker in parallel**. On a small VPS, serialize them on the Dokploy host before deploy:
 

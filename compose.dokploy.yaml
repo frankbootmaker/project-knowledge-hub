@@ -1,19 +1,23 @@
-# Dokploy Dev/UAT stack — private Postgres/Redis, migrate-on-deploy, HTTPS at the proxy.
+# Dokploy PARALLEL preview stack for branch feature/new-design.
+# Every service, image tag, volume, and DNS name is prefixed `nd-` / `dokploy-nd`
+# so this app can run beside the live KnowHub stack on the same Dokploy host
+# without stealing Docker DNS, overwriting images, or reusing volumes.
+#
+# Create a *new* Dokploy Compose service (do not reuse the live app). Point it at
+# this branch, this file, and a distinct public domain. Attach Traefik to `nd-web`.
+#
 # Usage (local validation):
 #   docker compose -f compose.dokploy.yaml --env-file .env.dokploy.example up --build
 # Dokploy: attach this file; set env on the Compose *service* Environment tab (not only project).
 #
-# Browser → web only. Next rewrites /api/v1 and /mcp to the internal API (API_URL at image build).
+# Browser → nd-web only. Next rewrites /api/v1 and /mcp to nd-api (baked at image build).
 #
-# Networking: app traffic runs on the project-scoped Compose default network. Only `web` and
-# `api` also join external `dokploy-network`, because Traefik domain routing needs them there
-# (Dokploy domain injection historically drops custom-only networks on the published service).
-# Never put postgres/redis/worker/db-backup on `dokploy-network`: it is shared by every Dokploy
-# app, service names become duplicate DNS aliases, and a second deploy of this same stack then
-# resolves `postgres` to the other app's database (intermittent 28P01 with an unchanged password).
-# Also: api/web stay on dokploy-network for Traefik, so they must NOT use the generic hostnames
-# `postgres` / `redis` — other apps (e.g. amae) register those names on the shared network and
-# steal DNS even when *our* DB is only on the project network. Use kh-postgres / kh-redis.
+# Networking: app traffic runs on the project-scoped Compose default network. Only `nd-web`
+# and `nd-api` also join external `dokploy-network`, because Traefik domain routing needs
+# them there (Dokploy domain injection historically drops custom-only networks on the
+# published service). Never put postgres/redis/worker/db-backup on `dokploy-network`.
+# Do not reuse generic names `api` / `web` / `postgres` / `redis` — those aliases on
+# dokploy-network belong to other apps (including live KnowHub).
 
 x-app-env: &app-env
   NODE_ENV: production
@@ -24,12 +28,12 @@ x-app-env: &app-env
   POSTGRES_USER: ${POSTGRES_USER:-knowledge_hub}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
   POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
-  POSTGRES_HOST: kh-postgres
+  POSTGRES_HOST: nd-postgres
   # Legacy fallback URL (password not encoded). Prefer POSTGRES_* above.
-  DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@kh-postgres:5432/${POSTGRES_DB:-knowledge_hub}
-  REDIS_URL: redis://kh-redis:6379
+  DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@nd-postgres:5432/${POSTGRES_DB:-knowledge_hub}
+  REDIS_URL: redis://nd-redis:6379
   WEB_URL: ${WEB_URL:?WEB_URL is required}
-  API_URL: http://api:3101
+  API_URL: http://nd-api:3101
   SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
   # OIDC SSO (Authentik). All three empty = button hidden; all three set = enabled.
   OIDC_ISSUER: ${OIDC_ISSUER:-}
@@ -48,9 +52,10 @@ x-app-env: &app-env
   BLOB_S3_ACCESS_KEY_ID: ${BLOB_S3_ACCESS_KEY_ID:-}
   BLOB_S3_SECRET_ACCESS_KEY: ${BLOB_S3_SECRET_ACCESS_KEY:-}
   BLOB_S3_FORCE_PATH_STYLE: ${BLOB_S3_FORCE_PATH_STYLE:-false}
-  BLOB_KEY_PREFIX: ${BLOB_KEY_PREFIX:-}
+  # Isolate objects from the live stack if both share one bucket.
+  BLOB_KEY_PREFIX: ${BLOB_KEY_PREFIX:-new-design/}
   # Local filesystem fallbacks when BLOB_PROVIDER=disabled. Absolute paths on the
-  # shared knowledge_hub_data volume so api + worker see the same bytes (imports,
+  # shared nd_knowledge_hub_data volume so api + worker see the same bytes (imports,
   # media, avatars, style-pack logos). Relative ./data/* under /app is not writable as uid 1001.
   DATA_DIR: ${DATA_DIR:-/data}
   AVATAR_UPLOAD_DIR: ${AVATAR_UPLOAD_DIR:-/data/avatars}
@@ -59,7 +64,7 @@ x-app-env: &app-env
   STYLE_PACK_UPLOAD_DIR: ${STYLE_PACK_UPLOAD_DIR:-/data/style-packs}
   BACKUP_OFFSITE: ${BACKUP_OFFSITE:-true}
   BACKUP_OFFSITE_SYNC_INTERVAL_MS: ${BACKUP_OFFSITE_SYNC_INTERVAL_MS:-300000}
-  MARKITDOWN_URL: ${MARKITDOWN_URL:-http://kh-markitdown:8080}
+  MARKITDOWN_URL: ${MARKITDOWN_URL:-http://nd-markitdown:8080}
   MARKITDOWN_TIMEOUT_MS: ${MARKITDOWN_TIMEOUT_MS:-120000}
   DOCUMENT_IMPORT_MAX_BYTES: ${DOCUMENT_IMPORT_MAX_BYTES:-26214400}
   DOCUMENT_IMPORT_OCR_ENGINE: ${DOCUMENT_IMPORT_OCR_ENGINE:-none}
@@ -69,17 +74,16 @@ x-app-env: &app-env
   TESSERACT_LANG: ${TESSERACT_LANG:-eng}
 
 services:
-  # Unique service DNS names (not `postgres`/`redis`) so api on dokploy-network cannot
-  # resolve another stack's generic aliases.
-  kh-postgres:
+  nd-postgres:
     image: pgvector/pgvector:pg16
+    container_name: kh-nd-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
       POSTGRES_USER: ${POSTGRES_USER:-knowledge_hub}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
-      - knowledge_hub_postgres_data:/var/lib/postgresql/data
+      - nd_knowledge_hub_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test:
         [
@@ -94,29 +98,31 @@ services:
     networks:
       - default
 
-  kh-redis:
+  nd-redis:
     image: redis:7-alpine
+    container_name: kh-nd-redis
     restart: unless-stopped
     volumes:
-      - knowledge_hub_redis_data:/data
+      - nd_knowledge_hub_redis_data:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 12
       start_period: 5s
-    # Internal only — see kh-postgres.
+    # Internal only — see nd-postgres.
     networks:
       - default
 
   # Migrate + seed in one one-shot so they share a single env block. A separate
   # `seed` service repeatedly got a different POSTGRES_PASSWORD from Dokploy
   # injection (migrate OK, seed 28P01). --remove-orphans drops the old seed container.
-  migrate:
-    # Reuse the image built by `api` (no build: here). Compose builds images first,
+  nd-migrate:
+    # Reuse the image built by `nd-api` (no build: here). Compose builds images first,
     # then starts migrate — so the tag exists before this one-shot runs. Avoids a
     # second parallel api.Dockerfile build that OOMs smaller Dokploy hosts.
-    image: knowledge-hub-api:dokploy
+    image: knowledge-hub-api:dokploy-nd
+    container_name: kh-nd-migrate
     pull_policy: never
     restart: 'no'
     # Bypass api-entrypoint (backup chown) and disable api HEALTHCHECK (no :3101 here).
@@ -131,21 +137,22 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-knowledge_hub}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
-      POSTGRES_HOST: kh-postgres
-      DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@kh-postgres:5432/${POSTGRES_DB:-knowledge_hub}
+      POSTGRES_HOST: nd-postgres
+      DATABASE_URL: postgres://${POSTGRES_USER:-knowledge_hub}:${POSTGRES_PASSWORD}@nd-postgres:5432/${POSTGRES_DB:-knowledge_hub}
       DEFAULT_ORGANIZATION_NAME: ${DEFAULT_ORGANIZATION_NAME:-Default Organization}
       DEFAULT_ORGANIZATION_SLUG: ${DEFAULT_ORGANIZATION_SLUG:-default}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       BOOTSTRAP_ADMIN_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:-Administrator}
     depends_on:
-      kh-postgres:
+      nd-postgres:
         condition: service_healthy
     networks:
       - default
 
-  api:
-    image: knowledge-hub-api:dokploy
+  nd-api:
+    image: knowledge-hub-api:dokploy-nd
+    container_name: kh-nd-api
     build:
       context: .
       dockerfile: infrastructure/docker/api.Dockerfile
@@ -164,16 +171,16 @@ services:
       XDG_CONFIG_HOME: /tmp/.chromium
       XDG_CACHE_HOME: /tmp/.chromium
     volumes:
-      - knowledge_hub_backups:/backups
-      - knowledge_hub_data:/data
+      - nd_knowledge_hub_backups:/backups
+      - nd_knowledge_hub_data:/data
     depends_on:
-      kh-postgres:
+      nd-postgres:
         condition: service_healthy
-      kh-redis:
+      nd-redis:
         condition: service_healthy
-      migrate:
+      nd-migrate:
         condition: service_completed_successfully
-      kh-markitdown:
+      nd-markitdown:
         condition: service_started
     healthcheck:
       test:
@@ -191,8 +198,9 @@ services:
       - default
       - dokploy-network
 
-  worker:
-    image: knowledge-hub-worker:dokploy
+  nd-worker:
+    image: knowledge-hub-worker:dokploy-nd
+    container_name: kh-nd-worker
     build:
       context: .
       dockerfile: infrastructure/docker/worker.Dockerfile
@@ -201,28 +209,29 @@ services:
       <<: *app-env
       BACKUP_DIR: ${BACKUP_DIR:-/backups}
     volumes:
-      - knowledge_hub_backups:/backups
-      - knowledge_hub_data:/data
+      - nd_knowledge_hub_backups:/backups
+      - nd_knowledge_hub_data:/data
     depends_on:
-      kh-postgres:
+      nd-postgres:
         condition: service_healthy
-      kh-redis:
+      nd-redis:
         condition: service_healthy
-      migrate:
+      nd-migrate:
         condition: service_completed_successfully
-      kh-markitdown:
+      nd-markitdown:
         condition: service_started
     networks:
       - default
 
-  web:
-    image: knowledge-hub-web:dokploy
+  nd-web:
+    image: knowledge-hub-web:dokploy-nd
+    container_name: kh-nd-web
     build:
       context: .
       dockerfile: infrastructure/docker/web.Dockerfile
       args:
         # Hardcoded on purpose — do not pass Dokploy API_URL=localhost into the build.
-        NEXT_REWRITE_API_ORIGIN: http://api:3101
+        NEXT_REWRITE_API_ORIGIN: http://nd-api:3101
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -232,8 +241,8 @@ services:
       HOSTNAME: 0.0.0.0
       LOG_LEVEL: ${LOG_LEVEL:-info}
       WEB_URL: ${WEB_URL:?WEB_URL is required}
-      # SSR → api over Compose DNS (must not be localhost).
-      API_URL: http://api:3101
+      # SSR → nd-api over Compose DNS (must not be localhost).
+      API_URL: http://nd-api:3101
       # Import form defaults / OCR option availability (SSR only).
       DOCUMENT_IMPORT_OCR_ENGINE: ${DOCUMENT_IMPORT_OCR_ENGINE:-none}
       VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
@@ -241,7 +250,7 @@ services:
     expose:
       - '3100'
     depends_on:
-      api:
+      nd-api:
         condition: service_healthy
     healthcheck:
       test:
@@ -260,11 +269,12 @@ services:
       - dokploy-network
 
   # Document/image → Markdown (Microsoft MarkItDown). Project network only.
-  kh-markitdown:
+  nd-markitdown:
     build:
       context: ./infrastructure/markitdown
       dockerfile: Dockerfile
-    image: knowledge-hub-markitdown:dokploy
+    image: knowledge-hub-markitdown:dokploy-nd
+    container_name: kh-nd-markitdown
     restart: unless-stopped
     environment:
       VISION_LLM_BASE_URL: ${VISION_LLM_BASE_URL:-}
@@ -278,14 +288,15 @@ services:
   # Scripts are baked into the image (not bind-mounted from the git checkout). Dokploy replaces
   # the clone on each deploy; a long-running bind mount then loses /scripts/*.sh mid-sleep.
   # Disable with BACKUP_ENABLED=false. Offsite upload is Ops-1 (after BlobStore).
-  db-backup:
-    image: knowledge-hub-db-backup:dokploy
+  nd-db-backup:
+    image: knowledge-hub-db-backup:dokploy-nd
+    container_name: kh-nd-db-backup
     build:
       context: .
       dockerfile: infrastructure/docker/db-backup.Dockerfile
     restart: unless-stopped
     environment:
-      POSTGRES_HOST: kh-postgres
+      POSTGRES_HOST: nd-postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-knowledge_hub}
       POSTGRES_USER: ${POSTGRES_USER:-knowledge_hub}
@@ -298,21 +309,20 @@ services:
       BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-3}
       BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-1}
     volumes:
-      - knowledge_hub_backups:/backups
+      - nd_knowledge_hub_backups:/backups
     depends_on:
-      kh-postgres:
+      nd-postgres:
         condition: service_healthy
     networks:
       - default
 
-# Project-scoped names (Compose prefixes with -p project). Do not pin global
-# `name:` — a second Dokploy app would reuse the old Postgres volume and hit
-# 28P01 when POSTGRES_PASSWORD differs from the first init.
+# Project-scoped volume keys (Compose prefixes with -p project). Distinct from the
+# live stack's knowledge_hub_* keys even if a compose project name were reused.
 volumes:
-  knowledge_hub_postgres_data:
-  knowledge_hub_redis_data:
-  knowledge_hub_backups:
-  knowledge_hub_data:
+  nd_knowledge_hub_postgres_data:
+  nd_knowledge_hub_redis_data:
+  nd_knowledge_hub_backups:
+  nd_knowledge_hub_data:
 
 networks:
   dokploy-network:
