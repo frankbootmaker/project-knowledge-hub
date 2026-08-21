@@ -83,11 +83,10 @@ function forwardedPublicOrigin(request: {
   if (!host) {
     return null;
   }
-  const proto = (
-    firstHeaderValue(request.headers['x-forwarded-proto']) ?? 'https'
-  )
-    .split(',')[0]
-    .trim();
+  const proto =
+    firstHeaderValue(request.headers['x-forwarded-proto'])
+      ?.split(',')[0]
+      ?.trim() || 'https';
   return originFromUrl(`${proto}://${host}`);
 }
 
