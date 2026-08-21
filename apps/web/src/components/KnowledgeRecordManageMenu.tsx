@@ -686,7 +686,7 @@ export function KnowledgeRecordManageMenu(props: {
                         <summary className="cursor-pointer font-medium text-ink">
                           {t('translateDetailsShow')}
                         </summary>
-                        <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-canvas p-2 font-mono text-xs text-ink">
+                        <pre className="kh-ops-code mt-1 max-h-48 overflow-auto whitespace-pre-wrap">
                           {translateLog}
                         </pre>
                       </details>

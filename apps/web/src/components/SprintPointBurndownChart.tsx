@@ -19,7 +19,7 @@ export function BurndownLegendHelp() {
     <div className="grid justify-items-end gap-2">
       <button
         type="button"
-        className="inline-flex size-6 items-center justify-center rounded-full border border-line text-xs font-semibold text-ink-muted hover:bg-brand-soft hover:text-ink"
+        className="kh-ops-help-btn"
         aria-expanded={open}
         aria-controls={legendId}
         aria-label={t('scrumBurndownHelp')}
@@ -32,7 +32,7 @@ export function BurndownLegendHelp() {
         <p
           id={legendId}
           role="note"
-          className="m-0 max-w-md rounded-md border border-line bg-panel-solid px-2.5 py-2 text-left text-xs text-ink-muted"
+          className="kh-ops-inset m-0 max-w-md text-left text-xs text-ink-muted"
         >
           {t('scrumBurndownLegend')}
         </p>

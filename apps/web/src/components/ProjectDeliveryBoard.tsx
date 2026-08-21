@@ -191,7 +191,7 @@ function BoardMetaHelp() {
     <div className="relative">
       <button
         type="button"
-        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-line text-xs font-semibold text-ink-muted hover:bg-brand-soft hover:text-ink"
+        className="kh-ops-help-btn"
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={t('boardMetaHelp')}
@@ -204,7 +204,7 @@ function BoardMetaHelp() {
         <div
           id={panelId}
           role="note"
-          className="absolute left-0 top-full z-10 mt-2 grid w-max max-w-sm gap-2 rounded-md border border-line bg-panel-solid px-2.5 py-2 text-xs text-ink-muted shadow-sm"
+          className="kh-ops-popover"
         >
           <p className="m-0">{t('boardMetaHint')}</p>
           <ul
@@ -215,7 +215,7 @@ function BoardMetaHelp() {
               <li
                 key={tone}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium',
+                  'kh-ops-type-chip',
                   deliveryScheduleSurfaceClass(tone),
                 )}
               >
@@ -825,12 +825,8 @@ export function ProjectDeliveryBoard({
                 type="button"
                 role="tab"
                 aria-selected={active}
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold',
-                  active
-                    ? 'border-brand bg-brand-soft text-brand'
-                    : 'border-line bg-panel text-ink-muted',
-                )}
+                className="kh-ops-type-chip"
+                aria-pressed={active}
                 onClick={() => setMobileColumn(status)}
               >
                 {t(`taskStatus.${status}`)}

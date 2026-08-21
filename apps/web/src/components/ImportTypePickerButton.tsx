@@ -71,16 +71,16 @@ export function ImportTypePickerButton({
                 type="button"
                 disabled={!type.available}
                 data-modal-initial-focus={index === 0 ? true : undefined}
-                className="kh-panel-inset flex w-full cursor-pointer flex-col items-start gap-1 border border-line bg-panel-solid text-left transition hover:border-brand/35 disabled:cursor-not-allowed disabled:opacity-60"
+                className="kh-ops-choice"
                 onClick={() => chooseType(type.id, type.available)}
               >
-                <span className="flex w-full flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-ink">{t(`type_${type.id}`)}</span>
-                  <span className="text-xs font-medium text-ink-muted">
-                    {type.available ? t('typeAvailable') : t('typeComingSoon')}
-                  </span>
+                <span className="kh-ops-choice-copy">
+                  <strong>{t(`type_${type.id}`)}</strong>
+                  <span>{t(`typeHint_${type.id}`)}</span>
                 </span>
-                <span className="text-sm text-ink-muted">{t(`typeHint_${type.id}`)}</span>
+                <span>
+                  {type.available ? t('typeAvailable') : t('typeComingSoon')}
+                </span>
               </button>
             </li>
           ))}

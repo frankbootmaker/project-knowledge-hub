@@ -497,7 +497,7 @@ export function GitConnectionsPanel(props: {
                   <button
                     type="button"
                     disabled={!supported}
-                    className="kh-panel-inset flex w-full cursor-pointer flex-col items-start gap-1 border border-line bg-panel-solid text-left transition hover:border-brand/35 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="kh-ops-choice kh-ops-choice-stack h-full"
                     onClick={() => {
                       if (!supported) return;
                       setSelectedProvider(provider.id);
@@ -505,9 +505,11 @@ export function GitConnectionsPanel(props: {
                       setError(null);
                     }}
                   >
-                    <span className="font-medium text-ink">{t(provider.labelKey)}</span>
-                    <span className="text-sm text-ink-muted">
-                      {supported ? t('providerAvailable') : t('providerComingSoon')}
+                    <span className="kh-ops-choice-copy">
+                      <strong>{t(provider.labelKey)}</strong>
+                      <span>
+                        {supported ? t('providerAvailable') : t('providerComingSoon')}
+                      </span>
                     </span>
                   </button>
                 </li>

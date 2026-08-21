@@ -1257,13 +1257,13 @@ export function ProjectScrumView({
                       {t('scrumReviewNoStakeholders')}
                     </p>
                   ) : (
-                    <ul className="m-0 grid max-h-48 list-none gap-1 overflow-y-auto rounded-md border border-line p-2">
+                    <ul className="kh-ops-check-list">
                       {ceremonyStakeholders.map((person) => {
                         const role = formatStakeholderRole(person.projectRole);
                         const checked = selectedAttendeeIds.includes(person.id);
                         return (
                           <li key={person.id}>
-                            <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-neutral-soft/60">
+                            <label>
                               <input
                                 type="checkbox"
                                 checked={checked}
@@ -1290,11 +1290,11 @@ export function ProjectScrumView({
                     <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
                       {reviewGuests.map((guest) => (
                         <li key={guest}>
-                          <span className="inline-flex items-center gap-1 rounded-md border border-line bg-neutral-soft/40 px-2 py-1 text-sm">
+                          <span className="kh-ops-tag inline-flex items-center gap-1">
                             {guest}
                             <button
                               type="button"
-                              className="text-ink-muted hover:text-ink"
+                              className="kh-ops-text-btn px-0"
                               aria-label={t('scrumReviewRemoveGuest', {
                                 name: guest,
                               })}
@@ -1399,7 +1399,7 @@ export function ProjectScrumView({
       >
         <div className="grid gap-4">
           {definitionOfDone?.trim() ? (
-            <div className="rounded-md border border-line px-3 py-2 text-sm">
+            <div className="kh-ops-inset text-sm">
               <p className="m-0 mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
                 {t('scrumDoD')}
               </p>
@@ -1429,7 +1429,7 @@ export function ProjectScrumView({
                 return (
                   <label
                     key={row.taskId}
-                    className="grid grid-cols-[auto_1fr_5rem] items-center gap-2 rounded-md border border-line px-2 py-2 text-sm"
+                    className="kh-ops-plan-row"
                   >
                     <input
                       type="checkbox"

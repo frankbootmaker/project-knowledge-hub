@@ -616,7 +616,7 @@ export function ProjectAgileManageModal({
             rows={4}
           />
         </Field>
-        <div className="rounded-md border border-line bg-panel-solid p-3">
+        <div className="kh-ops-inset">
           <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
           {linkedDocuments.length === 0 ? (
             <p className="m-0 text-sm text-ink-muted">{t('linkedDocumentsEmpty')}</p>

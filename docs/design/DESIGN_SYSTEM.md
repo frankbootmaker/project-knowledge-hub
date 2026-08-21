@@ -134,7 +134,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-capacity-row` / `.kh-ops-capacity-track` | Utilization planned (ink) + burn (accent) bars |
 | `.kh-ops-budget-layout` / `.kh-ops-cost-split` / `.kh-ops-cost-part` | Budget burndown + people/AI/systems split |
 | `.kh-ops-baseline-grid` / `.kh-ops-field-cell` / `.kh-ops-pinned` | Baseline field cells and pinned records |
-| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack cards; `button.kh-ops-project-card` for report launchers |
+| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack cards; `button.kh-ops-project-card` for report launchers. Workspace colour is a 3px inset stripe (`kh-workspace-tile`), not a wash. |
 | `.kh-ops-media-grid` / `.kh-ops-media-card` / `.kh-ops-media-preview` / `.kh-ops-media-info` | Workspace media catalogue (4 / 3 / 1 columns) |
 | `.kh-ops-form-grid` / `.kh-ops-field-span` | Dense two-column modal and admin forms |
 | `.kh-ops-card-body` / `.kh-ops-card-foot` / `.kh-ops-action-line` | Panel interior padding, card footer, save/test action row |
@@ -153,6 +153,9 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-manage-strip` / `.kh-ops-keyvals` / `.kh-ops-tag-list` / `.kh-ops-tag` | Record action strip, definition lists, tag chips |
 | `.kh-ops-markdown-view` / `.kh-ops-toc` / `.kh-ops-preview-pane` | Markdown document density, TOC panel, live preview |
 | `.kh-ops-roster-person` | Stakeholder roster avatar + name cell |
+| `.kh-ops-org-tree` / `.kh-ops-org-card` / `.kh-ops-org-ungrouped-grid` | Stakeholder org chart (tree connectors, 200px cards, ungrouped grid) |
+| `.kh-ops-help-btn` / `.kh-ops-popover` | Compact `?` help control and square legend/tooltip panel |
+| `.kh-ops-choice` / `.kh-ops-check-list` / `.kh-ops-plan-row` | Manage/import/git pickers, attendee check lists, scrum plan rows |
 | `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |
 | `.kh-ops-detail-grid` / `.kh-ops-record-head` | Knowledge/system read two-column layout + record title block |
 | `.kh-ops-leader-strip` / `.kh-ops-leader` | Monitoring client leaderboard cells |
@@ -232,6 +235,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console leftover polish** — Org chart uses org-tree / org-card / ungrouped-grid. Manage, Git provider, and import-type pickers use `.kh-ops-choice`. Scrum attendee lists, plan rows, DoD inset, guest chips, and delivery `?` legends/popovers use Ops recipes. Workspace colour is a 3px inset stripe instead of a soft wash.
 * **Ops Console media + reports** — Workspace media catalogue (`/workspaces/{slug}/media`) lists existing image assets (jpeg/png/webp/gif) from `GET/POST /api/v1/workspaces/:workspaceId/media` with optional PATCH link and DELETE. Ops rail **Media library** points there (document import stays `/imports`). Project **Reports** rail and section `#project-reports` open the existing status / delivery / stakeholder markdown preview (no insight widgets). Viewer loading/footer use Ops empty + action-line recipes.
 * **Ops Console leftover chrome** — Knowledge read, system detail, and project overview use detail-grid, record-head, keyvals, and tags. Monitoring uses health cards, client leader-strip, on-duty connection rows, and archived-count stamps for live data only (no restore-drill UI). Audit uses a compact calendar, form-grid filters, and a Created/Actor/Action/Entity table (IP stays on the actor cell; no invented outcome column). Import details, manage interiors, archive/purge confirms, translation chips, RAID/change/baseline pickers, search/memberships wrappers, account sidebar (restyled, not removed), AI discover, and remaining admin confirm/editor panels match Ops density. No media library, reports studio, MCP agent portal, owner, or generated-key reservation.
 * **Ops Console knowledge editor** — Create/edit record chrome uses editor-shell, markdown toolbar, manage-strip/action-line, and live preview aside. Existing fields and save/lifecycle actions stay; no owner, generated-key reservation, or version diff is invented. Record detail more-details, tags, markdown viewer, and version snapshot warnings use the same Ops density.

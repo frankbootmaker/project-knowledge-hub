@@ -504,25 +504,22 @@ function TimelineHintHelp({
 
   return (
     <div className="relative">
-      <Button
+      <button
         type="button"
-        variant={open ? 'secondary' : 'ghost'}
-        className="!px-2.5"
+        className="kh-ops-help-btn"
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={t('timelineLegendHelp')}
         title={t('timelineLegendHelp')}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="inline-flex size-4 items-center justify-center text-sm font-semibold leading-none">
-          ?
-        </span>
-      </Button>
+        ?
+      </button>
       {open ? (
         <div
           id={panelId}
           role="note"
-          className="absolute left-0 top-full z-10 mt-2 grid w-max max-w-xl gap-2 rounded-md border border-line bg-panel-solid px-2.5 py-2 text-xs text-ink-muted shadow-sm"
+          className="kh-ops-popover max-w-xl"
         >
           <p className="m-0">{t('timelineHint')}</p>
           <p className="m-0">{t('timelineDragHint')}</p>
