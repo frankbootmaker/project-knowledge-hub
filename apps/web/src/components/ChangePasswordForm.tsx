@@ -7,7 +7,6 @@ import {
   Button,
   ErrorText,
   Field,
-  Panel,
   PasswordInput,
   PasswordStrengthHint,
   useToast,
@@ -25,9 +24,11 @@ export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
 
   if (!hasPassword) {
     return (
-      <Panel>
-        <p className="m-0 text-sm text-ink-muted">{t('passwordUnavailable')}</p>
-      </Panel>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-card-body">
+          <p className="m-0 text-sm text-ink-muted">{t('passwordUnavailable')}</p>
+        </div>
+      </section>
     );
   }
 
@@ -75,37 +76,51 @@ export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
   }
 
   return (
-    <Panel className="grid gap-4">
-      <p className="m-0 text-sm text-ink-muted">{t('passwordBlurb')}</p>
-      <Field label={t('currentPassword')}>
-        <PasswordInput
-          value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
-          required
-          autoComplete="current-password"
-        />
-      </Field>
-      <Field label={t('newPassword')}>
-        <PasswordInput
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          required
-          minLength={8}
-          autoComplete="new-password"
-        />
-      </Field>
-      <PasswordStrengthHint value={newPassword} />
-      <Field label={t('confirmPassword')}>
-        <PasswordInput
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          required
-          minLength={8}
-          autoComplete="new-password"
-        />
-      </Field>
-      {error ? <ErrorText>{error}</ErrorText> : null}
-      <div>
+    <section className="kh-ops-panel kh-ops-narrow-form">
+      <div className="kh-ops-panel-head">
+        <h2 className="kh-ops-panel-title">{t('password')}</h2>
+      </div>
+      <div className="kh-ops-card-body">
+        <p className="mt-0 mb-3 text-sm text-ink-muted">{t('passwordBlurb')}</p>
+        <div className="kh-ops-form-grid">
+          <Field className="kh-ops-field-span" label={t('currentPassword')}>
+            <PasswordInput
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
+          </Field>
+          <Field label={t('newPassword')}>
+            <PasswordInput
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </Field>
+          <Field label={t('confirmPassword')}>
+            <PasswordInput
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </Field>
+          <div className="kh-ops-field-span">
+            <PasswordStrengthHint value={newPassword} />
+          </div>
+          {error ? (
+            <div className="kh-ops-field-span">
+              <ErrorText>{error}</ErrorText>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="kh-ops-action-line">
+        <span className="kh-ops-panel-meta">{t('password')}</span>
         <Button
           type="button"
           disabled={
@@ -119,6 +134,6 @@ export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
           {pending ? t('passwordSaving') : t('passwordSubmit')}
         </Button>
       </div>
-    </Panel>
+    </section>
   );
 }

@@ -77,11 +77,11 @@ export function LlmClientPicker({
         <p className="mt-1 mb-0 text-xs text-ink-muted">{t('mcpWizardTargetClientHint')}</p>
       </div>
       <div
-        className="flex flex-wrap gap-2"
+        className="kh-ops-setup-grid"
         role="radiogroup"
         aria-label={t('mcpWizardTargetClient')}
       >
-        {LLM_CLIENTS.map((id) => {
+        {LLM_CLIENTS.map((id, index) => {
           const active = value === id;
           return (
             <button
@@ -89,15 +89,20 @@ export function LlmClientPicker({
               type="button"
               role="radio"
               aria-checked={active}
-              className={active ? 'kh-step kh-step-active' : 'kh-step'}
+              className={`kh-ops-setup-card${active ? ' selected' : ''}`}
               onClick={() => onChange(id)}
             >
-              {t(`mcpWizardClient_${id}`)}
+              <div className="kh-ops-card-body">
+                <span className="kh-ops-setup-step">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <h3>{t(`mcpWizardClient_${id}`)}</h3>
+                <p>{t(`mcpWizardClientBlurb_${id}`)}</p>
+              </div>
             </button>
           );
         })}
       </div>
-      <p className="m-0 text-sm text-ink-muted">{t(`mcpWizardClientBlurb_${value}`)}</p>
     </div>
   );
 }
@@ -285,25 +290,33 @@ export function McpClientSchemas({
 
       {error ? <p className="m-0 text-sm text-danger">{error}</p> : null}
 
-      {panes.map((pane) => (
-        <div key={pane.id} className="grid gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="m-0 text-sm font-semibold">{t(pane.labelKey)}</p>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void copyText(pane.value, pane.id)}
-            >
-              {copied === pane.id ? t('mcpWizardCopied') : t('mcpWizardCopySchema')}
-            </Button>
-          </div>
-          <pre className="m-0 max-h-80 overflow-auto rounded-md bg-panel-solid px-3 py-3 font-mono text-xs">
-            {pane.value}
-          </pre>
-        </div>
-      ))}
+      <div className="kh-ops-setup-grid">
+        {panes.map((pane, index) => (
+          <article key={pane.id} className="kh-ops-setup-card">
+            <div className="kh-ops-card-body">
+              <span className="kh-ops-setup-step">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <h3>{t(pane.labelKey)}</h3>
+              <pre className="kh-ops-code mt-3 mb-0 max-h-64 overflow-auto whitespace-pre-wrap">
+                {pane.value}
+              </pre>
+            </div>
+            <div className="kh-ops-card-foot">
+              <span>{t(`mcpWizardClient_${client}`)}</span>
+              <button
+                type="button"
+                className="kh-ops-text-btn"
+                onClick={() => void copyText(pane.value, pane.id)}
+              >
+                {copied === pane.id ? t('mcpWizardCopied') : t('mcpWizardCopySchema')}
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="kh-ops-action-line px-0">
         <Button type="button" variant="secondary" onClick={onBack}>
           {t('mcpWizardBack')}
         </Button>

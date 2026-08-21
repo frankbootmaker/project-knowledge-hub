@@ -318,8 +318,9 @@
   }
 
   .kh-step {
-    @apply rounded-md border border-line bg-panel-solid px-3 py-1.5 text-sm font-medium
+    @apply rounded-[3px] border border-line bg-panel-solid px-3 py-1.5 text-xs font-medium
       text-ink-muted transition disabled:cursor-not-allowed disabled:opacity-50;
+    font-family: var(--font-mono), ui-monospace, monospace;
   }
 
   .kh-step-active {

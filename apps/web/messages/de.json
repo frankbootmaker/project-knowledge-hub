@@ -307,6 +307,7 @@
     "toastRejected": "KI-Verbindung abgelehnt.",
     "toastRevoked": "KI-Verbindung widerrufen.",
     "scopes": "Scopes",
+    "colActions": "Aktionen",
     "workspaces": "Workspaces",
     "workspacesAllowlistHint": "Wählen Sie alle Arbeitsbereiche für diese Verbindung. Admins können das später am API-Client ändern.",
     "noWorkspaces": "Keine Workspaces verfügbar.",

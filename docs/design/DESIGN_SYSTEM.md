@@ -135,10 +135,17 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-baseline-grid` / `.kh-ops-field-cell` / `.kh-ops-pinned` | Baseline field cells and pinned records |
 | `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack cards |
 | `.kh-ops-form-grid` / `.kh-ops-field-span` | Dense two-column modal and admin forms |
+| `.kh-ops-card-body` / `.kh-ops-card-foot` / `.kh-ops-action-line` | Panel interior padding, card footer, save/test action row |
+| `.kh-ops-setup-grid` / `.kh-ops-setup-card` / `.kh-ops-setup-step` | MCP / AI client setup cards |
+| `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card` | Admin overview setup shortcuts |
+| `.kh-ops-danger-zone` / `.kh-ops-danger-copy` | Close-account irreversible panel |
+| `.kh-ops-dropzone` / `.kh-ops-paste-area` / `.kh-ops-narrow-form` | Document dropzone, conversation paste, 840px create forms |
+| `.kh-ops-scope-list` / `.kh-ops-scope-checks` / `.kh-ops-scope-check` | Scope tags and checkbox chips |
+| `.kh-ops-code` / `.kh-ops-status-row` | Token/schema blocks and MCP preflight rows |
 | `.kh-ops-modal-tabs` / `.kh-ops-modal-pane` | Manage-dialog tab strip (existing product tabs only) |
 | `.kh-ops-activity-item` / `.kh-ops-linked-row` / `.kh-ops-text-btn` | Task activity thread, linked rows, quiet actions |
 | `.kh-ops-storage-choice` / `.kh-ops-provider` | Admin storage provider picker |
-| `.kh-ops-stage-strip` / `.kh-ops-stage-card` | Document-import progress stages |
+| `.kh-ops-stage-strip` / `.kh-ops-stage-card` | Import progress stages and MCP wizard steps |
 | `.kh-ops-history-list` / `.kh-ops-history-item` | Knowledge version history rows |
 | `.kh-ops-roster-person` | Stakeholder roster avatar + name cell |
 | `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |
@@ -212,6 +219,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console leftover forms** — Mail settings, MCP setup wizard (stage strip + client setup cards + schema copy cards), admin overview shortcuts, close-account danger zone, conversation/document import, create workspace/project/system, AI connection tables, change password, and display/notification prefs now use Ops form-grid, action-line, setup-card, dropzone, and danger-zone recipes. Drivers stay console/SMTP/Resend; confirm phrase stays `CLOSE`; no invented SES, FTE, or Azure fields.
 * **Ops Console leftover catalogues** — Project-linked systems/records, workspace picker, account memberships, import details, version history, Git connections, and remaining admin lists (organizations, AI providers, storage picker, style packs) now use Ops data tables, project cards, or provider/stage strips. Task manage dialogs use prototype modal tabs and form grid for existing Details / RACI / Handoff / Activity / Documents sections. No invented FTE, retention, or Azure storage columns.
 * **Ops Console catalogues (slices 1–8)** — Stakeholders (list/org/utilization inline; `?stakeholders=org` / `?utilization=1` unchanged), RAID, change, budget body, baseline, workspace project grid + knowledge/system tables, search groups, archive tables, manage-modal density, and admin/account lists now use `.kh-ops-data-table`, capacity bars, budget layout, baseline grid, and project cards. No invented FTE/cycle-time/budget-impact columns.
 * **Ops Console delivery** — Project delivery matches the prototype board/list/tree/scrum/calendar/timeline chrome in place (`?delivery=` hash routes unchanged). Mode strip, live open-work / hours / cost stats, sortable list table, lane task cards, work-breakdown tree, sprint-head, month+day calendar, and timeline bars use `.kh-ops-delivery-*` recipes. Board statuses stay `todo|in_progress|blocked|done|cancelled`; cycle time is not invented.

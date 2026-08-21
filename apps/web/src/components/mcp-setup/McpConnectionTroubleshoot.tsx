@@ -33,15 +33,15 @@ export function McpConnectionTroubleshoot({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="rounded-md border border-line bg-panel-solid">
+    <div className="kh-ops-panel mb-0">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+        className="kh-ops-panel-head w-full cursor-pointer text-left"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="text-sm font-semibold">{t('mcpWizardTroubleshootTitle')}</span>
-        <span className="text-xs text-ink-muted">
+        <span className="kh-ops-panel-title">{t('mcpWizardTroubleshootTitle')}</span>
+        <span className="kh-ops-panel-meta">
           {open ? t('mcpWizardTroubleshootHide') : t('mcpWizardTroubleshootShow')}
         </span>
       </button>

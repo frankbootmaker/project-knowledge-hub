@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Button, Panel } from '../ui';
+import { Button } from '../ui';
 import { McpConnectionTroubleshoot } from './McpConnectionTroubleshoot';
 
 export function McpSetupDonePanel({
@@ -18,26 +18,29 @@ export function McpSetupDonePanel({
   const t = useTranslations('admin');
 
   return (
-    <Panel className="grid gap-4">
-      <div>
-        <h3 className="mt-0 mb-1 text-base font-semibold">{t('mcpWizardDoneTitle')}</h3>
+    <section className="kh-ops-panel">
+      <div className="kh-ops-panel-head">
+        <h3 className="kh-ops-panel-title">{t('mcpWizardDoneTitle')}</h3>
+      </div>
+      <div className="kh-ops-card-body grid gap-4">
         <p className="m-0 text-sm text-ink-muted">
           {clientName
             ? t('mcpWizardDoneBlurbNamed', { name: clientName })
             : t('mcpWizardDoneBlurb')}
         </p>
-        <p className="mt-2 mb-0 text-sm text-ink-muted">
+        <p className="m-0 text-sm text-ink-muted">
           {variant === 'admin'
             ? t('mcpWizardDoneNextAdmin')
             : t('mcpWizardDoneNextUser')}
         </p>
+        <McpConnectionTroubleshoot variant={variant} mcpUrl={mcpUrl} />
       </div>
-      <McpConnectionTroubleshoot variant={variant} mcpUrl={mcpUrl} />
-      <div className="flex flex-wrap gap-2">
+      <div className="kh-ops-action-line">
+        <span className="kh-ops-panel-meta">{t('mcpWizardDoneTitle')}</span>
         <Button type="button" onClick={onStartAnother}>
           {t('mcpWizardStartAnother')}
         </Button>
       </div>
-    </Panel>
+    </section>
   );
 }

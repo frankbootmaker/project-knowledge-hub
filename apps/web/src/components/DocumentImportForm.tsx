@@ -16,9 +16,7 @@ import {
   ErrorText,
   Field,
   Input,
-  Panel,
   Select,
-  buttonClassName,
 } from './ui';
 
 type Option = { id: string; name: string; slug: string };
@@ -160,134 +158,131 @@ export function DocumentImportForm(props: {
       : '.pdf,.docx,.pptx,.xlsx,.html,.md,.txt,application/pdf';
 
   return (
-    <Panel>
-      <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
-        <p className="m-0 text-sm text-ink-muted">
-          {props.lane === 'image' ? t('imageHelp') : t('documentHelp')}
-        </p>
-        <Field label={t('titleOptional')}>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={t('titlePlaceholder')}
-          />
-        </Field>
-        <Field label={t('file')} className="min-w-0">
-          <input
-            ref={fileInputRef}
-            id={inputId}
-            type="file"
-            accept={accept}
-            className="sr-only"
-            tabIndex={-1}
-            onChange={(e) => assignFile(e.target.files?.[0] ?? null)}
-          />
-          <div
-            role="button"
-            tabIndex={0}
-            aria-controls={inputId}
-            aria-label={t('dropzoneAria')}
-            onClick={openFilePicker}
-            onKeyDown={onDropZoneKeyDown}
-            onDragEnter={onDragEnter}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-            className={[
-              'flex min-h-44 w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-2',
-              'overflow-hidden rounded-lg border-2 border-dashed px-4 py-10 text-center transition sm:px-6',
-              dragActive
-                ? 'border-brand bg-brand-soft/60'
-                : 'border-line-strong bg-panel-solid/60 hover:border-brand hover:bg-brand-soft/40',
-            ].join(' ')}
-          >
-            {dragActive ? (
-              <p className="m-0 max-w-full text-base font-medium text-ink">
-                {t('dropzoneActive')}
-              </p>
-            ) : (
-              <p className="m-0 flex max-w-full flex-wrap items-center justify-center gap-2 text-base font-medium text-ink">
-                <span>{t('dropzoneTitleBefore')}</span>
-                <span className={buttonClassName('secondary')} aria-hidden>
-                  {tCommon('browse')}
-                </span>
-              </p>
-            )}
-            <p className="m-0 max-w-full text-sm text-ink-muted">{t('dropzoneHint')}</p>
-            {file ? (
-              <p className="m-0 mt-2 w-full min-w-0 max-w-full break-words rounded-md bg-panel-solid px-3 py-1.5 text-sm text-ink">
-                <span className="block break-all [overflow-wrap:anywhere]">{file.name}</span>
-                <span className="text-ink-muted"> · {formatBytes(file.size)}</span>
-              </p>
-            ) : null}
-          </div>
-        </Field>
-        <Field label={t('ocrEngine')}>
-          <Select
-            value={ocrEngine}
-            onChange={(e) =>
-              setOcrEngine(e.target.value as DocumentImportOcrEngine)
-            }
-          >
-            {DOCUMENT_IMPORT_OCR_ENGINES.map((engine) => (
-              <option
-                key={engine}
-                value={engine}
-                disabled={
-                  engine === 'vision' && props.visionConfigured === false
+    <section className="kh-ops-panel kh-ops-narrow-form">
+      <form onSubmit={onSubmit}>
+        <div className="kh-ops-card-body">
+          <p className="mt-0 mb-3 text-sm text-ink-muted">
+            {props.lane === 'image' ? t('imageHelp') : t('documentHelp')}
+          </p>
+          <div className="kh-ops-form-grid">
+            <Field className="kh-ops-field-span" label={t('titleOptional')}>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t('titlePlaceholder')}
+              />
+            </Field>
+            <Field className="kh-ops-field-span min-w-0" label={t('file')}>
+              <input
+                ref={fileInputRef}
+                id={inputId}
+                type="file"
+                accept={accept}
+                className="sr-only"
+                tabIndex={-1}
+                onChange={(e) => assignFile(e.target.files?.[0] ?? null)}
+              />
+              <div
+                role="button"
+                tabIndex={0}
+                aria-controls={inputId}
+                aria-label={t('dropzoneAria')}
+                onClick={openFilePicker}
+                onKeyDown={onDropZoneKeyDown}
+                onDragEnter={onDragEnter}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                className={`kh-ops-dropzone${dragActive ? ' is-active' : ''}`}
+              >
+                {dragActive ? (
+                  <strong>{t('dropzoneActive')}</strong>
+                ) : (
+                  <strong>
+                    {t('dropzoneTitleBefore')} {tCommon('browse')}
+                  </strong>
+                )}
+                <p>{t('dropzoneHint')}</p>
+                {file ? (
+                  <p className="m-0 w-full min-w-0 max-w-full break-words text-ink">
+                    <span className="block break-all [overflow-wrap:anywhere]">{file.name}</span>
+                    <span className="text-ink-muted"> · {formatBytes(file.size)}</span>
+                  </p>
+                ) : null}
+              </div>
+            </Field>
+            <Field label={t('ocrEngine')}>
+              <Select
+                value={ocrEngine}
+                onChange={(e) =>
+                  setOcrEngine(e.target.value as DocumentImportOcrEngine)
                 }
               >
-                {t(`ocrEngine_${engine}`)}
-              </option>
-            ))}
-          </Select>
-          <p className="m-0 mt-1 text-sm text-ink-muted">{t('ocrEngineHelp')}</p>
-        </Field>
-        {ocrEngine === 'tesseract' || ocrEngine === 'vision' ? (
-          <Field label={t('ocrLang')}>
-            <Select
-              value={ocrLang}
-              onChange={(e) =>
-                setOcrLang(e.target.value as DocumentImportOcrLang)
-              }
-            >
-              {DOCUMENT_IMPORT_OCR_LANGS.map((lang) => (
-                <option key={lang} value={lang}>
-                  {t(`ocrLang_${lang}`)}
-                </option>
-              ))}
-            </Select>
-            <p className="m-0 mt-1 text-sm text-ink-muted">{t('ocrLangHelp')}</p>
-          </Field>
-        ) : null}
-        <Field label={tCommon('project')}>
-          <Select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-          >
-            <option value="">{tCommon('none')}</option>
-            {props.projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={tCommon('system')}>
-          <Select
-            value={systemId}
-            onChange={(e) => setSystemId(e.target.value)}
-          >
-            <option value="">{tCommon('none')}</option>
-            {props.systems.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+                {DOCUMENT_IMPORT_OCR_ENGINES.map((engine) => (
+                  <option
+                    key={engine}
+                    value={engine}
+                    disabled={
+                      engine === 'vision' && props.visionConfigured === false
+                    }
+                  >
+                    {t(`ocrEngine_${engine}`)}
+                  </option>
+                ))}
+              </Select>
+              <p className="m-0 mt-1 text-sm text-ink-muted">{t('ocrEngineHelp')}</p>
+            </Field>
+            {ocrEngine === 'tesseract' || ocrEngine === 'vision' ? (
+              <Field label={t('ocrLang')}>
+                <Select
+                  value={ocrLang}
+                  onChange={(e) =>
+                    setOcrLang(e.target.value as DocumentImportOcrLang)
+                  }
+                >
+                  {DOCUMENT_IMPORT_OCR_LANGS.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {t(`ocrLang_${lang}`)}
+                    </option>
+                  ))}
+                </Select>
+                <p className="m-0 mt-1 text-sm text-ink-muted">{t('ocrLangHelp')}</p>
+              </Field>
+            ) : null}
+            <Field label={tCommon('project')}>
+              <Select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+              >
+                <option value="">{tCommon('none')}</option>
+                {props.projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={tCommon('system')}>
+              <Select
+                value={systemId}
+                onChange={(e) => setSystemId(e.target.value)}
+              >
+                <option value="">{tCommon('none')}</option>
+                {props.systems.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {error ? (
+              <div className="kh-ops-field-span">
+                <ErrorText>{error}</ErrorText>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="kh-ops-action-line">
           <Button
             type="button"
             variant="secondary"
@@ -303,6 +298,6 @@ export function DocumentImportForm(props: {
           </Button>
         </div>
       </form>
-    </Panel>
+    </section>
   );
 }

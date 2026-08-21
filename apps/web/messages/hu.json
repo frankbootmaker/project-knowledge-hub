@@ -307,6 +307,7 @@
     "toastRejected": "AI-kapcsolat elutasítva.",
     "toastRevoked": "AI-kapcsolat visszavonva.",
     "scopes": "Scope-ok",
+    "colActions": "Műveletek",
     "workspaces": "Munkaterületek",
     "workspacesAllowlistHint": "Jelölje ki az összes munkaterületet ehhez a kapcsolathoz. Az admin később is módosíthatja az API-kliensen.",
     "noWorkspaces": "Nincs elérhető munkaterület.",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { LinkButton, Panel, Switch } from '../ui';
+import { LinkButton, Switch } from '../ui';
 
 const STORAGE_MCP = 'kh.admin.overview.showMcp';
 const STORAGE_EMAIL = 'kh.admin.overview.showEmail';
@@ -71,71 +71,76 @@ export function AdminOverviewSetupCards() {
   const hideLabel = t('overviewHide');
 
   return (
-    <div className="mb-4 grid gap-4">
-      {showMcp ? (
-        <Panel className="flex flex-wrap items-center justify-between gap-3 p-3">
-          <div className="min-w-0 flex-1">
-            <p className="kh-ops-panel-title m-0">{t('mcpSetup')}</p>
-            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('mcpWizardBlurb')}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <LinkButton href="/admin/mcp-setup">{t('mcpWizardStart')}</LinkButton>
-            <HideToggle
-              id="admin-overview-hide-mcp"
-              label={hideLabel}
-              onHide={() => setMcpVisible(false)}
-            />
-          </div>
-        </Panel>
-      ) : null}
-
-      {showEmail ? (
-        <Panel className="flex flex-wrap items-center justify-between gap-3 p-3">
-          <div className="min-w-0 flex-1">
-            <p className="kh-ops-panel-title m-0">{t('email')}</p>
-            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('mailOverviewBlurb')}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <LinkButton href="/admin/email">{t('mailConfigure')}</LinkButton>
-            <HideToggle
-              id="admin-overview-hide-email"
-              label={hideLabel}
-              onHide={() => setEmailVisible(false)}
-            />
-          </div>
-        </Panel>
+    <div className="mb-4 grid gap-3">
+      {showMcp || showEmail ? (
+        <div className="kh-ops-admin-link-grid">
+          {showMcp ? (
+            <article className="kh-ops-admin-link-card">
+              <div className="min-w-0">
+                <strong>{t('mcpSetup')}</strong>
+                <small>{t('mcpWizardBlurb')}</small>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-3">
+                <LinkButton href="/admin/mcp-setup">{t('mcpWizardStart')}</LinkButton>
+                <HideToggle
+                  id="admin-overview-hide-mcp"
+                  label={hideLabel}
+                  onHide={() => setMcpVisible(false)}
+                />
+              </div>
+            </article>
+          ) : null}
+          {showEmail ? (
+            <article className="kh-ops-admin-link-card">
+              <div className="min-w-0">
+                <strong>{t('email')}</strong>
+                <small>{t('mailOverviewBlurb')}</small>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-3">
+                <LinkButton href="/admin/email">{t('mailConfigure')}</LinkButton>
+                <HideToggle
+                  id="admin-overview-hide-email"
+                  label={hideLabel}
+                  onHide={() => setEmailVisible(false)}
+                />
+              </div>
+            </article>
+          ) : null}
+        </div>
       ) : null}
 
       {anyHidden ? (
-        <Panel variant="inset" className="grid gap-2">
-          <p className="m-0 text-sm text-ink-muted">{t('overviewHiddenHint')}</p>
-          <div className="flex flex-wrap gap-4">
-            {!showMcp ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={false}
-                  onChange={(e) => {
-                    if (e.target.checked) setMcpVisible(true);
-                  }}
-                />
-                {t('overviewShowMcp')}
-              </label>
-            ) : null}
-            {!showEmail ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={false}
-                  onChange={(e) => {
-                    if (e.target.checked) setEmailVisible(true);
-                  }}
-                />
-                {t('overviewShowEmail')}
-              </label>
-            ) : null}
+        <section className="kh-ops-panel">
+          <div className="kh-ops-card-body grid gap-2">
+            <p className="m-0 text-sm text-ink-muted">{t('overviewHiddenHint')}</p>
+            <div className="flex flex-wrap gap-4">
+              {!showMcp ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={(e) => {
+                      if (e.target.checked) setMcpVisible(true);
+                    }}
+                  />
+                  {t('overviewShowMcp')}
+                </label>
+              ) : null}
+              {!showEmail ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={(e) => {
+                      if (e.target.checked) setEmailVisible(true);
+                    }}
+                  />
+                  {t('overviewShowEmail')}
+                </label>
+              ) : null}
+            </div>
           </div>
-        </Panel>
+        </section>
       ) : null}
     </div>
   );

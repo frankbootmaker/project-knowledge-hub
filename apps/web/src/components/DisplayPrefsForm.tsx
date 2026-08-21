@@ -8,7 +8,7 @@ import {
   DASHBOARD_WIDGET_KEYS,
   REPORT_DIAGRAM_KEYS,
 } from '@project-knowledge-hub/domain';
-import { ErrorText, Panel, Switch, useToast } from './ui';
+import { ErrorText, Switch, useToast } from './ui';
 
 type ReportKey = (typeof REPORT_DIAGRAM_KEYS)[number];
 type DashboardKey = (typeof DASHBOARD_WIDGET_KEYS)[number];
@@ -108,59 +108,65 @@ export function DisplayPrefsForm({
   }
 
   return (
-    <div className="grid gap-6">
-      <Panel className="grid gap-4">
-        <div>
-          <h2 className="m-0 text-base font-semibold">{t('displayReportsTitle')}</h2>
-          <p className="m-0 mt-1 text-sm text-ink-muted">{t('displayReportsBlurb')}</p>
+    <div className="grid gap-3">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('displayReportsTitle')}</h2>
         </div>
-        {REPORT_DIAGRAM_KEYS.map((key) => (
-          <div key={key} className="kh-ops-setting-row px-0">
-            <div>
-              <Switch
-                id={`report-${key}`}
-                checked={prefs.reportDiagrams[key]}
-                disabled={pendingKey !== null}
-                label={t(`display_report_${key}`)}
-                onCheckedChange={(checked) => void updateReportPref(key, checked)}
-              />
-              <p className="m-0 text-[11px] text-ink-muted">
-                {t(`display_report_${key}_hint`)}
-              </p>
+        <div className="kh-ops-card-body grid gap-0 p-0">
+          <p className="m-0 px-4 py-3 text-sm text-ink-muted">{t('displayReportsBlurb')}</p>
+          {REPORT_DIAGRAM_KEYS.map((key) => (
+            <div key={key} className="kh-ops-setting-row">
+              <div>
+                <Switch
+                  id={`report-${key}`}
+                  checked={prefs.reportDiagrams[key]}
+                  disabled={pendingKey !== null}
+                  label={t(`display_report_${key}`)}
+                  onCheckedChange={(checked) => void updateReportPref(key, checked)}
+                />
+                <p className="m-0 text-[11px] text-ink-muted">
+                  {t(`display_report_${key}_hint`)}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
-      </Panel>
+          ))}
+        </div>
+      </section>
 
-      <Panel className="grid gap-4">
-        <div>
-          <h2 className="m-0 text-base font-semibold">
-            {t('displayDashboardTitle')}
-          </h2>
-          <p className="m-0 mt-1 text-sm text-ink-muted">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('displayDashboardTitle')}</h2>
+        </div>
+        <div className="kh-ops-card-body grid gap-0 p-0">
+          <p className="m-0 px-4 py-3 text-sm text-ink-muted">
             {t('displayDashboardBlurb')}
           </p>
-        </div>
-        {DASHBOARD_WIDGET_KEYS.map((key) => (
-          <div key={key} className="kh-ops-setting-row px-0">
-            <div>
-              <Switch
-                id={`dashboard-${key}`}
-                checked={prefs.dashboardWidgets[key]}
-                disabled={pendingKey !== null}
-                label={t(`display_dashboard_${key}`)}
-                onCheckedChange={(checked) =>
-                  void updateDashboardPref(key, checked)
-                }
-              />
-              <p className="m-0 text-[11px] text-ink-muted">
-                {t(`display_dashboard_${key}_hint`)}
-              </p>
+          {DASHBOARD_WIDGET_KEYS.map((key) => (
+            <div key={key} className="kh-ops-setting-row">
+              <div>
+                <Switch
+                  id={`dashboard-${key}`}
+                  checked={prefs.dashboardWidgets[key]}
+                  disabled={pendingKey !== null}
+                  label={t(`display_dashboard_${key}`)}
+                  onCheckedChange={(checked) =>
+                    void updateDashboardPref(key, checked)
+                  }
+                />
+                <p className="m-0 text-[11px] text-ink-muted">
+                  {t(`display_dashboard_${key}_hint`)}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
-        {error ? <ErrorText>{error}</ErrorText> : null}
-      </Panel>
+          ))}
+          {error ? (
+            <div className="px-4 py-3">
+              <ErrorText>{error}</ErrorText>
+            </div>
+          ) : null}
+        </div>
+      </section>
     </div>
   );
 }

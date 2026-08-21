@@ -6,7 +6,6 @@ import { useState, useTransition } from 'react';
 import { applyBrand, brandIds, brandMeta, type BrandId } from '../lib/brand';
 import { setBrandAction } from '../lib/brand-actions';
 import { cn } from '../lib/cn';
-import { Panel } from './ui';
 
 const brandSwatches: Record<BrandId, [string, string]> = {
   knowhub: ['oklch(52% 0.14 145)', 'oklch(58% 0.16 145)'],
@@ -22,10 +21,11 @@ export function BrandPicker({ initialBrand }: { initialBrand: BrandId }) {
   const [pending, startTransition] = useTransition();
 
   return (
-    <Panel id="brand" className="scroll-mt-20">
-      <h2 className="mt-0 mb-1 font-display text-base font-semibold">
-        {t('brandTitle')}
-      </h2>
+    <section id="brand" className="kh-ops-panel scroll-mt-20">
+      <div className="kh-ops-panel-head">
+        <h2 className="kh-ops-panel-title">{t('brandTitle')}</h2>
+      </div>
+      <div className="kh-ops-card-body">
       <p className="mt-0 mb-4 text-sm text-ink-muted">{t('brandBlurb')}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         {brandIds.map((id) => {
@@ -82,6 +82,7 @@ export function BrandPicker({ initialBrand }: { initialBrand: BrandId }) {
           );
         })}
       </div>
-    </Panel>
+      </div>
+    </section>
   );
 }

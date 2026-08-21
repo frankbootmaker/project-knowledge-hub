@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { EmailNotificationPrefs } from '@project-knowledge-hub/domain';
-import { ErrorText, Panel, Switch, useToast } from './ui';
+import { ErrorText, Switch, useToast } from './ui';
 
 const BASE_TOGGLE_KEYS = [
   'passwordChanged',
@@ -77,38 +77,48 @@ export function NotificationPrefsForm({
   }
 
   return (
-    <div className="grid gap-6">
-      <Panel className="grid gap-4">
-        <p className="m-0 text-sm text-ink-muted">{t('notificationsBlurb')}</p>
-        {toggleKeys.map((key) => (
-          <div key={key} className="kh-ops-setting-row px-0">
-            <div className="grid gap-1">
-              <Switch
-                id={`notify-${key}`}
-                checked={prefs[key]}
-                disabled={pendingKey !== null}
-                label={t(`notify_${key}`)}
-                onCheckedChange={(checked) => void updatePref(key, checked)}
-              />
-              <p className="m-0 text-xs text-ink-muted">{t(`notify_${key}_hint`)}</p>
+    <div className="grid gap-3">
+      <section className="kh-ops-panel">
+        <div className="kh-ops-card-body grid gap-0 p-0">
+          <p className="m-0 px-4 py-3 text-sm text-ink-muted">{t('notificationsBlurb')}</p>
+          {toggleKeys.map((key) => (
+            <div key={key} className="kh-ops-setting-row">
+              <div className="grid gap-1">
+                <Switch
+                  id={`notify-${key}`}
+                  checked={prefs[key]}
+                  disabled={pendingKey !== null}
+                  label={t(`notify_${key}`)}
+                  onCheckedChange={(checked) => void updatePref(key, checked)}
+                />
+                <p className="m-0 text-xs text-ink-muted">{t(`notify_${key}_hint`)}</p>
+              </div>
             </div>
-          </div>
-        ))}
-        {error ? <ErrorText>{error}</ErrorText> : null}
-      </Panel>
+          ))}
+          {error ? (
+            <div className="px-4 py-3">
+              <ErrorText>{error}</ErrorText>
+            </div>
+          ) : null}
+        </div>
+      </section>
 
-      <Panel className="grid gap-2">
-        <h2 className="m-0 text-base font-semibold">{t('notificationsAlwaysTitle')}</h2>
-        <p className="m-0 text-sm text-ink-muted">{t('notificationsAlwaysBlurb')}</p>
-        <ul className="m-0 list-disc pl-5 text-sm text-ink-muted">
-          <li>{t('notificationsAlwaysReset')}</li>
-          <li>{t('notificationsAlwaysInvite')}</li>
-          <li>{t('notificationsAlwaysConfirm')}</li>
-          <li>{t('notificationsAlwaysApproved')}</li>
-          <li>{t('notificationsAlwaysRejected')}</li>
-          <li>{t('notificationsAlwaysClosed')}</li>
-        </ul>
-      </Panel>
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('notificationsAlwaysTitle')}</h2>
+        </div>
+        <div className="kh-ops-card-body grid gap-2">
+          <p className="m-0 text-sm text-ink-muted">{t('notificationsAlwaysBlurb')}</p>
+          <ul className="m-0 list-disc pl-5 text-sm text-ink-muted">
+            <li>{t('notificationsAlwaysReset')}</li>
+            <li>{t('notificationsAlwaysInvite')}</li>
+            <li>{t('notificationsAlwaysConfirm')}</li>
+            <li>{t('notificationsAlwaysApproved')}</li>
+            <li>{t('notificationsAlwaysRejected')}</li>
+            <li>{t('notificationsAlwaysClosed')}</li>
+          </ul>
+        </div>
+      </section>
     </div>
   );
 }

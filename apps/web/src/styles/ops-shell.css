@@ -2335,6 +2335,248 @@ a.kh-ops-health-card:hover {
   font-size: 11px;
 }
 
+.kh-ops-card-body {
+  padding: 18px 15px;
+}
+
+.kh-ops-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--kh-line);
+  background: var(--kh-bg);
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.kh-ops-action-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px;
+  border-top: 1px solid var(--kh-line);
+}
+
+.kh-ops-narrow-form {
+  max-width: 840px;
+}
+
+.kh-ops-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kh-ops-setup-card {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-surface);
+  color: inherit;
+  text-align: left;
+}
+
+button.kh-ops-setup-card {
+  width: 100%;
+  cursor: pointer;
+}
+
+.kh-ops-setup-card.selected {
+  border-color: var(--kh-ink);
+  box-shadow: inset 0 3px var(--kh-accent);
+}
+
+.kh-ops-setup-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.kh-ops-setup-card .kh-ops-card-body h3 {
+  margin: 0 0 5px;
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.kh-ops-setup-card .kh-ops-card-body p {
+  margin: 0;
+  color: var(--kh-ink-muted);
+  font-size: 12px;
+}
+
+.kh-ops-setup-step {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 10px;
+  background: var(--kh-ink);
+  color: var(--kh-panel-solid);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.kh-ops-scope-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.kh-ops-scope-checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.kh-ops-scope-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 9px;
+  border: 1px solid var(--kh-line);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.kh-ops-admin-link-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kh-ops-admin-link-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-surface);
+  text-align: left;
+}
+
+.kh-ops-admin-link-card:hover {
+  border-color: var(--kh-ink);
+  background: var(--kh-bg);
+}
+
+.kh-ops-admin-link-card strong,
+.kh-ops-admin-link-card small {
+  display: block;
+}
+
+.kh-ops-admin-link-card strong {
+  font-size: 13px;
+}
+
+.kh-ops-admin-link-card small {
+  margin-top: 3px;
+  color: var(--kh-ink-muted);
+  font-size: 11px;
+}
+
+.kh-ops-danger-zone {
+  border-color: color-mix(in oklch, var(--kh-danger), var(--kh-line) 50%);
+}
+
+.kh-ops-danger-zone .kh-ops-panel-head {
+  border-color: color-mix(in oklch, var(--kh-danger), var(--kh-line) 65%);
+}
+
+.kh-ops-danger-copy {
+  padding: 16px;
+  color: var(--kh-ink-muted);
+  font-size: 11px;
+}
+
+.kh-ops-dropzone {
+  display: grid;
+  place-items: center;
+  min-height: 170px;
+  width: 100%;
+  padding: 24px;
+  border: 1px dashed var(--kh-ink-muted);
+  background: var(--kh-bg);
+  color: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.kh-ops-dropzone:hover,
+.kh-ops-dropzone.is-active {
+  border-color: var(--kh-ink);
+  background: color-mix(in oklch, var(--kh-accent), var(--kh-bg) 94%);
+}
+
+.kh-ops-dropzone strong {
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.kh-ops-dropzone p {
+  margin: 5px 0 12px;
+  color: var(--kh-ink-muted);
+  font-size: 12px;
+}
+
+.kh-ops-paste-area {
+  min-height: 250px;
+  font-family: var(--font-mono), ui-monospace, monospace !important;
+}
+
+.kh-ops-code {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-bg);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.kh-ops-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-bg);
+}
+
+.kh-ops-status-row p {
+  margin: 0;
+}
+
+.kh-ops-status-row p + p {
+  margin-top: 4px;
+  color: var(--kh-ink-muted);
+  font-size: 11px;
+}
+
+button.kh-ops-stage-card {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.kh-ops-stage-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 @media (max-width: 1080px) {
   .kh-ops-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2388,6 +2630,10 @@ a.kh-ops-health-card:hover {
   .kh-ops-health-grid[data-cols='4'] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .kh-ops-setup-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -2436,7 +2682,10 @@ a.kh-ops-health-card:hover {
   .kh-ops-cost-split,
   .kh-ops-form-grid,
   .kh-ops-storage-choice,
-  .kh-ops-stage-strip {
+  .kh-ops-stage-strip,
+  .kh-ops-setup-grid,
+  .kh-ops-admin-link-grid,
+  .kh-ops-scope-checks {
     grid-template-columns: 1fr;
   }
 

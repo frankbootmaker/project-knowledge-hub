@@ -307,6 +307,7 @@
     "toastRejected": "AI connection rejected.",
     "toastRevoked": "AI connection revoked.",
     "scopes": "Scopes",
+    "colActions": "Actions",
     "workspaces": "Workspaces",
     "workspacesAllowlistHint": "Select every workspace this connection may access. Admins can also change this later on the API client.",
     "noWorkspaces": "No workspaces available.",

@@ -48,7 +48,7 @@ export function PasswordStrengthHint({ value }: { value: string }) {
             <span
               key={index}
               className={cn(
-                'rounded-full bg-line',
+                'bg-line',
                 index < filled ? tone.bar : null,
               )}
             />
