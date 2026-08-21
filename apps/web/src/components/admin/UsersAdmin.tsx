@@ -457,10 +457,18 @@ export function UsersAdmin({
 
   function renderUserRow(user: PublicUser, options?: { showApprove?: boolean }) {
     return (
-      <Panel key={user.id} className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <strong>{user.displayName}</strong>
+      <tr key={user.id}>
+        <td className="kh-ops-primary-cell">
+          {user.displayName}
+          {user.fullName ? (
+            <div className="text-[11px] font-normal text-ink-muted">
+              {user.fullName}
+            </div>
+          ) : null}
+        </td>
+        <td>{user.email}</td>
+        <td>
+          <div className="flex flex-wrap items-center gap-1">
             <Badge tone={statusTone(user.status)}>{statusLabel(user.status)}</Badge>
             {user.isSystemAdmin ? <Badge tone="brand">{t('systemAdmin')}</Badge> : null}
             {user.idpSource ? <Badge tone="neutral">{user.idpSource}</Badge> : null}
@@ -468,63 +476,66 @@ export function UsersAdmin({
               <Badge tone="danger">{t('statusClosed')}</Badge>
             ) : null}
           </div>
-          <p className="mt-1 mb-0 text-sm text-ink-muted">{user.email}</p>
-          {user.fullName ? (
-            <p className="mt-0.5 mb-0 text-sm text-ink-muted">{user.fullName}</p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {options?.showApprove ? (
-            <>
-              <Button
-                type="button"
-                disabled={pending || workspaces.length === 0}
-                onClick={() => openApprove(user)}
-              >
-                {t('approveUser')}
-              </Button>
+        </td>
+        <td>
+          <div className="flex flex-wrap items-center gap-2">
+            {options?.showApprove ? (
+              <>
+                <Button
+                  type="button"
+                  className="h-8 min-h-8 px-2 text-xs"
+                  disabled={pending || workspaces.length === 0}
+                  onClick={() => openApprove(user)}
+                >
+                  {t('approveUser')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  className="h-8 min-h-8 px-2 text-xs"
+                  disabled={pending}
+                  onClick={() => void rejectPendingUser(user)}
+                >
+                  {t('rejectUser')}
+                </Button>
+              </>
+            ) : null}
+            {user.status === 'pending_email' ? (
               <Button
                 type="button"
                 variant="danger"
+                className="h-8 min-h-8 px-2 text-xs"
                 disabled={pending}
                 onClick={() => void rejectPendingUser(user)}
               >
                 {t('rejectUser')}
               </Button>
-            </>
-          ) : null}
-          {user.status === 'pending_email' ? (
-            <Button
-              type="button"
-              variant="danger"
-              disabled={pending}
-              onClick={() => void rejectPendingUser(user)}
-            >
-              {t('rejectUser')}
-            </Button>
-          ) : null}
-          {user.status === 'invited' ? (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={() => void resendInvite(user.id)}
-            >
-              {t('resendInvite')}
-            </Button>
-          ) : null}
-          {!isClosedAccount(user) || allowHardDelete ? (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending || !canEdit(user)}
-              onClick={() => openEdit(user)}
-            >
-              {t('editUser')}
-            </Button>
-          ) : null}
-        </div>
-      </Panel>
+            ) : null}
+            {user.status === 'invited' ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 min-h-8 px-2 text-xs"
+                disabled={pending}
+                onClick={() => void resendInvite(user.id)}
+              >
+                {t('resendInvite')}
+              </Button>
+            ) : null}
+            {!isClosedAccount(user) || allowHardDelete ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 min-h-8 px-2 text-xs"
+                disabled={pending || !canEdit(user)}
+                onClick={() => openEdit(user)}
+              >
+                {t('editUser')}
+              </Button>
+            ) : null}
+          </div>
+        </td>
+      </tr>
     );
   }
 
@@ -992,37 +1003,83 @@ export function UsersAdmin({
       </Modal>
 
       {pendingApproval.length > 0 ? (
-        <section className="grid gap-3">
-          <h2 className="m-0 text-base font-semibold">{t('pendingApprovalTitle')}</h2>
-          <p className="m-0 text-sm text-ink-muted">{t('pendingApprovalHint')}</p>
-          {pendingApproval.map((user) => renderUserRow(user, { showApprove: true }))}
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('pendingApprovalTitle')}</h2>
+          </div>
+          <p className="m-0 px-3 pt-3 text-[11px] text-ink-muted">
+            {t('pendingApprovalHint')}
+          </p>
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('colName')}</th>
+                  <th>{t('colEmail')}</th>
+                  <th>{t('colStatus')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingApproval.map((user) =>
+                  renderUserRow(user, { showApprove: true }),
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 
       {pendingEmail.length > 0 ? (
-        <section className="grid gap-3">
-          <h2 className="m-0 text-base font-semibold">{t('pendingEmailTitle')}</h2>
-          <p className="m-0 text-sm text-ink-muted">{t('pendingEmailHint')}</p>
-          {pendingEmail.map((user) => renderUserRow(user))}
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('pendingEmailTitle')}</h2>
+          </div>
+          <p className="m-0 px-3 pt-3 text-[11px] text-ink-muted">
+            {t('pendingEmailHint')}
+          </p>
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('colName')}</th>
+                  <th>{t('colEmail')}</th>
+                  <th>{t('colStatus')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>{pendingEmail.map((user) => renderUserRow(user))}</tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 
-      <section className="grid gap-3">
+      <section className="kh-ops-panel">
         {pendingApproval.length > 0 || pendingEmail.length > 0 ? (
-          <h2 className="m-0 text-base font-semibold">{t('allUsersTitle')}</h2>
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('allUsersTitle')}</h2>
+          </div>
         ) : null}
         {filteredUsers.length === 0 ? (
-          <p className="kh-muted">
+          <p className="kh-ops-empty">
             {initialUsers.length === 0 ? t('emptyUsers') : t('emptyUsersFiltered')}
           </p>
-        ) : otherUsers.length === 0 &&
-          pendingApproval.length === 0 &&
-          pendingEmail.length === 0 ? (
-          <p className="kh-muted">{t('emptyOtherUsers')}</p>
         ) : otherUsers.length === 0 ? (
-          <p className="kh-muted">{t('emptyOtherUsers')}</p>
+          <p className="kh-ops-empty">{t('emptyOtherUsers')}</p>
         ) : (
-          otherUsers.map((user) => renderUserRow(user))
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('colName')}</th>
+                  <th>{t('colEmail')}</th>
+                  <th>{t('colStatus')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>{otherUsers.map((user) => renderUserRow(user))}</tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

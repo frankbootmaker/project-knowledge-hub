@@ -81,18 +81,17 @@ export function NotificationPrefsForm({
       <Panel className="grid gap-4">
         <p className="m-0 text-sm text-ink-muted">{t('notificationsBlurb')}</p>
         {toggleKeys.map((key) => (
-          <div
-            key={key}
-            className="grid gap-1 border-t border-line pt-3 first:border-t-0 first:pt-0"
-          >
-            <Switch
-              id={`notify-${key}`}
-              checked={prefs[key]}
-              disabled={pendingKey !== null}
-              label={t(`notify_${key}`)}
-              onCheckedChange={(checked) => void updatePref(key, checked)}
-            />
-            <p className="m-0 text-xs text-ink-muted">{t(`notify_${key}_hint`)}</p>
+          <div key={key} className="kh-ops-setting-row px-0">
+            <div className="grid gap-1">
+              <Switch
+                id={`notify-${key}`}
+                checked={prefs[key]}
+                disabled={pendingKey !== null}
+                label={t(`notify_${key}`)}
+                onCheckedChange={(checked) => void updatePref(key, checked)}
+              />
+              <p className="m-0 text-xs text-ink-muted">{t(`notify_${key}_hint`)}</p>
+            </div>
           </div>
         ))}
         {error ? <ErrorText>{error}</ErrorText> : null}

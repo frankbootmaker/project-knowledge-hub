@@ -1,14 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  Badge,
-  Button,
-  ErrorText,
-  Modal,
-} from './ui';
-import { cn } from '../lib/cn';
+import { Badge, ErrorText } from './ui';
 
 type UtilizationView = 'planned' | 'burn' | 'combined';
 type UtilizationStatus = 'under' | 'on_track' | 'over' | 'unknown';
@@ -80,17 +74,24 @@ function pctForView(row: PersonRow, view: UtilizationView): number | null {
   return row.plannedPct;
 }
 
-function CapacityBars({
+function CapacityRows({
   people,
   view,
 }: {
   people: PersonRow[];
   view: UtilizationView;
 }) {
+  const t = useTranslations('utilization');
   const max = useMemo(() => {
     let peak = 1;
     for (const row of people) {
-      peak = Math.max(peak, row.capacityHours ?? 0, demandForView(row, view));
+      peak = Math.max(
+        peak,
+        row.capacityHours ?? 0,
+        row.plannedHours,
+        row.burnHours,
+        demandForView(row, view),
+      );
     }
     return peak;
   }, [people, view]);
@@ -98,36 +99,43 @@ function CapacityBars({
   if (people.length === 0) return null;
 
   return (
-    <div className="grid gap-3" aria-hidden>
+    <div className="kh-ops-panel">
       {people.map((row) => {
-        const capacity = row.capacityHours ?? 0;
-        const demand = demandForView(row, view);
-        const capacityPct = Math.min(100, (capacity / max) * 100);
-        const demandPct = Math.min(100, (demand / max) * 100);
-        const over = demand > capacity && capacity > 0;
+        const plannedPct = Math.min(100, (row.plannedHours / max) * 100);
+        const burnPct = Math.min(100, (row.burnHours / max) * 100);
+        const singleDemand = demandForView(row, view);
+        const singlePct = Math.min(100, (singleDemand / max) * 100);
+        const plannedWidth = view === 'burn' ? 0 : view === 'combined' ? plannedPct : singlePct;
+        const burnWidth = view === 'planned' ? 0 : view === 'combined' ? burnPct : singlePct;
         return (
-          <div key={row.userId} className="grid gap-1">
-            <div className="flex items-baseline justify-between gap-2 text-xs">
-              <span className="truncate font-medium text-ink">
-                {row.displayName}
-              </span>
-              <span className="shrink-0 text-ink-muted">
-                {formatHours(demand)} / {formatHours(row.capacityHours)}
-              </span>
+          <div key={row.userId} className="kh-ops-capacity-row">
+            <div className="kh-ops-capacity-name">
+              <strong>{row.displayName}</strong>
+              <small>
+                {formatHours(row.capacityHours)}
+                {row.engagementType
+                  ? ` · ${t(`engagement.${row.engagementType}`)}`
+                  : ''}
+              </small>
             </div>
-            <div className="relative h-3 overflow-hidden rounded-sm bg-neutral-soft">
-              <div
-                className="absolute inset-y-0 left-0 bg-line"
-                style={{ width: `${capacityPct}%` }}
-              />
-              <div
-                className={cn(
-                  'absolute inset-y-0 left-0',
-                  over ? 'bg-danger/80' : 'bg-brand/70',
-                )}
-                style={{ width: `${demandPct}%` }}
-              />
+            <div
+              className="kh-ops-capacity-track"
+              style={
+                {
+                  '--planned': `${plannedWidth}%`,
+                  '--burn': `${burnWidth}%`,
+                } as CSSProperties
+              }
+            >
+              <i />
+              <b />
             </div>
+            <span className="kh-ops-capacity-hours">
+              {formatHours(demandForView(row, view))}
+            </span>
+            <Badge tone={statusTone(row.status)}>
+              {t(`status.${row.status}`)}
+            </Badge>
           </div>
         );
       })}
@@ -135,25 +143,23 @@ function CapacityBars({
   );
 }
 
-export function ProjectResourceUtilizationModal({
-  open,
-  onClose,
+export function ProjectResourceUtilizationView({
   projectId,
+  active,
 }: {
-  open: boolean;
-  onClose: () => void;
   projectId: string;
+  active: boolean;
 }) {
   const t = useTranslations('utilization');
   const tCommon = useTranslations('common');
   const tProjects = useTranslations('projects');
-  const [view, setView] = useState<UtilizationView>('planned');
+  const [view, setView] = useState<UtilizationView>('combined');
   const [data, setData] = useState<UtilizationPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    if (!open) return;
+    if (!active) return;
     setLoading(true);
     setError(null);
     try {
@@ -173,158 +179,128 @@ export function ProjectResourceUtilizationModal({
     } finally {
       setLoading(false);
     }
-  }, [open, projectId, view, t]);
+  }, [active, projectId, view, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  if (!active) return null;
+
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={t('title')}
-      description={t('description')}
-      size="xl"
-      bodyClassName="!block overflow-auto"
-      footer={
-        <Button type="button" variant="secondary" onClick={onClose}>
-          {tCommon('close')}
-        </Button>
-      }
-    >
-      <div className="grid gap-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div
-            className="inline-flex max-w-full overflow-x-auto rounded-md border border-line p-0.5"
-            role="group"
-            aria-label={t('viewLabel')}
-          >
-            {VIEWS.map((mode) => (
-              <Button
-                key={mode}
-                type="button"
-                variant={view === mode ? 'primary' : 'secondary'}
-                className={cn(
-                  'h-8 shrink-0 rounded-sm px-2 text-xs sm:px-2.5',
-                  view === mode
-                    ? ''
-                    : 'border-transparent bg-transparent shadow-none',
-                )}
-                aria-pressed={view === mode}
-                onClick={() => setView(mode)}
-              >
-                {t(`view.${mode}`)}
-              </Button>
-            ))}
-          </div>
-          {data ? (
-            <Badge tone={ragTone(data.resourceRag)}>
-              {t('resourceRag')}: {tProjects(`rag.${data.resourceRag}`)}
-            </Badge>
-          ) : null}
+    <div className="grid gap-3">
+      <div className="kh-ops-toolbar">
+        <div
+          className="kh-ops-delivery-modes mb-0"
+          role="group"
+          aria-label={t('viewLabel')}
+        >
+          {VIEWS.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={view === mode}
+              onClick={() => setView(mode)}
+            >
+              {t(`view.${mode}`)}
+            </button>
+          ))}
         </div>
-
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        {loading && !data ? (
-          <p className="m-0 text-sm text-ink-muted">{tCommon('loading')}</p>
-        ) : null}
-
-        {data && data.resourceRag !== 'green' ? (
-          <p className="m-0 rounded-md border border-warn/40 bg-warn-soft px-3 py-2 text-sm text-ink">
-            {t('atRiskCallout')}
-          </p>
-        ) : null}
-
         {data ? (
-          <>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-md border border-line bg-panel-solid p-3">
-                <p className="m-0 text-xs uppercase tracking-wide text-ink-muted">
-                  {t('capacity')}
-                </p>
-                <p className="mt-1 mb-0 text-lg font-semibold">
-                  {formatHours(data.totals.capacityHours)}
-                </p>
-              </div>
-              <div className="rounded-md border border-line bg-panel-solid p-3">
-                <p className="m-0 text-xs uppercase tracking-wide text-ink-muted">
-                  {t('plannedDemand')}
-                </p>
-                <p className="mt-1 mb-0 text-lg font-semibold">
-                  {formatHours(data.totals.plannedHours)}
-                </p>
-              </div>
-              <div className="rounded-md border border-line bg-panel-solid p-3">
-                <p className="m-0 text-xs uppercase tracking-wide text-ink-muted">
-                  {t('burnDemand')}
-                </p>
-                <p className="mt-1 mb-0 text-lg font-semibold">
-                  {formatHours(data.totals.burnHours)}
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <p className="mt-0 mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
-                {t('diagram')}
-              </p>
-              {data.people.length === 0 ? (
-                <p className="m-0 text-sm text-ink-muted">{t('empty')}</p>
-              ) : (
-                <CapacityBars people={data.people} view={view} />
-              )}
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-muted">
-                    <th className="py-2 pr-3 font-medium">{t('person')}</th>
-                    <th className="py-2 pr-3 font-medium">{t('capacity')}</th>
-                    <th className="py-2 pr-3 font-medium">{t('demand')}</th>
-                    <th className="py-2 pr-3 font-medium">{t('pct')}</th>
-                    <th className="py-2 font-medium">{t('statusLabel')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.people.map((row) => (
-                    <tr key={row.userId} className="border-b border-line/70">
-                      <td className="py-2 pr-3">
-                        <div className="font-medium text-ink">
-                          {row.displayName}
-                        </div>
-                        <div className="text-xs text-ink-muted">
-                          {row.engagementType
-                            ? t(`engagement.${row.engagementType}`)
-                            : t('engagement.unset')}
-                          {row.windowStart && row.windowEnd
-                            ? ` · ${row.windowStart} → ${row.windowEnd}`
-                            : ''}
-                        </div>
-                      </td>
-                      <td className="py-2 pr-3 text-ink-muted">
-                        {formatHours(row.capacityHours)}
-                      </td>
-                      <td className="py-2 pr-3 text-ink-muted">
-                        {formatHours(demandForView(row, view))}
-                      </td>
-                      <td className="py-2 pr-3 text-ink-muted">
-                        {formatPct(pctForView(row, view))}
-                      </td>
-                      <td className="py-2">
-                        <Badge tone={statusTone(row.status)}>
-                          {t(`status.${row.status}`)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
+          <Badge tone={ragTone(data.resourceRag)}>
+            {t('resourceRag')}: {tProjects(`rag.${data.resourceRag}`)}
+          </Badge>
         ) : null}
       </div>
-    </Modal>
+
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      {loading && !data ? (
+        <p className="m-0 text-sm text-ink-muted">{tCommon('loading')}</p>
+      ) : null}
+
+      {data && data.resourceRag !== 'green' ? (
+        <p className="m-0 rounded-[3px] border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-ink">
+          {t('atRiskCallout')}
+        </p>
+      ) : null}
+
+      {data ? (
+        <>
+          <div className="kh-ops-stats">
+            <article className="kh-ops-stat">
+              <div className="kh-ops-stat-label">{t('capacity')}</div>
+              <div className="kh-ops-stat-value">
+                {formatHours(data.totals.capacityHours)}
+              </div>
+            </article>
+            <article className="kh-ops-stat">
+              <div className="kh-ops-stat-label">{t('plannedDemand')}</div>
+              <div className="kh-ops-stat-value">
+                {formatHours(data.totals.plannedHours)}
+              </div>
+            </article>
+            <article className="kh-ops-stat">
+              <div className="kh-ops-stat-label">{t('burnDemand')}</div>
+              <div className="kh-ops-stat-value">
+                {formatHours(data.totals.burnHours)}
+              </div>
+            </article>
+          </div>
+
+          {data.people.length === 0 ? (
+            <div className="kh-ops-empty-state">
+              <div className="kh-ops-empty-mark">00</div>
+              <h3>{t('title')}</h3>
+              <p>{t('empty')}</p>
+            </div>
+          ) : (
+            <CapacityRows people={data.people} view={view} />
+          )}
+
+          {data.people.length > 0 ? (
+            <section className="kh-ops-panel">
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('person')}</th>
+                      <th>{t('capacity')}</th>
+                      <th>{t('demand')}</th>
+                      <th>{t('pct')}</th>
+                      <th>{t('statusLabel')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.people.map((row) => (
+                      <tr key={row.userId}>
+                        <td className="kh-ops-primary-cell">
+                          {row.displayName}
+                          <div className="text-[11px] font-normal text-ink-muted">
+                            {row.engagementType
+                              ? t(`engagement.${row.engagementType}`)
+                              : t('engagement.unset')}
+                            {row.windowStart && row.windowEnd
+                              ? ` · ${row.windowStart} → ${row.windowEnd}`
+                              : ''}
+                          </div>
+                        </td>
+                        <td>{formatHours(row.capacityHours)}</td>
+                        <td>{formatHours(demandForView(row, view))}</td>
+                        <td>{formatPct(pctForView(row, view))}</td>
+                        <td>
+                          <Badge tone={statusTone(row.status)}>
+                            {t(`status.${row.status}`)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : null}
+    </div>
   );
 }

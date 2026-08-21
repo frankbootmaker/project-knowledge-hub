@@ -1,13 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import {
-  CatalogueSection,
-  type CatalogueListItem,
-} from './CatalogueSection';
 import { CollapsibleSection } from './CollapsibleSection';
+import { ProjectChangeList } from './ProjectChangeList';
 import {
   Badge,
   Button,
@@ -98,7 +95,6 @@ export function ProjectChangePanel({
 }) {
   const t = useTranslations('changes');
   const tCommon = useTranslations('common');
-  const tWorkspaces = useTranslations('workspaces');
   const tArchive = useTranslations('archive');
   const router = useRouter();
   const { pushToast } = useToast();
@@ -170,50 +166,6 @@ export function ProjectChangePanel({
       resetForm(managing);
     }
   }, [manageId, managing?.id]);
-
-  const catalogueItems: CatalogueListItem[] = useMemo(
-    () =>
-      items.map((item) => ({
-        id: item.id,
-        title: item.title,
-        primaryBadge: item.humanKey ?? t(`kind.${item.kind}`),
-        secondaryBadge: t(`status.${item.status}`),
-        subtitle: [
-          t(`kind.${item.kind}`),
-          item.requestedBy?.displayName
-            ? `${t('requestedBy')}: ${item.requestedBy.displayName}`
-            : null,
-          item.effectiveDate
-            ? `${t('effectiveDate')}: ${item.effectiveDate}`
-            : null,
-          item.deliveryLinks.length > 0
-            ? t('linkedDeliveryCount', { count: item.deliveryLinks.length })
-            : null,
-          item.knowledgeRecordTitle
-            ? `${t('relatedRecord')}: ${item.knowledgeRecordTitle}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(' · '),
-        updatedAt: item.updatedAt ?? item.createdAt ?? null,
-        searchText: [
-          item.title,
-          item.humanKey ?? '',
-          item.description ?? '',
-          item.rationale ?? '',
-          item.kind,
-          item.status,
-          item.requestedBy?.displayName ?? '',
-          item.knowledgeRecordTitle ?? '',
-          ...item.deliveryLinks.map((link) => link.entityTitle ?? ''),
-        ]
-          .join(' ')
-          .toLowerCase(),
-        filterValue: `${item.kind}:${item.status}`,
-        filterLabel: `${t(`kind.${item.kind}`)} · ${t(`status.${item.status}`)}`,
-      })),
-    [items, t],
-  );
 
   function toggleDeliveryLink(option: DeliveryOption) {
     const key = linkKey(option);
@@ -549,64 +501,13 @@ export function ProjectChangePanel({
           </div>
         ) : null}
 
-        <CatalogueSection
-          className="mb-2"
-          title={t('title')}
-          showTitle={false}
-          items={catalogueItems}
-          emptyLabel={t('empty')}
-          searchPlaceholder={t('searchPlaceholder')}
-          filterLabel={t('filterLabel')}
-          filterAllLabel={tWorkspaces('sectionFilterAll')}
-          createLabel={t('addItem')}
-          canCreate={canMutate}
+        <ProjectChangeList
+          items={items}
+          canMutate={canMutate}
+          onManage={(id) => setManageId(id)}
           onCreate={() => {
             resetForm();
             setCreateOpen(true);
-          }}
-          renderItem={(item) => {
-            const change = items.find((row) => row.id === item.id);
-            return (
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {change?.humanKey ? (
-                      <Badge tone="brand" className="font-mono">
-                        {change.humanKey}
-                      </Badge>
-                    ) : item.primaryBadge ? (
-                      <Badge tone="brand">{item.primaryBadge}</Badge>
-                    ) : null}
-                    <span className="font-semibold">{item.title}</span>
-                    {item.secondaryBadge ? (
-                      <Badge>{item.secondaryBadge}</Badge>
-                    ) : null}
-                  </div>
-                  {item.subtitle ? (
-                    <p className="mt-2 mb-0 text-sm text-ink-muted">
-                      {item.subtitle}
-                    </p>
-                  ) : null}
-                  {change && change.deliveryLinks.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {change.deliveryLinks.map((link) => (
-                        <Badge key={linkKey(link)}>
-                          {link.entityTitle || link.entityId}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full sm:w-auto"
-                  onClick={() => setManageId(item.id)}
-                >
-                  {t('manage')}
-                </Button>
-              </div>
-            );
           }}
         />
         <p className="mt-3 mb-0 text-xs text-ink-muted">

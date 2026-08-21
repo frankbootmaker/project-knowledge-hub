@@ -396,33 +396,86 @@ export function ProjectBudgetPanel({
             </div>
           </div>
 
-          <div className="grid gap-1 text-xs text-ink-muted">
-            <p className="m-0">
-              {t('acBreakdown', {
-                person: formatMoney(summary.personAc ?? summary.ac, currency, locale),
-                ai: formatMoney(summary.aiAc ?? 0, currency, locale),
-                systems: formatMoney(summary.systemAc ?? 0, currency, locale),
-              })}
-            </p>
-            {(summary.aiNoteOnlyTokens ?? 0) > 0 ? (
-              <p className="m-0">
-                {t('aiNoteOnlyTokens', { count: summary.aiNoteOnlyTokens })}
-              </p>
-            ) : null}
-            {(summary.aiSystems ?? []).some((system) => system.overAllocation) ? (
-              <p className="m-0 text-warn">
-                {t('aiOverAllocation')}
-              </p>
-            ) : null}
-            {(summary.itSystems ?? []).some((system) => system.overAllocation) ? (
-              <p className="m-0 text-warn">
-                {t('systemOverAllocation')}
-              </p>
-            ) : null}
-            {(summary.aiSystems ?? []).length > 0 ? (
-              <ul className="m-0 grid list-none gap-1 p-0">
+          <div className="kh-ops-budget-layout">
+            <section className="kh-ops-panel">
+              <div className="kh-ops-panel-head">
+                <h2 className="kh-ops-panel-title">{t('burndown')}</h2>
+              </div>
+              <div className="kh-ops-chart-wrap">
+                <div className="kh-ops-chart-legend">
+                  <span>
+                    <i style={{ background: 'var(--kh-ink)' }} />
+                    {t('kpi.ev')}
+                  </span>
+                  <span>
+                    <i style={{ background: 'var(--kh-accent)' }} />
+                    {t('kpi.ac')}
+                  </span>
+                </div>
+                <p className="mt-0 mb-2 text-[11px] text-ink-muted">
+                  {t('burndownLegend')}
+                </p>
+                <div className="hidden md:block">
+                  <BurndownChart
+                    bac={summary.bac}
+                    startDate={summary.startDate}
+                    endDate={summary.endDate}
+                    burndown={summary.burndown}
+                  />
+                </div>
+                <div className="md:hidden">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-fit"
+                    onClick={() => setBurndownOpen(true)}
+                  >
+                    {t('burndownOpen')}
+                  </Button>
+                  <p className="mt-2 mb-0 text-xs text-ink-muted">
+                    {t('burndownLandscapeHint')}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="kh-ops-panel">
+              <div className="kh-ops-panel-head">
+                <h2 className="kh-ops-panel-title">{t('costSplit')}</h2>
+              </div>
+              <div className="kh-ops-cost-split">
+                {(
+                  [
+                    ['people', summary.personAc ?? summary.ac, t('costSplitPeople')],
+                    ['ai', summary.aiAc ?? 0, t('costSplitAi')],
+                    ['systems', summary.systemAc ?? 0, t('costSplitSystems')],
+                  ] as const
+                ).map(([key, value, label]) => {
+                  const total = summary.ac || 1;
+                  const width = Math.min(100, Math.max(0, (value / total) * 100));
+                  return (
+                    <div key={key} className="kh-ops-cost-part">
+                      <small>{label}</small>
+                      <strong>{formatMoney(value, currency, locale)}</strong>
+                      <i style={{ width: `${width}%` }} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="grid gap-1 px-3 py-3 text-[11px] text-ink-muted">
+                {(summary.aiNoteOnlyTokens ?? 0) > 0 ? (
+                  <p className="m-0">
+                    {t('aiNoteOnlyTokens', { count: summary.aiNoteOnlyTokens })}
+                  </p>
+                ) : null}
+                {(summary.aiSystems ?? []).some((system) => system.overAllocation) ? (
+                  <p className="m-0 text-warn">{t('aiOverAllocation')}</p>
+                ) : null}
+                {(summary.itSystems ?? []).some((system) => system.overAllocation) ? (
+                  <p className="m-0 text-warn">{t('systemOverAllocation')}</p>
+                ) : null}
                 {(summary.aiSystems ?? []).map((system) => (
-                  <li key={system.systemId}>
+                  <p key={system.systemId} className="m-0">
                     {t('aiBreakdown', {
                       name: system.name,
                       mode: system.costMode
@@ -431,14 +484,10 @@ export function ProjectBudgetPanel({
                       cost: formatMoney(system.billableCost, currency, locale),
                     })}
                     {system.overAllocation ? ` · ${t('aiOverAllocationShort')}` : ''}
-                  </li>
+                  </p>
                 ))}
-              </ul>
-            ) : null}
-            {(summary.itSystems ?? []).length > 0 ? (
-              <ul className="m-0 grid list-none gap-1 p-0">
                 {(summary.itSystems ?? []).map((system) => (
-                  <li key={system.systemId}>
+                  <p key={system.systemId} className="m-0">
                     {t('systemBreakdown', {
                       name: system.name,
                       mode: system.costMode
@@ -449,138 +498,49 @@ export function ProjectBudgetPanel({
                     {system.overAllocation
                       ? ` · ${t('systemOverAllocationShort')}`
                       : ''}
-                  </li>
+                  </p>
                 ))}
-              </ul>
-            ) : null}
+              </div>
+            </section>
           </div>
 
-          <div>
-            <p className="mt-0 mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('burndown')}
-            </p>
-            <p className="mt-0 mb-2 text-xs text-ink-muted">{t('burndownLegend')}</p>
-            <div className="hidden md:block">
-              <BurndownChart
-                bac={summary.bac}
-                startDate={summary.startDate}
-                endDate={summary.endDate}
-                burndown={summary.burndown}
-              />
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{t('epicRollups')}</h2>
             </div>
-            <div className="md:hidden">
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-fit"
-                onClick={() => setBurndownOpen(true)}
-              >
-                {t('burndownOpen')}
-              </Button>
-              <p className="mt-2 mb-0 text-xs text-ink-muted">
-                {t('burndownLandscapeHint')}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <p className="mt-0 mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
-              {t('epicRollups')}
-            </p>
             {summary.epics.length === 0 ? (
-              <p className="m-0 text-sm text-ink-muted">{t('epicRollupsEmpty')}</p>
+              <p className="kh-ops-empty">{t('epicRollupsEmpty')}</p>
             ) : (
-              <>
-                <ul className="m-0 grid list-none gap-2 p-0 md:hidden">
-                  {summary.epics.map((epic) => (
-                    <li
-                      key={epic.epicId}
-                      className="rounded-md border border-line bg-panel-solid p-3"
-                    >
-                      <p className="m-0 text-sm font-semibold text-ink">
-                        {epic.title}
-                      </p>
-                      <dl className="mt-2 mb-0 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                        <div>
-                          <dt className="m-0 font-medium text-ink-muted">
-                            {t('forecastHoursShort')}
-                          </dt>
-                          <dd className="m-0 text-ink">{epic.forecastHours}</dd>
-                        </div>
-                        <div>
-                          <dt className="m-0 font-medium text-ink-muted">
-                            {t('actualHoursShort')}
-                          </dt>
-                          <dd className="m-0 text-ink">{epic.actualHours}</dd>
-                        </div>
-                        <div>
-                          <dt className="m-0 font-medium text-ink-muted">
-                            {t('forecastCostShort')}
-                          </dt>
-                          <dd className="m-0 text-ink">
-                            {formatMoney(epic.forecastCost, currency, locale)}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="m-0 font-medium text-ink-muted">
-                            {t('actualCostShort')}
-                          </dt>
-                          <dd className="m-0 text-ink">
-                            {formatMoney(epic.actualCost, currency, locale)}
-                          </dd>
-                        </div>
-                      </dl>
-                    </li>
-                  ))}
-                </ul>
-                <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full border-collapse text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-line uppercase tracking-wide text-ink-muted">
-                        <th className="py-1.5 pr-2 font-medium">{t('epic')}</th>
-                        <th className="py-1.5 pr-2 font-medium whitespace-nowrap">
-                          {t('forecastHoursShort')}
-                        </th>
-                        <th className="py-1.5 pr-2 font-medium whitespace-nowrap">
-                          {t('actualHoursShort')}
-                        </th>
-                        <th className="py-1.5 pr-2 font-medium whitespace-nowrap">
-                          {t('forecastCostShort')}
-                        </th>
-                        <th className="py-1.5 font-medium whitespace-nowrap">
-                          {t('actualCostShort')}
-                        </th>
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('epic')}</th>
+                      <th className="kh-ops-num">{t('forecastHoursShort')}</th>
+                      <th className="kh-ops-num">{t('actualHoursShort')}</th>
+                      <th className="kh-ops-num">{t('forecastCostShort')}</th>
+                      <th className="kh-ops-num">{t('actualCostShort')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.epics.map((epic) => (
+                      <tr key={epic.epicId}>
+                        <td className="kh-ops-primary-cell">{epic.title}</td>
+                        <td className="kh-ops-num">{epic.forecastHours}</td>
+                        <td className="kh-ops-num">{epic.actualHours}</td>
+                        <td className="kh-ops-num">
+                          {formatMoney(epic.forecastCost, currency, locale)}
+                        </td>
+                        <td className="kh-ops-num">
+                          {formatMoney(epic.actualCost, currency, locale)}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {summary.epics.map((epic) => (
-                        <tr
-                          key={epic.epicId}
-                          className="border-b border-line/70"
-                        >
-                          <td className="max-w-[14rem] truncate py-1.5 pr-2 font-medium text-ink">
-                            {epic.title}
-                          </td>
-                          <td className="py-1.5 pr-2 whitespace-nowrap text-ink-muted">
-                            {epic.forecastHours}
-                          </td>
-                          <td className="py-1.5 pr-2 whitespace-nowrap text-ink-muted">
-                            {epic.actualHours}
-                          </td>
-                          <td className="py-1.5 pr-2 whitespace-nowrap text-ink-muted">
-                            {formatMoney(epic.forecastCost, currency, locale)}
-                          </td>
-                          <td className="py-1.5 whitespace-nowrap text-ink-muted">
-                            {formatMoney(epic.actualCost, currency, locale)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
+          </section>
 
           <p className="m-0 text-xs text-ink-muted">
             {canMutate ? t('hint') : t('readOnlyHint')}

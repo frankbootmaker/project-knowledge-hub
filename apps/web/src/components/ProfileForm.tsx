@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { UserAvatar } from './UserAvatar';
-import { Button, ErrorText, Field, Input, Panel, useToast } from './ui';
+import { Button, ErrorText, Field, Input, useToast } from './ui';
 
 export type ProfileUser = {
   id: string;
@@ -129,68 +129,82 @@ export function ProfileForm({ initialUser }: { initialUser: ProfileUser }) {
   }
 
   return (
-    <Panel className="grid gap-4">
-      <div className="flex flex-wrap items-center gap-4">
-        <UserAvatar
-          displayName={displayName}
-          fullName={fullName}
-          avatarUrl={avatarUrl}
-          size="lg"
-        />
-        <div className="grid gap-2">
-          <p className="m-0 text-sm text-ink-muted">{t('avatarHint')}</p>
-          <div className="flex flex-wrap gap-2">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="sr-only"
-              onChange={(e) => void onAvatarSelected(e.target.files?.[0] ?? null)}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={() => fileRef.current?.click()}
-            >
-              {t('avatarUpload')}
-            </Button>
-            {avatarUrl ? (
+    <section className="kh-ops-panel">
+      <div className="kh-ops-panel-head">
+        <h2 className="kh-ops-panel-title">{t('title')}</h2>
+      </div>
+      <div className="kh-ops-setting-row">
+        <div className="flex flex-wrap items-center gap-4">
+          <UserAvatar
+            displayName={displayName}
+            fullName={fullName}
+            avatarUrl={avatarUrl}
+            size="lg"
+          />
+          <div className="grid gap-2">
+            <p className="m-0 text-xs text-ink-muted">{t('avatarHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={(e) => void onAvatarSelected(e.target.files?.[0] ?? null)}
+              />
               <Button
                 type="button"
                 variant="secondary"
                 disabled={pending}
-                onClick={() => void onRemoveAvatar()}
+                onClick={() => fileRef.current?.click()}
               >
-                {t('avatarRemove')}
+                {t('avatarUpload')}
               </Button>
-            ) : null}
+              {avatarUrl ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() => void onRemoveAvatar()}
+                >
+                  {t('avatarRemove')}
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
-
-      <Field label={t('email')}>
-        <Input value={initialUser.email} readOnly disabled />
-      </Field>
-      <p className="m-0 text-sm text-ink-muted">{t('emailHint')}</p>
-      <Field label={t('displayName')}>
-        <Input
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          required
-          maxLength={160}
-        />
-      </Field>
-      <Field label={t('fullName')}>
-        <Input
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          maxLength={200}
-          placeholder={t('fullNamePlaceholder')}
-        />
-      </Field>
-      {error ? <ErrorText>{error}</ErrorText> : null}
-      <div>
+      <div className="kh-ops-setting-row">
+        <Field label={t('email')}>
+          <Input value={initialUser.email} readOnly disabled />
+        </Field>
+      </div>
+      <p className="m-0 px-3.5 text-[11px] text-ink-muted">{t('emailHint')}</p>
+      <div className="kh-ops-setting-row">
+        <Field label={t('displayName')}>
+          <Input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+            maxLength={160}
+          />
+        </Field>
+      </div>
+      <div className="kh-ops-setting-row">
+        <Field label={t('fullName')}>
+          <Input
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            maxLength={200}
+            placeholder={t('fullNamePlaceholder')}
+          />
+        </Field>
+      </div>
+      {error ? (
+        <div className="px-3.5">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      ) : null}
+      <div className="kh-ops-setting-row">
         <Button
           type="button"
           disabled={pending || !displayName.trim()}
@@ -199,6 +213,6 @@ export function ProfileForm({ initialUser }: { initialUser: ProfileUser }) {
           {pending ? tCommon('saving') : tCommon('save')}
         </Button>
       </div>
-    </Panel>
+    </section>
   );
 }

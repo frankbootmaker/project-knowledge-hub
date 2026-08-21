@@ -1827,12 +1827,310 @@ a.kh-ops-health-card:hover {
   margin: 6px auto 13px;
   color: var(--kh-ink-muted);
   font-size: 12px;
-  line-height: 1.5;
+}
+
+.kh-ops-roster-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kh-ops-roster-person-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.kh-ops-roster-person-copy small {
+  overflow: hidden;
+  color: var(--kh-ink-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.kh-ops-capacity-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) 54px auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--kh-line);
+}
+
+.kh-ops-capacity-row:last-child {
+  border-bottom: 0;
+}
+
+.kh-ops-capacity-name {
+  min-width: 0;
+}
+
+.kh-ops-capacity-name strong {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kh-ops-capacity-name small {
+  display: block;
+  color: var(--kh-ink-muted);
+  font-size: 10px;
+}
+
+.kh-ops-capacity-track {
+  position: relative;
+  height: 10px;
+  background: var(--kh-line);
+}
+
+.kh-ops-capacity-track i,
+.kh-ops-capacity-track b {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+}
+
+.kh-ops-capacity-track i {
+  background: var(--kh-ink);
+  width: var(--planned, 0%);
+}
+
+.kh-ops-capacity-track b {
+  background: var(--kh-accent);
+  width: var(--burn, 0%);
+  mix-blend-mode: multiply;
+}
+
+.kh-ops-capacity-hours {
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  text-align: right;
+}
+
+.kh-ops-budget-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 12px;
+}
+
+.kh-ops-chart-wrap {
+  padding: 14px 15px;
+}
+
+.kh-ops-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 9px;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.kh-ops-chart-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.kh-ops-cost-split {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--kh-line);
+}
+
+.kh-ops-cost-part {
+  padding: 13px;
+  border-right: 1px solid var(--kh-line);
+}
+
+.kh-ops-cost-part:last-child {
+  border-right: 0;
+}
+
+.kh-ops-cost-part small {
+  display: block;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.kh-ops-cost-part strong {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.kh-ops-cost-part i {
+  display: block;
+  height: 3px;
+  margin-top: 9px;
+  background: var(--kh-accent);
+}
+
+.kh-ops-baseline-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.kh-ops-field-cell {
+  padding: 14px;
+  border-right: 1px solid var(--kh-line);
+  border-bottom: 1px solid var(--kh-line);
+}
+
+.kh-ops-field-cell:nth-child(3n) {
+  border-right: 0;
+}
+
+.kh-ops-field-cell small {
+  display: block;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.kh-ops-field-cell strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.kh-ops-pinned {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--kh-line);
+}
+
+.kh-ops-pinned:last-child {
+  border-bottom: 0;
+}
+
+.kh-ops-pinned h3 {
+  margin: 0;
+  font-size: 11px;
+}
+
+.kh-ops-pinned p {
+  margin: 2px 0 0;
+  color: var(--kh-ink-muted);
+  font-size: 11px;
+}
+
+.kh-ops-code-box {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-surface);
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.kh-ops-project-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+}
+
+.kh-ops-project-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-surface);
+}
+
+.kh-ops-project-card h3 {
+  margin: 0;
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.kh-ops-project-card h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.kh-ops-project-card h3 a:hover {
+  text-decoration: underline;
+}
+
+.kh-ops-project-card p {
+  margin: 0;
+  color: var(--kh-ink-muted);
+  font-size: 12px;
+}
+
+.kh-ops-project-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kh-ops-search-group {
+  margin-bottom: 12px;
+}
+
+.kh-ops-search-group .kh-ops-panel-head {
+  border-bottom: 0;
+}
+
+.kh-ops-competency-list {
+  max-width: 280px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 1080px) {
   .kh-ops-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kh-ops-budget-layout,
+  .kh-ops-project-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .kh-ops-baseline-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .kh-ops-field-cell:nth-child(3n) {
+    border-right: 1px solid var(--kh-line);
+  }
+
+  .kh-ops-field-cell:nth-child(2n) {
+    border-right: 0;
   }
 
   .kh-ops-calendar-layout,
@@ -1904,6 +2202,29 @@ a.kh-ops-health-card:hover {
   .kh-ops-health-grid,
   .kh-ops-health-grid[data-cols='4'] {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .kh-ops-budget-layout,
+  .kh-ops-project-grid,
+  .kh-ops-baseline-grid,
+  .kh-ops-cost-split {
+    grid-template-columns: 1fr;
+  }
+
+  .kh-ops-cost-part,
+  .kh-ops-field-cell,
+  .kh-ops-field-cell:nth-child(2n),
+  .kh-ops-field-cell:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .kh-ops-capacity-row {
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+
+  .kh-ops-capacity-track {
+    grid-column: 1 / -1;
   }
 }
 

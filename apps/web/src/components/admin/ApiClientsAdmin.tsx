@@ -751,120 +751,145 @@ export function ApiClientsAdmin({
       </Modal>
 
       {pendingClients.length > 0 ? (
-        <section className="grid gap-3">
-          <h2 className="m-0 text-base font-semibold">{t('pendingApiClientsTitle')}</h2>
-          <p className="m-0 text-sm text-ink-muted">{t('pendingApiClientsHint')}</p>
-          {pendingClients.map((client) => (
-            <Panel key={client.id} className="grid gap-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="m-0 text-base font-semibold">{client.name}</h3>
-                    <Badge tone="brand">{t('statusPendingApproval')}</Badge>
-                    {client.agentLabel ? (
-                      <Badge tone="neutral">{client.agentLabel}</Badge>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 mb-0 text-sm text-ink-muted">
-                    {t('requestedBy')}: {userLabel(client.requestedByUserId)}
-                  </p>
-                  <p className="mt-1 mb-0 font-mono text-xs text-ink-muted">
-                    {client.scopes.join(', ')}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => openApprove(client)}
-                  >
-                    {t('approveApiClient')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    disabled={pending}
-                    onClick={() => void rejectPending(client.id)}
-                  >
-                    {t('rejectApiClient')}
-                  </Button>
-                </div>
-              </div>
-            </Panel>
-          ))}
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('pendingApiClientsTitle')}</h2>
+          </div>
+          <p className="m-0 px-3 pt-3 text-[11px] text-ink-muted">
+            {t('pendingApiClientsHint')}
+          </p>
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('colName')}</th>
+                  <th>{t('colStatus')}</th>
+                  <th>{t('colScopes')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingClients.map((client) => (
+                  <tr key={client.id}>
+                    <td className="kh-ops-primary-cell">
+                      {client.name}
+                      <div className="text-[11px] font-normal text-ink-muted">
+                        {t('requestedBy')}: {userLabel(client.requestedByUserId)}
+                      </div>
+                    </td>
+                    <td>
+                      <Badge tone="brand">{t('statusPendingApproval')}</Badge>
+                      {client.agentLabel ? (
+                        <Badge tone="neutral">{client.agentLabel}</Badge>
+                      ) : null}
+                    </td>
+                    <td className="font-mono text-[11px]">
+                      {client.scopes.join(', ')}
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          className="h-8 min-h-8 px-2 text-xs"
+                          disabled={pending}
+                          onClick={() => openApprove(client)}
+                        >
+                          {t('approveApiClient')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          className="h-8 min-h-8 px-2 text-xs"
+                          disabled={pending}
+                          onClick={() => void rejectPending(client.id)}
+                        >
+                          {t('rejectApiClient')}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 
-      <section className="grid gap-3">
+      <section className="kh-ops-panel">
         {pendingClients.length > 0 ? (
-          <h2 className="m-0 text-base font-semibold">{t('activeApiClientsTitle')}</h2>
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('activeApiClientsTitle')}</h2>
+          </div>
         ) : null}
         {filteredClients.length === 0 ? (
-          <p className="kh-muted">
+          <p className="kh-ops-empty">
             {initialClients.length === 0
               ? t('emptyClients')
               : t('emptyClientsFiltered')}
           </p>
         ) : activeClients.length === 0 ? (
-          <p className="kh-muted">{t('emptyActiveClientsFiltered')}</p>
+          <p className="kh-ops-empty">{t('emptyActiveClientsFiltered')}</p>
         ) : (
-          activeClients.map((client) => (
-            <Panel key={client.id} className="grid gap-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="m-0 text-base font-semibold">{client.name}</h3>
-                  <p className="mt-1 mb-0 text-sm text-ink-muted">
-                    {t('tokenPrefix')}:{' '}
-                    <span className="font-mono">{client.tokenPrefix ?? '—'}</span>
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={pending}
-                    onClick={() => openEdit(client)}
-                  >
-                    {t('editApiClient')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={pending}
-                    onClick={() => void rotate(client.id)}
-                  >
-                    {t('rotate')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    disabled={pending}
-                    onClick={() => void revoke(client.id)}
-                  >
-                    {t('revoke')}
-                  </Button>
-                </div>
-              </div>
-              <p className="m-0 font-mono text-xs text-ink-muted">
-                {client.scopes.join(', ')}
-              </p>
-              <p className="m-0 text-sm text-ink-muted">
-                <span className="font-medium text-ink">{t('allowedWorkspaces')}:</span>{' '}
-                {workspaceNames(client.allowedWorkspaceIds)}
-              </p>
-              {client.actingUserId ? (
-                <p className="m-0 text-xs text-ink-muted">
-                  {t('actingUser')}: {userLabel(client.actingUserId)}
-                </p>
-              ) : null}
-              <p className="m-0 text-xs text-ink-muted">
-                {t('created')}: {new Date(client.createdAt).toLocaleString()}
-                {client.lastUsedAt
-                  ? ` · ${t('lastUsed')}: ${new Date(client.lastUsedAt).toLocaleString()}`
-                  : ''}
-              </p>
-            </Panel>
-          ))
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('colName')}</th>
+                  <th>{t('tokenPrefix')}</th>
+                  <th>{t('colScopes')}</th>
+                  <th>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeClients.map((client) => (
+                  <tr key={client.id}>
+                    <td className="kh-ops-primary-cell">
+                      {client.name}
+                      <div className="text-[11px] font-normal text-ink-muted">
+                        {t('allowedWorkspaces')}:{' '}
+                        {workspaceNames(client.allowedWorkspaceIds)}
+                      </div>
+                    </td>
+                    <td className="font-mono">{client.tokenPrefix ?? '—'}</td>
+                    <td className="font-mono text-[11px]">
+                      {client.scopes.join(', ')}
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-8 min-h-8 px-2 text-xs"
+                          disabled={pending}
+                          onClick={() => openEdit(client)}
+                        >
+                          {t('editApiClient')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-8 min-h-8 px-2 text-xs"
+                          disabled={pending}
+                          onClick={() => void rotate(client.id)}
+                        >
+                          {t('rotate')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          className="h-8 min-h-8 px-2 text-xs"
+                          disabled={pending}
+                          onClick={() => void revoke(client.id)}
+                        >
+                          {t('revoke')}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

@@ -1,15 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import {
-  CatalogueSection,
-  type CatalogueListItem,
-} from './CatalogueSection';
 import { CollapsibleSection } from './CollapsibleSection';
+import { ProjectRaidList } from './ProjectRaidList';
 import {
-  Badge,
   Button,
   ErrorText,
   Field,
@@ -18,7 +14,6 @@ import {
   Panel,
   Select,
   Textarea,
-  raidSeverityTone,
   useToast,
 } from './ui';
 
@@ -77,7 +72,6 @@ export function ProjectRaidPanel({
 }) {
   const t = useTranslations('raid');
   const tCommon = useTranslations('common');
-  const tWorkspaces = useTranslations('workspaces');
   const tArchive = useTranslations('archive');
   const router = useRouter();
   const { pushToast } = useToast();
@@ -134,45 +128,6 @@ export function ProjectRaidPanel({
       resetForm(managing);
     }
   }, [manageId, managing?.id]);
-
-  const catalogueItems: CatalogueListItem[] = useMemo(
-    () =>
-      items.map((item) => ({
-        id: item.id,
-        title: item.title,
-        primaryBadge: item.humanKey ?? t(`kind.${item.kind}`),
-        secondaryBadge: t(`status.${item.status}`),
-        subtitle: [
-          t(`kind.${item.kind}`),
-          t(`severity.${item.severity}`),
-          item.owner?.displayName
-            ? `${t('owner')}: ${item.owner.displayName}`
-            : null,
-          item.dueDate ? `${t('dueDate')}: ${item.dueDate}` : null,
-          item.tasks.length > 0
-            ? t('linkedTasksCount', { count: item.tasks.length })
-            : null,
-        ]
-          .filter(Boolean)
-          .join(' · '),
-        updatedAt: item.updatedAt ?? item.createdAt ?? null,
-        searchText: [
-          item.title,
-          item.humanKey ?? '',
-          item.description ?? '',
-          item.kind,
-          item.status,
-          item.severity,
-          item.owner?.displayName ?? '',
-          ...item.tasks.map((task) => task.title),
-        ]
-          .join(' ')
-          .toLowerCase(),
-        filterValue: `${item.kind}:${item.status}`,
-        filterLabel: `${t(`kind.${item.kind}`)} · ${t(`status.${item.status}`)}`,
-      })),
-    [items, t],
-  );
 
   function toggleTask(taskId: string) {
     setTaskIds((prev) =>
@@ -513,70 +468,13 @@ export function ProjectRaidPanel({
           </div>
         ) : null}
 
-        <CatalogueSection
-          className="mb-2"
-          title={t('title')}
-          showTitle={false}
-          items={catalogueItems}
-          emptyLabel={t('empty')}
-          searchPlaceholder={t('searchPlaceholder')}
-          filterLabel={t('filterLabel')}
-          filterAllLabel={tWorkspaces('sectionFilterAll')}
-          createLabel={t('addItem')}
-          canCreate={canMutate}
+        <ProjectRaidList
+          items={items}
+          canMutate={canMutate}
+          onManage={(id) => setManageId(id)}
           onCreate={() => {
             resetForm();
             setCreateOpen(true);
-          }}
-          renderItem={(item) => {
-            const raid = items.find((row) => row.id === item.id);
-            return (
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {raid?.humanKey ? (
-                      <Badge tone="brand" className="font-mono">
-                        {raid.humanKey}
-                      </Badge>
-                    ) : item.primaryBadge ? (
-                      <Badge tone="brand">{item.primaryBadge}</Badge>
-                    ) : null}
-                    <span className="font-semibold">{item.title}</span>
-                    {raid ? (
-                      <Badge>{t(`kind.${raid.kind}`)}</Badge>
-                    ) : null}
-                    {item.secondaryBadge ? (
-                      <Badge>{item.secondaryBadge}</Badge>
-                    ) : null}
-                    {raid ? (
-                      <Badge tone={raidSeverityTone(raid.severity)}>
-                        {t(`severity.${raid.severity}`)}
-                      </Badge>
-                    ) : null}
-                  </div>
-                  {item.subtitle ? (
-                    <p className="mt-2 mb-0 text-sm text-ink-muted">
-                      {item.subtitle}
-                    </p>
-                  ) : null}
-                  {raid && raid.tasks.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {raid.tasks.map((task) => (
-                        <Badge key={task.id}>{task.title}</Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full sm:w-auto"
-                  onClick={() => setManageId(item.id)}
-                >
-                  {t('manage')}
-                </Button>
-              </div>
-            );
           }}
         />
         <p className="mt-3 mb-0 text-xs text-ink-muted">
