@@ -344,7 +344,6 @@ export function WorkspaceMediaLibrary(props: {
           {visible.map((item) => (
             <article key={item.id} className="kh-ops-media-card">
               <div className="kh-ops-media-preview">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.url}
                   alt={item.altText ?? item.originalFilename ?? ''}
