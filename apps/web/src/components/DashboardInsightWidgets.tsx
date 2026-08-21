@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import type { DashboardWidgetPrefs } from '@project-knowledge-hub/domain';
 import type { DashboardInsights } from '../lib/dashboard';
-import { Panel } from './ui';
+import { cn } from '../lib/cn';
 
 function BarRow({
   label,
@@ -16,25 +16,23 @@ function BarRow({
   tone: 'danger' | 'warn' | 'ok' | 'muted' | 'brand';
 }) {
   const width = total > 0 ? Math.max(4, Math.round((value / total) * 100)) : 0;
-  const barClass =
+  const progressClass =
     tone === 'danger'
-      ? 'bg-danger'
+      ? 'kh-ops-progress-danger'
       : tone === 'warn'
-        ? 'bg-amber-500'
-        : tone === 'ok'
-          ? 'bg-emerald-500'
-          : tone === 'brand'
-            ? 'bg-brand'
-            : 'bg-ink-muted/40';
+        ? 'kh-ops-progress-warn'
+        : tone === 'muted'
+          ? 'kh-ops-progress-muted'
+          : '';
 
   return (
-    <div className="grid gap-1">
-      <div className="flex items-baseline justify-between gap-2 text-xs">
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-[11px]">
         <span className="text-ink-muted">{label}</span>
-        <span className="font-semibold text-ink">{value}</span>
+        <span className="font-semibold tabular-nums text-ink">{value}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-line">
-        <div className={`h-full rounded-full ${barClass}`} style={{ width: `${width}%` }} />
+      <div className={cn('kh-ops-progress', progressClass)}>
+        <span style={{ width: `${width}%` }} />
       </div>
     </div>
   );
@@ -67,10 +65,10 @@ export async function DashboardInsightWidgets({
   const raidTotal = Math.max(insights.openRaid.total, 1);
 
   return (
-    <section className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="kh-ops-stats mb-4">
       {prefs.tasksByDue ? (
-        <Panel className="grid gap-3">
-          <h2 className="m-0 text-sm font-semibold">{t('widgetTasksByDue')}</h2>
+        <div className="kh-ops-stat grid gap-2">
+          <p className="kh-ops-stat-label m-0">{t('widgetTasksByDue')}</p>
           <BarRow
             label={t('widgetOverdue')}
             value={insights.tasksByDue.overdue}
@@ -95,12 +93,12 @@ export async function DashboardInsightWidgets({
             total={taskTotal}
             tone="muted"
           />
-        </Panel>
+        </div>
       ) : null}
 
       {prefs.projectHealthRag ? (
-        <Panel className="grid gap-3">
-          <h2 className="m-0 text-sm font-semibold">{t('widgetProjectHealth')}</h2>
+        <div className="kh-ops-stat grid gap-2">
+          <p className="kh-ops-stat-label m-0">{t('widgetProjectHealth')}</p>
           <BarRow
             label={t('widgetRagGreen')}
             value={insights.projectHealthRag.green}
@@ -119,12 +117,12 @@ export async function DashboardInsightWidgets({
             total={ragTotal}
             tone="danger"
           />
-        </Panel>
+        </div>
       ) : null}
 
       {prefs.openRaidCounts ? (
-        <Panel className="grid gap-3">
-          <h2 className="m-0 text-sm font-semibold">{t('widgetOpenRaid')}</h2>
+        <div className="kh-ops-stat grid gap-2">
+          <p className="kh-ops-stat-label m-0">{t('widgetOpenRaid')}</p>
           <BarRow
             label={t('widgetRisks')}
             value={insights.openRaid.risks}
@@ -149,14 +147,14 @@ export async function DashboardInsightWidgets({
             total={raidTotal}
             tone="muted"
           />
-        </Panel>
+        </div>
       ) : null}
 
       {prefs.budgetAttention ? (
-        <Panel className="grid gap-3">
-          <h2 className="m-0 text-sm font-semibold">{t('widgetBudgetAttention')}</h2>
+        <div className="kh-ops-stat grid gap-2">
+          <p className="kh-ops-stat-label m-0">{t('widgetBudgetAttention')}</p>
           {insights.budgetAttention.length === 0 ? (
-            <p className="m-0 text-sm text-ink-muted">{t('widgetBudgetClear')}</p>
+            <p className="kh-ops-stat-note m-0">{t('widgetBudgetClear')}</p>
           ) : (
             <ul className="m-0 grid list-none gap-2 p-0">
               {insights.budgetAttention.map((row) => (
@@ -167,7 +165,7 @@ export async function DashboardInsightWidgets({
                   >
                     {row.projectName}
                   </Link>
-                  <p className="m-0 text-xs text-ink-muted">
+                  <p className="m-0 text-[11px] text-ink-muted">
                     CPI {row.cpi?.toFixed(2) ?? '—'} · SPI{' '}
                     {row.spi?.toFixed(2) ?? '—'} · {t(`rag.${row.financialRag}`)}
                   </p>
@@ -175,7 +173,7 @@ export async function DashboardInsightWidgets({
               ))}
             </ul>
           )}
-        </Panel>
+        </div>
       ) : null}
     </section>
   );

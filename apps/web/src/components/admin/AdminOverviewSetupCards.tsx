@@ -73,10 +73,10 @@ export function AdminOverviewSetupCards() {
   return (
     <div className="mb-4 grid gap-4">
       {showMcp ? (
-        <Panel className="flex flex-wrap items-center justify-between gap-3">
+        <Panel className="flex flex-wrap items-center justify-between gap-3 p-3">
           <div className="min-w-0 flex-1">
-            <p className="m-0 text-sm font-semibold">{t('mcpSetup')}</p>
-            <p className="mt-1 mb-0 text-sm text-ink-muted">{t('mcpWizardBlurb')}</p>
+            <p className="kh-ops-panel-title m-0">{t('mcpSetup')}</p>
+            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('mcpWizardBlurb')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <LinkButton href="/admin/mcp-setup">{t('mcpWizardStart')}</LinkButton>
@@ -90,10 +90,10 @@ export function AdminOverviewSetupCards() {
       ) : null}
 
       {showEmail ? (
-        <Panel className="flex flex-wrap items-center justify-between gap-3">
+        <Panel className="flex flex-wrap items-center justify-between gap-3 p-3">
           <div className="min-w-0 flex-1">
-            <p className="m-0 text-sm font-semibold">{t('email')}</p>
-            <p className="mt-1 mb-0 text-sm text-ink-muted">{t('mailOverviewBlurb')}</p>
+            <p className="kh-ops-panel-title m-0">{t('email')}</p>
+            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('mailOverviewBlurb')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <LinkButton href="/admin/email">{t('mailConfigure')}</LinkButton>

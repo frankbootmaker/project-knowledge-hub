@@ -406,22 +406,7 @@ export default async function ProjectDetailPage({
             {t('breadcrumb')}
           </>
         }
-        title={
-          <span className="inline-flex flex-wrap items-center gap-3">
-            <span>{project.name}</span>
-            <Badge
-              tone={ragBadgeTone(overallRag)}
-              title={[
-                `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,
-                `${t('ragRisks')}: ${t(`rag.${riskRag}`)}`,
-                `${t('ragFinancials')}: ${t(`rag.${financialRag}`)}`,
-              ].join(' · ')}
-              aria-label={`${t('ragOverall')}: ${t(`rag.${overallRag}`)}`}
-            >
-              {t('ragOverall')}: {t(`rag.${overallRag}`)}
-            </Badge>
-          </span>
-        }
+        title={project.name}
         nav={
           <nav
             aria-label={t('sectionNav')}
@@ -451,24 +436,57 @@ export default async function ProjectDetailPage({
         }
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
-            <span>{project.slug}</span>
+            <span>{project.summary || project.slug}</span>
             <Badge tone="brand">{project.status}</Badge>
             {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
           </span>
         }
         actions={
-          <ProjectManageMenu
-            workspaceSlug={workspace.slug}
-            project={project}
-            canMutate={canMutate}
-            canPurge={canPurge}
-            knowledgeRecords={knowledgeRecords}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              tone={ragBadgeTone(overallRag)}
+              title={[
+                `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,
+                `${t('ragRisks')}: ${t(`rag.${riskRag}`)}`,
+                `${t('ragFinancials')}: ${t(`rag.${financialRag}`)}`,
+              ].join(' · ')}
+              aria-label={`${t('ragOverall')}: ${t(`rag.${overallRag}`)}`}
+            >
+              {t('ragOverall')} · {t(`rag.${overallRag}`)}
+            </Badge>
+            <ProjectManageMenu
+              workspaceSlug={workspace.slug}
+              project={project}
+              canMutate={canMutate}
+              canPurge={canPurge}
+              knowledgeRecords={knowledgeRecords}
+            />
+          </div>
         }
       />
 
+      <div className="kh-ops-stats">
+        <div className="kh-ops-stat">
+          <p className="kh-ops-stat-label m-0">{t('countTasks')}</p>
+          <p className="kh-ops-stat-value">{tasks.length}</p>
+        </div>
+        <div className="kh-ops-stat">
+          <p className="kh-ops-stat-label m-0">{t('countMilestones')}</p>
+          <p className="kh-ops-stat-value">{milestones.length}</p>
+        </div>
+        <div className="kh-ops-stat">
+          <p className="kh-ops-stat-label m-0">{t('countRaid')}</p>
+          <p className="kh-ops-stat-value">{raidItems.length}</p>
+          <p className="kh-ops-stat-note">{t(`rag.${riskRag}`)}</p>
+        </div>
+        <div className="kh-ops-stat">
+          <p className="kh-ops-stat-label m-0">{t('countStakeholders')}</p>
+          <p className="kh-ops-stat-value">{stakeholders.length}</p>
+        </div>
+      </div>
+
       <Panel id="project-overview" className="mb-8 scroll-mt-6">
-        <h2 className="mt-0 mb-3 text-xl font-semibold tracking-tight text-ink">
+        <h2 className="kh-ops-panel-title mt-0 mb-3">
           {t('navOverview')}
         </h2>
         <p className="mt-0 mb-3 text-ink-muted">{project.summary || tCommon('noSummary')}</p>

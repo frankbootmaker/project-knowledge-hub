@@ -1,14 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import {
-  CatalogueSection,
-  type CatalogueListItem,
-} from './CatalogueSection';
-import { CollapsibleSection } from './CollapsibleSection';
-import { Badge } from './ui';
+import { Badge, Input } from './ui';
 import { cn } from '../lib/cn';
 import {
   deliveryScheduleSurfaceClass,
@@ -28,6 +23,13 @@ function taskHref(task: DashboardAssignedTask): string {
   return `/workspaces/${task.workspaceSlug}/projects/${task.projectSlug}?task=${encodeURIComponent(task.id)}#project-delivery`;
 }
 
+function sortByDue(a: DashboardAssignedTask, b: DashboardAssignedTask): number {
+  if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+  if (a.dueDate) return -1;
+  if (b.dueDate) return 1;
+  return a.title.localeCompare(b.title);
+}
+
 export function DashboardMyTasks({
   tasks,
 }: {
@@ -35,128 +37,116 @@ export function DashboardMyTasks({
 }) {
   const t = useTranslations('dashboard');
   const tDelivery = useTranslations('delivery');
-  const tWorkspaces = useTranslations('workspaces');
+  const [query, setQuery] = useState('');
 
-  const items: CatalogueListItem[] = useMemo(
-    () =>
-      tasks.map((task) => {
-        const href = taskHref(task);
-        const raciShort = t(RACI_LABEL[task.myRole]);
-        return {
-          id: task.id,
-          title: task.title,
-          href,
-          primaryBadge: tDelivery(`taskStatus.${task.status}`),
-          secondaryBadge: raciShort,
-          subtitle: [
-            task.workspaceName,
-            task.projectName,
-            task.dueDate ? `${tDelivery('dueDate')}: ${task.dueDate}` : null,
-            task.milestoneTitle
-              ? `${tDelivery('milestoneOptional')}: ${task.milestoneTitle}`
-              : null,
-            task.currentOwner?.displayName
-              ? `${tDelivery('ownerLabel')}: ${task.currentOwner.displayName}`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(' · '),
-          // Catalogue date sort uses updatedAt; map due dates so "oldest" = soonest due.
-          updatedAt: task.dueDate
-            ? `${task.dueDate}T12:00:00.000Z`
-            : '9999-12-31T00:00:00.000Z',
-          searchText: [
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const rows = needle
+      ? tasks.filter((task) =>
+          [
             task.title,
-            task.description ?? '',
+            task.projectName,
+            task.workspaceName,
             task.status,
             task.myRole,
-            raciShort,
-            task.workspaceName,
-            task.projectName,
-            task.milestoneTitle ?? '',
-            task.currentOwner?.displayName ?? '',
             task.dueDate ?? '',
+            task.currentOwner?.displayName ?? '',
           ]
             .join(' ')
-            .toLowerCase(),
-          filterValue: task.status,
-          filterLabel: tDelivery(`taskStatus.${task.status}`),
-        };
-      }),
-    [tasks, t, tDelivery],
-  );
-
-  const taskById = useMemo(() => {
-    const map = new Map<string, DashboardAssignedTask>();
-    for (const task of tasks) map.set(task.id, task);
-    return map;
-  }, [tasks]);
+            .toLowerCase()
+            .includes(needle),
+        )
+      : tasks;
+    return [...rows].sort(sortByDue);
+  }, [tasks, query]);
 
   return (
-    <CollapsibleSection
-      storageKey="dashboard:my-tasks"
-      title={t('myTasks')}
-      defaultOpen
-    >
-      <CatalogueSection
-        title={t('myTasks')}
-        showTitle={false}
-        className="mb-0"
-        items={items}
-        emptyLabel={t('myTasksEmpty')}
-        searchPlaceholder={t('myTasksSearch')}
-        filterLabel={tDelivery('filterStatus')}
-        filterAllLabel={tWorkspaces('sectionFilterAll')}
-        createLabel=""
-        canCreate={false}
-        defaultSort="oldest"
-        renderItem={(item) => {
-          const task = taskById.get(item.id);
-          const scheduleTone = task
-            ? deliveryScheduleTone({
-                status: task.status,
-                date: task.dueDate,
-                today: todayYmd(),
-              })
-            : null;
-
-          return (
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                {item.href ? (
-                  <Link href={item.href} className="font-semibold no-underline">
-                    {item.title}
-                  </Link>
-                ) : (
-                  <span className="font-semibold">{item.title}</span>
-                )}
-                {item.secondaryBadge ? (
-                  <Badge tone="brand">{item.secondaryBadge}</Badge>
-                ) : null}
-                {item.primaryBadge ? <Badge>{item.primaryBadge}</Badge> : null}
-                {scheduleTone ? (
-                  <span
-                    className={cn(
-                      'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide',
-                      deliveryScheduleSurfaceClass(scheduleTone),
-                    )}
-                  >
-                    <span className="sm:hidden">
-                      {tDelivery(`scheduleToneShort.${scheduleTone}`)}
-                    </span>
-                    <span className="hidden sm:inline">
-                      {tDelivery(`scheduleTone.${scheduleTone}`)}
-                    </span>
-                  </span>
-                ) : null}
-              </div>
-              {item.subtitle ? (
-                <p className="mt-2 mb-0 text-sm text-ink-muted">{item.subtitle}</p>
-              ) : null}
-            </div>
-          );
-        }}
-      />
-    </CollapsibleSection>
+    <section className="kh-ops-panel">
+      <div className="kh-ops-panel-head">
+        <h2 className="kh-ops-panel-title">{t('queueTitle')}</h2>
+        <span className="kh-ops-panel-meta">{t('queueMeta')}</span>
+      </div>
+      <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
+        <label className="flex min-w-[220px] flex-1 items-center gap-2">
+          <span className="sr-only">{t('myTasksSearch')}</span>
+          <Input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('myTasksSearch')}
+            className="h-10 min-h-10 py-1.5 text-xs"
+          />
+        </label>
+      </div>
+      {filtered.length === 0 ? (
+        <p className="kh-ops-empty">{t('myTasksEmpty')}</p>
+      ) : (
+        <div className="kh-ops-table-wrap">
+          <table className="kh-ops-data-table">
+            <thead>
+              <tr>
+                <th>{t('colWorkItem')}</th>
+                <th>{t('colProject')}</th>
+                <th>{t('colRole')}</th>
+                <th>{t('colDue')}</th>
+                <th>{t('colState')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((task) => {
+                const scheduleTone = deliveryScheduleTone({
+                  status: task.status,
+                  date: task.dueDate,
+                  today: todayYmd(),
+                });
+                return (
+                  <tr key={task.id}>
+                    <td className="kh-ops-primary-cell">
+                      <Link href={taskHref(task)} className="no-underline">
+                        {task.title}
+                      </Link>
+                    </td>
+                    <td>
+                      <span className="text-ink-muted">
+                        {task.workspaceName} / {task.projectName}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="kh-ops-type-chip">{t(RACI_LABEL[task.myRole])}</span>
+                    </td>
+                    <td>
+                      {task.dueDate ? (
+                        <span
+                          className={cn(
+                            scheduleTone === 'overdue' && 'font-semibold text-danger',
+                          )}
+                        >
+                          {task.dueDate}
+                        </span>
+                      ) : (
+                        <span className="text-ink-muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge>{tDelivery(`taskStatus.${task.status}`)}</Badge>
+                        <span
+                          className={cn(
+                            'inline-flex items-center border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide uppercase',
+                            deliveryScheduleSurfaceClass(scheduleTone),
+                          )}
+                        >
+                          {tDelivery(`scheduleToneShort.${scheduleTone}`)}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

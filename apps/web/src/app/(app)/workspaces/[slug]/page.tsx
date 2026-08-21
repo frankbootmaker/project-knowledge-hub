@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { WorkspaceCatalogueSections } from '../../../../components/WorkspaceCatalogueSections';
 import { WorkspaceManageMenu } from '../../../../components/WorkspaceManageMenu';
 import { WorkspaceStatusBadge } from '../../../../components/WorkspaceStatusBadge';
+import { OpsCountStrip } from '../../../../components/ops/OpsCountStrip';
 import { Page, PageHeader } from '../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../lib/session';
 import { workspaceAccentClassName } from '../../../../lib/workspace-colors';
@@ -71,6 +72,7 @@ export default async function WorkspaceDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const session = await requireSession();
+  const t = await getTranslations('workspaces');
   const tGit = await getTranslations('gitSync');
   const { slug } = await params;
 
@@ -150,7 +152,9 @@ export default async function WorkspaceDetailPage({
   return (
     <Page wide>
       <PageHeader
+        eyebrow={t('eyebrow')}
         title={workspace.name}
+        description={workspace.description?.trim() || undefined}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <WorkspaceStatusBadge status={workspaceStatus} />
@@ -182,14 +186,17 @@ export default async function WorkspaceDetailPage({
           </div>
         }
       />
-      {workspace.description?.trim() ? (
-        <p className="mt-0 mb-3 max-w-3xl text-base leading-relaxed text-ink-muted">
-          {workspace.description.trim()}
-        </p>
-      ) : null}
+      <OpsCountStrip
+        items={[
+          { label: t('countProjects'), value: projects.length },
+          { label: t('countSystems'), value: systems.length },
+          { label: t('countRecords'), value: records.length },
+          { label: t('countGit'), value: gitConnections.length },
+        ]}
+      />
       <div
         className={cn(
-          'kh-workspace-accent-bar mb-8',
+          'kh-workspace-accent-bar mb-4',
           workspaceAccentClassName(workspace.color, workspace.id),
         )}
         aria-hidden

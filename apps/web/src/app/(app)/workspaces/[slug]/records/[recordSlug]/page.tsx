@@ -171,7 +171,7 @@ export default async function KnowledgeRecordDetailPage({
               {workspace.name}
             </Link>
             {' / '}
-            {tCommon('knowledge')}
+            {t('eyebrow')}
           </>
         }
         title={
@@ -180,7 +180,11 @@ export default async function KnowledgeRecordDetailPage({
             : record.title
         }
         description={`${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
-      />
+        actions={
+          <Badge tone={lifecycleTone(record.lifecycleStatus)}>
+            {lifecycleLabel(record.lifecycleStatus, t)}
+          </Badge>
+        }
 
       <RecordTranslationSwitcher
         workspaceSlug={workspace.slug}

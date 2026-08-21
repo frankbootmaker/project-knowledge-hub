@@ -371,7 +371,7 @@ export function ProjectBudgetPanel({
             ) : null}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="kh-ops-stats">
             {(
               [
                 ['bac', summary.bac],
@@ -379,33 +379,20 @@ export function ProjectBudgetPanel({
                 ['ac', summary.ac],
               ] as const
             ).map(([key, value]) => (
-              <div
-                key={key}
-                className="rounded-md border border-line bg-panel-solid p-3"
-              >
-                <p className="m-0 text-xs font-medium uppercase tracking-wide text-ink-muted">
-                  {t(`kpi.${key}`)}
-                </p>
-                <p className="mt-1 mb-0 text-lg font-semibold text-ink">
+              <div key={key} className="kh-ops-stat">
+                <p className="kh-ops-stat-label m-0">{t(`kpi.${key}`)}</p>
+                <p className="kh-ops-stat-value">
                   {formatMoney(value, currency, locale)}
                 </p>
               </div>
             ))}
-            <div className="rounded-md border border-line bg-panel-solid p-3">
-              <p className="m-0 text-xs font-medium uppercase tracking-wide text-ink-muted">
-                {t('kpi.cpi')}
-              </p>
-              <p className="mt-1 mb-0 text-lg font-semibold text-ink">
-                {formatIndex(summary.cpi)}
-              </p>
+            <div className="kh-ops-stat">
+              <p className="kh-ops-stat-label m-0">{t('kpi.cpi')}</p>
+              <p className="kh-ops-stat-value">{formatIndex(summary.cpi)}</p>
             </div>
-            <div className="rounded-md border border-line bg-panel-solid p-3">
-              <p className="m-0 text-xs font-medium uppercase tracking-wide text-ink-muted">
-                {t('kpi.spi')}
-              </p>
-              <p className="mt-1 mb-0 text-lg font-semibold text-ink">
-                {formatIndex(summary.spi)}
-              </p>
+            <div className="kh-ops-stat">
+              <p className="kh-ops-stat-label m-0">{t('kpi.spi')}</p>
+              <p className="kh-ops-stat-value">{formatIndex(summary.spi)}</p>
             </div>
           </div>
 

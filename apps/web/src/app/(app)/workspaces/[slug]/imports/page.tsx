@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ImportTypePickerButton } from '../../../../../components/ImportTypePickerButton';
+import { OpsCountStrip } from '../../../../../components/ops/OpsCountStrip';
 import {
   Badge,
-  ListCard,
   Page,
   PageHeader,
 } from '../../../../../components/ui';
@@ -70,39 +70,75 @@ export default async function WorkspaceImportsPage({
           ) : null
         }
       />
-      <p className="mt-0 mb-6">
+      <p className="mt-0 mb-3">
         <Link
           href={`/workspaces/${workspace.slug}`}
-          className="text-sm text-ink-muted no-underline hover:text-ink"
+          className="text-xs text-ink-muted no-underline hover:text-ink"
         >
           {t('backToWorkspace')}
         </Link>
       </p>
-      <ul className="m-0 grid list-none gap-3 p-0">
-        {imports.map((item) => (
-          <ListCard key={item.id}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href={`/workspaces/${workspace.slug}/imports/${item.id}`}
-                className="font-semibold no-underline"
-              >
-                {item.title}
-              </Link>
-              <Badge tone="brand">{item.contentFormat}</Badge>
-              {item.archivedAt ? <Badge>{t('archivedBadge')}</Badge> : null}
-            </div>
-            <p className="mt-2 mb-0 text-sm text-ink-muted">
-              {new Date(item.createdAt).toLocaleString()}
-              {item.generatedByModel
-                ? ` · ${t('modelLabel', { model: item.generatedByModel })}`
-                : ''}
-            </p>
-          </ListCard>
-        ))}
+      <OpsCountStrip
+        items={[
+          { label: t('countTotal'), value: imports.length },
+          {
+            label: t('countActive'),
+            value: imports.filter((item) => !item.archivedAt).length,
+          },
+          {
+            label: t('countArchived'),
+            value: imports.filter((item) => item.archivedAt).length,
+          },
+        ]}
+      />
+      <section className="kh-ops-panel">
         {imports.length === 0 ? (
-          <li className="kh-muted list-none">{t('empty')}</li>
-        ) : null}
-      </ul>
+          <p className="kh-ops-empty">{t('empty')}</p>
+        ) : (
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table">
+              <thead>
+                <tr>
+                  <th>{t('title')}</th>
+                  <th>{t('colFormat')}</th>
+                  <th>{t('colStatus')}</th>
+                  <th>{t('colUpdated')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {imports.map((item) => (
+                  <tr key={item.id}>
+                    <td className="kh-ops-primary-cell">
+                      <Link
+                        href={`/workspaces/${workspace.slug}/imports/${item.id}`}
+                        className="no-underline"
+                      >
+                        {item.title}
+                      </Link>
+                    </td>
+                    <td>
+                      <span className="kh-ops-type-chip">{item.contentFormat}</span>
+                    </td>
+                    <td>
+                      {item.archivedAt ? (
+                        <Badge>{t('archivedBadge')}</Badge>
+                      ) : (
+                        <Badge tone="success">{t('countActive')}</Badge>
+                      )}
+                    </td>
+                    <td>
+                      {new Date(item.createdAt).toLocaleString()}
+                      {item.generatedByModel
+                        ? ` · ${t('modelLabel', { model: item.generatedByModel })}`
+                        : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </Page>
   );
 }

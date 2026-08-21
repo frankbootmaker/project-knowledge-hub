@@ -751,6 +751,39 @@ export function MonitoringDashboard({
         </Panel>
       ) : null}
 
+      <div className="kh-ops-health-grid">
+        <div className="kh-ops-health-card">
+          <small>{t('monitoringApi')}</small>
+          <strong>{data.health.api}</strong>
+        </div>
+        <div className="kh-ops-health-card">
+          <small>{t('monitoringReady')}</small>
+          <strong>
+            {data.loadError
+              ? t('monitoringUnknown')
+              : data.health.ready
+                ? t('monitoringOk')
+                : t('monitoringDegraded')}
+          </strong>
+        </div>
+        <div className="kh-ops-health-card">
+          <small>{t('monitoringPostgres')}</small>
+          <strong>{data.health.checks.postgres}</strong>
+        </div>
+        <div className="kh-ops-health-card">
+          <small>{t('monitoringRedis')}</small>
+          <strong>{data.health.checks.redis}</strong>
+        </div>
+        <div className="kh-ops-health-card">
+          <small>{t('monitoringActiveSessions')}</small>
+          <strong>{data.sessions.active}</strong>
+        </div>
+        <div className="kh-ops-health-card">
+          <small>{t('monitoringPendingLabel')}</small>
+          <strong>{data.attention.pendingUsers}</strong>
+        </div>
+      </div>
+
       <section id="health" className="grid scroll-mt-6 gap-3">
         <h2 className="m-0 text-lg font-semibold text-ink">{t('monitoringHealthTitle')}</h2>
         <Panel className="grid gap-0 divide-y divide-line overflow-hidden p-0">
@@ -827,39 +860,23 @@ export function MonitoringDashboard({
             </Select>
           </Field>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Panel className="p-4">
-            <p className="m-0 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
-              {t('monitoringActiveSessions')}
-            </p>
-            <p className="mt-2 mb-0 text-2xl font-semibold tabular-nums">
-              {data.sessions.active}
-            </p>
-          </Panel>
-          <Panel className="p-4">
-            <p className="m-0 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
-              {t('monitoringMcpRequests')}
-            </p>
-            <p className="mt-2 mb-0 text-2xl font-semibold tabular-nums">
-              {data.mcp.requestCount}
-            </p>
-          </Panel>
-          <Panel className="p-4">
-            <p className="m-0 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
-              {t('monitoringMcpToolCalls')}
-            </p>
-            <p className="mt-2 mb-0 text-2xl font-semibold tabular-nums">
-              {data.mcp.toolCallCount}
-            </p>
-          </Panel>
-          <Panel className="p-4">
-            <p className="m-0 text-xs font-semibold tracking-[0.12em] text-ink-muted uppercase">
-              {t('monitoringMcpErrors')}
-            </p>
-            <p className="mt-2 mb-0 text-2xl font-semibold tabular-nums">
-              {data.mcp.toolErrorCount}
-            </p>
-          </Panel>
+        <div className="kh-ops-stats">
+          <div className="kh-ops-stat">
+            <p className="kh-ops-stat-label m-0">{t('monitoringActiveSessions')}</p>
+            <p className="kh-ops-stat-value">{data.sessions.active}</p>
+          </div>
+          <div className="kh-ops-stat">
+            <p className="kh-ops-stat-label m-0">{t('monitoringMcpRequests')}</p>
+            <p className="kh-ops-stat-value">{data.mcp.requestCount}</p>
+          </div>
+          <div className="kh-ops-stat">
+            <p className="kh-ops-stat-label m-0">{t('monitoringMcpToolCalls')}</p>
+            <p className="kh-ops-stat-value">{data.mcp.toolCallCount}</p>
+          </div>
+          <div className="kh-ops-stat">
+            <p className="kh-ops-stat-label m-0">{t('monitoringMcpErrors')}</p>
+            <p className="kh-ops-stat-value">{data.mcp.toolErrorCount}</p>
+          </div>
         </div>
         <Panel className="p-4">
           <p className="mt-0 mb-2 text-sm font-medium text-ink">{t('monitoringAttention')}</p>

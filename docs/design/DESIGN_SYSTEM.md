@@ -95,7 +95,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 
 | Shell | Pattern |
 |-------|---------|
-| App chrome | Ops Console grid: sticky left rail + sticky header (breadcrumbs, title, Create/sync, search, theme segment, language). Mobile bar below `md` |
+| App chrome | Ops Console grid: sticky left rail + sticky header. Page bodies use view-intro, count strips, square panels, and data tables. Mobile bar below `md` |
 | App / status content | `.kh-ops-view` inside the authenticated shell. Status/monitoring live under Admin rail |
 | Admin | Rail Admin section; no second admin sidebar |
 | Account | Account sidebar on account routes; also reachable from the rail user menu |
@@ -118,6 +118,15 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-text-link` | Inline text links |
 | `.kh-toast-viewport` / `.kh-toast` / `.kh-toast-{success,danger,info}` / `.kh-toast-dismiss` | Toasts |
 | `.kh-ops-shell` / `.kh-ops-rail` / `.kh-ops-subhead` / `.kh-ops-view` | Authenticated Ops Console chrome (rail + header + content) |
+| `.kh-ops-view-intro` / `.kh-ops-eyebrow` / `.kh-ops-page-title` / `.kh-ops-subtitle` | Page intro (used by `PageHeader`) |
+| `.kh-ops-count-strip` / `.kh-ops-count-item` | Horizontal count strip |
+| `.kh-ops-stats` / `.kh-ops-stat` / `.kh-ops-stat-label` / `.kh-ops-stat-value` / `.kh-ops-progress` | KPI / insight stat cards |
+| `.kh-ops-panel` / `.kh-ops-panel-head` / `.kh-ops-panel-title` / `.kh-ops-panel-meta` | Square panel with 13px display header |
+| `.kh-ops-toolbar` | List/admin search+filter chrome (also on `FunctionHeader`) |
+| `.kh-ops-data-table` / `.kh-ops-table-wrap` / `.kh-ops-data-item` / `.kh-ops-stack` | Dense tables and catalogue rows |
+| `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |
+| `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
+| `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips, account setting rows |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
 | `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
@@ -137,8 +146,10 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `Badge` | Compact status chips (e.g. health “ok”) |
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`); mobile full-width bottom, desktop corner |
-| `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout (`SectionHeader` optional `action` — responsive title/actions split) |
-| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (stacks below `sm`) |
+| `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout. `PageHeader` is the Ops Console view-intro (eyebrow + condensed title + subtitle + actions). `ListCard` is a dense catalogue row inside `.kh-ops-panel` |
+| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (`.kh-ops-toolbar`; stacks below `sm`) |
+| `OpsCountStrip` | Horizontal count strip for live totals (dashboard, workspace, git, imports, stakeholders) |
+| `AuthCard` | Bordered login/register/reset/confirm card with KH mark |
 
 Shared button classes live in `buttonStyles.ts` and `.kh-btn*` recipes so Button and
 LinkButton stay identical.
@@ -181,6 +192,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-08-21
+
+* **Ops Console views** — Remaining high-traffic surfaces match the prototype density: `PageHeader` is `.kh-ops-view-intro`; catalogues sit in square panels with row items; dashboards/admin/git/imports use count strips and data tables; auth uses the bordered `AuthCard`. Shared recipes live in `styles/ops-shell.css` (`OpsCountStrip`, `.kh-ops-stats`, `.kh-ops-health-grid`, `.kh-ops-data-table`).
 
 ### 2026-08-20
 

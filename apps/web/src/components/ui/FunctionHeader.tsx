@@ -19,7 +19,7 @@ export function FunctionHeader({
   const hasControls = search != null || filters != null;
 
   return (
-    <div className={cn('kh-function-header', className)}>
+    <div className={cn('kh-function-header kh-ops-toolbar', className)}>
       {hasControls ? (
         <div className="kh-function-header-controls">
           {search}

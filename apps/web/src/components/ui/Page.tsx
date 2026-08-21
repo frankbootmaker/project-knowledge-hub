@@ -49,22 +49,22 @@ export function PageHeader({
   nav?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0">
-        {eyebrow ? <p className="mb-1 text-sm text-ink-muted">{eyebrow}</p> : null}
-        <h1 className="m-0 font-display text-[clamp(25px,2.4vw,31px)] font-bold tracking-tight text-ink">
-          {title}
-        </h1>
-        {nav ? <div className="mt-3">{nav}</div> : null}
-        {description ? (
-          <p className="mt-1.5 mb-0 text-ink-muted">{description}</p>
+    <div className="mb-4">
+      <div className="kh-ops-view-intro">
+        <div className="min-w-0">
+          {eyebrow ? <p className="kh-ops-eyebrow">{eyebrow}</p> : null}
+          <h1 className="kh-ops-page-title">{title}</h1>
+          {description ? (
+            <div className="kh-ops-subtitle">{description}</div>
+          ) : null}
+        </div>
+        {actions ? (
+          <div className="kh-ops-view-intro-actions flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
+            {actions}
+          </div>
         ) : null}
       </div>
-      {actions ? (
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
-          {actions}
-        </div>
-      ) : null}
+      {nav ? <div className="mt-1 mb-3">{nav}</div> : null}
     </div>
   );
 }
@@ -77,8 +77,8 @@ export function SectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-2 sm:gap-3">
-      <h2 className="m-0 min-w-0 truncate text-xl font-semibold tracking-tight">
+    <div className="kh-ops-panel-head mb-3 border-line px-0">
+      <h2 className="kh-ops-panel-title min-w-0 truncate">
         {title}
       </h2>
       {action ? (
@@ -98,7 +98,7 @@ export function ListCard({
   className?: string;
 }) {
   return (
-    <li className={cn('kh-panel list-none p-4 transition hover:border-brand/30', className)}>
+    <li className={cn('kh-ops-data-item list-none', className)}>
       {children}
     </li>
   );

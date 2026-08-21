@@ -8,6 +8,7 @@ import {
   type CatalogueListItem,
 } from './CatalogueSection';
 import { CollapsibleSection } from './CollapsibleSection';
+import { OpsCountStrip } from './ops/OpsCountStrip';
 import { AssistantBrandMark } from './AssistantBrandMark';
 import { ProjectStakeholdersOrgChart } from './ProjectStakeholdersOrgChart';
 import { ProjectResourceUtilizationModal } from './ProjectResourceUtilizationModal';
@@ -938,6 +939,31 @@ export function ProjectStakeholdersPanel({
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
+
+      <OpsCountStrip
+        items={[
+          {
+            label: t('countPeople'),
+            value: stakeholders.filter((row) => row.kind === 'person').length,
+          },
+          {
+            label: t('countAi'),
+            value: stakeholders.filter((row) => row.kind === 'ai_assistant').length,
+          },
+          {
+            label: t('countOpenRoles'),
+            value: stakeholders.filter((row) => row.kind === 'open_role').length,
+          },
+          {
+            label: t('countAssigned'),
+            value: stakeholders.filter((row) => row.staffingStatus === 'assigned').length,
+          },
+          {
+            label: t('countTotal'),
+            value: stakeholders.length,
+          },
+        ]}
+      />
 
       <CatalogueSection
         className="mb-2"

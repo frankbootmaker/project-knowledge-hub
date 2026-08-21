@@ -115,20 +115,19 @@ export function DisplayPrefsForm({
           <p className="m-0 mt-1 text-sm text-ink-muted">{t('displayReportsBlurb')}</p>
         </div>
         {REPORT_DIAGRAM_KEYS.map((key) => (
-          <div
-            key={key}
-            className="grid gap-1 border-t border-line pt-3 first:border-t-0 first:pt-0"
-          >
-            <Switch
-              id={`report-${key}`}
-              checked={prefs.reportDiagrams[key]}
-              disabled={pendingKey !== null}
-              label={t(`display_report_${key}`)}
-              onCheckedChange={(checked) => void updateReportPref(key, checked)}
-            />
-            <p className="m-0 text-xs text-ink-muted">
-              {t(`display_report_${key}_hint`)}
-            </p>
+          <div key={key} className="kh-ops-setting-row px-0">
+            <div>
+              <Switch
+                id={`report-${key}`}
+                checked={prefs.reportDiagrams[key]}
+                disabled={pendingKey !== null}
+                label={t(`display_report_${key}`)}
+                onCheckedChange={(checked) => void updateReportPref(key, checked)}
+              />
+              <p className="m-0 text-[11px] text-ink-muted">
+                {t(`display_report_${key}_hint`)}
+              </p>
+            </div>
           </div>
         ))}
       </Panel>
@@ -143,22 +142,21 @@ export function DisplayPrefsForm({
           </p>
         </div>
         {DASHBOARD_WIDGET_KEYS.map((key) => (
-          <div
-            key={key}
-            className="grid gap-1 border-t border-line pt-3 first:border-t-0 first:pt-0"
-          >
-            <Switch
-              id={`dashboard-${key}`}
-              checked={prefs.dashboardWidgets[key]}
-              disabled={pendingKey !== null}
-              label={t(`display_dashboard_${key}`)}
-              onCheckedChange={(checked) =>
-                void updateDashboardPref(key, checked)
-              }
-            />
-            <p className="m-0 text-xs text-ink-muted">
-              {t(`display_dashboard_${key}_hint`)}
-            </p>
+          <div key={key} className="kh-ops-setting-row px-0">
+            <div>
+              <Switch
+                id={`dashboard-${key}`}
+                checked={prefs.dashboardWidgets[key]}
+                disabled={pendingKey !== null}
+                label={t(`display_dashboard_${key}`)}
+                onCheckedChange={(checked) =>
+                  void updateDashboardPref(key, checked)
+                }
+              />
+              <p className="m-0 text-[11px] text-ink-muted">
+                {t(`display_dashboard_${key}_hint`)}
+              </p>
+            </div>
           </div>
         ))}
         {error ? <ErrorText>{error}</ErrorText> : null}

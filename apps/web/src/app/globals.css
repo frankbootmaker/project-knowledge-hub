@@ -107,7 +107,7 @@
   }
 
   .kh-function-header {
-    @apply mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between;
+    @apply mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between;
   }
 
   .kh-function-header-controls {

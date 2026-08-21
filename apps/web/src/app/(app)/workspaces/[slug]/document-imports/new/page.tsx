@@ -73,6 +73,7 @@ export default async function NewDocumentImportPage({
   return (
     <Page narrow>
       <PageHeader
+        eyebrow={t('eyebrow')}
         title={lane === 'image' ? t('createImageTitle') : t('createDocumentTitle')}
         description={
           lane === 'image' ? t('imageHelp') : t('documentHelp')

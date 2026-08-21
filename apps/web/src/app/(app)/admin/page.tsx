@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { AdminOverviewSetupCards } from '../../../components/admin/AdminOverviewSetupCards';
-import { PageHeader, Panel } from '../../../components/ui';
+import { PageHeader } from '../../../components/ui';
 import { apiFetch } from '../../../lib/session';
 
 export default async function AdminOverviewPage() {
@@ -36,21 +36,20 @@ export default async function AdminOverviewPage() {
 
   return (
     <div>
-      <PageHeader title={t('title')} description={t('overviewBlurb')} />
-      <AdminOverviewSetupCards />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <PageHeader
+        eyebrow={t('eyebrow')}
+        title={t('title')}
+        description={t('overviewBlurb')}
+      />
+      <div className="kh-ops-health-grid" data-cols="4">
         {cards.map((card) => (
-          <Panel key={card.href} className="flex flex-col gap-3">
-            <div>
-              <p className="m-0 text-sm text-ink-muted">{card.label}</p>
-              <p className="mt-1 mb-0 text-3xl font-semibold tracking-tight">{card.count}</p>
-            </div>
-            <Link href={card.href} className="kh-text-link self-start">
-              {t('open')}
-            </Link>
-          </Panel>
+          <Link key={card.href} href={card.href} className="kh-ops-health-card">
+            <small>{card.label}</small>
+            <strong>{card.count}</strong>
+          </Link>
         ))}
       </div>
+      <AdminOverviewSetupCards />
     </div>
   );
 }
