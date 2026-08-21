@@ -370,4 +370,5 @@ export default function NewSystemPage() {
       </section>
     </Page>
   );
+}
 
