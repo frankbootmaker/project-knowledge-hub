@@ -74,20 +74,39 @@ function originFromUrl(value: string | undefined): string | null {
   }
 }
 
-function forwardedPublicOrigin(request: {
-  headers: FastifyRequest['headers'];
-}): string | null {
-  const host = firstHeaderValue(request.headers['x-forwarded-host'])
-    ?.split(',')[0]
-    ?.trim();
-  if (!host) {
+function hostnameOf(value: string | undefined): string | null {
+  if (!value?.trim()) {
     return null;
   }
-  const proto =
-    firstHeaderValue(request.headers['x-forwarded-proto'])
-      ?.split(',')[0]
-      ?.trim() || 'https';
-  return originFromUrl(`${proto}://${host}`);
+  try {
+    const url = value.includes('://') ? new URL(value) : new URL(`https://${value}`);
+    return url.hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function headerHostList(request: { headers: FastifyRequest['headers'] }, name: string): string[] {
+  const raw = firstHeaderValue(request.headers[name]);
+  if (!raw) {
+    return [];
+  }
+  return raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function addOrigin(allowed: Set<string>, value: string | undefined): void {
+  const origin = originFromUrl(value);
+  if (origin) {
+    allowed.add(origin);
+  }
+}
+
+function addHostOrigins(allowed: Set<string>, host: string): void {
+  addOrigin(allowed, `https://${host}`);
+  addOrigin(allowed, `http://${host}`);
 }
 
 /** Origins allowed for CSRF + CORS: WEB_URL, API rewrite target, public proxy host. */
@@ -96,19 +115,27 @@ export function allowedOriginsForRequest(
   request: { headers: FastifyRequest['headers'] },
 ): Set<string> {
   const allowed = new Set<string>();
-  const web = originFromUrl(env.WEB_URL);
-  if (web) {
-    allowed.add(web);
-  }
-  const api = originFromUrl(env.API_URL);
-  if (api) {
-    allowed.add(api);
-  }
-  const forwarded = forwardedPublicOrigin(request);
-  if (forwarded) {
-    allowed.add(forwarded);
+  addOrigin(allowed, env.WEB_URL);
+  addOrigin(allowed, env.API_URL);
+  addOrigin(allowed, firstHeaderValue(request.headers['x-kh-web-origin']));
+  for (const host of headerHostList(request, 'x-forwarded-host')) {
+    addHostOrigins(allowed, host);
   }
   return allowed;
+}
+
+function allowedHostsForRequest(
+  env: { WEB_URL: string; API_URL: string },
+  request: { headers: FastifyRequest['headers'] },
+): Set<string> {
+  const hosts = new Set<string>();
+  for (const origin of allowedOriginsForRequest(env, request)) {
+    const host = hostnameOf(origin);
+    if (host) {
+      hosts.add(host);
+    }
+  }
+  return hosts;
 }
 
 export function isAllowedRequestOrigin(
@@ -116,7 +143,17 @@ export function isAllowedRequestOrigin(
   request: { headers: FastifyRequest['headers'] },
   origin: string,
 ): boolean {
-  return allowedOriginsForRequest(env, request).has(origin);
+  if (allowedOriginsForRequest(env, request).has(origin)) {
+    return true;
+  }
+  const originHost = hostnameOf(origin);
+  if (originHost && allowedHostsForRequest(env, request).has(originHost)) {
+    return true;
+  }
+  // Browser same-origin fetch (login via Next rewrite). Cross-site CSRF is
+  // `cross-site` and still requires Origin to match WEB_URL / forwarded host.
+  const fetchSite = firstHeaderValue(request.headers['sec-fetch-site']);
+  return fetchSite === 'same-origin';
 }
 
 export function assertMutatingOrigin(app: FastifyInstance, request: FastifyRequest): void {

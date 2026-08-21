@@ -23,7 +23,13 @@ export function middleware(request: NextRequest) {
   // Without this, unauthenticated POST /mcp gets a 307 to /login and MCP clients
   // (Cursor, Antigravity, etc.) fail with "initialize" EOF.
   if (pathname.startsWith('/api/') || pathname === '/mcp' || pathname.startsWith('/mcp/')) {
-    return NextResponse.next();
+    const headers = new Headers(request.headers);
+    // Next's HTTP rewrite to nd-api overwrites x-forwarded-proto to http.
+    // Stamp the public browser origin so CSRF can match preview domains.
+    headers.set('x-kh-web-origin', request.nextUrl.origin);
+    headers.set('x-forwarded-host', request.nextUrl.host);
+    headers.set('x-forwarded-proto', request.nextUrl.protocol.replace(/:$/, '') || 'https');
+    return NextResponse.next({ request: { headers } });
   }
 
   const isPublic = publicPaths.some(
