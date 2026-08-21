@@ -170,12 +170,9 @@
   }
 
   .kh-workspace-swatch-btn-active {
-    border-color: var(--kh-workspace-accent, var(--kh-brand));
-    background: color-mix(
-      in srgb,
-      var(--kh-workspace-accent, var(--kh-brand)) 12%,
-      transparent
-    );
+    border-color: var(--kh-ink);
+    background: transparent;
+    box-shadow: inset 0 3px var(--kh-workspace-accent, var(--kh-brand));
   }
 
   .kh-workspace-color-ocean {

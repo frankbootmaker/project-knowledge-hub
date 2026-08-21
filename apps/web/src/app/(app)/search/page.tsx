@@ -134,7 +134,7 @@ export default async function SearchPage({
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('workspace')}>
               <Select name="workspaceId" defaultValue={activeWorkspaceId}>
                 {workspaces.map((workspace) => (
@@ -186,8 +186,8 @@ export default async function SearchPage({
             </Field>
           </div>
 
-          <div className="flex flex-wrap gap-4 text-sm text-ink">
-            <label className="inline-flex items-center gap-2">
+          <div className="kh-ops-scope-checks">
+            <label className="kh-ops-scope-check">
               <input
                 type="checkbox"
                 name="verifiedOnly"
@@ -196,7 +196,7 @@ export default async function SearchPage({
               />
               {t('verifiedOnly')}
             </label>
-            <label className="inline-flex items-center gap-2">
+            <label className="kh-ops-scope-check">
               <input
                 type="checkbox"
                 name="currentOnly"
@@ -205,7 +205,7 @@ export default async function SearchPage({
               />
               {t('currentOnly')}
             </label>
-            <label className="inline-flex items-center gap-2">
+            <label className="kh-ops-scope-check">
               <input
                 type="checkbox"
                 name="includeHistorical"
@@ -215,7 +215,7 @@ export default async function SearchPage({
               {t('includeHistorical')}
             </label>
             {hybridAvailable ? (
-              <label className="inline-flex items-center gap-2">
+              <label className="kh-ops-scope-check">
                 <input
                   type="checkbox"
                   name="hybrid"
@@ -227,9 +227,10 @@ export default async function SearchPage({
             ) : null}
           </div>
 
-          <Button type="submit" className="justify-self-start">
-            {t('searchButton')}
-          </Button>
+          <div className="kh-ops-action-line px-0">
+            <span className="kh-ops-panel-meta">{t('title')}</span>
+            <Button type="submit">{t('searchButton')}</Button>
+          </div>
         </form>
         </div>
       </section>

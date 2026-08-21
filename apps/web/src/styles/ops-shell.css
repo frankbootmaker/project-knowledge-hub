@@ -1529,6 +1529,35 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   cursor: pointer;
 }
 
+.kh-ops-meta-chip {
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.kh-ops-meta-chip small {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kh-ops-meta-chip > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
 .kh-ops-setting-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1540,6 +1569,22 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 
 .kh-ops-setting-row:last-child {
   border-bottom: 0;
+}
+
+.kh-ops-setting-row small {
+  display: block;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kh-ops-setting-row strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .kh-ops-auth-page {

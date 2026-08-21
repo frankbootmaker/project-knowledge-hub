@@ -17,10 +17,8 @@ export function SignInIdentityPanel({ user }: { user: IdentityUser }) {
     <section className="kh-ops-panel">
       <div className="kh-ops-setting-row">
         <div>
-          <p className="m-0 text-[10px] font-mono uppercase tracking-wide text-ink-muted">
-            {t('identityEmail')}
-          </p>
-          <p className="m-0 mt-1 text-xs">{user.email}</p>
+          <small>{t('identityEmail')}</small>
+          <strong>{user.email}</strong>
         </div>
       </div>
       {isLocalAccount ? (
@@ -31,18 +29,14 @@ export function SignInIdentityPanel({ user }: { user: IdentityUser }) {
         <>
           <div className="kh-ops-setting-row">
             <div>
-              <p className="m-0 text-[10px] font-mono uppercase tracking-wide text-ink-muted">
-                {t('identityIdpSource')}
-              </p>
-              <p className="m-0 mt-1 text-xs">{user.idpSource}</p>
+              <small>{t('identityIdpSource')}</small>
+              <strong>{user.idpSource}</strong>
             </div>
           </div>
           <div className="kh-ops-setting-row">
             <div>
-              <p className="m-0 text-[10px] font-mono uppercase tracking-wide text-ink-muted">
-                {t('identityIdpSubject')}
-              </p>
-              <p className="m-0 mt-1 font-mono text-xs">{user.idpSubject}</p>
+              <small>{t('identityIdpSubject')}</small>
+              <strong className="font-mono">{user.idpSubject}</strong>
             </div>
           </div>
         </>

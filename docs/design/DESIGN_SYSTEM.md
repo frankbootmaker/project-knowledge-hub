@@ -166,8 +166,10 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-confirm` / `.kh-ops-inset` | Archive/purge confirms and nested pickers |
 | `.kh-ops-cal-day` | Compact admin audit calendar cells |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
-| `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips (`aria-pressed` for filters; `data-tone` for delivery schedule; also style-pack token insert), account setting rows |
+| `.kh-ops-empty` / `.kh-ops-type-chip` | Empty states, type chips (`aria-pressed` for filters; `data-tone` for delivery schedule; also style-pack token insert) |
+| `.kh-ops-setting-row` | Account setting rows (`small` label + `strong` value) |
 | `.kh-ops-color-swatch` / `.kh-ops-color-input` | Square colour chips and native colour input (style-pack picker) |
+| `.kh-ops-meta-chip` | Compact delivery board label/value tags |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
 | `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
@@ -236,6 +238,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console leftover filters/meta** — Search filters use form-grid + scope-check chips and an action-line submit. Board lane meta tags use `.kh-ops-meta-chip`. Document-import extracted images use linked-row. MCP troubleshoot body uses card-body. Account identity uses setting-row `small`/`strong`. Dashboard extra-workspace count uses card-foot. Workspace colour picker active state is an ink border + 3px stripe, not a wash.
 * **Ops Console leftover chips/insets** — Delivery schedule chips use `.kh-ops-type-chip[data-tone]`. Remaining nested form boxes use `.kh-ops-inset`. Calendar selected-day rows use data-item. Timeline/board meta type is ≥10px. Workspace colour picker swatches are square.
 * **Ops Console leftover dashboard/brand chrome** — Dashboard workspace tiles use `.kh-ops-project-grid` / `.kh-ops-project-card` (colour stripe unchanged). Search/admin jump tiles use `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card`. Account brand schemes use project cards with `.selected`. Style-pack token insert uses type chips; colour picker swatches/native input are square (`.kh-ops-color-swatch` / `.kh-ops-color-input`).
 * **Ops Console leftover polish** — Org chart uses org-tree / org-card / ungrouped-grid. Manage, Git provider, and import-type pickers use `.kh-ops-choice`. Scrum attendee lists, plan rows, DoD inset, guest chips, and delivery `?` legends/popovers use Ops recipes. Workspace colour is a 3px inset stripe instead of a soft wash.

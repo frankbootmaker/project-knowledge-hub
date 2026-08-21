@@ -167,13 +167,11 @@ function BoardMetaTag({
 }) {
   return (
     <div
-      className="max-w-full border border-line bg-panel-solid px-1.5 py-0.5 text-left text-[10px] leading-snug text-ink"
+      className="kh-ops-meta-chip"
       title={title ?? `${label}: ${value}`}
     >
-      <span className="mb-0.5 block font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
-        {label}
-      </span>
-      <span className="flex min-w-0 items-center gap-1">
+      <small>{label}</small>
+      <span>
         {leading}
         <span className="block truncate">{value}</span>
       </span>

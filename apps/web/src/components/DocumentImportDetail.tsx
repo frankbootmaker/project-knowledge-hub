@@ -325,10 +325,10 @@ export function DocumentImportDetail(props: {
           <div className="kh-ops-panel-head">
             <h3 className="kh-ops-panel-title">{t('extractedImages')}</h3>
           </div>
-          <ul className="m-0 grid list-none gap-2 p-3.5">
+          <ul className="kh-ops-stack m-0">
             {doc.media.map((m) => (
-              <li key={m.workspaceMediaId}>
-                <a href={m.url} className="text-sm text-brand no-underline">
+              <li key={m.workspaceMediaId} className="kh-ops-linked-row">
+                <a href={m.url} className="kh-text-link text-sm">
                   {m.originalFilename ?? m.workspaceMediaId}
                 </a>
               </li>

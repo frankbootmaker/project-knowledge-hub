@@ -144,9 +144,7 @@ export default async function DashboardPage() {
           </div>
         )}
         {hiddenWorkspaceCount > 0 ? (
-          <p className="m-0 border-t border-line px-3.5 py-2 text-[11px] text-ink-muted">
-            {t('moreWorkspaces', { count: hiddenWorkspaceCount })}
-          </p>
+          <p className="kh-ops-card-foot m-0">{t('moreWorkspaces', { count: hiddenWorkspaceCount })}</p>
         ) : null}
       </section>
 

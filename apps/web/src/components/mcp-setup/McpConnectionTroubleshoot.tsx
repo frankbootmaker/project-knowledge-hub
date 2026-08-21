@@ -46,7 +46,7 @@ export function McpConnectionTroubleshoot({
         </span>
       </button>
       {open ? (
-        <div className="grid gap-3 border-t border-line px-3 py-3">
+        <div className="kh-ops-card-body grid gap-3">
           <p className="m-0 text-sm text-ink-muted">{t('mcpWizardTroubleshootIntro')}</p>
           <ul className="m-0 grid list-disc gap-2 pl-5 text-sm text-ink-muted">
             {USER_TIPS.map((key) => (

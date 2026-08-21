@@ -172,11 +172,13 @@ export function ProfileForm({ initialUser }: { initialUser: ProfileUser }) {
           </div>
       </div>
       <div className="kh-ops-setting-row">
-        <Field label={t('email')}>
-          <Input value={initialUser.email} readOnly disabled />
-        </Field>
+        <div className="grid min-w-0 gap-1">
+          <Field label={t('email')}>
+            <Input value={initialUser.email} readOnly disabled />
+          </Field>
+          <p className="m-0 text-[11px] text-ink-muted">{t('emailHint')}</p>
+        </div>
       </div>
-      <p className="m-0 px-3.5 text-[11px] text-ink-muted">{t('emailHint')}</p>
       <div className="kh-ops-setting-row">
         <Field label={t('displayName')}>
           <Input
@@ -198,7 +200,7 @@ export function ProfileForm({ initialUser }: { initialUser: ProfileUser }) {
         </Field>
       </div>
       {error ? (
-        <div className="px-3.5">
+        <div className="kh-ops-setting-row">
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
