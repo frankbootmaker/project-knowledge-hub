@@ -1176,12 +1176,10 @@ export function ProjectDeliveryTimeline({
           <button
             type="button"
             className={cn(
-              'absolute top-1 rounded-md border px-2 text-left text-xs font-medium',
+              'kh-ops-time-bar absolute top-1 text-left',
               epicHasMeta ? 'h-8 py-0.5 leading-tight' : 'h-6',
-              epicTone
-                ? deliveryScheduleSurfaceClass(epicTone)
-                : 'border-brand/40 bg-brand/20 text-ink hover:bg-brand/30',
             )}
+            data-tone={epicTone ?? undefined}
             style={style}
             title={`${epic.startDate ?? '…'} → ${epic.endDate ?? '…'}`}
             onClick={() => onManageEpic(epic.id)}
@@ -1310,12 +1308,10 @@ export function ProjectDeliveryTimeline({
           <button
             type="button"
             className={cn(
-              'absolute top-1 max-w-full rounded border px-2 text-left text-xs',
+              'kh-ops-time-bar absolute top-1 max-w-full text-left',
               storyHasMeta ? 'h-8 py-0.5 leading-tight' : 'h-6',
-              storyTone
-                ? deliveryScheduleSurfaceClass(storyTone)
-                : 'border-line bg-panel-solid text-ink hover:border-brand/50',
             )}
+            data-tone={storyTone ?? undefined}
             style={style}
             title={
               storyDue ? `${story.title} (${storyDue})` : story.title
@@ -1338,7 +1334,7 @@ export function ProjectDeliveryTimeline({
 
   return (
     <div className="grid gap-4">
-      <fieldset className="m-0 grid gap-2 rounded-md border border-line p-3">
+      <fieldset className="kh-ops-panel m-0 grid gap-2 p-3">
         <legend className="px-1 text-sm font-semibold">
           {t('timelineFilterLabel')}
         </legend>
@@ -1387,7 +1383,7 @@ export function ProjectDeliveryTimeline({
         </div>
       </fieldset>
 
-      <fieldset className="m-0 grid gap-3 rounded-md border border-line p-3">
+      <fieldset className="kh-ops-panel m-0 grid gap-3 p-3">
         <legend className="px-1 text-sm font-semibold">
           {t('timelineWindowLabel')}
         </legend>
@@ -1508,8 +1504,8 @@ export function ProjectDeliveryTimeline({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-line bg-panel-solid p-3">
-        <div className="min-w-[48rem]">
+      <div className="kh-ops-panel kh-ops-timeline-scroll">
+        <div className="kh-ops-timeline-chart">
           <div className="relative mb-2 h-6">
             {labelTicks.map((tick) => (
               <div
@@ -1699,7 +1695,7 @@ export function ProjectDeliveryTimeline({
       {unscheduledEpics.length > 0 ||
       unscheduledStories.length > 0 ||
       unscheduledMilestones.length > 0 ? (
-        <div className="rounded-md border border-line p-3">
+        <div className="kh-ops-panel p-3">
           <p className="mt-0 mb-2 text-sm font-semibold">
             {t('timelineUnscheduled')}
           </p>

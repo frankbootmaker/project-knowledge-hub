@@ -27,6 +27,7 @@ import {
 } from './ProjectDeliveryBoard';
 import { todayYmd } from '../lib/delivery-schedule';
 import { downloadAuthenticatedExport } from '../lib/download-export';
+import type { RatePerson } from '../lib/task-costing';
 import {
   BurndownLegendHelp,
   SprintPointBurndownChart,
@@ -78,6 +79,8 @@ type Props = {
   onExportStateChange?: (
     state: { pending: boolean; canExport: boolean } | null,
   ) => void;
+  currency?: string;
+  ratePeople?: RatePerson[];
 };
 
 const TASK_STATUSES = [
@@ -109,6 +112,8 @@ export function ProjectScrumView({
   onRefresh,
   exportHandleRef,
   onExportStateChange,
+  currency = 'EUR',
+  ratePeople = [],
 }: Props) {
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
@@ -811,10 +816,21 @@ export function ProjectScrumView({
     .filter((row) => row.selected)
     .reduce((sum, row) => sum + (Number(row.storyPoints) || 0), 0);
 
-  const capacityLabel = selected
-    ? `${selected.committedPoints}${
-        selected.capacityPoints != null ? ` / ${selected.capacityPoints}` : ''
-      } pts · ${selected.donePoints} done`
+  const remainingPoints = selected
+    ? Math.max(0, selected.committedPoints - selected.donePoints)
+    : 0;
+  const sprintDaysLeft = selected?.endDate
+    ? Math.max(
+        0,
+        Math.round(
+          (Date.parse(`${selected.endDate}T00:00:00Z`) -
+            Date.parse(`${today}T00:00:00Z`)) /
+            86_400_000,
+        ),
+      )
+    : null;
+  const sprintDateLabel = selected
+    ? [selected.startDate, selected.endDate].filter(Boolean).join(' — ')
     : '';
 
   return (
@@ -901,45 +917,60 @@ export function ProjectScrumView({
       </div>
 
       {selected ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
-          {selected.humanKey ? <Badge tone="brand">{selected.humanKey}</Badge> : null}
-          <span>{capacityLabel}</span>
-          {velocity != null ? (
-            <span>· {t('scrumVelocity', { value: velocity })}</span>
-          ) : null}
-          {selected.goal ? <span>· {selected.goal}</span> : null}
-          {selected.startDate || selected.endDate ? (
-            <span>
-              · {[selected.startDate, selected.endDate].filter(Boolean).join(' → ')}
-            </span>
-          ) : null}
+        <div className="kh-ops-sprint-head">
+          <div className="kh-ops-sprint-goal">
+            <small>{t('scrumGoal')}</small>
+            <strong>{selected.goal?.trim() || selected.name}</strong>
+          </div>
+          <div className="kh-ops-sprint-metric">
+            <small>{t('scrumExportWindow')}</small>
+            <strong>{sprintDateLabel || '—'}</strong>
+          </div>
+          <div className="kh-ops-sprint-metric">
+            <small>{t('scrumRemainingPoints')}</small>
+            <strong>
+              {remainingPoints} / {selected.committedPoints} pt
+            </strong>
+          </div>
+          <div className="kh-ops-sprint-metric">
+            <small>{t('scrumDaysLeft')}</small>
+            <strong>{sprintDaysLeft == null ? '—' : sprintDaysLeft}</strong>
+          </div>
         </div>
+      ) : null}
+
+      {velocity != null ? (
+        <p className="mb-3 mt-0 text-xs text-ink-muted">
+          {t('scrumVelocity', { value: velocity })}
+        </p>
       ) : null}
 
       {definitionOfDone?.trim() ? (
-        <div className="rounded-md border border-line px-3 py-2 text-sm">
-          <p className="m-0 mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
-            {t('scrumDoD')}
-          </p>
-          <pre className="m-0 whitespace-pre-wrap font-sans text-ink">
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('scrumDoD')}</h2>
+          </div>
+          <pre className="m-0 whitespace-pre-wrap px-4 py-3 font-sans text-sm text-ink">
             {definitionOfDone}
           </pre>
-        </div>
+        </section>
       ) : null}
 
       {selected && burndown ? (
-        <div className="rounded-md border border-line p-3">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <p className="m-0 text-sm font-semibold">{t('scrumBurndown')}</p>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">{t('scrumBurndown')}</h2>
             <BurndownLegendHelp />
           </div>
+          <div className="p-3">
           <SprintPointBurndownChart
             committedPoints={burndown.committedPoints}
             startDate={burndown.startDate}
             endDate={burndown.endDate}
             points={burndown.points}
           />
-        </div>
+          </div>
+        </section>
       ) : null}
 
       {error && !createOpen && ceremonyOpen == null && !wizardOpen ? (
@@ -955,6 +986,8 @@ export function ProjectScrumView({
               tasks={sprintTasks}
               milestoneTitles={milestoneTitles}
               canMutate={canMutate}
+              currency={currency}
+              ratePeople={ratePeople}
               onTaskStatusChange={onTaskStatusChange}
               onManageTask={onOpenTask}
               onMetaFiltersChange={setBoardMeta}
@@ -964,16 +997,15 @@ export function ProjectScrumView({
           )}
         </div>
 
-        <section className="grid min-w-0 gap-2 border-t border-line pt-4">
-          <div className="flex w-[min(17.5rem,85vw)] flex-col rounded-lg border border-line bg-neutral-soft/40 md:w-[17.5rem]">
-            <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
-              <h3 className="m-0 text-sm font-semibold">{t('scrumBacklog')}</h3>
-              <span className="text-xs text-ink-muted">{backlogTasks.length}</span>
+        <section className="kh-ops-lane w-full max-w-sm">
+            <div className="kh-ops-lane-head">
+              <h3 className="m-0">{t('scrumBacklog')}</h3>
+              <span className="kh-ops-lane-count">{backlogTasks.length}</span>
             </div>
             {backlogTasks.length === 0 ? (
-              <p className="m-0 p-3 text-sm text-ink-muted">{t('scrumBacklogEmpty')}</p>
+              <p className="kh-ops-empty">{t('scrumBacklogEmpty')}</p>
             ) : (
-              <ul className="m-0 flex list-none flex-col gap-2 p-2">
+              <ul className="m-0 flex list-none flex-col p-0">
                 {backlogTasks.map((task) => (
                   <li key={task.id} className="min-w-0">
                     <BoardTaskCard
@@ -990,6 +1022,8 @@ export function ProjectScrumView({
                       showStatusSelect={false}
                       onTaskStatusChange={onTaskStatusChange}
                       onManageTask={onOpenTask}
+                      currency={currency}
+                      ratePeople={ratePeople}
                       actions={
                         canMutate &&
                         selected &&
@@ -1012,7 +1046,6 @@ export function ProjectScrumView({
                 ))}
               </ul>
             )}
-          </div>
         </section>
       </div>
 

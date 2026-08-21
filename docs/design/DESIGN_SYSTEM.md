@@ -88,7 +88,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
 | Modals | Below `sm`: bottom sheet (`items-end`, rounded top, `max-h` ≈ 92–96dvh), body scrolls, header/footer fixed; footer actions stack full-width (`flex-col-reverse`). From `sm`: centered card. Respect `safe-area-inset-*`; root `viewportFit: 'cover'` |
 | Toasts | Below `sm`: full-bleed bottom strip with safe-area padding; from `sm`: bottom-right stack (`max-w-sm`). Stay above modals (`--kh-z-toast` > `--kh-z-modal`) |
-| Section header actions | `SectionHeader` keeps title + actions on one row. View mode switchers use icons below `md` (labels from `md`) via `ViewModeIcon` so Delivery/Stakeholders controls fit beside the title |
+| Section header actions | `SectionHeader` keeps title + actions on one row. Delivery view modes are a full-width `.kh-ops-delivery-modes` strip (text labels, overflow-x). Stakeholders view switchers still use icons below `md` via `ViewModeIcon` |
 | Function header | `.kh-function-header*` stacks controls above actions below `sm`; controls may wrap; from `sm` keep search/filters left and primary actions right |
 
 ### Layout shells
@@ -124,6 +124,12 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-panel` / `.kh-ops-panel-head` / `.kh-ops-panel-title` / `.kh-ops-panel-meta` | Square panel with 13px display header |
 | `.kh-ops-toolbar` | List/admin search+filter chrome (also on `FunctionHeader`) |
 | `.kh-ops-data-table` / `.kh-ops-table-wrap` / `.kh-ops-data-item` / `.kh-ops-stack` | Dense tables and catalogue rows |
+| `.kh-ops-delivery-modes` / `.kh-ops-board` / `.kh-ops-lane` / `.kh-ops-task-card` | Delivery view strip, kanban lanes, and task cards |
+| `.kh-ops-delivery-list` / `.kh-ops-delivery-tree-*` / `.kh-ops-tree-*` | Sortable delivery table and work-breakdown tree |
+| `.kh-ops-sprint-head` / `.kh-ops-scrum-board` | Scrum sprint metrics + board density |
+| `.kh-ops-calendar-layout` / `.kh-ops-month` / `.kh-ops-day` / `.kh-ops-event-dot` | Delivery calendar month + day list |
+| `.kh-ops-timeline-scroll` / `.kh-ops-time-bar` | Timeline chart chrome and epic/story bars |
+| `.kh-ops-empty-state` / `.kh-ops-empty-mark` | Empty delivery panes |
 | `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
 | `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips, account setting rows |
@@ -195,6 +201,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console delivery** — Project delivery matches the prototype board/list/tree/scrum/calendar/timeline chrome in place (`?delivery=` hash routes unchanged). Mode strip, live open-work / hours / cost stats, sortable list table, lane task cards, work-breakdown tree, sprint-head, month+day calendar, and timeline bars use `.kh-ops-delivery-*` recipes. Board statuses stay `todo|in_progress|blocked|done|cancelled`; cycle time is not invented.
 * **Ops Console views** — Remaining high-traffic surfaces match the prototype density: `PageHeader` is `.kh-ops-view-intro`; catalogues sit in square panels with row items; dashboards/admin/git/imports use count strips and data tables; auth uses the bordered `AuthCard`. Shared recipes live in `styles/ops-shell.css` (`OpsCountStrip`, `.kh-ops-stats`, `.kh-ops-health-grid`, `.kh-ops-data-table`).
 
 ### 2026-08-20

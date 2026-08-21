@@ -9,9 +9,7 @@ import {
 } from 'react';
 import { useTranslations } from 'next-intl';
 import { Badge, Button, useToast } from './ui';
-import { cn } from '../lib/cn';
 import {
-  deliveryScheduleSurfaceClass,
   deliveryScheduleTone,
   todayYmd,
 } from '../lib/delivery-schedule';
@@ -72,13 +70,21 @@ function CalendarItemChip({
     today,
   });
 
+  if (dense) {
+    return (
+      <span
+        className="kh-ops-event-dot"
+        data-tone={tone}
+        title={`${item.humanKey ? `${item.humanKey} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
+      >
+        {item.title}
+      </span>
+    );
+  }
+
   return (
     <li
-      className={cn(
-        'rounded border',
-        dense ? 'truncate px-1.5 py-1 text-xs' : 'px-2.5 py-2 text-sm',
-        deliveryScheduleSurfaceClass(tone),
-      )}
+      className="border border-line px-2.5 py-2 text-sm"
       title={`${item.humanKey ? `${item.humanKey} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
     >
       <div className="flex min-w-0 items-center gap-1.5">
@@ -96,30 +102,16 @@ function CalendarItemChip({
             {item.kind === 'milestone' ? 'M' : 'T'}
           </Badge>
         )}
-        <span
-          className={cn(
-            'min-w-0 truncate',
-            dense ? 'text-ink' : 'font-medium text-ink',
-          )}
-        >
-          {item.title}
-        </span>
+        <span className="min-w-0 truncate font-medium text-ink">{item.title}</span>
       </div>
       {item.humanKey ? (
-        <span
-          className={cn(
-            'mt-0.5 block truncate opacity-80',
-            dense ? 'text-[10px]' : 'text-xs',
-          )}
-        >
+        <span className="mt-0.5 block truncate font-mono text-[10px] text-ink-muted">
           {item.humanKey}
         </span>
       ) : null}
-      {!dense ? (
-        <span className="mt-1 block text-xs opacity-80">
-          {t(`scheduleTone.${tone}`)}
-        </span>
-      ) : null}
+      <span className="mt-1 block text-xs text-ink-muted">
+        {t(`scheduleTone.${tone}`)}
+      </span>
     </li>
   );
 }
@@ -144,12 +136,15 @@ export function ProjectDeliveryCalendar({
   const { pushToast } = useToast();
   const [cursor, setCursor] = useState<{ year: number; month: number } | null>(null);
   const [today, setToday] = useState<string | null>(null);
+  const [selectedIso, setSelectedIso] = useState<string | null>(null);
   const [exportPending, setExportPending] = useState(false);
 
   useEffect(() => {
     const now = new Date();
+    const iso = todayYmd(now);
     setCursor({ year: now.getFullYear(), month: now.getMonth() });
-    setToday(todayYmd(now));
+    setToday(iso);
+    setSelectedIso((current) => current ?? iso);
   }, []);
 
   const exportCalendarPdf = useCallback(async () => {
@@ -291,25 +286,16 @@ export function ProjectDeliveryCalendar({
     return result;
   }, [cursor, byDate]);
 
-  const agendaDays = useMemo(() => {
-    if (!cursor) return [];
-    const { year, month } = cursor;
-    const totalDays = daysInMonth(year, month);
-    const days: Array<{ iso: string; day: number; items: CalendarItem[] }> = [];
-    for (let day = 1; day <= totalDays; day += 1) {
-      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const dayItems = byDate.get(iso) ?? [];
-      if (dayItems.length > 0) {
-        days.push({ iso, day, items: dayItems });
-      }
-    }
-    return days;
-  }, [cursor, byDate]);
+  const selectedItems = selectedIso ? (byDate.get(selectedIso) ?? []) : [];
+  const selectedDayNumber = selectedIso
+    ? Number(selectedIso.slice(8, 10))
+    : null;
 
   if (!cursor || !today) {
     return (
-      <div className="rounded-lg border border-line px-4 py-10 text-center text-sm text-ink-muted">
-        {t('calendarLoading')}
+      <div className="kh-ops-empty-state kh-ops-panel">
+        <div className="kh-ops-empty-mark">00</div>
+        <h3>{t('calendarLoading')}</h3>
       </div>
     );
   }
@@ -329,105 +315,57 @@ export function ProjectDeliveryCalendar({
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="m-0 text-base font-semibold">{monthLabel}</h3>
+      <div className="kh-ops-toolbar">
+        <h3 className="m-0 font-display text-[13px] font-bold">{monthLabel}</h3>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="secondary" onClick={() => shiftMonth(-1)}>
-            <span className="sm:hidden" aria-hidden>
-              ‹
-            </span>
-            <span className="hidden sm:inline">{t('calendarPrev')}</span>
-            <span className="sr-only sm:hidden">{t('calendarPrev')}</span>
+            {t('calendarPrev')}
           </Button>
           <Button
             type="button"
             variant="secondary"
             onClick={() => {
               const now = new Date();
+              const iso = todayYmd(now);
               setCursor({ year: now.getFullYear(), month: now.getMonth() });
-              setToday(todayYmd(now));
+              setToday(iso);
+              setSelectedIso(iso);
             }}
           >
             {t('calendarToday')}
           </Button>
           <Button type="button" variant="secondary" onClick={() => shiftMonth(1)}>
-            <span className="sm:hidden" aria-hidden>
-              ›
-            </span>
-            <span className="hidden sm:inline">{t('calendarNext')}</span>
-            <span className="sr-only sm:hidden">{t('calendarNext')}</span>
+            {t('calendarNext')}
           </Button>
         </div>
       </div>
 
       <DeliveryScheduleLegend />
 
-      {/* Mobile: agenda by day */}
-      <div className="grid gap-3 md:hidden">
-        <p className="m-0 text-xs text-ink-muted">{t('calendarAgendaHint')}</p>
-        {agendaDays.length === 0 ? (
-          <div className="rounded-lg border border-line px-4 py-8 text-center text-sm text-ink-muted">
-            {t('calendarAgendaEmpty')}
-          </div>
-        ) : (
-          <ul className="m-0 grid list-none gap-3 p-0">
-            {agendaDays.map((day) => {
-              const isToday = day.iso === today;
-              return (
-                <li
-                  key={day.iso}
-                  className={cn(
-                    'rounded-lg border border-line bg-panel-solid p-3',
-                    isToday && 'border-brand/40 ring-1 ring-brand/20',
-                  )}
-                >
-                  <div className="mb-2 flex items-baseline justify-between gap-2">
-                    <p className="m-0 text-sm font-semibold">
-                      {t(`calendarWeekdays.${weekdayKeyForIso(day.iso)}`)}{' '}
-                      <span className="text-ink-muted">{day.day}</span>
-                    </p>
-                    {isToday ? (
-                      <Badge tone="brand">{t('calendarToday')}</Badge>
-                    ) : null}
-                  </div>
-                  <ul className="m-0 grid list-none gap-2 p-0">
-                    {day.items.map((item) => (
-                      <CalendarItemChip key={item.id} item={item} today={today} />
-                    ))}
-                  </ul>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      {/* md+: month grid */}
-      <div className="hidden md:block">
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-line bg-line">
-          {WEEKDAY_KEYS.map((key) => (
-            <div
-              key={key}
-              className="bg-panel px-1 py-2 text-center text-xs font-semibold tracking-wide text-ink-muted uppercase lg:px-2"
-            >
-              <span className="lg:hidden">{t(`calendarWeekdaysShort.${key}`)}</span>
-              <span className="hidden lg:inline">{t(`calendarWeekdays.${key}`)}</span>
-            </div>
-          ))}
-          {cells.map((cell) => (
-            <div
-              key={cell.key}
-              className={cn(
-                'min-h-[5.5rem] bg-panel-solid p-1.5 lg:min-h-[7.5rem] lg:p-2',
-                !cell.inMonth && 'bg-neutral-soft/50',
-                cell.iso === today && 'ring-1 ring-inset ring-brand/35',
-              )}
-            >
-              {cell.day != null ? (
-                <p className="m-0 mb-1 text-xs font-semibold text-ink-muted">{cell.day}</p>
-              ) : null}
-              <ul className="m-0 grid list-none gap-1 p-0">
-                {cell.items.slice(0, 4).map((item) => (
+      <div className="kh-ops-calendar-layout">
+        <section className="kh-ops-panel">
+          <div className="kh-ops-month">
+            {WEEKDAY_KEYS.map((key) => (
+              <div key={key} className="kh-ops-day-name">
+                {t(`calendarWeekdaysShort.${key}`)}
+              </div>
+            ))}
+            {cells.map((cell) => (
+              <button
+                key={cell.key}
+                type="button"
+                className="kh-ops-day"
+                data-muted={cell.inMonth ? undefined : 'true'}
+                aria-pressed={cell.iso != null && cell.iso === selectedIso}
+                disabled={!cell.inMonth}
+                onClick={() => {
+                  if (cell.iso) setSelectedIso(cell.iso);
+                }}
+              >
+                {cell.day != null ? (
+                  <span className="kh-ops-day-num">{cell.day}</span>
+                ) : null}
+                {cell.items.slice(0, 3).map((item) => (
                   <CalendarItemChip
                     key={item.id}
                     item={item}
@@ -435,16 +373,36 @@ export function ProjectDeliveryCalendar({
                     dense
                   />
                 ))}
-                {cell.items.length > 4 ? (
-                  <li className="text-xs text-ink-muted">
-                    {t('calendarMore', { count: cell.items.length - 4 })}
-                  </li>
+                {cell.items.length > 3 ? (
+                  <span className="mt-1 block font-mono text-[10px] text-ink-muted">
+                    {t('calendarMore', { count: cell.items.length - 3 })}
+                  </span>
                 ) : null}
-              </ul>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 mb-0 text-xs text-ink-muted">{t('calendarHint')}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="kh-ops-panel">
+          <div className="kh-ops-panel-head">
+            <h2 className="kh-ops-panel-title">
+              {selectedIso
+                ? `${t(`calendarWeekdays.${weekdayKeyForIso(selectedIso)}`)} ${selectedDayNumber}`
+                : t('calendarToday')}
+            </h2>
+            <span className="kh-ops-panel-meta">
+              {t('calendarDayCount', { count: selectedItems.length })}
+            </span>
+          </div>
+          {selectedItems.length === 0 ? (
+            <p className="kh-ops-empty">{t('calendarSelectedEmpty')}</p>
+          ) : (
+            <ul className="kh-ops-stack">
+              {selectedItems.map((item) => (
+                <CalendarItemChip key={item.id} item={item} today={today} />
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </div>
   );

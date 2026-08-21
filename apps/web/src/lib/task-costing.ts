@@ -44,6 +44,13 @@ export function parseHoursInput(value: string | null | undefined): number | null
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/** Coerce API hour fields (numeric strings or numbers) to a finite hour count. */
+export function toHours(value: string | number | null | undefined): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function sumEffortRollup(
   tasks: Array<{
     forecastHours?: string | number | null;

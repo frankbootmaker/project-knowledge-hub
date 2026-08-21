@@ -2,14 +2,8 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Badge, Button } from './ui';
-import { cn } from '../lib/cn';
-import {
-  deliveryScheduleSurfaceClass,
-  deliveryScheduleTone,
-  todayYmd,
-} from '../lib/delivery-schedule';
-import { UserAvatar } from './UserAvatar';
+import { Button } from './ui';
+import { toHours } from '../lib/task-costing';
 
 type TreeEpic = {
   id: string;
@@ -39,36 +33,17 @@ type TreeTask = {
     avatarUrl?: string | null;
   } | null;
   humanKey?: string | null;
+  forecastHours?: string | number | null;
+  actualHours?: string | number | null;
+  storyPoints?: number | null;
+  sprintLabel?: string | null;
 };
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      aria-hidden
-      className={cn(
-        'size-3.5 shrink-0 text-ink-muted transition-transform',
-        open && 'rotate-90',
-      )}
-      fill="none"
-    >
-      <path
-        d="M7 5l5 5-5 5"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 function TreeBranch({
   open,
   onToggle,
   label,
-  badge,
-  statusLabel,
+  sub,
   meta,
   children,
   depth,
@@ -77,8 +52,7 @@ function TreeBranch({
   open: boolean;
   onToggle?: () => void;
   label: ReactNode;
-  badge?: string;
-  statusLabel?: string;
+  sub?: ReactNode;
   meta?: ReactNode;
   children?: ReactNode;
   depth: number;
@@ -87,39 +61,32 @@ function TreeBranch({
   const hasChildren = Boolean(children);
   return (
     <li className="list-none">
-      <div
-        className={cn(
-          'flex flex-wrap items-start gap-2 rounded-md border border-line bg-panel-solid px-3 py-2',
-          depth === 0 && 'border-brand/25',
-        )}
-        style={{ marginLeft: depth * 16 }}
-      >
-        {hasChildren && onToggle ? (
-          <button
-            type="button"
-            className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded border-0 bg-transparent p-0 text-ink"
-            aria-expanded={open}
-            onClick={onToggle}
-          >
-            <Chevron open={open} />
-          </button>
-        ) : (
-          <span className="mt-0.5 inline-flex size-6 shrink-0" aria-hidden />
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {badge ? <Badge tone="brand">{badge}</Badge> : null}
-            <span className="font-semibold text-ink">{label}</span>
-            {statusLabel ? <Badge>{statusLabel}</Badge> : null}
+      <div className="kh-ops-delivery-tree-row">
+        <div className="kh-ops-tree-main" style={{ ['--level' as string]: depth }}>
+          {hasChildren && onToggle ? (
+            <button
+              type="button"
+              className="kh-ops-tree-toggle"
+              aria-expanded={open}
+              onClick={onToggle}
+            >
+              {open ? '⌄' : '›'}
+            </button>
+          ) : (
+            <span className="kh-ops-tree-spacer" aria-hidden />
+          )}
+          <div className="kh-ops-tree-title">
+            <strong>{label}</strong>
+            {sub ? <small>{sub}</small> : null}
           </div>
-          {meta ? (
-            <div className="mt-1 text-xs text-ink-muted">{meta}</div>
-          ) : null}
         </div>
-        {actions ? <div className="shrink-0">{actions}</div> : null}
+        <div className="kh-ops-tree-meta">
+          {meta}
+          {actions}
+        </div>
       </div>
       {hasChildren && open ? (
-        <ul className="m-0 mt-2 grid list-none gap-2 p-0">{children}</ul>
+        <ul className="m-0 grid list-none p-0">{children}</ul>
       ) : null}
     </li>
   );
@@ -141,7 +108,6 @@ export function ProjectDeliveryTree({
   onManageStory?: (storyId: string) => void;
 }) {
   const t = useTranslations('delivery');
-  const today = todayYmd();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   function isOpen(id: string) {
@@ -188,51 +154,45 @@ export function ProjectDeliveryTree({
     return { storiesByEpic, orphanStories, tasksByStory, ungroupedTasks, sortedEpics };
   }, [epics, stories, tasks]);
 
+  function metaBits(input: {
+    statusLabel: string;
+    owner?: string | null;
+    sprint?: string | null;
+    hours?: number | null;
+    points?: number | null;
+  }) {
+    return (
+      <>
+        <span>{input.statusLabel}</span>
+        <span>{input.owner ?? '—'}</span>
+        <span>{input.sprint ?? '—'}</span>
+        <span>{input.hours == null ? '—' : `${input.hours}h`}</span>
+        <span>{input.points == null ? '—' : `${input.points}pt`}</span>
+      </>
+    );
+  }
+
   function renderTask(task: TreeTask, depth: number) {
-    const tone = deliveryScheduleTone({
-      status: task.status,
-      date: task.dueDate,
-      today,
-    });
     return (
       <TreeBranch
         key={task.id}
         open
         depth={depth}
-        badge={task.humanKey ?? t('kindTask')}
         label={task.title}
-        statusLabel={t(`taskStatus.${task.status}`)}
-        meta={
-          <div className="flex flex-wrap items-center gap-2">
-            {task.dueDate ? <span>{t('dueDate')}: {task.dueDate}</span> : null}
-            {task.currentOwner ? (
-              <span className="inline-flex items-center gap-1.5">
-                <UserAvatar
-                  displayName={task.currentOwner.displayName}
-                  avatarUrl={task.currentOwner.avatarUrl}
-                  size="xs"
-                />
-                <span>
-                  {t('ownerLabel')}: {task.currentOwner.displayName}
-                </span>
-              </span>
-            ) : null}
-            <span
-              className={cn(
-                'inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold',
-                deliveryScheduleSurfaceClass(tone),
-              )}
-            >
-              {t(`scheduleTone.${tone}`)}
-            </span>
-          </div>
-        }
+        sub={task.humanKey ?? t('kindTask')}
+        meta={metaBits({
+          statusLabel: t(`taskStatus.${task.status}`),
+          owner: task.currentOwner?.displayName ?? null,
+          sprint: task.sprintLabel ?? null,
+          hours: toHours(task.forecastHours),
+          points: task.storyPoints ?? null,
+        })}
         actions={
           onManageTask ? (
             <Button
               type="button"
               variant="secondary"
-              className="h-8 px-2 text-xs"
+              className="h-8 min-h-8 px-2 text-xs"
               onClick={() => onManageTask(task.id)}
             >
               {t('manage')}
@@ -252,16 +212,17 @@ export function ProjectDeliveryTree({
         open={isOpen(nodeId)}
         onToggle={() => toggle(nodeId)}
         depth={depth}
-        badge={story.humanKey ?? t('kindStory')}
         label={story.title}
-        statusLabel={t(`milestoneStatus.${story.status}`)}
-        meta={t('treeStoryCount', { count: storyTasks.length })}
+        sub={story.humanKey ?? t('kindStory')}
+        meta={metaBits({
+          statusLabel: t(`milestoneStatus.${story.status}`),
+        })}
         actions={
           onManageStory ? (
             <Button
               type="button"
               variant="secondary"
-              className="h-8 px-2 text-xs"
+              className="h-8 min-h-8 px-2 text-xs"
               onClick={() => onManageStory(story.id)}
             >
               {t('manage')}
@@ -272,10 +233,7 @@ export function ProjectDeliveryTree({
         {storyTasks.length > 0
           ? storyTasks.map((task) => renderTask(task, depth + 1))
           : (
-            <li
-              className="list-none text-sm text-ink-muted"
-              style={{ marginLeft: (depth + 1) * 16 }}
-            >
+            <li className="kh-ops-delivery-tree-row list-none text-sm text-ink-muted">
               {t('treeNoTasks')}
             </li>
           )}
@@ -289,84 +247,88 @@ export function ProjectDeliveryTree({
     tree.ungroupedTasks.length > 0;
 
   if (!hasAny) {
-    return <p className="m-0 text-sm text-ink-muted">{t('treeEmpty')}</p>;
+    return (
+      <section className="kh-ops-panel">
+        <div className="kh-ops-empty-state">
+          <div className="kh-ops-empty-mark">00</div>
+          <h3>{t('emptyTitle')}</h3>
+          <p>{t('treeEmpty')}</p>
+        </div>
+      </section>
+    );
   }
 
   return (
-    <div className="grid gap-3">
-      <p className="m-0 text-xs text-ink-muted">{t('treeHint')}</p>
-      <ul className="m-0 grid list-none gap-2 p-0">
-        {tree.sortedEpics.map((epic) => {
-          const epicStories = tree.storiesByEpic.get(epic.id) ?? [];
-          const nodeId = `epic:${epic.id}`;
-          return (
+    <section className="kh-ops-panel overflow-x-auto">
+      <div className="kh-ops-delivery-tree">
+        <div className="kh-ops-delivery-tree-head">
+          <span>{t('treeBreakdown')}</span>
+          <span>{t('treeMetaHead')}</span>
+        </div>
+        <ul className="m-0 grid list-none p-0">
+          {tree.sortedEpics.map((epic) => {
+            const epicStories = tree.storiesByEpic.get(epic.id) ?? [];
+            const nodeId = `epic:${epic.id}`;
+            return (
+              <TreeBranch
+                key={epic.id}
+                open={isOpen(nodeId)}
+                onToggle={() => toggle(nodeId)}
+                depth={0}
+                label={epic.title}
+                sub={epic.humanKey ?? t('kindEpic')}
+                meta={metaBits({
+                  statusLabel: t(`milestoneStatus.${epic.status}`),
+                })}
+                actions={
+                  onManageEpic ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 min-h-8 px-2 text-xs"
+                      onClick={() => onManageEpic(epic.id)}
+                    >
+                      {t('manage')}
+                    </Button>
+                  ) : null
+                }
+              >
+                {epicStories.length > 0
+                  ? epicStories.map((story) => renderStory(story, 1))
+                  : (
+                    <li className="kh-ops-delivery-tree-row list-none text-sm text-ink-muted">
+                      {t('treeNoStories')}
+                    </li>
+                  )}
+              </TreeBranch>
+            );
+          })}
+
+          {tree.orphanStories.length > 0 ? (
             <TreeBranch
-              key={epic.id}
-              open={isOpen(nodeId)}
-              onToggle={() => toggle(nodeId)}
+              open={isOpen('orphan-stories')}
+              onToggle={() => toggle('orphan-stories')}
               depth={0}
-              badge={epic.humanKey ?? t('kindEpic')}
-              label={epic.title}
-              statusLabel={t(`milestoneStatus.${epic.status}`)}
-              meta={t('treeEpicCount', {
-                stories: epicStories.length,
-                tasks: epicStories.reduce(
-                  (sum, story) => sum + (tree.tasksByStory.get(story.id)?.length ?? 0),
-                  0,
-                ),
-              })}
-              actions={
-                onManageEpic ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-8 px-2 text-xs"
-                    onClick={() => onManageEpic(epic.id)}
-                  >
-                    {t('manage')}
-                  </Button>
-                ) : null
-              }
+              label={t('treeUngroupedStories')}
+              sub={t('kindStory')}
             >
-              {epicStories.length > 0
-                ? epicStories.map((story) => renderStory(story, 1))
-                : (
-                  <li
-                    className="list-none text-sm text-ink-muted"
-                    style={{ marginLeft: 16 }}
-                  >
-                    {t('treeNoStories')}
-                  </li>
-                )}
+              {tree.orphanStories.map((story) => renderStory(story, 1))}
             </TreeBranch>
-          );
-        })}
+          ) : null}
 
-        {tree.orphanStories.length > 0 ? (
-          <TreeBranch
-            open={isOpen('orphan-stories')}
-            onToggle={() => toggle('orphan-stories')}
-            depth={0}
-            badge={t('kindStory')}
-            label={t('treeUngroupedStories')}
-          >
-            {tree.orphanStories.map((story) => renderStory(story, 1))}
-          </TreeBranch>
-        ) : null}
-
-        {tree.ungroupedTasks.length > 0 ? (
-          <TreeBranch
-            open={isOpen('ungrouped-tasks')}
-            onToggle={() => toggle('ungrouped-tasks')}
-            depth={0}
-            badge={t('kindTask')}
-            label={t('treeUngroupedTasks')}
-            meta={t('treeStoryCount', { count: tree.ungroupedTasks.length })}
-          >
-            {tree.ungroupedTasks.map((task) => renderTask(task, 1))}
-          </TreeBranch>
-        ) : null}
-      </ul>
-    </div>
+          {tree.ungroupedTasks.length > 0 ? (
+            <TreeBranch
+              open={isOpen('ungrouped-tasks')}
+              onToggle={() => toggle('ungrouped-tasks')}
+              depth={0}
+              label={t('treeUngroupedTasks')}
+              sub={t('kindTask')}
+            >
+              {tree.ungroupedTasks.map((task) => renderTask(task, 1))}
+            </TreeBranch>
+          ) : null}
+        </ul>
+      </div>
+    </section>
   );
 }

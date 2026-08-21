@@ -2,8 +2,8 @@
 
 import type { DragEvent, ReactNode, RefObject } from 'react';
 import { useCallback, useEffect, useId, useState } from 'react';
-import { useTranslations } from 'next-intl';
-import { Badge, Button, Select, useToast } from './ui';
+import { useLocale, useTranslations } from 'next-intl';
+import { Button, Select, useToast } from './ui';
 import { cn } from '../lib/cn';
 import {
   deliveryScheduleSurfaceClass,
@@ -13,6 +13,13 @@ import {
 } from '../lib/delivery-schedule';
 import { UserAvatar } from './UserAvatar';
 import { downloadAuthenticatedExport } from '../lib/download-export';
+import {
+  hoursCost,
+  resolveRatePerson,
+  toHours,
+  type RatePerson,
+} from '../lib/task-costing';
+import { formatMoney } from '../lib/project-currency';
 
 const SCHEDULE_LEGEND: DeliveryScheduleTone[] = [
   'onTrack',
@@ -26,11 +33,14 @@ export type BoardTask = {
   title: string;
   status: string;
   dueDate: string | null;
+  forecastHours?: string | number | null;
+  actualHours?: string | number | null;
   milestoneId: string | null;
   sprintId?: string | null;
   storyPoints?: number | null;
   humanKey?: string | null;
   userStoryTitle?: string | null;
+  currentOwnerUserId?: string | null;
   currentOwner?: {
     userId: string;
     displayName: string;
@@ -158,10 +168,10 @@ function BoardMetaTag({
 }) {
   return (
     <div
-      className="max-w-full rounded border border-line bg-panel-solid px-1.5 py-0.5 text-left text-[10px] leading-snug text-ink shadow-sm"
+      className="max-w-full border border-line bg-panel-solid px-1.5 py-0.5 text-left text-[10px] leading-snug text-ink"
       title={title ?? `${label}: ${value}`}
     >
-      <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide text-ink-muted">
+      <span className="mb-0.5 block font-mono text-[9px] font-semibold uppercase tracking-wide text-ink-muted">
         {label}
       </span>
       <span className="flex min-w-0 items-center gap-1">
@@ -255,25 +265,31 @@ function BoardMilestoneCard({
         event.dataTransfer.effectAllowed = 'move';
       }}
       className={cn(
-        'rounded-md border border-dashed p-3 shadow-sm',
-        deliveryScheduleSurfaceClass(tone),
+        'kh-ops-task-card',
         canMutate &&
           !pending &&
           !showStatusSelect &&
           'cursor-grab active:cursor-grabbing',
       )}
     >
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge tone="brand">
+      <div className="kh-ops-task-top">
+        <span className="kh-ops-task-id">
           {showIssueId ? milestone.humanKey! : t('kindMilestone')}
-        </Badge>
-        <p className="m-0 min-w-0 flex-1 text-sm font-medium text-ink">
-          {milestone.title}
-        </p>
+        </span>
+        <span
+          className={cn(
+            'inline-flex items-center border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide uppercase',
+            deliveryScheduleSurfaceClass(tone),
+          )}
+        >
+          {t(`scheduleToneShort.${tone}`)}
+        </span>
       </div>
+      <h3>{milestone.title}</h3>
       {showDue ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <BoardMetaTag label={t('dueDate')} value={milestone.targetDate!} />
+        <div className="kh-ops-task-meta">
+          <span>{t('dueDate')}</span>
+          <b>{milestone.targetDate}</b>
         </div>
       ) : null}
       {onManageMilestone ? (
@@ -322,6 +338,8 @@ export function BoardTaskCard({
   onTaskStatusChange,
   onManageTask,
   actions,
+  currency = 'EUR',
+  ratePeople = [],
 }: {
   task: BoardTask;
   milestoneLabel: string | null;
@@ -333,8 +351,11 @@ export function BoardTaskCard({
   onTaskStatusChange: (taskId: string, status: string) => void;
   onManageTask?: (taskId: string) => void;
   actions?: ReactNode;
+  currency?: string;
+  ratePeople?: RatePerson[];
 }) {
   const t = useTranslations('delivery');
+  const locale = useLocale();
   const accountable = task.raci.find((entry) => entry.role === 'A');
   const actor = actionablePerson(task);
   const tone = deliveryScheduleTone({
@@ -352,13 +373,22 @@ export function BoardTaskCard({
     task.storyPoints != null &&
     Number.isFinite(task.storyPoints);
   const showIssueId = meta.issueId && Boolean(task.humanKey);
+  const forecast = toHours(task.forecastHours);
+  const rates = new Map(ratePeople.map((person) => [person.userId, person]));
+  const ratePerson = resolveRatePerson(
+    task.currentOwnerUserId ?? task.currentOwner?.userId,
+    task.raci,
+    rates,
+  );
+  const cost = hoursCost(forecast, ratePerson?.hourlyRate);
   const hasMeta =
     showStory ||
     showMilestone ||
     showAccountable ||
     showOwner ||
     showDue ||
-    showPoints;
+    showPoints ||
+    forecast != null;
   const canDrag = canMutate && !pending && !showStatusSelect;
 
   return (
@@ -369,18 +399,51 @@ export function BoardTaskCard({
         event.dataTransfer.effectAllowed = 'move';
       }}
       className={cn(
-        'rounded-md border p-3 shadow-sm',
-        deliveryScheduleSurfaceClass(tone),
+        'kh-ops-task-card',
         canDrag && 'cursor-grab active:cursor-grabbing',
       )}
     >
-      <p className="m-0 text-sm font-medium text-ink">
-        {showIssueId ? (
-          <span className="text-ink-muted">{task.humanKey} · </span>
-        ) : null}
-        {task.title}
-      </p>
+      <div className="kh-ops-task-top">
+        <span className="kh-ops-task-id">
+          {showIssueId ? task.humanKey : t('kindTask')}
+        </span>
+        <span
+          className={cn(
+            'inline-flex items-center border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide uppercase',
+            deliveryScheduleSurfaceClass(tone),
+          )}
+        >
+          {t(`scheduleToneShort.${tone}`)}
+        </span>
+      </div>
+      <h3>{task.title}</h3>
       {hasMeta ? (
+        <div className="kh-ops-task-meta">
+          {showOwner && actor ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <UserAvatar
+                displayName={actor.displayName}
+                avatarUrl={actor.avatarUrl}
+                size="xs"
+              />
+              <span className="truncate">{actor.displayName}</span>
+            </span>
+          ) : (
+            <span />
+          )}
+          {forecast != null ? (
+            <b>
+              {forecast}h
+              {cost != null ? ` · ${formatMoney(cost, currency, locale)}` : ''}
+            </b>
+          ) : null}
+          {showDue ? <span>{task.dueDate}</span> : <span />}
+          {showPoints ? (
+            <span className="kh-ops-points">{task.storyPoints} PT</span>
+          ) : null}
+        </div>
+      ) : null}
+      {showStory || showMilestone || showAccountable ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {showStory ? (
             <BoardMetaTag label={t('kindStory')} value={task.userStoryTitle!} />
@@ -392,28 +455,6 @@ export function BoardTaskCard({
             <BoardMetaTag
               label={t('accountable')}
               value={accountable!.displayName}
-            />
-          ) : null}
-          {showOwner && actor ? (
-            <BoardMetaTag
-              label={t('currentOwner')}
-              value={actor.displayName}
-              leading={
-                <UserAvatar
-                  displayName={actor.displayName}
-                  avatarUrl={actor.avatarUrl}
-                  size="xs"
-                />
-              }
-            />
-          ) : null}
-          {showDue ? (
-            <BoardMetaTag label={t('dueDate')} value={task.dueDate!} />
-          ) : null}
-          {showPoints ? (
-            <BoardMetaTag
-              label={t('boardMetaStoryPoints')}
-              value={String(task.storyPoints)}
             />
           ) : null}
         </div>
@@ -468,6 +509,8 @@ function BoardColumnPanel({
   onMilestoneStatusChange,
   onManageTask,
   onManageMilestone,
+  currency,
+  ratePeople,
 }: {
   status: BoardColumn;
   tasks: BoardTask[];
@@ -484,35 +527,37 @@ function BoardColumnPanel({
   onMilestoneStatusChange?: (milestoneId: string, status: string) => void;
   onManageTask?: (taskId: string) => void;
   onManageMilestone?: (milestoneId: string) => void;
+  currency?: string;
+  ratePeople?: RatePerson[];
 }) {
   const t = useTranslations('delivery');
   const itemCount = tasks.length + milestones.length;
+  const laneHours = tasks.reduce((sum, task) => sum + (toHours(task.forecastHours) ?? 0), 0);
+  const laneCount =
+    laneHours > 0
+      ? `${String(itemCount).padStart(2, '0')} / ${Math.round(laneHours)}h`
+      : String(itemCount).padStart(2, '0');
 
   return (
     <div
-      className={cn(
-        'flex flex-col rounded-lg border border-line bg-neutral-soft/40',
-        compact
-          ? 'w-full'
-          : 'w-[min(17.5rem,85vw)] shrink-0 snap-start md:w-[17.5rem]',
-      )}
+      className={cn('kh-ops-lane flex flex-col', compact && 'w-full')}
       onDragOver={(event) => {
         if (canMutate && !showStatusSelect) event.preventDefault();
       }}
       onDrop={(event) => onDrop(status, event)}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
-        <h3 className="m-0 text-sm font-semibold">{t(`taskStatus.${status}`)}</h3>
-        <span className="text-xs text-ink-muted">{itemCount}</span>
+      <div className="kh-ops-lane-head">
+        <h3 className="m-0">{t(`taskStatus.${status}`)}</h3>
+        <span className="kh-ops-lane-count">{laneCount}</span>
       </div>
       <div
         className={cn(
-          'flex flex-col gap-2 p-2',
+          'flex flex-col',
           compact ? 'min-h-[8rem]' : 'min-h-[12rem]',
         )}
       >
         {itemCount === 0 ? (
-          <p className="m-0 px-1 py-6 text-center text-xs text-ink-muted">
+          <p className="kh-ops-empty">
             {showStatusSelect
               ? t('boardEmptyColumnMobile')
               : t('boardEmptyColumn')}
@@ -548,6 +593,8 @@ function BoardColumnPanel({
                 showStatusSelect={showStatusSelect}
                 onTaskStatusChange={onTaskStatusChange}
                 onManageTask={onManageTask}
+                currency={currency}
+                ratePeople={ratePeople}
               />
             ))}
           </>
@@ -572,6 +619,8 @@ export function ProjectDeliveryBoard({
   exportHandleRef,
   onExportStateChange,
   onMetaFiltersChange,
+  currency = 'EUR',
+  ratePeople = [],
 }: {
   projectId: string;
   projectName: string;
@@ -589,6 +638,8 @@ export function ProjectDeliveryBoard({
     state: { pending: boolean; canExport: boolean } | null,
   ) => void;
   onMetaFiltersChange?: (meta: BoardMetaFilters) => void;
+  currency?: string;
+  ratePeople?: RatePerson[];
 }) {
   const t = useTranslations('delivery');
   const tProjects = useTranslations('projects');
@@ -804,6 +855,8 @@ export function ProjectDeliveryBoard({
           onMilestoneStatusChange={onMilestoneStatusChange}
           onManageTask={onManageTask}
           onManageMilestone={onManageMilestone}
+          currency={currency}
+          ratePeople={ratePeople}
         />
         {canMutate ? (
           <p className="m-0 text-xs text-ink-muted">{t('boardMobileHint')}</p>
@@ -812,7 +865,7 @@ export function ProjectDeliveryBoard({
 
       {/* Desktop / tablet landscape: horizontal kanban with drag */}
       <div className="hidden min-w-0 max-w-full md:block">
-        <div className="flex max-w-full gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
+        <div className="kh-ops-board">
           {BOARD_COLUMNS.map((status) => (
             <BoardColumnPanel
               key={status}
@@ -833,6 +886,8 @@ export function ProjectDeliveryBoard({
               onMilestoneStatusChange={onMilestoneStatusChange}
               onManageTask={onManageTask}
               onManageMilestone={onManageMilestone}
+              currency={currency}
+              ratePeople={ratePeople}
             />
           ))}
         </div>
