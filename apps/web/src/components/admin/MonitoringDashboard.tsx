@@ -259,7 +259,7 @@ function StatusRow({
   const useBadge = tone !== 'neutral' || value.length <= 28;
 
   return (
-    <div className="kh-ops-setting-row px-4 py-3">
+    <div className="kh-ops-setting-row">
       <strong className="text-sm font-medium text-ink">{label}</strong>
       {useBadge ? (
         <Badge tone={badgeTone} className="max-w-[min(100%,20rem)] truncate">
@@ -1209,7 +1209,7 @@ export function MonitoringDashboard({
               })}
             </p>
           </div>
-          <label className="flex items-center gap-2 text-sm text-ink">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={scheduleEnabled}
@@ -1218,7 +1218,7 @@ export function MonitoringDashboard({
             />
             {t('monitoringScheduleEnabled')}
           </label>
-          <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+          <div className="kh-ops-form-grid">
             <Field label={t('monitoringScheduleInterval')}>
               <Select
                 value={scheduleInterval}
@@ -1379,7 +1379,7 @@ export function MonitoringDashboard({
               />
             </Field>
           </div>
-          <label className="flex items-center gap-2 text-sm text-ink">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={autoRotate}

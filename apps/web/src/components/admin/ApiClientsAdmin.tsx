@@ -533,9 +533,9 @@ export function ApiClientsAdmin({
         </Field>
         <fieldset className="m-0 grid gap-2 border-0 p-0">
           <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="kh-ops-scope-checks">
             {MCP_SCOPES.map((scope) => (
-              <label key={scope} className="flex items-center gap-2 text-sm">
+              <label key={scope} className="kh-ops-scope-check">
                 <input
                   type="checkbox"
                   checked={scopes.includes(scope)}
@@ -556,7 +556,7 @@ export function ApiClientsAdmin({
               <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
             ) : (
               orgWorkspaces.map((workspace) => (
-                <label key={workspace.id} className="flex items-center gap-2 text-sm">
+                <label key={workspace.id} className="kh-ops-scope-check">
                   <input
                     type="checkbox"
                     checked={allowedWorkspaceIds.includes(workspace.id)}
@@ -616,9 +616,9 @@ export function ApiClientsAdmin({
             </p>
             <fieldset className="m-0 grid gap-2 border-0 p-0">
               <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="kh-ops-scope-checks">
                 {MCP_SCOPES.map((scope) => (
-                  <label key={scope} className="flex items-center gap-2 text-sm">
+                  <label key={scope} className="kh-ops-scope-check">
                     <input
                       type="checkbox"
                       checked={approveScopes.includes(scope)}
@@ -633,7 +633,7 @@ export function ApiClientsAdmin({
               <legend className="mb-1 text-sm font-medium">{t('allowedWorkspaces')}</legend>
               <div className="kh-ops-scope-checks max-h-40 overflow-auto">
                 {approveOrgWorkspaces.map((workspace) => (
-                  <label key={workspace.id} className="flex items-center gap-2 text-sm">
+                  <label key={workspace.id} className="kh-ops-scope-check">
                     <input
                       type="checkbox"
                       checked={approveWorkspaces.includes(workspace.id)}
@@ -694,9 +694,9 @@ export function ApiClientsAdmin({
             </Field>
             <fieldset className="m-0 grid gap-2 border-0 p-0">
               <legend className="mb-1 text-sm font-medium">{t('scopes')}</legend>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="kh-ops-scope-checks">
                 {MCP_SCOPES.map((scope) => (
-                  <label key={scope} className="flex items-center gap-2 text-sm">
+                  <label key={scope} className="kh-ops-scope-check">
                     <input
                       type="checkbox"
                       checked={editScopes.includes(scope)}
@@ -720,7 +720,7 @@ export function ApiClientsAdmin({
                   editOrgWorkspaces.map((workspace) => (
                     <label
                       key={workspace.id}
-                      className="flex items-center gap-2 text-sm"
+                      className="kh-ops-scope-check"
                     >
                       <input
                         type="checkbox"

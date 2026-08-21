@@ -169,9 +169,9 @@ export function ConversationImportDetail(props: {
           <div>
             <p className="font-medium text-ink">{t('secretWarningsTitle')}</p>
             <p>{t('secretWarningsHelp')}</p>
-            <ul className="mt-2 mb-0 grid list-none gap-2 p-0">
+            <ul className="kh-ops-stack mt-2 mb-0">
               {warnings.map((warning) => (
-                <li key={warning.code} className="flex flex-wrap items-center gap-2 text-sm">
+                <li key={warning.code} className="kh-ops-linked-row">
                   <Badge tone={warning.severity === 'high' ? 'danger' : 'neutral'}>
                     {warning.severity}
                   </Badge>

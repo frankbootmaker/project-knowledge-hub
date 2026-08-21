@@ -462,7 +462,7 @@ export function ProjectBudgetPanel({
                   );
                 })}
               </div>
-              <div className="grid gap-1 px-3 py-3 text-[11px] text-ink-muted">
+              <div className="kh-ops-card-body grid gap-1 text-[11px] text-ink-muted">
                 {(summary.aiNoteOnlyTokens ?? 0) > 0 ? (
                   <p className="m-0">
                     {t('aiNoteOnlyTokens', { count: summary.aiNoteOnlyTokens })}

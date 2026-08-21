@@ -471,7 +471,7 @@ export function CatalogueSection({
           </ul>
 
           {filtered.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-3 py-2.5">
+            <div className="kh-ops-card-foot">
               <p className="m-0 text-xs text-ink-muted">
                 {t('sectionShowing', {
                   from: rangeFrom,

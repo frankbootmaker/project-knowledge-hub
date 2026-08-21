@@ -689,7 +689,7 @@ export function ProjectStakeholdersPanel({
           </Field>
         )}
         {isEmployee ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('assignmentStart')}>
               <Input
                 type="date"
@@ -732,7 +732,7 @@ export function ProjectStakeholdersPanel({
                 placeholder={t('contractedBudgetPlaceholder', { currency })}
               />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={t('contractStart')}>
                 <Input
                   type="date"
@@ -754,7 +754,7 @@ export function ProjectStakeholdersPanel({
                 />
               </Field>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={t('assignmentStart')}>
                 <Input
                   type="date"

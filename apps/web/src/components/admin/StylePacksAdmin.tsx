@@ -946,8 +946,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
           </p>
         </Field>
 
-        <div className="flex flex-wrap gap-4 text-sm">
-          <label className="flex items-center gap-2">
+        <div className="kh-ops-scope-checks">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={form.showLogo}
@@ -961,7 +961,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             />
             {t('templatesShowLogo')}
           </label>
-          <label className="flex items-center gap-2">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={form.showCoverBrand}
@@ -975,7 +975,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             />
             {t('templatesShowCoverBrand')}
           </label>
-          <label className="flex items-center gap-2">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={form.showCoverTitle}
@@ -989,7 +989,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
             />
             {t('templatesShowCoverTitle')}
           </label>
-          <label className="flex items-center gap-2">
+          <label className="kh-ops-scope-check">
             <input
               type="checkbox"
               checked={form.showCoverDetails}
@@ -1024,7 +1024,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
                 {t('templatesUploadLogo')}
               </Button>
             </div>
-            <div className="grid gap-3 border-t border-line pt-4">
+            <div className="kh-ops-inset grid gap-3">
               <p className="m-0 text-sm font-semibold text-ink">
                 {t('templatesDocxShell')}
               </p>
@@ -1083,7 +1083,8 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
+        <div className="kh-ops-action-line">
+          <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="secondary"
@@ -1145,6 +1146,7 @@ export function StylePacksAdmin({ organizationId, initialPacks }: Props) {
               </Button>
             </>
           )}
+          </div>
         </div>
         </div>
       </section>

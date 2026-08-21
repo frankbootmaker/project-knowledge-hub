@@ -489,7 +489,7 @@ export function GitConnectionsPanel(props: {
         size="lg"
       >
         {addStep === 'provider' ? (
-          <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
+          <ul className="kh-ops-storage-choice m-0 list-none p-0">
             {SYNC_PROVIDER_CATALOG.map((provider) => {
               const supported = provider.syncSupported;
               return (
@@ -522,7 +522,7 @@ export function GitConnectionsPanel(props: {
               {t(`connectBlurb_${selectedProvider}`)}
             </p>
             <p className="m-0 text-sm text-ink-muted">{t('safetySweepHint')}</p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={fieldLabel(selectedProvider, 'owner')}>
                 <Input
                   autoFocus
@@ -558,7 +558,7 @@ export function GitConnectionsPanel(props: {
                       ? t('baseUrlRequiredLabel')
                       : t('baseUrlOptional')
                   }
-                  className="sm:col-span-2"
+                  className="kh-ops-field-span"
                 >
                   <Input
                     value={baseUrl}
@@ -568,7 +568,7 @@ export function GitConnectionsPanel(props: {
                   />
                 </Field>
               ) : null}
-              <Field label={fieldLabel(selectedProvider, 'token')} className="sm:col-span-2">
+              <Field label={fieldLabel(selectedProvider, 'token')} className="kh-ops-field-span">
                 <PasswordInput
                   value={accessToken}
                   onChange={(e) => setAccessToken(e.target.value)}
@@ -576,7 +576,7 @@ export function GitConnectionsPanel(props: {
                   autoComplete="off"
                 />
               </Field>
-              <Field label={t('webhookSecret')} className="sm:col-span-2">
+              <Field label={t('webhookSecret')} className="kh-ops-field-span">
                 <PasswordInput
                   value={webhookSecret}
                   onChange={(e) => setWebhookSecret(e.target.value)}
@@ -584,12 +584,12 @@ export function GitConnectionsPanel(props: {
                   autoComplete="off"
                 />
               </Field>
-              <p className="m-0 sm:col-span-2 text-sm text-ink-muted">
+              <p className="kh-ops-field-span m-0 text-sm text-ink-muted">
                 {t('webhookPathHint', {
                   path: webhookPathForProvider(selectedProvider),
                 })}
               </p>
-              <Field label={t('includePaths')} className="sm:col-span-2">
+              <Field label={t('includePaths')} className="kh-ops-field-span">
                 <Textarea
                   rows={4}
                   value={includePaths}
@@ -655,7 +655,7 @@ export function GitConnectionsPanel(props: {
             </div>
 
             {props.canManage && isSyncProviderSupported(manageConnection.provider) ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="kh-ops-form-grid">
                 <Field label={t('branch')}>
                   <Input
                     value={manageBranch}
@@ -673,7 +673,7 @@ export function GitConnectionsPanel(props: {
                     <option value="paused">{t('statusPaused')}</option>
                   </Select>
                 </Field>
-                <Field label={t('projectOptional')} className="sm:col-span-2">
+                <Field label={t('projectOptional')} className="kh-ops-field-span">
                   <Select
                     value={manageProjectId}
                     onChange={(e) => setManageProjectId(e.target.value)}
@@ -693,7 +693,7 @@ export function GitConnectionsPanel(props: {
                         ? t('baseUrlRequiredLabel')
                         : t('baseUrlOptional')
                     }
-                    className="sm:col-span-2"
+                    className="kh-ops-field-span"
                   >
                     <Input
                       value={manageBaseUrl}
@@ -705,7 +705,7 @@ export function GitConnectionsPanel(props: {
                     />
                   </Field>
                 ) : null}
-                <Field label={t('accessToken')} className="sm:col-span-2">
+                <Field label={t('accessToken')} className="kh-ops-field-span">
                   <PasswordInput
                     value={manageToken}
                     onChange={(e) => setManageToken(e.target.value)}
@@ -715,7 +715,7 @@ export function GitConnectionsPanel(props: {
                     autoComplete="off"
                   />
                 </Field>
-                <Field label={t('webhookSecret')} className="sm:col-span-2">
+                <Field label={t('webhookSecret')} className="kh-ops-field-span">
                   <PasswordInput
                     value={manageWebhook}
                     onChange={(e) => setManageWebhook(e.target.value)}
@@ -727,14 +727,14 @@ export function GitConnectionsPanel(props: {
                     autoComplete="off"
                   />
                 </Field>
-                <p className="m-0 sm:col-span-2 text-sm text-ink-muted">
+                <p className="kh-ops-field-span m-0 text-sm text-ink-muted">
                   {t('webhookPathHint', {
                     path: webhookPathForProvider(
                       manageConnection.provider as SyncProvider,
                     ),
                   })}
                 </p>
-                <Field label={t('includePaths')} className="sm:col-span-2">
+                <Field label={t('includePaths')} className="kh-ops-field-span">
                   <Textarea
                     rows={4}
                     value={manageIncludePaths}

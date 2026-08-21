@@ -772,7 +772,7 @@ export function UsersAdmin({
             )}
 
             {canRemove(editUser) ? (
-              <div className="grid gap-3 border-t border-line pt-3">
+              <div className="kh-ops-danger-copy grid gap-3">
                 {removeStep === 0 ? (
                   <Button
                     type="button"

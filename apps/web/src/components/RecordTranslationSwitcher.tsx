@@ -38,7 +38,7 @@ export async function RecordTranslationSwitcher({
       <div className="kh-ops-panel-head">
         <h2 className="kh-ops-panel-title">{t('translationsLabel')}</h2>
       </div>
-      <div className="flex flex-wrap items-center gap-2 px-3.5 py-3">
+      <div className="kh-ops-card-body">
         {translations.map((item) => {
           const code = item.language ?? 'en';
           const active = item.id === currentRecordId;

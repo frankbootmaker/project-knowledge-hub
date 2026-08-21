@@ -357,7 +357,7 @@ export function ProjectManageMenu(props: {
             <Field label={tCommon('tagsHint')}>
               <Input value={tags} onChange={(e) => setTags(e.target.value)} />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={tBaseline('startDate')}>
                 <Input
                   type="date"

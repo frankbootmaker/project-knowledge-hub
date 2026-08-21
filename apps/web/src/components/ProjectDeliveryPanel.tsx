@@ -1170,7 +1170,7 @@ export function ProjectDeliveryPanel({
             />
           </Field>
           {createKind === 'milestone' ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={t('startDate')}>
                 <Input
                   type="date"
@@ -1190,7 +1190,7 @@ export function ProjectDeliveryPanel({
             </div>
           ) : null}
           {createKind === 'epic' ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="kh-ops-form-grid">
               <Field label={t('startDate')}>
                 <Input
                   type="date"
@@ -1225,7 +1225,7 @@ export function ProjectDeliveryPanel({
                   ))}
                 </Select>
               </Field>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="kh-ops-form-grid">
                 <Field label={t('startDate')}>
                   <Input
                     type="date"
@@ -1255,7 +1255,7 @@ export function ProjectDeliveryPanel({
                   disabled={pending}
                 />
               </Field>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="kh-ops-form-grid">
                 <Field label={t('forecastHours')}>
                   <Input
                     type="number"

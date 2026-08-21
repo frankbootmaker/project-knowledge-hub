@@ -80,7 +80,7 @@ export function NotificationPrefsForm({
     <div className="grid gap-3">
       <section className="kh-ops-panel">
         <div className="kh-ops-card-body grid gap-0 p-0">
-          <p className="m-0 px-4 py-3 text-sm text-ink-muted">{t('notificationsBlurb')}</p>
+          <p className="kh-ops-setting-row m-0 text-sm text-ink-muted">{t('notificationsBlurb')}</p>
           {toggleKeys.map((key) => (
             <div key={key} className="kh-ops-setting-row">
               <div className="grid gap-1">
@@ -96,7 +96,7 @@ export function NotificationPrefsForm({
             </div>
           ))}
           {error ? (
-            <div className="px-4 py-3">
+            <div className="kh-ops-setting-row">
               <ErrorText>{error}</ErrorText>
             </div>
           ) : null}

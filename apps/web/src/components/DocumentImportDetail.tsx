@@ -341,13 +341,13 @@ export function DocumentImportDetail(props: {
         <div className="kh-ops-status-row" data-tone="danger">
           <div>
             <p className="font-medium">{t('secretWarnings')}</p>
-            <ul className="mt-2 mb-0 grid list-none gap-1 p-0 text-sm">
+            <ul className="kh-ops-stack mt-2 mb-0">
             {warnings.map((w) => (
-              <li key={w.code}>
+              <li key={w.code} className="kh-ops-linked-row">
                 <Badge tone={w.severity === 'high' ? 'danger' : 'warn'}>
                   {w.severity}
-                </Badge>{' '}
-                {w.label} × {w.count}
+                </Badge>
+                <span>{w.label} × {w.count}</span>
               </li>
             ))}
             </ul>

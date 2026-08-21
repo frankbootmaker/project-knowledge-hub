@@ -950,7 +950,7 @@ export function ProjectScrumView({
           <div className="kh-ops-panel-head">
             <h2 className="kh-ops-panel-title">{t('scrumDoD')}</h2>
           </div>
-          <pre className="m-0 whitespace-pre-wrap px-4 py-3 font-sans text-sm text-ink">
+          <pre className="kh-ops-card-body m-0 whitespace-pre-wrap font-sans text-sm text-ink">
             {definitionOfDone}
           </pre>
         </section>

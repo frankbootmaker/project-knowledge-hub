@@ -331,7 +331,7 @@ export function ProjectBaselinePanel({
               </div>
             </div>
             {project.definitionOfDone?.trim() ? (
-              <p className="m-0 whitespace-pre-wrap px-3 py-3 text-xs text-ink-muted">
+              <p className="kh-ops-card-body m-0 whitespace-pre-wrap text-xs text-ink-muted">
                 {project.definitionOfDone}
               </p>
             ) : null}
@@ -461,7 +461,7 @@ export function ProjectBaselinePanel({
       >
         <div className="grid gap-3">
           {error ? <ErrorText>{error}</ErrorText> : null}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('startDate')}>
               <Input
                 type="date"
@@ -480,7 +480,7 @@ export function ProjectBaselinePanel({
               />
             </Field>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="kh-ops-form-grid">
             <Field label={t('currency')}>
               <Select
                 value={currency}
