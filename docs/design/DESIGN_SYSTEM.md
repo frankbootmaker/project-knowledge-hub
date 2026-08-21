@@ -134,12 +134,12 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-capacity-row` / `.kh-ops-capacity-track` | Utilization planned (ink) + burn (accent) bars |
 | `.kh-ops-budget-layout` / `.kh-ops-cost-split` / `.kh-ops-cost-part` | Budget burndown + people/AI/systems split |
 | `.kh-ops-baseline-grid` / `.kh-ops-field-cell` / `.kh-ops-pinned` | Baseline field cells and pinned records |
-| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack cards; `button.kh-ops-project-card` for report launchers. Workspace colour is a 3px inset stripe (`kh-workspace-tile`), not a wash. |
+| `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack / dashboard workspace / account brand cards; `button.kh-ops-project-card` for report launchers and brand schemes. Workspace colour is a 3px inset stripe (`kh-workspace-tile`), not a wash. Selected brand uses `.selected` (ink border + 3px accent inset). |
 | `.kh-ops-media-grid` / `.kh-ops-media-card` / `.kh-ops-media-preview` / `.kh-ops-media-info` | Workspace media catalogue (4 / 3 / 1 columns) |
 | `.kh-ops-form-grid` / `.kh-ops-field-span` | Dense two-column modal and admin forms |
 | `.kh-ops-card-body` / `.kh-ops-card-foot` / `.kh-ops-action-line` | Panel interior padding, card footer, save/test action row |
 | `.kh-ops-setup-grid` / `.kh-ops-setup-card` / `.kh-ops-setup-step` | MCP / AI client setup cards |
-| `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card` | Admin overview setup shortcuts |
+| `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card` | Admin overview setup shortcuts and dashboard search/admin jump tiles (`a.kh-ops-admin-link-card`) |
 | `.kh-ops-danger-zone` / `.kh-ops-danger-copy` | Close-account irreversible panel |
 | `.kh-ops-dropzone` / `.kh-ops-paste-area` / `.kh-ops-narrow-form` | Document dropzone, conversation paste, 840px create forms |
 | `.kh-ops-scope-list` / `.kh-ops-scope-checks` / `.kh-ops-scope-check` | Scope tags and checkbox chips |
@@ -166,7 +166,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-confirm` / `.kh-ops-inset` | Archive/purge confirms and nested pickers |
 | `.kh-ops-cal-day` | Compact admin audit calendar cells |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
-| `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips (`aria-pressed` for filters), account setting rows |
+| `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips (`aria-pressed` for filters; also style-pack token insert), account setting rows |
+| `.kh-ops-color-swatch` / `.kh-ops-color-input` | Square colour chips and native colour input (style-pack picker) |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
 | `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
@@ -235,6 +236,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console leftover dashboard/brand chrome** — Dashboard workspace tiles use `.kh-ops-project-grid` / `.kh-ops-project-card` (colour stripe unchanged). Search/admin jump tiles use `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card`. Account brand schemes use project cards with `.selected`. Style-pack token insert uses type chips; colour picker swatches/native input are square (`.kh-ops-color-swatch` / `.kh-ops-color-input`).
 * **Ops Console leftover polish** — Org chart uses org-tree / org-card / ungrouped-grid. Manage, Git provider, and import-type pickers use `.kh-ops-choice`. Scrum attendee lists, plan rows, DoD inset, guest chips, and delivery `?` legends/popovers use Ops recipes. Workspace colour is a 3px inset stripe instead of a soft wash.
 * **Ops Console media + reports** — Workspace media catalogue (`/workspaces/{slug}/media`) lists existing image assets (jpeg/png/webp/gif) from `GET/POST /api/v1/workspaces/:workspaceId/media` with optional PATCH link and DELETE. Ops rail **Media library** points there (document import stays `/imports`). Project **Reports** rail and section `#project-reports` open the existing status / delivery / stakeholder markdown preview (no insight widgets). Viewer loading/footer use Ops empty + action-line recipes.
 * **Ops Console leftover chrome** — Knowledge read, system detail, and project overview use detail-grid, record-head, keyvals, and tags. Monitoring uses health cards, client leader-strip, on-duty connection rows, and archived-count stamps for live data only (no restore-drill UI). Audit uses a compact calendar, form-grid filters, and a Created/Actor/Action/Entity table (IP stays on the actor cell; no invented outcome column). Import details, manage interiors, archive/purge confirms, translation chips, RAID/change/baseline pickers, search/memberships wrappers, account sidebar (restyled, not removed), AI discover, and remaining admin confirm/editor panels match Ops density. No media library, reports studio, MCP agent portal, owner, or generated-key reservation.

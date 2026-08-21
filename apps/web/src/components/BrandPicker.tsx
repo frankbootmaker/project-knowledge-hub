@@ -27,7 +27,7 @@ export function BrandPicker({ initialBrand }: { initialBrand: BrandId }) {
       </div>
       <div className="kh-ops-card-body">
       <p className="mt-0 mb-4 text-sm text-ink-muted">{t('brandBlurb')}</p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="kh-ops-project-grid px-0">
         {brandIds.map((id) => {
           const active = brand === id;
           return (
@@ -36,10 +36,7 @@ export function BrandPicker({ initialBrand }: { initialBrand: BrandId }) {
               type="button"
               disabled={pending}
               data-brand-choice={id}
-              className={cn(
-                'rounded-sm border border-line bg-panel-solid p-0 text-left',
-                active && 'border-brand shadow-[inset_0_3px_0_var(--kh-accent)]',
-              )}
+              className={cn('kh-ops-project-card', active && 'selected')}
               onClick={() => {
                 setBrand(id);
                 applyBrand(id);
@@ -50,7 +47,7 @@ export function BrandPicker({ initialBrand }: { initialBrand: BrandId }) {
               }}
             >
               <span
-                className="flex h-12 overflow-hidden border-b border-line"
+                className="flex h-12 overflow-hidden border border-line"
                 aria-hidden
               >
                 <i
@@ -62,22 +59,11 @@ export function BrandPicker({ initialBrand }: { initialBrand: BrandId }) {
                   style={{ background: brandSwatches[id][1] }}
                 />
               </span>
-              <span className="block p-3">
-                <span className="block font-display text-base font-semibold">
-                  {brandMeta[id].label}
-                </span>
-                <span className="mt-1 block text-xs text-ink-muted">
-                  {t(`brand_${id}`)}
-                </span>
-                <span
-                  className={cn(
-                    'mt-2 block font-mono text-[11px] uppercase',
-                    active ? 'font-semibold text-brand' : 'text-ink-muted',
-                  )}
-                >
-                  {active ? t('brandActive') : t('brandUse')}
-                </span>
-              </span>
+              <h3>{brandMeta[id].label}</h3>
+              <p>{t(`brand_${id}`)}</p>
+              <div className="kh-ops-project-card-foot">
+                <span>{active ? t('brandActive') : t('brandUse')}</span>
+              </div>
             </button>
           );
         })}

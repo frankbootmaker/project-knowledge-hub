@@ -12,7 +12,6 @@ import {
 import { loadDashboardData } from '../../../lib/dashboard';
 import { requireSession } from '../../../lib/session';
 import { workspaceTileClassName } from '../../../lib/workspace-colors';
-import { cn } from '../../../lib/cn';
 
 function roleLabel(
   role: string | null,
@@ -104,44 +103,42 @@ export default async function DashboardPage() {
           </div>
         </div>
         {data.workspaces.length === 0 ? (
-          <div className="px-4 py-4">
-            <p className="m-0 text-xs text-ink-muted">{t('emptyWorkspaces')}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
+          <div>
+            <p className="kh-ops-empty">{t('emptyWorkspaces')}</p>
+            <div className="kh-ops-action-line">
               <LinkButton href="/workspaces" variant="secondary">
                 {t('browseWorkspaces')}
               </LinkButton>
             </div>
           </div>
         ) : (
-          <div className="grid gap-0 sm:grid-cols-2 lg:grid-cols-3">
-            {data.workspaces.map((workspace, index) => {
+          <div className="kh-ops-project-grid">
+            {data.workspaces.map((workspace) => {
               const role = roleLabel(workspace.role, t);
               return (
-                <Link
+                <article
                   key={workspace.id}
-                  href={`/workspaces/${workspace.slug}`}
-                  className={cn(
-                    'block border-line p-3.5 no-underline transition hover:bg-brand-soft/30',
-                    index % 3 !== 2 && 'lg:border-r',
-                    index % 2 !== 1 && 'sm:border-r lg:border-r-0',
-                    index < data.workspaces.length - (data.workspaces.length % 3 || 3)
-                      ? 'border-b'
-                      : '',
-                    workspaceTileClassName(workspace.color, workspace.id),
-                  )}
+                  className={`kh-ops-project-card ${workspaceTileClassName(
+                    workspace.color,
+                    workspace.id,
+                  )}`}
                 >
-                  <p className="m-0 text-sm font-semibold text-ink">{workspace.name}</p>
                   {role ? (
-                    <p className="mt-1 mb-0 text-[11px] text-ink-muted">{role}</p>
+                    <span className="kh-ops-type-chip">{role}</span>
                   ) : null}
-                  <p className="mt-2 mb-0 text-[11px] text-ink-muted">
+                  <h3>
+                    <Link href={`/workspaces/${workspace.slug}`}>
+                      {workspace.name}
+                    </Link>
+                  </h3>
+                  <p>
                     {t('workspaceCounts', {
                       projects: workspace.projectCount,
                       systems: workspace.systemCount,
                       records: workspace.recordCount,
                     })}
                   </p>
-                </Link>
+                </article>
               );
             })}
           </div>
@@ -153,31 +150,26 @@ export default async function DashboardPage() {
         ) : null}
       </section>
 
-      <section className="mb-3 grid gap-0 border border-line bg-panel-solid sm:grid-cols-2">
-        <Link
-          href={searchHref}
-          className="block border-line p-3.5 no-underline transition hover:bg-brand-soft/30 sm:border-r"
-        >
-          <p className="m-0 text-sm font-semibold text-ink">{t('searchTitle')}</p>
-          <p className="mt-1 mb-0 text-[11px] text-ink-muted">{t('searchBlurb')}</p>
+      <section className="kh-ops-admin-link-grid mb-3">
+        <Link href={searchHref} className="kh-ops-admin-link-card">
+          <div>
+            <strong>{t('searchTitle')}</strong>
+            <small>{t('searchBlurb')}</small>
+          </div>
         </Link>
         {session.user.isSystemAdmin ? (
-          <Link
-            href="/admin"
-            className="block p-3.5 no-underline transition hover:bg-brand-soft/30"
-          >
-            <p className="m-0 text-sm font-semibold text-ink">{t('adminTitle')}</p>
-            <p className="mt-1 mb-0 text-[11px] text-ink-muted">{t('adminBlurb')}</p>
+          <Link href="/admin" className="kh-ops-admin-link-card">
+            <div>
+              <strong>{t('adminTitle')}</strong>
+              <small>{t('adminBlurb')}</small>
+            </div>
           </Link>
         ) : (
-          <Link
-            href="/workspaces"
-            className="block p-3.5 no-underline transition hover:bg-brand-soft/30"
-          >
-            <p className="m-0 text-sm font-semibold text-ink">
-              {t('browseWorkspaces')}
-            </p>
-            <p className="mt-1 mb-0 text-[11px] text-ink-muted">{t('browseBlurb')}</p>
+          <Link href="/workspaces" className="kh-ops-admin-link-card">
+            <div>
+              <strong>{t('browseWorkspaces')}</strong>
+              <small>{t('browseBlurb')}</small>
+            </div>
           </Link>
         )}
       </section>

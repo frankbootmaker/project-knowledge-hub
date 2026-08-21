@@ -90,7 +90,7 @@ function StylePackTokenHints(props: {
             disabled={props.disabled}
             title={t(item.descKey)}
             aria-label={`${item.token}: ${t(item.descKey)}`}
-            className="rounded border border-line bg-panel-solid px-2 py-0.5 font-mono text-xs text-ink transition hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-60"
+            className="kh-ops-type-chip disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => props.onInsert(item.token)}
           >
             {item.token}
