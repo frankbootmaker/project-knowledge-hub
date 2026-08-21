@@ -185,7 +185,7 @@ export default async function KnowledgeRecordDetailPage({
             {lifecycleLabel(record.lifecycleStatus, t)}
           </Badge>
         }
-
+      />
       <RecordTranslationSwitcher
         workspaceSlug={workspace.slug}
         currentRecordId={record.id}
