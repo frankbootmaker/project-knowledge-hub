@@ -1449,6 +1449,7 @@ a.kh-ops-health-card:hover {
 .kh-ops-type-chip {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 2px 6px;
   border: 1px solid var(--kh-line);
   background: var(--kh-surface);
@@ -1462,6 +1463,34 @@ a.kh-ops-health-card:hover {
 button.kh-ops-type-chip {
   color: inherit;
   cursor: pointer;
+}
+
+.kh-ops-type-chip[data-tone='completed'] {
+  border-color: color-mix(in oklch, var(--kh-brand), transparent 65%);
+  background: var(--kh-brand-soft);
+  color: var(--kh-brand);
+}
+
+.kh-ops-type-chip[data-tone='overdue'] {
+  border-color: color-mix(in oklch, var(--kh-danger), transparent 65%);
+  background: var(--kh-danger-soft);
+  color: var(--kh-danger);
+}
+
+.kh-ops-type-chip[data-tone='atRisk'] {
+  border-color: color-mix(in oklch, var(--kh-warn), transparent 60%);
+  background: var(--kh-warn-soft);
+  color: var(--kh-warn);
+}
+
+.kh-ops-type-chip[data-tone='onTrack'] {
+  border-color: color-mix(in oklch, var(--kh-accent), transparent 65%);
+  background: var(--kh-accent-soft);
+  color: var(--kh-accent);
+}
+
+.kh-ops-type-chip[data-tone='neutral'] {
+  color: var(--kh-ink-muted);
 }
 
 .kh-ops-type-chip[aria-pressed='true'] {

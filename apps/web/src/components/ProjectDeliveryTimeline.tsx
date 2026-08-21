@@ -1240,7 +1240,7 @@ export function ProjectDeliveryTimeline({
                   onOffsetChange={updateOffset}
                   onOpen={() => onManageStory(story.id)}
                   className={cn(
-                    'absolute left-0 top-1 z-[1] max-w-[14rem] rounded border px-1.5 text-left text-[11px] shadow-sm',
+                    'absolute left-0 top-1 z-[1] max-w-[14rem] border px-1.5 text-left text-[11px] shadow-sm',
                     storyHasMeta ? 'h-auto min-h-5 py-0.5' : 'h-5',
                     storyTone
                       ? deliveryScheduleSurfaceClass(storyTone)
@@ -1263,7 +1263,7 @@ export function ProjectDeliveryTimeline({
                     date={storyDue}
                     showIssueIds={showIssueIds}
                     showDueDates={showDueDates}
-                    className="text-[9px] opacity-80"
+                    className="text-[10px] opacity-80"
                   />
                 </DraggableTag>
               </div>
@@ -1624,7 +1624,7 @@ export function ProjectDeliveryTimeline({
                       onOffsetChange={updateOffset}
                       onOpen={marker.onOpen}
                       className={cn(
-                        'absolute left-1/2 top-1/2 z-[2] w-max max-w-[11rem] rounded border px-1.5 py-0.5 text-left text-[10px] leading-snug shadow-sm',
+                        'absolute left-1/2 top-1/2 z-[2] w-max max-w-[11rem] border px-1.5 py-0.5 text-left text-[10px] leading-snug shadow-sm',
                         tone
                           ? deliveryScheduleSurfaceClass(tone)
                           : 'border-line bg-panel-solid text-ink hover:border-brand/50',
@@ -1636,7 +1636,7 @@ export function ProjectDeliveryTimeline({
                     >
                       <span
                         className={cn(
-                          'mb-0.5 block text-[9px] font-semibold uppercase tracking-wide',
+                          'mb-0.5 block text-[10px] font-semibold uppercase tracking-wide',
                           tone ? 'opacity-80' : 'text-ink-muted',
                         )}
                       >
@@ -1651,7 +1651,7 @@ export function ProjectDeliveryTimeline({
                         showIssueIds={showIssueIds}
                         showDueDates={showDueDates}
                         className={cn(
-                          'mt-0.5 text-[9px]',
+                          'mt-0.5 text-[10px]',
                           tone ? 'opacity-80' : 'text-ink-muted',
                         )}
                       />

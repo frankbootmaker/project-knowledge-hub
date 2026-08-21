@@ -84,7 +84,7 @@ function CalendarItemChip({
 
   return (
     <li
-      className="border border-line px-2.5 py-2 text-sm"
+      className="kh-ops-data-item"
       title={`${item.humanKey ? `${item.humanKey} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
     >
       <div className="flex min-w-0 items-center gap-1.5">

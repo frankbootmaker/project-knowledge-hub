@@ -6,7 +6,6 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Button, Select, useToast } from './ui';
 import { cn } from '../lib/cn';
 import {
-  deliveryScheduleSurfaceClass,
   deliveryScheduleTone,
   todayYmd,
   type DeliveryScheduleTone,
@@ -171,7 +170,7 @@ function BoardMetaTag({
       className="max-w-full border border-line bg-panel-solid px-1.5 py-0.5 text-left text-[10px] leading-snug text-ink"
       title={title ?? `${label}: ${value}`}
     >
-      <span className="mb-0.5 block font-mono text-[9px] font-semibold uppercase tracking-wide text-ink-muted">
+      <span className="mb-0.5 block font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
         {label}
       </span>
       <span className="flex min-w-0 items-center gap-1">
@@ -214,10 +213,8 @@ function BoardMetaHelp() {
             {SCHEDULE_LEGEND.map((tone) => (
               <li
                 key={tone}
-                className={cn(
-                  'kh-ops-type-chip',
-                  deliveryScheduleSurfaceClass(tone),
-                )}
+                className="kh-ops-type-chip"
+                data-tone={tone}
               >
                 <span>{t(`scheduleTone.${tone}`)}</span>
               </li>
@@ -276,12 +273,7 @@ function BoardMilestoneCard({
         <span className="kh-ops-task-id">
           {showIssueId ? milestone.humanKey! : t('kindMilestone')}
         </span>
-        <span
-          className={cn(
-            'inline-flex items-center border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide uppercase',
-            deliveryScheduleSurfaceClass(tone),
-          )}
-        >
+        <span className="kh-ops-type-chip" data-tone={tone}>
           {t(`scheduleToneShort.${tone}`)}
         </span>
       </div>
@@ -407,12 +399,7 @@ export function BoardTaskCard({
         <span className="kh-ops-task-id">
           {showIssueId ? task.humanKey : t('kindTask')}
         </span>
-        <span
-          className={cn(
-            'inline-flex items-center border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide uppercase',
-            deliveryScheduleSurfaceClass(tone),
-          )}
-        >
+        <span className="kh-ops-type-chip" data-tone={tone}>
           {t(`scheduleToneShort.${tone}`)}
         </span>
       </div>

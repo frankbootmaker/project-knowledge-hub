@@ -108,8 +108,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-input` / `.kh-label` | Form controls |
 | `.kh-function-header` / `-controls` / `-actions` | List toolbar (search/filters + primary actions) |
 | `.kh-panel` / `.kh-panel-solid` / `.kh-panel-inset` | Surfaces |
-| `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (soft wash + hover; no left bar); palette keys from domain |
-| `.kh-workspace-swatch` / `.kh-workspace-swatch-btn*` | Color picker swatches |
+| `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (3px inset stripe, not a wash); palette keys from domain |
+| `.kh-workspace-swatch` / `.kh-workspace-swatch-btn*` | Square workspace colour picker swatches |
 | `.kh-muted` | Secondary text |
 | `.kh-btn` + `.kh-btn-{primary,secondary,ghost,success,danger}` | Buttons / link-buttons |
 | `.kh-nav-link` / `.kh-nav-link-active` | Header nav |
@@ -166,7 +166,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-confirm` / `.kh-ops-inset` | Archive/purge confirms and nested pickers |
 | `.kh-ops-cal-day` | Compact admin audit calendar cells |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
-| `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips (`aria-pressed` for filters; also style-pack token insert), account setting rows |
+| `.kh-ops-empty` / `.kh-ops-type-chip` / `.kh-ops-setting-row` | Empty states, type chips (`aria-pressed` for filters; `data-tone` for delivery schedule; also style-pack token insert), account setting rows |
 | `.kh-ops-color-swatch` / `.kh-ops-color-input` | Square colour chips and native colour input (style-pack picker) |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
@@ -236,6 +236,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-21
 
+* **Ops Console leftover chips/insets** — Delivery schedule chips use `.kh-ops-type-chip[data-tone]`. Remaining nested form boxes use `.kh-ops-inset`. Calendar selected-day rows use data-item. Timeline/board meta type is ≥10px. Workspace colour picker swatches are square.
 * **Ops Console leftover dashboard/brand chrome** — Dashboard workspace tiles use `.kh-ops-project-grid` / `.kh-ops-project-card` (colour stripe unchanged). Search/admin jump tiles use `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card`. Account brand schemes use project cards with `.selected`. Style-pack token insert uses type chips; colour picker swatches/native input are square (`.kh-ops-color-swatch` / `.kh-ops-color-input`).
 * **Ops Console leftover polish** — Org chart uses org-tree / org-card / ungrouped-grid. Manage, Git provider, and import-type pickers use `.kh-ops-choice`. Scrum attendee lists, plan rows, DoD inset, guest chips, and delivery `?` legends/popovers use Ops recipes. Workspace colour is a 3px inset stripe instead of a soft wash.
 * **Ops Console media + reports** — Workspace media catalogue (`/workspaces/{slug}/media`) lists existing image assets (jpeg/png/webp/gif) from `GET/POST /api/v1/workspaces/:workspaceId/media` with optional PATCH link and DELETE. Ops rail **Media library** points there (document import stays `/imports`). Project **Reports** rail and section `#project-reports` open the existing status / delivery / stakeholder markdown preview (no insight widgets). Viewer loading/footer use Ops empty + action-line recipes.

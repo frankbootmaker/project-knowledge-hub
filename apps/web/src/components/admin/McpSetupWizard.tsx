@@ -349,7 +349,7 @@ export function McpSetupWizard({
                         .join(', ') || `HTTP ${preflight.ready.statusCode}`
                 }
               />
-              <div className="grid gap-3 border border-line p-3">
+              <div className="kh-ops-inset grid gap-3">
                 <p className="m-0 text-sm">
                   <span className="text-ink-muted">{t('mcpWizardInternalUrl')}: </span>
                   <code className="font-mono text-xs">
@@ -375,7 +375,7 @@ export function McpSetupWizard({
                 />
               </div>
               {showPublicUrlOverride ? (
-                <div className="grid gap-3 border border-line p-3">
+                <div className="kh-ops-inset grid gap-3">
                   <Field label={t('mcpWizardPublicUrlOverride')}>
                     <Input
                       value={publicUrlDraft}

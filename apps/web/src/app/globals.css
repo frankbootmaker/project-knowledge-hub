@@ -149,9 +149,8 @@
     display: inline-block;
     width: 1.35rem;
     height: 1.35rem;
-    border-radius: 999px;
+    border: 1px solid var(--kh-line);
     background: var(--kh-workspace-accent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kh-ink) 18%, transparent);
   }
 
   .kh-workspace-swatch-btn {

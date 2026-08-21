@@ -6,7 +6,6 @@ import { useTranslations } from 'next-intl';
 import { Badge, Input } from './ui';
 import { cn } from '../lib/cn';
 import {
-  deliveryScheduleSurfaceClass,
   deliveryScheduleTone,
   todayYmd,
 } from '../lib/delivery-schedule';
@@ -131,10 +130,8 @@ export function DashboardMyTasks({
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Badge>{tDelivery(`taskStatus.${task.status}`)}</Badge>
                         <span
-                          className={cn(
-                            'inline-flex items-center border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide uppercase',
-                            deliveryScheduleSurfaceClass(scheduleTone),
-                          )}
+                          className="kh-ops-type-chip"
+                          data-tone={scheduleTone}
                         >
                           {tDelivery(`scheduleToneShort.${scheduleTone}`)}
                         </span>

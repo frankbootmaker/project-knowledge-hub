@@ -258,7 +258,7 @@ export function AiConnectionsPanel({
         <div className="kh-ops-card-body grid gap-3">
           <p className="m-0 text-sm text-ink-muted">{t('pairingBlurb')}</p>
           {pairingCode ? (
-            <div className="grid gap-2 border border-line p-3">
+            <div className="kh-ops-inset grid gap-2">
               <p className="m-0 text-sm font-medium">{t('yourCode')}</p>
               <code className="kh-ops-code text-lg tracking-wider">{pairingCode}</code>
               {pairingExpiresAt ? (

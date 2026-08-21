@@ -3,10 +3,7 @@
 import { useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { cn } from '../lib/cn';
-import {
-  deliveryScheduleSurfaceClass,
-  type DeliveryScheduleTone,
-} from '../lib/delivery-schedule';
+import { type DeliveryScheduleTone } from '../lib/delivery-schedule';
 
 const LEGEND: DeliveryScheduleTone[] = [
   'onTrack',
@@ -42,10 +39,8 @@ export function DeliveryScheduleLegend({ className }: { className?: string }) {
           {LEGEND.map((tone) => (
             <li
               key={tone}
-              className={cn(
-                'kh-ops-type-chip',
-                deliveryScheduleSurfaceClass(tone),
-              )}
+              className="kh-ops-type-chip"
+              data-tone={tone}
             >
               <span
                 className={cn(

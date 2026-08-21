@@ -34,7 +34,7 @@ export function WorkspaceColorPicker(props: {
             aria-label={t('colorAuto')}
           >
             <span className={workspaceSwatchClassName(preview)} />
-            <span className="text-[0.65rem] text-ink-muted">{t('colorAutoShort')}</span>
+            <span className="text-[10px] text-ink-muted">{t('colorAutoShort')}</span>
           </button>
         ) : null}
         {WORKSPACE_COLORS.map((color) => (

@@ -16,7 +16,6 @@ import {
 } from './ui';
 import { cn } from '../lib/cn';
 import {
-  deliveryScheduleSurfaceClass,
   deliveryScheduleTone,
   todayYmd,
 } from '../lib/delivery-schedule';
@@ -558,12 +557,7 @@ export function ProjectTaskManageModal({
               <Badge tone="brand">{task.humanKey}</Badge>
             ) : null}
             {scheduleTone ? (
-              <span
-                className={cn(
-                  'inline-flex items-center rounded-[3px] border px-2 py-0.5 text-xs font-semibold',
-                  deliveryScheduleSurfaceClass(scheduleTone),
-                )}
-              >
+              <span className="kh-ops-type-chip" data-tone={scheduleTone}>
                 {t(`scheduleTone.${scheduleTone}`)}
               </span>
             ) : null}

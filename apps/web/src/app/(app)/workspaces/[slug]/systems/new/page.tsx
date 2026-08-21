@@ -220,7 +220,7 @@ export default function NewSystemPage() {
                   <option value="critical">{t('criticalityOption.critical')}</option>
                 </Select>
               </Field>
-              <div className="kh-ops-field-span grid gap-3 border border-line p-3">
+              <div className="kh-ops-field-span kh-ops-inset grid gap-3">
                 <div>
                   <p className="m-0 text-sm font-medium">{t('itSection')}</p>
                   <p className="mt-1 mb-0 text-xs text-ink-muted">{t('itSectionHint')}</p>
@@ -298,7 +298,7 @@ export default function NewSystemPage() {
                 </div>
               </div>
               {systemType.trim() !== 'ai_assistant' ? (
-                <div className="kh-ops-field-span grid gap-3 border border-line p-3">
+                <div className="kh-ops-field-span kh-ops-inset grid gap-3">
                   <div>
                     <p className="m-0 text-sm font-medium">{t('itCostSection')}</p>
                     <p className="mt-1 mb-0 text-xs text-ink-muted">
