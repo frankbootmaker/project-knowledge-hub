@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { LanguageSwitcher } from '../LanguageSwitcher';
 import { ThemeSwitcher } from '../ThemeSwitcher';
-import type { AppTheme } from '../../lib/theme';
+import { defaultTheme, type AppTheme } from '../../lib/theme';
 
 export function AuthCard({
   brand,
@@ -9,14 +9,14 @@ export function AuthCard({
   title,
   subtitle,
   children,
-  theme,
+  theme = defaultTheme,
 }: {
   brand: string;
   eyebrow?: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
   children: ReactNode;
-  theme: AppTheme;
+  theme?: AppTheme;
 }) {
   return (
     <div className="kh-ops-auth-page">

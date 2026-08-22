@@ -6,10 +6,8 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { AuthCard } from '../../components/ops/AuthCard';
 import { Button, ErrorText, Field, Input } from '../../components/ui';
-import { getThemePreference } from '../../lib/theme-actions';
-import type { AppTheme } from '../../lib/theme';
 
-function ForgotPasswordForm({ theme }: { theme: AppTheme }) {
+function ForgotPasswordForm() {
   const t = useTranslations('forgotPassword');
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +53,6 @@ function ForgotPasswordForm({ theme }: { theme: AppTheme }) {
       eyebrow={t('eyebrow')}
       title={t('title')}
       subtitle={t('subtitle')}
-      theme={theme}
     >
       {done ? (
         <div className="mt-4 grid gap-4">
@@ -90,7 +87,6 @@ function ForgotPasswordForm({ theme }: { theme: AppTheme }) {
   );
 }
 
-export default async function ForgotPasswordPage() {
-  const theme = await getThemePreference();
-  return <ForgotPasswordForm theme={theme} />;
+export default function ForgotPasswordPage() {
+  return <ForgotPasswordForm />;
 }

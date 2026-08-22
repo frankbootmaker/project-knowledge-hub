@@ -6,10 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AuthCard } from '../../components/ops/AuthCard';
 import { Button, ErrorText } from '../../components/ui';
-import { getThemePreference } from '../../lib/theme-actions';
-import type { AppTheme } from '../../lib/theme';
 
-function ConfirmEmailForm({ theme }: { theme: AppTheme }) {
+function ConfirmEmailForm() {
   const t = useTranslations('confirmEmail');
   const tCommon = useTranslations('common');
   const searchParams = useSearchParams();
@@ -100,7 +98,6 @@ function ConfirmEmailForm({ theme }: { theme: AppTheme }) {
       eyebrow={t('eyebrow')}
       title={t('title')}
       subtitle={t('subtitle')}
-      theme={theme}
     >
       {checking ? (
         <p className="mt-4 mb-0 text-ink-muted">{tCommon('loading')}</p>
@@ -144,11 +141,10 @@ function ConfirmEmailForm({ theme }: { theme: AppTheme }) {
   );
 }
 
-export default async function ConfirmEmailPage() {
-  const theme = await getThemePreference();
+export default function ConfirmEmailPage() {
   return (
     <Suspense fallback={null}>
-      <ConfirmEmailForm theme={theme} />
+      <ConfirmEmailForm />
     </Suspense>
   );
 }

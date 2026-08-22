@@ -14,10 +14,8 @@ import {
   PasswordInput,
 } from '../../components/ui';
 import type { AppLocale } from '../../i18n/config';
-import { getThemePreference } from '../../lib/theme-actions';
-import type { AppTheme } from '../../lib/theme';
 
-function LoginForm({ theme }: { theme: AppTheme }) {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const locale = useLocale() as AppLocale;
@@ -108,7 +106,6 @@ function LoginForm({ theme }: { theme: AppTheme }) {
       eyebrow={t('eyebrow')}
       title={t('welcomeTitle')}
       subtitle={t('subtitle')}
-      theme={theme}
     >
       {passwordSet ? (
         <p className="mt-4 mb-0 text-sm text-brand">{t('passwordSet')}</p>
@@ -169,11 +166,10 @@ function LoginForm({ theme }: { theme: AppTheme }) {
   );
 }
 
-export default async function LoginPage() {
-  const theme = await getThemePreference();
+export default function LoginPage() {
   return (
     <Suspense fallback={null}>
-      <LoginForm theme={theme} />
+      <LoginForm />
     </Suspense>
   );
 }

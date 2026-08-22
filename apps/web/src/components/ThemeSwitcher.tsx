@@ -55,7 +55,11 @@ function ThemeIcon({ theme }: { theme: AppTheme }) {
   );
 }
 
-export function ThemeSwitcher({ initialTheme }: { initialTheme: AppTheme }) {
+export function ThemeSwitcher({
+  initialTheme = defaultTheme,
+}: {
+  initialTheme?: AppTheme;
+}) {
   const t = useTranslations('common');
   const router = useRouter();
   const [pending, startTransition] = useTransition();

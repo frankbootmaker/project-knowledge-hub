@@ -15,10 +15,8 @@ import {
   PasswordStrengthHint,
 } from '../../components/ui';
 import type { AppLocale } from '../../i18n/config';
-import { getThemePreference } from '../../lib/theme-actions';
-import type { AppTheme } from '../../lib/theme';
 
-function RegisterForm({ theme }: { theme: AppTheme }) {
+function RegisterForm() {
   const locale = useLocale() as AppLocale;
   const t = useTranslations('register');
   const tCommon = useTranslations('common');
@@ -118,7 +116,6 @@ function RegisterForm({ theme }: { theme: AppTheme }) {
       eyebrow={t('eyebrow')}
       title={t('title')}
       subtitle={t('subtitle')}
-      theme={theme}
     >
       {done ? (
         <div className="mt-4 grid gap-4">
@@ -197,7 +194,6 @@ function RegisterForm({ theme }: { theme: AppTheme }) {
   );
 }
 
-export default async function RegisterPage() {
-  const theme = await getThemePreference();
-  return <RegisterForm theme={theme} />;
+export default function RegisterPage() {
+  return <RegisterForm />;
 }
