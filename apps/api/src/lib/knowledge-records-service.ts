@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import { slugify } from '@project-knowledge-hub/auth';
+import { SLUG_MAX_LENGTH, slugify } from '@project-knowledge-hub/auth';
 import {
   knowledgeRecords,
   knowledgeSources,
@@ -898,12 +898,19 @@ export type TranslationSibling = {
   lifecycleStatus: string;
 };
 
+export function translationSlug(sourceSlug: string, language: string): string {
+  const lang = slugify(language) || 'xx';
+  const suffix = `-${lang}`;
+  const base = sourceSlug.slice(0, Math.max(1, SLUG_MAX_LENGTH - suffix.length));
+  return slugify(`${base}${suffix}`) || `record${suffix}`.slice(0, SLUG_MAX_LENGTH);
+}
+
 async function allocateUniqueRecordSlug(
   database: Database,
   workspaceId: string,
   desired: string,
 ): Promise<string> {
-  const base = slugify(desired).slice(0, 96) || 'record';
+  const base = (slugify(desired) || 'record').slice(0, SLUG_MAX_LENGTH);
   let candidate = base;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const [existing] = await database.db
@@ -920,7 +927,7 @@ async function allocateUniqueRecordSlug(
       return candidate;
     }
     const suffix = `-${attempt + 2}`;
-    candidate = `${base.slice(0, 96 - suffix.length)}${suffix}`;
+    candidate = `${base.slice(0, SLUG_MAX_LENGTH - suffix.length)}${suffix}`;
   }
   throw new AppError({
     code: 'KNOWLEDGE_RECORD_SLUG_CONFLICT',
@@ -1129,11 +1136,11 @@ export async function createRecordTranslation(
 
   const desiredSlug = body.slug?.trim()
     ? slugify(body.slug)
-    : slugify(`${source.slug}-${language}`);
+    : translationSlug(source.slug, language);
   const slug = await allocateUniqueRecordSlug(
     app.database,
     source.workspaceId,
-    desiredSlug || `${source.slug}-${language}`,
+    desiredSlug || translationSlug(source.slug, language),
   );
 
   const tagList =
