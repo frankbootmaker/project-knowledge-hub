@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { LanguageSwitcher } from '../LanguageSwitcher';
+import { ThemeSwitcher } from '../ThemeSwitcher';
+import type { AppTheme } from '../../lib/theme';
 
 export function AuthCard({
   brand,
@@ -7,16 +9,19 @@ export function AuthCard({
   title,
   subtitle,
   children,
+  theme,
 }: {
   brand: string;
   eyebrow?: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
   children: ReactNode;
+  theme: AppTheme;
 }) {
   return (
     <div className="kh-ops-auth-page">
-      <div className="mb-4 flex w-full max-w-[440px] justify-end">
+      <div className="mb-4 flex w-full max-w-[440px] items-center justify-end gap-2">
+        <ThemeSwitcher initialTheme={theme} />
         <LanguageSwitcher />
       </div>
       <section className="kh-ops-auth-card">

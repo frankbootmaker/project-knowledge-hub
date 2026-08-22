@@ -8,8 +8,10 @@ import { useTranslations } from 'next-intl';
 import { evaluatePasswordStrength } from '@project-knowledge-hub/domain';
 import { AuthCard } from '../../components/ops/AuthCard';
 import { Button, ErrorText, Field, PasswordInput, PasswordStrengthHint } from '../../components/ui';
+import { getThemePreference } from '../../lib/theme-actions';
+import type { AppTheme } from '../../lib/theme';
 
-function SetPasswordForm() {
+function SetPasswordForm({ theme }: { theme: AppTheme }) {
   const t = useTranslations('setPassword');
   const tCommon = useTranslations('common');
   const router = useRouter();
@@ -118,6 +120,7 @@ function SetPasswordForm() {
           {emailHint ? ` ${t('forEmail', { email: emailHint })}` : null}
         </>
       }
+      theme={theme}
     >
       {checking ? (
         <p className="mt-4 mb-0 text-ink-muted">{tCommon('loading')}</p>
@@ -162,10 +165,11 @@ function SetPasswordForm() {
   );
 }
 
-export default function SetPasswordPage() {
+export default async function SetPasswordPage() {
+  const theme = await getThemePreference();
   return (
     <Suspense fallback={null}>
-      <SetPasswordForm />
+      <SetPasswordForm theme={theme} />
     </Suspense>
   );
 }
