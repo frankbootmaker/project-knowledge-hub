@@ -25,7 +25,6 @@ import {
 import {
   readLastProject,
   readLastWorkspace,
-  readNavSection,
   readRailCompact,
   writeLastProject,
   writeLastWorkspace,
@@ -61,7 +60,10 @@ export function AppRail({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const jumpId = useId();
-  const [section, setSection] = useState<NavSectionId>(() => readNavSection());
+  const search = searchParams.toString() ? `?${searchParams.toString()}` : '';
+  const [section, setSection] = useState<NavSectionId>(() =>
+    inferNavSection(pathname, '', search),
+  );
   const [jump, setJump] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -74,7 +76,6 @@ export function AppRail({
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setSection(readNavSection());
     setLastWorkspace(readLastWorkspace());
     setLastProject(readLastProject());
   }, []);
@@ -103,14 +104,10 @@ export function AppRail({
   }, [pathParts.workspaceSlug, pathParts.projectSlug]);
 
   useEffect(() => {
-    const inferred = inferNavSection(
-      pathname,
-      hash,
-      searchParams.toString() ? `?${searchParams.toString()}` : '',
-    );
+    const inferred = inferNavSection(pathname, hash, search);
     setSection(inferred);
     writeNavSection(inferred);
-  }, [pathname, hash, searchParams]);
+  }, [pathname, hash, search]);
 
   useEffect(() => {
     onOpenChange(false);
@@ -170,7 +167,6 @@ export function AppRail({
   const visibleSections = NAV_SECTIONS.filter(
     (item) => !item.adminOnly || ctx.isAdmin,
   );
-  const search = searchParams.toString() ? `?${searchParams.toString()}` : '';
   const activeItem = findActiveNavItem(ctx, pathname, hash, search);
   const currentWorkspace =
     workspaces.find((row) => row.slug === ctx.workspaceSlug) ?? workspaces[0];

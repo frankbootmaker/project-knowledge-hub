@@ -2819,6 +2819,7 @@
     "saveApproved": "Genehmigtes Budget speichern",
     "updated": "Budget aktualisiert.",
     "failedUpdate": "Budget konnte nicht aktualisiert werden",
+    "failedLoad": "Budget konnte nicht geladen werden",
     "financialRag": "Finanzen",
     "kpi": {
       "bac": "BAC",

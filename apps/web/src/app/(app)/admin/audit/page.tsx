@@ -119,8 +119,8 @@ export default async function AdminAuditPage({
     <div>
       <PageHeader title={t('audit')} description={t('auditBlurb')} />
 
-      <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
-        <div className="grid gap-4 self-start">
+      <div className="kh-ops-audit-layout">
+        <div className="kh-ops-audit-filters">
           <section className="kh-ops-panel">
             <div className="kh-ops-panel-head">
               <Link
@@ -201,7 +201,7 @@ export default async function AdminAuditPage({
 
           <section className="kh-ops-panel">
             <div className="kh-ops-card-body">
-            <form method="get" className="kh-ops-form-grid">
+            <form method="get" className="kh-ops-form-grid kh-ops-audit-filter-form">
               <input type="hidden" name="month" value={month} />
               {query.day ? <input type="hidden" name="day" value={query.day} /> : null}
               <input type="hidden" name="page" value="1" />
@@ -265,7 +265,7 @@ export default async function AdminAuditPage({
                 </>
               ) : null}
 
-              <div className="kh-ops-action-line kh-ops-field-span">
+              <div className="kh-ops-audit-filter-actions kh-ops-field-span">
                 <Button type="submit">{t('auditApplyFilters')}</Button>
                 <Link
                   href="/admin/audit"

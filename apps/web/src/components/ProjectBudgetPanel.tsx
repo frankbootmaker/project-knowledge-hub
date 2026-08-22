@@ -263,21 +263,28 @@ export function ProjectBudgetPanel({
   const [burndownOpen, setBurndownOpen] = useState(false);
 
   const load = useCallback(async () => {
-    const response = await fetch(
-      `/api/v1/projects/${projectId}/budget-summary`,
-    );
-    if (!response.ok) return;
-    const payload = (await response.json()) as {
-      budget?: ProjectBudgetSummary;
-    };
-    if (payload.budget) {
+    try {
+      const response = await fetch(
+        `/api/v1/projects/${projectId}/budget-summary`,
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        budget?: ProjectBudgetSummary;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.budget) {
+        throw new Error(payload.error?.message || t('failedLoad'));
+      }
+      setError(null);
       setSummary(payload.budget);
       setApprovedBudget(
         payload.budget.approvedBudget != null
           ? String(payload.budget.approvedBudget)
           : '',
       );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedLoad'));
     }
+    // t is locale-stable for this panel; omitting it avoids a refetch loop.
   }, [projectId]);
 
   useEffect(() => {
@@ -344,9 +351,11 @@ export function ProjectBudgetPanel({
         </div>
       ) : null}
 
-      {!summary ? (
+      {!summary && !error ? (
         <p className="m-0 text-sm text-ink-muted">{tCommon('loading')}</p>
-      ) : (
+      ) : null}
+
+      {summary ? (
         <div className="grid gap-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <Field label={t('approvedBudget')} className="w-full max-w-xs">
@@ -546,7 +555,7 @@ export function ProjectBudgetPanel({
             {canMutate ? t('hint') : t('readOnlyHint')}
           </p>
         </div>
-      )}
+      ) : null}
     </CollapsibleSection>
 
     <Modal

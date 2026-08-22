@@ -2819,6 +2819,7 @@
     "saveApproved": "Jóváhagyott költségvetés mentése",
     "updated": "Költségvetés frissítve.",
     "failedUpdate": "Nem sikerült frissíteni a költségvetést",
+    "failedLoad": "Nem sikerült betölteni a költségvetést",
     "financialRag": "Pénzügyek",
     "kpi": {
       "bac": "BAC",

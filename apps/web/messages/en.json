@@ -2749,6 +2749,7 @@
     "saveApproved": "Save approved budget",
     "updated": "Budget updated.",
     "failedUpdate": "Failed to update budget",
+    "failedLoad": "Failed to load budget",
     "financialRag": "Financials",
     "kpi": {
       "bac": "BAC",

@@ -2750,12 +2750,52 @@ button.kh-ops-project-card:disabled {
 
 .kh-ops-form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 11px;
+  min-width: 0;
+}
+
+.kh-ops-form-grid > * {
+  min-width: 0;
 }
 
 .kh-ops-field-span {
   grid-column: 1 / -1;
+}
+
+.kh-ops-audit-layout {
+  display: grid;
+  gap: 24px;
+}
+
+.kh-ops-audit-filters {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.kh-ops-audit-filter-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.kh-ops-audit-filter-form .kh-input,
+.kh-ops-audit-filter-form select.kh-input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.kh-ops-audit-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (min-width: 1280px) {
+  .kh-ops-audit-layout {
+    grid-template-columns: minmax(0, 23rem) minmax(0, 1fr);
+    align-items: start;
+  }
 }
 
 .kh-ops-form-grid .kh-label {
