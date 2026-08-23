@@ -4,13 +4,19 @@ import { mergeDisplayPrefs } from '@project-knowledge-hub/domain';
 import { BrandPicker } from '../../../../components/BrandPicker';
 import { DisplayPrefsForm } from '../../../../components/DisplayPrefsForm';
 import { PageHeader } from '../../../../components/ui';
-import { getBrandPreference } from '../../../../lib/brand-actions';
+import {
+  getPersonalBrandCookie,
+  loadPlatformBrandSettings,
+} from '../../../../lib/brand-actions';
+import { resolveEffectiveBrand } from '../../../../lib/brand';
 import { apiFetch, requireSession } from '../../../../lib/session';
 
 export default async function AccountDisplayPage() {
   await requireSession();
   const t = await getTranslations('account');
-  const brand = await getBrandPreference();
+  const brandSettings = await loadPlatformBrandSettings();
+  const personalBrand = await getPersonalBrandCookie();
+  const brand = resolveEffectiveBrand(brandSettings, personalBrand);
 
   const response = await apiFetch('/api/v1/me');
   if (!response.ok) {
@@ -29,7 +35,12 @@ export default async function AccountDisplayPage() {
   return (
     <div className="grid gap-6">
       <PageHeader title={t('display')} description={t('displaySubtitle')} />
-      <BrandPicker initialBrand={brand} />
+      <BrandPicker
+        initialBrand={brand}
+        defaultBrand={brandSettings.defaultBrand}
+        locked={brandSettings.locked}
+        personalOverride={Boolean(personalBrand)}
+      />
       <DisplayPrefsForm
         initialPrefs={mergeDisplayPrefs(user.displayPrefs)}
       />

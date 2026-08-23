@@ -5,7 +5,11 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeScript } from '../components/ThemeScript';
 import { ToastProvider } from '../components/ui';
-import { getBrandPreference } from '../lib/brand-actions';
+import {
+  getPersonalBrandCookie,
+  loadPlatformBrandSettings,
+} from '../lib/brand-actions';
+import { resolveEffectiveBrand } from '../lib/brand';
 import { getThemePreference } from '../lib/theme-actions';
 import './globals.css';
 
@@ -53,7 +57,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const locale = await getLocale();
   const messages = await getMessages();
   const themePreference = await getThemePreference();
-  const brand = await getBrandPreference();
+  const brandSettings = await loadPlatformBrandSettings();
+  const personalBrand = await getPersonalBrandCookie();
+  const brand = resolveEffectiveBrand(brandSettings, personalBrand);
   const ssrTheme = themePreference === 'dark' ? 'dark' : 'light';
 
   return (
@@ -62,10 +68,15 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       className={`${sans.variable} ${display.variable} ${mono.variable}${ssrTheme === 'dark' ? ' dark' : ''}`}
       data-theme={ssrTheme}
       data-brand={brand}
+      data-brand-default={brandSettings.defaultBrand}
+      data-brand-locked={brandSettings.locked ? '1' : '0'}
       suppressHydrationWarning
     >
       <body className="font-sans">
-        <ThemeScript />
+        <ThemeScript
+          brandDefault={brandSettings.defaultBrand}
+          brandLocked={brandSettings.locked}
+        />
         <NextIntlClientProvider messages={messages}>
           <ToastProvider>{children}</ToastProvider>
         </NextIntlClientProvider>

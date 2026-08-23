@@ -5,6 +5,16 @@ export type BrandId = (typeof brandIds)[number];
 
 export const defaultBrand: BrandId = 'knowhub';
 
+export type PlatformBrandSettings = {
+  defaultBrand: BrandId;
+  locked: boolean;
+};
+
+export const fallbackBrandSettings: PlatformBrandSettings = {
+  defaultBrand,
+  locked: false,
+};
+
 export const brandMeta: Record<
   BrandId,
   { label: string; description: string }
@@ -38,6 +48,14 @@ export function isBrandId(value: string | undefined | null): value is BrandId {
 
 export function parseBrand(value: string | undefined | null): BrandId {
   return isBrandId(value) ? value : defaultBrand;
+}
+
+export function resolveEffectiveBrand(
+  settings: PlatformBrandSettings,
+  personalBrand: string | undefined | null,
+): BrandId {
+  if (settings.locked) return settings.defaultBrand;
+  return isBrandId(personalBrand) ? personalBrand : settings.defaultBrand;
 }
 
 export function applyBrand(brand: BrandId): void {

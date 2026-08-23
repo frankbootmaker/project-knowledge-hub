@@ -355,7 +355,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         icon: 'brand',
         labelKey: 'adminBrand',
         adminOnly: true,
-        href: () => '/account/display#brand',
+        href: () => '/admin/brand',
       },
       {
         id: 'admin-users',
@@ -569,7 +569,7 @@ export function matchNavItem(
     return pathname.startsWith('/admin/monitoring') && hash !== 'backups';
   }
   if (item.id === 'admin-brand') {
-    return pathname.startsWith('/account/display') && hash === 'brand';
+    return pathname.startsWith('/admin/brand');
   }
 
   const params = new URLSearchParams(

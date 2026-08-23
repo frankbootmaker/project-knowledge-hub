@@ -46,6 +46,14 @@ type StatusFilter =
   | 'pending_email'
   | 'pending_approval';
 
+const DEFAULT_PAGE_SIZE = 5;
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
+type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
+
+function isPageSizeOption(value: number): value is PageSizeOption {
+  return (PAGE_SIZE_OPTIONS as readonly number[]).includes(value);
+}
+
 function statusTone(status: string): 'success' | 'warn' | 'danger' | 'neutral' | 'brand' {
   if (status === 'active') return 'success';
   if (status === 'disabled') return 'danger';
@@ -100,6 +108,8 @@ export function UsersAdmin({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
 
   const [editUser, setEditUser] = useState<PublicUser | null>(null);
   const [editDisplayName, setEditDisplayName] = useState('');
@@ -146,6 +156,29 @@ export function UsersAdmin({
       ),
     [filteredUsers],
   );
+
+  const totalPages = Math.max(1, Math.ceil(otherUsers.length / pageSize) || 1);
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const pageUsers = otherUsers.slice(pageStart, pageStart + pageSize);
+  const rangeFrom = otherUsers.length === 0 ? 0 : pageStart + 1;
+  const rangeTo = Math.min(pageStart + pageSize, otherUsers.length);
+
+  function updateSearchQuery(value: string) {
+    setSearchQuery(value);
+    setPage(1);
+  }
+
+  function updateStatusFilter(value: StatusFilter) {
+    setStatusFilter(value);
+    setPage(1);
+  }
+
+  function updatePageSize(raw: string) {
+    const parsed = Number(raw);
+    setPageSize(isPageSizeOption(parsed) ? parsed : DEFAULT_PAGE_SIZE);
+    setPage(1);
+  }
 
   function statusLabel(status: string): string {
     if (status === 'pending_email') return t('statusPendingEmail');
@@ -545,26 +578,39 @@ export function UsersAdmin({
           <Input
             type="search"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => updateSearchQuery(e.target.value)}
             placeholder={t('usersSearchPlaceholder')}
             aria-label={t('usersSearchPlaceholder')}
           />
         }
         filters={
-          <Select
-            value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as StatusFilter)
-            }
-            aria-label={t('usersFilterStatus')}
-          >
-            <option value="all">{t('usersFilterAll')}</option>
-            <option value="active">{t('statusActive')}</option>
-            <option value="disabled">{t('statusDisabled')}</option>
-            <option value="invited">{t('statusInvited')}</option>
-            <option value="pending_email">{t('statusPendingEmail')}</option>
-            <option value="pending_approval">{t('statusPendingApproval')}</option>
-          </Select>
+          <>
+            <Select
+              value={statusFilter}
+              onChange={(e) =>
+                updateStatusFilter(e.target.value as StatusFilter)
+              }
+              aria-label={t('usersFilterStatus')}
+            >
+              <option value="all">{t('usersFilterAll')}</option>
+              <option value="active">{t('statusActive')}</option>
+              <option value="disabled">{t('statusDisabled')}</option>
+              <option value="invited">{t('statusInvited')}</option>
+              <option value="pending_email">{t('statusPendingEmail')}</option>
+              <option value="pending_approval">{t('statusPendingApproval')}</option>
+            </Select>
+            <Select
+              value={String(pageSize)}
+              onChange={(e) => updatePageSize(e.target.value)}
+              aria-label={t('pageSize')}
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={String(size)}>
+                  {t('pageSizeOption', { count: size })}
+                </option>
+              ))}
+            </Select>
+          </>
         }
         actions={
           <Button
@@ -1066,19 +1112,56 @@ export function UsersAdmin({
         ) : otherUsers.length === 0 ? (
           <p className="kh-ops-empty">{t('emptyOtherUsers')}</p>
         ) : (
-          <div className="kh-ops-table-wrap">
-            <table className="kh-ops-data-table">
-              <thead>
-                <tr>
-                  <th>{t('colName')}</th>
-                  <th>{t('colEmail')}</th>
-                  <th>{t('colStatus')}</th>
-                  <th>{t('colActions')}</th>
-                </tr>
-              </thead>
-              <tbody>{otherUsers.map((user) => renderUserRow(user))}</tbody>
-            </table>
-          </div>
+          <>
+            <div className="kh-ops-table-wrap">
+              <table className="kh-ops-data-table">
+                <thead>
+                  <tr>
+                    <th>{t('colName')}</th>
+                    <th>{t('colEmail')}</th>
+                    <th>{t('colStatus')}</th>
+                    <th>{t('colActions')}</th>
+                  </tr>
+                </thead>
+                <tbody>{pageUsers.map((user) => renderUserRow(user))}</tbody>
+              </table>
+            </div>
+            <div className="kh-ops-card-foot">
+              <p className="m-0 text-xs text-ink-muted">
+                {t('showing', {
+                  from: rangeFrom,
+                  to: rangeTo,
+                  total: otherUsers.length,
+                })}
+              </p>
+              {totalPages > 1 ? (
+                <nav
+                  className="flex flex-wrap items-center gap-2"
+                  aria-label={t('allUsersTitle')}
+                >
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage(Math.max(1, currentPage - 1))}
+                  >
+                    {t('prevPage')}
+                  </Button>
+                  <span className="kh-page-num-active" aria-current="page">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+                  >
+                    {t('nextPage')}
+                  </Button>
+                </nav>
+              ) : null}
+            </div>
+          </>
         )}
       </section>
     </div>
