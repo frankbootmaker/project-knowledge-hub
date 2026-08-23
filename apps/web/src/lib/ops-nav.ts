@@ -341,7 +341,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         icon: 'backups',
         labelKey: 'adminBackups',
         adminOnly: true,
-        href: () => '/admin/monitoring#backups',
+        href: () => '/admin/backups',
       },
       {
         id: 'admin-mcp',
@@ -563,10 +563,10 @@ export function matchNavItem(
     return pathname === '/admin';
   }
   if (item.id === 'admin-backups') {
-    return pathname.startsWith('/admin/monitoring') && hash === 'backups';
+    return pathname.startsWith('/admin/backups');
   }
   if (item.id === 'admin-monitoring') {
-    return pathname.startsWith('/admin/monitoring') && hash !== 'backups';
+    return pathname.startsWith('/admin/monitoring');
   }
   if (item.id === 'admin-brand') {
     return pathname.startsWith('/admin/brand');

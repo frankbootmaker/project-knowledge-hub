@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
-import { MonitoringDashboard } from '../../../../components/admin/MonitoringDashboard';
-import type { MonitoringPayload } from '../../../../components/admin/monitoring-types';
+import { BackupsAdmin } from '../../../../components/admin/BackupsAdmin';
+import { type MonitoringPayload } from '../../../../components/admin/monitoring-types';
 import { apiFetch } from '../../../../lib/session';
 
 const emptyPayload = (loadError: string): MonitoringPayload => ({
@@ -77,18 +77,9 @@ const emptyPayload = (loadError: string): MonitoringPayload => ({
   },
 });
 
-export default async function AdminMonitoringPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default async function AdminBackupsPage() {
   const t = await getTranslations('admin');
-  const params = await searchParams;
-  const rawRange = typeof params.range === 'string' ? params.range : '24h';
-  const range =
-    rawRange === '1h' || rawRange === '7d' || rawRange === '24h' ? rawRange : '24h';
-
-  const response = await apiFetch(`/api/v1/admin/monitoring?range=${range}`);
+  const response = await apiFetch('/api/v1/admin/monitoring?range=24h');
   let payload: MonitoringPayload;
   if (response.ok) {
     payload = (await response.json()) as MonitoringPayload;
@@ -100,16 +91,15 @@ export default async function AdminMonitoringPage({
       ? ` ${body.error.code ? `[${body.error.code}] ` : ''}${body.error.message}`
       : '';
     payload = emptyPayload(
-      `Monitoring API returned HTTP ${response.status}.${detail} Check web API_URL / NEXT_REWRITE_API_ORIGIN reaches the api service (Dokploy: http://api:3101).`,
+      `Monitoring API returned HTTP ${response.status}.${detail}`,
     );
   }
 
   return (
-    <MonitoringDashboard
-      title={t('monitoring')}
-      description={t('monitoringBlurb')}
+    <BackupsAdmin
+      title={t('backupsPageTitle')}
+      description={t('backupsPageBlurb')}
       initial={payload}
-      initialRange={range}
     />
   );
 }

@@ -49,7 +49,7 @@ export function PageHeader({
   nav?: ReactNode;
 }) {
   return (
-    <div className="mb-4">
+    <div>
       <div className="kh-ops-view-intro">
         <div className="min-w-0">
           {eyebrow ? <p className="kh-ops-eyebrow">{eyebrow}</p> : null}
