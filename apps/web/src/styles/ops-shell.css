@@ -1134,8 +1134,26 @@ html[data-theme='dark'] .kh-ops-nav-items a.active {
 
 .kh-ops-data-table {
   width: 100%;
-  min-width: 0;
+  min-width: 42rem;
   border-collapse: collapse;
+  table-layout: auto;
+}
+
+.kh-ops-data-table--wide {
+  min-width: 56rem;
+}
+
+.kh-ops-data-table th.kh-ops-cell-wrap,
+.kh-ops-data-table td.kh-ops-cell-wrap {
+  white-space: normal;
+  vertical-align: top;
+}
+
+.kh-ops-scope-list--inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
 }
 
 .kh-ops-data-table th,

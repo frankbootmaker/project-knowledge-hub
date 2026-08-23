@@ -76,6 +76,28 @@ function matchesClientSearch(client: PublicApiClient, query: string): boolean {
   return haystack.includes(query);
 }
 
+function formatLastUsed(at: string | null, neverLabel: string): string {
+  if (!at) return neverLabel;
+  const seconds = Math.floor((Date.now() - new Date(at).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds < 86400 * 30) return `${Math.floor(seconds / 86400)}d`;
+  return at.slice(0, 10);
+}
+
+function ScopeTags({ scopes }: { scopes: string[] }) {
+  return (
+    <div className="kh-ops-scope-list kh-ops-scope-list--inline">
+      {scopes.map((scope) => (
+        <span key={scope} className="kh-ops-tag">
+          {scope}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function ApiClientsAdmin({
   initialClients,
   organizations,
@@ -166,6 +188,16 @@ export function ApiClientsAdmin({
     if (!userId) return '—';
     const user = users.find((item) => item.id === userId);
     return user ? `${user.displayName} (${user.email})` : userId;
+  }
+
+  function actingUserLabel(userId: string | null | undefined): string {
+    if (!userId) return '—';
+    const user = users.find((item) => item.id === userId);
+    return user?.displayName ?? userId;
+  }
+
+  function orgName(orgId: string): string {
+    return organizations.find((org) => org.id === orgId)?.name ?? '—';
   }
 
   function workspaceNames(ids: string[]): string {
@@ -760,12 +792,16 @@ export function ApiClientsAdmin({
             {t('pendingApiClientsHint')}
           </p>
           <div className="kh-ops-table-wrap">
-            <table className="kh-ops-data-table">
+            <table className="kh-ops-data-table kh-ops-data-table--wide">
               <thead>
                 <tr>
                   <th>{t('colName')}</th>
+                  <th>{t('organization')}</th>
+                  <th className="kh-ops-cell-wrap">{t('colScopes')}</th>
+                  <th className="kh-ops-cell-wrap">{t('allowedWorkspaces')}</th>
+                  <th>{t('actingUser')}</th>
+                  <th>{t('lastUsed')}</th>
                   <th>{t('colStatus')}</th>
-                  <th>{t('colScopes')}</th>
                   <th>{t('colActions')}</th>
                 </tr>
               </thead>
@@ -773,19 +809,29 @@ export function ApiClientsAdmin({
                 {pendingClients.map((client) => (
                   <tr key={client.id}>
                     <td className="kh-ops-primary-cell">
-                      {client.name}
-                      <div className="text-[11px] font-normal text-ink-muted">
+                      <div>{client.name}</div>
+                      <div className="mt-0.5 text-[11px] font-normal text-ink-muted">
                         {t('requestedBy')}: {userLabel(client.requestedByUserId)}
                       </div>
+                    </td>
+                    <td>{orgName(client.organizationId)}</td>
+                    <td className="kh-ops-cell-wrap">
+                      <ScopeTags scopes={client.scopes} />
+                    </td>
+                    <td className="kh-ops-cell-wrap">
+                      {workspaceNames(client.allowedWorkspaceIds)}
+                    </td>
+                    <td className="kh-ops-cell-wrap">
+                      {actingUserLabel(client.actingUserId)}
+                    </td>
+                    <td className="font-mono text-[11px]">
+                      {formatLastUsed(client.lastUsedAt, t('monitoringNever'))}
                     </td>
                     <td>
                       <Badge tone="brand">{t('statusPendingApproval')}</Badge>
                       {client.agentLabel ? (
                         <Badge tone="neutral">{client.agentLabel}</Badge>
                       ) : null}
-                    </td>
-                    <td className="font-mono text-[11px]">
-                      {client.scopes.join(', ')}
                     </td>
                     <td>
                       <div className="flex flex-wrap gap-2">
@@ -832,12 +878,16 @@ export function ApiClientsAdmin({
           <p className="kh-ops-empty">{t('emptyActiveClientsFiltered')}</p>
         ) : (
           <div className="kh-ops-table-wrap">
-            <table className="kh-ops-data-table">
+            <table className="kh-ops-data-table kh-ops-data-table--wide">
               <thead>
                 <tr>
                   <th>{t('colName')}</th>
-                  <th>{t('tokenPrefix')}</th>
-                  <th>{t('colScopes')}</th>
+                  <th>{t('organization')}</th>
+                  <th className="kh-ops-cell-wrap">{t('colScopes')}</th>
+                  <th className="kh-ops-cell-wrap">{t('allowedWorkspaces')}</th>
+                  <th>{t('actingUser')}</th>
+                  <th>{t('lastUsed')}</th>
+                  <th>{t('colStatus')}</th>
                   <th>{t('colActions')}</th>
                 </tr>
               </thead>
@@ -845,15 +895,28 @@ export function ApiClientsAdmin({
                 {activeClients.map((client) => (
                   <tr key={client.id}>
                     <td className="kh-ops-primary-cell">
-                      {client.name}
-                      <div className="text-[11px] font-normal text-ink-muted">
-                        {t('allowedWorkspaces')}:{' '}
-                        {workspaceNames(client.allowedWorkspaceIds)}
-                      </div>
+                      <div>{client.name}</div>
+                      {client.tokenPrefix ? (
+                        <div className="mt-0.5 font-mono text-[10px] font-normal text-ink-muted">
+                          {client.tokenPrefix}…
+                        </div>
+                      ) : null}
                     </td>
-                    <td className="font-mono">{client.tokenPrefix ?? '—'}</td>
+                    <td>{orgName(client.organizationId)}</td>
+                    <td className="kh-ops-cell-wrap">
+                      <ScopeTags scopes={client.scopes} />
+                    </td>
+                    <td className="kh-ops-cell-wrap">
+                      {workspaceNames(client.allowedWorkspaceIds)}
+                    </td>
+                    <td className="kh-ops-cell-wrap">
+                      {actingUserLabel(client.actingUserId)}
+                    </td>
                     <td className="font-mono text-[11px]">
-                      {client.scopes.join(', ')}
+                      {formatLastUsed(client.lastUsedAt, t('monitoringNever'))}
+                    </td>
+                    <td>
+                      <Badge tone="success">{t('statusActive')}</Badge>
                     </td>
                     <td>
                       <div className="flex flex-wrap gap-2">
