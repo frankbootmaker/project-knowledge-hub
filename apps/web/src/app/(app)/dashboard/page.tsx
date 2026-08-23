@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { DashboardInsightWidgets } from '../../../components/DashboardInsightWidgets';
 import { DashboardMyTasks } from '../../../components/DashboardMyTasks';
+import { DashboardRecentList } from '../../../components/DashboardRecentList';
 import { OpsCountStrip } from '../../../components/ops/OpsCountStrip';
 import {
   Badge,
@@ -22,15 +23,6 @@ function roleLabel(
   if (role === 'reader') return t('roleReader');
   if (role === 'system_admin') return t('roleSystemAdmin');
   return null;
-}
-
-function kindLabel(
-  kind: 'project' | 'system' | 'record',
-  t: Awaited<ReturnType<typeof getTranslations>>,
-) {
-  if (kind === 'project') return t('kindProject');
-  if (kind === 'system') return t('kindSystem');
-  return t('kindRecord');
 }
 
 export default async function DashboardPage() {
@@ -81,12 +73,12 @@ export default async function DashboardPage() {
         ]}
       />
 
-      <DashboardMyTasks tasks={data.myTasks} />
-
       <DashboardInsightWidgets
         insights={data.insights}
         prefs={data.displayPrefs.dashboardWidgets}
       />
+
+      <DashboardMyTasks tasks={data.myTasks} />
 
       <section className="kh-ops-panel">
         <div className="kh-ops-panel-head">
@@ -172,47 +164,7 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <section className="kh-ops-panel">
-        <div className="kh-ops-panel-head">
-          <h2 className="kh-ops-panel-title">{t('recentTitle')}</h2>
-        </div>
-        {data.recent.length === 0 ? (
-          <p className="kh-ops-empty">{t('recentEmpty')}</p>
-        ) : (
-          <div className="kh-ops-table-wrap">
-            <table className="kh-ops-data-table">
-              <thead>
-                <tr>
-                  <th>{t('colWorkItem')}</th>
-                  <th>{t('colKind')}</th>
-                  <th>{t('colWorkspace')}</th>
-                  <th>{t('colUpdated')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recent.map((item) => (
-                  <tr key={`${item.kind}-${item.id}`}>
-                    <td className="kh-ops-primary-cell">
-                      <Link href={item.href} className="no-underline">
-                        {item.title}
-                      </Link>
-                    </td>
-                    <td>
-                      <span className="kh-ops-type-chip">{kindLabel(item.kind, t)}</span>
-                    </td>
-                    <td>{item.workspaceName}</td>
-                    <td>
-                      <time dateTime={item.updatedAt}>
-                        {new Date(item.updatedAt).toLocaleString()}
-                      </time>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <DashboardRecentList items={data.recent} />
     </Page>
   );
 }

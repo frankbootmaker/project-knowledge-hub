@@ -30,7 +30,7 @@ async function logoutAction() {
     });
   }
   cookieStore.delete(cookieName);
-  redirect('/login');
+  redirect('/');
 }
 
 function LogOutIcon() {

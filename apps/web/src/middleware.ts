@@ -32,9 +32,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers } });
   }
 
-  const isPublic = publicPaths.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
-  );
+  const isPublic =
+    pathname === '/'
+    || publicPaths.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    );
 
   const cookieName = process.env.SESSION_COOKIE_NAME ?? 'kh_session';
   const hasSession = Boolean(request.cookies.get(cookieName)?.value);

@@ -2,6 +2,7 @@
 @import 'highlight.js/styles/github.css';
 @import '../styles/tokens.css';
 @import '../styles/ops-shell.css';
+@import '../styles/landing.css';
 
 @theme {
   --font-sans: var(--font-ibm-plex-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
