@@ -1,19 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="KnowHub">
-  <!-- KnowHub favicon: navy tile + white K with hub cutout in the stem -->
-  <rect width="32" height="32" rx="8" fill="#1F4B73"/>
-  <!-- Bold geometric K -->
-  <path
-    fill="#FFFFFF"
-    d="M7.25 5.75h6.1v8.55L21.9 5.75h5.35L18.2 16l9.05 10.25H21.9L13.35 17.7v8.55h-6.1V5.75z"
-  />
-  <!-- Hub motif (brand blue cutouts in the K stem) -->
-  <g fill="#1F4B73" stroke="#1F4B73" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="10.3" y1="16" x2="8.15" y2="12.55" stroke-width="1.35"/>
-    <line x1="10.3" y1="16" x2="7.55" y2="16" stroke-width="1.35"/>
-    <line x1="10.3" y1="16" x2="8.15" y2="19.45" stroke-width="1.35"/>
-    <circle cx="10.3" cy="16" r="1.55" fill="#1F4B73" stroke="none"/>
-    <circle cx="8.15" cy="12.55" r="1.05" fill="#1F4B73" stroke="none"/>
-    <circle cx="7.55" cy="16" r="1.05" fill="#1F4B73" stroke="none"/>
-    <circle cx="8.15" cy="19.45" r="1.05" fill="#1F4B73" stroke="none"/>
+  <!-- Ops Console mark: ink tile + white KH (matches .kh-ops-brand-symbol) -->
+  <rect width="32" height="32" rx="3" fill="#111811"/>
+  <!-- Geometric KH — IBM Plex Mono weight, tight tracking -->
+  <g fill="#FFFFFF">
+    <!-- K stem -->
+    <rect x="5.5" y="7" width="3.2" height="18"/>
+    <!-- K arms (joined at mid stem) -->
+    <polygon points="8.7,16 15.4,7 18.6,7 11.1,16 18.6,25 15.4,25"/>
+    <!-- H left stem -->
+    <rect x="19.4" y="7" width="3.2" height="18"/>
+    <!-- H right stem -->
+    <rect x="25.3" y="7" width="3.2" height="18"/>
+    <!-- H crossbar -->
+    <rect x="19.4" y="14.4" width="9.1" height="3.2"/>
   </g>
 </svg>
