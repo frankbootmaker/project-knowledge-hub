@@ -7,6 +7,7 @@ import {
 } from '../plugins/auth.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { migrateLocalBlobsToS3 } from '../lib/blob-migrate.js';
+import { summarizeLocalBlobUsage } from '../lib/blob-usage.js';
 import {
   BLOB_SETTINGS_KEY,
   clearStoredBlobSettings,
@@ -36,7 +37,13 @@ export async function registerBlobSettingsRoutes(app: FastifyInstance): Promise<
     const principal = requireAuthenticated(request);
     requireSystemAdmin(principal);
     const settings = await getPublicBlobSettings(app.database, app.env);
-    return { settings };
+    const usage = await summarizeLocalBlobUsage({
+      avatarUploadDir: app.env.AVATAR_UPLOAD_DIR,
+      mediaUploadDir: app.env.MEDIA_UPLOAD_DIR,
+      documentImportDir: app.env.DOCUMENT_IMPORT_DIR,
+      stylePackUploadDir: app.env.STYLE_PACK_UPLOAD_DIR,
+    });
+    return { settings, usage };
   });
 
   app.put('/api/v1/admin/storage-settings', async (request) => {

@@ -2903,7 +2903,7 @@ button.kh-ops-project-card:disabled {
 
 .kh-ops-storage-choice {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -2935,6 +2935,80 @@ button.kh-ops-project-card:disabled {
   color: var(--kh-ink-muted);
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 10px;
+}
+
+.kh-ops-budget-box {
+  padding: 15px;
+}
+
+.kh-ops-big-pair {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kh-ops-big-pair strong {
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-size: 27px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-ops-big-pair span {
+  color: var(--kh-ink-muted);
+  font-size: 12px;
+}
+
+.kh-ops-disk-strip {
+  height: 12px;
+  margin: 12px 0;
+  background: var(--kh-line);
+}
+
+.kh-ops-disk-strip i {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  background: var(--kh-ink);
+}
+
+.kh-ops-purpose-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--kh-line);
+  font-size: 12px;
+}
+
+.kh-ops-purpose-row:last-child {
+  border-bottom: 0;
+}
+
+.kh-ops-purpose-row span:nth-child(2) {
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-ops-migration-progress {
+  height: 6px;
+  background: var(--kh-line);
+}
+
+.kh-ops-migration-progress i {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  background: var(--kh-accent);
+}
+
+.kh-ops-grid-main {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .kh-ops-stage-strip {
@@ -3509,6 +3583,7 @@ button.kh-ops-stage-card:disabled {
   .kh-ops-budget-layout,
   .kh-ops-project-grid,
   .kh-ops-storage-choice,
+  .kh-ops-grid-main,
   .kh-ops-stage-strip {
     grid-template-columns: 1fr 1fr;
   }
@@ -3629,6 +3704,7 @@ button.kh-ops-stage-card:disabled {
   .kh-ops-cost-split,
   .kh-ops-form-grid,
   .kh-ops-storage-choice,
+  .kh-ops-grid-main,
   .kh-ops-stage-strip,
   .kh-ops-setup-grid,
   .kh-ops-admin-link-grid,
