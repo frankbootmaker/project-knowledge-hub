@@ -1,9 +1,10 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// next.config.mts: Next 16 compiles next.config.ts as CJS; import.meta then
+// yields "exports is not defined in ES module scope". Use .mts + import.meta.dirname.
+const configDir = import.meta.dirname;
 // Prefer NEXT_REWRITE_API_ORIGIN (Docker build) so a host/Dokploy API_URL=localhost
 // cannot bake broken rewrites into the web image.
 const apiUrl =
@@ -13,13 +14,13 @@ const apiUrl =
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const mcpSchemasPath = path.join(
-  __dirname,
+  configDir,
   '../../packages/mcp/src/llm-client-schemas.ts',
 );
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  outputFileTracingRoot: path.join(__dirname, '../..'),
+  outputFileTracingRoot: path.join(configDir, '../..'),
   poweredByHeader: false,
   // Soft navigations must not serve stale RSC payloads for catalogue lists.
   experimental: {
@@ -44,6 +45,9 @@ const nextConfig: NextConfig = {
       '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
     },
   },
+  // Mermaid/d3 named ESM re-exports still need Webpack aliases. Next 16 defaults
+  // to Turbopack for `next build`; keep `--webpack` in package.json until these
+  // aliases are ported fully to `turbopack.resolveAlias`.
   webpack: (config) => {
     // mcp/schemas aliases to TypeScript sources; sibling ESM imports use `.js`
     // (e.g. ./llm-tool-catalog.js → llm-tool-catalog.ts).
@@ -56,8 +60,8 @@ const nextConfig: NextConfig = {
       '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
       // Webpack fails named ESM re-exports from the d3 umbrella (mermaid → d3).
       // Pin to d3-shape/d3-path v3 src (pnpm overrides keep these off d3-sankey's 1.x).
-      'd3-path': path.resolve(__dirname, '../../node_modules/d3-path/src/index.js'),
-      'd3-shape': path.resolve(__dirname, '../../node_modules/d3-shape/src/index.js'),
+      'd3-path': path.resolve(configDir, '../../node_modules/d3-path/src/index.js'),
+      'd3-shape': path.resolve(configDir, '../../node_modules/d3-shape/src/index.js'),
     };
     return config;
   },

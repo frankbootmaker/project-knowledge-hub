@@ -10,7 +10,7 @@ const publicPaths = [
   '/ai-discover',
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // OAuth discovery probes (mcp-remote, Claude, etc.) must not get a login HTML

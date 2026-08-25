@@ -103,7 +103,7 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 
 **AI translation / long LLM calls return non-JSON / `Internal Server Error` in the browser:** the UI expected JSON but got HTML, empty body, or plain-text `Internal Server Error`. Two common causes while the API waits on the model (often 60–120s+ for local Ollama):
 
-1. **Next.js rewrite proxy** defaults to **30s** (`experimental.proxyTimeout`). KnowHub sets this to **600s** in `apps/web/next.config.ts` — rebuild/redeploy **nd-web** after pulling that change. Local `pnpm run dev` must restart so Next reloads the config.
+1. **Next.js rewrite proxy** defaults to **30s** (`experimental.proxyTimeout`). KnowHub sets this to **600s** in `apps/web/next.config.mts` — rebuild/redeploy **nd-web** after pulling that change. Local `pnpm run dev` must restart so Next reloads the config.
 2. **Traefik gateway timeout** (default ~60s). Raise entrypoint timeouts on the Dokploy host (`/etc/dokploy/traefik/traefik.yml`), then reload Traefik:
 
 ```yaml
