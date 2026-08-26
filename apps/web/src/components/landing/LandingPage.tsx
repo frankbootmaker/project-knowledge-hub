@@ -80,31 +80,31 @@ export function LandingPage({
         <section className="kh-lp-section">
           <div className="kh-lp-shell">
             <div className="kh-lp-section-heading">
-              <span className="kh-lp-section-index">01 / USERS</span>
+              <span className="kh-lp-section-index">01 / TOGETHER</span>
               <h2>{t('audienceTitle')}</h2>
             </div>
             <div className="kh-lp-audience-grid">
               <article className="kh-lp-audience-card">
-                <div className="kh-lp-card-label">{t('operatorLabel')}</div>
-                <h3>{t('operatorTitle')}</h3>
-                <p>{t('operatorBody')}</p>
+                <div className="kh-lp-card-label">{t('peopleLabel')}</div>
+                <h3>{t('peopleTitle')}</h3>
+                <p>{t('peopleBody')}</p>
                 <ul className="kh-lp-clean-list">
                   <li>{t('control')}</li>
                   <li>{t('catalogue')}</li>
-                  <li>{t('audit')}</li>
-                  <li>AI / MCP</li>
+                  <li>{t('delivery')}</li>
+                  <li>{t('budget')}</li>
+                  <li>{t('stakeholders')}</li>
                 </ul>
               </article>
               <article className="kh-lp-audience-card">
-                <div className="kh-lp-card-label">{t('teamLabel')}</div>
-                <h3>{t('teamTitle')}</h3>
-                <p>{t('teamBody')}</p>
+                <div className="kh-lp-card-label">{t('aiLabel')}</div>
+                <h3>{t('aiTitle')}</h3>
+                <p>{t('aiBody')}</p>
                 <ul className="kh-lp-clean-list">
-                  <li>{t('records')}</li>
-                  <li>{t('delivery')}</li>
-                  <li>{t('budget')}</li>
-                  <li>RAID</li>
-                  <li>{t('stakeholders')}</li>
+                  <li>{t('mcp')}</li>
+                  <li>{t('scopedAccess')}</li>
+                  <li>{t('sharedKnowledge')}</li>
+                  <li>{t('audit')}</li>
                 </ul>
               </article>
             </div>

@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('landing');
   return {
     title: {
-      absolute: 'KnowHub — Project knowledge, managed',
+      absolute: 'KnowHub — Where people and AI share the work',
     },
     description: t('heroBody'),
   };
