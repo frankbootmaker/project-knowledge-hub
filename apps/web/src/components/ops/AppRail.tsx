@@ -16,9 +16,11 @@ import { userMonogram } from '../../lib/monogram';
 import {
   findActiveNavItem,
   inferNavSection,
-  NAV_SECTIONS,
   parseAppPath,
   parseNavSection,
+  resolveActiveNavSection,
+  visibleNavItems,
+  visibleNavSections,
   type NavContext,
   type NavSectionId,
 } from '../../lib/ops-nav';
@@ -103,11 +105,38 @@ export function AppRail({
     }
   }, [pathParts.workspaceSlug, pathParts.projectSlug]);
 
+  const ctx: NavContext = useMemo(() => {
+    const workspaceSlug =
+      pathParts.workspaceSlug
+      || lastProject?.workspaceSlug
+      || lastWorkspace
+      || workspaces[0]?.slug
+      || null;
+    const projectSlug =
+      pathParts.projectSlug
+      || (lastProject && lastProject.workspaceSlug === workspaceSlug
+        ? lastProject.projectSlug
+        : null);
+    return {
+      workspaceSlug,
+      projectSlug,
+      isAdmin: session.user.isSystemAdmin,
+    };
+  }, [
+    pathParts.workspaceSlug,
+    pathParts.projectSlug,
+    lastProject,
+    lastWorkspace,
+    workspaces,
+    session.user.isSystemAdmin,
+  ]);
+
   useEffect(() => {
     const inferred = inferNavSection(pathname, hash, search);
-    setSection(inferred);
-    writeNavSection(inferred);
-  }, [pathname, hash, search]);
+    const resolved = resolveActiveNavSection(inferred, ctx);
+    setSection(resolved);
+    writeNavSection(resolved);
+  }, [pathname, hash, search, ctx]);
 
   useEffect(() => {
     onOpenChange(false);
@@ -138,35 +167,7 @@ export function AppRail({
     };
   }, [userOpen]);
 
-  const ctx: NavContext = useMemo(() => {
-    const workspaceSlug =
-      pathParts.workspaceSlug
-      || lastProject?.workspaceSlug
-      || lastWorkspace
-      || workspaces[0]?.slug
-      || null;
-    const projectSlug =
-      pathParts.projectSlug
-      || (lastProject && lastProject.workspaceSlug === workspaceSlug
-        ? lastProject.projectSlug
-        : null);
-    return {
-      workspaceSlug,
-      projectSlug,
-      isAdmin: session.user.isSystemAdmin,
-    };
-  }, [
-    pathParts.workspaceSlug,
-    pathParts.projectSlug,
-    lastProject,
-    lastWorkspace,
-    workspaces,
-    session.user.isSystemAdmin,
-  ]);
-
-  const visibleSections = NAV_SECTIONS.filter(
-    (item) => !item.adminOnly || ctx.isAdmin,
-  );
+  const visibleSections = useMemo(() => visibleNavSections(ctx), [ctx]);
   const activeItem = findActiveNavItem(ctx, pathname, hash, search);
   const currentWorkspace =
     workspaces.find((row) => row.slug === ctx.workspaceSlug) ?? workspaces[0];
@@ -178,10 +179,7 @@ export function AppRail({
     }
     const hits: Array<{ href: string; label: string; section: string }> = [];
     for (const group of visibleSections) {
-      for (const item of group.items) {
-        if (item.adminOnly && !ctx.isAdmin) {
-          continue;
-        }
+      for (const item of visibleNavItems(group, ctx)) {
         const label = t(item.labelKey);
         const sectionLabel = t(group.labelKey);
         if (
@@ -200,8 +198,9 @@ export function AppRail({
   }, [jump, visibleSections, ctx, t]);
 
   function selectSection(next: NavSectionId) {
-    setSection(parseNavSection(next));
-    writeNavSection(next);
+    const resolved = resolveActiveNavSection(parseNavSection(next), ctx);
+    setSection(resolved);
+    writeNavSection(resolved);
     setJump('');
   }
 
@@ -350,9 +349,7 @@ export function AppRail({
                   <span className="kh-ops-group-label">{t(group.labelKey)}</span>
                 </div>
                 <div className="kh-ops-nav-items">
-                  {group.items
-                    .filter((item) => !item.adminOnly || ctx.isAdmin)
-                    .map((item) => {
+                  {visibleNavItems(group, ctx).map((item) => {
                       const href = item.href(ctx);
                       const active = activeItem?.id === item.id;
                       return (

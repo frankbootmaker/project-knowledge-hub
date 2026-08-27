@@ -98,11 +98,15 @@ export type NavItemId =
   | 'admin-templates'
   | 'admin-archive';
 
+/** Context needed before an item is offered in the rail. `project` implies workspace. */
+export type NavItemRequires = 'workspace' | 'project';
+
 export type NavItemDef = {
   id: NavItemId;
   icon: NavIconName;
   labelKey: string;
   adminOnly?: boolean;
+  requires?: NavItemRequires;
   href: (ctx: NavContext) => string;
 };
 
@@ -159,36 +163,42 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'overview',
         icon: 'overview',
         labelKey: 'overview',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-overview'),
       },
       {
         id: 'delivery',
         icon: 'delivery',
         labelKey: 'delivery',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=board'),
       },
       {
         id: 'scrum',
         icon: 'scrum',
         labelKey: 'scrum',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=scrum'),
       },
       {
         id: 'timeline',
         icon: 'timeline',
         labelKey: 'timeline',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=timeline'),
       },
       {
         id: 'calendar',
         icon: 'calendar',
         labelKey: 'calendar',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=calendar'),
       },
       {
         id: 'budget',
         icon: 'budget',
         labelKey: 'budget',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-budget'),
       },
     ],
@@ -202,27 +212,28 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'systems',
         icon: 'systems',
         labelKey: 'systems',
-        href: (ctx) =>
-          ctx.projectSlug
-            ? projectHref(ctx, '#project-systems')
-            : workspaceHref(ctx),
+        requires: 'project',
+        href: (ctx) => projectHref(ctx, '#project-systems'),
       },
       {
         id: 'raid',
         icon: 'raid',
         labelKey: 'raid',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-raid'),
       },
       {
         id: 'stakeholders',
         icon: 'stakeholders',
         labelKey: 'stakeholders',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-stakeholders'),
       },
       {
         id: 'utilization',
         icon: 'utilization',
         labelKey: 'utilization',
+        requires: 'project',
         href: (ctx) =>
           projectHref(ctx, '#project-stakeholders', '?utilization=1'),
       },
@@ -230,6 +241,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'org',
         icon: 'org',
         labelKey: 'orgChart',
+        requires: 'project',
         href: (ctx) =>
           projectHref(ctx, '#project-stakeholders', '?stakeholders=org'),
       },
@@ -237,6 +249,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'baseline',
         icon: 'baseline',
         labelKey: 'baseline',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-baseline'),
       },
     ],
@@ -250,6 +263,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'knowledge',
         icon: 'knowledgeItem',
         labelKey: 'knowledgeLibrary',
+        requires: 'workspace',
         href: (ctx) =>
           ctx.projectSlug
             ? projectHref(ctx, '#project-knowledge')
@@ -259,19 +273,21 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'media',
         icon: 'media',
         labelKey: 'mediaLibrary',
+        requires: 'workspace',
         href: (ctx) => workspaceHref(ctx, '/media'),
       },
       {
         id: 'archive',
         icon: 'archive',
         labelKey: 'archive',
-        href: (ctx) =>
-          ctx.workspaceSlug ? workspaceHref(ctx, '/archived') : '/archived',
+        requires: 'workspace',
+        href: (ctx) => workspaceHref(ctx, '/archived'),
       },
       {
         id: 'import',
         icon: 'import',
         labelKey: 'documentImport',
+        requires: 'workspace',
         href: (ctx) => workspaceHref(ctx, '/imports'),
       },
     ],
@@ -291,6 +307,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         id: 'reports',
         icon: 'reports',
         labelKey: 'reports',
+        requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-reports'),
       },
     ],
@@ -409,6 +426,46 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     ],
   },
 ];
+
+export function isNavItemAvailable(item: NavItemDef, ctx: NavContext): boolean {
+  if (item.adminOnly && !ctx.isAdmin) {
+    return false;
+  }
+  if (item.requires === 'project' && !ctx.projectSlug) {
+    return false;
+  }
+  if (item.requires === 'workspace' && !ctx.workspaceSlug) {
+    return false;
+  }
+  return true;
+}
+
+export function visibleNavItems(
+  section: NavSectionDef,
+  ctx: NavContext,
+): NavItemDef[] {
+  return section.items.filter((item) => isNavItemAvailable(item, ctx));
+}
+
+export function visibleNavSections(ctx: NavContext): NavSectionDef[] {
+  return NAV_SECTIONS.filter((section) => {
+    if (section.adminOnly && !ctx.isAdmin) {
+      return false;
+    }
+    return visibleNavItems(section, ctx).length > 0;
+  });
+}
+
+export function resolveActiveNavSection(
+  preferred: NavSectionId,
+  ctx: NavContext,
+): NavSectionId {
+  const visible = visibleNavSections(ctx);
+  if (visible.some((section) => section.id === preferred)) {
+    return preferred;
+  }
+  return visible[0]?.id ?? defaultNavSection;
+}
 
 export function isNavSectionId(
   value: string | undefined | null,
@@ -607,7 +664,7 @@ export function findActiveNavItem(
 ): NavItemDef | null {
   for (const section of NAV_SECTIONS) {
     for (const item of section.items) {
-      if (item.adminOnly && !ctx.isAdmin) {
+      if (!isNavItemAvailable(item, ctx)) {
         continue;
       }
       if (matchNavItem(item, ctx, pathname, hash, search)) {

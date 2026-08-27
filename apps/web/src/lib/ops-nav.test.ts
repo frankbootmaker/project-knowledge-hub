@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   findActiveNavItem,
   inferNavSection,
+  isNavItemAvailable,
   matchNavItem,
   NAV_SECTIONS,
   parseAppPath,
   parseNavSection,
+  resolveActiveNavSection,
+  visibleNavItems,
+  visibleNavSections,
 } from './ops-nav';
 
 const ctx = {
@@ -150,5 +154,80 @@ describe('ops nav', () => {
         'project-overview',
       ),
     ).toBe(false);
+  });
+
+  it('hides delivery and control without a project; keeps personal and ops', () => {
+    const bare = {
+      workspaceSlug: null,
+      projectSlug: null,
+      isAdmin: false,
+    };
+    const ids = visibleNavSections(bare).map((section) => section.id);
+    expect(ids).toEqual(['personal', 'ops']);
+    expect(ids).not.toContain('delivery-finance');
+    expect(ids).not.toContain('control');
+    expect(ids).not.toContain('knowledge');
+    expect(ids).not.toContain('admin');
+  });
+
+  it('shows knowledge with a workspace but not delivery without a project', () => {
+    const workspaceOnly = {
+      workspaceSlug: 'platform',
+      projectSlug: null,
+      isAdmin: false,
+    };
+    const ids = visibleNavSections(workspaceOnly).map((section) => section.id);
+    expect(ids).toContain('personal');
+    expect(ids).toContain('knowledge');
+    expect(ids).toContain('ops');
+    expect(ids).not.toContain('delivery-finance');
+    expect(ids).not.toContain('control');
+  });
+
+  it('shows delivery and control when a project is set', () => {
+    const ids = visibleNavSections(ctx).map((section) => section.id);
+    expect(ids).toEqual([
+      'personal',
+      'delivery-finance',
+      'control',
+      'knowledge',
+      'ops',
+      'admin',
+    ]);
+  });
+
+  it('hides admin for non-admins', () => {
+    const member = {
+      workspaceSlug: 'platform',
+      projectSlug: 'renewal',
+      isAdmin: false,
+    };
+    expect(visibleNavSections(member).map((section) => section.id)).not.toContain(
+      'admin',
+    );
+  });
+
+  it('keeps agents without a project but hides reports', () => {
+    const workspaceOnly = {
+      workspaceSlug: 'platform',
+      projectSlug: null,
+      isAdmin: false,
+    };
+    const ops = NAV_SECTIONS.find((section) => section.id === 'ops')!;
+    const available = visibleNavItems(ops, workspaceOnly).map((item) => item.id);
+    expect(available).toEqual(['agents']);
+    const reports = ops.items.find((item) => item.id === 'reports')!;
+    expect(isNavItemAvailable(reports, workspaceOnly)).toBe(false);
+    expect(isNavItemAvailable(reports, ctx)).toBe(true);
+  });
+
+  it('falls back when the preferred section is not visible', () => {
+    const bare = {
+      workspaceSlug: null,
+      projectSlug: null,
+      isAdmin: false,
+    };
+    expect(resolveActiveNavSection('delivery-finance', bare)).toBe('personal');
+    expect(resolveActiveNavSection('ops', bare)).toBe('ops');
   });
 });
