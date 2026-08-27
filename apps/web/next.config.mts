@@ -17,6 +17,12 @@ const mcpSchemasPath = path.join(
   configDir,
   '../../packages/mcp/src/llm-client-schemas.ts',
 );
+// Turbopack treats absolute alias targets as server-relative (`./home/...`) and
+// fails. It also cannot rewrite sibling `.js` → `.ts` imports the way webpack
+// extensionAlias does, so point Turbopack at the built MCP schemas entry.
+const mcpSchemasDistRel = '../../packages/mcp/dist/llm-client-schemas.js';
+const d3PathAliasRel = '../../node_modules/d3-path/src/index.js';
+const d3ShapeAliasRel = '../../node_modules/d3-shape/src/index.js';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -42,10 +48,11 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['mermaid', 'cytoscape', 'cytoscape-fcose', 'cose-base'],
   turbopack: {
     resolveAlias: {
-      '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
-      // Same pinning as webpack — mermaid/d3-sankey need d3-path v3 `Path` export.
-      'd3-path': path.resolve(configDir, '../../node_modules/d3-path/src/index.js'),
-      'd3-shape': path.resolve(configDir, '../../node_modules/d3-shape/src/index.js'),
+      // Prefer dist so sibling `.js` imports resolve; overrides tsconfig → src.
+      '@project-knowledge-hub/mcp/schemas': mcpSchemasDistRel,
+      // Pin mermaid/d3 to v3 src (relative paths — absolute breaks Turbopack).
+      'd3-path': d3PathAliasRel,
+      'd3-shape': d3ShapeAliasRel,
     },
   },
   // Mermaid/d3 named ESM re-exports still need Webpack aliases. Next 16 defaults
@@ -63,8 +70,8 @@ const nextConfig: NextConfig = {
       '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
       // Webpack fails named ESM re-exports from the d3 umbrella (mermaid → d3).
       // Pin to d3-shape/d3-path v3 src (pnpm overrides keep these off d3-sankey's 1.x).
-      'd3-path': path.resolve(configDir, '../../node_modules/d3-path/src/index.js'),
-      'd3-shape': path.resolve(configDir, '../../node_modules/d3-shape/src/index.js'),
+      'd3-path': path.resolve(configDir, d3PathAliasRel),
+      'd3-shape': path.resolve(configDir, d3ShapeAliasRel),
     };
     return config;
   },
