@@ -63,6 +63,13 @@ export default async function DashboardPage() {
         }
       />
 
+      {session.memberships.length === 0 && !session.user.isSystemAdmin ? (
+        <section className="kh-ops-panel" aria-live="polite">
+          <h2 className="kh-ops-panel-title">{t('waitingWorkspaceTitle')}</h2>
+          <p className="kh-ops-empty m-0">{t('waitingWorkspaceBody')}</p>
+        </section>
+      ) : null}
+
       <OpsCountStrip
         items={[
           { label: t('countAssigned'), value: openTasks.length },

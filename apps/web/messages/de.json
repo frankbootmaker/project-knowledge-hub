@@ -520,6 +520,8 @@
     "myWorkspaces": "Meine Workspaces",
     "viewAllWorkspaces": "Alle anzeigen",
     "emptyWorkspaces": "Sie haben noch keine Workspaces.",
+    "waitingWorkspaceTitle": "Warten auf Workspace-Zugang",
+    "waitingWorkspaceBody": "Sie sind angemeldet. Ein Administrator muss Ihnen noch einen Workspace und eine Rolle zuweisen, bevor Katalog- und Delivery-Funktionen erscheinen.",
     "moreWorkspaces": "+{count} weitere — unter Alle anzeigen finden Sie alle Workspaces.",
     "workspaceCounts": "{projects} Projekte · {systems} Systeme · {records} Einträge",
     "searchTitle": "Wissen suchen",

@@ -154,6 +154,29 @@ export function signupPendingApprovalEmail(input: {
   });
 }
 
+export function ssoUserProvisionedEmail(input: {
+  locale?: string | null;
+  displayName: string;
+  signupDisplayName: string;
+  signupEmail: string;
+  reviewUrl: string;
+}): LinkMailContent {
+  const locale = normalizeAppLocale(input.locale);
+  const m = getMailMessages(locale).ssoUserProvisioned;
+  const name = displayNameOrFallback(input.displayName, locale);
+  const greeting = interpolate(m.greeting, { name });
+  const userLine = interpolate(m.userLabel, { user: input.signupDisplayName });
+  const emailLine = interpolate(m.emailLabel, { email: input.signupEmail });
+  return renderMailLayout({
+    locale,
+    subject: m.subject,
+    title: m.title,
+    bodyHtml: `${p(greeting)}${p(m.body)}${p(userLine)}${p(emailLine)}`,
+    cta: { label: m.cta, url: input.reviewUrl },
+    textLines: [greeting, '', m.body, '', userLine, emailLine, '', input.reviewUrl],
+  });
+}
+
 export function signupPendingEscalationEmail(input: {
   locale?: string | null;
   displayName: string;
@@ -446,6 +469,11 @@ export function adminUsersPendingUrl(webUrl: string): string {
   const url = new URL('/admin/users', `${base}/`);
   url.searchParams.set('status', 'pending_approval');
   return url.toString();
+}
+
+export function adminUsersUrl(webUrl: string): string {
+  const base = webUrl.replace(/\/$/, '');
+  return new URL('/admin/users', `${base}/`).toString();
 }
 
 export function adminMonitoringUrl(webUrl: string): string {

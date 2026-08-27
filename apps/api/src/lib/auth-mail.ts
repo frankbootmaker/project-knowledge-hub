@@ -4,6 +4,7 @@ import {
   emailConfirmEmail,
   accountApprovedEmail,
   signupPendingApprovalEmail,
+  ssoUserProvisionedEmail,
   signupPendingEscalationEmail,
   passwordChangedEmail,
   accountClosedEmail,
@@ -15,6 +16,7 @@ import {
   confirmEmailUrl,
   loginUrl,
   adminUsersPendingUrl,
+  adminUsersUrl,
   aiConnectionsUrl,
   type MailSendResult,
   type MailTransport,
@@ -132,6 +134,31 @@ export async function sendSignupPendingApprovalMail(
     signupDisplayName: input.signupDisplayName,
     signupEmail: input.signupEmail,
     reviewUrl: adminUsersPendingUrl(input.webUrl),
+  });
+  return mail.send({
+    to: input.to,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+  });
+}
+
+export async function sendSsoUserProvisionedMail(
+  mail: MailTransport,
+  input: {
+    webUrl: string;
+    to: string;
+    displayName: string;
+    signupDisplayName: string;
+    signupEmail: string;
+  } & LocaleInput,
+): Promise<MailSendResult> {
+  const content = ssoUserProvisionedEmail({
+    locale: input.locale,
+    displayName: input.displayName,
+    signupDisplayName: input.signupDisplayName,
+    signupEmail: input.signupEmail,
+    reviewUrl: adminUsersUrl(input.webUrl),
   });
   return mail.send({
     to: input.to,

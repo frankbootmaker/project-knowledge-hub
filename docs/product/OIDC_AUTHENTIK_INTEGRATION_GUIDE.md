@@ -26,7 +26,7 @@ After a successful SSO:
 | --- | --- |
 | Azure Blob / AWS storage credentials | Cloud object auth is NF-007 / existing S3 keys — not human SSO |
 | ChatGPT MCP App OAuth | Separate backlog NF-004 |
-| Auto-create users on first SSO | Invite/link only in v1 |
+| Auto-create users on first SSO | Optional via `OIDC_JIT_PROVISIONING=true` (default off = invite/link) |
 | Admin UI for IdP settings | Env vars only in v1 |
 | Multiple OIDC issuers in one UI | Single configured issuer per deployment |
 
@@ -44,7 +44,7 @@ User opens /login
   → User signs in at Authentik
   → GET /api/v1/auth/oidc/callback?code&state
   → KnowHub exchanges code, reads claims / userinfo
-  → Resolve or link KnowHub user (invite/link rules)
+  → Resolve, link, or (if JIT enabled) create KnowHub user
   → Create session + Set-Cookie
   → Redirect to /dashboard
 ```
@@ -61,26 +61,27 @@ The **redirect URI must use `WEB_URL`** (web origin), e.g. `https://knowhub-dev.
 
 ---
 
-## 3. User provisioning (invite / link only)
+## 3. User provisioning
 
-SSO succeeds only if one of these is true:
+SSO succeeds if one of these is true:
 
 1. **Already linked:** a user exists with matching `(idp_source, idp_subject)` and status `active`.
 2. **First-time email link:** an **active** user exists with the same email, IdP fields are empty, and the IdP asserts `email_verified=true` → KnowHub writes `idp_source` / `idp_subject` and continues.
+3. **JIT (optional):** `OIDC_JIT_PROVISIONING=true`, verified email, and no KnowHub user yet → create an **active** user with IdP fields set and **no memberships**. On-duty admins get an email; the user sees a waiting banner on the dashboard until assigned.
 
 Otherwise the user is sent back to login with a query flag:
 
 | Query | Meaning |
 | --- | --- |
-| `?sso=unknown` | No matching / linkable KnowHub account (also when email is present but `email_verified` is false) |
+| `?sso=unknown` | No matching / linkable KnowHub account (also when email is present but `email_verified` is false, or JIT is off) |
 | `?sso=inactive` | Account exists but is not `active` |
 | `?sso=conflict` | Email already linked to a different IdP subject |
 | `?sso=error` | OAuth/state/token failure |
 
 ### Operator checklist before first SSO
 
-1. Create or invite the user in KnowHub (Admin → Users) with the **same email** Authentik will assert.
-2. Ensure status is **active** and they have at least one workspace membership (same rules as password users).
+1. **Invite/link mode (default):** create or invite the user in KnowHub (Admin → Users) with the **same email** Authentik will assert; status **active** with workspace membership.
+2. **JIT mode:** set `OIDC_JIT_PROVISIONING=true`; after first SSO, assign workspace/role in Admin → Users.
 3. Optional: pre-fill **IdP source** / **IdP subject** in Admin → Users if you know Authentik’s `sub` (otherwise first successful SSO links by verified email).
 4. Prefer setting `OIDC_IDP_SOURCE=authentik` so the stored source is stable and readable.
 5. Ensure Authentik issues `email_verified: true` (see §5.1 — required on Authentik ≥ 2025.10).
@@ -92,9 +93,9 @@ Otherwise the user is sent back to login with a query flag:
 | Claim | Use in KnowHub |
 | --- | --- |
 | `sub` | Required → `idp_subject` |
-| `email` | Required for email-link path; stored/matched lower-case |
-| `email_verified` | Must be **true** to link by email |
-| `name` / `preferred_username` | Ignored in v1 (display name stays hub-managed) |
+| `email` | Required for email-link and JIT; stored/matched lower-case |
+| `email_verified` | Must be **true** to link or JIT-create by email |
+| `name` / `preferred_username` | Used as `displayName` on JIT create (else email local-part) |
 
 Scopes requested: `openid email profile`.
 
@@ -160,6 +161,8 @@ OIDC_CLIENT_ID=...
 OIDC_CLIENT_SECRET=...
 OIDC_BUTTON_LABEL=Sign in with Authentik
 OIDC_IDP_SOURCE=authentik
+# Optional: create active users on first verified-email SSO (default false)
+# OIDC_JIT_PROVISIONING=true
 # Optional override (default is {WEB_URL}/api/v1/auth/oidc/callback)
 # OIDC_REDIRECT_URI=https://knowhub-dev.in3.technology/api/v1/auth/oidc/callback
 ```

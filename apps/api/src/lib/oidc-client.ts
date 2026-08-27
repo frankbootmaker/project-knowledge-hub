@@ -24,6 +24,7 @@ export type OidcClaims = {
   subject: string;
   email: string | null;
   emailVerified: boolean;
+  displayName: string | null;
 };
 
 let cachedConfig: { issuer: string; clientId: string; config: Configuration } | null =
@@ -105,9 +106,10 @@ export async function completeOidcAuthorization(
   let email =
     typeof idClaims?.email === 'string' ? idClaims.email.trim().toLowerCase() : null;
   let emailVerified = isEmailVerifiedClaim(idClaims?.email_verified);
+  let displayName = pickDisplayNameClaim(idClaims);
 
   const accessToken = tokens.access_token;
-  if (accessToken && (!email || !emailVerified)) {
+  if (accessToken && (!email || !emailVerified || !displayName)) {
     try {
       const userinfo = await fetchUserInfo(config, accessToken, subject);
       if (!email && typeof userinfo.email === 'string') {
@@ -116,12 +118,15 @@ export async function completeOidcAuthorization(
       if (!emailVerified) {
         emailVerified = isEmailVerifiedClaim(userinfo.email_verified);
       }
+      if (!displayName) {
+        displayName = pickDisplayNameClaim(userinfo);
+      }
     } catch {
       // userinfo optional when ID token already carries email
     }
   }
 
-  return { subject, email, emailVerified };
+  return { subject, email, emailVerified, displayName };
 }
 
 export function oidcStateRedisKey(state: string): string {
@@ -155,4 +160,21 @@ export function parseOidcPendingState(raw: string): OidcPendingState | null {
 
 function isEmailVerifiedClaim(value: unknown): boolean {
   return value === true || value === 'true';
+}
+
+function pickDisplayNameClaim(claims: unknown): string | null {
+  if (!claims || typeof claims !== 'object') {
+    return null;
+  }
+  const record = claims as Record<string, unknown>;
+  for (const key of ['name', 'preferred_username'] as const) {
+    const value = record[key];
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed.slice(0, 120);
+      }
+    }
+  }
+  return null;
 }

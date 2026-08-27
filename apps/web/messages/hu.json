@@ -520,6 +520,8 @@
     "myWorkspaces": "Munkaterületeim",
     "viewAllWorkspaces": "Összes",
     "emptyWorkspaces": "Még nincs munkaterülete.",
+    "waitingWorkspaceTitle": "Workspace-hozzáférésre vár",
+    "waitingWorkspaceBody": "Be vagy jelentkezve. Egy adminisztrátornak még workspace-t és szerepkört kell hozzárendelnie, mielőtt a katalógus és a delivery funkciók megjelennek.",
     "moreWorkspaces": "+{count} további — az Összes alatt minden munkaterület látszik.",
     "workspaceCounts": "{projects} projekt · {systems} rendszer · {records} rekord",
     "searchTitle": "Tudás keresése",

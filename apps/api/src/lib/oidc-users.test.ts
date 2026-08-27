@@ -57,6 +57,7 @@ describe.skipIf(!hasDb)('resolveOidcUser', () => {
     if (result.status === 'ok') {
       expect(result.user.id).toBe(user!.id);
       expect(result.linked).toBe(false);
+      expect(result.created).toBe(false);
     }
   });
 
@@ -84,6 +85,7 @@ describe.skipIf(!hasDb)('resolveOidcUser', () => {
     expect(result.status).toBe('ok');
     if (result.status === 'ok') {
       expect(result.linked).toBe(true);
+      expect(result.created).toBe(false);
       expect(result.user.idpSource).toBe(idpSource);
       expect(result.user.idpSubject).toBe(subject);
     }
@@ -159,5 +161,68 @@ describe.skipIf(!hasDb)('resolveOidcUser', () => {
       emailVerified: true,
     });
     expect(result.status).toBe('conflict');
+  });
+
+  it('creates an active user when JIT is enabled and email is verified', async () => {
+    const suffix = randomUUID();
+    const email = `oidc-jit-${suffix}@example.com`;
+    const subject = `jit-sub-${suffix}`;
+    const result = await resolveOidcUser(database, {
+      idpSource,
+      subject,
+      email,
+      emailVerified: true,
+      displayName: 'JIT User',
+      jitProvisioning: true,
+    });
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      expect(result.created).toBe(true);
+      expect(result.linked).toBe(false);
+      expect(result.user.email).toBe(email);
+      expect(result.user.displayName).toBe('JIT User');
+      expect(result.user.status).toBe('active');
+      expect(result.user.passwordHash).toBeNull();
+      expect(result.user.idpSource).toBe(idpSource);
+      expect(result.user.idpSubject).toBe(subject);
+    }
+  });
+
+  it('does not JIT-create when flag is off or email is unverified', async () => {
+    const suffix = randomUUID();
+    const off = await resolveOidcUser(database, {
+      idpSource,
+      subject: `jit-off-${suffix}`,
+      email: `oidc-jit-off-${suffix}@example.com`,
+      emailVerified: true,
+      jitProvisioning: false,
+    });
+    expect(off.status).toBe('unknown');
+
+    const unverified = await resolveOidcUser(database, {
+      idpSource,
+      subject: `jit-unverif-${suffix}`,
+      email: `oidc-jit-unverif-${suffix}@example.com`,
+      emailVerified: false,
+      jitProvisioning: true,
+    });
+    expect(unverified.status).toBe('unknown');
+  });
+
+  it('uses email local-part when JIT displayName claim is missing', async () => {
+    const suffix = randomUUID();
+    const email = `oidc-local-${suffix}@example.com`;
+    const result = await resolveOidcUser(database, {
+      idpSource,
+      subject: `jit-local-${suffix}`,
+      email,
+      emailVerified: true,
+      jitProvisioning: true,
+    });
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      expect(result.created).toBe(true);
+      expect(result.user.displayName).toBe(`oidc-local-${suffix}`);
+    }
   });
 });

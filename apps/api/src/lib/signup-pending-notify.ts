@@ -5,7 +5,7 @@ import {
 } from '@project-knowledge-hub/domain';
 import { users, type Database } from '@project-knowledge-hub/database';
 import type { MailTransport } from '@project-knowledge-hub/mail';
-import { sendSignupPendingApprovalMail } from './auth-mail.js';
+import { sendSignupPendingApprovalMail, sendSsoUserProvisionedMail } from './auth-mail.js';
 
 export type OnDutyAdmin = {
   id: string;
@@ -72,6 +72,40 @@ export async function notifyAdminsOfSignupPendingApproval(input: {
   await Promise.all(
     recipients.map((admin) =>
       sendSignupPendingApprovalMail(input.mail, {
+        webUrl: input.webUrl,
+        to: admin.email,
+        displayName: admin.displayName,
+        signupDisplayName: input.signup.displayName,
+        signupEmail: input.signup.email,
+        locale: admin.preferredLocale,
+      }).catch(() => undefined),
+    ),
+  );
+
+  return { recipientCount: recipients.length, usedFallback };
+}
+
+/** Reuses signup on-duty pref: notify admins that an SSO user needs workspace assignment. */
+export async function notifyAdminsOfSsoUserProvisioned(input: {
+  database: Database;
+  mail: MailTransport;
+  webUrl: string;
+  signup: { displayName: string; email: string };
+}): Promise<{ recipientCount: number; usedFallback: boolean }> {
+  const admins = await listActiveSystemAdmins(input.database);
+  if (admins.length === 0) {
+    return { recipientCount: 0, usedFallback: false };
+  }
+
+  const onDuty = admins.filter((admin) =>
+    allowsEmailNotification(admin.emailNotificationPrefs, 'signupPendingApproval'),
+  );
+  const recipients = onDuty.length > 0 ? onDuty : admins;
+  const usedFallback = onDuty.length === 0;
+
+  await Promise.all(
+    recipients.map((admin) =>
+      sendSsoUserProvisionedMail(input.mail, {
         webUrl: input.webUrl,
         to: admin.email,
         displayName: admin.displayName,

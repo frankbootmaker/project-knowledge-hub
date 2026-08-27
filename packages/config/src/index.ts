@@ -187,6 +187,11 @@ export const envSchema = z.object({
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().url().optional(),
   ),
+  /** When true, first SSO with verified email creates an active user (no memberships). */
+  OIDC_JIT_PROVISIONING: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   /** Directory for profile avatar binaries (one file per user id). */
   AVATAR_UPLOAD_DIR: z.string().min(1).default('./data/avatars'),
   AVATAR_MAX_BYTES: z.coerce.number().int().positive().default(1024 * 1024),
@@ -505,6 +510,7 @@ export type OidcEnvConfig = {
   buttonLabel: string;
   idpSource: string;
   redirectUri: string;
+  jitProvisioning: boolean;
 };
 
 /** Returns OIDC settings when SSO is fully configured; otherwise null. */
@@ -520,6 +526,7 @@ export function oidcConfigFromEnv(env: AppEnv): OidcEnvConfig | null {
     buttonLabel: env.OIDC_BUTTON_LABEL,
     idpSource: env.OIDC_IDP_SOURCE,
     redirectUri: env.OIDC_REDIRECT_URI ?? `${webBase}/api/v1/auth/oidc/callback`,
+    jitProvisioning: env.OIDC_JIT_PROVISIONING,
   };
 }
 
