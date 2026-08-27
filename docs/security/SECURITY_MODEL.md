@@ -12,7 +12,7 @@
 
 * `users.idp_source` and `users.idp_subject` store the external SSO key (unique together when set)
 * Local password accounts keep both null and continue to use password / invite / reset flows
-* **OIDC v1 (NF-017):** env-configured generic OIDC (Authentik first) — see [`OIDC_IDP.md`](../product/OIDC_IDP.md). Invite/link only (no JIT signup). Same `kh_session` cookie as password login.
+* **OIDC v1 (NF-017):** env-configured generic OIDC (Authentik first) — see [`OIDC_IDP.md`](../product/OIDC_IDP.md). Invite/link by default; optional JIT via `OIDC_JIT_PROVISIONING`. Same `kh_session` cookie as password login.
 * **Planned:** Microsoft Entra ID (**NF-012**) reuses the OIDC path; Entra-auth **Azure Blob** on Admin → Storage remains **NF-007** (separate from human SSO)
 
 ## Auth email flows

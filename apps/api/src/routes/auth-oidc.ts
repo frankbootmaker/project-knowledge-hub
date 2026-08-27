@@ -14,6 +14,7 @@ import {
 } from '../lib/oidc-client.js';
 import { resolveOidcUser } from '../lib/oidc-users.js';
 import { writeAuditEvent } from '../lib/identity.js';
+import { notifyAdminsOfSsoUserProvisioned } from '../lib/signup-pending-notify.js';
 
 function loginRedirect(app: FastifyInstance, ssoError: string): string {
   const url = new URL('/login', app.env.WEB_URL);
@@ -101,6 +102,8 @@ export async function registerOidcAuthRoutes(app: FastifyInstance): Promise<void
         subject: claims.subject,
         email: claims.email,
         emailVerified: claims.emailVerified,
+        displayName: claims.displayName,
+        jitProvisioning: oidc.jitProvisioning,
       });
 
       if (resolved.status === 'unknown' || resolved.status === 'conflict') {
@@ -136,7 +139,7 @@ export async function registerOidcAuthRoutes(app: FastifyInstance): Promise<void
         return reply.redirect(loginRedirect(app, 'inactive'));
       }
 
-      const { user, linked } = resolved;
+      const { user, linked, created } = resolved;
       const token = createSessionToken();
       const expiresAt = new Date(Date.now() + app.env.SESSION_TTL_SECONDS * 1000);
 
@@ -148,15 +151,35 @@ export async function registerOidcAuthRoutes(app: FastifyInstance): Promise<void
         userAgent: request.headers['user-agent'] ?? null,
       });
 
-      await writeAuditEvent(app.database, {
-        actorType: 'user',
-        actorId: user.id,
-        action: linked ? 'auth.oidc_link' : 'auth.oidc_login',
-        entityType: 'user',
-        entityId: user.id,
-        metadata: { idpSource: oidc.idpSource },
-        ipAddress: request.ip,
-      });
+      if (created) {
+        await writeAuditEvent(app.database, {
+          actorType: 'user',
+          actorId: user.id,
+          action: 'auth.oidc_provision',
+          entityType: 'user',
+          entityId: user.id,
+          metadata: { idpSource: oidc.idpSource },
+          ipAddress: request.ip,
+        });
+        await notifyAdminsOfSsoUserProvisioned({
+          database: app.database,
+          mail: app.mail,
+          webUrl: app.env.WEB_URL,
+          signup: { displayName: user.displayName, email: user.email },
+        }).catch((err) => {
+          request.log.warn({ err }, 'SSO provision admin notify failed');
+        });
+      } else {
+        await writeAuditEvent(app.database, {
+          actorType: 'user',
+          actorId: user.id,
+          action: linked ? 'auth.oidc_link' : 'auth.oidc_login',
+          entityType: 'user',
+          entityId: user.id,
+          metadata: { idpSource: oidc.idpSource },
+          ipAddress: request.ip,
+        });
+      }
 
       setSessionCookie(app, reply, token, app.env.SESSION_TTL_SECONDS);
       return reply.redirect(dashboardRedirect(app));

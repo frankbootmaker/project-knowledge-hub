@@ -398,6 +398,8 @@
     "myWorkspaces": "My workspaces",
     "viewAllWorkspaces": "View all",
     "emptyWorkspaces": "You do not have any workspaces yet.",
+    "waitingWorkspaceTitle": "Waiting for workspace access",
+    "waitingWorkspaceBody": "You are signed in. An administrator still needs to assign you to a workspace and role before catalogue and delivery features appear.",
     "moreWorkspaces": "+{count} more — open View all to see every workspace.",
     "workspaceCounts": "{projects} projects · {systems} systems · {records} records",
     "searchTitle": "Search knowledge",

@@ -51,6 +51,15 @@ export type MailMessages = {
     emailLabel: string;
     cta: string;
   };
+  ssoUserProvisioned: {
+    subject: string;
+    title: string;
+    greeting: string;
+    body: string;
+    userLabel: string;
+    emailLabel: string;
+    cta: string;
+  };
   signupPendingEscalation: {
     subject: string;
     title: string;
@@ -202,6 +211,15 @@ export const en: MailMessages = {
     userLabel: 'Name: {user}',
     emailLabel: 'Email: {email}',
     cta: 'Review pending users',
+  },
+  ssoUserProvisioned: {
+    subject: 'New SSO user needs a workspace — Project Knowledge Hub',
+    title: 'New SSO user',
+    greeting: 'Hi {name},',
+    body: 'A user signed in with SSO for the first time. Assign a workspace and role so they can start working.',
+    userLabel: 'Name: {user}',
+    emailLabel: 'Email: {email}',
+    cta: 'Open users',
   },
   signupPendingEscalation: {
     subject: 'Signup still pending — Project Knowledge Hub',
@@ -356,6 +374,15 @@ export const de: MailMessages = {
     emailLabel: 'E-Mail: {email}',
     cta: 'Ausstehende Benutzer prüfen',
   },
+  ssoUserProvisioned: {
+    subject: 'Neuer SSO-Benutzer braucht einen Workspace — Project Knowledge Hub',
+    title: 'Neuer SSO-Benutzer',
+    greeting: 'Hallo {name},',
+    body: 'Ein Benutzer hat sich erstmals per SSO angemeldet. Weisen Sie Workspace und Rolle zu, damit die Arbeit beginnen kann.',
+    userLabel: 'Name: {user}',
+    emailLabel: 'E-Mail: {email}',
+    cta: 'Benutzer öffnen',
+  },
   signupPendingEscalation: {
     subject: 'Registrierung weiterhin ausstehend — Project Knowledge Hub',
     title: 'Registrierung weiterhin ausstehend',
@@ -509,6 +536,15 @@ export const hu: MailMessages = {
     userLabel: 'Név: {user}',
     emailLabel: 'E-mail: {email}',
     cta: 'Függő felhasználók áttekintése',
+  },
+  ssoUserProvisioned: {
+    subject: 'Új SSO-felhasználó workspace-t vár — Project Knowledge Hub',
+    title: 'Új SSO-felhasználó',
+    greeting: 'Szia {name}!',
+    body: 'Egy felhasználó először jelentkezett be SSO-val. Rendelj hozzá workspace-t és szerepkört, hogy elkezdhessen dolgozni.',
+    userLabel: 'Név: {user}',
+    emailLabel: 'E-mail: {email}',
+    cta: 'Felhasználók megnyitása',
   },
   signupPendingEscalation: {
     subject: 'Regisztráció továbbra is függőben — Project Knowledge Hub',
