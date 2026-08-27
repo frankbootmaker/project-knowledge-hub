@@ -13,10 +13,10 @@ import {
 } from '../../lib/ops-nav';
 import { readLastProject, readLastWorkspace } from '../../lib/ops-prefs';
 import type { ThemePreference } from '../../lib/theme';
-import { LanguageSelect } from './LanguageSelect';
+import { LandingLangSegment } from '../landing/LandingLangSegment';
+import { LandingThemeSegment } from '../landing/LandingThemeSegment';
 import type { ShellWorkspace } from './AppRail';
 import { MenuGlyphIcon, SearchGlyphIcon } from './NavIcons';
-import { ThemeSegment } from './ThemeSegment';
 
 export function AppTopBar({
   workspaces,
@@ -146,8 +146,8 @@ export function AppTopBar({
         </div>
         <div className="kh-ops-sub-actions">
           <div className="kh-ops-display-controls">
-            <ThemeSegment initialPreference={themePreference} />
-            <LanguageSelect />
+            <LandingThemeSegment initialPreference={themePreference} />
+            <LandingLangSegment />
           </div>
           <Link
             href="/search"

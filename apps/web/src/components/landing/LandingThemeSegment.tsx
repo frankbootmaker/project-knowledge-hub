@@ -30,6 +30,24 @@ function systemIsDark(): boolean {
   );
 }
 
+function nextTheme(current: ThemePreference): ThemePreference {
+  const index = themePreferences.indexOf(current);
+  return themePreferences[(index + 1) % themePreferences.length]!;
+}
+
+function themeGlyph(choice: ThemePreference): string {
+  return choice === 'dark' ? '●' : choice === 'light' ? '○' : '◐';
+}
+
+function themeLabel(
+  choice: ThemePreference,
+  t: (key: 'themeLight' | 'themeDark' | 'themeSystem') => string,
+): string {
+  if (choice === 'light') return t('themeLight');
+  if (choice === 'dark') return t('themeDark');
+  return t('themeSystem');
+}
+
 export function LandingThemeSegment({
   initialPreference,
 }: {
@@ -59,37 +77,27 @@ export function LandingThemeSegment({
     return () => media.removeEventListener('change', onChange);
   }, [preference]);
 
+  const upcoming = nextTheme(preference);
+  const currentLabel = themeLabel(preference, t);
+
   return (
-    <div className="kh-lp-segment" role="group" aria-label={t('theme')}>
-      {themePreferences.map((choice) => {
-        const label =
-          choice === 'light'
-            ? t('themeLight')
-            : choice === 'dark'
-              ? t('themeDark')
-              : t('themeSystem');
-        const glyph = choice === 'dark' ? '●' : choice === 'light' ? '○' : '◐';
-        const active = preference === choice;
-        return (
-          <button
-            key={choice}
-            type="button"
-            data-theme-choice={choice}
-            aria-pressed={active}
-            disabled={pending}
-            onClick={() => {
-              setPreference(choice);
-              applyResolvedTheme(resolveTheme(choice, systemIsDark()));
-              startTransition(async () => {
-                await setThemeAction(choice);
-                router.refresh();
-              });
-            }}
-          >
-            <span className="kh-lp-theme-word">{label}</span> {glyph}
-          </button>
-        );
-      })}
-    </div>
+    <button
+      type="button"
+      className="kh-lp-cycle"
+      data-theme-choice={preference}
+      aria-label={`${t('theme')}: ${currentLabel}`}
+      title={`${t('theme')}: ${currentLabel}`}
+      disabled={pending}
+      onClick={() => {
+        setPreference(upcoming);
+        applyResolvedTheme(resolveTheme(upcoming, systemIsDark()));
+        startTransition(async () => {
+          await setThemeAction(upcoming);
+          router.refresh();
+        });
+      }}
+    >
+      {themeGlyph(preference)}
+    </button>
   );
 }

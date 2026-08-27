@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { LanguageSwitcher } from '../LanguageSwitcher';
-import { ThemeSwitcher } from '../ThemeSwitcher';
-import { defaultTheme, type AppTheme } from '../../lib/theme';
+import { LandingLangSegment } from '../landing/LandingLangSegment';
+import { LandingThemeSegment } from '../landing/LandingThemeSegment';
+import { defaultTheme, type ThemePreference } from '../../lib/theme';
 
 export function AuthCard({
   brand,
@@ -9,20 +9,20 @@ export function AuthCard({
   title,
   subtitle,
   children,
-  theme = defaultTheme,
+  themePreference = defaultTheme,
 }: {
   brand: string;
   eyebrow?: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
   children: ReactNode;
-  theme?: AppTheme;
+  themePreference?: ThemePreference;
 }) {
   return (
     <div className="kh-ops-auth-page">
-      <div className="mb-4 flex w-full max-w-[440px] items-center justify-end gap-2">
-        <ThemeSwitcher initialTheme={theme} />
-        <LanguageSwitcher />
+      <div className="kh-ops-auth-controls">
+        <LandingThemeSegment initialPreference={themePreference} />
+        <LandingLangSegment />
       </div>
       <section className="kh-ops-auth-card">
         <div className="kh-ops-auth-brand">

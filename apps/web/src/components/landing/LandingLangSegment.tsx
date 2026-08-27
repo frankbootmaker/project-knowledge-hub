@@ -22,36 +22,34 @@ async function syncPreferredLocale(locale: AppLocale): Promise<void> {
   }
 }
 
+function nextLocale(current: AppLocale): AppLocale {
+  const index = locales.indexOf(current);
+  return locales[(index + 1) % locales.length]!;
+}
+
 export function LandingLangSegment() {
   const locale = useLocale() as AppLocale;
   const t = useTranslations('common');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const upcoming = nextLocale(locale);
 
   return (
-    <div className="kh-lp-segment" role="group" aria-label={t('language')}>
-      {locales.map((code) => {
-        const active = locale === code;
-        return (
-          <button
-            key={code}
-            type="button"
-            data-lang={code}
-            aria-pressed={active}
-            disabled={pending}
-            onClick={() => {
-              if (active) return;
-              startTransition(async () => {
-                await setLocaleAction(code);
-                await syncPreferredLocale(code);
-                router.refresh();
-              });
-            }}
-          >
-            {code.toUpperCase()}
-          </button>
-        );
-      })}
-    </div>
+    <button
+      type="button"
+      className="kh-lp-cycle"
+      aria-label={`${t('language')}: ${locale.toUpperCase()}`}
+      title={`${t('language')}: ${locale.toUpperCase()}`}
+      disabled={pending}
+      onClick={() => {
+        startTransition(async () => {
+          await setLocaleAction(upcoming);
+          await syncPreferredLocale(upcoming);
+          router.refresh();
+        });
+      }}
+    >
+      {locale.toUpperCase()}
+    </button>
   );
 }

@@ -43,6 +43,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     resolveAlias: {
       '@project-knowledge-hub/mcp/schemas': mcpSchemasPath,
+      // Same pinning as webpack — mermaid/d3-sankey need d3-path v3 `Path` export.
+      'd3-path': path.resolve(configDir, '../../node_modules/d3-path/src/index.js'),
+      'd3-shape': path.resolve(configDir, '../../node_modules/d3-shape/src/index.js'),
     },
   },
   // Mermaid/d3 named ESM re-exports still need Webpack aliases. Next 16 defaults

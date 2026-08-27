@@ -104,55 +104,51 @@ html[data-theme='dark'] .kh-landing {
   gap: 16px;
 }
 
-.kh-landing .kh-lp-segment {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--lp-border);
-  border-radius: var(--lp-radius);
-  background: var(--lp-surface);
-}
-
-.kh-landing .kh-lp-segment button {
-  min-width: 38px;
+/* Compact language/theme cycle controls — shared by landing + auth pages */
+.kh-lp-cycle {
+  min-width: 40px;
   min-height: 36px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
-  color: var(--lp-muted);
+  padding: 0 10px;
+  border: 1px solid var(--kh-line);
+  border-radius: var(--kh-radius-sm);
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
   cursor: pointer;
   font: 500 12px/1 var(--font-mono), monospace;
 }
 
-.kh-landing .kh-lp-segment button[data-theme-choice] {
-  min-width: 44px;
+.kh-lp-cycle[data-theme-choice] {
+  min-width: 36px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
 }
 
-.kh-landing .kh-lp-segment button[aria-pressed='true'] {
-  color: var(--lp-fg);
-  background: var(--lp-accent-soft);
+.kh-lp-cycle:hover {
+  background: var(--kh-brand-soft);
 }
 
-.kh-landing .kh-lp-segment button:disabled {
+.kh-lp-cycle:disabled {
   opacity: 0.6;
   cursor: wait;
-}
-
-.kh-landing .kh-lp-theme-word {
-  margin-right: 4px;
 }
 
 .kh-landing .kh-lp-text-link {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  font-weight: 500;
+  padding: 0;
+  border: 0;
   border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 .kh-landing .kh-lp-text-link:hover {
-  border-color: currentColor;
+  border-bottom-color: currentColor;
 }
 
 .kh-landing .kh-lp-button {
@@ -194,6 +190,11 @@ html[data-theme='dark'] .kh-landing {
   background: var(--lp-surface);
   border-color: var(--lp-fg);
   transform: translateY(-1px);
+}
+
+.kh-landing button.kh-lp-button {
+  cursor: pointer;
+  font: inherit;
 }
 
 .kh-landing :focus-visible {
@@ -490,22 +491,19 @@ html[data-theme='dark'] .kh-landing {
   gap: 24px;
 }
 
-.kh-landing .kh-lp-footer-links a:hover {
+.kh-landing .kh-lp-footer-links a:hover,
+.kh-landing .kh-lp-footer-links button:hover {
   color: var(--lp-band-fg);
+}
+
+.kh-landing .kh-lp-footer-links .kh-lp-text-link {
+  min-height: auto;
+  color: inherit;
+  border-bottom-color: transparent;
 }
 
 .kh-landing .kh-lp-footer-lang {
   font: 500 12px/1 var(--font-mono), monospace;
-}
-
-@media (max-width: 1100px) {
-  .kh-landing .kh-lp-theme-word {
-    display: none;
-  }
-
-  .kh-landing .kh-lp-segment button[data-theme-choice] {
-    min-width: 38px;
-  }
 }
 
 @media (max-width: 820px) {
@@ -535,9 +533,14 @@ html[data-theme='dark'] .kh-landing {
     font-size: 14px;
   }
 
-  .kh-landing .kh-lp-segment button {
+  .kh-lp-cycle {
     min-width: 34px;
-    padding: 0 6px;
+    min-height: 34px;
+    padding: 0 8px;
+  }
+
+  .kh-lp-cycle[data-theme-choice] {
+    min-width: 34px;
   }
 
   .kh-landing .kh-lp-hero {
@@ -640,3 +643,207 @@ html[data-theme='dark'] .kh-landing {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Login modal over landing (portaled to body — not nested under .kh-landing) */
+.kh-lp-login-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.kh-lp-login-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: color-mix(in oklch, var(--kh-ink) 28%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.kh-lp-login-panel {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
+  max-height: min(92vh, 720px);
+  overflow: auto;
+  border: 1px solid var(--kh-ink);
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
+  box-shadow: 0 24px 64px color-mix(in oklch, var(--kh-ink) 22%, transparent);
+}
+
+.kh-lp-login-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--kh-line);
+}
+
+.kh-lp-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.kh-lp-login-brand .kh-lp-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--kh-radius-sm);
+  background: var(--kh-brand);
+  color: var(--kh-on-brand);
+  font: 700 11px/1 var(--font-mono), monospace;
+  letter-spacing: 0.02em;
+}
+
+.kh-lp-login-close {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--kh-line);
+  border-radius: var(--kh-radius-sm);
+  background: transparent;
+  color: var(--kh-ink);
+  cursor: pointer;
+}
+
+.kh-lp-login-close:hover {
+  background: var(--kh-brand-soft);
+}
+
+.kh-lp-login-panel-body {
+  padding: 20px 22px 24px;
+}
+
+.kh-lp-login-eyebrow {
+  margin: 0 0 8px;
+  color: var(--kh-brand);
+  font: 500 12px/1.2 var(--font-mono), monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kh-lp-login-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.kh-lp-login-subtitle {
+  margin: 0 0 18px;
+  color: var(--kh-ink-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.kh-lp-login-form {
+  display: grid;
+  gap: 12px;
+}
+
+.kh-lp-login-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.kh-lp-login-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.kh-lp-login-or {
+  margin: 0;
+  text-align: center;
+  color: var(--kh-ink-muted);
+  font-size: 12px;
+}
+
+.kh-lp-login-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.kh-lp-login-links a {
+  color: var(--kh-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kh-lp-login-discover {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--kh-ink-muted);
+}
+
+.kh-lp-login-discover a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kh-lp-login-banner {
+  margin: 0;
+  font-size: 13px;
+  color: var(--kh-ink-muted);
+}
+
+.kh-lp-login-banner--ok {
+  color: var(--kh-brand);
+}
+
+.kh-lp-auth-text-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--kh-ink);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.kh-lp-auth-text-btn:hover {
+  color: var(--kh-brand);
+}
+
+@media (max-width: 520px) {
+  .kh-lp-login-modal {
+    padding: 0;
+    align-items: end;
+  }
+
+  .kh-lp-login-panel {
+    width: 100%;
+    max-height: 94vh;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kh-lp-login-backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: color-mix(in oklch, var(--kh-ink) 45%, transparent);
+  }
+}
+

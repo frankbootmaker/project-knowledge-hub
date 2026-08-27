@@ -1,8 +1,16 @@
 'use client';
 
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { ThemePreference } from '../../lib/theme';
+import {
+  AUTH_DESKTOP_MQ,
+  authPathForMode,
+  type AuthMode,
+} from './auth-mode';
+import { AuthModal } from './AuthModal';
 import { LandingLangSegment } from './LandingLangSegment';
 import { LandingThemeSegment } from './LandingThemeSegment';
 
@@ -19,10 +27,26 @@ function BrandLink({ className }: { className?: string }) {
 
 export function LandingPage({
   themePreference,
+  initialAuthMode = null,
 }: {
   themePreference: ThemePreference;
+  /** When set (desktop auth routes), open that modal immediately. */
+  initialAuthMode?: AuthMode | null;
 }) {
   const t = useTranslations('landing');
+  const router = useRouter();
+  const [authMode, setAuthMode] = useState<AuthMode | null>(initialAuthMode);
+
+  const openAuth = useCallback(
+    (mode: AuthMode) => {
+      if (typeof window !== 'undefined' && window.matchMedia(AUTH_DESKTOP_MQ).matches) {
+        setAuthMode(mode);
+        return;
+      }
+      router.push(authPathForMode(mode));
+    },
+    [router],
+  );
 
   return (
     <div className="kh-landing">
@@ -32,12 +56,20 @@ export function LandingPage({
           <div className="kh-lp-header-actions">
             <LandingThemeSegment initialPreference={themePreference} />
             <LandingLangSegment />
-            <Link className="kh-lp-text-link kh-lp-header-signin" href="/login">
+            <button
+              type="button"
+              className="kh-lp-text-link kh-lp-header-signin"
+              onClick={() => openAuth('login')}
+            >
               {t('signIn')}
-            </Link>
-            <Link className="kh-lp-button kh-lp-button-primary" href="/register">
+            </button>
+            <button
+              type="button"
+              className="kh-lp-button kh-lp-button-primary"
+              onClick={() => openAuth('register')}
+            >
               {t('requestAccess')}
-            </Link>
+            </button>
           </div>
         </div>
       </header>
@@ -51,12 +83,20 @@ export function LandingPage({
               <div className="kh-lp-hero-copy">
                 <p>{t('heroBody')}</p>
                 <div className="kh-lp-hero-actions">
-                  <Link className="kh-lp-button kh-lp-button-primary" href="/register">
+                  <button
+                    type="button"
+                    className="kh-lp-button kh-lp-button-primary"
+                    onClick={() => openAuth('register')}
+                  >
                     {t('requestAccess')}
-                  </Link>
-                  <Link className="kh-lp-button kh-lp-button-secondary" href="/login">
+                  </button>
+                  <button
+                    type="button"
+                    className="kh-lp-button kh-lp-button-secondary"
+                    onClick={() => openAuth('login')}
+                  >
                     {t('signIn')}
-                  </Link>
+                  </button>
                 </div>
               </div>
             </div>
@@ -168,9 +208,13 @@ export function LandingPage({
         <section className="kh-lp-closing">
           <div className="kh-lp-shell kh-lp-closing-inner">
             <h2>{t('closingTitle')}</h2>
-            <Link className="kh-lp-button kh-lp-button-primary" href="/register">
+            <button
+              type="button"
+              className="kh-lp-button kh-lp-button-primary"
+              onClick={() => openAuth('register')}
+            >
               {t('requestAccess')}
-            </Link>
+            </button>
           </div>
         </section>
       </main>
@@ -179,12 +223,27 @@ export function LandingPage({
         <div className="kh-lp-shell kh-lp-footer-inner">
           <BrandLink />
           <nav className="kh-lp-footer-links" aria-label="Footer">
-            <Link href="/login">{t('signIn')}</Link>
-            <Link href="/register">{t('requestAccess')}</Link>
+            <button type="button" className="kh-lp-text-link" onClick={() => openAuth('login')}>
+              {t('signIn')}
+            </button>
+            <button
+              type="button"
+              className="kh-lp-text-link"
+              onClick={() => openAuth('register')}
+            >
+              {t('requestAccess')}
+            </button>
             <span className="kh-lp-footer-lang">EN / DE / HU</span>
           </nav>
         </div>
       </footer>
+
+      <AuthModal
+        open={authMode !== null}
+        mode={authMode ?? 'login'}
+        onModeChange={setAuthMode}
+        onClose={() => setAuthMode(null)}
+      />
     </div>
   );
 }

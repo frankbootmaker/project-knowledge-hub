@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Button, Select } from './ui';
 import type { DashboardRecentItem } from '../lib/dashboard';
+import { LocalDateTime } from './LocalDateTime';
+import { Button, Select } from './ui';
 
 const DEFAULT_PAGE_SIZE = 5;
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
@@ -91,9 +92,7 @@ export function DashboardRecentList({
                     </td>
                     <td>{item.workspaceName}</td>
                     <td>
-                      <time dateTime={item.updatedAt}>
-                        {new Date(item.updatedAt).toLocaleString()}
-                      </time>
+                      <LocalDateTime value={item.updatedAt} />
                     </td>
                   </tr>
                 ))}
