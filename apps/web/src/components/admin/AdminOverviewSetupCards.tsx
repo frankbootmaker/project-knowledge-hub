@@ -6,6 +6,7 @@ import { LinkButton, Panel, Switch } from '../ui';
 
 const STORAGE_MCP = 'kh.admin.overview.showMcp';
 const STORAGE_EMAIL = 'kh.admin.overview.showEmail';
+const STORAGE_SSO = 'kh.admin.overview.showSso';
 
 function readFlag(key: string, fallback = true): boolean {
   if (typeof window === 'undefined') return fallback;
@@ -46,10 +47,12 @@ export function AdminOverviewSetupCards() {
   const [ready, setReady] = useState(false);
   const [showMcp, setShowMcp] = useState(true);
   const [showEmail, setShowEmail] = useState(true);
+  const [showSso, setShowSso] = useState(true);
 
   useEffect(() => {
     setShowMcp(readFlag(STORAGE_MCP, true));
     setShowEmail(readFlag(STORAGE_EMAIL, true));
+    setShowSso(readFlag(STORAGE_SSO, true));
     setReady(true);
   }, []);
 
@@ -63,11 +66,16 @@ export function AdminOverviewSetupCards() {
     writeFlag(STORAGE_EMAIL, visible);
   }
 
+  function setSsoVisible(visible: boolean) {
+    setShowSso(visible);
+    writeFlag(STORAGE_SSO, visible);
+  }
+
   if (!ready) {
     return <div className="mb-4 min-h-[1px]" aria-hidden />;
   }
 
-  const anyHidden = !showMcp || !showEmail;
+  const anyHidden = !showMcp || !showEmail || !showSso;
   const hideLabel = t('overviewHide');
 
   return (
@@ -106,6 +114,23 @@ export function AdminOverviewSetupCards() {
         </Panel>
       ) : null}
 
+      {showSso ? (
+        <Panel className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="m-0 text-sm font-semibold">{t('sso')}</p>
+            <p className="mt-1 mb-0 text-sm text-ink-muted">{t('ssoOverviewBlurb')}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <LinkButton href="/admin/sso">{t('ssoConfigure')}</LinkButton>
+            <HideToggle
+              id="admin-overview-hide-sso"
+              label={hideLabel}
+              onHide={() => setSsoVisible(false)}
+            />
+          </div>
+        </Panel>
+      ) : null}
+
       {anyHidden ? (
         <Panel variant="inset" className="grid gap-2">
           <p className="m-0 text-sm text-ink-muted">{t('overviewHiddenHint')}</p>
@@ -132,6 +157,18 @@ export function AdminOverviewSetupCards() {
                   }}
                 />
                 {t('overviewShowEmail')}
+              </label>
+            ) : null}
+            {!showSso ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={(e) => {
+                    if (e.target.checked) setSsoVisible(true);
+                  }}
+                />
+                {t('overviewShowSso')}
               </label>
             ) : null}
           </div>

@@ -32,6 +32,7 @@ import { registerAuditRoutes } from './routes/audit.js';
 import { registerKnowledgeRecordRoutes } from './routes/knowledge-records.js';
 import { registerLlmOpenApiRoutes } from './routes/llm-openapi.js';
 import { registerMailSettingsRoutes } from './routes/mail-settings.js';
+import { registerOidcSettingsRoutes } from './routes/oidc-settings.js';
 import { registerMcpRoutes } from './routes/mcp.js';
 import { registerMcpSetupRoutes } from './routes/mcp-setup.js';
 import { registerMembershipRoutes } from './routes/memberships.js';
@@ -231,6 +232,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerOrganizationRoutes(app);
   await registerUserRoutes(app);
   await registerMailSettingsRoutes(app);
+  await registerOidcSettingsRoutes(app);
   await registerBlobSettingsRoutes(app);
   await registerLlmProviderRoutes(app);
   await registerDocFactoryAdminRoutes(app);
