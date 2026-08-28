@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **OIDC JIT provisioning:** optional just-in-time user create on first verified-email SSO (`OIDC_JIT_PROVISIONING` or Admin → SSO toggle, default off). New users are `active` with IdP fields set and no memberships; on-duty admins get email; dashboard waiting banner until a workspace role is assigned.
 
+* **Ops Console landing + auth:** public landing; desktop login/register/forgot as landing modals; mobile still uses AuthCard pages. Ops top bar uses the same single theme/language cycle controls as the landing.
+
+* **Context-aware Admin rail:** hide nav groups with no usable items; show groups from the **current route** (not last-used prefs). Ops section is Reports-only (MCP setup stays under the account menu / Admin).
+
 * **Catalogue system OpEx in project AC:** non-AI systems linked to a project can set `it_cost_mode` (`flat` / `one_time` / `note_only`) with flat monthly, one-time, and soft allocation fields; billable OpEx rolls into Budgeting AC beside people + AI. Migration `0046`. UI create/manage + budget breakdown; MCP `create_system` / `update_system` cost args.
 
 * **Agent catalogue systems + IT details:** opt-in MCP scope `catalogue:write` with direct `create_system` / `update_system` (ChatGPT via `call_hub_tool`); enriched `list_systems` / `get_system`; structured `it_details` jsonb (hostname, URLs, deployment, data class, support, …) plus UI fields for version/criticality/IT inventory. Migration `0045`. ADR-014 Tier B ships as direct tools for systems first (propose/commit later).
