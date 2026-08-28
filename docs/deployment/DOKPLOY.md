@@ -74,7 +74,7 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | `POSTGRES_*` | runtime | Compose builds `DATABASE_URL` via host `nd-postgres` |
 | (Redis) | runtime | Fixed `redis://nd-redis:6379` on the Compose network |
 | `SESSION_SECRET` | runtime | Long random secret |
-| `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | runtime | Authentik (or generic OIDC). Set all three to enable SSO; omit or leave empty to hide the button. Optional: `OIDC_BUTTON_LABEL`, `OIDC_IDP_SOURCE=authentik`, `OIDC_REDIRECT_URI` (default `{WEB_URL}/api/v1/auth/oidc/callback`), `OIDC_JIT_PROVISIONING=true` (create active users on first verified-email SSO; default `false`) |
+| `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | runtime | Authentik (or generic OIDC) **env fallback**. Prefer **Admin → SSO** to save issuer/client/secret/JIT (applies on next login, no redeploy). Env still works if the Admin override is absent. Set all three to enable SSO; omit or leave empty to hide the button unless Admin SSO is complete. Optional: `OIDC_BUTTON_LABEL`, `OIDC_IDP_SOURCE=authentik`, `OIDC_REDIRECT_URI` (default `{WEB_URL}/api/v1/auth/oidc/callback`), `OIDC_JIT_PROVISIONING=true` (create active users on first verified-email SSO; default `false`) |
 | `APP_ENV` | runtime | Use `staging` for Dev/UAT |
 | `NODE_ENV` | runtime | Always `production` in containers |
 | `MCP_PUBLIC_URL` | runtime | Optional; prefer `https://<domain>/mcp` |
