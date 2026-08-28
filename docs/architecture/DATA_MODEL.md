@@ -25,7 +25,7 @@ Unique: (`organization_id`, `slug`)
 `id`, `email`, `display_name`, `full_name`, `password_hash`, `status`, `is_system_admin`, `idp_source`, `idp_subject`, `avatar_content_type`, `created_at`, `updated_at`
 
 * `full_name` — optional formal name; UI may fall back to `display_name`
-* `idp_source` / `idp_subject` — reserved for future SSO (null for local password accounts); unique together when set
+* `idp_source` / `idp_subject` — OIDC identity (Authentik / generic IdP); null for local password accounts; unique together when set. Linked on first verified-email SSO or set by JIT create. See [`OIDC_IDP.md`](../product/OIDC_IDP.md).
 * `avatar_content_type` — set when a profile image exists in BlobStore (`avatars/{userId}`) or on disk (`AVATAR_UPLOAD_DIR/{userId}` when blobs disabled); UI uses a monogram when null
 * `status` — `active` | `disabled` | `invited` | `pending_email` | `pending_approval` (self-signup: email confirm then admin approve)  
 Unique: `email`
@@ -36,6 +36,12 @@ Unique: `email`
 
 * Workspace image library (JPEG/PNG/WebP) for Markdown embeds; bytes in BlobStore `media/{workspaceId}/{mediaId}` or `MEDIA_UPLOAD_DIR`
 * Optional `knowledge_record_id` link; embed URL `/api/v1/media/{id}` (workspace view required)
+
+### `platform_settings`
+
+`key` (PK), `value` (JSON text), `updated_by`, `updated_at`
+
+Platform-wide overrides that win over env at request time. Known keys include `mail_config`, `oidc_config`, blob/MCP public URL, and related admin settings. **Admin → SSO** writes `oidc_config` (issuer, client, secret, JIT, enabled); GET APIs never return secrets.
 
 ### `memberships`
 

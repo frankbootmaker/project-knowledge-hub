@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Admin SSO settings:** Admin → SSO (`/admin/sso`) stores OIDC issuer, client id/secret, button label, IdP source, optional redirect URI, enable toggle, and JIT in `platform_settings` (`oidc_config`). Values override `OIDC_*` env at request time (no rebuild/restart). GET never returns the secret. “Reset to .env” clears the override. Login status/start/callback use the resolved config. Briefs [`OIDC_IDP.md`](product/OIDC_IDP.md), [`OIDC_AUTHENTIK_INTEGRATION_GUIDE.md`](product/OIDC_AUTHENTIK_INTEGRATION_GUIDE.md).
+
+* **OIDC JIT provisioning:** optional just-in-time user create on first verified-email SSO (`OIDC_JIT_PROVISIONING` or Admin → SSO toggle, default off). New users are `active` with IdP fields set and no memberships; on-duty admins get email; dashboard waiting banner until a workspace role is assigned.
+
 * **Catalogue system OpEx in project AC:** non-AI systems linked to a project can set `it_cost_mode` (`flat` / `one_time` / `note_only`) with flat monthly, one-time, and soft allocation fields; billable OpEx rolls into Budgeting AC beside people + AI. Migration `0046`. UI create/manage + budget breakdown; MCP `create_system` / `update_system` cost args.
 
 * **Agent catalogue systems + IT details:** opt-in MCP scope `catalogue:write` with direct `create_system` / `update_system` (ChatGPT via `call_hub_tool`); enriched `list_systems` / `get_system`; structured `it_details` jsonb (hostname, URLs, deployment, data class, support, …) plus UI fields for version/criticality/IT inventory. Migration `0045`. ADR-014 Tier B ships as direct tools for systems first (propose/commit later).
@@ -29,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **Dashboard My tasks deep links:** task titles open the project Delivery section with `?task=` and the manage modal; Manage button removed from the dashboard list.
 
-* **OIDC sign-in (Authentik):** optional OpenID Connect login beside local email/password; operator integration guide; session links IdP subject when configured.
+* **OIDC sign-in (Authentik):** optional OpenID Connect login beside local email/password; operator integration guide; session links IdP subject when configured. Later: Admin → SSO UI + optional JIT (see Unreleased above).
 
 * **AI translation progress (SSE):** Manage → Translate streams stage updates, elapsed time, indeterminate bar, and a collapsible Details log (content deltas only; Hide stays respected). New `POST …/translations/stream`; JSON POST kept for MCP.
 

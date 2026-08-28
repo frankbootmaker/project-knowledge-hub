@@ -179,6 +179,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-08-28
+
+* **Admin SSO** — `/admin/sso` (Admin sidebar, same pattern as Email) for OIDC issuer, client, secret, button label, IdP source, redirect URI, enable, and JIT. Stored in `platform_settings`; login uses the override immediately. Overview setup card next to Email (per-browser hide/restore).
+
 ### 2026-08-11
 
 * **Responsive modals & toasts** — Modals are bottom sheets below `sm` (scrollable body, sticky header/footer, full-width stacked actions, safe-area padding); centered cards from `sm`. Toasts are full-bleed at the bottom on small screens and corner-stacked from `sm`. Root `viewportFit: 'cover'` for insets.
@@ -216,7 +220,6 @@ Record durable UI / design-system changes here (newest first).
 * **Account profile** — `/account/profile` for display name + full name (email read-only), optional photo upload, and `UserAvatar` monogram fallback. **Workspace roles** (`/account/memberships`) lists memberships read-only. **Sign-in identity** and **Change password** are separate Account sidebar pages (`/account/identity`, `/account/password`; `POST /api/v1/me/password`). Account area uses the same left sidebar layout as Admin. Header shows avatar + display name linked to profile; mobile nav includes Profile.
 * **Admin overview setup cards** — LLM/MCP and Email promo panels can be hidden per browser (`localStorage`); they remain in the admin sidebar. A small restore strip reappears when either card is hidden.
 * **Admin Email** — Sidebar link `/admin/email` for SMTP / Resend / console mail settings, test send, and overview card on Admin home. Product emails use a shared branded HTML layout in `packages/mail` with en/de/hu catalogs; locale comes from `users.preferred_locale` (synced from the language switcher / login / register).
-* **Admin SSO** — Sidebar link `/admin/sso` for OIDC issuer/client settings and JIT; stored in `platform_settings` and resolved per login (env is fallback).
 * **Auth pages** — Public `/forgot-password`, `/set-password`, `/register`, and `/confirm-email` match the login `Page narrow` + `Panel` pattern.
 * **Admin users** — Create modal toggles invite-vs-password; list rows open Edit (display name, status, optional password, system admin) with Resend invite for `invited` users.
 
