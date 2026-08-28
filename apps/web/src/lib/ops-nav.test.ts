@@ -5,6 +5,7 @@ import {
   isNavItemAvailable,
   matchNavItem,
   NAV_SECTIONS,
+  navAvailabilityContext,
   parseAppPath,
   parseNavSection,
   resolveActiveNavSection,
@@ -33,7 +34,7 @@ describe('ops nav', () => {
   it('infers sections from routes', () => {
     expect(inferNavSection('/dashboard')).toBe('personal');
     expect(inferNavSection('/admin/users')).toBe('admin');
-    expect(inferNavSection('/account/ai-connections')).toBe('ops');
+    expect(inferNavSection('/account/ai-connections')).toBe('personal');
     expect(inferNavSection('/workspaces/platform/projects/renewal')).toBe(
       'delivery-finance',
     );
@@ -156,17 +157,18 @@ describe('ops nav', () => {
     ).toBe(false);
   });
 
-  it('hides delivery and control without a project; keeps personal and ops', () => {
+  it('hides delivery, control, and ops without a project; keeps personal', () => {
     const bare = {
       workspaceSlug: null,
       projectSlug: null,
       isAdmin: false,
     };
     const ids = visibleNavSections(bare).map((section) => section.id);
-    expect(ids).toEqual(['personal', 'ops']);
+    expect(ids).toEqual(['personal']);
     expect(ids).not.toContain('delivery-finance');
     expect(ids).not.toContain('control');
     expect(ids).not.toContain('knowledge');
+    expect(ids).not.toContain('ops');
     expect(ids).not.toContain('admin');
   });
 
@@ -179,7 +181,7 @@ describe('ops nav', () => {
     const ids = visibleNavSections(workspaceOnly).map((section) => section.id);
     expect(ids).toContain('personal');
     expect(ids).toContain('knowledge');
-    expect(ids).toContain('ops');
+    expect(ids).not.toContain('ops');
     expect(ids).not.toContain('delivery-finance');
     expect(ids).not.toContain('control');
   });
@@ -207,7 +209,7 @@ describe('ops nav', () => {
     );
   });
 
-  it('keeps agents without a project but hides reports', () => {
+  it('hides ops reports without a project', () => {
     const workspaceOnly = {
       workspaceSlug: 'platform',
       projectSlug: null,
@@ -215,7 +217,7 @@ describe('ops nav', () => {
     };
     const ops = NAV_SECTIONS.find((section) => section.id === 'ops')!;
     const available = visibleNavItems(ops, workspaceOnly).map((item) => item.id);
-    expect(available).toEqual(['agents']);
+    expect(available).toEqual([]);
     const reports = ops.items.find((item) => item.id === 'reports')!;
     expect(isNavItemAvailable(reports, workspaceOnly)).toBe(false);
     expect(isNavItemAvailable(reports, ctx)).toBe(true);
@@ -228,6 +230,33 @@ describe('ops nav', () => {
       isAdmin: false,
     };
     expect(resolveActiveNavSection('delivery-finance', bare)).toBe('personal');
-    expect(resolveActiveNavSection('ops', bare)).toBe('ops');
+    expect(resolveActiveNavSection('ops', bare)).toBe('personal');
+  });
+
+  it('uses the current route, not remembered context, for group visibility', () => {
+    expect(navAvailabilityContext('/dashboard', false)).toEqual({
+      workspaceSlug: null,
+      projectSlug: null,
+      isAdmin: false,
+    });
+    expect(
+      navAvailabilityContext('/workspaces/platform', false),
+    ).toEqual({
+      workspaceSlug: 'platform',
+      projectSlug: null,
+      isAdmin: false,
+    });
+    expect(
+      navAvailabilityContext('/workspaces/platform/projects/renewal', true),
+    ).toEqual({
+      workspaceSlug: 'platform',
+      projectSlug: 'renewal',
+      isAdmin: true,
+    });
+    expect(
+      visibleNavSections(navAvailabilityContext('/dashboard', false)).map(
+        (section) => section.id,
+      ),
+    ).toEqual(['personal']);
   });
 });

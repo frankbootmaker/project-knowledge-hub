@@ -16,6 +16,7 @@ import { userMonogram } from '../../lib/monogram';
 import {
   findActiveNavItem,
   inferNavSection,
+  navAvailabilityContext,
   parseAppPath,
   parseNavSection,
   resolveActiveNavSection,
@@ -131,12 +132,21 @@ export function AppRail({
     session.user.isSystemAdmin,
   ]);
 
+  const availabilityCtx = useMemo(
+    () => navAvailabilityContext(pathname, session.user.isSystemAdmin),
+    [pathname, session.user.isSystemAdmin],
+  );
+  const visibleSections = useMemo(
+    () => visibleNavSections(availabilityCtx),
+    [availabilityCtx],
+  );
+
   useEffect(() => {
     const inferred = inferNavSection(pathname, hash, search);
-    const resolved = resolveActiveNavSection(inferred, ctx);
+    const resolved = resolveActiveNavSection(inferred, availabilityCtx);
     setSection(resolved);
     writeNavSection(resolved);
-  }, [pathname, hash, search, ctx]);
+  }, [pathname, hash, search, availabilityCtx]);
 
   useEffect(() => {
     onOpenChange(false);
@@ -167,8 +177,7 @@ export function AppRail({
     };
   }, [userOpen]);
 
-  const visibleSections = useMemo(() => visibleNavSections(ctx), [ctx]);
-  const activeItem = findActiveNavItem(ctx, pathname, hash, search);
+  const activeItem = findActiveNavItem(availabilityCtx, pathname, hash, search);
   const currentWorkspace =
     workspaces.find((row) => row.slug === ctx.workspaceSlug) ?? workspaces[0];
 
@@ -179,7 +188,7 @@ export function AppRail({
     }
     const hits: Array<{ href: string; label: string; section: string }> = [];
     for (const group of visibleSections) {
-      for (const item of visibleNavItems(group, ctx)) {
+      for (const item of visibleNavItems(group, availabilityCtx)) {
         const label = t(item.labelKey);
         const sectionLabel = t(group.labelKey);
         if (
@@ -195,10 +204,10 @@ export function AppRail({
       }
     }
     return hits.slice(0, 12);
-  }, [jump, visibleSections, ctx, t]);
+  }, [jump, visibleSections, availabilityCtx, ctx, t]);
 
   function selectSection(next: NavSectionId) {
-    const resolved = resolveActiveNavSection(parseNavSection(next), ctx);
+    const resolved = resolveActiveNavSection(parseNavSection(next), availabilityCtx);
     setSection(resolved);
     writeNavSection(resolved);
     setJump('');
@@ -349,7 +358,7 @@ export function AppRail({
                   <span className="kh-ops-group-label">{t(group.labelKey)}</span>
                 </div>
                 <div className="kh-ops-nav-items">
-                  {visibleNavItems(group, ctx).map((item) => {
+                  {visibleNavItems(group, availabilityCtx).map((item) => {
                       const href = item.href(ctx);
                       const active = activeItem?.id === item.id;
                       return (

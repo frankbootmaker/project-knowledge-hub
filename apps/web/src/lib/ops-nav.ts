@@ -80,7 +80,6 @@ export type NavItemId =
   | 'media'
   | 'archive'
   | 'import'
-  | 'agents'
   | 'reports'
   | 'admin-overview'
   | 'admin-monitoring'
@@ -298,12 +297,6 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     labelKey: 'sectionOps',
     items: [
       {
-        id: 'agents',
-        icon: 'agents',
-        labelKey: 'mcpAgents',
-        href: () => '/account/ai-connections',
-      },
-      {
         id: 'reports',
         icon: 'reports',
         labelKey: 'reports',
@@ -440,6 +433,15 @@ export function isNavItemAvailable(item: NavItemDef, ctx: NavContext): boolean {
   return true;
 }
 
+/** Route-only context for which groups to show — ignores last-used prefs. */
+export function navAvailabilityContext(
+  pathname: string,
+  isAdmin: boolean,
+): NavContext {
+  const { workspaceSlug, projectSlug } = parseAppPath(pathname);
+  return { workspaceSlug, projectSlug, isAdmin };
+}
+
 export function visibleNavItems(
   section: NavSectionDef,
   ctx: NavContext,
@@ -500,9 +502,6 @@ export function inferNavSection(
 ): NavSectionId {
   if (pathname.startsWith('/admin')) {
     return 'admin';
-  }
-  if (pathname.startsWith('/account/ai-connections')) {
-    return 'ops';
   }
   if (pathname.startsWith('/account')) {
     return 'personal';
@@ -612,9 +611,6 @@ export function matchNavItem(
   }
   if (item.id === 'media') {
     return /\/media(?:\/|$)/.test(pathname);
-  }
-  if (item.id === 'agents') {
-    return pathname.startsWith('/account/ai-connections');
   }
   if (item.id === 'admin-overview') {
     return pathname === '/admin';
