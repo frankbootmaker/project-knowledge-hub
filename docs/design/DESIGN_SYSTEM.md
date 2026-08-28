@@ -239,6 +239,8 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-08-28
 
 * **Admin SSO** — `/admin/sso` (Admin rail / sidebar, same pattern as Email) for OIDC issuer, client, secret, button label, IdP source, redirect URI, enable, and JIT. Stored in `platform_settings`; login uses the override immediately. Overview setup card next to Email (per-browser hide/restore).
+* **Landing auth** — Desktop login/register/forgot open as landing modals; mobile keeps AuthCard pages. Ops top bar uses the same single theme/language cycle buttons as the landing.
+* **Rail visibility** — Hide section groups with no usable items; visible groups follow the **current route**, not last-used prefs. Ops is Reports-only; MCP setup stays in the account menu / Admin.
 
 ### 2026-08-21
 
