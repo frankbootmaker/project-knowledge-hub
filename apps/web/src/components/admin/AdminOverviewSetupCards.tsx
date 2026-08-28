@@ -6,6 +6,7 @@ import { LinkButton, Switch } from '../ui';
 
 const STORAGE_MCP = 'kh.admin.overview.showMcp';
 const STORAGE_EMAIL = 'kh.admin.overview.showEmail';
+const STORAGE_SSO = 'kh.admin.overview.showSso';
 
 function readFlag(key: string, fallback = true): boolean {
   if (typeof window === 'undefined') return fallback;
@@ -46,10 +47,12 @@ export function AdminOverviewSetupCards() {
   const [ready, setReady] = useState(false);
   const [showMcp, setShowMcp] = useState(true);
   const [showEmail, setShowEmail] = useState(true);
+  const [showSso, setShowSso] = useState(true);
 
   useEffect(() => {
     setShowMcp(readFlag(STORAGE_MCP, true));
     setShowEmail(readFlag(STORAGE_EMAIL, true));
+    setShowSso(readFlag(STORAGE_SSO, true));
     setReady(true);
   }, []);
 
@@ -63,16 +66,22 @@ export function AdminOverviewSetupCards() {
     writeFlag(STORAGE_EMAIL, visible);
   }
 
+  function setSsoVisible(visible: boolean) {
+    setShowSso(visible);
+    writeFlag(STORAGE_SSO, visible);
+  }
+
   if (!ready) {
     return <div className="mb-4 min-h-[1px]" aria-hidden />;
   }
 
-  const anyHidden = !showMcp || !showEmail;
+  const anyHidden = !showMcp || !showEmail || !showSso;
   const hideLabel = t('overviewHide');
+  const anyVisible = showMcp || showEmail || showSso;
 
   return (
     <div className="mb-4 grid gap-3">
-      {showMcp || showEmail ? (
+      {anyVisible ? (
         <div className="kh-ops-admin-link-grid">
           {showMcp ? (
             <article className="kh-ops-admin-link-card">
@@ -102,6 +111,22 @@ export function AdminOverviewSetupCards() {
                   id="admin-overview-hide-email"
                   label={hideLabel}
                   onHide={() => setEmailVisible(false)}
+                />
+              </div>
+            </article>
+          ) : null}
+          {showSso ? (
+            <article className="kh-ops-admin-link-card">
+              <div className="min-w-0">
+                <strong>{t('sso')}</strong>
+                <small>{t('ssoOverviewBlurb')}</small>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-3">
+                <LinkButton href="/admin/sso">{t('ssoConfigure')}</LinkButton>
+                <HideToggle
+                  id="admin-overview-hide-sso"
+                  label={hideLabel}
+                  onHide={() => setSsoVisible(false)}
                 />
               </div>
             </article>
@@ -136,6 +161,18 @@ export function AdminOverviewSetupCards() {
                     }}
                   />
                   {t('overviewShowEmail')}
+                </label>
+              ) : null}
+              {!showSso ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={(e) => {
+                      if (e.target.checked) setSsoVisible(true);
+                    }}
+                  />
+                  {t('overviewShowSso')}
                 </label>
               ) : null}
             </div>

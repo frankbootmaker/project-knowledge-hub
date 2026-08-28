@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { createSessionToken, hashSessionToken } from '@project-knowledge-hub/auth';
-import { oidcConfigFromEnv } from '@project-knowledge-hub/config';
+import type { OidcEnvConfig } from '@project-knowledge-hub/config';
 import { sessions } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 import { setSessionCookie } from '../plugins/auth.js';
@@ -12,6 +12,7 @@ import {
   parseOidcPendingState,
   serializeOidcPendingState,
 } from '../lib/oidc-client.js';
+import { resolveOidcConfig } from '../lib/oidc-settings.js';
 import { resolveOidcUser } from '../lib/oidc-users.js';
 import { writeAuditEvent } from '../lib/identity.js';
 import { notifyAdminsOfSsoUserProvisioned } from '../lib/signup-pending-notify.js';
@@ -26,8 +27,11 @@ function dashboardRedirect(app: FastifyInstance): string {
   return new URL('/dashboard', app.env.WEB_URL).toString();
 }
 
-function buildCallbackUrl(app: FastifyInstance, requestUrl: string): URL {
-  const oidc = oidcConfigFromEnv(app.env);
+function buildCallbackUrl(
+  app: FastifyInstance,
+  requestUrl: string,
+  oidc: OidcEnvConfig | null,
+): URL {
   const incoming = new URL(requestUrl, app.env.API_URL);
   // Rebuild against registered redirect_uri origin/path so token exchange matches IdP config.
   const callback = new URL(oidc?.redirectUri ?? incoming.toString());
@@ -35,9 +39,14 @@ function buildCallbackUrl(app: FastifyInstance, requestUrl: string): URL {
   return callback;
 }
 
+async function loadOidcConfig(app: FastifyInstance): Promise<OidcEnvConfig | null> {
+  const { config } = await resolveOidcConfig(app.database, app.env);
+  return config;
+}
+
 export async function registerOidcAuthRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/auth/oidc/status', async () => {
-    const oidc = oidcConfigFromEnv(app.env);
+    const oidc = await loadOidcConfig(app);
     return {
       enabled: Boolean(oidc),
       buttonLabel: oidc?.buttonLabel ?? 'Sign in with SSO',
@@ -45,7 +54,7 @@ export async function registerOidcAuthRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get('/api/v1/auth/oidc/start', async (request, reply) => {
-    const oidc = oidcConfigFromEnv(app.env);
+    const oidc = await loadOidcConfig(app);
     if (!oidc) {
       throw new AppError({
         code: 'OIDC_DISABLED',
@@ -70,7 +79,7 @@ export async function registerOidcAuthRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get('/api/v1/auth/oidc/callback', async (request, reply) => {
-    const oidc = oidcConfigFromEnv(app.env);
+    const oidc = await loadOidcConfig(app);
     if (!oidc) {
       return reply.redirect(loginRedirect(app, 'error'));
     }
@@ -95,7 +104,7 @@ export async function registerOidcAuthRoutes(app: FastifyInstance): Promise<void
     }
 
     try {
-      const callbackUrl = buildCallbackUrl(app, request.url);
+      const callbackUrl = buildCallbackUrl(app, request.url, oidc);
       const claims = await completeOidcAuthorization(oidc, callbackUrl, pending, state);
       const resolved = await resolveOidcUser(app.database, {
         idpSource: oidc.idpSource,

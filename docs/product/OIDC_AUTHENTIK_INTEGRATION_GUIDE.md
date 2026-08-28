@@ -26,8 +26,7 @@ After a successful SSO:
 | --- | --- |
 | Azure Blob / AWS storage credentials | Cloud object auth is NF-007 / existing S3 keys — not human SSO |
 | ChatGPT MCP App OAuth | Separate backlog NF-004 |
-| Auto-create users on first SSO | Optional via `OIDC_JIT_PROVISIONING=true` (default off = invite/link) |
-| Admin UI for IdP settings | Env vars only in v1 |
+| Auto-create users on first SSO | Optional via Admin → SSO JIT toggle or `OIDC_JIT_PROVISIONING=true` (default off = invite/link) |
 | Multiple OIDC issuers in one UI | Single configured issuer per deployment |
 
 Authentik *can* broker Entra/AWS IAM Identity Center for **people login**. That still does not wire Azure Blob or S3 by itself.
@@ -38,7 +37,7 @@ Authentik *can* broker Entra/AWS IAM Identity Center for **people login**. That 
 
 ```text
 User opens /login
-  → (optional) SSO button if OIDC env is complete
+  → (optional) SSO button if OIDC is configured (Admin → SSO and/or env)
   → GET /api/v1/auth/oidc/start
   → Redirect to Authentik authorize (PKCE + state in Redis)
   → User signs in at Authentik
@@ -67,7 +66,7 @@ SSO succeeds if one of these is true:
 
 1. **Already linked:** a user exists with matching `(idp_source, idp_subject)` and status `active`.
 2. **First-time email link:** an **active** user exists with the same email, IdP fields are empty, and the IdP asserts `email_verified=true` → KnowHub writes `idp_source` / `idp_subject` and continues.
-3. **JIT (optional):** `OIDC_JIT_PROVISIONING=true`, verified email, and no KnowHub user yet → create an **active** user with IdP fields set and **no memberships**. On-duty admins get an email; the user sees a waiting banner on the dashboard until assigned.
+3. **JIT (optional):** JIT on (Admin → SSO or `OIDC_JIT_PROVISIONING=true`), verified email, and no KnowHub user yet → create an **active** user with IdP fields set and **no memberships**. On-duty admins get an email; the user sees a waiting banner on the dashboard until assigned.
 
 Otherwise the user is sent back to login with a query flag:
 
@@ -81,7 +80,7 @@ Otherwise the user is sent back to login with a query flag:
 ### Operator checklist before first SSO
 
 1. **Invite/link mode (default):** create or invite the user in KnowHub (Admin → Users) with the **same email** Authentik will assert; status **active** with workspace membership.
-2. **JIT mode:** set `OIDC_JIT_PROVISIONING=true`; after first SSO, assign workspace/role in Admin → Users.
+2. **JIT mode:** enable JIT in Admin → SSO (or `OIDC_JIT_PROVISIONING=true`); after first SSO, assign workspace/role in Admin → Users.
 3. Optional: pre-fill **IdP source** / **IdP subject** in Admin → Users if you know Authentik’s `sub` (otherwise first successful SSO links by verified email).
 4. Prefer setting `OIDC_IDP_SOURCE=authentik` so the stored source is stable and readable.
 5. Ensure Authentik issues `email_verified: true` (see §5.1 — required on Authentik ≥ 2025.10).
@@ -149,11 +148,13 @@ For stricter setups later, store verification in a user attribute and return tha
 
 ---
 
-## 6. Configure KnowHub (env)
+## 6. Configure KnowHub (Admin UI or env)
 
-`OIDC_*` must be listed in `compose.dokploy.yaml` **and** set on the Dokploy **Compose service Environment** tab (project-level env alone is not enough).
+Prefer **Admin → SSO**: paste issuer, client id, and secret, optionally enable JIT, then Save. Changes apply on the next login without a rebuild or restart. “Reset to .env” removes the stored override.
 
-Set all three of issuer + client id + secret together (partial config fails process start / keeps SSO disabled).
+`OIDC_*` env remains bootstrap/fallback (and is still required in `compose.dokploy.yaml` **and** the Dokploy **Compose service Environment** tab if you rely on env rather than the Admin page).
+
+Set all three of issuer + client id + secret together (in Admin and/or env); otherwise SSO stays disabled.
 
 ```bash
 OIDC_ISSUER=https://auth-dev.in3.technology/application/o/<slug>/
@@ -171,7 +172,7 @@ Also ensure:
 
 * `WEB_URL` is the public browser origin users use.
 * Redis is available (PKCE `state` is stored with a short TTL).
-* Redeploy after env / compose change.
+* Redeploy after env / compose change if you are not using Admin → SSO.
 
 References in repo: `.env.example`, `.env.dokploy.example`, `compose.dokploy.yaml`.
 
@@ -199,7 +200,7 @@ Audit actions: `auth.oidc_login`, `auth.oidc_link`, `auth.oidc_rejected`.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| No SSO button / `enabled: false` | `OIDC_*` not in container env | Add vars to Compose Environment + ensure `compose.dokploy.yaml` interpolates them; redeploy |
+| No SSO button / `enabled: false` | Incomplete Admin SSO settings and/or `OIDC_*` not in container env | Save issuer + client id + secret in Admin → SSO, or add vars to Compose Environment and redeploy |
 | Redirect URI mismatch | Authentik URI ≠ KnowHub callback | Align to `{WEB_URL}/api/v1/auth/oidc/callback` |
 | Cookie missing / bounce to login | Callback hit API host instead of web | Use WEB_URL redirect; do not register API_URL-only callback |
 | `sso=unknown`, audit **email null** | User not invited / email claim missing | Invite matching email; ensure `email` scope mapping |
@@ -220,7 +221,6 @@ Audit actions: `auth.oidc_login`, `auth.oidc_link`, `auth.oidc_rejected`.
 
 ## 10. Follow-ups (not in v1)
 
-* Admin UI for IdP config.
 * Authentik group → workspace role mapping.
 * Multiple concurrent issuers in one deployment UI.
 * Attribute-based `email_verified` instead of hard-coded `True` in the scope mapping.

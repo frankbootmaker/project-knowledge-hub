@@ -51,6 +51,7 @@ export type NavIconName =
   | 'memberships'
   | 'audit'
   | 'email'
+  | 'sso'
   | 'templates'
   | 'adminArchive';
 
@@ -94,6 +95,7 @@ export type NavItemId =
   | 'admin-memberships'
   | 'admin-audit'
   | 'admin-email'
+  | 'admin-sso'
   | 'admin-templates'
   | 'admin-archive';
 
@@ -401,6 +403,13 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         labelKey: 'adminEmail',
         adminOnly: true,
         href: () => '/admin/email',
+      },
+      {
+        id: 'admin-sso',
+        icon: 'sso',
+        labelKey: 'adminSso',
+        adminOnly: true,
+        href: () => '/admin/sso',
       },
       {
         id: 'admin-templates',

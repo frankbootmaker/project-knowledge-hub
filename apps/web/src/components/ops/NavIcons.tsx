@@ -110,6 +110,12 @@ const paths: Record<NavIconName, ReactNode> = {
     </>
   ),
   email: <path d="M4 7h16v11H4zM4 7l8 6 8-6" />,
+  sso: (
+    <>
+      <circle cx="8" cy="12" r="3" />
+      <path d="M11 12h9M17 12v3M20 12v4" />
+    </>
+  ),
   templates: <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />,
   adminArchive: (
     <>
