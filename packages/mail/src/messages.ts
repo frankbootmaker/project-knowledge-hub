@@ -160,13 +160,12 @@ export type MailMessages = {
 };
 
 export const en: MailMessages = {
-  brandName: 'IN3 Technology',
-  appName: 'Project Knowledge Hub',
-  footerNote:
-    'You received this email because of activity on your Project Knowledge Hub account.',
+  brandName: 'KnowHub',
+  appName: 'KnowHub',
+  footerNote: 'You received this email because of activity on your KnowHub account.',
   ctaFallback: 'Or copy and paste this link into your browser:',
   passwordReset: {
-    subject: 'Reset your Project Knowledge Hub password',
+    subject: 'Reset your KnowHub password',
     title: 'Reset your password',
     greeting: 'Hi {name},',
     body: 'We received a request to reset your password. Use the button below to choose a new one. This link expires soon.',
@@ -174,25 +173,25 @@ export const en: MailMessages = {
     ignore: 'If you did not request this, you can ignore this email.',
   },
   invite: {
-    subject: 'You are invited to Project Knowledge Hub',
+    subject: 'You are invited to KnowHub',
     title: 'You are invited',
     greeting: 'Hi {name},',
-    body: 'You have been invited to Project Knowledge Hub. Set your password to activate your account.',
+    body: 'You have been invited to KnowHub. Set your password to activate your account.',
     cta: 'Set your password',
     ignore: 'If you were not expecting this invitation, you can ignore this email.',
   },
   emailConfirm: {
-    subject: 'Confirm your Project Knowledge Hub email',
+    subject: 'Confirm your KnowHub email',
     title: 'Confirm your email',
     greeting: 'Hi {name},',
-    body: 'Thanks for signing up for Project Knowledge Hub. Confirm your email address to continue.',
+    body: 'Thanks for signing up for KnowHub. Confirm your email address to continue.',
     after:
       'After you confirm, an administrator must approve your account and assign workspace access and a role. Until then you cannot sign in.',
     cta: 'Confirm your email',
     ignore: 'If you did not create an account, you can ignore this email.',
   },
   accountApproved: {
-    subject: 'Your Project Knowledge Hub account is ready',
+    subject: 'Your KnowHub account is ready',
     title: 'Account approved',
     greeting: 'Hi {name},',
     body: 'An administrator has approved your account. You can sign in now.',
@@ -204,7 +203,7 @@ export const en: MailMessages = {
     cta: 'Sign in',
   },
   signupPendingApproval: {
-    subject: 'Signup awaiting approval — Project Knowledge Hub',
+    subject: 'Signup awaiting approval — KnowHub',
     title: 'Signup awaiting approval',
     greeting: 'Hi {name},',
     body: 'A new user confirmed their email and is waiting for administrator approval and workspace assignment.',
@@ -213,7 +212,7 @@ export const en: MailMessages = {
     cta: 'Review pending users',
   },
   ssoUserProvisioned: {
-    subject: 'New SSO user needs a workspace — Project Knowledge Hub',
+    subject: 'New SSO user needs a workspace — KnowHub',
     title: 'New SSO user',
     greeting: 'Hi {name},',
     body: 'A user signed in with SSO for the first time. Assign a workspace and role so they can start working.',
@@ -222,7 +221,7 @@ export const en: MailMessages = {
     cta: 'Open users',
   },
   signupPendingEscalation: {
-    subject: 'Signup still pending — Project Knowledge Hub',
+    subject: 'Signup still pending — KnowHub',
     title: 'Signup still pending',
     greeting: 'Hi {name},',
     body: 'A signup has been waiting for approval longer than the configured threshold. Please review and approve or reject.',
@@ -232,7 +231,7 @@ export const en: MailMessages = {
     cta: 'Review pending users',
   },
   backupStaleAlert: {
-    subject: 'Database backup is stale — Project Knowledge Hub',
+    subject: 'Database backup is stale — KnowHub',
     title: 'Stale database backup',
     greeting: 'Hi {name},',
     body: 'The last successful database dump is older than the configured threshold. Check Admin → Monitoring and the backup sidecar.',
@@ -245,25 +244,25 @@ export const en: MailMessages = {
     cta: 'Open Monitoring',
   },
   opsAlertBackupFail: {
-    subject: 'Database backup failed — Project Knowledge Hub',
+    subject: 'Database backup failed — KnowHub',
     title: 'Database backup failed',
     body: 'The backup sidecar recorded a failed dump. Check Admin → Monitoring and the db-backup logs.',
     failureAtLabel: 'Failure stamp: {at}',
   },
   opsAlertErrorSpike: {
-    subject: 'Elevated error rate — Project Knowledge Hub',
+    subject: 'Elevated error rate — KnowHub',
     title: 'Elevated error rate',
     body: 'Recent audit events look like failures above the configured threshold. Review Admin → Monitoring and Audit.',
     countLabel: '{count} error-like events in the last {minutes} minutes (threshold {threshold})',
   },
   opsAlertDiskLow: {
-    subject: 'Backup volume disk space low — Project Knowledge Hub',
+    subject: 'Backup volume disk space low — KnowHub',
     title: 'Backup volume disk space low',
     body: 'Free space on the backup volume is below the configured minimum. Free space or adjust retention.',
     freeLabel: 'Free: {free} of {total} ({percent}%)',
   },
   passwordChanged: {
-    subject: 'Your Project Knowledge Hub password was changed',
+    subject: 'Your KnowHub password was changed',
     title: 'Password changed',
     greeting: 'Hi {name},',
     body: 'Your account password was just changed.',
@@ -272,15 +271,15 @@ export const en: MailMessages = {
     cta: 'Sign in',
   },
   accountClosed: {
-    subject: 'Your Project Knowledge Hub account was closed',
+    subject: 'Your KnowHub account was closed',
     title: 'Account closed',
     greeting: 'Hi {name},',
-    body: 'Your Project Knowledge Hub account has been closed. You can no longer sign in with this email.',
+    body: 'Your KnowHub account has been closed. You can no longer sign in with this email.',
     bodyExtra:
       'Authored knowledge may remain in the hub. Contact an administrator if you need access again.',
   },
   signupRejected: {
-    subject: 'Your Project Knowledge Hub signup was not approved',
+    subject: 'Your KnowHub signup was not approved',
     title: 'Signup not approved',
     greeting: 'Hi {name},',
     body: 'An administrator did not approve your signup request. The account has been disabled. Contact an administrator if you believe this is a mistake.',
@@ -310,10 +309,10 @@ export const en: MailMessages = {
     cta: 'View AI connections',
   },
   testEmail: {
-    subject: 'Project Knowledge Hub — test email',
+    subject: 'KnowHub — test email',
     title: 'Test email',
     greeting: 'Hi {name},',
-    body: 'This is a test message from Project Knowledge Hub. Mail delivery is working with the settings below.',
+    body: 'This is a test message from KnowHub. Mail delivery is working with the settings below.',
     driverLabel: 'Driver: {driver}',
     sourceLabel: 'Config source: {source}',
     fromLabel: 'From: {from}',
@@ -322,13 +321,13 @@ export const en: MailMessages = {
 };
 
 export const de: MailMessages = {
-  brandName: 'IN3 Technology',
-  appName: 'Project Knowledge Hub',
+  brandName: 'KnowHub',
+  appName: 'KnowHub',
   footerNote:
-    'Sie erhalten diese E-Mail wegen einer Aktivität an Ihrem Project Knowledge Hub-Konto.',
+    'Sie erhalten diese E-Mail wegen einer Aktivität an Ihrem KnowHub-Konto.',
   ctaFallback: 'Oder kopieren Sie diesen Link in Ihren Browser:',
   passwordReset: {
-    subject: 'Passwort für Project Knowledge Hub zurücksetzen',
+    subject: 'Passwort für KnowHub zurücksetzen',
     title: 'Passwort zurücksetzen',
     greeting: 'Hallo {name},',
     body: 'Wir haben eine Anfrage zum Zurücksetzen Ihres Passworts erhalten. Nutzen Sie die Schaltfläche unten, um ein neues zu wählen. Der Link läuft bald ab.',
@@ -336,25 +335,25 @@ export const de: MailMessages = {
     ignore: 'Wenn Sie dies nicht angefordert haben, können Sie diese E-Mail ignorieren.',
   },
   invite: {
-    subject: 'Einladung zum Project Knowledge Hub',
+    subject: 'Einladung zu KnowHub',
     title: 'Sie sind eingeladen',
     greeting: 'Hallo {name},',
-    body: 'Sie wurden zum Project Knowledge Hub eingeladen. Legen Sie ein Passwort fest, um Ihr Konto zu aktivieren.',
+    body: 'Sie wurden zu KnowHub eingeladen. Legen Sie ein Passwort fest, um Ihr Konto zu aktivieren.',
     cta: 'Passwort festlegen',
     ignore: 'Wenn Sie diese Einladung nicht erwartet haben, können Sie diese E-Mail ignorieren.',
   },
   emailConfirm: {
-    subject: 'E-Mail für Project Knowledge Hub bestätigen',
+    subject: 'E-Mail für KnowHub bestätigen',
     title: 'E-Mail bestätigen',
     greeting: 'Hallo {name},',
-    body: 'Danke für Ihre Registrierung beim Project Knowledge Hub. Bestätigen Sie Ihre E-Mail-Adresse, um fortzufahren.',
+    body: 'Danke für Ihre Registrierung bei KnowHub. Bestätigen Sie Ihre E-Mail-Adresse, um fortzufahren.',
     after:
       'Nach der Bestätigung muss ein Administrator Ihr Konto freigeben und Workspace-Zugang sowie eine Rolle zuweisen. Bis dahin ist eine Anmeldung nicht möglich.',
     cta: 'E-Mail bestätigen',
     ignore: 'Wenn Sie kein Konto erstellt haben, können Sie diese E-Mail ignorieren.',
   },
   accountApproved: {
-    subject: 'Ihr Project Knowledge Hub-Konto ist bereit',
+    subject: 'Ihr KnowHub-Konto ist bereit',
     title: 'Konto freigegeben',
     greeting: 'Hallo {name},',
     body: 'Ein Administrator hat Ihr Konto freigegeben. Sie können sich jetzt anmelden.',
@@ -366,7 +365,7 @@ export const de: MailMessages = {
     cta: 'Anmelden',
   },
   signupPendingApproval: {
-    subject: 'Registrierung wartet auf Freigabe — Project Knowledge Hub',
+    subject: 'Registrierung wartet auf Freigabe — KnowHub',
     title: 'Registrierung wartet auf Freigabe',
     greeting: 'Hallo {name},',
     body: 'Ein neuer Benutzer hat seine E-Mail bestätigt und wartet auf Administrator-Freigabe sowie Workspace-Zuweisung.',
@@ -375,7 +374,7 @@ export const de: MailMessages = {
     cta: 'Ausstehende Benutzer prüfen',
   },
   ssoUserProvisioned: {
-    subject: 'Neuer SSO-Benutzer braucht einen Workspace — Project Knowledge Hub',
+    subject: 'Neuer SSO-Benutzer braucht einen Workspace — KnowHub',
     title: 'Neuer SSO-Benutzer',
     greeting: 'Hallo {name},',
     body: 'Ein Benutzer hat sich erstmals per SSO angemeldet. Weisen Sie Workspace und Rolle zu, damit die Arbeit beginnen kann.',
@@ -384,7 +383,7 @@ export const de: MailMessages = {
     cta: 'Benutzer öffnen',
   },
   signupPendingEscalation: {
-    subject: 'Registrierung weiterhin ausstehend — Project Knowledge Hub',
+    subject: 'Registrierung weiterhin ausstehend — KnowHub',
     title: 'Registrierung weiterhin ausstehend',
     greeting: 'Hallo {name},',
     body: 'Eine Registrierung wartet länger als der konfigurierte Schwellenwert auf Freigabe. Bitte prüfen und freigeben oder ablehnen.',
@@ -394,7 +393,7 @@ export const de: MailMessages = {
     cta: 'Ausstehende Benutzer prüfen',
   },
   backupStaleAlert: {
-    subject: 'Datenbank-Backup ist veraltet — Project Knowledge Hub',
+    subject: 'Datenbank-Backup ist veraltet — KnowHub',
     title: 'Veraltetes Datenbank-Backup',
     greeting: 'Hallo {name},',
     body: 'Der letzte erfolgreiche Datenbank-Dump ist älter als der konfigurierte Schwellenwert. Prüfen Sie Admin → Monitoring und den Backup-Sidecar.',
@@ -407,26 +406,26 @@ export const de: MailMessages = {
     cta: 'Monitoring öffnen',
   },
   opsAlertBackupFail: {
-    subject: 'Datenbank-Backup fehlgeschlagen — Project Knowledge Hub',
+    subject: 'Datenbank-Backup fehlgeschlagen — KnowHub',
     title: 'Datenbank-Backup fehlgeschlagen',
     body: 'Der Backup-Sidecar hat einen fehlgeschlagenen Dump gemeldet. Prüfen Sie Admin → Monitoring und die db-backup-Logs.',
     failureAtLabel: 'Fehler-Zeitstempel: {at}',
   },
   opsAlertErrorSpike: {
-    subject: 'Erhöhte Fehlerrate — Project Knowledge Hub',
+    subject: 'Erhöhte Fehlerrate — KnowHub',
     title: 'Erhöhte Fehlerrate',
     body: 'In den letzten Audit-Ereignissen liegen fehlerähnliche Einträge über dem Schwellenwert. Prüfen Sie Admin → Monitoring und Audit.',
     countLabel:
       '{count} fehlerähnliche Ereignisse in den letzten {minutes} Minuten (Schwelle {threshold})',
   },
   opsAlertDiskLow: {
-    subject: 'Wenig Speicher auf dem Backup-Volume — Project Knowledge Hub',
+    subject: 'Wenig Speicher auf dem Backup-Volume — KnowHub',
     title: 'Wenig Speicher auf dem Backup-Volume',
     body: 'Der freie Speicher auf dem Backup-Volume liegt unter dem Minimum. Speicher freigeben oder Retention anpassen.',
     freeLabel: 'Frei: {free} von {total} ({percent}%)',
   },
   passwordChanged: {
-    subject: 'Ihr Project Knowledge Hub-Passwort wurde geändert',
+    subject: 'Ihr KnowHub-Passwort wurde geändert',
     title: 'Passwort geändert',
     greeting: 'Hallo {name},',
     body: 'Das Passwort Ihres Kontos wurde soeben geändert.',
@@ -435,15 +434,15 @@ export const de: MailMessages = {
     cta: 'Anmelden',
   },
   accountClosed: {
-    subject: 'Ihr Project Knowledge Hub-Konto wurde geschlossen',
+    subject: 'Ihr KnowHub-Konto wurde geschlossen',
     title: 'Konto geschlossen',
     greeting: 'Hallo {name},',
-    body: 'Ihr Project Knowledge Hub-Konto wurde geschlossen. Mit dieser E-Mail können Sie sich nicht mehr anmelden.',
+    body: 'Ihr KnowHub-Konto wurde geschlossen. Mit dieser E-Mail können Sie sich nicht mehr anmelden.',
     bodyExtra:
       'Verfasste Wissenseinträge können im Hub verbleiben. Kontaktieren Sie einen Administrator, wenn Sie erneut Zugang benötigen.',
   },
   signupRejected: {
-    subject: 'Ihre Project Knowledge Hub-Registrierung wurde nicht freigegeben',
+    subject: 'Ihre KnowHub-Registrierung wurde nicht freigegeben',
     title: 'Registrierung nicht freigegeben',
     greeting: 'Hallo {name},',
     body: 'Ein Administrator hat Ihre Registrierungsanfrage nicht freigegeben. Das Konto wurde deaktiviert. Kontaktieren Sie einen Administrator, wenn Sie dies für einen Fehler halten.',
@@ -473,10 +472,10 @@ export const de: MailMessages = {
     cta: 'KI-Verbindungen anzeigen',
   },
   testEmail: {
-    subject: 'Project Knowledge Hub — Test-E-Mail',
+    subject: 'KnowHub — Test-E-Mail',
     title: 'Test-E-Mail',
     greeting: 'Hallo {name},',
-    body: 'Dies ist eine Testnachricht von Project Knowledge Hub. Der E-Mail-Versand funktioniert mit den folgenden Einstellungen.',
+    body: 'Dies ist eine Testnachricht von KnowHub. Der E-Mail-Versand funktioniert mit den folgenden Einstellungen.',
     driverLabel: 'Treiber: {driver}',
     sourceLabel: 'Konfigurationsquelle: {source}',
     fromLabel: 'Absender: {from}',
@@ -485,13 +484,12 @@ export const de: MailMessages = {
 };
 
 export const hu: MailMessages = {
-  brandName: 'IN3 Technology',
-  appName: 'Project Knowledge Hub',
-  footerNote:
-    'Ezt az e-mailt a Project Knowledge Hub fiókoddal kapcsolatos tevékenység miatt kapod.',
+  brandName: 'KnowHub',
+  appName: 'KnowHub',
+  footerNote: 'Ezt az e-mailt a KnowHub fiókoddal kapcsolatos tevékenység miatt kapod.',
   ctaFallback: 'Vagy másold be ezt a linket a böngésződbe:',
   passwordReset: {
-    subject: 'Project Knowledge Hub jelszó visszaállítása',
+    subject: 'KnowHub jelszó visszaállítása',
     title: 'Jelszó visszaállítása',
     greeting: 'Szia {name}!',
     body: 'Jelszó-visszaállítási kérelmet kaptunk. Az alábbi gombbal új jelszót választhatsz. A link hamarosan lejár.',
@@ -499,25 +497,25 @@ export const hu: MailMessages = {
     ignore: 'Ha nem te kérted, nyugodtan hagyd figyelmen kívül ezt az e-mailt.',
   },
   invite: {
-    subject: 'Meghívó a Project Knowledge Hubba',
+    subject: 'Meghívó a KnowHubba',
     title: 'Meghívót kaptál',
     greeting: 'Szia {name}!',
-    body: 'Meghívtak a Project Knowledge Hubba. Állíts be jelszót a fiók aktiválásához.',
+    body: 'Meghívtak a KnowHubba. Állíts be jelszót a fiók aktiválásához.',
     cta: 'Jelszó beállítása',
     ignore: 'Ha nem vártad ezt a meghívót, hagyd figyelmen kívül ezt az e-mailt.',
   },
   emailConfirm: {
-    subject: 'Erősítsd meg a Project Knowledge Hub e-mail címed',
+    subject: 'Erősítsd meg a KnowHub e-mail címed',
     title: 'E-mail megerősítése',
     greeting: 'Szia {name}!',
-    body: 'Köszönjük a Project Knowledge Hub regisztrációt. Erősítsd meg az e-mail címed a folytatáshoz.',
+    body: 'Köszönjük a KnowHub regisztrációt. Erősítsd meg az e-mail címed a folytatáshoz.',
     after:
       'A megerősítés után egy adminisztrátornak jóvá kell hagynia a fiókodat, és workspace-hozzáférést valamint szerepkört kell kiosztania. Addig nem tudsz bejelentkezni.',
     cta: 'E-mail megerősítése',
     ignore: 'Ha nem te hoztál létre fiókot, hagyd figyelmen kívül ezt az e-mailt.',
   },
   accountApproved: {
-    subject: 'A Project Knowledge Hub fiókod kész',
+    subject: 'A KnowHub fiókod kész',
     title: 'Fiók jóváhagyva',
     greeting: 'Szia {name}!',
     body: 'Egy adminisztrátor jóváhagyta a fiókodat. Most már bejelentkezhetsz.',
@@ -529,7 +527,7 @@ export const hu: MailMessages = {
     cta: 'Bejelentkezés',
   },
   signupPendingApproval: {
-    subject: 'Regisztráció jóváhagyásra vár — Project Knowledge Hub',
+    subject: 'Regisztráció jóváhagyásra vár — KnowHub',
     title: 'Regisztráció jóváhagyásra vár',
     greeting: 'Szia {name}!',
     body: 'Egy új felhasználó megerősítette az e-mail címét, és adminisztrátori jóváhagyásra valamint workspace-hozzárendelésre vár.',
@@ -538,7 +536,7 @@ export const hu: MailMessages = {
     cta: 'Függő felhasználók áttekintése',
   },
   ssoUserProvisioned: {
-    subject: 'Új SSO-felhasználó workspace-t vár — Project Knowledge Hub',
+    subject: 'Új SSO-felhasználó workspace-t vár — KnowHub',
     title: 'Új SSO-felhasználó',
     greeting: 'Szia {name}!',
     body: 'Egy felhasználó először jelentkezett be SSO-val. Rendelj hozzá workspace-t és szerepkört, hogy elkezdhessen dolgozni.',
@@ -547,7 +545,7 @@ export const hu: MailMessages = {
     cta: 'Felhasználók megnyitása',
   },
   signupPendingEscalation: {
-    subject: 'Regisztráció továbbra is függőben — Project Knowledge Hub',
+    subject: 'Regisztráció továbbra is függőben — KnowHub',
     title: 'Regisztráció továbbra is függőben',
     greeting: 'Szia {name}!',
     body: 'Egy regisztráció a beállított küszöbnél hosszabb ideje vár jóváhagyásra. Kérjük, tekintsd át, majd hagyd jóvá vagy utasítsd el.',
@@ -557,7 +555,7 @@ export const hu: MailMessages = {
     cta: 'Függő felhasználók áttekintése',
   },
   backupStaleAlert: {
-    subject: 'Az adatbázis-mentés elavult — Project Knowledge Hub',
+    subject: 'Az adatbázis-mentés elavult — KnowHub',
     title: 'Elavult adatbázis-mentés',
     greeting: 'Szia {name}!',
     body: 'Az utolsó sikeres adatbázis-dump régebbi, mint a beállított küszöb. Nézd meg az Admin → Monitoring oldalt és a backup sidecar-t.',
@@ -570,26 +568,26 @@ export const hu: MailMessages = {
     cta: 'Monitoring megnyitása',
   },
   opsAlertBackupFail: {
-    subject: 'Az adatbázis-mentés sikertelen — Project Knowledge Hub',
+    subject: 'Az adatbázis-mentés sikertelen — KnowHub',
     title: 'Az adatbázis-mentés sikertelen',
     body: 'A backup sidecar sikertelen dumpot rögzített. Nézd meg az Admin → Monitoring oldalt és a db-backup naplókat.',
     failureAtLabel: 'Hibabélyegző: {at}',
   },
   opsAlertErrorSpike: {
-    subject: 'Megemelkedett hibaszám — Project Knowledge Hub',
+    subject: 'Megemelkedett hibaszám — KnowHub',
     title: 'Megemelkedett hibaszám',
     body: 'A közelmúltbeli audit események között a hibaszerű bejegyzések száma meghaladja a küszöböt. Nézd meg az Admin → Monitoring és Audit oldalakat.',
     countLabel:
       '{count} hibaszerű esemény az utolsó {minutes} percben (küszöb {threshold})',
   },
   opsAlertDiskLow: {
-    subject: 'Keves a szabad hely a mentési köteten — Project Knowledge Hub',
+    subject: 'Keves a szabad hely a mentési köteten — KnowHub',
     title: 'Keves a szabad hely a mentési köteten',
     body: 'A mentési kötet szabad helye a beállított minimum alatt van. Szabadíts fel helyet, vagy módosítsd a megőrzést.',
     freeLabel: 'Szabad: {free} / {total} ({percent}%)',
   },
   passwordChanged: {
-    subject: 'A Project Knowledge Hub jelszavad megváltozott',
+    subject: 'A KnowHub jelszavad megváltozott',
     title: 'Jelszó megváltozott',
     greeting: 'Szia {name}!',
     body: 'A fiókod jelszava most változott meg.',
@@ -598,15 +596,15 @@ export const hu: MailMessages = {
     cta: 'Bejelentkezés',
   },
   accountClosed: {
-    subject: 'A Project Knowledge Hub fiókod bezárásra került',
+    subject: 'A KnowHub fiókod bezárásra került',
     title: 'Fiók bezárva',
     greeting: 'Szia {name}!',
-    body: 'A Project Knowledge Hub fiókodat bezárták. Ezzel az e-maillel már nem tudsz bejelentkezni.',
+    body: 'A KnowHub fiókodat bezárták. Ezzel az e-maillel már nem tudsz bejelentkezni.',
     bodyExtra:
       'Az általad írt tudásbejegyzések a hubban maradhatnak. Új hozzáféréshez vedd fel a kapcsolatot egy adminisztrátorral.',
   },
   signupRejected: {
-    subject: 'A Project Knowledge Hub regisztrációdat nem hagyták jóvá',
+    subject: 'A KnowHub regisztrációdat nem hagyták jóvá',
     title: 'Regisztráció elutasítva',
     greeting: 'Szia {name}!',
     body: 'Egy adminisztrátor nem hagyta jóvá a regisztrációs kérelmedet. A fiók le lett tiltva. Ha szerinted ez hiba, vedd fel a kapcsolatot egy adminisztrátorral.',
@@ -636,10 +634,10 @@ export const hu: MailMessages = {
     cta: 'AI-kapcsolatok megtekintése',
   },
   testEmail: {
-    subject: 'Project Knowledge Hub — teszt e-mail',
+    subject: 'KnowHub — teszt e-mail',
     title: 'Teszt e-mail',
     greeting: 'Szia {name}!',
-    body: 'Ez egy tesztüzenet a Project Knowledge Hubtól. Az e-mail küldés a lenti beállításokkal működik.',
+    body: 'Ez egy tesztüzenet a KnowHubtól. Az e-mail küldés a lenti beállításokkal működik.',
     driverLabel: 'Illesztő: {driver}',
     sourceLabel: 'Konfig forrás: {source}',
     fromLabel: 'Feladó: {from}',

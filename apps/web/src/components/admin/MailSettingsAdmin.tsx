@@ -228,7 +228,7 @@ export function MailSettingsAdmin({
               <Input
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                placeholder="Project Knowledge Hub <noreply@example.com>"
+                placeholder="KnowHub <noreply@example.com>"
                 autoComplete="off"
               />
             </Field>

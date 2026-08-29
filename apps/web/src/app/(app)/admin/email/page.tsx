@@ -13,7 +13,7 @@ export default async function AdminEmailPage() {
     ? ((await response.json()) as { settings: PublicMailSettings }).settings
     : {
         driver: 'console',
-        from: 'Project Knowledge Hub <noreply@localhost.local>',
+        from: 'KnowHub <noreply@localhost.local>',
         smtpHost: '',
         smtpPort: 587,
         smtpSecure: false,

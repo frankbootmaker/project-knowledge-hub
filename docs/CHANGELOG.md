@@ -61,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Mail chrome:** product emails (including Admin test send) use the Ops Console KnowHub layout — KH mark, IBM Plex stacks, ink CTA, 3px panels, green accent — instead of IN3 navy / “Project Knowledge Hub” chrome.
+
 * **Responsive Delivery / Budgeting UX:** view mode controls use icons below `md` on the section title row; compact mobile header (brand mark, icon auth, menu far right); bottom-sheet modals + full-width toasts on small screens; Budgeting burndown opens on demand in a wide modal below `md`; epic cost rollups use compact cards on mobile and denser tables on desktop; approved-budget field width capped so Save stays visible.
 
 * **German locale (de):** filled missing Scrum / ceremony / DoD / section-nav / document-key strings so DE no longer shows raw message keys.

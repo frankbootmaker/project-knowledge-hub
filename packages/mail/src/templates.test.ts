@@ -6,7 +6,15 @@ import {
   accountApprovedEmail,
   passwordChangedEmail,
   accountClosedEmail,
+  signupRejectedEmail,
+  signupPendingApprovalEmail,
+  ssoUserProvisionedEmail,
+  signupPendingEscalationEmail,
+  backupStaleAlertEmail,
+  opsAlertEmail,
   aiConnectionPendingEmail,
+  aiConnectionApprovedEmail,
+  aiConnectionRejectedEmail,
   testEmail,
   setPasswordUrl,
   confirmEmailUrl,
@@ -32,8 +40,12 @@ describe('mail templates', () => {
       actionUrl: 'http://localhost:3100/set-password?token=t',
     });
     expect(mail.subject).toMatch(/password/i);
-    expect(mail.html).toContain('IN3 Technology');
-    expect(mail.html).toContain('Project Knowledge Hub');
+    expect(mail.html).toContain('KnowHub');
+    expect(mail.html).toMatch(/>\s*KH\s*</);
+    expect(mail.html).toContain('#111811');
+    expect(mail.html).toContain('#121c23');
+    expect(mail.html).not.toContain('IN3 Technology');
+    expect(mail.html).not.toContain('#1f4b73');
     expect(mail.html).toContain('href="http://localhost:3100/set-password?token=t"');
     expect(mail.text).toContain('http://localhost:3100/set-password?token=t');
   });
@@ -110,6 +122,104 @@ describe('mail templates', () => {
     expect(mail.html).toContain('/account/ai-connections');
   });
 
+  it('uses KnowHub ops chrome on every product and test template', () => {
+    const samples = [
+      passwordResetEmail({
+        locale: 'en',
+        displayName: 'Ada',
+        actionUrl: 'http://localhost:3100/set-password?token=t',
+      }),
+      inviteEmail({
+        locale: 'de',
+        displayName: 'Ada',
+        actionUrl: 'http://localhost:3100/set-password?token=t',
+      }),
+      emailConfirmEmail({
+        locale: 'hu',
+        displayName: 'Ada',
+        actionUrl: 'http://localhost:3100/confirm-email?token=t',
+      }),
+      accountApprovedEmail({
+        displayName: 'Ada',
+        loginUrl: 'http://localhost:3100/login',
+      }),
+      passwordChangedEmail({
+        locale: 'en',
+        displayName: 'Ada',
+        loginUrl: 'http://localhost:3100/login',
+      }),
+      accountClosedEmail({ locale: 'en', displayName: 'Ada' }),
+      signupRejectedEmail({ locale: 'en', displayName: 'Ada' }),
+      signupPendingApprovalEmail({
+        displayName: 'Ada',
+        signupDisplayName: 'Ada',
+        signupEmail: 'ada@example.com',
+        reviewUrl: 'http://localhost:3100/admin/users',
+      }),
+      ssoUserProvisionedEmail({
+        displayName: 'Ada',
+        signupDisplayName: 'Ada',
+        signupEmail: 'ada@example.com',
+        reviewUrl: 'http://localhost:3100/admin/users',
+      }),
+      signupPendingEscalationEmail({
+        displayName: 'Ada',
+        signupDisplayName: 'Ada',
+        signupEmail: 'ada@example.com',
+        pendingSince: '2026-08-01',
+        pendingAge: '2d',
+        reviewUrl: 'http://localhost:3100/admin/users',
+      }),
+      backupStaleAlertEmail({
+        displayName: 'Ada',
+        ageLabel: '26h',
+        staleAfterHours: 24,
+        monitoringUrl: 'http://localhost:3100/admin/monitoring',
+      }),
+      opsAlertEmail({
+        displayName: 'Ada',
+        subject: 'KnowHub — ops',
+        title: 'Ops alert',
+        body: 'Check monitoring.',
+        monitoringUrl: 'http://localhost:3100/admin/monitoring',
+      }),
+      aiConnectionPendingEmail({
+        displayName: 'Ada',
+        agentName: 'Cursor',
+        manageUrl: 'http://localhost:3100/account/ai-connections',
+      }),
+      aiConnectionApprovedEmail({
+        displayName: 'Ada',
+        agentName: 'Cursor',
+        manageUrl: 'http://localhost:3100/account/ai-connections',
+      }),
+      aiConnectionRejectedEmail({
+        displayName: 'Ada',
+        agentName: 'Cursor',
+        manageUrl: 'http://localhost:3100/account/ai-connections',
+      }),
+      testEmail({
+        locale: 'en',
+        displayName: 'Ada',
+        driver: 'console',
+        source: 'env',
+        from: 'hub@example.com',
+        settingsUrl: 'http://localhost:3100/admin/email',
+      }),
+    ];
+
+    for (const mail of samples) {
+      expect(mail.html).toContain('KnowHub');
+      expect(mail.html).toMatch(/>\s*KH\s*</);
+      expect(mail.html).toContain('#111811');
+      expect(mail.html).toContain('#121c23');
+      expect(mail.html).toContain("IBM Plex Sans");
+      expect(mail.html).not.toContain('IN3 Technology');
+      expect(mail.html).not.toContain('Project Knowledge Hub');
+      expect(mail.html).not.toContain('#1f4b73');
+    }
+  });
+
   it('renders branded test email with driver metadata', () => {
     const mail = testEmail({
       locale: 'en',
@@ -119,8 +229,11 @@ describe('mail templates', () => {
       from: 'hub@example.com',
       settingsUrl: 'http://localhost:3100/admin/email',
     });
+    expect(mail.subject).toMatch(/KnowHub/i);
     expect(mail.subject).toMatch(/test email/i);
-    expect(mail.html).toContain('IN3 Technology');
+    expect(mail.html).toContain('KnowHub');
+    expect(mail.html).toMatch(/>\s*KH\s*</);
+    expect(mail.html).not.toContain('IN3 Technology');
     expect(mail.html).toContain('Driver: console');
     expect(mail.html).toContain('href="http://localhost:3100/admin/email"');
     expect(mail.text).toContain('hub@example.com');
