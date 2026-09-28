@@ -209,6 +209,136 @@ async function resolveDeliveryEntityRef(
   return resolveEntityId(database, { entityType, idOrKey, projectId });
 }
 
+/**
+ * Resolve and validate a filter entity (milestone, sprint, epic, user story) for list operations.
+ * Returns the resolved UUID, or throws a clear validation error if the entity exists but doesn't
+ * belong to the requested project. This avoids the misleading 'No project found for key prefix'
+ * error when a human key references a valid entity in another project.
+ */
+async function resolveFilterEntity(
+  database: Parameters<typeof resolveEntityId>[0],
+  input: {
+    entityType: ResolvableEntityType;
+    idOrKey: string;
+    requestedProjectId: string;
+  },
+): Promise<string> {
+  const { entityType, idOrKey, requestedProjectId } = input;
+  
+  try {
+    // First, try to resolve the entity without project scoping to see if it exists at all
+    const entityId = await resolveEntityId(database, {
+      entityType,
+      idOrKey,
+    });
+    
+    // Now check if this entity belongs to the requested project
+    const entityTableMap = {
+      milestone: 'projectMilestones',
+      sprint: 'projectSprints',
+      epic: 'projectEpics',
+      user_story: 'projectUserStories',
+      task: 'projectTasks',
+      raid: 'projectRaidItems',
+      change: 'projectChangeItems',
+    };
+    
+    const { projectMilestones, projectSprints, projectEpics, projectUserStories, projectTasks, projectRaidItems, projectChangeItems, projects: projectsTable } = await import('@project-knowledge-hub/database');
+    
+    const tableMap: Record<string, any> = {
+      projectMilestones,
+      projectSprints,
+      projectEpics,
+      projectUserStories,
+      projectTasks,
+      projectRaidItems,
+      projectChangeItems,
+    };
+    
+    const tableName = entityTableMap[entityType];
+    if (!tableName) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: `Unsupported entity type for filter validation: ${entityType}`,
+        statusCode: 400,
+      });
+    }
+    
+    const table = tableMap[tableName];
+    if (!table) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: `Table not found for entity type: ${entityType}`,
+        statusCode: 400,
+      });
+    }
+    
+    // Check which project this entity belongs to
+    const { eq } = await import('drizzle-orm');
+    const [row] = await database.db
+      .select({
+        projectId: table.projectId,
+        issueKeyType: table.issueKeyType,
+        issueNumber: table.issueNumber,
+        keyPrefix: projectsTable.keyPrefix,
+      })
+      .from(table)
+      .innerJoin(projectsTable, eq(table.projectId, projectsTable.id))
+      .where(eq(table.id, entityId))
+      .limit(1);
+    
+    if (!row) {
+      // Entity was found by resolveEntityId but doesn't exist anymore (rare race condition)
+      throw new AppError({
+        code: 'ENTITY_NOT_FOUND',
+        message: `${entityType} not found`,
+        statusCode: 404,
+      });
+    }
+    
+    if (row.projectId !== requestedProjectId) {
+      // Get the requested project's info for a better error message
+      const [requestedProject] = await database.db
+        .select({
+          keyPrefix: projectsTable.keyPrefix,
+          name: projectsTable.name,
+        })
+        .from(projectsTable)
+        .where(eq(projectsTable.id, requestedProjectId))
+        .limit(1);
+      
+      const { formatHumanKey } = await import('@project-knowledge-hub/domain');
+      const entityHumanKey = formatHumanKey(
+        row.keyPrefix,
+        row.issueKeyType,
+        row.issueNumber,
+      );
+      const requestedProjectKey = requestedProject?.keyPrefix || requestedProject?.name || requestedProjectId.substring(0, 8);
+      
+      throw new AppError({
+        code: 'ENTITY_NOT_IN_PROJECT',
+        message: `${entityType.charAt(0).toUpperCase() + entityType.slice(1).replace('_', ' ')} ${entityHumanKey || entityId.substring(0, 8)} does not belong to project ${requestedProjectKey}`,
+        statusCode: 400,
+      });
+    }
+    
+    return entityId;
+  } catch (error) {
+    // If resolveEntityId couldn't find it at all, re-throw that error unchanged
+    if (error instanceof AppError && error.code === 'ISSUE_KEY_NOT_FOUND') {
+      // Try to improve the error message if it's the misleading "No project found" one
+      if (error.message.includes('No project found for key prefix')) {
+        throw new AppError({
+          code: 'ENTITY_NOT_FOUND',
+          message: `${entityType.charAt(0).toUpperCase() + entityType.slice(1).replace('_', ' ')} ${idOrKey} not found`,
+          statusCode: 404,
+        });
+      }
+    }
+    throw error;
+  }
+}
+
 async function resolveOptionalKnowledgeRecordId(
   database: Parameters<typeof resolveKnowledgeRecordId>[0],
   idOrKey: string | null | undefined,
@@ -1601,20 +1731,20 @@ export function createMcpToolHandlers(
         ? null
         : input.milestoneId;
       if (typeof milestoneId === 'string') {
-        milestoneId = await resolveEntityId(app.database, {
+        milestoneId = await resolveFilterEntity(app.database, {
           entityType: 'milestone',
           idOrKey: milestoneId,
-          projectId: input.projectId,
+          requestedProjectId: input.projectId,
         });
       }
       let sprintId: string | null | undefined = input.unassignedSprint
         ? null
         : input.sprintId;
       if (typeof sprintId === 'string') {
-        sprintId = await resolveEntityId(app.database, {
+        sprintId = await resolveFilterEntity(app.database, {
           entityType: 'sprint',
           idOrKey: sprintId,
-          projectId: input.projectId,
+          requestedProjectId: input.projectId,
         });
       }
       return {
@@ -1977,26 +2107,26 @@ export function createMcpToolHandlers(
       const milestoneId =
         input.milestoneId == null
           ? input.milestoneId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'milestone',
               idOrKey: input.milestoneId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const userStoryId =
         input.userStoryId == null
           ? input.userStoryId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'user_story',
               idOrKey: input.userStoryId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const sprintId =
         input.sprintId == null
           ? input.sprintId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'sprint',
               idOrKey: input.sprintId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const task = await createTask(app.database, {
         projectId: project.id,
@@ -2066,26 +2196,26 @@ export function createMcpToolHandlers(
       const milestoneId =
         input.milestoneId === undefined || input.milestoneId === null
           ? input.milestoneId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'milestone',
               idOrKey: input.milestoneId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const userStoryId =
         input.userStoryId === undefined || input.userStoryId === null
           ? input.userStoryId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'user_story',
               idOrKey: input.userStoryId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const sprintId =
         input.sprintId === undefined || input.sprintId === null
           ? input.sprintId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'sprint',
               idOrKey: input.sprintId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const task = await updateTask(app.database, taskId, {
         title: input.title,
@@ -2281,10 +2411,10 @@ export function createMcpToolHandlers(
     async listProjectUserStories(input) {
       await requirePmProject(app, client, input.projectId);
       const epicId = input.epicId
-        ? await resolveEntityId(app.database, {
+        ? await resolveFilterEntity(app.database, {
             entityType: 'epic',
             idOrKey: input.epicId,
-            projectId: input.projectId,
+            requestedProjectId: input.projectId,
           })
         : undefined;
       return {
@@ -2300,10 +2430,10 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
-      const epicId = await resolveEntityId(app.database, {
+      const epicId = await resolveFilterEntity(app.database, {
         entityType: 'epic',
         idOrKey: input.epicId,
-        projectId: project.id,
+        requestedProjectId: project.id,
       });
       const userStory = await createUserStory(app.database, {
         projectId: project.id,
@@ -2343,10 +2473,10 @@ export function createMcpToolHandlers(
       const epicId =
         input.epicId === undefined
           ? undefined
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'epic',
               idOrKey: input.epicId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const userStory = await updateUserStory(app.database, storyId, {
         title: input.title,

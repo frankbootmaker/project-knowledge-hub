@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **MCP list filter validation (PRO-T-7):** `list_project_tasks`, `list_project_user_stories`, `create_project_task`, `update_project_task`, `create_project_user_story`, and `update_project_user_story` now return a clear error message when a filter entity (milestone, sprint, epic, user story) exists but belongs to a different project. Previously, passing another project's human key like `FUR-M-1` returned the misleading error `No project found for key prefix FUR`, even when project FUR existed. The new message is `Milestone FUR-M-1 does not belong to project PRO`.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.
