@@ -273,4 +273,84 @@ describe('sanitizeError', () => {
     // But the client message is still clean
     expect(result.message).toBe('Invalid date or datetime value');
   });
+
+  test('preserves Fastify 4xx errors when preserveClientErrors is true', () => {
+    const fastifyError = Object.assign(new Error('Content-Type is not JSON'), {
+      statusCode: 400,
+      code: 'FST_ERR_CTP_INVALID_JSON',
+    });
+
+    const result = sanitizeError(fastifyError, { preserveClientErrors: true });
+
+    expect(result.statusCode).toBe(400);
+    expect(result.code).toBe('FST_ERR_CTP_INVALID_JSON');
+    expect(result.message).toBe('Content-Type is not JSON');
+    expect(result.correlationId).toBeUndefined();
+  });
+
+  test('preserves 413 body too large error', () => {
+    const error = Object.assign(new Error('Request body too large'), {
+      statusCode: 413,
+      code: 'FST_ERR_CTP_BODY_TOO_LARGE',
+    });
+
+    const result = sanitizeError(error, { preserveClientErrors: true });
+
+    expect(result.statusCode).toBe(413);
+    expect(result.code).toBe('FST_ERR_CTP_BODY_TOO_LARGE');
+    expect(result.message).toBe('Request body too large');
+  });
+
+  test('preserves 429 rate limit error', () => {
+    const error = Object.assign(new Error('Rate limit exceeded'), {
+      statusCode: 429,
+      code: 'RATE_LIMIT_EXCEEDED',
+    });
+
+    const result = sanitizeError(error, { preserveClientErrors: true });
+
+    expect(result.statusCode).toBe(429);
+    expect(result.code).toBe('RATE_LIMIT_EXCEEDED');
+    expect(result.message).toBe('Rate limit exceeded');
+  });
+
+  test('does not preserve 5xx errors even with preserveClientErrors', () => {
+    const error = Object.assign(new Error('Something broke'), {
+      statusCode: 500,
+    });
+
+    const result = sanitizeError(error, { preserveClientErrors: true });
+
+    expect(result.statusCode).toBe(500);
+    expect(result.code).toBe('INTERNAL_ERROR');
+    expect(result.message).toContain('Internal error (ref:');
+    expect(result.correlationId).toBeDefined();
+  });
+
+  test('does not preserve 4xx errors when preserveClientErrors is false', () => {
+    const error = Object.assign(new Error('Bad request'), {
+      statusCode: 400,
+      code: 'BAD_REQUEST',
+    });
+
+    const result = sanitizeError(error, { preserveClientErrors: false });
+
+    expect(result.statusCode).toBe(500);
+    expect(result.code).toBe('INTERNAL_ERROR');
+    expect(result.message).toContain('Internal error (ref:');
+    expect(result.correlationId).toBeDefined();
+  });
+
+  test('database errors take precedence over preserveClientErrors', () => {
+    // Even if the error has a statusCode, database errors are always mapped
+    const postgresError = Object.assign(new Error('date error'), {
+      code: '22007',
+      statusCode: 418, // This should be ignored
+    });
+
+    const result = sanitizeError(postgresError, { preserveClientErrors: true });
+
+    expect(result.statusCode).toBe(400);
+    expect(result.code).toBe('INVALID_DATE');
+  });
 });

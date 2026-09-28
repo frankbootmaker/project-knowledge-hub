@@ -514,6 +514,12 @@ export type McpToolHandlers = {
     ok: boolean,
     context?: McpToolCallContext,
   ) => Promise<void>;
+  /**
+   * Optional logger for error reporting. If not provided, falls back to console.error.
+   */
+  logger?: {
+    error: (obj: Record<string, unknown>, msg?: string) => void;
+  };
 };
 
 export type McpToolCallContext = {
@@ -528,6 +534,42 @@ function requireScope(client: McpClientContext, scope: McpScope): void {
   if (!hasMcpScope(client.scopes, scope)) {
     throw new Error(`Missing required scope: ${scope}`);
   }
+}
+
+/**
+ * Convert an error to an MCP error result, sanitizing sensitive information.
+ * Only AppError messages are returned verbatim; all other errors are sanitized.
+ * 
+ * @param error - The error to convert
+ * @param logger - Optional logger for server-side error logging
+ * @returns MCP error result with safe message
+ */
+export function toMcpErrorResult(
+  error: unknown,
+  logger?: { error: (obj: Record<string, unknown>, msg?: string) => void },
+): { isError: true; content: Array<{ type: 'text'; text: string }> } {
+  // Only return safe error messages to MCP clients
+  if (error instanceof AppError) {
+    return {
+      isError: true,
+      content: [{ type: 'text' as const, text: error.message }],
+    };
+  }
+
+  // Sanitize all other errors (database, internal, etc.)
+  const sanitized = sanitizeError(error);
+  if (sanitized.logPayload) {
+    if (logger) {
+      logger.error({ err: error, ...sanitized.logPayload }, 'MCP tool error');
+    } else {
+      console.error('[MCP Error]', { err: error, ...sanitized.logPayload });
+    }
+  }
+  
+  return {
+    isError: true,
+    content: [{ type: 'text' as const, text: sanitized.message }],
+  };
 }
 
 function textResult(data: unknown) {
@@ -615,25 +657,7 @@ export function createKnowledgeHubMcpServer(
         return textResult(data);
       } catch (error) {
         await handlers.onToolCall?.(toolName, false, argContext);
-        
-        // Only return safe error messages to MCP clients
-        if (error instanceof AppError) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: error.message }],
-          };
-        }
-
-        // Sanitize all other errors (database, internal, etc.)
-        const sanitized = sanitizeError(error);
-        if (sanitized.logPayload) {
-          console.error('[MCP Error]', sanitized.logPayload);
-        }
-        
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: sanitized.message }],
-        };
+        return toMcpErrorResult(error, handlers.logger);
       }
     };
 

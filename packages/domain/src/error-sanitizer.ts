@@ -1,5 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { AppError } from './index.js';
+
+function randomUUID(): string {
+  return globalThis.crypto.randomUUID();
+}
 
 type PostgresError = Error & {
   code?: string;
@@ -72,15 +75,26 @@ export type SanitizedError = {
   logPayload?: Record<string, unknown>;
 };
 
+export type SanitizeErrorOptions = {
+  /**
+   * If true, preserves status codes and messages for 4xx errors that are not database errors.
+   * Useful for REST APIs where framework errors (validation, rate limiting, etc.) should be passed through.
+   */
+  preserveClientErrors?: boolean;
+};
+
 /**
  * Sanitize errors for safe return to clients.
  * - AppError: returned as-is (already safe)
  * - Database errors: mapped to clean 4xx/5xx with correlation ID, full details logged
- * - Other errors: generic 500 with correlation ID
+ * - Other errors: generic 500 with correlation ID (or preserved if 4xx and preserveClientErrors is true)
  * 
  * Never returns raw SQL, params, table names, or internal details to clients.
  */
-export function sanitizeError(error: unknown): SanitizedError {
+export function sanitizeError(
+  error: unknown,
+  options?: SanitizeErrorOptions,
+): SanitizedError {
   if (error instanceof AppError) {
     return {
       statusCode: error.statusCode,
@@ -145,6 +159,29 @@ export function sanitizeError(error: unknown): SanitizedError {
           logPayload,
         };
     }
+  }
+
+  // Preserve Fastify and framework 4xx errors if requested
+  if (
+    options?.preserveClientErrors &&
+    error &&
+    typeof error === 'object' &&
+    'statusCode' in error &&
+    typeof error.statusCode === 'number' &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500
+  ) {
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    const errorCode =
+      'code' in error && typeof error.code === 'string'
+        ? error.code
+        : 'CLIENT_ERROR';
+    return {
+      statusCode: error.statusCode,
+      code: errorCode,
+      message: errorMessage,
+    };
   }
 
   const correlationId = randomUUID();

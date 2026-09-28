@@ -161,9 +161,9 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
       });
     }
 
-    const sanitized = sanitizeError(error);
+    const sanitized = sanitizeError(error, { preserveClientErrors: true });
     if (sanitized.logPayload) {
-      request.log.error(sanitized.logPayload, 'Database or internal error');
+      request.log.error({ err: error, ...sanitized.logPayload }, 'Database or internal error');
     }
     return reply.status(sanitized.statusCode).send({
       error: {
