@@ -26,6 +26,7 @@ import {
   parseTokenRate,
   upsertProjectCostSnapshot,
 } from './project-budget.js';
+import { mergeItDetails } from './systems-it-details.js';
 
 export type PublicSystemTag = { id: string; name: string; slug: string };
 
@@ -394,8 +395,12 @@ export async function updateSystem(
 
   let nextItDetails = system.itDetails;
   if (input.itDetails !== undefined) {
-    nextItDetails =
-      input.itDetails == null ? {} : parseItDetails(input.itDetails);
+    if (input.itDetails == null) {
+      nextItDetails = {};
+    } else {
+      const existing = parseItDetails(system.itDetails);
+      nextItDetails = mergeItDetails(existing, input.itDetails);
+    }
   }
 
   const [updated] = await database.db

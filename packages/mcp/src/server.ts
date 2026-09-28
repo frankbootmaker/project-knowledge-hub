@@ -761,7 +761,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_system',
-    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Does not archive/purge. Requires catalogue:write.',
+    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Does not archive/purge. itDetails updates are merged by key: omitted keys are preserved, keys set to null are removed, and array fields (ports, endpoints, ipAddresses, dependencies) are replaced entirely. Requires catalogue:write.',
     {
       systemId: z.string().uuid(),
       projectId: z.string().uuid().nullable().optional(),
