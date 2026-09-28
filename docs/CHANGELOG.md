@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-* **Media content type validation (PRO-T-11):** workspace media uploads (`upload_workspace_media` and chunked `begin` → `append` → `finalize_workspace_media_upload`) now verify file bytes against the declared content type using magic-byte signatures (PNG, JPEG, GIF, WebP). Uploads with mismatched or unrecognized content are rejected with `MEDIA_CONTENT_MISMATCH` before persisting. Media download responses now include `X-Content-Type-Options: nosniff` to prevent content-type confusion attacks.
-
 ### Added
 
 * **Admin SSO settings:** Admin → SSO (`/admin/sso`) stores OIDC issuer, client id/secret, button label, IdP source, optional redirect URI, enable toggle, and JIT in `platform_settings` (`oidc_config`). Values override `OIDC_*` env at request time (no rebuild/restart). GET never returns the secret. “Reset to .env” clears the override. Login status/start/callback use the resolved config. Briefs [`OIDC_IDP.md`](product/OIDC_IDP.md), [`OIDC_AUTHENTIK_INTEGRATION_GUIDE.md`](product/OIDC_AUTHENTIK_INTEGRATION_GUIDE.md).
@@ -76,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **LLM OpenAPI / Gemini schemas:** ChatGPT Actions + OpenWebUI OpenAPI include first-class delivery tools (`create_project_task`, sprints, milestones, …) under the 30-op limit, plus `call_hub_tool` for the full catalog; Gemini function declarations include the full PM surface; `update_knowledge_record` supports soft-archive.
 
 ### Fixed
+
+* **Media content type validation (PRO-T-11):** workspace media uploads (`upload_workspace_media` and chunked `begin` → `append` → `finalize_workspace_media_upload`) now verify file bytes against the declared content type using magic-byte signatures (PNG, JPEG, GIF, WebP). Uploads with mismatched or unrecognized content are rejected with `MEDIA_CONTENT_MISMATCH` before persisting. Media download responses now include `X-Content-Type-Options: nosniff` to prevent content-type confusion attacks.
 
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
