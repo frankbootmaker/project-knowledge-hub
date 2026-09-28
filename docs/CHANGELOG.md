@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **MCP translation provenance (PRO-T-12):** `create_record_translation` via MCP now records `ai_generated_draft` + conversation/mcp source (matching `create_knowledge_record`), not hub-managed/manual. REST/web UI path unchanged. MCP tool accepts optional `generatedByModel` / `sourceTitle`.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.

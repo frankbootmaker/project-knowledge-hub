@@ -886,6 +886,10 @@ export const createTranslationInputSchema = z.object({
   title: z.string().min(1).max(300).optional(),
   summary: z.string().max(1000).nullable().optional(),
   contentMarkdown: z.string().max(500_000).optional(),
+  /** Optional override for source-of-truth mode (MCP callers supply ai_generated_draft). */
+  sourceOfTruthMode: sourceOfTruthModeSchema.optional(),
+  /** Optional override for source provenance (MCP callers supply conversation/mcp source). */
+  source: sourceInputSchema.optional(),
 });
 
 export type CreateTranslationInput = z.infer<typeof createTranslationInputSchema>;
@@ -1155,14 +1159,14 @@ export async function createRecordTranslation(
       summary: summary ?? undefined,
       recordType: recordTypeSchema.parse(source.recordType),
       lifecycleStatus: 'draft',
-      sourceOfTruthMode: 'hub_managed',
+      sourceOfTruthMode: body.sourceOfTruthMode ?? 'hub_managed',
       contentMarkdown,
       language,
       translationGroupId,
       projectId: source.projectId,
       systemId: source.systemId,
       tags: tagList.map((tag) => tag.name),
-      source: {
+      source: body.source ?? {
         sourceType: translateWithAi ? 'conversation' : 'manual',
         sourceProvider: translateWithAi ? 'vision_llm' : 'project-knowledge-hub',
         sourceTitle: translateWithAi

@@ -1111,6 +1111,13 @@ export function createMcpToolHandlers(
           title: input.title,
           summary: input.summary,
           contentMarkdown: input.contentMarkdown,
+          sourceOfTruthMode: 'ai_generated_draft',
+          source: {
+            sourceType: 'conversation',
+            sourceProvider: 'mcp',
+            sourceTitle: input.sourceTitle ?? 'Created via MCP',
+            generatedByModel: input.generatedByModel ?? null,
+          },
         },
         {
           actorType: 'api_client',
