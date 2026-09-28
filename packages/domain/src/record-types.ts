@@ -584,39 +584,157 @@ export type KnowledgeRecordMetadata = {
 
 /**
  * MCP tool input schemas for knowledge records.
- * These match the zod schemas registered in packages/mcp/src/server.ts.
+ * Single source of truth - used by packages/mcp/src/server.ts.
+ * These are intentionally more restrictive than the API schemas
+ * (no lifecycleStatus, sourceOfTruthMode, metadata, source fields).
  */
 export const createKnowledgeRecordInputSchema = z.object({
-  workspaceId: z.string().uuid(),
-  title: z.string().min(1).max(300),
-  recordType: z.string().min(1).max(64),
-  contentMarkdown: z.string().max(500_000),
-  summary: z.string().max(1000).optional(),
-  slug: z.string().min(1).max(96).optional(),
-  projectId: z.string().uuid().optional(),
-  systemId: z.string().uuid().optional(),
-  tags: z.array(z.string().min(1).max(64)).max(30).optional(),
-  language: z.string().min(2).max(16).optional(),
-  translationGroupId: z.string().uuid().nullable().optional(),
-  generatedByModel: z.string().max(160).optional(),
-  sourceTitle: z.string().max(300).optional(),
+  workspaceId: z
+    .string()
+    .uuid()
+    .describe('Target workspace UUID (must be on the API client allowlist for writes).'),
+  title: z
+    .string()
+    .min(1)
+    .max(300)
+    .describe('Human-readable title (1–300 chars).'),
+  recordType: z
+    .string()
+    .min(1)
+    .max(64)
+    .describe('One of the catalog recordType values from list_record_metadata.'),
+  contentMarkdown: z
+    .string()
+    .max(500_000)
+    .describe('Markdown body of the record.'),
+  summary: z
+    .string()
+    .max(1000)
+    .optional()
+    .describe('Short summary (≤1000 chars).'),
+  slug: z
+    .string()
+    .min(1)
+    .max(96)
+    .optional()
+    .describe('URL slug; auto-derived from title when omitted.'),
+  projectId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe('Optional project UUID to scope the record.'),
+  systemId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe('Optional system UUID to scope the record.'),
+  tags: z
+    .array(z.string().min(1).max(64))
+    .max(30)
+    .optional()
+    .describe('Up to 30 tag strings.'),
+  language: z
+    .string()
+    .min(2)
+    .max(16)
+    .optional()
+    .describe('BCP 47 / short language code (e.g. en, de, hu).'),
+  translationGroupId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe('Optional UUID shared by translation siblings (same group id).'),
+  generatedByModel: z
+    .string()
+    .max(160)
+    .optional()
+    .describe('Model identifier for provenance (MCP conversation source).'),
+  sourceTitle: z
+    .string()
+    .max(300)
+    .optional()
+    .describe('Human label for the originating conversation or document.'),
 });
 
 export const updateKnowledgeRecordInputSchema = z.object({
-  recordId: z.string().min(1).max(80),
-  changeMessage: z.string().min(1).max(500),
-  title: z.string().min(1).max(300).optional(),
-  summary: z.string().max(1000).nullable().optional(),
-  recordType: z.string().min(1).max(64).optional(),
-  contentMarkdown: z.string().max(500_000).optional(),
-  projectId: z.string().uuid().nullable().optional(),
-  systemId: z.string().uuid().nullable().optional(),
-  tags: z.array(z.string().min(1).max(64)).max(30).optional(),
-  language: z.string().min(2).max(16).nullable().optional(),
-  translationGroupId: z.string().uuid().nullable().optional(),
-  generatedByModel: z.string().max(160).optional(),
-  sourceTitle: z.string().max(300).optional(),
-  archived: z.boolean().optional(),
+  recordId: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe('UUID or project document key (e.g. HL1-VIS-2) of the record to update.'),
+  changeMessage: z
+    .string()
+    .min(1)
+    .max(500)
+    .describe('Required: why the change was made.'),
+  title: z
+    .string()
+    .min(1)
+    .max(300)
+    .optional()
+    .describe('Human-readable title (1–300 chars).'),
+  summary: z
+    .string()
+    .max(1000)
+    .nullable()
+    .optional()
+    .describe('Short summary (≤1000 chars).'),
+  recordType: z
+    .string()
+    .min(1)
+    .max(64)
+    .optional()
+    .describe('One of the catalog recordType values from list_record_metadata.'),
+  contentMarkdown: z
+    .string()
+    .max(500_000)
+    .optional()
+    .describe('Markdown body of the record.'),
+  projectId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe('Optional project UUID to scope the record.'),
+  systemId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe('Optional system UUID to scope the record.'),
+  tags: z
+    .array(z.string().min(1).max(64))
+    .max(30)
+    .optional()
+    .describe('Up to 30 tag strings.'),
+  language: z
+    .string()
+    .min(2)
+    .max(16)
+    .nullable()
+    .optional()
+    .describe('BCP 47 / short language code (e.g. en, de, hu).'),
+  translationGroupId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe('Optional UUID shared by translation siblings (same group id).'),
+  generatedByModel: z
+    .string()
+    .max(160)
+    .optional()
+    .describe('Model identifier for provenance (MCP conversation source).'),
+  sourceTitle: z
+    .string()
+    .max(300)
+    .optional()
+    .describe('Human label for the originating conversation or document.'),
+  archived: z
+    .boolean()
+    .optional()
+    .describe('Set true to soft-archive the record, or false to restore it.'),
 });
 
 export type CreateKnowledgeRecordInput = z.infer<typeof createKnowledgeRecordInputSchema>;

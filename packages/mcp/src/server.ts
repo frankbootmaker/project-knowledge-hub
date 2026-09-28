@@ -1,5 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import {
+  createKnowledgeRecordInputSchema,
+  updateKnowledgeRecordInputSchema,
+} from '@project-knowledge-hub/domain';
 import { hasMcpScope, type McpScope } from './scopes.js';
 import { enforceResponseSize, MCP_MAX_LIST_LIMIT } from './limits.js';
 
@@ -1150,21 +1154,7 @@ export function createKnowledgeHubMcpServer(
   server.tool(
     'create_knowledge_record',
     'Create a NEW draft topic (knowledge:write; humans approve/mark-current). Prefer list_record_metadata first. Images: begin→append→finalize + media.markdownSnippet — never data:image URIs. NEVER use this for hu/de of an existing record — that creates unlinked duplicates; use create_record_translation.',
-    {
-      workspaceId: z.string().uuid(),
-      title: z.string().min(1).max(300),
-      recordType: z.string().min(1).max(64),
-      contentMarkdown: z.string().max(500_000),
-      summary: z.string().max(1000).optional(),
-      slug: z.string().min(1).max(96).optional(),
-      projectId: z.string().uuid().optional(),
-      systemId: z.string().uuid().optional(),
-      tags: z.array(z.string().min(1).max(64)).max(30).optional(),
-      language: z.string().min(2).max(16).optional(),
-      translationGroupId: z.string().uuid().nullable().optional(),
-      generatedByModel: z.string().max(160).optional(),
-      sourceTitle: z.string().max(300).optional(),
-    },
+    createKnowledgeRecordInputSchema.shape,
     async (args) =>
       wrap(
         'create_knowledge_record',
@@ -1181,22 +1171,7 @@ export function createKnowledgeHubMcpServer(
   server.tool(
     'update_knowledge_record',
     'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Set archived=true to soft-archive (or false to restore). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
-    {
-      recordId: z.string().min(1).max(80),
-      changeMessage: z.string().min(1).max(500),
-      title: z.string().min(1).max(300).optional(),
-      summary: z.string().max(1000).nullable().optional(),
-      recordType: z.string().min(1).max(64).optional(),
-      contentMarkdown: z.string().max(500_000).optional(),
-      projectId: z.string().uuid().nullable().optional(),
-      systemId: z.string().uuid().nullable().optional(),
-      tags: z.array(z.string().min(1).max(64)).max(30).optional(),
-      language: z.string().min(2).max(16).nullable().optional(),
-      translationGroupId: z.string().uuid().nullable().optional(),
-      generatedByModel: z.string().max(160).optional(),
-      sourceTitle: z.string().max(300).optional(),
-      archived: z.boolean().optional(),
-    },
+    updateKnowledgeRecordInputSchema.shape,
     async (args) =>
       wrap('update_knowledge_record', 'knowledge:write', () =>
         handlers.updateKnowledgeRecord(args),
