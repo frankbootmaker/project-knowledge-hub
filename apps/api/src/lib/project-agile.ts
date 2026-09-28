@@ -10,6 +10,8 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  assertDateRange,
+  effectiveDateRange,
   epicStatusSchema,
   taskActivityTypeSchema,
   userStoryStatusSchema,
@@ -199,6 +201,7 @@ export async function createEpic(
     sortOrder?: number;
   },
 ): Promise<PublicEpic> {
+  assertDateRange({ start: input.startDate, end: input.endDate, startField: 'startDate', endField: 'endDate' });
   const allocated = await allocateIssueNumber(database, input.projectId, 'E');
   const [row] = await database.db
     .insert(projectEpics)
@@ -249,6 +252,13 @@ export async function updateEpic(
       statusCode: 404,
     });
   }
+
+  const effectiveDates = effectiveDateRange({
+    stored: { start: existing.startDate, end: existing.endDate },
+    patch: { start: input.startDate, end: input.endDate },
+  });
+  assertDateRange({ start: effectiveDates.start, end: effectiveDates.end, startField: 'startDate', endField: 'endDate' });
+
   const [row] = await database.db
     .update(projectEpics)
     .set({
@@ -355,6 +365,7 @@ export async function createUserStory(
     sortOrder?: number;
   },
 ): Promise<PublicUserStory> {
+  assertDateRange({ start: input.startDate, end: input.endDate, startField: 'startDate', endField: 'endDate' });
   await assertEpicInProject(database, input.projectId, input.epicId);
   const allocated = await allocateIssueNumber(database, input.projectId, 'S');
   const [row] = await database.db
@@ -411,6 +422,13 @@ export async function updateUserStory(
   if (input.epicId !== undefined) {
     await assertEpicInProject(database, existing.projectId, input.epicId);
   }
+
+  const effectiveDates = effectiveDateRange({
+    stored: { start: existing.startDate, end: existing.endDate },
+    patch: { start: input.startDate, end: input.endDate },
+  });
+  assertDateRange({ start: effectiveDates.start, end: effectiveDates.end, startField: 'startDate', endField: 'endDate' });
+
   const [row] = await database.db
     .update(projectUserStories)
     .set({

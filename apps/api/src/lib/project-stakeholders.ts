@@ -11,6 +11,8 @@ import {
 import {
   AppError,
   aiCostModeSchema,
+  assertDateRange,
+  effectiveDateRange,
   projectStakeholderRoleSchema,
   raciRoleSchema,
   resolveAssistantBrand,
@@ -633,6 +635,8 @@ export async function upsertProjectStakeholder(
     sortOrder?: number;
   } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
+  assertDateRange({ start: input.assignmentStart, end: input.assignmentEnd, startField: 'assignmentStart', endField: 'assignmentEnd' });
+  assertDateRange({ start: input.contractStart, end: input.contractEnd, startField: 'contractStart', endField: 'contractEnd' });
   const { project } = await requireProjectContext(database, input.projectId);
   assertProjectNotArchived(project);
 
@@ -837,6 +841,19 @@ export async function updateProjectStakeholder(
   } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
   const existing = await getRosterStakeholder(database, rosterId);
+
+  const effectiveAssignment = effectiveDateRange({
+    stored: { start: existing.assignmentStart, end: existing.assignmentEnd },
+    patch: { start: input.assignmentStart, end: input.assignmentEnd },
+  });
+  assertDateRange({ start: effectiveAssignment.start, end: effectiveAssignment.end, startField: 'assignmentStart', endField: 'assignmentEnd' });
+
+  const effectiveContract = effectiveDateRange({
+    stored: { start: existing.contractStart, end: existing.contractEnd },
+    patch: { start: input.contractStart, end: input.contractEnd },
+  });
+  assertDateRange({ start: effectiveContract.start, end: effectiveContract.end, startField: 'contractStart', endField: 'contractEnd' });
+
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
 

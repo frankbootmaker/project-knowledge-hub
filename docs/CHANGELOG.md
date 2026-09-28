@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **PRO-T-9: Date range validation (MCP):** `create_project_epic`, `create_project_sprint`, `create_project_milestone`, and `create_project_stakeholder` (plus their update variants) reject `endDate` / `targetDate` / `assignmentEnd` / `contractEnd` before the corresponding start date. The check applies on create and update (comparing against stored values when only one date is supplied). Domain helper `assertDateRange` validates all start/end pairs (epics, user stories, sprints, milestones, project baseline, stakeholder assignment/contract windows). Error code `INVALID_DATE_RANGE` with field names in the message.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.

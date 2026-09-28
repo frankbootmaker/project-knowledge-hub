@@ -661,6 +661,11 @@ export {
   type IssueCounters,
 } from './issue-keys.js';
 
+export {
+  assertDateRange,
+  effectiveDateRange,
+} from './date-validation.js';
+
 export class AppError extends Error {
   readonly code: string;
   readonly statusCode: number;

@@ -10,11 +10,13 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  assertDateRange,
   buildKnowledgeRecordMetadata,
   changeDeliveryEntityTypeSchema,
   changeKindSchema,
   changeStatusSchema,
   deliveryLinkEntityTypeSchema,
+  effectiveDateRange,
   epicStatusSchema,
   milestoneStatusSchema,
   aiCostModeSchema,
@@ -627,6 +629,13 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
+
+      const effectiveDates = effectiveDateRange({
+        stored: { start: project.startDate, end: project.endDate },
+        patch: { start: input.startDate, end: input.endDate },
+      });
+      assertDateRange({ start: effectiveDates.start, end: effectiveDates.end, startField: 'startDate', endField: 'endDate' });
+
       const nextCharterId =
         input.charterRecordId === undefined
           ? project.charterRecordId
