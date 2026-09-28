@@ -1416,6 +1416,7 @@ export const projectRaidTaskLinks = pgTable(
       table.taskId,
     ),
     index('project_raid_task_links_task_id_idx').on(table.taskId),
+    index('project_raid_task_links_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1450,6 +1451,7 @@ export const knowledgeRecordDeliveryLinks = pgTable(
       table.entityId,
     ),
     index('knowledge_record_delivery_links_record_idx').on(table.knowledgeRecordId),
+    index('knowledge_record_delivery_links_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1464,6 +1466,9 @@ export const projectInitialStakeholders = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     projectRole: text('project_role').notNull().default('stakeholder'),
     sortOrder: integer('sort_order').notNull().default(0),
     ...timestamps,
@@ -1474,6 +1479,7 @@ export const projectInitialStakeholders = pgTable(
       table.userId,
     ),
     index('project_initial_stakeholders_project_id_idx').on(table.projectId),
+    index('project_initial_stakeholders_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1557,6 +1563,7 @@ export const projectChangeDeliveryLinks = pgTable(
       table.entityType,
       table.entityId,
     ),
+    index('project_change_delivery_links_created_by_idx').on(table.createdBy),
   ],
 );
 

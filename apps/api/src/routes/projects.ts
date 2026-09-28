@@ -417,6 +417,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     const initialStakeholders = await setInitialStakeholders(app.database, {
       projectId: project.id,
       workspaceId: project.workspaceId,
+      createdBy: principal.userId,
       stakeholders: body.stakeholders,
     });
 

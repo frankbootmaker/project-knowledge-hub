@@ -12,7 +12,7 @@ import {
   loadPurgeUser,
   runSystemUserPurge,
 } from '../lib/system-user-purge.js';
-import { deleteMediaBytes } from '../lib/workspace-media.js';
+import { countMediaStorageFailures } from '../lib/workspace-media.js';
 
 const bodySchema = z.object({
   projectId: z.string().uuid(),
@@ -52,20 +52,19 @@ export async function registerSystemUserPurgeRoutes(
         ipAddress: request.ip,
         log: request.log,
         deleteMedia: async (media) => {
-          await deleteMediaBytes(
+          const failures = await countMediaStorageFailures(
             app.env.MEDIA_UPLOAD_DIR,
             media.workspaceId,
             media.id,
-            {
-              blobStore: store,
-              onError: (error, where) => {
-                request.log.error(
-                  { err: error, mediaId: media.id, where },
-                  'Purge media storage delete failed',
-                );
-              },
-            },
+            store,
           );
+          if (failures > 0) {
+            request.log.error(
+              { mediaId: media.id, failures },
+              'Purge media storage delete failed',
+            );
+          }
+          return failures;
         },
       });
     },

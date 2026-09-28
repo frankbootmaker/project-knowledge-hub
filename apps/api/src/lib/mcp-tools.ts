@@ -485,7 +485,7 @@ export function createMcpToolHandlers(
           tags: input.tags,
           metadata: input.metadata,
         },
-        { defaultOwnerUserId: actingUserId },
+        { defaultOwnerUserId: actingUserId, createdBy: actingUserId },
       );
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -789,6 +789,7 @@ export function createMcpToolHandlers(
       const initialStakeholders = await setInitialStakeholders(app.database, {
         projectId: project.id,
         workspaceId: project.workspaceId,
+        createdBy: actingUserId,
         stakeholders: input.stakeholders.map((row) => ({
           userId: row.userId,
           projectRole: row.projectRole

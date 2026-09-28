@@ -30,6 +30,7 @@ import {
   toHumanKeyFields,
 } from './project-issue-keys.js';
 import { avatarUrlForUser } from './public-user.js';
+import { diffReplacement } from './replace-diff.js';
 import { activeMemberConditions } from './user-category.js';
 
 export type PublicRaciEntry = {
@@ -857,13 +858,40 @@ export async function replaceTaskRaci(
     input.entries.map((entry) => entry.userId),
   );
 
-  await database.db
-    .delete(projectTaskRaci)
+  const existing = await database.db
+    .select({
+      id: projectTaskRaci.id,
+      userId: projectTaskRaci.userId,
+      role: projectTaskRaci.role,
+    })
+    .from(projectTaskRaci)
     .where(eq(projectTaskRaci.taskId, input.taskId));
-
-  if (input.entries.length > 0) {
+  const diff = diffReplacement(
+    existing,
+    input.entries,
+    (row) => row.userId,
+    (row) => row.userId,
+    (prev, row) => prev.role === row.role,
+  );
+  if (diff.remove.length > 0) {
+    await database.db
+      .delete(projectTaskRaci)
+      .where(
+        inArray(
+          projectTaskRaci.id,
+          diff.remove.map((row) => row.id),
+        ),
+      );
+  }
+  for (const change of diff.update) {
+    await database.db
+      .update(projectTaskRaci)
+      .set({ role: change.next.role })
+      .where(eq(projectTaskRaci.id, change.existing.id));
+  }
+  if (diff.insert.length > 0) {
     await database.db.insert(projectTaskRaci).values(
-      input.entries.map((entry) => ({
+      diff.insert.map((entry) => ({
         taskId: input.taskId,
         userId: entry.userId,
         role: entry.role,
@@ -993,6 +1021,21 @@ export async function deleteTask(
   const existing = await getTask(database, taskId);
   await database.db.delete(projectTasks).where(eq(projectTasks.id, taskId));
   return { id: existing.id, projectId: existing.projectId };
+}
+
+function aiUsagePrevious(
+  changedFields: readonly string[],
+  existing: { tokensUsed: number | null; aiSystemId: string | null },
+): { previous?: { tokensUsed?: number | null; aiSystemId?: string | null } } {
+  const previous: { tokensUsed?: number | null; aiSystemId?: string | null } = {};
+  if (changedFields.includes('tokensUsed')) {
+    previous.tokensUsed = existing.tokensUsed;
+  }
+  if (changedFields.includes('aiSystemId')) {
+    previous.aiSystemId = existing.aiSystemId;
+  }
+  if (Object.keys(previous).length === 0) return {};
+  return { previous };
 }
 
 export async function updateTask(
@@ -1132,7 +1175,10 @@ export async function updateTask(
       taskId,
       actorUserId: input.actorUserId,
       type: 'fields_updated',
-      metadata: { fields: changedFields },
+      metadata: {
+      fields: changedFields,
+      ...aiUsagePrevious(changedFields, existing),
+    },
     });
   }
 

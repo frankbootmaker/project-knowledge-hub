@@ -64,6 +64,11 @@ BEGIN
           'project_change_delivery_links',
           'project_change_delivery_links_created_by_users_id_fk',
           'project_change_delivery_links_created_by_idx'
+        ),
+        (
+          'project_initial_stakeholders',
+          'project_initial_stakeholders_created_by_users_id_fk',
+          'project_initial_stakeholders_created_by_idx'
         )
     ) AS t(table_name, constraint_name, index_name)
   LOOP

@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import {
   auditEvents,
   conversationImportRecords,
@@ -13,6 +13,7 @@ import {
   projectChangeDeliveryLinks,
   projectChangeItems,
   projectEpics,
+  projectInitialStakeholders,
   projectMilestones,
   projectRaidItems,
   projectRaidTaskLinks,
@@ -47,18 +48,48 @@ import { upsertProjectCostSnapshot } from './project-budget.js';
  * - AI usage is not its own table: fields_updated activities that touch
  *   tokensUsed/aiSystemId, plus tokens stored on the task itself
  *
- * Conflict strategy: all-or-nothing. Nullable FKs from real rows onto
- * system-owned rows are detached (set null). Tag joins are detached.
- * A cascade that would remove a row the system user did not create
- * (human story under a system epic, human comment on a system task,
- * human version, human delivery link, media still used by a real record)
- * is a conflict and the purge writes nothing.
+ * Conflict strategy: all-or-nothing for in-project cascades. Nullable FKs
+ * from kept rows in the target project onto system-owned rows are detached
+ * and listed in `detaches`. A cascade that would remove a row the system
+ * user did not create inside the target project (human story under a system
+ * epic, human comment, human version, human delivery link on a deleted
+ * parent, media still used by a kept record in this project) is a conflict
+ * and the purge writes nothing.
+ *
+ * Workspace and org rows (null projectId record, system, media, tag) are
+ * deleted only when the system user created them and every reference sits
+ * inside the target project's delete set or on a target-project row that is
+ * detached. Any other reference skips that item (`skippedSharedItems`) and
+ * leaves the outside row untouched. Tag joins outside the project are never
+ * removed. The same skip rule covers project-scoped rows when a database
+ * ON DELETE SET NULL or CASCADE would touch another project
+ * (`project_tasks.ai_system_id`, story `epic_id`, change
+ * `knowledge_record_id`, import `system_id`, `projects.charter_record_id` /
+ * `initial_plan_record_id`, record `system_id` / `supersedes_record_id`).
+ * Charter and initial-plan pointers on the target project are detached and
+ * reported; they are not left to a silent database SET NULL.
+ *
+ * Polymorphic delivery links have no FK. System-created links whose parent
+ * is in this project, or whose entity is in the delete set, are deleted.
+ * Human links whose entity is in the delete set are removed and reported in
+ * `detaches` so the pointer does not dangle. Links, versions, and media of
+ * records outside this project are ignored unless the link's entity is in
+ * the delete set.
+ *
+ * AI usage is `tokens_used` / `ai_system_id` on a task plus the system user's
+ * `fields_updated` activity. On a kept task the purge restores the previous
+ * values when that activity recorded them. Older activities without
+ * `metadata.previous` are listed in `unrecoverableAiUsage` and left as-is
+ * (guessing null would wipe an unknown human value).
  *
  * Issue-key counters are not reclaimed. Budget summary, sprint burndown,
  * and velocity are computed on read. The daily cost snapshot for today is
- * refreshed after a committed purge; older snapshots stay historical.
- * Project charter and initial-plan pointers are nullable and set null by
- * the database if they referenced a deleted record.
+ * refreshed after a committed purge only. Dry-run opens no transaction,
+ * deletes nothing, and writes only a flagged audit row.
+ *
+ * The commit transaction is SERIALIZABLE and retried once on SQLSTATE 40001.
+ * Counts, detaches, and media ids in the response come from that transaction's
+ * plan. A conflict discovered inside the transaction is audited after rollback.
  */
 
 export const PURGE_COUNT_KEYS = [
@@ -73,6 +104,7 @@ export const PURGE_COUNT_KEYS = [
   'activities',
   'raci',
   'stakeholders',
+  'initialStakeholders',
   'aiUsageReports',
   'deliveryLinks',
   'knowledgeRecords',
@@ -99,11 +131,35 @@ export type PurgeDetach = {
     | 'change_item'
     | 'raid_item'
     | 'media'
-    | 'tag_link';
+    | 'tag_link'
+    | 'project'
+    | 'document_import'
+    | 'conversation_import'
+    | 'knowledge_delivery_link'
+    | 'change_delivery_link';
   entityId: string;
   field: string;
   tagId?: string;
   ownerType?: 'project' | 'system' | 'knowledge_record';
+};
+
+export type PurgeSkippedItem = {
+  entityType: string;
+  entityId: string;
+  reason: string;
+};
+
+export type PurgeUnrecoverable = {
+  entityType: 'task';
+  entityId: string;
+  field: 'tokensUsed' | 'aiSystemId';
+  reason: string;
+};
+
+export type PurgeAiRestore = {
+  taskId: string;
+  tokensUsed?: number | null;
+  aiSystemId?: string | null;
 };
 
 export type SystemUserPurgeSnapshot = {
@@ -148,9 +204,18 @@ export type SystemUserPurgeSnapshot = {
     taskId: string;
     type: string;
     fields: string[];
+    recordedTokensUsed?: boolean;
+    previousTokensUsed?: number | null;
+    recordedAiSystemId?: boolean;
+    previousAiSystemId?: string | null;
   }>;
   raci: Array<{ id: string; createdBy: string | null; taskId: string }>;
   stakeholders: Array<{
+    id: string;
+    createdBy: string | null;
+    projectId: string;
+  }>;
+  initialStakeholders?: Array<{
     id: string;
     createdBy: string | null;
     projectId: string;
@@ -159,11 +224,15 @@ export type SystemUserPurgeSnapshot = {
     id: string;
     createdBy: string | null;
     knowledgeRecordId: string;
+    entityType?: string;
+    entityId?: string;
   }>;
   changeDeliveryLinks: Array<{
     id: string;
     createdBy: string | null;
     changeId: string;
+    entityType?: string;
+    entityId?: string;
   }>;
   raidTaskLinks: Array<{
     id: string;
@@ -202,12 +271,29 @@ export type SystemUserPurgeSnapshot = {
     tagId: string;
     ownerType: 'project' | 'system' | 'knowledge_record';
     ownerId: string;
+    ownerProjectId?: string | null;
   }>;
-  mediaImportRefs: Array<{ mediaId: string; importCreatedBy: string }>;
+  mediaImportRefs: Array<{
+    mediaId: string;
+    importCreatedBy: string;
+    projectId?: string | null;
+  }>;
   recordImportRefs: Array<{
     knowledgeRecordId: string;
     importCreatedBy: string;
     kind: 'document_import' | 'conversation_import';
+    projectId?: string | null;
+  }>;
+  projectPointers?: Array<{
+    projectId: string;
+    field: 'charterRecordId' | 'initialPlanRecordId';
+    recordId: string;
+  }>;
+  importSystemRefs?: Array<{
+    systemId: string;
+    sourceId: string;
+    kind: 'document_import' | 'conversation_import';
+    projectId: string | null;
   }>;
 };
 
@@ -226,6 +312,7 @@ export type SystemUserPurgePlan = {
     aiUsageReports: string[];
     raci: string[];
     stakeholders: string[];
+    initialStakeholders: string[];
     knowledgeDeliveryLinks: string[];
     changeDeliveryLinks: string[];
     raidTaskLinks: string[];
@@ -237,6 +324,9 @@ export type SystemUserPurgePlan = {
   };
   detaches: PurgeDetach[];
   conflicts: PurgeConflict[];
+  skippedSharedItems: PurgeSkippedItem[];
+  unrecoverableAiUsage: PurgeUnrecoverable[];
+  aiRestores: PurgeAiRestore[];
 };
 
 export type PurgeCommitDecision = 'dry_run' | 'refuse_conflicts' | 'commit';
@@ -254,6 +344,7 @@ export function emptyPurgeCounts(): PurgeCounts {
     activities: 0,
     raci: 0,
     stakeholders: 0,
+    initialStakeholders: 0,
     aiUsageReports: 0,
     deliveryLinks: 0,
     knowledgeRecords: 0,
@@ -296,7 +387,7 @@ export function assertPurgeProject(
   }
 }
 
-/** Dry-run never writes. Conflicts block a real purge. Otherwise commit. */
+/** Dry-run writes only a flagged audit row. Conflicts block a real purge. */
 export function purgeCommitDecision(input: {
   dryRun: boolean;
   conflictCount: number;
@@ -332,19 +423,39 @@ export function planSystemUserPurge(
 
   const conflicts: PurgeConflict[] = [];
   const detaches: PurgeDetach[] = [];
+  const skipped: PurgeSkippedItem[] = [];
+  const skippedIds = {
+    tasks: new Set<string>(),
+    sprints: new Set<string>(),
+    epics: new Set<string>(),
+    userStories: new Set<string>(),
+    milestones: new Set<string>(),
+    raidItems: new Set<string>(),
+    records: new Set<string>(),
+    media: new Set<string>(),
+    systems: new Set<string>(),
+    tags: new Set<string>(),
+  };
+  const skip = (
+    kind: keyof typeof skippedIds,
+    entityId: string,
+    reason: string,
+  ) => {
+    if (skippedIds[kind].has(entityId)) return;
+    skippedIds[kind].add(entityId);
+    skipped.push({ entityType: kind, entityId, reason });
+  };
 
-  const tasks = inProject(snapshot.tasks).filter((row) => owned(row.createdBy));
-  const sprints = inProject(snapshot.sprints).filter((row) =>
+  let tasks = inProject(snapshot.tasks).filter((row) => owned(row.createdBy));
+  let sprints = inProject(snapshot.sprints).filter((row) => owned(row.createdBy));
+  let epics = inProject(snapshot.epics).filter((row) => owned(row.createdBy));
+  let userStories = inProject(snapshot.userStories).filter((row) =>
     owned(row.createdBy),
   );
-  const epics = inProject(snapshot.epics).filter((row) => owned(row.createdBy));
-  const userStories = inProject(snapshot.userStories).filter((row) =>
+  let milestones = inProject(snapshot.milestones).filter((row) =>
     owned(row.createdBy),
   );
-  const milestones = inProject(snapshot.milestones).filter((row) =>
-    owned(row.createdBy),
-  );
-  const raidItems = inProject(snapshot.raidItems).filter((row) =>
+  let raidItems = inProject(snapshot.raidItems).filter((row) =>
     owned(row.createdBy),
   );
   const changeItems = inProject(snapshot.changeItems).filter((row) =>
@@ -353,6 +464,189 @@ export function planSystemUserPurge(
   const stakeholders = inProject(snapshot.stakeholders).filter((row) =>
     owned(row.createdBy),
   );
+  const initialStakeholders = inProject(snapshot.initialStakeholders ?? []).filter(
+    (row) => owned(row.createdBy),
+  );
+
+  const recordsById = new Map(snapshot.knowledgeRecords.map((row) => [row.id, row]));
+  const systemsById = new Map(snapshot.systems.map((row) => [row.id, row]));
+
+  let records = snapshot.knowledgeRecords.filter(
+    (row) =>
+      row.workspaceId === snapshot.workspaceId &&
+      (row.projectId === null || row.projectId === projectId) &&
+      owned(row.createdBy),
+  );
+  let systemRows = snapshot.systems.filter(
+    (row) =>
+      row.workspaceId === snapshot.workspaceId &&
+      (row.projectId === null || row.projectId === projectId) &&
+      owned(row.createdBy),
+  );
+
+  const candidate = {
+    tasks: ids(tasks),
+    sprints: ids(sprints),
+    epics: ids(epics),
+    stories: ids(userStories),
+    milestones: ids(milestones),
+    raid: ids(raidItems),
+    records: ids(records),
+    systems: ids(systemRows),
+  };
+
+  const refProject = (project: string | null | undefined) =>
+    project === undefined ? projectId : project;
+
+  for (const task of snapshot.tasks) {
+    if (task.projectId === projectId) continue;
+    if (task.milestoneId && candidate.milestones.has(task.milestoneId)) {
+      skip(
+        'milestones',
+        task.milestoneId,
+        'Another project references this milestone; deleting it would SET NULL outside the purge.',
+      );
+    }
+    if (task.userStoryId && candidate.stories.has(task.userStoryId)) {
+      skip(
+        'userStories',
+        task.userStoryId,
+        'Another project references this user story; deleting it would SET NULL outside the purge.',
+      );
+    }
+    if (task.sprintId && candidate.sprints.has(task.sprintId)) {
+      skip(
+        'sprints',
+        task.sprintId,
+        'Another project references this sprint; deleting it would SET NULL outside the purge.',
+      );
+    }
+    if (task.aiSystemId && candidate.systems.has(task.aiSystemId)) {
+      skip(
+        'systems',
+        task.aiSystemId,
+        'Another project references this system; deleting it would SET NULL outside the purge.',
+      );
+    }
+  }
+
+  for (const story of snapshot.userStories) {
+    if (story.projectId === projectId) continue;
+    if (candidate.epics.has(story.epicId)) {
+      skip(
+        'epics',
+        story.epicId,
+        'Another project has a user story under this epic; deleting it would cascade outside the purge.',
+      );
+    }
+  }
+
+  for (const item of snapshot.raidItems) {
+    if (item.projectId === projectId) continue;
+    if (
+      item.transferredToRaidItemId &&
+      candidate.raid.has(item.transferredToRaidItemId)
+    ) {
+      skip(
+        'raidItems',
+        item.transferredToRaidItemId,
+        'Another project references this RAID item; deleting it would SET NULL outside the purge.',
+      );
+    }
+    if (
+      item.transferredFromRaidItemId &&
+      candidate.raid.has(item.transferredFromRaidItemId)
+    ) {
+      skip(
+        'raidItems',
+        item.transferredFromRaidItemId,
+        'Another project references this RAID item; deleting it would SET NULL outside the purge.',
+      );
+    }
+  }
+
+  for (const item of snapshot.changeItems) {
+    if (!item.knowledgeRecordId || !candidate.records.has(item.knowledgeRecordId)) {
+      continue;
+    }
+    if (item.projectId !== projectId) {
+      skip(
+        'records',
+        item.knowledgeRecordId,
+        'Another project change item references this record; deleting it would SET NULL outside the purge.',
+      );
+    }
+  }
+
+  for (const record of snapshot.knowledgeRecords) {
+    if (record.projectId === projectId || candidate.records.has(record.id)) continue;
+    if (
+      record.supersedesRecordId &&
+      candidate.records.has(record.supersedesRecordId)
+    ) {
+      skip(
+        'records',
+        record.supersedesRecordId,
+        'A record outside the target project supersedes this record.',
+      );
+    }
+  }
+
+  for (const pointer of snapshot.projectPointers ?? []) {
+    if (!candidate.records.has(pointer.recordId)) continue;
+    if (pointer.projectId !== projectId) {
+      skip(
+        'records',
+        pointer.recordId,
+        'Another project pins this record as charter or initial plan.',
+      );
+    }
+  }
+
+  for (const ref of snapshot.importSystemRefs ?? []) {
+    if (!candidate.systems.has(ref.systemId)) continue;
+    if (ref.projectId !== projectId) {
+      skip(
+        'systems',
+        ref.systemId,
+        'An import outside the target project references this system.',
+      );
+    }
+  }
+
+  for (const ref of snapshot.recordImportRefs) {
+    if (!candidate.records.has(ref.knowledgeRecordId)) continue;
+    if (ref.importCreatedBy === systemUserId) continue;
+    if (refProject(ref.projectId) !== projectId) {
+      skip(
+        'records',
+        ref.knowledgeRecordId,
+        'An import outside the target project links this record.',
+      );
+    }
+  }
+
+  const recordWillDelete = (id: string) =>
+    candidate.records.has(id) && !skippedIds.records.has(id);
+  for (const record of snapshot.knowledgeRecords) {
+    if (!record.systemId || !candidate.systems.has(record.systemId)) continue;
+    if (recordWillDelete(record.id)) continue;
+    if (record.projectId === projectId) continue;
+    skip(
+      'systems',
+      record.systemId,
+      'A record outside the target project references this system.',
+    );
+  }
+
+  tasks = tasks.filter((row) => !skippedIds.tasks.has(row.id));
+  sprints = sprints.filter((row) => !skippedIds.sprints.has(row.id));
+  epics = epics.filter((row) => !skippedIds.epics.has(row.id));
+  userStories = userStories.filter((row) => !skippedIds.userStories.has(row.id));
+  milestones = milestones.filter((row) => !skippedIds.milestones.has(row.id));
+  raidItems = raidItems.filter((row) => !skippedIds.raidItems.has(row.id));
+  records = records.filter((row) => !skippedIds.records.has(row.id));
+  systemRows = systemRows.filter((row) => !skippedIds.systems.has(row.id));
 
   const taskIds = ids(tasks);
   const sprintIds = ids(sprints);
@@ -361,8 +655,14 @@ export function planSystemUserPurge(
   const milestoneIds = ids(milestones);
   const raidIds = ids(raidItems);
   const changeIds = ids(changeItems);
-
+  const recordIds = ids(records);
+  const systemIds = ids(systemRows);
   const projectTaskIds = ids(inProject(snapshot.tasks));
+  const inScopeRecord = (recordId: string) => {
+    const record = recordsById.get(recordId);
+    if (!record) return false;
+    return record.projectId === projectId || record.projectId === null;
+  };
 
   for (const story of inProject(snapshot.userStories)) {
     if (!owned(story.createdBy) && epicIds.has(story.epicId)) {
@@ -414,16 +714,63 @@ export function planSystemUserPurge(
     }
   }
 
-  const records = snapshot.knowledgeRecords.filter(
-    (row) =>
-      row.workspaceId === snapshot.workspaceId &&
-      (row.projectId === null || row.projectId === projectId) &&
-      owned(row.createdBy),
+  const unrecoverable: PurgeUnrecoverable[] = [];
+  const aiRestores: PurgeAiRestore[] = [];
+  const keptTaskIds = [...projectTaskIds].filter((id) => !taskIds.has(id));
+  for (const taskId of keptTaskIds) {
+    const acts = snapshot.activities.filter(
+      (activity) =>
+        activity.taskId === taskId &&
+        activity.actorUserId === systemUserId &&
+        isAiUsageActivity(activity),
+    );
+    const restore: PurgeAiRestore = { taskId };
+    let restoreAny = false;
+    let tokensSeen = false;
+    let systemSeen = false;
+    for (const activity of acts) {
+      if (!tokensSeen && activity.fields.includes('tokensUsed')) {
+        tokensSeen = true;
+        if (activity.recordedTokensUsed) {
+          restore.tokensUsed = activity.previousTokensUsed ?? null;
+          restoreAny = true;
+        } else {
+          unrecoverable.push({
+            entityType: 'task',
+            entityId: taskId,
+            field: 'tokensUsed',
+            reason:
+              'System user overwrote tokensUsed and the activity did not record the previous value.',
+          });
+        }
+      }
+      if (!systemSeen && activity.fields.includes('aiSystemId')) {
+        systemSeen = true;
+        if (activity.recordedAiSystemId) {
+          restore.aiSystemId = activity.previousAiSystemId ?? null;
+          restoreAny = true;
+        } else {
+          unrecoverable.push({
+            entityType: 'task',
+            entityId: taskId,
+            field: 'aiSystemId',
+            reason:
+              'System user overwrote aiSystemId and the activity did not record the previous value.',
+          });
+        }
+      }
+    }
+    if (restoreAny) aiRestores.push(restore);
+  }
+  const restoredAiSystem = new Map(
+    aiRestores
+      .filter((row) => 'aiSystemId' in row)
+      .map((row) => [row.taskId, row.aiSystemId ?? null]),
   );
-  const recordIds = ids(records);
 
   const versions: string[] = [];
   for (const version of snapshot.knowledgeRecordVersions) {
+    if (!inScopeRecord(version.knowledgeRecordId)) continue;
     const parentDeleted = recordIds.has(version.knowledgeRecordId);
     if (parentDeleted && !owned(version.createdBy)) {
       conflicts.push({
@@ -434,7 +781,12 @@ export function planSystemUserPurge(
       });
       continue;
     }
-    if (!parentDeleted && owned(version.createdBy)) {
+    const parent = recordsById.get(version.knowledgeRecordId);
+    if (
+      !parentDeleted &&
+      owned(version.createdBy) &&
+      parent?.projectId === projectId
+    ) {
       conflicts.push({
         entityType: 'knowledge_record_version',
         entityId: version.id,
@@ -447,59 +799,114 @@ export function planSystemUserPurge(
   }
 
   for (const ref of snapshot.recordImportRefs) {
-    if (
-      recordIds.has(ref.knowledgeRecordId) &&
-      ref.importCreatedBy !== systemUserId
-    ) {
-      conflicts.push({
-        entityType: ref.kind,
-        entityId: ref.knowledgeRecordId,
-        reason:
-          'An import the system user did not create links this record. Deleting the record would remove that link.',
-      });
-    }
+    if (!recordIds.has(ref.knowledgeRecordId)) continue;
+    if (ref.importCreatedBy === systemUserId) continue;
+    if (refProject(ref.projectId) !== projectId) continue;
+    conflicts.push({
+      entityType: ref.kind,
+      entityId: ref.knowledgeRecordId,
+      reason:
+        'An import the system user did not create links this record. Deleting the record would remove that link.',
+    });
   }
 
+  const entityInDeleteSet = (entityType: string | undefined, entityId: string | undefined) => {
+    if (!entityType || !entityId) return false;
+    if (entityType === 'epic') return epicIds.has(entityId);
+    if (entityType === 'user_story') return storyIds.has(entityId);
+    if (entityType === 'task') return taskIds.has(entityId);
+    if (entityType === 'sprint') return sprintIds.has(entityId);
+    if (entityType === 'milestone') return milestoneIds.has(entityId);
+    return false;
+  };
+
   const knowledgeDeliveryLinks: string[] = [];
+  const seenKnowledgeLinks = new Set<string>();
   for (const link of snapshot.knowledgeDeliveryLinks) {
+    if (seenKnowledgeLinks.has(link.id)) continue;
+    seenKnowledgeLinks.add(link.id);
+    const parent = recordsById.get(link.knowledgeRecordId);
+    const parentInScope = parent
+      ? parent.projectId === projectId || parent.projectId === null
+      : false;
     const parentDeleted = recordIds.has(link.knowledgeRecordId);
-    if (owned(link.createdBy)) {
+    const entityDeleted = entityInDeleteSet(link.entityType, link.entityId);
+    if (!parentInScope && !entityDeleted) continue;
+    if (parentDeleted) {
+      if (owned(link.createdBy)) knowledgeDeliveryLinks.push(link.id);
+      else {
+        conflicts.push({
+          entityType: 'knowledge_delivery_link',
+          entityId: link.id,
+          reason:
+            'Delivery link on a system-created record was not created by that user.',
+        });
+      }
+      continue;
+    }
+    if (parentInScope && parent?.projectId === projectId && owned(link.createdBy)) {
       knowledgeDeliveryLinks.push(link.id);
       continue;
     }
-    if (parentDeleted) {
-      conflicts.push({
+    if (!entityDeleted) continue;
+    knowledgeDeliveryLinks.push(link.id);
+    if (!owned(link.createdBy)) {
+      detaches.push({
         entityType: 'knowledge_delivery_link',
         entityId: link.id,
-        reason:
-          'Delivery link on a system-created record was not created by that user.',
+        field: 'entityId',
       });
     }
   }
 
   const changeDeliveryLinks: string[] = [];
+  const changesById = new Map(snapshot.changeItems.map((row) => [row.id, row]));
+  const seenChangeLinks = new Set<string>();
   for (const link of snapshot.changeDeliveryLinks) {
+    if (seenChangeLinks.has(link.id)) continue;
+    seenChangeLinks.add(link.id);
+    const parent = changesById.get(link.changeId);
+    const parentInScope = parent?.projectId === projectId;
     const parentDeleted = changeIds.has(link.changeId);
-    if (owned(link.createdBy)) {
+    const entityDeleted = entityInDeleteSet(link.entityType, link.entityId);
+    if (!parentInScope && !entityDeleted) continue;
+    if (parentDeleted) {
+      if (owned(link.createdBy)) changeDeliveryLinks.push(link.id);
+      else {
+        conflicts.push({
+          entityType: 'change_delivery_link',
+          entityId: link.id,
+          reason:
+            'Delivery link on a system-created change item was not created by that user.',
+        });
+      }
+      continue;
+    }
+    if (parentInScope && owned(link.createdBy)) {
       changeDeliveryLinks.push(link.id);
       continue;
     }
-    if (parentDeleted) {
-      conflicts.push({
+    if (!entityDeleted) continue;
+    changeDeliveryLinks.push(link.id);
+    if (!owned(link.createdBy)) {
+      detaches.push({
         entityType: 'change_delivery_link',
         entityId: link.id,
-        reason:
-          'Delivery link on a system-created change item was not created by that user.',
+        field: 'entityId',
       });
     }
   }
 
+  const raidById = new Map(snapshot.raidItems.map((row) => [row.id, row]));
+  const taskById = new Map(snapshot.tasks.map((row) => [row.id, row]));
   const raidTaskLinks: string[] = [];
   for (const link of snapshot.raidTaskLinks) {
-    const parentDeleted =
-      raidIds.has(link.raidItemId) || taskIds.has(link.taskId);
+    const raidInProject = raidById.get(link.raidItemId)?.projectId === projectId;
+    const taskInProject = taskById.get(link.taskId)?.projectId === projectId;
+    if (!raidInProject && !taskInProject) continue;
+    const parentDeleted = raidIds.has(link.raidItemId) || taskIds.has(link.taskId);
     if (owned(link.createdBy)) {
-      raidTaskLinks.push(link.id);
+      if (parentDeleted || raidInProject) raidTaskLinks.push(link.id);
       continue;
     }
     if (parentDeleted) {
@@ -512,20 +919,20 @@ export function planSystemUserPurge(
     }
   }
 
-  const systemRows = snapshot.systems.filter(
-    (row) =>
-      row.workspaceId === snapshot.workspaceId &&
-      (row.projectId === null || row.projectId === projectId) &&
-      owned(row.createdBy),
-  );
-  const systemIds = ids(systemRows);
-
   const mediaRows: Array<(typeof snapshot.media)[number]> = [];
   for (const row of snapshot.media) {
-    if (row.workspaceId !== snapshot.workspaceId || !owned(row.createdBy)) {
-      continue;
-    }
+    if (row.workspaceId !== snapshot.workspaceId || !owned(row.createdBy)) continue;
     if (row.knowledgeRecordId && !recordIds.has(row.knowledgeRecordId)) {
+      const parent = recordsById.get(row.knowledgeRecordId);
+      const parentInProject = parent?.projectId === projectId;
+      if (!parentInProject) {
+        skip(
+          'media',
+          row.id,
+          'Media is still referenced by a record outside the target project.',
+        );
+        continue;
+      }
       conflicts.push({
         entityType: 'media',
         entityId: row.id,
@@ -534,11 +941,21 @@ export function planSystemUserPurge(
       });
       continue;
     }
-    const blocked = snapshot.mediaImportRefs.some(
-      (ref) =>
-        ref.mediaId === row.id && ref.importCreatedBy !== systemUserId,
+    const blocking = snapshot.mediaImportRefs.filter(
+      (ref) => ref.mediaId === row.id && ref.importCreatedBy !== systemUserId,
     );
-    if (blocked) {
+    const outsideImport = blocking.find(
+      (ref) => refProject(ref.projectId) !== projectId,
+    );
+    if (outsideImport) {
+      skip(
+        'media',
+        row.id,
+        'Media is attached to an import outside the target project.',
+      );
+      continue;
+    }
+    if (blocking.length > 0) {
       conflicts.push({
         entityType: 'media',
         entityId: row.id,
@@ -549,15 +966,47 @@ export function planSystemUserPurge(
     }
     mediaRows.push(row);
   }
-  const mediaIds = ids(mediaRows);
 
-  const tagRows = snapshot.tags.filter(
+  const tagOwnerProject = (link: (typeof snapshot.tagLinks)[number]) => {
+    if (link.ownerProjectId !== undefined) return link.ownerProjectId;
+    if (link.ownerType === 'project') return link.ownerId;
+    if (link.ownerType === 'system') {
+      return systemsById.get(link.ownerId)?.projectId ?? null;
+    }
+    return recordsById.get(link.ownerId)?.projectId ?? null;
+  };
+  const tagOwnerInScope = (link: (typeof snapshot.tagLinks)[number]) => {
+    if (tagOwnerProject(link) === projectId) return true;
+    if (link.ownerType === 'system' && systemIds.has(link.ownerId)) return true;
+    if (link.ownerType === 'knowledge_record' && recordIds.has(link.ownerId)) {
+      return true;
+    }
+    return false;
+  };
+
+  const tagCandidates = snapshot.tags.filter(
     (row) =>
       row.organizationId === snapshot.organizationId && owned(row.createdBy),
   );
+  const tagRows = tagCandidates.filter((tag) => {
+    const links = snapshot.tagLinks.filter((link) => link.tagId === tag.id);
+    const outside = links.find((link) => !tagOwnerInScope(link));
+    if (!outside) return true;
+    skip(
+      'tags',
+      tag.id,
+      'Tag is used outside the target project. Its join rows are left in place.',
+    );
+    return false;
+  });
   const tagIds = ids(tagRows);
   for (const link of snapshot.tagLinks) {
     if (!tagIds.has(link.tagId)) continue;
+    const ownerDeleted =
+      (link.ownerType === 'system' && systemIds.has(link.ownerId)) ||
+      (link.ownerType === 'knowledge_record' && recordIds.has(link.ownerId)) ||
+      (link.ownerType === 'project' && false);
+    if (ownerDeleted) continue;
     detaches.push({
       entityType: 'tag_link',
       entityId: link.ownerId,
@@ -591,16 +1040,22 @@ export function planSystemUserPurge(
       });
     }
     if (task.aiSystemId && systemIds.has(task.aiSystemId)) {
-      detaches.push({
-        entityType: 'task',
-        entityId: task.id,
-        field: 'aiSystemId',
-      });
+      const restored = restoredAiSystem.get(task.id);
+      const restoredKept =
+        restored !== undefined && restored !== null && !systemIds.has(restored);
+      if (!restoredKept) {
+        detaches.push({
+          entityType: 'task',
+          entityId: task.id,
+          field: 'aiSystemId',
+        });
+      }
     }
   }
 
   for (const record of snapshot.knowledgeRecords) {
     if (recordIds.has(record.id)) continue;
+    if (record.projectId !== projectId) continue;
     if (record.systemId && systemIds.has(record.systemId)) {
       detaches.push({
         entityType: 'knowledge_record',
@@ -608,10 +1063,7 @@ export function planSystemUserPurge(
         field: 'systemId',
       });
     }
-    if (
-      record.supersedesRecordId &&
-      recordIds.has(record.supersedesRecordId)
-    ) {
+    if (record.supersedesRecordId && recordIds.has(record.supersedesRecordId)) {
       detaches.push({
         entityType: 'knowledge_record',
         entityId: record.id,
@@ -620,9 +1072,30 @@ export function planSystemUserPurge(
     }
   }
 
+  for (const pointer of snapshot.projectPointers ?? []) {
+    if (pointer.projectId !== projectId) continue;
+    if (!recordIds.has(pointer.recordId)) continue;
+    detaches.push({
+      entityType: 'project',
+      entityId: pointer.projectId,
+      field: pointer.field,
+    });
+  }
+
+  for (const ref of snapshot.importSystemRefs ?? []) {
+    if (ref.projectId !== projectId) continue;
+    if (!systemIds.has(ref.systemId)) continue;
+    detaches.push({
+      entityType: ref.kind,
+      entityId: ref.sourceId,
+      field: 'systemId',
+    });
+  }
+
   const groupMembers = new Map<string, string[]>();
   for (const record of snapshot.knowledgeRecords) {
     if (!record.translationGroupId) continue;
+    if (record.projectId !== projectId && record.projectId !== null) continue;
     const list = groupMembers.get(record.translationGroupId) ?? [];
     list.push(record.id);
     groupMembers.set(record.translationGroupId, list);
@@ -631,15 +1104,19 @@ export function planSystemUserPurge(
   for (const record of records) {
     if (!record.translationGroupId) continue;
     const members = groupMembers.get(record.translationGroupId) ?? [];
-    if (members.some((id) => id !== record.id)) {
-      translationIds.add(record.id);
-    }
+    if (members.some((id) => id !== record.id)) translationIds.add(record.id);
   }
   for (const members of groupMembers.values()) {
     const survivors = members.filter((id) => !recordIds.has(id));
     const removed = members.some((id) => recordIds.has(id));
     const survivorId = survivors[0];
-    if (removed && survivors.length === 1 && survivorId) {
+    const survivor = survivorId ? recordsById.get(survivorId) : undefined;
+    if (
+      removed &&
+      survivors.length === 1 &&
+      survivorId &&
+      survivor?.projectId === projectId
+    ) {
       detaches.push({
         entityType: 'knowledge_record',
         entityId: survivorId,
@@ -684,7 +1161,8 @@ export function planSystemUserPurge(
   }
 
   for (const row of snapshot.media) {
-    if (mediaIds.has(row.id)) continue;
+    if (ids(mediaRows).has(row.id)) continue;
+    if (row.workspaceId !== snapshot.workspaceId) continue;
     if (row.knowledgeRecordId && recordIds.has(row.knowledgeRecordId)) {
       detaches.push({
         entityType: 'media',
@@ -706,6 +1184,7 @@ export function planSystemUserPurge(
   counts.activities = activities.length;
   counts.raci = raci.length;
   counts.stakeholders = stakeholders.length;
+  counts.initialStakeholders = initialStakeholders.length;
   counts.aiUsageReports = aiUsageReports.length;
   counts.deliveryLinks =
     knowledgeDeliveryLinks.length +
@@ -733,6 +1212,7 @@ export function planSystemUserPurge(
       aiUsageReports,
       raci,
       stakeholders: stakeholders.map((row) => row.id),
+      initialStakeholders: initialStakeholders.map((row) => row.id),
       knowledgeDeliveryLinks,
       changeDeliveryLinks,
       raidTaskLinks,
@@ -744,6 +1224,9 @@ export function planSystemUserPurge(
     },
     detaches,
     conflicts,
+    skippedSharedItems: skipped,
+    unrecoverableAiUsage: unrecoverable,
+    aiRestores,
   };
 }
 
@@ -756,6 +1239,44 @@ function activityFields(metadata: unknown): string[] {
   return fields.filter((item): item is string => typeof item === 'string');
 }
 
+function activityPrevious(metadata: unknown): {
+  recordedTokensUsed: boolean;
+  previousTokensUsed: number | null;
+  recordedAiSystemId: boolean;
+  previousAiSystemId: string | null;
+} {
+  const empty = {
+    recordedTokensUsed: false,
+    previousTokensUsed: null,
+    recordedAiSystemId: false,
+    previousAiSystemId: null,
+  };
+  if (!metadata || typeof metadata !== 'object') return empty;
+  const previous = (metadata as { previous?: unknown }).previous;
+  if (!previous || typeof previous !== 'object') return empty;
+  const prev = previous as { tokensUsed?: unknown; aiSystemId?: unknown };
+  const recordedTokensUsed =
+    Object.prototype.hasOwnProperty.call(prev, 'tokensUsed') &&
+    (typeof prev.tokensUsed === 'number' || prev.tokensUsed === null);
+  const recordedAiSystemId =
+    Object.prototype.hasOwnProperty.call(prev, 'aiSystemId') &&
+    (typeof prev.aiSystemId === 'string' || prev.aiSystemId === null);
+  return {
+    recordedTokensUsed,
+    previousTokensUsed: recordedTokensUsed ? (prev.tokensUsed as number | null) : null,
+    recordedAiSystemId,
+    previousAiSystemId: recordedAiSystemId
+      ? (prev.aiSystemId as string | null)
+      : null,
+  };
+}
+
+function dedupeById<T extends { id: string }>(rows: T[]): T[] {
+  const map = new Map<string, T>();
+  for (const row of rows) map.set(row.id, row);
+  return [...map.values()];
+}
+
 export async function loadSystemUserPurgeSnapshot(
   db: QueryDb,
   input: {
@@ -765,130 +1286,277 @@ export async function loadSystemUserPurgeSnapshot(
     organizationId: string;
   },
 ): Promise<SystemUserPurgeSnapshot> {
-  const projectTasksRows = await db
-    .select({
-      id: projectTasks.id,
-      createdBy: projectTasks.createdBy,
-      projectId: projectTasks.projectId,
-      milestoneId: projectTasks.milestoneId,
-      userStoryId: projectTasks.userStoryId,
-      sprintId: projectTasks.sprintId,
-      aiSystemId: projectTasks.aiSystemId,
-    })
+  const projectTaskIds = db
+    .select({ id: projectTasks.id })
     .from(projectTasks)
     .where(eq(projectTasks.projectId, input.projectId));
-
-  const taskIdList = projectTasksRows.map((row) => row.id);
-  const activityRows =
-    taskIdList.length === 0
-      ? []
-      : await db
-          .select({
-            id: projectTaskActivities.id,
-            actorUserId: projectTaskActivities.actorUserId,
-            taskId: projectTaskActivities.taskId,
-            type: projectTaskActivities.type,
-            metadataJson: projectTaskActivities.metadataJson,
-          })
-          .from(projectTaskActivities)
-          .where(inArray(projectTaskActivities.taskId, taskIdList));
-  const raciRows =
-    taskIdList.length === 0
-      ? []
-      : await db
-          .select({
-            id: projectTaskRaci.id,
-            createdBy: projectTaskRaci.createdBy,
-            taskId: projectTaskRaci.taskId,
-          })
-          .from(projectTaskRaci)
-          .where(inArray(projectTaskRaci.taskId, taskIdList));
-
-  const recordRows = await db
-    .select({
-      id: knowledgeRecords.id,
-      createdBy: knowledgeRecords.createdBy,
-      projectId: knowledgeRecords.projectId,
-      workspaceId: knowledgeRecords.workspaceId,
-      systemId: knowledgeRecords.systemId,
-      translationGroupId: knowledgeRecords.translationGroupId,
-      supersedesRecordId: knowledgeRecords.supersedesRecordId,
-    })
-    .from(knowledgeRecords)
-    .where(eq(knowledgeRecords.workspaceId, input.workspaceId));
-  const recordIdList = recordRows.map((row) => row.id);
-
-  const versionRows =
-    recordIdList.length === 0
-      ? []
-      : await db
-          .select({
-            id: knowledgeRecordVersions.id,
-            createdBy: knowledgeRecordVersions.createdBy,
-            knowledgeRecordId: knowledgeRecordVersions.knowledgeRecordId,
-          })
-          .from(knowledgeRecordVersions)
-          .where(inArray(knowledgeRecordVersions.knowledgeRecordId, recordIdList));
-
-  const knowledgeLinks =
-    recordIdList.length === 0
-      ? []
-      : await db
-          .select({
-            id: knowledgeRecordDeliveryLinks.id,
-            createdBy: knowledgeRecordDeliveryLinks.createdBy,
-            knowledgeRecordId: knowledgeRecordDeliveryLinks.knowledgeRecordId,
-          })
-          .from(knowledgeRecordDeliveryLinks)
-          .where(
-            inArray(knowledgeRecordDeliveryLinks.knowledgeRecordId, recordIdList),
-          );
-
-  const raidRows = await db
-    .select({
-      id: projectRaidItems.id,
-      createdBy: projectRaidItems.createdBy,
-      projectId: projectRaidItems.projectId,
-      transferredToRaidItemId: projectRaidItems.transferredToRaidItemId,
-      transferredFromRaidItemId: projectRaidItems.transferredFromRaidItemId,
-    })
+  const projectSprintIds = db
+    .select({ id: projectSprints.id })
+    .from(projectSprints)
+    .where(eq(projectSprints.projectId, input.projectId));
+  const projectStoryIds = db
+    .select({ id: projectUserStories.id })
+    .from(projectUserStories)
+    .where(eq(projectUserStories.projectId, input.projectId));
+  const projectEpicIds = db
+    .select({ id: projectEpics.id })
+    .from(projectEpics)
+    .where(eq(projectEpics.projectId, input.projectId));
+  const projectMilestoneIds = db
+    .select({ id: projectMilestones.id })
+    .from(projectMilestones)
+    .where(eq(projectMilestones.projectId, input.projectId));
+  const projectRaidIds = db
+    .select({ id: projectRaidItems.id })
     .from(projectRaidItems)
     .where(eq(projectRaidItems.projectId, input.projectId));
-  const raidIdList = raidRows.map((row) => row.id);
-  const raidLinks =
-    raidIdList.length === 0
-      ? []
-      : await db
-          .select({
-            id: projectRaidTaskLinks.id,
-            createdBy: projectRaidTaskLinks.createdBy,
-            raidItemId: projectRaidTaskLinks.raidItemId,
-            taskId: projectRaidTaskLinks.taskId,
-          })
-          .from(projectRaidTaskLinks)
-          .where(inArray(projectRaidTaskLinks.raidItemId, raidIdList));
-
-  const changeRows = await db
-    .select({
-      id: projectChangeItems.id,
-      createdBy: projectChangeItems.createdBy,
-      projectId: projectChangeItems.projectId,
-      knowledgeRecordId: projectChangeItems.knowledgeRecordId,
-    })
+  const projectChangeIds = db
+    .select({ id: projectChangeItems.id })
     .from(projectChangeItems)
     .where(eq(projectChangeItems.projectId, input.projectId));
-  const changeIdList = changeRows.map((row) => row.id);
-  const changeLinks =
-    changeIdList.length === 0
-      ? []
-      : await db
-          .select({
-            id: projectChangeDeliveryLinks.id,
-            createdBy: projectChangeDeliveryLinks.createdBy,
-            changeId: projectChangeDeliveryLinks.changeId,
-          })
-          .from(projectChangeDeliveryLinks)
-          .where(inArray(projectChangeDeliveryLinks.changeId, changeIdList));
+  const inScopeRecordIds = db
+    .select({ id: knowledgeRecords.id })
+    .from(knowledgeRecords)
+    .where(
+      and(
+        eq(knowledgeRecords.workspaceId, input.workspaceId),
+        or(
+          eq(knowledgeRecords.projectId, input.projectId),
+          isNull(knowledgeRecords.projectId),
+        ),
+      ),
+    );
+  const candidateSystemIds = db
+    .select({ id: systems.id })
+    .from(systems)
+    .where(
+      and(
+        eq(systems.workspaceId, input.workspaceId),
+        eq(systems.createdBy, input.systemUserId),
+        or(isNull(systems.projectId), eq(systems.projectId, input.projectId)),
+      ),
+    );
+  const systemTagIds = db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(
+      and(
+        eq(tags.organizationId, input.organizationId),
+        eq(tags.createdBy, input.systemUserId),
+      ),
+    );
+
+  const taskColumns = {
+    id: projectTasks.id,
+    createdBy: projectTasks.createdBy,
+    projectId: projectTasks.projectId,
+    milestoneId: projectTasks.milestoneId,
+    userStoryId: projectTasks.userStoryId,
+    sprintId: projectTasks.sprintId,
+    aiSystemId: projectTasks.aiSystemId,
+  };
+  const projectTaskRows = await db
+    .select(taskColumns)
+    .from(projectTasks)
+    .where(eq(projectTasks.projectId, input.projectId));
+  const foreignTaskRows = await db
+    .select(taskColumns)
+    .from(projectTasks)
+    .where(
+      and(
+        ne(projectTasks.projectId, input.projectId),
+        or(
+          inArray(projectTasks.milestoneId, projectMilestoneIds),
+          inArray(projectTasks.sprintId, projectSprintIds),
+          inArray(projectTasks.userStoryId, projectStoryIds),
+          inArray(projectTasks.aiSystemId, candidateSystemIds),
+        ),
+      ),
+    );
+
+  const activityRows = await db
+    .select({
+      id: projectTaskActivities.id,
+      actorUserId: projectTaskActivities.actorUserId,
+      taskId: projectTaskActivities.taskId,
+      type: projectTaskActivities.type,
+      metadataJson: projectTaskActivities.metadataJson,
+    })
+    .from(projectTaskActivities)
+    .where(inArray(projectTaskActivities.taskId, projectTaskIds))
+    .orderBy(asc(projectTaskActivities.createdAt));
+  const raciRows = await db
+    .select({
+      id: projectTaskRaci.id,
+      createdBy: projectTaskRaci.createdBy,
+      taskId: projectTaskRaci.taskId,
+    })
+    .from(projectTaskRaci)
+    .where(inArray(projectTaskRaci.taskId, projectTaskIds));
+
+  const recordColumns = {
+    id: knowledgeRecords.id,
+    createdBy: knowledgeRecords.createdBy,
+    projectId: knowledgeRecords.projectId,
+    workspaceId: knowledgeRecords.workspaceId,
+    systemId: knowledgeRecords.systemId,
+    translationGroupId: knowledgeRecords.translationGroupId,
+    supersedesRecordId: knowledgeRecords.supersedesRecordId,
+  };
+  const inScopeRecords = await db
+    .select(recordColumns)
+    .from(knowledgeRecords)
+    .where(
+      and(
+        eq(knowledgeRecords.workspaceId, input.workspaceId),
+        or(
+          eq(knowledgeRecords.projectId, input.projectId),
+          isNull(knowledgeRecords.projectId),
+        ),
+      ),
+    );
+  const foreignRecords = await db
+    .select(recordColumns)
+    .from(knowledgeRecords)
+    .where(
+      and(
+        eq(knowledgeRecords.workspaceId, input.workspaceId),
+        isNotNull(knowledgeRecords.projectId),
+        ne(knowledgeRecords.projectId, input.projectId),
+        or(
+          inArray(knowledgeRecords.systemId, candidateSystemIds),
+          inArray(knowledgeRecords.supersedesRecordId, inScopeRecordIds),
+        ),
+      ),
+    );
+
+  const versionRows = await db
+    .select({
+      id: knowledgeRecordVersions.id,
+      createdBy: knowledgeRecordVersions.createdBy,
+      knowledgeRecordId: knowledgeRecordVersions.knowledgeRecordId,
+    })
+    .from(knowledgeRecordVersions)
+    .where(inArray(knowledgeRecordVersions.knowledgeRecordId, inScopeRecordIds));
+
+  const knowledgeLinks = await db
+    .select({
+      id: knowledgeRecordDeliveryLinks.id,
+      createdBy: knowledgeRecordDeliveryLinks.createdBy,
+      knowledgeRecordId: knowledgeRecordDeliveryLinks.knowledgeRecordId,
+      entityType: knowledgeRecordDeliveryLinks.entityType,
+      entityId: knowledgeRecordDeliveryLinks.entityId,
+    })
+    .from(knowledgeRecordDeliveryLinks)
+    .where(
+      or(
+        inArray(knowledgeRecordDeliveryLinks.knowledgeRecordId, inScopeRecordIds),
+        and(
+          eq(knowledgeRecordDeliveryLinks.entityType, 'epic'),
+          inArray(knowledgeRecordDeliveryLinks.entityId, projectEpicIds),
+        ),
+        and(
+          eq(knowledgeRecordDeliveryLinks.entityType, 'user_story'),
+          inArray(knowledgeRecordDeliveryLinks.entityId, projectStoryIds),
+        ),
+        and(
+          eq(knowledgeRecordDeliveryLinks.entityType, 'task'),
+          inArray(knowledgeRecordDeliveryLinks.entityId, projectTaskIds),
+        ),
+        and(
+          eq(knowledgeRecordDeliveryLinks.entityType, 'sprint'),
+          inArray(knowledgeRecordDeliveryLinks.entityId, projectSprintIds),
+        ),
+      ),
+    );
+
+  const raidColumns = {
+    id: projectRaidItems.id,
+    createdBy: projectRaidItems.createdBy,
+    projectId: projectRaidItems.projectId,
+    transferredToRaidItemId: projectRaidItems.transferredToRaidItemId,
+    transferredFromRaidItemId: projectRaidItems.transferredFromRaidItemId,
+  };
+  const raidRows = await db
+    .select(raidColumns)
+    .from(projectRaidItems)
+    .where(eq(projectRaidItems.projectId, input.projectId));
+  const foreignRaidRows = await db
+    .select(raidColumns)
+    .from(projectRaidItems)
+    .where(
+      and(
+        ne(projectRaidItems.projectId, input.projectId),
+        or(
+          inArray(projectRaidItems.transferredToRaidItemId, projectRaidIds),
+          inArray(projectRaidItems.transferredFromRaidItemId, projectRaidIds),
+        ),
+      ),
+    );
+  const raidLinks = await db
+    .select({
+      id: projectRaidTaskLinks.id,
+      createdBy: projectRaidTaskLinks.createdBy,
+      raidItemId: projectRaidTaskLinks.raidItemId,
+      taskId: projectRaidTaskLinks.taskId,
+    })
+    .from(projectRaidTaskLinks)
+    .where(
+      or(
+        inArray(projectRaidTaskLinks.raidItemId, projectRaidIds),
+        inArray(projectRaidTaskLinks.taskId, projectTaskIds),
+      ),
+    );
+
+  const changeColumns = {
+    id: projectChangeItems.id,
+    createdBy: projectChangeItems.createdBy,
+    projectId: projectChangeItems.projectId,
+    knowledgeRecordId: projectChangeItems.knowledgeRecordId,
+  };
+  const changeRows = await db
+    .select(changeColumns)
+    .from(projectChangeItems)
+    .where(eq(projectChangeItems.projectId, input.projectId));
+  const foreignChangeRows = await db
+    .select(changeColumns)
+    .from(projectChangeItems)
+    .where(
+      and(
+        ne(projectChangeItems.projectId, input.projectId),
+        inArray(projectChangeItems.knowledgeRecordId, inScopeRecordIds),
+      ),
+    );
+  const changeLinks = await db
+    .select({
+      id: projectChangeDeliveryLinks.id,
+      createdBy: projectChangeDeliveryLinks.createdBy,
+      changeId: projectChangeDeliveryLinks.changeId,
+      entityType: projectChangeDeliveryLinks.entityType,
+      entityId: projectChangeDeliveryLinks.entityId,
+    })
+    .from(projectChangeDeliveryLinks)
+    .where(
+      or(
+        inArray(projectChangeDeliveryLinks.changeId, projectChangeIds),
+        and(
+          eq(projectChangeDeliveryLinks.entityType, 'epic'),
+          inArray(projectChangeDeliveryLinks.entityId, projectEpicIds),
+        ),
+        and(
+          eq(projectChangeDeliveryLinks.entityType, 'user_story'),
+          inArray(projectChangeDeliveryLinks.entityId, projectStoryIds),
+        ),
+        and(
+          eq(projectChangeDeliveryLinks.entityType, 'milestone'),
+          inArray(projectChangeDeliveryLinks.entityId, projectMilestoneIds),
+        ),
+        and(
+          eq(projectChangeDeliveryLinks.entityType, 'task'),
+          inArray(projectChangeDeliveryLinks.entityId, projectTaskIds),
+        ),
+      ),
+    );
 
   const mediaRows = await db
     .select({
@@ -898,53 +1566,129 @@ export async function loadSystemUserPurgeSnapshot(
       knowledgeRecordId: workspaceMedia.knowledgeRecordId,
     })
     .from(workspaceMedia)
-    .where(eq(workspaceMedia.workspaceId, input.workspaceId));
-  const mediaIdList = mediaRows.map((row) => row.id);
-  const mediaImportRefs =
-    mediaIdList.length === 0
-      ? []
-      : await db
-          .select({
-            mediaId: documentImportMedia.workspaceMediaId,
-            importCreatedBy: documentImports.createdBy,
-          })
-          .from(documentImportMedia)
-          .innerJoin(
-            documentImports,
-            eq(documentImportMedia.importId, documentImports.id),
-          )
-          .where(inArray(documentImportMedia.workspaceMediaId, mediaIdList));
-
-  const documentRecordImportRefs =
-    recordIdList.length === 0
-      ? []
-      : await db
-          .select({
-            knowledgeRecordId: documentImportRecords.knowledgeRecordId,
-            importCreatedBy: documentImports.createdBy,
-          })
-          .from(documentImportRecords)
-          .innerJoin(
-            documentImports,
-            eq(documentImportRecords.importId, documentImports.id),
-          )
-          .where(inArray(documentImportRecords.knowledgeRecordId, recordIdList));
-  const conversationRecordImportRefs =
-    recordIdList.length === 0
-      ? []
-      : await db
-          .select({
-            knowledgeRecordId: conversationImportRecords.knowledgeRecordId,
-            importCreatedBy: conversationImports.createdBy,
-          })
-          .from(conversationImportRecords)
-          .innerJoin(
-            conversationImports,
-            eq(conversationImportRecords.importId, conversationImports.id),
-          )
+    .where(
+      and(
+        eq(workspaceMedia.workspaceId, input.workspaceId),
+        or(
+          eq(workspaceMedia.createdBy, input.systemUserId),
+          inArray(workspaceMedia.knowledgeRecordId, inScopeRecordIds),
+        ),
+      ),
+    );
+  const mediaImportRefs = await db
+    .select({
+      mediaId: documentImportMedia.workspaceMediaId,
+      importCreatedBy: documentImports.createdBy,
+      projectId: documentImports.projectId,
+    })
+    .from(documentImportMedia)
+    .innerJoin(
+      documentImports,
+      eq(documentImportMedia.importId, documentImports.id),
+    )
+    .where(
+      inArray(
+        documentImportMedia.workspaceMediaId,
+        db
+          .select({ id: workspaceMedia.id })
+          .from(workspaceMedia)
           .where(
-            inArray(conversationImportRecords.knowledgeRecordId, recordIdList),
-          );
+            and(
+              eq(workspaceMedia.workspaceId, input.workspaceId),
+              eq(workspaceMedia.createdBy, input.systemUserId),
+            ),
+          ),
+      ),
+    );
+
+  const documentRecordImportRefs = await db
+    .select({
+      knowledgeRecordId: documentImportRecords.knowledgeRecordId,
+      importCreatedBy: documentImports.createdBy,
+      projectId: documentImports.projectId,
+    })
+    .from(documentImportRecords)
+    .innerJoin(
+      documentImports,
+      eq(documentImportRecords.importId, documentImports.id),
+    )
+    .where(inArray(documentImportRecords.knowledgeRecordId, inScopeRecordIds));
+  const conversationRecordImportRefs = await db
+    .select({
+      knowledgeRecordId: conversationImportRecords.knowledgeRecordId,
+      importCreatedBy: conversationImports.createdBy,
+      projectId: conversationImports.projectId,
+    })
+    .from(conversationImportRecords)
+    .innerJoin(
+      conversationImports,
+      eq(conversationImportRecords.importId, conversationImports.id),
+    )
+    .where(
+      inArray(conversationImportRecords.knowledgeRecordId, inScopeRecordIds),
+    );
+
+  const documentSystemRefs = await db
+    .select({
+      systemId: documentImports.systemId,
+      sourceId: documentImports.id,
+      projectId: documentImports.projectId,
+    })
+    .from(documentImports)
+    .where(
+      and(
+        eq(documentImports.workspaceId, input.workspaceId),
+        inArray(documentImports.systemId, candidateSystemIds),
+      ),
+    );
+  const conversationSystemRefs = await db
+    .select({
+      systemId: conversationImports.systemId,
+      sourceId: conversationImports.id,
+      projectId: conversationImports.projectId,
+    })
+    .from(conversationImports)
+    .where(
+      and(
+        eq(conversationImports.workspaceId, input.workspaceId),
+        inArray(conversationImports.systemId, candidateSystemIds),
+      ),
+    );
+
+  const pointerRows = await db
+    .select({
+      id: projects.id,
+      charterRecordId: projects.charterRecordId,
+      initialPlanRecordId: projects.initialPlanRecordId,
+    })
+    .from(projects)
+    .where(
+      and(
+        eq(projects.workspaceId, input.workspaceId),
+        or(
+          inArray(projects.charterRecordId, inScopeRecordIds),
+          inArray(projects.initialPlanRecordId, inScopeRecordIds),
+        ),
+      ),
+    );
+  const projectPointers: NonNullable<SystemUserPurgeSnapshot['projectPointers']> =
+    [];
+  for (const row of pointerRows) {
+    if (row.charterRecordId) {
+      projectPointers.push({
+        projectId: row.id,
+        field: 'charterRecordId',
+        recordId: row.charterRecordId,
+      });
+    }
+    if (row.initialPlanRecordId) {
+      projectPointers.push({
+        projectId: row.id,
+        field: 'initialPlanRecordId',
+        recordId: row.initialPlanRecordId,
+      });
+    }
+  }
 
   const tagRows = await db
     .select({
@@ -954,47 +1698,61 @@ export async function loadSystemUserPurgeSnapshot(
     })
     .from(tags)
     .where(eq(tags.organizationId, input.organizationId));
-  const systemTagIds = tagRows
-    .filter((row) => row.createdBy === input.systemUserId)
-    .map((row) => row.id);
+  const projectTagLinks = await db
+    .select({
+      tagId: projectTags.tagId,
+      ownerId: projectTags.projectId,
+    })
+    .from(projectTags)
+    .where(inArray(projectTags.tagId, systemTagIds));
+  const systemTagLinks = await db
+    .select({
+      tagId: systemTags.tagId,
+      ownerId: systemTags.systemId,
+      ownerProjectId: systems.projectId,
+    })
+    .from(systemTags)
+    .innerJoin(systems, eq(systemTags.systemId, systems.id))
+    .where(inArray(systemTags.tagId, systemTagIds));
+  const recordTagLinks = await db
+    .select({
+      tagId: knowledgeRecordTags.tagId,
+      ownerId: knowledgeRecordTags.knowledgeRecordId,
+      ownerProjectId: knowledgeRecords.projectId,
+    })
+    .from(knowledgeRecordTags)
+    .innerJoin(
+      knowledgeRecords,
+      eq(knowledgeRecordTags.knowledgeRecordId, knowledgeRecords.id),
+    )
+    .where(inArray(knowledgeRecordTags.tagId, systemTagIds));
 
-  const projectTagLinks =
-    systemTagIds.length === 0
-      ? []
-      : await db
-          .select({
-            tagId: projectTags.tagId,
-            ownerId: projectTags.projectId,
-          })
-          .from(projectTags)
-          .where(inArray(projectTags.tagId, systemTagIds));
-  const systemTagLinks =
-    systemTagIds.length === 0
-      ? []
-      : await db
-          .select({
-            tagId: systemTags.tagId,
-            ownerId: systemTags.systemId,
-          })
-          .from(systemTags)
-          .where(inArray(systemTags.tagId, systemTagIds));
-  const recordTagLinks =
-    systemTagIds.length === 0
-      ? []
-      : await db
-          .select({
-            tagId: knowledgeRecordTags.tagId,
-            ownerId: knowledgeRecordTags.knowledgeRecordId,
-          })
-          .from(knowledgeRecordTags)
-          .where(inArray(knowledgeRecordTags.tagId, systemTagIds));
+  const storyColumns = {
+    id: projectUserStories.id,
+    createdBy: projectUserStories.createdBy,
+    projectId: projectUserStories.projectId,
+    epicId: projectUserStories.epicId,
+  };
+  const storyRows = await db
+    .select(storyColumns)
+    .from(projectUserStories)
+    .where(eq(projectUserStories.projectId, input.projectId));
+  const foreignStoryRows = await db
+    .select(storyColumns)
+    .from(projectUserStories)
+    .where(
+      and(
+        ne(projectUserStories.projectId, input.projectId),
+        inArray(projectUserStories.epicId, projectEpicIds),
+      ),
+    );
 
   return {
     systemUserId: input.systemUserId,
     projectId: input.projectId,
     workspaceId: input.workspaceId,
     organizationId: input.organizationId,
-    tasks: projectTasksRows,
+    tasks: dedupeById([...projectTaskRows, ...foreignTaskRows]),
     sprints: await db
       .select({
         id: projectSprints.id,
@@ -1011,15 +1769,7 @@ export async function loadSystemUserPurgeSnapshot(
       })
       .from(projectEpics)
       .where(eq(projectEpics.projectId, input.projectId)),
-    userStories: await db
-      .select({
-        id: projectUserStories.id,
-        createdBy: projectUserStories.createdBy,
-        projectId: projectUserStories.projectId,
-        epicId: projectUserStories.epicId,
-      })
-      .from(projectUserStories)
-      .where(eq(projectUserStories.projectId, input.projectId)),
+    userStories: dedupeById([...storyRows, ...foreignStoryRows]),
     milestones: await db
       .select({
         id: projectMilestones.id,
@@ -1028,14 +1778,15 @@ export async function loadSystemUserPurgeSnapshot(
       })
       .from(projectMilestones)
       .where(eq(projectMilestones.projectId, input.projectId)),
-    raidItems: raidRows,
-    changeItems: changeRows,
+    raidItems: dedupeById([...raidRows, ...foreignRaidRows]),
+    changeItems: dedupeById([...changeRows, ...foreignChangeRows]),
     activities: activityRows.map((row) => ({
       id: row.id,
       actorUserId: row.actorUserId,
       taskId: row.taskId,
       type: row.type,
       fields: activityFields(row.metadataJson),
+      ...activityPrevious(row.metadataJson),
     })),
     raci: raciRows,
     stakeholders: await db
@@ -1046,10 +1797,18 @@ export async function loadSystemUserPurgeSnapshot(
       })
       .from(projectStakeholders)
       .where(eq(projectStakeholders.projectId, input.projectId)),
+    initialStakeholders: await db
+      .select({
+        id: projectInitialStakeholders.id,
+        createdBy: projectInitialStakeholders.createdBy,
+        projectId: projectInitialStakeholders.projectId,
+      })
+      .from(projectInitialStakeholders)
+      .where(eq(projectInitialStakeholders.projectId, input.projectId)),
     knowledgeDeliveryLinks: knowledgeLinks,
     changeDeliveryLinks: changeLinks,
     raidTaskLinks: raidLinks,
-    knowledgeRecords: recordRows,
+    knowledgeRecords: dedupeById([...inScopeRecords, ...foreignRecords]),
     knowledgeRecordVersions: versionRows,
     media: mediaRows,
     systems: await db
@@ -1067,28 +1826,58 @@ export async function loadSystemUserPurgeSnapshot(
         tagId: row.tagId,
         ownerType: 'project' as const,
         ownerId: row.ownerId,
+        ownerProjectId: row.ownerId,
       })),
       ...systemTagLinks.map((row) => ({
         tagId: row.tagId,
         ownerType: 'system' as const,
         ownerId: row.ownerId,
+        ownerProjectId: row.ownerProjectId,
       })),
       ...recordTagLinks.map((row) => ({
         tagId: row.tagId,
         ownerType: 'knowledge_record' as const,
         ownerId: row.ownerId,
+        ownerProjectId: row.ownerProjectId,
       })),
     ],
     mediaImportRefs,
     recordImportRefs: [
       ...documentRecordImportRefs.map((row) => ({
-        ...row,
+        knowledgeRecordId: row.knowledgeRecordId,
+        importCreatedBy: row.importCreatedBy,
+        projectId: row.projectId,
         kind: 'document_import' as const,
       })),
       ...conversationRecordImportRefs.map((row) => ({
-        ...row,
+        knowledgeRecordId: row.knowledgeRecordId,
+        importCreatedBy: row.importCreatedBy,
+        projectId: row.projectId,
         kind: 'conversation_import' as const,
       })),
+    ],
+    projectPointers,
+    importSystemRefs: [
+      ...documentSystemRefs.flatMap((row) =>
+        row.systemId
+          ? [{
+              systemId: row.systemId,
+              sourceId: row.sourceId,
+              projectId: row.projectId,
+              kind: 'document_import' as const,
+            }]
+          : [],
+      ),
+      ...conversationSystemRefs.flatMap((row) =>
+        row.systemId
+          ? [{
+              systemId: row.systemId,
+              sourceId: row.sourceId,
+              projectId: row.projectId,
+              kind: 'conversation_import' as const,
+            }]
+          : [],
+      ),
     ],
   };
 }
@@ -1118,6 +1907,20 @@ export async function applySystemUserPurge(
   const now = new Date();
   const { deleteIds: del, detaches } = plan;
 
+  for (const restore of plan.aiRestores) {
+    const values: {
+      tokensUsed?: number | null;
+      aiSystemId?: string | null;
+      updatedAt: Date;
+    } = { updatedAt: now };
+    if ('tokensUsed' in restore) values.tokensUsed = restore.tokensUsed ?? null;
+    if ('aiSystemId' in restore) values.aiSystemId = restore.aiSystemId ?? null;
+    await db
+      .update(projectTasks)
+      .set(values)
+      .where(eq(projectTasks.id, restore.taskId));
+  }
+
   await runIfIds(detachIds(detaches, 'task', 'milestoneId'), async (idList) => {
     await db
       .update(projectTasks)
@@ -1142,6 +1945,36 @@ export async function applySystemUserPurge(
       .set({ aiSystemId: null, updatedAt: now })
       .where(inArray(projectTasks.id, idList));
   });
+  await runIfIds(detachIds(detaches, 'project', 'charterRecordId'), async (idList) => {
+    await db
+      .update(projects)
+      .set({ charterRecordId: null, updatedAt: now })
+      .where(inArray(projects.id, idList));
+  });
+  await runIfIds(
+    detachIds(detaches, 'project', 'initialPlanRecordId'),
+    async (idList) => {
+      await db
+        .update(projects)
+        .set({ initialPlanRecordId: null, updatedAt: now })
+        .where(inArray(projects.id, idList));
+    },
+  );
+  await runIfIds(detachIds(detaches, 'document_import', 'systemId'), async (idList) => {
+    await db
+      .update(documentImports)
+      .set({ systemId: null, updatedAt: now })
+      .where(inArray(documentImports.id, idList));
+  });
+  await runIfIds(
+    detachIds(detaches, 'conversation_import', 'systemId'),
+    async (idList) => {
+      await db
+        .update(conversationImports)
+        .set({ systemId: null, updatedAt: now })
+        .where(inArray(conversationImports.id, idList));
+    },
+  );
 
   await runIfIds(detachIds(detaches, 'knowledge_record', 'systemId'), async (idList) => {
     await db
@@ -1205,6 +2038,7 @@ export async function applySystemUserPurge(
     },
   );
 
+  // Skipped tags are not in del.tags, so joins outside the project stay.
   if (del.tags.length > 0) {
     await db.delete(projectTags).where(inArray(projectTags.tagId, del.tags));
     await db.delete(systemTags).where(inArray(systemTags.tagId, del.tags));
@@ -1274,6 +2108,11 @@ export async function applySystemUserPurge(
       .delete(projectStakeholders)
       .where(inArray(projectStakeholders.id, idList));
   });
+  await runIfIds(del.initialStakeholders, async (idList) => {
+    await db
+      .delete(projectInitialStakeholders)
+      .where(inArray(projectInitialStakeholders.id, idList));
+  });
 
   await runIfIds(del.knowledgeRecordVersions, async (idList) => {
     await db
@@ -1304,6 +2143,8 @@ export type SystemUserPurgeResult = {
   counts: PurgeCounts;
   conflicts: PurgeConflict[];
   detaches: PurgeDetach[];
+  skippedSharedItems: PurgeSkippedItem[];
+  unrecoverableAiUsage: PurgeUnrecoverable[];
   issueKeysReclaimed: false;
   aggregates: {
     budgetSummary: 'computed_on_read';
@@ -1317,7 +2158,13 @@ export type SystemUserPurgeResult = {
 function auditMetadata(
   result: Pick<
     SystemUserPurgeResult,
-    'dryRun' | 'committed' | 'projectId' | 'counts' | 'conflicts'
+    | 'dryRun'
+    | 'committed'
+    | 'projectId'
+    | 'counts'
+    | 'conflicts'
+    | 'skippedSharedItems'
+    | 'unrecoverableAiUsage'
   >,
 ): Record<string, unknown> {
   return {
@@ -1327,8 +2174,37 @@ function auditMetadata(
     counts: result.counts,
     conflictCount: result.conflicts.length,
     conflicts: result.conflicts,
+    skippedSharedItems: result.skippedSharedItems,
+    unrecoverableAiUsage: result.unrecoverableAiUsage,
     issueKeysReclaimed: false,
   };
+}
+
+function isSerializationFailure(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    if ((current as { code?: unknown }).code === '40001') return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+function purgeConflictError(plan: SystemUserPurgePlan): AppError {
+  return new AppError({
+    code: 'PURGE_CONFLICT',
+    message:
+      'Purge refused because rows the system user did not create still reference the delete set',
+    statusCode: 409,
+    details: {
+      counts: plan.counts,
+      conflicts: plan.conflicts,
+      detaches: plan.detaches,
+      skippedSharedItems: plan.skippedSharedItems,
+      unrecoverableAiUsage: plan.unrecoverableAiUsage,
+    },
+  });
 }
 
 export async function runSystemUserPurge(
@@ -1341,7 +2217,9 @@ export async function runSystemUserPurge(
     dryRun: boolean;
     actorUserId: string;
     ipAddress?: string | null;
-    deleteMedia?: (media: { id: string; workspaceId: string }) => Promise<void>;
+    deleteMedia?: (
+      media: { id: string; workspaceId: string },
+    ) => Promise<number | void>;
     log?: { error: (obj: unknown, msg?: string) => void };
   },
 ): Promise<SystemUserPurgeResult> {
@@ -1360,87 +2238,93 @@ export async function runSystemUserPurge(
     conflictCount: preview.conflicts.length,
   });
 
-  const base = {
-    dryRun: input.dryRun,
-    systemUserId: input.systemUserId,
-    projectId: input.projectId,
-    counts: preview.counts,
-    conflicts: preview.conflicts,
-    detaches: preview.detaches,
-    issueKeysReclaimed: false as const,
-    mediaStorageFailures: 0,
+  const aggregatesRead = {
+    budgetSummary: 'computed_on_read' as const,
+    sprintBurndown: 'computed_on_read' as const,
+    velocity: 'computed_on_read' as const,
   };
 
-  if (decision !== 'commit') {
-    await database.db.insert(auditEvents).values({
+  const writeAudit = async (
+    plan: SystemUserPurgePlan,
+    committed: boolean,
+    tx?: { insert: Database['db']['insert'] },
+  ) => {
+    const values = {
       organizationId: input.organizationId,
-      actorType: 'user',
+      actorType: 'user' as const,
       actorId: input.actorUserId,
       action: 'admin.system_user_purge',
-      entityType: 'user',
-      entityId: input.systemUserId,
-      metadataJson: auditMetadata({ ...base, committed: false }),
-      ipAddress: input.ipAddress ?? null,
-    });
-    if (decision === 'refuse_conflicts') {
-      throw new AppError({
-        code: 'PURGE_CONFLICT',
-        message:
-          'Purge refused because rows the system user did not create still reference the delete set',
-        statusCode: 409,
-        details: {
-          counts: preview.counts,
-          conflicts: preview.conflicts,
-        },
-      });
-    }
-    return {
-      ...base,
-      committed: false,
-      aggregates: {
-        budgetSummary: 'computed_on_read',
-        sprintBurndown: 'computed_on_read',
-        velocity: 'computed_on_read',
-        costSnapshotRefreshed: false,
-      },
-    };
-  }
-
-  await database.db.transaction(async (tx) => {
-    const plan = planSystemUserPurge(
-      await loadSystemUserPurgeSnapshot(tx as unknown as QueryDb, scope),
-    );
-    const again = purgeCommitDecision({
-      dryRun: false,
-      conflictCount: plan.conflicts.length,
-    });
-    if (again !== 'commit') {
-      throw new AppError({
-        code: 'PURGE_CONFLICT',
-        message:
-          'Purge refused because rows the system user did not create still reference the delete set',
-        statusCode: 409,
-        details: { counts: plan.counts, conflicts: plan.conflicts },
-      });
-    }
-    await applySystemUserPurge(tx as unknown as QueryDb, plan);
-    await tx.insert(auditEvents).values({
-      organizationId: input.organizationId,
-      actorType: 'user',
-      actorId: input.actorUserId,
-      action: 'admin.system_user_purge',
-      entityType: 'user',
+      entityType: 'user' as const,
       entityId: input.systemUserId,
       metadataJson: auditMetadata({
-        dryRun: false,
-        committed: true,
+        dryRun: input.dryRun,
+        committed,
         projectId: input.projectId,
         counts: plan.counts,
         conflicts: plan.conflicts,
+        skippedSharedItems: plan.skippedSharedItems,
+        unrecoverableAiUsage: plan.unrecoverableAiUsage,
       }),
       ipAddress: input.ipAddress ?? null,
+    };
+    if (tx) await tx.insert(auditEvents).values(values);
+    else await database.db.insert(auditEvents).values(values);
+  };
+
+  if (decision !== 'commit') {
+    await writeAudit(preview, false);
+    if (decision === 'refuse_conflicts') throw purgeConflictError(preview);
+    return {
+      dryRun: true,
+      committed: false,
+      systemUserId: input.systemUserId,
+      projectId: input.projectId,
+      counts: preview.counts,
+      conflicts: preview.conflicts,
+      detaches: preview.detaches,
+      skippedSharedItems: preview.skippedSharedItems,
+      unrecoverableAiUsage: preview.unrecoverableAiUsage,
+      issueKeysReclaimed: false,
+      aggregates: { ...aggregatesRead, costSnapshotRefreshed: false },
+      mediaStorageFailures: 0,
+    };
+  }
+
+  let committedPlan: SystemUserPurgePlan | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let refusedPlan: SystemUserPurgePlan | null = null;
+    try {
+      committedPlan = await database.db.transaction(
+        async (tx) => {
+          const plan = planSystemUserPurge(
+            await loadSystemUserPurgeSnapshot(tx as unknown as QueryDb, scope),
+          );
+          if (plan.conflicts.length > 0) {
+            refusedPlan = plan;
+            throw purgeConflictError(plan);
+          }
+          await applySystemUserPurge(tx as unknown as QueryDb, plan);
+          await writeAudit(plan, true, tx);
+          return plan;
+        },
+        { isolationLevel: 'serializable' },
+      );
+      break;
+    } catch (error) {
+      if (refusedPlan) {
+        await writeAudit(refusedPlan, false);
+        throw purgeConflictError(refusedPlan);
+      }
+      if (!isSerializationFailure(error) || attempt === 1) throw error;
+    }
+  }
+  if (!committedPlan) {
+    throw new AppError({
+      code: 'PURGE_FAILED',
+      message: 'Purge did not commit',
+      statusCode: 500,
     });
-  });
+  }
 
   let costSnapshotRefreshed = false;
   try {
@@ -1452,12 +2336,13 @@ export async function runSystemUserPurge(
 
   let mediaStorageFailures = 0;
   if (input.deleteMedia) {
-    for (const mediaId of preview.deleteIds.media) {
+    for (const mediaId of committedPlan.deleteIds.media) {
       try {
-        await input.deleteMedia({
+        const reported = await input.deleteMedia({
           id: mediaId,
           workspaceId: input.workspaceId,
         });
+        if (typeof reported === 'number') mediaStorageFailures += reported;
       } catch (error) {
         mediaStorageFailures += 1;
         input.log?.error(
@@ -1469,14 +2354,17 @@ export async function runSystemUserPurge(
   }
 
   return {
-    ...base,
+    dryRun: false,
     committed: true,
-    aggregates: {
-      budgetSummary: 'computed_on_read',
-      sprintBurndown: 'computed_on_read',
-      velocity: 'computed_on_read',
-      costSnapshotRefreshed,
-    },
+    systemUserId: input.systemUserId,
+    projectId: input.projectId,
+    counts: committedPlan.counts,
+    conflicts: committedPlan.conflicts,
+    detaches: committedPlan.detaches,
+    skippedSharedItems: committedPlan.skippedSharedItems,
+    unrecoverableAiUsage: committedPlan.unrecoverableAiUsage,
+    issueKeysReclaimed: false,
+    aggregates: { ...aggregatesRead, costSnapshotRefreshed },
     mediaStorageFailures,
   };
 }

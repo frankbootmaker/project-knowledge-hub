@@ -20,6 +20,7 @@ import {
   type ChangeKind,
   type ChangeStatus,
 } from '@project-knowledge-hub/domain';
+import { diffReplacement } from './replace-diff.js';
 import { activeMemberConditions } from './user-category.js';
 import {
   assertProjectNotArchived,
@@ -359,12 +360,34 @@ export async function setChangeDeliveryLinks(
     }
   }
 
-  await database.db
-    .delete(projectChangeDeliveryLinks)
+  const existing = await database.db
+    .select({
+      id: projectChangeDeliveryLinks.id,
+      entityType: projectChangeDeliveryLinks.entityType,
+      entityId: projectChangeDeliveryLinks.entityId,
+    })
+    .from(projectChangeDeliveryLinks)
     .where(eq(projectChangeDeliveryLinks.changeId, input.changeId));
-  if (links.length > 0) {
+  const diff = diffReplacement(
+    existing,
+    links,
+    (row) => `${row.entityType}:${row.entityId}`,
+    (row) => `${row.entityType}:${row.entityId}`,
+    () => true,
+  );
+  if (diff.remove.length > 0) {
+    await database.db
+      .delete(projectChangeDeliveryLinks)
+      .where(
+        inArray(
+          projectChangeDeliveryLinks.id,
+          diff.remove.map((row) => row.id),
+        ),
+      );
+  }
+  if (diff.insert.length > 0) {
     await database.db.insert(projectChangeDeliveryLinks).values(
-      links.map((link) => ({
+      diff.insert.map((link) => ({
         changeId: input.changeId,
         entityType: link.entityType,
         entityId: link.entityId,

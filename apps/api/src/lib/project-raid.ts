@@ -18,6 +18,7 @@ import {
   type RaidSeverity,
   type RaidStatus,
 } from '@project-knowledge-hub/domain';
+import { diffReplacement } from './replace-diff.js';
 import { activeMemberConditions } from './user-category.js';
 import {
   assertProjectNotArchived,
@@ -588,15 +589,35 @@ export async function setRaidTaskLinks(
     }
   }
 
-  await database.db
-    .delete(projectRaidTaskLinks)
+  const existing = await database.db
+    .select({
+      id: projectRaidTaskLinks.id,
+      taskId: projectRaidTaskLinks.taskId,
+    })
+    .from(projectRaidTaskLinks)
     .where(eq(projectRaidTaskLinks.raidItemId, input.raidItemId));
-
-  if (uniqueTaskIds.length > 0) {
+  const diff = diffReplacement(
+    existing,
+    uniqueTaskIds.map((taskId) => ({ taskId })),
+    (row) => row.taskId,
+    (row) => row.taskId,
+    () => true,
+  );
+  if (diff.remove.length > 0) {
+    await database.db
+      .delete(projectRaidTaskLinks)
+      .where(
+        inArray(
+          projectRaidTaskLinks.id,
+          diff.remove.map((row) => row.id),
+        ),
+      );
+  }
+  if (diff.insert.length > 0) {
     await database.db.insert(projectRaidTaskLinks).values(
-      uniqueTaskIds.map((taskId) => ({
+      diff.insert.map((row) => ({
         raidItemId: input.raidItemId,
-        taskId,
+        taskId: row.taskId,
         createdBy: input.createdBy ?? null,
       })),
     );

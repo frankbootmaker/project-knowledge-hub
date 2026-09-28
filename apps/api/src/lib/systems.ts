@@ -199,7 +199,7 @@ export type CreateSystemInput = {
 export async function createSystem(
   database: Database,
   input: CreateSystemInput,
-  opts: { defaultOwnerUserId: string },
+  opts: { defaultOwnerUserId: string; createdBy: string },
 ): Promise<PublicSystem> {
   const [workspace] = await database.db
     .select()
@@ -292,7 +292,7 @@ export async function createSystem(
           ? null
           : parseBudgetAmount(input.itBudgetAllocation) ?? null,
       metadataJson: input.metadata ?? null,
-      createdBy: opts.defaultOwnerUserId,
+      createdBy: opts.createdBy,
       updatedAt: new Date(),
     })
     .returning();

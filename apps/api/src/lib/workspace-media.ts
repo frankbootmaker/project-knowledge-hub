@@ -143,6 +143,23 @@ async function readLocalMedia(
   }
 }
 
+/** Counts blob/file failures that deleteMediaBytes reports only via onError. */
+export async function countMediaStorageFailures(
+  uploadDir: string,
+  workspaceId: string,
+  mediaId: string,
+  blobStore?: BlobStore,
+): Promise<number> {
+  let failures = 0;
+  await deleteMediaBytes(uploadDir, workspaceId, mediaId, {
+    blobStore,
+    onError: () => {
+      failures += 1;
+    },
+  });
+  return failures;
+}
+
 export async function deleteMediaBytes(
   uploadDir: string,
   workspaceId: string,

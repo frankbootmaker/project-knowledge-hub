@@ -123,6 +123,7 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
 
     const system = await createSystem(app.database, body, {
       defaultOwnerUserId: principal.userId,
+      createdBy: principal.userId,
     });
 
     const [workspace] = await app.database.db

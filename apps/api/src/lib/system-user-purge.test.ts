@@ -231,12 +231,6 @@ describe('planSystemUserPurge', () => {
             projectId: PROJECT,
           },
           {
-            id: 'workspace-system',
-            createdBy: SYS,
-            workspaceId: WS,
-            projectId: null,
-          },
-          {
             id: 'other-system',
             createdBy: SYS,
             workspaceId: WS,
@@ -287,7 +281,7 @@ describe('planSystemUserPurge', () => {
       knowledgeRecordVersions: 1,
       translations: 0,
       media: 1,
-      systems: 2,
+      systems: 1,
       tags: 1,
     });
     expect(plan.deleteIds.tasks).toEqual(['qa-task']);
@@ -299,7 +293,7 @@ describe('planSystemUserPurge', () => {
     expect(plan.deleteIds.aiUsageReports).toEqual(['qa-ai']);
     expect(plan.deleteIds.raci).toEqual(['qa-raci']);
     expect(plan.deleteIds.knowledgeRecords).toEqual(['qa-record']);
-    expect(plan.deleteIds.systems).toEqual(['qa-system', 'workspace-system']);
+    expect(plan.deleteIds.systems).toEqual(['qa-system']);
     expect(plan.deleteIds.tags).toEqual(['qa-tag']);
     expect(plan.detaches).toContainEqual({
       entityType: 'tag_link',
@@ -568,5 +562,328 @@ describe('planSystemUserPurge', () => {
       'import-media',
       'linked-media',
     ]);
+  });
+
+  it('skips shared workspace rows used by another project', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        tasks: [
+          {
+            id: 'p2-task',
+            createdBy: HUMAN,
+            projectId: OTHER,
+            milestoneId: null,
+            userStoryId: null,
+            sprintId: null,
+            aiSystemId: 'shared-system',
+          },
+        ],
+        changeItems: [
+          {
+            id: 'p2-change',
+            createdBy: HUMAN,
+            projectId: OTHER,
+            knowledgeRecordId: 'shared-record',
+          },
+        ],
+        knowledgeRecords: [
+          {
+            id: 'shared-record',
+            createdBy: SYS,
+            projectId: null,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+          {
+            id: 'p2-record',
+            createdBy: HUMAN,
+            projectId: OTHER,
+            workspaceId: WS,
+            systemId: 'shared-system',
+            translationGroupId: null,
+            supersedesRecordId: 'shared-record',
+          },
+        ],
+        systems: [
+          {
+            id: 'shared-system',
+            createdBy: SYS,
+            workspaceId: WS,
+            projectId: null,
+          },
+        ],
+        tags: [{ id: 'shared-tag', createdBy: SYS, organizationId: ORG }],
+        tagLinks: [
+          {
+            tagId: 'shared-tag',
+            ownerType: 'project',
+            ownerId: OTHER,
+            ownerProjectId: OTHER,
+          },
+        ],
+        media: [
+          {
+            id: 'shared-media',
+            createdBy: SYS,
+            workspaceId: WS,
+            knowledgeRecordId: 'p2-record',
+          },
+        ],
+        projectPointers: [
+          {
+            projectId: OTHER,
+            field: 'charterRecordId',
+            recordId: 'shared-record',
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.systems).toEqual([]);
+    expect(plan.deleteIds.knowledgeRecords).toEqual([]);
+    expect(plan.deleteIds.tags).toEqual([]);
+    expect(plan.deleteIds.media).toEqual([]);
+    expect(plan.deleteIds.tasks).toEqual([]);
+    expect(plan.deleteIds.changeItems).toEqual([]);
+    const detachedIds = plan.detaches.map((row) => row.entityId);
+    expect(detachedIds).not.toContain('p2-task');
+    expect(detachedIds).not.toContain('p2-record');
+    expect(detachedIds).not.toContain('p2-change');
+    expect(detachedIds).not.toContain(OTHER);
+    expect(plan.skippedSharedItems.map((row) => row.entityId).sort()).toEqual([
+      'shared-media',
+      'shared-record',
+      'shared-system',
+      'shared-tag',
+    ]);
+  });
+
+  it('purges one project when the system user also has records in another', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        knowledgeRecords: [
+          {
+            id: 'p1-record',
+            createdBy: SYS,
+            projectId: PROJECT,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+          {
+            id: 'p2-record',
+            createdBy: SYS,
+            projectId: OTHER,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+        ],
+        knowledgeRecordVersions: [
+          { id: 'p1-version', createdBy: SYS, knowledgeRecordId: 'p1-record' },
+          { id: 'p2-version', createdBy: SYS, knowledgeRecordId: 'p2-record' },
+        ],
+        knowledgeDeliveryLinks: [
+          {
+            id: 'p2-link',
+            createdBy: SYS,
+            knowledgeRecordId: 'p2-record',
+            entityType: 'task',
+            entityId: 'p2-task',
+          },
+        ],
+        media: [
+          {
+            id: 'p2-media',
+            createdBy: SYS,
+            workspaceId: WS,
+            knowledgeRecordId: 'p2-record',
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.knowledgeRecords).toEqual(['p1-record']);
+    expect(plan.deleteIds.knowledgeRecordVersions).toEqual(['p1-version']);
+    expect(plan.deleteIds.knowledgeDeliveryLinks).toEqual([]);
+    expect(plan.deleteIds.media).toEqual([]);
+    expect(plan.skippedSharedItems.map((row) => row.entityId)).toContain(
+      'p2-media',
+    );
+  });
+
+  it('removes a human link that targets a purged epic and reports the detach', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        epics: [{ id: 'qa-epic', createdBy: SYS, projectId: PROJECT }],
+        knowledgeRecords: [
+          {
+            id: 'p2-record',
+            createdBy: HUMAN,
+            projectId: OTHER,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+        ],
+        knowledgeDeliveryLinks: [
+          {
+            id: 'human-dangling',
+            createdBy: HUMAN,
+            knowledgeRecordId: 'p2-record',
+            entityType: 'epic',
+            entityId: 'qa-epic',
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.epics).toEqual(['qa-epic']);
+    expect(plan.deleteIds.knowledgeRecords).toEqual([]);
+    expect(plan.deleteIds.knowledgeDeliveryLinks).toEqual(['human-dangling']);
+    expect(plan.detaches).toContainEqual({
+      entityType: 'knowledge_delivery_link',
+      entityId: 'human-dangling',
+      field: 'entityId',
+    });
+  });
+
+  it('restores recorded AI usage and reports usage that cannot be restored', () => {
+    const restored = planSystemUserPurge(
+      snapshot({
+        tasks: [
+          {
+            id: 'human-task',
+            createdBy: HUMAN,
+            projectId: PROJECT,
+            milestoneId: null,
+            userStoryId: null,
+            sprintId: null,
+            aiSystemId: null,
+          },
+        ],
+        activities: [
+          {
+            id: 'ai-old',
+            actorUserId: SYS,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['tokensUsed'],
+            recordedTokensUsed: true,
+            previousTokensUsed: 4,
+          },
+          {
+            id: 'ai-new',
+            actorUserId: SYS,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['tokensUsed'],
+            recordedTokensUsed: true,
+            previousTokensUsed: 99,
+          },
+        ],
+      }),
+    );
+    expect(restored.aiRestores).toEqual([
+      { taskId: 'human-task', tokensUsed: 4 },
+    ]);
+    expect(restored.unrecoverableAiUsage).toEqual([]);
+
+    const missing = planSystemUserPurge(
+      snapshot({
+        tasks: [
+          {
+            id: 'human-task',
+            createdBy: HUMAN,
+            projectId: PROJECT,
+            milestoneId: null,
+            userStoryId: null,
+            sprintId: null,
+            aiSystemId: null,
+          },
+        ],
+        activities: [
+          {
+            id: 'ai',
+            actorUserId: SYS,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['tokensUsed', 'aiSystemId'],
+          },
+        ],
+      }),
+    );
+    expect(missing.aiRestores).toEqual([]);
+    expect(missing.unrecoverableAiUsage.map((row) => row.field).sort()).toEqual([
+      'aiSystemId',
+      'tokensUsed',
+    ]);
+    expect(missing.deleteIds.tasks).toEqual([]);
+  });
+
+  it('detaches the target project charter and an in-project import system pointer', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        knowledgeRecords: [
+          {
+            id: 'qa-record',
+            createdBy: SYS,
+            projectId: PROJECT,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+        ],
+        systems: [
+          {
+            id: 'qa-system',
+            createdBy: SYS,
+            workspaceId: WS,
+            projectId: PROJECT,
+          },
+        ],
+        projectPointers: [
+          {
+            projectId: PROJECT,
+            field: 'charterRecordId',
+            recordId: 'qa-record',
+          },
+        ],
+        importSystemRefs: [
+          {
+            systemId: 'qa-system',
+            sourceId: 'import-1',
+            kind: 'document_import',
+            projectId: PROJECT,
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.skippedSharedItems).toEqual([]);
+    expect(plan.detaches).toEqual(
+      expect.arrayContaining([
+        {
+          entityType: 'project',
+          entityId: PROJECT,
+          field: 'charterRecordId',
+        },
+        {
+          entityType: 'document_import',
+          entityId: 'import-1',
+          field: 'systemId',
+        },
+      ]),
+    );
   });
 });
