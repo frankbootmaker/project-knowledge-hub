@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { systemItDetailsPatchSchema } from '@project-knowledge-hub/domain';
 import {
   normalizeCriticalityInput,
   parseItDetails,
@@ -121,9 +122,9 @@ describe('mergeItDetails', () => {
     };
     const patch = {
       ports: [{ port: 99999999999 }], // port out of range
-    } as Partial<typeof existing>;
+    };
 
-    expect(() => mergeItDetails(existing, patch)).toThrow();
+    expect(() => mergeItDetails(existing, patch as never)).toThrow();
   });
 
   it('strips unknown keys from patch during merge', () => {
@@ -133,8 +134,8 @@ describe('mergeItDetails', () => {
     const patch = {
       vendor: 'MySQL',
       unknownField: 'should be removed',
-    } as Partial<typeof existing> & Record<string, unknown>;
-    const result = mergeItDetails(existing, patch);
+    };
+    const result = mergeItDetails(existing, patch as never);
 
     expect(result).toEqual({
       hostname: 'db.example',
@@ -197,8 +198,54 @@ describe('mergeItDetails', () => {
     };
     const patch = {
       deploymentModel: 'invalid_model',
-    } as Partial<typeof existing>;
+    };
 
-    expect(() => mergeItDetails(existing, patch)).toThrow();
+    expect(() => mergeItDetails(existing, patch as never)).toThrow();
+  });
+});
+
+describe('mergeItDetails with systemItDetailsPatchSchema (end-to-end)', () => {
+  it('parses patch schema then merges, where null removes a key', () => {
+    const existing = {
+      hostname: 'qa-host.example',
+      vendor: 'Acme',
+      ports: [{ port: 443, protocol: 'tcp' }],
+    };
+
+    const rawPatch = {
+      vendor: null,
+      notes: 'updated notes',
+    };
+
+    const parsedPatch = systemItDetailsPatchSchema.parse(rawPatch);
+    const result = mergeItDetails(existing, parsedPatch);
+
+    expect(result).toEqual({
+      hostname: 'qa-host.example',
+      ports: [{ port: 443, protocol: 'tcp' }],
+      notes: 'updated notes',
+    });
+    expect('vendor' in result).toBe(false);
+  });
+
+  it('parses patch with empty array and merges', () => {
+    const existing = {
+      hostname: 'web.example',
+      ports: [{ port: 80 }, { port: 443 }],
+      ipAddresses: ['10.0.1.1'],
+    };
+
+    const rawPatch = {
+      ports: [],
+    };
+
+    const parsedPatch = systemItDetailsPatchSchema.parse(rawPatch);
+    const result = mergeItDetails(existing, parsedPatch);
+
+    expect(result).toEqual({
+      hostname: 'web.example',
+      ports: [],
+      ipAddresses: ['10.0.1.1'],
+    });
   });
 });

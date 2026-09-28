@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { buildItDetailsPatch } from '@project-knowledge-hub/domain';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
 import {
@@ -205,16 +206,15 @@ export function SystemManageMenu(props: {
           environment: environment.trim() || null,
           version: version.trim() || null,
           criticality: criticality || null,
-          itDetails: {
-            ...(props.system.itDetails ?? {}),
-            primaryUrl: primaryUrl.trim() || undefined,
-            hostname: hostname.trim() || undefined,
-            vendor: vendor.trim() || undefined,
-            deploymentModel: deploymentModel || undefined,
-            supportContact: supportContact.trim() || undefined,
-            documentationUrl: documentationUrl.trim() || undefined,
-            dataClassification: dataClassification || undefined,
-          },
+          itDetails: buildItDetailsPatch({
+            primaryUrl,
+            hostname,
+            vendor,
+            deploymentModel,
+            supportContact,
+            documentationUrl,
+            dataClassification,
+          }),
           ...(showItCost
             ? {
                 itCostMode: itCostMode || null,

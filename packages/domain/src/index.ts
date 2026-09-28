@@ -393,6 +393,35 @@ export const systemItDetailsSchema = z
   })
   .strip();
 
+/**
+ * Partial update schema for itDetails (PATCH/MCP update).
+ * Each field is nullable (to remove) and optional (to preserve).
+ * Unknown keys stripped.
+ */
+export const systemItDetailsPatchSchema = z
+  .object({
+    hostname: z.string().trim().min(1).max(253).nullable().optional(),
+    primaryUrl: z.string().trim().min(1).max(2000).nullable().optional(),
+    ipAddresses: z.array(z.string().trim().min(1).max(80)).max(20).nullable().optional(),
+    ports: z.array(systemItPortSchema).max(40).nullable().optional(),
+    endpoints: z.array(systemItEndpointSchema).max(20).nullable().optional(),
+    networkZone: z.string().trim().min(1).max(80).nullable().optional(),
+    location: z.string().trim().min(1).max(200).nullable().optional(),
+    deploymentModel: systemDeploymentModelSchema.nullable().optional(),
+    vendor: z.string().trim().min(1).max(120).nullable().optional(),
+    product: z.string().trim().min(1).max(120).nullable().optional(),
+    platform: z.string().trim().min(1).max(120).nullable().optional(),
+    dataClassification: systemDataClassificationSchema.nullable().optional(),
+    backupPolicy: z.string().trim().min(1).max(500).nullable().optional(),
+    supportContact: z.string().trim().min(1).max(200).nullable().optional(),
+    documentationUrl: z.string().trim().min(1).max(2000).nullable().optional(),
+    assetTag: z.string().trim().min(1).max(80).nullable().optional(),
+    externalId: z.string().trim().min(1).max(120).nullable().optional(),
+    dependencies: z.array(z.string().trim().min(1).max(200)).max(50).nullable().optional(),
+    notes: z.string().trim().min(1).max(5000).nullable().optional(),
+  })
+  .strip();
+
 /** Normalize free-text criticality to the enum when possible. */
 export function normalizeSystemCriticality(
   value: string | null | undefined,
@@ -408,6 +437,49 @@ export function normalizeSystemCriticality(
     crit: 'critical',
   };
   return aliases[key] ?? null;
+}
+
+/**
+ * Build an itDetails patch from form fields.
+ * Empty strings become `null` (to remove the key), trimmed non-empty strings are kept.
+ * Use this to build the payload for update operations where clearing a field should remove it.
+ */
+export function buildItDetailsPatch(form: {
+  primaryUrl?: string;
+  hostname?: string;
+  vendor?: string;
+  deploymentModel?: string;
+  supportContact?: string;
+  documentationUrl?: string;
+  dataClassification?: string;
+}): SystemItDetailsPatch {
+  const patch: SystemItDetailsPatch = {};
+  
+  if (form.primaryUrl !== undefined) {
+    patch.primaryUrl = form.primaryUrl.trim() || null;
+  }
+  if (form.hostname !== undefined) {
+    patch.hostname = form.hostname.trim() || null;
+  }
+  if (form.vendor !== undefined) {
+    patch.vendor = form.vendor.trim() || null;
+  }
+  if (form.deploymentModel !== undefined) {
+    const value = form.deploymentModel || null;
+    patch.deploymentModel = value as SystemItDetailsPatch['deploymentModel'];
+  }
+  if (form.supportContact !== undefined) {
+    patch.supportContact = form.supportContact.trim() || null;
+  }
+  if (form.documentationUrl !== undefined) {
+    patch.documentationUrl = form.documentationUrl.trim() || null;
+  }
+  if (form.dataClassification !== undefined) {
+    const value = form.dataClassification || null;
+    patch.dataClassification = value as SystemItDetailsPatch['dataClassification'];
+  }
+  
+  return patch;
 }
 
 export const membershipRoleSchema = z.enum([
@@ -600,6 +672,7 @@ export type SystemDataClassification = z.infer<
   typeof systemDataClassificationSchema
 >;
 export type SystemItDetails = z.infer<typeof systemItDetailsSchema>;
+export type SystemItDetailsPatch = z.infer<typeof systemItDetailsPatchSchema>;
 export type MembershipRole = z.infer<typeof membershipRoleSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
 export type MilestoneStatus = z.infer<typeof milestoneStatusSchema>;

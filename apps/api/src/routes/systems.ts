@@ -7,6 +7,7 @@ import {
   systemCriticalitySchema,
   systemItCostModeSchema,
   systemItDetailsSchema,
+  systemItDetailsPatchSchema,
   systemStatusSchema,
 } from '@project-knowledge-hub/domain';
 import {
@@ -62,7 +63,7 @@ const updateSystemSchema = z.object({
   environment: z.string().max(80).nullable().optional(),
   version: z.string().max(80).nullable().optional(),
   criticality: systemCriticalitySchema.nullable().optional(),
-  itDetails: systemItDetailsSchema.nullable().optional(),
+  itDetails: systemItDetailsPatchSchema.nullable().optional(),
   itCostMode: systemItCostModeSchema.nullable().optional(),
   itFlatMonthlyFee: moneySchema.optional(),
   itOneTimeCost: moneySchema.optional(),

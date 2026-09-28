@@ -18,6 +18,7 @@ import {
   type SystemCriticality,
   type SystemItCostMode,
   type SystemItDetails,
+  type SystemItDetailsPatch,
   type SystemStatus,
 } from '@project-knowledge-hub/domain';
 import { getSystemTags, setSystemTags } from './tags.js';
@@ -328,7 +329,7 @@ export type UpdateSystemInput = {
   environment?: string | null;
   version?: string | null;
   criticality?: string | null;
-  itDetails?: SystemItDetails | null;
+  itDetails?: SystemItDetailsPatch | null;
   itCostMode?: SystemItCostMode | null;
   itFlatMonthlyFee?: number | string | null;
   itOneTimeCost?: number | string | null;

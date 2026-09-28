@@ -1,6 +1,7 @@
 import {
   systemItDetailsSchema,
   type SystemItDetails,
+  type SystemItDetailsPatch,
 } from '@project-knowledge-hub/domain';
 
 /**
@@ -13,13 +14,13 @@ import {
  * - The merged result is validated against the itDetails schema.
  *
  * @param existing - Current itDetails stored in the database.
- * @param patch - Partial itDetails update from the client.
+ * @param patch - Partial itDetails update from the client (nullable fields to remove keys).
  * @returns Merged and validated itDetails object.
  * @throws ZodError if the merged result fails validation.
  */
 export function mergeItDetails(
   existing: SystemItDetails,
-  patch: Partial<SystemItDetails | null>,
+  patch: SystemItDetailsPatch | null | undefined,
 ): SystemItDetails {
   if (patch == null) {
     return existing;
@@ -28,7 +29,7 @@ export function mergeItDetails(
   const merged: Record<string, unknown> = { ...existing };
 
   for (const key of Object.keys(patch)) {
-    const value = patch[key as keyof SystemItDetails];
+    const value = patch[key as keyof SystemItDetailsPatch];
     if (value === null || value === undefined) {
       delete merged[key];
     } else {

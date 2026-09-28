@@ -10,6 +10,8 @@ import {
   stakeholderStaffingStatusSchema,
   normalizeSystemCriticality,
   systemItDetailsSchema,
+  systemItDetailsPatchSchema,
+  buildItDetailsPatch,
   taskActivityTypeSchema,
   taskStatusSchema,
   userStoryStatusSchema,
@@ -80,5 +82,145 @@ describe('domain foundations', () => {
     });
     expect(error.code).toBe('TEST_ERROR');
     expect(error.statusCode).toBe(400);
+  });
+});
+
+describe('systemItDetailsPatchSchema', () => {
+  it('parses null values to remove keys', () => {
+    const patch = systemItDetailsPatchSchema.parse({
+      vendor: null,
+      hostname: 'example.com',
+    });
+    expect(patch).toEqual({
+      vendor: null,
+      hostname: 'example.com',
+    });
+  });
+
+  it('parses empty arrays', () => {
+    const patch = systemItDetailsPatchSchema.parse({
+      ports: [],
+      ipAddresses: [],
+    });
+    expect(patch).toEqual({
+      ports: [],
+      ipAddresses: [],
+    });
+  });
+
+  it('rejects invalid enum values', () => {
+    expect(() =>
+      systemItDetailsPatchSchema.parse({
+        deploymentModel: 'invalid_model',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects out-of-range port numbers', () => {
+    expect(() =>
+      systemItDetailsPatchSchema.parse({
+        ports: [{ port: 99999 }],
+      }),
+    ).toThrow();
+  });
+
+  it('strips unknown keys', () => {
+    const patch = systemItDetailsPatchSchema.parse({
+      hostname: 'db.example',
+      unknownField: 'should be removed',
+    });
+    expect(patch).toEqual({
+      hostname: 'db.example',
+    });
+    expect('unknownField' in patch).toBe(false);
+  });
+
+  it('accepts valid nullable and optional fields', () => {
+    const patch = systemItDetailsPatchSchema.parse({
+      hostname: 'web.example',
+      vendor: null,
+      deploymentModel: 'kubernetes',
+      dataClassification: null,
+    });
+    expect(patch).toEqual({
+      hostname: 'web.example',
+      vendor: null,
+      deploymentModel: 'kubernetes',
+      dataClassification: null,
+    });
+  });
+});
+
+describe('buildItDetailsPatch', () => {
+  it('converts empty strings to null', () => {
+    const patch = buildItDetailsPatch({
+      hostname: '',
+      vendor: 'MySQL',
+    });
+    expect(patch).toEqual({
+      hostname: null,
+      vendor: 'MySQL',
+    });
+  });
+
+  it('trims non-empty strings', () => {
+    const patch = buildItDetailsPatch({
+      hostname: '  db.example.com  ',
+      vendor: '  PostgreSQL  ',
+    });
+    expect(patch).toEqual({
+      hostname: 'db.example.com',
+      vendor: 'PostgreSQL',
+    });
+  });
+
+  it('preserves unchanged fields by not including them', () => {
+    const patch = buildItDetailsPatch({
+      hostname: 'web.example',
+    });
+    expect(patch).toEqual({
+      hostname: 'web.example',
+    });
+    expect('vendor' in patch).toBe(false);
+    expect('primaryUrl' in patch).toBe(false);
+  });
+
+  it('converts empty deployment model to null', () => {
+    const patch = buildItDetailsPatch({
+      deploymentModel: '',
+    });
+    expect(patch).toEqual({
+      deploymentModel: null,
+    });
+  });
+
+  it('converts empty data classification to null', () => {
+    const patch = buildItDetailsPatch({
+      dataClassification: '',
+    });
+    expect(patch).toEqual({
+      dataClassification: null,
+    });
+  });
+
+  it('handles all fields together', () => {
+    const patch = buildItDetailsPatch({
+      primaryUrl: 'https://app.example.com',
+      hostname: '',
+      vendor: '  Acme Corp  ',
+      deploymentModel: 'kubernetes',
+      supportContact: '',
+      documentationUrl: 'https://docs.example.com',
+      dataClassification: 'internal',
+    });
+    expect(patch).toEqual({
+      primaryUrl: 'https://app.example.com',
+      hostname: null,
+      vendor: 'Acme Corp',
+      deploymentModel: 'kubernetes',
+      supportContact: null,
+      documentationUrl: 'https://docs.example.com',
+      dataClassification: 'internal',
+    });
   });
 });
