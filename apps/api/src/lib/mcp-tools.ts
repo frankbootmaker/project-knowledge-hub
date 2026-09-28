@@ -97,7 +97,7 @@ import {
 import {
   assignProjectStakeholder,
   deleteProjectStakeholder,
-  getRosterStakeholderWithFallback,
+  getRosterStakeholder,
   listProjectStakeholders,
   listWorkspaceMembers as listWorkspaceMembersForStaffing,
   unassignProjectStakeholder,
@@ -2543,17 +2543,76 @@ export function createMcpToolHandlers(
 
     async updateProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRosterStakeholderWithFallback(
-        app.database,
-        input.projectId,
-        input.stakeholderId,
-      );
+      
+      if (input.projectId) {
+        // With projectId: check auth first, then resolve with fallback
+        const project = await requirePmProject(app, client, input.projectId, {
+          forWrite: true,
+        });
+        const stakeholder = await updateProjectStakeholder(
+          app.database,
+          input.stakeholderId,
+          {
+            projectRole: input.projectRole
+              ? projectStakeholderRoleSchema.parse(input.projectRole)
+              : undefined,
+            jobTitle: input.jobTitle,
+            roleDescription: input.roleDescription,
+            competencies: parseMcpCompetencies(input.competencies),
+            notes: input.notes,
+            hourlyRate:
+              input.hourlyRate === undefined
+                ? undefined
+                : parseBudgetAmount(input.hourlyRate) ?? null,
+            reportsToUserId: input.reportsToUserId,
+            sortOrder: input.sortOrder,
+            engagementType:
+              input.engagementType === undefined
+                ? undefined
+                : input.engagementType == null
+                  ? null
+                  : stakeholderEngagementTypeSchema.parse(input.engagementType),
+            assignmentStart: input.assignmentStart,
+            assignmentEnd: input.assignmentEnd,
+            allocatedDailyHours:
+              input.allocatedDailyHours === undefined
+                ? undefined
+                : parseHours(input.allocatedDailyHours) ?? null,
+            contractRef: input.contractRef,
+            contractedBudget:
+              input.contractedBudget === undefined
+                ? undefined
+                : parseBudgetAmount(input.contractedBudget) ?? null,
+            contractStart: input.contractStart,
+            contractEnd: input.contractEnd,
+          },
+          input.projectId,
+        );
+        await writeAuditEvent(app.database, {
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          action: 'project.stakeholder_updated',
+          entityType: 'project_stakeholder',
+          entityId: stakeholder.rosterId ?? stakeholder.id,
+          metadata: {
+            projectId: project.id,
+            userId: stakeholder.userId,
+            via: 'mcp',
+            actingUserId,
+          },
+          ipAddress: ipAddress ?? null,
+        });
+        return { stakeholder };
+      }
+      
+      // Without projectId: resolve (will 404 if not a roster ID), then check auth
+      const existing = await getRosterStakeholder(app.database, input.stakeholderId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
       const stakeholder = await updateProjectStakeholder(
         app.database,
-        existing.projectId,
         input.stakeholderId,
         {
           projectRole: input.projectRole
@@ -2596,7 +2655,7 @@ export function createMcpToolHandlers(
         actorId: client.id,
         action: 'project.stakeholder_updated',
         entityType: 'project_stakeholder',
-        entityId: input.stakeholderId,
+        entityId: stakeholder.rosterId ?? stakeholder.id,
         metadata: {
           projectId: project.id,
           userId: stakeholder.userId,
@@ -2610,17 +2669,41 @@ export function createMcpToolHandlers(
 
     async assignProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRosterStakeholderWithFallback(
-        app.database,
-        input.projectId,
-        input.stakeholderId,
-      );
+      
+      if (input.projectId) {
+        const project = await requirePmProject(app, client, input.projectId, {
+          forWrite: true,
+        });
+        const stakeholder = await assignProjectStakeholder(
+          app.database,
+          input.stakeholderId,
+          input.userId,
+          input.projectId,
+        );
+        await writeAuditEvent(app.database, {
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          action: 'project.stakeholder_assigned',
+          entityType: 'project_stakeholder',
+          entityId: stakeholder.rosterId ?? stakeholder.id,
+          metadata: {
+            projectId: project.id,
+            userId: input.userId,
+            via: 'mcp',
+            actingUserId,
+          },
+          ipAddress: ipAddress ?? null,
+        });
+        return { stakeholder };
+      }
+      
+      const existing = await getRosterStakeholder(app.database, input.stakeholderId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
       const stakeholder = await assignProjectStakeholder(
         app.database,
-        existing.projectId,
         input.stakeholderId,
         input.userId,
       );
@@ -2630,7 +2713,7 @@ export function createMcpToolHandlers(
         actorId: client.id,
         action: 'project.stakeholder_assigned',
         entityType: 'project_stakeholder',
-        entityId: input.stakeholderId,
+        entityId: stakeholder.rosterId ?? stakeholder.id,
         metadata: {
           projectId: project.id,
           userId: input.userId,
@@ -2644,17 +2727,39 @@ export function createMcpToolHandlers(
 
     async unassignProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRosterStakeholderWithFallback(
-        app.database,
-        input.projectId,
-        input.stakeholderId,
-      );
+      
+      if (input.projectId) {
+        const project = await requirePmProject(app, client, input.projectId, {
+          forWrite: true,
+        });
+        const stakeholder = await unassignProjectStakeholder(
+          app.database,
+          input.stakeholderId,
+          input.projectId,
+        );
+        await writeAuditEvent(app.database, {
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          action: 'project.stakeholder_unassigned',
+          entityType: 'project_stakeholder',
+          entityId: stakeholder.rosterId ?? stakeholder.id,
+          metadata: {
+            projectId: project.id,
+            via: 'mcp',
+            actingUserId,
+          },
+          ipAddress: ipAddress ?? null,
+        });
+        return { stakeholder };
+      }
+      
+      const existing = await getRosterStakeholder(app.database, input.stakeholderId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
       const stakeholder = await unassignProjectStakeholder(
         app.database,
-        existing.projectId,
         input.stakeholderId,
       );
       await writeAuditEvent(app.database, {
@@ -2663,7 +2768,7 @@ export function createMcpToolHandlers(
         actorId: client.id,
         action: 'project.stakeholder_unassigned',
         entityType: 'project_stakeholder',
-        entityId: input.stakeholderId,
+        entityId: stakeholder.rosterId ?? stakeholder.id,
         metadata: {
           projectId: project.id,
           via: 'mcp',
@@ -2734,17 +2839,40 @@ export function createMcpToolHandlers(
 
     async deleteProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRosterStakeholderWithFallback(
-        app.database,
-        input.projectId,
-        input.stakeholderId,
-      );
+      
+      if (input.projectId) {
+        const project = await requirePmProject(app, client, input.projectId, {
+          forWrite: true,
+        });
+        const deleted = await deleteProjectStakeholder(
+          app.database,
+          input.stakeholderId,
+          input.projectId,
+        );
+        await writeAuditEvent(app.database, {
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          action: 'project.stakeholder_deleted',
+          entityType: 'project_stakeholder',
+          entityId: input.stakeholderId,
+          metadata: {
+            projectId: project.id,
+            userId: deleted.userId,
+            via: 'mcp',
+            actingUserId,
+          },
+          ipAddress: ipAddress ?? null,
+        });
+        return { ok: true, ...deleted };
+      }
+      
+      const existing = await getRosterStakeholder(app.database, input.stakeholderId);
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
       const deleted = await deleteProjectStakeholder(
         app.database,
-        existing.projectId,
         input.stakeholderId,
       );
       await writeAuditEvent(app.database, {

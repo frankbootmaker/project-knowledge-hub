@@ -389,7 +389,7 @@ export type McpToolHandlers = {
     contractEnd?: string | null;
   }) => Promise<unknown>;
   updateProjectStakeholder: (input: {
-    projectId: string;
+    projectId?: string;
     stakeholderId: string;
     projectRole?: string;
     jobTitle?: string | null;
@@ -409,12 +409,12 @@ export type McpToolHandlers = {
     contractEnd?: string | null;
   }) => Promise<unknown>;
   assignProjectStakeholder: (input: {
-    projectId: string;
+    projectId?: string;
     stakeholderId: string;
     userId: string;
   }) => Promise<unknown>;
   unassignProjectStakeholder: (input: {
-    projectId: string;
+    projectId?: string;
     stakeholderId: string;
   }) => Promise<unknown>;
   updateProjectAiAssistantCost: (input: {
@@ -425,7 +425,7 @@ export type McpToolHandlers = {
     aiBudgetAllocation?: number | string | null;
   }) => Promise<unknown>;
   deleteProjectStakeholder: (input: {
-    projectId: string;
+    projectId?: string;
     stakeholderId: string;
   }) => Promise<unknown>;
   listProjectRaidItems: (input: {
@@ -1814,9 +1814,9 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_stakeholder',
-    'Update a project stakeholder roster row (role, description, competencies, rate, capacity). stakeholderId must be the roster row ID (rosterId from list_project_stakeholders), not the userId. Requires pm:write.',
+    'Update a project stakeholder roster row (role, description, competencies, rate, capacity). stakeholderId must be the roster row ID (rosterId from list_project_stakeholders), not the userId. Optional projectId enables helpful userId→rosterId hints. Requires pm:write.',
     {
-      projectId: z.string().uuid(),
+      projectId: z.string().uuid().optional(),
       stakeholderId: z.string().uuid(),
       projectRole: stakeholderRoleEnum.optional(),
       jobTitle: z.string().max(200).nullable().optional(),
@@ -1843,9 +1843,9 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'assign_project_stakeholder',
-    'Fill an open job role by assigning a workspace member (userId). stakeholderId must be the roster row ID (rosterId from list_project_stakeholders), not the userId. Target must be open. Requires pm:write.',
+    'Fill an open job role by assigning a workspace member (userId). stakeholderId must be the roster row ID (rosterId from list_project_stakeholders), not the userId. Optional projectId enables helpful userId→rosterId hints. Target must be open. Requires pm:write.',
     {
-      projectId: z.string().uuid(),
+      projectId: z.string().uuid().optional(),
       stakeholderId: z.string().uuid(),
       userId: z.string().uuid(),
     },
@@ -1857,8 +1857,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'unassign_project_stakeholder',
-    'Reopen a filled roster seat (clear userId; keeps role description and competencies). stakeholderId must be the roster row ID (rosterId from list_project_stakeholders), not the userId. Requires pm:write.',
-    { projectId: z.string().uuid(), stakeholderId: z.string().uuid() },
+    'Reopen a filled roster seat (clear userId; keeps role description and competencies). stakeholderId must be the roster row ID (rosterId from list_project_stakeholders), not the userId. Optional projectId enables helpful userId→rosterId hints. Requires pm:write.',
+    { projectId: z.string().uuid().optional(), stakeholderId: z.string().uuid() },
     async (args) =>
       wrap('unassign_project_stakeholder', 'pm:write', () =>
         handlers.unassignProjectStakeholder(args),
@@ -1886,8 +1886,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'delete_project_stakeholder',
-    'Remove a durable project stakeholder roster row (RACI-derived people remain). stakeholderId must be the roster row ID (rosterId from list_project_stakeholders), not the userId. Requires pm:write.',
-    { projectId: z.string().uuid(), stakeholderId: z.string().uuid() },
+    'Remove a durable project stakeholder roster row (RACI-derived people remain). stakeholderId must be the roster row ID (rosterId from list_project_stakeholders), not the userId. Optional projectId enables helpful userId→rosterId hints. Requires pm:write.',
+    { projectId: z.string().uuid().optional(), stakeholderId: z.string().uuid() },
     async (args) =>
       wrap('delete_project_stakeholder', 'pm:write', () =>
         handlers.deleteProjectStakeholder(args),
