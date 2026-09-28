@@ -9,6 +9,7 @@ import {
   projectCurrencySchema,
   projectStakeholderRoleSchema,
   projectStatusSchema,
+  isoDateNullableSchema,
 } from '@project-knowledge-hub/domain';
 import {
   parseBudgetAmount,
@@ -37,11 +38,6 @@ import {
 } from '../lib/project-issue-keys.js';
 import { listProjectOverallRags } from '../lib/project-overall-rag.js';
 
-const dateStringSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .nullable();
-
 const createProjectSchema = z.object({
   workspaceId: z.string().uuid(),
   name: z.string().min(1).max(160),
@@ -52,8 +48,8 @@ const createProjectSchema = z.object({
   ownerUserId: z.string().uuid().nullable().optional(),
   businessDomain: z.string().max(160).optional(),
   criticality: z.string().max(80).optional(),
-  startDate: dateStringSchema.optional(),
-  endDate: dateStringSchema.optional(),
+  startDate: isoDateNullableSchema.optional(),
+  endDate: isoDateNullableSchema.optional(),
   charterRecordId: z.string().uuid().nullable().optional(),
   initialPlanRecordId: z.string().uuid().nullable().optional(),
   definitionOfDone: z.string().max(20000).nullable().optional(),
@@ -73,8 +69,8 @@ const updateProjectSchema = z.object({
   ownerUserId: z.string().uuid().nullable().optional(),
   businessDomain: z.string().max(160).nullable().optional(),
   criticality: z.string().max(80).nullable().optional(),
-  startDate: dateStringSchema.optional(),
-  endDate: dateStringSchema.optional(),
+  startDate: isoDateNullableSchema.optional(),
+  endDate: isoDateNullableSchema.optional(),
   charterRecordId: z.string().uuid().nullable().optional(),
   initialPlanRecordId: z.string().uuid().nullable().optional(),
   definitionOfDone: z.string().max(20000).nullable().optional(),
