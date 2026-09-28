@@ -661,6 +661,8 @@ export {
   type IssueCounters,
 } from './issue-keys.js';
 
+export { sanitizeError, type SanitizedError } from './error-sanitizer.js';
+
 /**
  * Validate that a YYYY-MM-DD string is a real calendar date.
  * Rejects impossible dates such as 2026-02-30, 2026-13-01, and non-leap 2027-02-29.
@@ -683,8 +685,12 @@ export const isoDateSchema = z
       );
     },
     { message: 'Invalid calendar date' },
-  )
-  .nullable();
+  );
+
+/**
+ * Nullable version of isoDateSchema for optional date fields.
+ */
+export const isoDateNullableSchema = isoDateSchema.nullable();
 
 export class AppError extends Error {
   readonly code: string;

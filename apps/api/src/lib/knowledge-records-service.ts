@@ -478,10 +478,8 @@ export async function createKnowledgeRecord(
     verifiedAt = now;
   }
 
-  let documentKeyType: string | null = null;
-  let documentNumber: number | null = null;
-  let keyPrefix: string | null = null;
   let created: typeof knowledgeRecords.$inferSelect;
+  let keyPrefix: string | null = null;
 
   if (body.projectId) {
     const docCode = getDocKeyCode(body.recordType);
@@ -496,7 +494,7 @@ export async function createKnowledgeRecord(
     const result = await app.database.db.transaction(async (tx) => {
       const allocated = await allocateIssueNumber(
         app.database,
-        body.projectId,
+        body.projectId!,
         docCode,
         tx,
       );
@@ -539,8 +537,6 @@ export async function createKnowledgeRecord(
     
     created = result.created;
     keyPrefix = result.keyPrefix;
-    documentKeyType = created.documentKeyType;
-    documentNumber = created.documentNumber;
   } else {
     const [row] = await app.database.db
       .insert(knowledgeRecords)

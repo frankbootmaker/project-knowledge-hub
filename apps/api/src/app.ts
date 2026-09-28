@@ -65,7 +65,7 @@ import {
   createResolvingMailTransport,
   resolveMailConfig,
 } from './lib/mail-settings.js';
-import { sanitizeError } from './lib/error-sanitizer.js';
+import { sanitizeError } from '@project-knowledge-hub/domain';
 
 export type ApiDependencies = {
   env: AppEnv;
@@ -161,12 +161,16 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
       });
     }
 
-    const sanitized = sanitizeError(error, request.log);
+    const sanitized = sanitizeError(error);
+    if (sanitized.logPayload) {
+      request.log.error(sanitized.logPayload, 'Database or internal error');
+    }
     return reply.status(sanitized.statusCode).send({
       error: {
         code: sanitized.code,
         message: sanitized.message,
         correlationId: sanitized.correlationId,
+        details: null,
       },
     });
   });

@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { isoDateSchema } from './index.js';
+import { isoDateSchema, isoDateNullableSchema } from './index.js';
 
 describe('isoDateSchema', () => {
   test('accepts valid dates', () => {
@@ -7,7 +7,15 @@ describe('isoDateSchema', () => {
     expect(isoDateSchema.safeParse('2026-12-31').success).toBe(true);
     expect(isoDateSchema.safeParse('2024-02-29').success).toBe(true); // leap year
     expect(isoDateSchema.safeParse('2028-02-29').success).toBe(true); // leap year
-    expect(isoDateSchema.safeParse(null).success).toBe(true); // nullable
+  });
+
+  test('rejects null for non-nullable schema', () => {
+    expect(isoDateSchema.safeParse(null).success).toBe(false);
+  });
+
+  test('accepts null for nullable schema', () => {
+    expect(isoDateNullableSchema.safeParse(null).success).toBe(true);
+    expect(isoDateNullableSchema.safeParse('2026-01-15').success).toBe(true);
   });
 
   test('rejects invalid calendar dates', () => {

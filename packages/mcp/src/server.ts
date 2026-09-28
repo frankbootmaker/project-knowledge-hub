@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { hasMcpScope, type McpScope } from './scopes.js';
 import { enforceResponseSize, MCP_MAX_LIST_LIMIT } from './limits.js';
-import { isoDateSchema } from '@project-knowledge-hub/domain';
+import { isoDateNullableSchema, sanitizeError, AppError } from '@project-knowledge-hub/domain';
 
 export type McpClientContext = {
   id: string;
@@ -615,32 +615,24 @@ export function createKnowledgeHubMcpServer(
         return textResult(data);
       } catch (error) {
         await handlers.onToolCall?.(toolName, false, argContext);
-        let message = 'Tool failed';
-        if (error instanceof Error) {
-          if ('code' in error && typeof error.code === 'string') {
-            const dbError = error as Error & { code?: string };
-            if (
-              dbError.code &&
-              (error.constructor.name === 'DatabaseError' ||
-                error.constructor.name === 'DrizzleError')
-            ) {
-              const correlationId = crypto.randomUUID();
-              console.error('[MCP Database Error]', {
-                correlationId,
-                code: dbError.code,
-                message: error.message,
-              });
-              message = `Internal error (ref: ${correlationId})`;
-            } else {
-              message = error.message;
-            }
-          } else {
-            message = error.message;
-          }
+        
+        // Only return safe error messages to MCP clients
+        if (error instanceof AppError) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: error.message }],
+          };
         }
+
+        // Sanitize all other errors (database, internal, etc.)
+        const sanitized = sanitizeError(error);
+        if (sanitized.logPayload) {
+          console.error('[MCP Error]', sanitized.logPayload);
+        }
+        
         return {
           isError: true,
-          content: [{ type: 'text' as const, text: message }],
+          content: [{ type: 'text' as const, text: sanitized.message }],
         };
       }
     };
@@ -846,8 +838,8 @@ export function createKnowledgeHubMcpServer(
     'Update project baseline window, pinned docs, Definition of Done, currency, budgets, and issue key prefix. Requires pm:write.',
     {
       projectId: z.string().uuid(),
-      startDate: isoDateSchema.optional(),
-      endDate: isoDateSchema.optional(),
+      startDate: isoDateNullableSchema.optional(),
+      endDate: isoDateNullableSchema.optional(),
       charterRecordId: z.string().uuid().nullable().optional(),
       initialPlanRecordId: z.string().uuid().nullable().optional(),
       definitionOfDone: z.string().max(20000).nullable().optional(),
@@ -1301,7 +1293,7 @@ export function createKnowledgeHubMcpServer(
       wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
   );
 
-  const ymdDate = isoDateSchema;
+  const ymdDate = isoDateNullableSchema;
 
   server.tool(
     'create_project_milestone',
@@ -1487,7 +1479,7 @@ export function createKnowledgeHubMcpServer(
       status: z
         .enum(['todo', 'in_progress', 'blocked', 'done', 'cancelled'])
         .optional(),
-      dueDate: isoDateSchema.optional(),
+      dueDate: isoDateNullableSchema.optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
       tokensUsed: z.number().int().min(0).nullable().optional(),
@@ -1527,7 +1519,7 @@ export function createKnowledgeHubMcpServer(
       status: z
         .enum(['todo', 'in_progress', 'blocked', 'done', 'cancelled'])
         .optional(),
-      dueDate: isoDateSchema.optional(),
+      dueDate: isoDateNullableSchema.optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
       tokensUsed: z.number().int().min(0).nullable().optional(),
@@ -1767,7 +1759,7 @@ export function createKnowledgeHubMcpServer(
   );
 
   const engagementEnum = z.enum(['employee', 'contractor']);
-  const ymdNullable = isoDateSchema;
+  const ymdNullable = isoDateNullableSchema;
   const competencyItemSchema = z.union([
     z.string().trim().min(1).max(80),
     z.object({
@@ -1926,7 +1918,7 @@ export function createKnowledgeHubMcpServer(
       status: raidStatusEnum.optional(),
       severity: raidSeverityEnum.optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
-      dueDate: isoDateSchema.optional(),
+      dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       taskIds: z.array(entityRef).max(100).optional(),
     },
@@ -1950,7 +1942,7 @@ export function createKnowledgeHubMcpServer(
       status: raidStatusEnum.optional(),
       severity: raidSeverityEnum.optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
-      dueDate: isoDateSchema.optional(),
+      dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
     },
