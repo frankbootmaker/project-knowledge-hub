@@ -78,6 +78,7 @@ export type McpToolHandlers = {
   getProjectResourceUtilization: (input: {
     projectId: string;
     view?: 'planned' | 'burn' | 'combined';
+    includeSystemUsers?: boolean;
   }) => Promise<unknown>;
   listProjectInitialStakeholders: (input: {
     projectId: string;
@@ -255,7 +256,9 @@ export type McpToolHandlers = {
     role?: 'R' | 'A' | 'C' | 'I';
     includeArchived?: boolean;
   }) => Promise<unknown>;
-  getMyDashboardInsights: () => Promise<unknown>;
+  getMyDashboardInsights: (input: {
+    includeSystemUsers?: boolean;
+  }) => Promise<unknown>;
   listProjectDeliveryDocumentLinks: (input: {
     projectId: string;
     entityType?: string;
@@ -366,7 +369,10 @@ export type McpToolHandlers = {
     note?: string | null;
   }) => Promise<unknown>;
   listProjectStakeholders: (input: { projectId: string }) => Promise<unknown>;
-  listWorkspaceMembers: (input: { workspaceId: string }) => Promise<unknown>;
+  listWorkspaceMembers: (input: {
+    workspaceId: string;
+    includeSystemUsers?: boolean;
+  }) => Promise<unknown>;
   createProjectStakeholder: (input: {
     projectId: string;
     /** Omit or null to create an open job role (jobTitle required). */
@@ -869,10 +875,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_resource_utilization',
-    'Get per-person capacity vs planned/burn demand for roster stakeholders (employee/contractor windows). view=planned|burn|combined. Requires pm:read.',
+    'Get per-person capacity vs planned/burn demand for roster stakeholders. System users are omitted unless includeSystemUsers is true. view=planned|burn|combined. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       view: z.enum(['planned', 'burn', 'combined']).optional(),
+      includeSystemUsers: z.boolean().optional(),
     },
     async (args) =>
       wrap(
@@ -1440,11 +1447,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_my_dashboard_insights',
-    'Dashboard insight rollups for the acting user (task due buckets, project health RAG, open RAID, budget attention). Requires pm:read and actingUserId.',
-    {},
-    async () =>
+    'Dashboard insight rollups for the acting user. Empty when the acting user is a system account unless includeSystemUsers is true. Requires pm:read and actingUserId.',
+    { includeSystemUsers: z.boolean().optional() },
+    async (args) =>
       wrap('get_my_dashboard_insights', 'pm:read', () =>
-        handlers.getMyDashboardInsights(),
+        handlers.getMyDashboardInsights(args),
       )(),
   );
 
@@ -1751,8 +1758,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspace_members',
-    'List active workspace members (userId, name, email, role) for staffing assignment. Requires projects:read.',
-    { workspaceId: z.string().uuid() },
+    'List active workspace members (userId, name, email, role, userType) for staffing. System users are omitted unless includeSystemUsers is true. Requires projects:read.',
+    {
+      workspaceId: z.string().uuid(),
+      includeSystemUsers: z.boolean().optional(),
+    },
     async (args) =>
       wrap(
         'list_workspace_members',

@@ -1,349 +1,264 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import type { users } from '@project-knowledge-hub/database';
+import { AppError } from '@project-knowledge-hub/domain';
+import { toPublicUser } from './public-user.js';
+import {
+  activeHumanUserConditions,
+  assertUserMayUseWebSignIn,
+  categoryChangeAuditMetadata,
+  categoryChangeEffects,
+  changeUserCategorySchema,
+  createUserSchema,
+  shouldOmitPersonalInsights,
+  systemUserExclusionCondition,
+  updateUserSchema,
+  validateUserCategoryChange,
+  webSignInBlockReason,
+} from './user-category.js';
 
-/**
- * Unit tests for system user sign-in refusal logic.
- * These tests verify the logic without requiring a database.
- */
-
-type User = {
-  id: string;
-  email: string;
-  userType: 'human' | 'system';
-  passwordHash: string | null;
-  status: string;
+const HUMAN = {
+  id: '11111111-1111-4111-8111-111111111111',
+  userType: 'human',
+  status: 'active',
+  isSystemAdmin: false,
+  passwordHash: 'hash',
 };
 
-function shouldAllowWebLogin(user: User | null): { allowed: boolean; reason?: string } {
-  if (!user) {
-    return { allowed: false, reason: 'USER_NOT_FOUND' };
-  }
+const SYSTEM = {
+  ...HUMAN,
+  id: '22222222-2222-4222-8222-222222222222',
+  userType: 'system',
+  passwordHash: null,
+};
 
-  if (user.userType === 'system') {
-    return { allowed: false, reason: 'SYSTEM_USER_LOGIN_FORBIDDEN' };
+function sqlText(node: unknown): string {
+  if (node == null) return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(sqlText).join(' ');
+  if (typeof node === 'object') {
+    const record = node as Record<string, unknown>;
+    if (Array.isArray(record.queryChunks)) return sqlText(record.queryChunks);
+    if (typeof record.name === 'string') return record.name;
+    if (Array.isArray(record.value)) return sqlText(record.value);
+    if (typeof record.value === 'string' || typeof record.value === 'number') {
+      return String(record.value);
+    }
   }
-
-  if (!user.passwordHash) {
-    return { allowed: false, reason: 'NO_PASSWORD' };
-  }
-
-  if (user.status !== 'active') {
-    return { allowed: false, reason: 'USER_NOT_ACTIVE' };
-  }
-
-  return { allowed: true };
+  return '';
 }
 
-function shouldAllowPasswordReset(user: User | null): { allowed: boolean; reason?: string } {
-  if (!user) {
-    return { allowed: false, reason: 'USER_NOT_FOUND' };
-  }
-
-  if (user.userType === 'system') {
-    return { allowed: false, reason: 'SYSTEM_USER_NO_PASSWORD_RESET' };
-  }
-
-  if (user.status !== 'active') {
-    return { allowed: false, reason: 'USER_NOT_ACTIVE' };
-  }
-
-  return { allowed: true };
-}
-
-describe('System user sign-in refusal logic', () => {
-  describe('shouldAllowWebLogin', () => {
-    it('should allow human users with password and active status', () => {
-      const user: User = {
-        id: '1',
-        email: 'human@example.com',
-        userType: 'human',
-        passwordHash: 'hashed',
-        status: 'active',
-      };
-      const result = shouldAllowWebLogin(user);
-      expect(result.allowed).toBe(true);
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('should refuse system users regardless of password', () => {
-      const user: User = {
-        id: '2',
-        email: 'system@example.com',
-        userType: 'system',
-        passwordHash: 'hashed',
-        status: 'active',
-      };
-      const result = shouldAllowWebLogin(user);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('SYSTEM_USER_LOGIN_FORBIDDEN');
-    });
-
-    it('should refuse system users with null password', () => {
-      const user: User = {
-        id: '3',
-        email: 'system2@example.com',
-        userType: 'system',
-        passwordHash: null,
-        status: 'active',
-      };
-      const result = shouldAllowWebLogin(user);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('SYSTEM_USER_LOGIN_FORBIDDEN');
-    });
-
-    it('should refuse human users without password', () => {
-      const user: User = {
-        id: '4',
-        email: 'invited@example.com',
-        userType: 'human',
-        passwordHash: null,
-        status: 'active',
-      };
-      const result = shouldAllowWebLogin(user);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('NO_PASSWORD');
-    });
-
-    it('should refuse inactive human users', () => {
-      const user: User = {
-        id: '5',
-        email: 'disabled@example.com',
-        userType: 'human',
-        passwordHash: 'hashed',
-        status: 'disabled',
-      };
-      const result = shouldAllowWebLogin(user);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('USER_NOT_ACTIVE');
-    });
-
-    it('should refuse null user', () => {
-      const result = shouldAllowWebLogin(null);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('USER_NOT_FOUND');
-    });
+describe('web sign-in refusal', () => {
+  it('allows an active human with a password when password is required', () => {
+    expect(webSignInBlockReason(HUMAN, { requirePassword: true })).toBeNull();
+    expect(() => assertUserMayUseWebSignIn(HUMAN, { requirePassword: true })).not.toThrow();
   });
 
-  describe('shouldAllowPasswordReset', () => {
-    it('should allow human users', () => {
-      const user: User = {
-        id: '1',
-        email: 'human@example.com',
-        userType: 'human',
-        passwordHash: 'hashed',
-        status: 'active',
-      };
-      const result = shouldAllowPasswordReset(user);
-      expect(result.allowed).toBe(true);
-      expect(result.reason).toBeUndefined();
-    });
+  it('blocks system users before any other check', () => {
+    expect(webSignInBlockReason(SYSTEM, { requireActive: false })).toBe('system');
+    expect(webSignInBlockReason({ ...SYSTEM, status: 'invited' })).toBe('system');
+    expect(() => assertUserMayUseWebSignIn(SYSTEM)).toThrow(AppError);
+    try {
+      assertUserMayUseWebSignIn(SYSTEM);
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).code).toBe('WEB_SIGN_IN_FORBIDDEN');
+      expect((error as AppError).details).toEqual({ reason: 'system' });
+    }
+  });
 
-    it('should refuse system users', () => {
-      const user: User = {
-        id: '2',
-        email: 'system@example.com',
-        userType: 'system',
-        passwordHash: null,
-        status: 'active',
-      };
-      const result = shouldAllowPasswordReset(user);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('SYSTEM_USER_NO_PASSWORD_RESET');
-    });
+  it('blocks inactive humans and missing passwords only when those checks are on', () => {
+    expect(webSignInBlockReason({ ...HUMAN, status: 'invited' })).toBe('inactive');
+    expect(
+      webSignInBlockReason({ ...HUMAN, status: 'invited' }, { requireActive: false }),
+    ).toBeNull();
+    expect(
+      webSignInBlockReason({ ...HUMAN, passwordHash: null }, { requirePassword: true }),
+    ).toBe('no_password');
+    expect(webSignInBlockReason(null)).toBe('missing');
+  });
 
-    it('should refuse inactive human users', () => {
-      const user: User = {
-        id: '3',
-        email: 'disabled@example.com',
-        userType: 'human',
-        passwordHash: 'hashed',
-        status: 'disabled',
-      };
-      const result = shouldAllowPasswordReset(user);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('USER_NOT_ACTIVE');
-    });
+  it('allows SSO humans who have no password when password is not required', () => {
+    expect(
+      webSignInBlockReason({ ...HUMAN, passwordHash: null }, { requireActive: true }),
+    ).toBeNull();
+  });
+});
 
-    it('should refuse null user', () => {
-      const result = shouldAllowPasswordReset(null);
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('USER_NOT_FOUND');
+describe('validateUserCategoryChange', () => {
+  it('rejects changing your own category', () => {
+    expect(() =>
+      validateUserCategoryChange({
+        existing: HUMAN,
+        target: 'system',
+        actorUserId: HUMAN.id,
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'CANNOT_CHANGE_OWN_CATEGORY' }));
+  });
+
+  it('rejects converting a system administrator into a system user', () => {
+    expect(() =>
+      validateUserCategoryChange({
+        existing: { ...HUMAN, isSystemAdmin: true },
+        target: 'system',
+        actorUserId: 'admin-other',
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: 'SYSTEM_ADMIN_CANNOT_BE_SYSTEM_USER' }),
+    );
+  });
+
+  it('rejects an unchanged category and inactive targets', () => {
+    expect(() =>
+      validateUserCategoryChange({
+        existing: HUMAN,
+        target: 'human',
+        actorUserId: 'admin-other',
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'USER_CATEGORY_UNCHANGED' }));
+    expect(() =>
+      validateUserCategoryChange({
+        existing: { ...HUMAN, status: 'invited' },
+        target: 'system',
+        actorUserId: 'admin-other',
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'USER_MUST_BE_ACTIVE' }));
+  });
+
+  it('allows an admin to convert another active human to system', () => {
+    expect(() =>
+      validateUserCategoryChange({
+        existing: HUMAN,
+        target: 'system',
+        actorUserId: 'admin-other',
+      }),
+    ).not.toThrow();
+  });
+
+  it('records audit metadata and revokes web access only when becoming system', () => {
+    expect(
+      categoryChangeAuditMetadata({
+        from: 'human',
+        to: 'system',
+        email: 'bot@example.com',
+      }),
+    ).toEqual({ from: 'human', to: 'system', email: 'bot@example.com' });
+    expect(categoryChangeEffects('system')).toEqual({
+      clearPassword: true,
+      revokeWebAccess: true,
+    });
+    expect(categoryChangeEffects('human')).toEqual({
+      clearPassword: false,
+      revokeWebAccess: false,
     });
   });
 });
 
-/**
- * Test user exclusion filter logic for pickers and lists
- */
-describe('System user exclusion filters', () => {
-  type UserRow = {
-    id: string;
-    displayName: string;
-    userType: 'human' | 'system';
-    status: string;
-  };
-
-  function filterUsersForPicker(
-    users: UserRow[],
-    options: { includeSystemUsers?: boolean } = {},
-  ): UserRow[] {
-    return users.filter((user) => {
-      if (user.status !== 'active') {
-        return false;
-      }
-      if (!options.includeSystemUsers && user.userType === 'system') {
-        return false;
-      }
-      return true;
-    });
-  }
-
-  const sampleUsers: UserRow[] = [
-    { id: '1', displayName: 'Alice Human', userType: 'human', status: 'active' },
-    { id: '2', displayName: 'Bob Human', userType: 'human', status: 'active' },
-    { id: '3', displayName: 'QA Bot', userType: 'system', status: 'active' },
-    { id: '4', displayName: 'API Integration', userType: 'system', status: 'active' },
-    { id: '5', displayName: 'Disabled Human', userType: 'human', status: 'disabled' },
-  ];
-
-  it('should exclude system users by default', () => {
-    const result = filterUsersForPicker(sampleUsers);
-    expect(result).toHaveLength(2);
-    expect(result.every((u) => u.userType === 'human')).toBe(true);
-    expect(result.map((u) => u.id)).toEqual(['1', '2']);
-  });
-
-  it('should include system users when explicitly requested', () => {
-    const result = filterUsersForPicker(sampleUsers, { includeSystemUsers: true });
-    expect(result).toHaveLength(4);
-    expect(result.map((u) => u.id)).toEqual(['1', '2', '3', '4']);
-  });
-
-  it('should always exclude inactive users', () => {
-    const result = filterUsersForPicker(sampleUsers, { includeSystemUsers: true });
-    expect(result.every((u) => u.status === 'active')).toBe(true);
-    expect(result.find((u) => u.id === '5')).toBeUndefined();
-  });
-
-  it('should return empty array when all users are system and not included', () => {
-    const systemOnly: UserRow[] = [
-      { id: '3', displayName: 'QA Bot', userType: 'system', status: 'active' },
-      { id: '4', displayName: 'API Integration', userType: 'system', status: 'active' },
-    ];
-    const result = filterUsersForPicker(systemOnly);
-    expect(result).toHaveLength(0);
-  });
-});
-
-/**
- * Test serializer field inclusion
- */
-describe('User serializer userType field', () => {
-  type UserEntity = {
-    id: string;
-    email: string;
-    displayName: string;
-    userType: 'human' | 'system';
-    status: string;
-  };
-
-  function serializeUser(user: UserEntity) {
-    return {
-      id: user.id,
-      email: user.email,
-      displayName: user.displayName,
-      userType: user.userType,
-      status: user.status,
-    };
-  }
-
-  it('should include userType field for human users', () => {
-    const user: UserEntity = {
-      id: '1',
-      email: 'human@example.com',
-      displayName: 'Human User',
-      userType: 'human',
-      status: 'active',
-    };
-    const result = serializeUser(user);
-    expect(result.userType).toBe('human');
-  });
-
-  it('should include userType field for system users', () => {
-    const user: UserEntity = {
-      id: '2',
-      email: 'system@example.com',
-      displayName: 'System User',
+describe('user create and update schemas', () => {
+  it('accepts a system user without a password and rejects admin or invite flags', () => {
+    const created = createUserSchema.parse({
+      email: 'qa@example.com',
+      displayName: 'QA bot',
       userType: 'system',
-      status: 'active',
-    };
-    const result = serializeUser(user);
-    expect(result.userType).toBe('system');
+    });
+    expect(created.userType).toBe('system');
+
+    expect(
+      createUserSchema.safeParse({
+        email: 'qa@example.com',
+        displayName: 'QA bot',
+        userType: 'system',
+        isSystemAdmin: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      createUserSchema.safeParse({
+        email: 'qa@example.com',
+        displayName: 'QA bot',
+        userType: 'system',
+        password: 'Password1',
+      }).success,
+    ).toBe(false);
+    expect(
+      createUserSchema.safeParse({
+        email: 'qa@example.com',
+        displayName: 'QA bot',
+        userType: 'system',
+        sendInvite: true,
+      }).success,
+    ).toBe(false);
   });
 
-  it('should preserve userType through serialization', () => {
-    const users: UserEntity[] = [
-      { id: '1', email: 'a@example.com', displayName: 'A', userType: 'human', status: 'active' },
-      { id: '2', email: 'b@example.com', displayName: 'B', userType: 'system', status: 'active' },
-    ];
-    const serialized = users.map(serializeUser);
-    expect(serialized[0].userType).toBe('human');
-    expect(serialized[1].userType).toBe('system');
+  it('strips userType from the normal user patch schema', () => {
+    const parsed = updateUserSchema.parse({
+      displayName: 'Ada',
+      userType: 'system',
+    });
+    expect(parsed.displayName).toBe('Ada');
+    expect(parsed).not.toHaveProperty('userType');
+    expect(changeUserCategorySchema.parse({ userType: 'system' }).userType).toBe(
+      'system',
+    );
+    expect(changeUserCategorySchema.safeParse({ userType: 'ai_agent' }).success).toBe(
+      false,
+    );
   });
 });
 
-/**
- * Test admin-only category change authorization
- */
-describe('Admin-only category change authorization', () => {
-  type Principal = {
-    userId: string;
-    isSystemAdmin: boolean;
-  };
+describe('toPublicUser', () => {
+  it('exposes userType for human and system rows', () => {
+    const base = {
+      id: HUMAN.id,
+      email: 'ada@example.com',
+      displayName: 'Ada',
+      fullName: null,
+      passwordHash: 'hash',
+      status: 'active',
+      isSystemAdmin: false,
+      idpSource: null,
+      idpSubject: null,
+      avatarContentType: null,
+      preferredLocale: 'en',
+      emailNotificationPrefs: {},
+      displayPrefs: {},
+      signupPendingEscalatedAt: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    } as typeof users.$inferSelect;
 
-  function canChangeuserType(principal: Principal | null): boolean {
-    if (!principal) {
-      return false;
-    }
-    return principal.isSystemAdmin === true;
-  }
+    expect(toPublicUser({ ...base, userType: 'human' }).userType).toBe('human');
+    expect(toPublicUser({ ...base, userType: 'system', passwordHash: null }).userType).toBe(
+      'system',
+    );
+    expect(toPublicUser({ ...base, userType: 'system', passwordHash: null }).hasPassword).toBe(
+      false,
+    );
+  });
+});
 
-  function validateCategoryChange(from: 'human' | 'system', to: 'human' | 'system'): {
-    valid: boolean;
-    reason?: string;
-  } {
-    if (from === to) {
-      return { valid: false, reason: 'CATEGORY_UNCHANGED' };
-    }
-    return { valid: true };
-  }
+describe('people-list filters', () => {
+  it('defaults member queries to active humans and opts system users back in', () => {
+    const hidden = sqlText(activeHumanUserConditions());
+    expect(hidden).toContain('status');
+    expect(hidden).toContain('active');
+    expect(hidden).toContain('user_type');
+    expect(hidden).toContain('human');
 
-  it('should allow system admins to change category', () => {
-    const admin: Principal = { userId: '1', isSystemAdmin: true };
-    expect(canChangeuserType(admin)).toBe(true);
+    const included = sqlText(activeHumanUserConditions({ includeSystemUsers: true }));
+    expect(included).toContain('active');
+    expect(included).not.toContain('user_type');
   });
 
-  it('should deny non-admin users', () => {
-    const user: Principal = { userId: '2', isSystemAdmin: false };
-    expect(canChangeuserType(user)).toBe(false);
+  it('builds the utilization exclusion only when system users are hidden', () => {
+    expect(sqlText(systemUserExclusionCondition())).toContain('human');
+    expect(systemUserExclusionCondition({ includeSystemUsers: true })).toBeUndefined();
   });
 
-  it('should deny null principal', () => {
-    expect(canChangeuserType(null)).toBe(false);
-  });
-
-  it('should reject unchanged category', () => {
-    const result = validateCategoryChange('human', 'human');
-    expect(result.valid).toBe(false);
-    expect(result.reason).toBe('CATEGORY_UNCHANGED');
-  });
-
-  it('should allow human to system', () => {
-    const result = validateCategoryChange('human', 'system');
-    expect(result.valid).toBe(true);
-  });
-
-  it('should allow system to human', () => {
-    const result = validateCategoryChange('system', 'human');
-    expect(result.valid).toBe(true);
+  it('omits personal insights for system users unless requested', () => {
+    expect(shouldOmitPersonalInsights('system')).toBe(true);
+    expect(shouldOmitPersonalInsights('system', { includeSystemUsers: true })).toBe(
+      false,
+    );
+    expect(shouldOmitPersonalInsights('human')).toBe(false);
+    expect(shouldOmitPersonalInsights(undefined)).toBe(false);
   });
 });

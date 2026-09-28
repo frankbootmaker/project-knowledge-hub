@@ -20,6 +20,7 @@ import {
   type ChangeKind,
   type ChangeStatus,
 } from '@project-knowledge-hub/domain';
+import { activeHumanUserConditions } from './user-category.js';
 import {
   assertProjectNotArchived,
   requireProjectContext,
@@ -40,6 +41,7 @@ export type PublicChangePerson = {
   userId: string;
   displayName: string;
   email: string;
+  userType: string;
 };
 
 export type PublicChangeItem = {
@@ -86,7 +88,7 @@ async function assertWorkspaceMember(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, userId),
-        eq(users.status, 'active'),
+        ...activeHumanUserConditions(),
       ),
     )
     .limit(1);
@@ -110,6 +112,7 @@ async function loadPeople(
       id: users.id,
       displayName: users.displayName,
       email: users.email,
+      userType: users.userType,
     })
     .from(users)
     .where(inArray(users.id, [...new Set(userIds)]));
@@ -118,6 +121,7 @@ async function loadPeople(
       userId: row.id,
       displayName: row.displayName,
       email: row.email,
+      userType: row.userType,
     });
   }
   return map;

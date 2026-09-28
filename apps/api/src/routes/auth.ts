@@ -26,6 +26,7 @@ import {
 } from '../lib/auth-tokens.js';
 import { writeAuditEvent } from '../lib/identity.js';
 import { avatarUrlForUser } from '../lib/public-user.js';
+import { assertUserMayUseWebSignIn, webSignInBlockReason } from '../lib/user-category.js';
 import { MemoryRateLimiter } from '../lib/rate-limit.js';
 import { notifyAdminsOfSignupPendingApproval } from '../lib/signup-pending-notify.js';
 
@@ -74,19 +75,31 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(users.email, body.email.toLowerCase()))
       .limit(1);
 
-    if (!user || !user.passwordHash || user.status !== 'active') {
+    try {
+      assertUserMayUseWebSignIn(user, { requirePassword: true });
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'WEB_SIGN_IN_FORBIDDEN') {
+        const reason = (error.details as { reason?: string } | undefined)?.reason;
+        if (reason === 'system') {
+          request.log.info(
+            { email: body.email.toLowerCase(), reason },
+            'web sign-in refused for system user',
+          );
+        }
+        throw new AppError({
+          code: 'INVALID_CREDENTIALS',
+          message: 'Invalid email or password',
+          statusCode: 401,
+        });
+      }
+      throw error;
+    }
+
+    if (!user.passwordHash) {
       throw new AppError({
         code: 'INVALID_CREDENTIALS',
         message: 'Invalid email or password',
         statusCode: 401,
-      });
-    }
-
-    if (user.userType === 'system') {
-      throw new AppError({
-        code: 'SYSTEM_USER_LOGIN_FORBIDDEN',
-        message: 'System users cannot sign in via the web interface. Use API token authentication.',
-        statusCode: 403,
       });
     }
 
@@ -139,6 +152,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         displayName: user.displayName,
         fullName: user.fullName ?? null,
         isSystemAdmin: user.isSystemAdmin,
+        userType: user.userType,
         avatarUrl: avatarUrlForUser(
           user.id,
           user.avatarContentType ?? null,
@@ -432,7 +446,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(users.email, email))
       .limit(1);
 
-    if (user && user.status === 'active' && user.userType !== 'system') {
+    if (user && !webSignInBlockReason(user)) {
       const rawToken = await issueAuthToken(app.database, {
         userId: user.id,
         purpose: 'password_reset',

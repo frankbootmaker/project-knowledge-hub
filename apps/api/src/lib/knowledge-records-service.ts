@@ -108,12 +108,14 @@ export type ApproverSnapshot = {
   userId: string;
   displayName: string;
   email: string;
+  userType: string;
 };
 
 export type ReviewedByUser = {
   id: string;
   displayName: string;
   email: string;
+  userType: string;
 };
 
 export function withApprovedByMetadata(
@@ -127,6 +129,7 @@ export function withApprovedByMetadata(
       userId: approver.userId,
       displayName: approver.displayName,
       email: approver.email,
+      userType: approver.userType,
       approvedAt: approvedAt.toISOString(),
     },
   };
@@ -156,10 +159,11 @@ export function approvedByFromMetadata(
   const id = typeof snap.userId === 'string' ? snap.userId : null;
   const displayName = typeof snap.displayName === 'string' ? snap.displayName : null;
   const email = typeof snap.email === 'string' ? snap.email : null;
+  const userType = snap.userType === 'system' ? 'system' : 'human';
   if (!id || !displayName) {
     return null;
   }
-  return { id, displayName, email: email ?? '' };
+  return { id, displayName, email: email ?? '', userType };
 }
 
 export async function loadApproverSnapshot(
@@ -171,6 +175,7 @@ export async function loadApproverSnapshot(
       id: users.id,
       displayName: users.displayName,
       email: users.email,
+      userType: users.userType,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -180,6 +185,7 @@ export async function loadApproverSnapshot(
     userId,
     displayName: user?.displayName ?? 'Unknown user',
     email: user?.email ?? '',
+    userType: user?.userType ?? 'human',
   };
 }
 
@@ -193,6 +199,7 @@ export async function resolveReviewedByUser(
         id: users.id,
         displayName: users.displayName,
         email: users.email,
+        userType: users.userType,
       })
       .from(users)
       .where(eq(users.id, record.reviewedBy))
@@ -202,6 +209,7 @@ export async function resolveReviewedByUser(
         id: user.id,
         displayName: user.displayName,
         email: user.email,
+        userType: user.userType,
       };
     }
   }

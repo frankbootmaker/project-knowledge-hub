@@ -6,10 +6,12 @@ import {
   projectRaidItems,
   projectTasks,
   projects,
+  users,
   workspaces,
 } from '@project-knowledge-hub/database';
 import { getProjectBudgetSummary } from './project-budget.js';
 import { listAssignedTasksForUser } from './project-delivery.js';
+import { shouldOmitPersonalInsights } from './user-category.js';
 
 export type DashboardInsights = {
   tasksByDue: {
@@ -100,10 +102,30 @@ async function accessibleWorkspaceIds(
   return rows.map((row) => row.workspaceId);
 }
 
+const emptyInsights = (): DashboardInsights => ({
+  tasksByDue: { overdue: 0, dueSoon: 0, later: 0, none: 0 },
+  projectHealthRag: { green: 0, amber: 0, red: 0 },
+  openRaid: { risks: 0, issues: 0, assumptions: 0, dependencies: 0, total: 0 },
+  budgetAttention: [],
+});
+
 export async function getDashboardInsights(
   database: Database,
-  input: { userId: string; isSystemAdmin: boolean },
+  input: {
+    userId: string;
+    isSystemAdmin: boolean;
+    includeSystemUsers?: boolean;
+  },
 ): Promise<DashboardInsights> {
+  const [subject] = await database.db
+    .select({ userType: users.userType })
+    .from(users)
+    .where(eq(users.id, input.userId))
+    .limit(1);
+  if (shouldOmitPersonalInsights(subject?.userType, input)) {
+    return emptyInsights();
+  }
+
   const today = todayYmd();
   const soon = addDaysYmd(today, 7);
 

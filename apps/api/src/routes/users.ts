@@ -2,8 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { hashPassword } from '@project-knowledge-hub/auth';
-import { memberships, users, workspaces } from '@project-knowledge-hub/database';
-import { AppError, passwordSchema, userStatusSchema } from '@project-knowledge-hub/domain';
+import {
+  auditEvents,
+  authTokens,
+  memberships,
+  sessions,
+  users,
+  workspaces,
+} from '@project-knowledge-hub/database';
+import { AppError } from '@project-knowledge-hub/domain';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import {
   assertMutatingOrigin,
@@ -20,6 +27,14 @@ import { issueAuthToken } from '../lib/auth-tokens.js';
 import { closeUserAccount, purgeUserAccount } from '../lib/close-user.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { toPublicUser } from '../lib/public-user.js';
+import {
+  categoryChangeAuditMetadata,
+  categoryChangeEffects,
+  changeUserCategorySchema,
+  createUserSchema,
+  updateUserSchema,
+  validateUserCategoryChange,
+} from '../lib/user-category.js';
 
 const assignableRoleSchema = z.enum(['workspace_admin', 'maintainer', 'reader']);
 
@@ -33,99 +48,6 @@ const approveUserSchema = z.object({
     )
     .min(1),
 });
-
-const createUserSchema = z
-  .object({
-    email: z.string().email().max(320),
-    displayName: z.string().min(1).max(160),
-    fullName: z.string().max(200).nullable().optional(),
-    password: passwordSchema.optional(),
-    sendInvite: z.boolean().optional(),
-    status: userStatusSchema.optional(),
-    isSystemAdmin: z.boolean().optional(),
-    userType: z.enum(['human', 'system']).optional(),
-    idpSource: z.string().min(1).max(64).nullable().optional(),
-    idpSubject: z.string().min(1).max(320).nullable().optional(),
-  })
-  .superRefine((value, ctx) => {
-    const isSystem = value.userType === 'system';
-    
-    // System users must not use password or invite flows
-    if (isSystem && (value.password || value.sendInvite)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'System users cannot have passwords or be invited. They authenticate via API tokens only.',
-        path: ['userType'],
-      });
-    }
-    
-    // System users must have status 'active' (skip invitation/approval flows)
-    if (isSystem && value.status && value.status !== 'active') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'System users must have status "active"',
-        path: ['status'],
-      });
-    }
-    
-    // Human users: password required when explicitly not inviting
-    if (!isSystem && value.sendInvite === false && !value.password) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Password is required unless sending an invite',
-        path: ['password'],
-      });
-    }
-    
-    const hasSource = Boolean(value.idpSource?.trim());
-    const hasSubject = Boolean(value.idpSubject?.trim());
-    if (hasSource !== hasSubject) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'IdP source and subject must be set together',
-        path: ['idpSource'],
-      });
-    }
-  });
-
-const updateUserSchema = z
-  .object({
-    displayName: z.string().min(1).max(160).optional(),
-    fullName: z.string().max(200).nullable().optional(),
-    status: userStatusSchema.optional(),
-    isSystemAdmin: z.boolean().optional(),
-    password: passwordSchema.optional(),
-    idpSource: z.string().min(1).max(64).nullable().optional(),
-    idpSubject: z.string().min(1).max(320).nullable().optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.idpSource !== undefined || value.idpSubject !== undefined) {
-      const source = value.idpSource;
-      const subject = value.idpSubject;
-      const clearing =
-        (source === null || source === '') &&
-        (subject === null || subject === '');
-      const bothSet =
-        typeof source === 'string' &&
-        source.trim().length > 0 &&
-        typeof subject === 'string' &&
-        subject.trim().length > 0;
-      if (!clearing && !bothSet && (source !== undefined || subject !== undefined)) {
-        // Allow partial omit (undefined) when only one field is in the patch
-        // if the other is also provided as null to clear, or both set.
-        if (
-          (source === null && subject !== null && subject !== undefined) ||
-          (subject === null && source !== null && source !== undefined)
-        ) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'IdP source and subject must be cleared or set together',
-            path: ['idpSource'],
-          });
-        }
-      }
-    }
-  });
 
 export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/users', async (request) => {
@@ -400,9 +322,7 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     const principal = requireAuthenticated(request);
     requireSystemAdmin(principal);
     const params = z.object({ userId: z.string().uuid() }).parse(request.params);
-    const body = z.object({
-      userType: z.enum(['human', 'system']),
-    }).parse(request.body);
+    const body = changeUserCategorySchema.parse(request.body);
 
     const [existing] = await app.database.db
       .select()
@@ -418,50 +338,56 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    if (existing.userType === body.userType) {
-      throw new AppError({
-        code: 'USER_CATEGORY_UNCHANGED',
-        message: `User is already a ${body.userType} user`,
-        statusCode: 400,
-      });
-    }
+    validateUserCategoryChange({
+      existing,
+      target: body.userType,
+      actorUserId: principal.userId,
+    });
 
-    // Additional validation: changing to system requires no password/active status
-    if (body.userType === 'system') {
-      if (existing.status !== 'active') {
-        throw new AppError({
-          code: 'USER_MUST_BE_ACTIVE',
-          message: 'Only active users can be converted to system users',
-          statusCode: 400,
-        });
-      }
-    }
-
-    const [updated] = await app.database.db
-      .update(users)
-      .set({
-        userType: body.userType,
-        // Clear password when converting to system user
-        passwordHash: body.userType === 'system' ? null : existing.passwordHash,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, params.userId))
-      .returning();
-
+    const effects = categoryChangeEffects(body.userType);
     const organization = await getDefaultOrganization(app.database);
-    await writeAuditEvent(app.database, {
-      organizationId: organization?.id ?? null,
-      actorType: 'user',
-      actorId: principal.userId,
-      action: 'user.change_category',
-      entityType: 'user',
-      entityId: params.userId,
-      metadata: {
-        from: existing.userType,
-        to: body.userType,
-        email: existing.email,
-      },
-      ipAddress: request.ip,
+    const now = new Date();
+
+    const updated = await app.database.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(users)
+        .set({
+          userType: body.userType,
+          passwordHash: effects.clearPassword ? null : existing.passwordHash,
+          updatedAt: now,
+        })
+        .where(eq(users.id, params.userId))
+        .returning();
+
+      if (effects.revokeWebAccess) {
+        await tx
+          .update(sessions)
+          .set({ revokedAt: now })
+          .where(and(eq(sessions.userId, params.userId), isNull(sessions.revokedAt)));
+        await tx
+          .update(authTokens)
+          .set({ usedAt: now })
+          .where(
+            and(eq(authTokens.userId, params.userId), isNull(authTokens.usedAt)),
+          );
+      }
+
+      await tx.insert(auditEvents).values({
+        organizationId: organization?.id ?? null,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'user.change_category',
+        entityType: 'user',
+        entityId: params.userId,
+        metadataJson: categoryChangeAuditMetadata({
+          from: existing.userType,
+          to: body.userType,
+          email: existing.email,
+        }),
+        ipAddress: request.ip,
+      });
+
+      return row ?? null;
     });
 
     return { user: updated ? toPublicUser(updated) : null };

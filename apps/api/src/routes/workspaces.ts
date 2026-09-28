@@ -162,6 +162,14 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
     requireWorkspaceView(principal, params.workspaceId);
 
+    const query = z
+      .object({
+        includeSystemUsers: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((value) => value === 'true'),
+      })
+      .parse(request.query ?? {});
     const [workspace] = await app.database.db
       .select({ id: workspaces.id })
       .from(workspaces)
@@ -176,7 +184,9 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     }
 
     return {
-      members: await listWorkspaceMembers(app.database, params.workspaceId),
+      members: await listWorkspaceMembers(app.database, params.workspaceId, {
+        includeSystemUsers: query.includeSystemUsers,
+      }),
     };
   });
 
@@ -204,6 +214,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
         id: users.id,
         displayName: users.displayName,
         email: users.email,
+        userType: users.userType,
         membershipCreatedAt: memberships.createdAt,
       })
       .from(memberships)
@@ -220,6 +231,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
       id: row.id,
       displayName: row.displayName,
       email: row.email,
+      userType: row.userType,
     }));
 
     return {

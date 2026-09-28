@@ -29,6 +29,7 @@ import {
   requireProjectContext,
 } from './project-delivery.js';
 import { avatarUrlForUser } from './public-user.js';
+import { activeHumanUserConditions } from './user-category.js';
 
 export type StakeholderKind = 'person' | 'ai_assistant' | 'open_role';
 export type StakeholderSource = 'roster' | 'owner' | 'raci' | 'ai_assistant';
@@ -48,6 +49,8 @@ export type PublicStakeholder = {
   displayName: string;
   fullName: string | null;
   email: string | null;
+  /** human | system for people; null for open roles and AI assistants. */
+  userType: string | null;
   projectRole: ProjectStakeholderRole | null;
   jobTitle: string | null;
   roleDescription: string | null;
@@ -173,7 +176,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        eq(users.status, 'active'),
+        ...activeHumanUserConditions(),
       ),
     );
   if (rows.length !== unique.length) {
@@ -195,6 +198,7 @@ async function loadUserMap(
       displayName: string;
       fullName: string | null;
       email: string;
+      userType: string;
       avatarUrl: string | null;
     }
   >
@@ -205,6 +209,7 @@ async function loadUserMap(
       displayName: string;
       fullName: string | null;
       email: string;
+      userType: string;
       avatarUrl: string | null;
     }
   >();
@@ -215,6 +220,7 @@ async function loadUserMap(
       displayName: users.displayName,
       fullName: users.fullName,
       email: users.email,
+      userType: users.userType,
       avatarContentType: users.avatarContentType,
       updatedAt: users.updatedAt,
     })
@@ -225,6 +231,7 @@ async function loadUserMap(
       displayName: row.displayName,
       fullName: row.fullName,
       email: row.email,
+      userType: row.userType,
       avatarUrl: avatarUrlForUser(
         row.id,
         row.avatarContentType ?? null,
@@ -401,6 +408,7 @@ export async function listProjectStakeholders(
       displayName: profile.displayName,
       fullName: profile.fullName,
       email: profile.email,
+      userType: profile.userType,
       projectRole: null,
       jobTitle: null,
       ...emptyPersonFields(),
@@ -450,6 +458,7 @@ export async function listProjectStakeholders(
         displayName: roleLabel,
         fullName: null,
         email: null,
+        userType: null,
         projectRole: projectStakeholderRoleSchema.parse(row.projectRole),
         jobTitle: row.jobTitle,
         roleDescription: row.roleDescription,
@@ -527,6 +536,7 @@ export async function listProjectStakeholders(
       displayName: assistant.name,
       fullName: null,
       email: null,
+      userType: null,
       projectRole: null,
       jobTitle: 'AI assistant',
       roleDescription: null,
@@ -1160,12 +1170,8 @@ export async function listWorkspaceMembers(
 > {
   const conditions = [
     eq(memberships.workspaceId, workspaceId),
-    eq(users.status, 'active'),
+    ...activeHumanUserConditions(options),
   ];
-  
-  if (!options.includeSystemUsers) {
-    conditions.push(eq(users.userType, 'human'));
-  }
 
   const rows = await database.db
     .select({

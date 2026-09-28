@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **User category (PRO-T-16):** `users.user_type` is `human` (default) or `system`. Existing rows become `human` (migration `0047`). System users are created without a password or invite and authenticate with API client tokens (`actingUserId`). Web sign-in (password, OIDC, reset/invite confirm, session cookies) refuses them. `POST /api/v1/users/:userId/change-category` is the only way to change the category; it is admin-only, audited, and revokes sessions and outstanding auth tokens when the target is `system`. Member lists, RACI/owner assignment, resource utilization, and personal dashboard insights omit system users unless `includeSystemUsers=true`.
+
 * **Admin SSO settings:** Admin → SSO (`/admin/sso`) stores OIDC issuer, client id/secret, button label, IdP source, optional redirect URI, enable toggle, and JIT in `platform_settings` (`oidc_config`). Values override `OIDC_*` env at request time (no rebuild/restart). GET never returns the secret. “Reset to .env” clears the override. Login status/start/callback use the resolved config. Briefs [`OIDC_IDP.md`](product/OIDC_IDP.md), [`OIDC_AUTHENTIK_INTEGRATION_GUIDE.md`](product/OIDC_AUTHENTIK_INTEGRATION_GUIDE.md).
 
 * **OIDC JIT provisioning:** optional just-in-time user create on first verified-email SSO (`OIDC_JIT_PROVISIONING` or Admin → SSO toggle, default off). New users are `active` with IdP fields set and no memberships; on-duty admins get email; dashboard waiting banner until a workspace role is assigned.

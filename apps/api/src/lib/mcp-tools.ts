@@ -751,6 +751,7 @@ export function createMcpToolHandlers(
     async getProjectResourceUtilization(input: {
       projectId: string;
       view?: 'planned' | 'burn' | 'combined';
+      includeSystemUsers?: boolean;
     }) {
       await requirePmProject(app, client, input.projectId);
       return {
@@ -758,6 +759,7 @@ export function createMcpToolHandlers(
           app.database,
           input.projectId,
           input.view ?? 'planned',
+          { includeSystemUsers: input.includeSystemUsers },
         ),
       };
     },
@@ -1883,7 +1885,7 @@ export function createMcpToolHandlers(
       };
     },
 
-    async getMyDashboardInsights() {
+    async getMyDashboardInsights(input: { includeSystemUsers?: boolean }) {
       const actingUserId = requireActingUserId(client);
       const [user] = await app.database.db
         .select({
@@ -1903,6 +1905,7 @@ export function createMcpToolHandlers(
       const insights = await getDashboardInsights(app.database, {
         userId: actingUserId,
         isSystemAdmin: user.isSystemAdmin,
+        includeSystemUsers: input.includeSystemUsers,
       });
       if (client.allowedProjectIds.length === 0) {
         return { insights };
@@ -2478,6 +2481,7 @@ export function createMcpToolHandlers(
         members: await listWorkspaceMembersForStaffing(
           app.database,
           input.workspaceId,
+          { includeSystemUsers: input.includeSystemUsers },
         ),
       };
     },
