@@ -725,7 +725,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_system',
-    'Create a catalogue system (IT resource) in an allowlisted workspace. Prefer linking projectId when the system serves a project. Fill itDetails whenever known. Set itCostMode (flat|one_time|note_only) plus fees so OpEx rolls into project budget AC. Requires catalogue:write.',
+    'Create a catalogue system (IT resource) in an allowlisted workspace. Prefer linking projectId when the system serves a project. Fill itDetails whenever known. Set itCostMode (flat|one_time|note_only) plus fees so OpEx rolls into project budget AC. Money/rate fields accept number or string; returned as JSON numbers. Requires catalogue:write.',
     {
       workspaceId: z.string().uuid(),
       projectId: z.string().uuid().nullable().optional(),
@@ -761,7 +761,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_system',
-    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Does not archive/purge. Requires catalogue:write.',
+    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Money/rate fields accept number or string; returned as JSON numbers. Does not archive/purge. Requires catalogue:write.',
     {
       systemId: z.string().uuid(),
       projectId: z.string().uuid().nullable().optional(),
@@ -790,7 +790,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project',
-    'Get a project by id (includes baseline dates and pinned charter/plan)',
+    'Get a project by id (includes baseline dates and pinned charter/plan). Money fields (initialBudget, approvedBudget) are returned as JSON numbers.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap('get_project', 'projects:read', () => handlers.getProject(args), {
@@ -820,7 +820,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_baseline',
-    'Update project baseline window, pinned docs, Definition of Done, currency, budgets, and issue key prefix. Requires pm:write.',
+    'Update project baseline window, pinned docs, Definition of Done, currency, budgets, and issue key prefix. Budget fields accept number or string; returned as JSON numbers. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       startDate: z
@@ -856,7 +856,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Includes person vs AI vs IT-system OpEx AC breakdown. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Includes person vs AI vs IT-system OpEx AC breakdown. All money/budget fields returned as JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -932,7 +932,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_system',
-    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Requires systems:read.',
+    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Money/rate fields (itFlatMonthlyFee, itBudgetAllocation, aiFlatMonthlyFee, aiTokenRatePer1k, aiBudgetAllocation) returned as JSON numbers. Requires systems:read.',
     { systemId: z.string().uuid() },
     async (args) =>
       wrap('get_system', 'systems:read', () => handlers.getSystem(args), {
@@ -1280,7 +1280,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_task',
-    'Get one project task with RACI. taskId may be a UUID or human key (e.g. HL1-T-12). Requires pm:read.',
+    'Get one project task with RACI. Hour fields (forecastHours, actualHours) returned as JSON numbers. taskId may be a UUID or human key (e.g. HL1-T-12). Requires pm:read.',
     { taskId: entityRef },
     async (args) =>
       wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
@@ -1467,7 +1467,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Requires pm:write.',
+    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1511,7 +1511,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. Requires pm:write.',
+    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1738,7 +1738,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_stakeholders',
-    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Requires pm:read.',
+    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Money/rate/hour fields (hourlyRate, allocatedDailyHours, contractedBudget, aiFlatMonthlyFee, aiTokenRatePer1k, aiBudgetAllocation) returned as JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -1778,7 +1778,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_stakeholder',
-    'Add or upsert a project stakeholder. Omit userId to create an open job role (jobTitle required). Accepts roleDescription and competency tags. Requires pm:write.',
+    'Add or upsert a project stakeholder. Omit userId to create an open job role (jobTitle required). Accepts roleDescription and competency tags. Money/rate/hour fields accept number or string; returned as JSON numbers. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       userId: z.string().uuid().nullable().optional(),
@@ -1810,7 +1810,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_stakeholder',
-    'Update a project stakeholder roster row (role, description, competencies, rate, capacity). Requires pm:write.',
+    'Update a project stakeholder roster row (role, description, competencies, rate, capacity). Money/rate/hour fields accept number or string; returned as JSON numbers. Requires pm:write.',
     {
       stakeholderId: z.string().uuid(),
       projectRole: stakeholderRoleEnum.optional(),

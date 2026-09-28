@@ -330,13 +330,6 @@
       "when": 1786400400000,
       "tag": "0046_system_it_cost",
       "breakpoints": true
-    },
-    {
-      "idx": 47,
-      "version": "7",
-      "when": 1790621218387,
-      "tag": "0047_wide_psylocke",
-      "breakpoints": true
     }
   ]
 }
