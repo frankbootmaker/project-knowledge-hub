@@ -414,19 +414,19 @@ const CREATE_FIELDS: KnowledgeRecordFieldGuide[] = [
     name: 'title',
     requirement: 'required',
     description: 'Human-readable title (1–300 chars).',
-    appliesTo: ['create', 'update'],
+    appliesTo: ['create'],
   },
   {
     name: 'recordType',
     requirement: 'required',
     description: 'One of the catalog recordType values from this metadata payload.',
-    appliesTo: ['create', 'update'],
+    appliesTo: ['create'],
   },
   {
     name: 'contentMarkdown',
     requirement: 'required',
     description: 'Markdown body of the record.',
-    appliesTo: ['create', 'update'],
+    appliesTo: ['create'],
   },
   {
     name: 'summary',
@@ -484,12 +484,6 @@ const CREATE_FIELDS: KnowledgeRecordFieldGuide[] = [
     appliesTo: ['create', 'update'],
   },
   {
-    name: 'changeMessage',
-    requirement: 'required',
-    description: 'Required on update: why the change was made.',
-    appliesTo: ['update'],
-  },
-  {
     name: 'lifecycleStatus',
     requirement: 'ignored_on_mcp_write',
     description:
@@ -502,6 +496,94 @@ const CREATE_FIELDS: KnowledgeRecordFieldGuide[] = [
     description:
       'Human/session API may set this. MCP writes always force ai_generated_draft.',
     appliesTo: ['human_api'],
+  },
+];
+
+const UPDATE_FIELDS: KnowledgeRecordFieldGuide[] = [
+  {
+    name: 'recordId',
+    requirement: 'required',
+    description: 'UUID or project document key (e.g. HL1-VIS-2) of the record to update.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'changeMessage',
+    requirement: 'required',
+    description: 'Required on update: why the change was made.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'title',
+    requirement: 'optional',
+    description: 'Human-readable title (1–300 chars).',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'summary',
+    requirement: 'optional',
+    description: 'Short summary (≤1000 chars).',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'recordType',
+    requirement: 'optional',
+    description: 'One of the catalog recordType values from this metadata payload.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'contentMarkdown',
+    requirement: 'optional',
+    description: 'Markdown body of the record.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'projectId',
+    requirement: 'optional',
+    description: 'Optional project UUID to scope the record.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'systemId',
+    requirement: 'optional',
+    description: 'Optional system UUID to scope the record.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'tags',
+    requirement: 'optional',
+    description: 'Up to 30 tag strings.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'language',
+    requirement: 'optional',
+    description: 'BCP 47 / short language code (e.g. en, de, hu).',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'translationGroupId',
+    requirement: 'optional',
+    description:
+      'Optional UUID shared by translation siblings (same group id). Phase 1: set via API/MCP only.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'generatedByModel',
+    requirement: 'optional',
+    description: 'Model identifier for provenance (MCP conversation source).',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'sourceTitle',
+    requirement: 'optional',
+    description: 'Human label for the originating conversation or document.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'archived',
+    requirement: 'optional',
+    description: 'Set true to soft-archive the record, or false to restore it.',
+    appliesTo: ['update'],
   },
 ];
 
@@ -637,8 +719,9 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
         'translationGroupId',
         'generatedByModel',
         'sourceTitle',
+        'archived',
       ],
-      fields: CREATE_FIELDS.filter((field) => field.appliesTo.includes('update')),
+      fields: UPDATE_FIELDS,
     },
     workspaceMedia: {
       tools: [

@@ -77,4 +77,75 @@ describe('record types catalog', () => {
       meta.guidance.some((line) => line.includes('finalize_workspace_media_upload')),
     ).toBe(true);
   });
+
+  it('buildKnowledgeRecordMetadata update guide matches update schema', () => {
+    const meta = buildKnowledgeRecordMetadata();
+    
+    // PRO-T-4: update guide required fields should match update_knowledge_record schema
+    expect(meta.updateKnowledgeRecord.requiredFields).toEqual([
+      'recordId',
+      'changeMessage',
+    ]);
+    
+    // PRO-T-4: update guide should include archived in optional fields
+    expect(meta.updateKnowledgeRecord.optionalFields).toContain('archived');
+    
+    // PRO-T-4: recordId should be documented in fields
+    const recordIdField = meta.updateKnowledgeRecord.fields.find(
+      (f) => f.name === 'recordId',
+    );
+    expect(recordIdField).toBeDefined();
+    expect(recordIdField?.requirement).toBe('required');
+    expect(recordIdField?.appliesTo).toContain('update');
+    
+    // PRO-T-4: archived should be documented in fields
+    const archivedField = meta.updateKnowledgeRecord.fields.find(
+      (f) => f.name === 'archived',
+    );
+    expect(archivedField).toBeDefined();
+    expect(archivedField?.requirement).toBe('optional');
+    expect(archivedField?.appliesTo).toContain('update');
+    
+    // PRO-T-4: title, recordType, contentMarkdown should be optional on update
+    for (const fieldName of ['title', 'recordType', 'contentMarkdown']) {
+      const field = meta.updateKnowledgeRecord.fields.find(
+        (f) => f.name === fieldName,
+      );
+      expect(field).toBeDefined();
+      expect(field?.requirement).toBe('optional');
+      expect(field?.appliesTo).toContain('update');
+    }
+    
+    // PRO-T-4: field requirements should match requiredFields/optionalFields lists
+    for (const field of meta.updateKnowledgeRecord.fields) {
+      if (field.requirement === 'required') {
+        expect(meta.updateKnowledgeRecord.requiredFields).toContain(field.name);
+      } else if (field.requirement === 'optional') {
+        expect(meta.updateKnowledgeRecord.optionalFields).toContain(field.name);
+      }
+    }
+  });
+
+  it('buildKnowledgeRecordMetadata create guide requirement values are correct', () => {
+    const meta = buildKnowledgeRecordMetadata();
+    
+    // Create guide: title, recordType, contentMarkdown should be required
+    for (const fieldName of ['title', 'recordType', 'contentMarkdown']) {
+      const field = meta.createKnowledgeRecord.fields.find(
+        (f) => f.name === fieldName,
+      );
+      expect(field).toBeDefined();
+      expect(field?.requirement).toBe('required');
+      expect(field?.appliesTo).toContain('create');
+    }
+    
+    // Field requirements should match requiredFields/optionalFields lists
+    for (const field of meta.createKnowledgeRecord.fields) {
+      if (field.requirement === 'required') {
+        expect(meta.createKnowledgeRecord.requiredFields).toContain(field.name);
+      } else if (field.requirement === 'optional') {
+        expect(meta.createKnowledgeRecord.optionalFields).toContain(field.name);
+      }
+    }
+  });
 });
