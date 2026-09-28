@@ -320,9 +320,9 @@ export async function runSearch(app: FastifyInstance, input: SearchInput) {
         excerpt: buildSnippet(excerptSource, input.query),
         updatedAt: row.updated_at instanceof Date
           ? row.updated_at.toISOString()
-          : String(row.updated_at),
-        score,
-        vectorScore,
+          : new Date(row.updated_at).toISOString(),
+        score: Math.round(score * 10000) / 10000,
+        vectorScore: vectorScore !== null ? Math.round(vectorScore * 10000) / 10000 : null,
       };
     })
     .sort((a, b) => b.score - a.score)
