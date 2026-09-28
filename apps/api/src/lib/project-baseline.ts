@@ -188,54 +188,57 @@ export async function setInitialStakeholders(
     rows.map((row) => row.userId),
   );
 
-  const existing = await database.db
-    .select({
-      id: projectInitialStakeholders.id,
-      userId: projectInitialStakeholders.userId,
-      projectRole: projectInitialStakeholders.projectRole,
-      sortOrder: projectInitialStakeholders.sortOrder,
-    })
-    .from(projectInitialStakeholders)
-    .where(eq(projectInitialStakeholders.projectId, input.projectId));
-  const diff = diffReplacement(
-    existing,
-    rows,
-    (row) => row.userId,
-    (row) => row.userId,
-    (prev, row) =>
-      prev.projectRole === row.projectRole && prev.sortOrder === row.sortOrder,
-  );
-  if (diff.remove.length > 0) {
-    await database.db
-      .delete(projectInitialStakeholders)
-      .where(
-        inArray(
-          projectInitialStakeholders.id,
-          diff.remove.map((row) => row.id),
-        ),
-      );
-  }
-  for (const change of diff.update) {
-    await database.db
-      .update(projectInitialStakeholders)
-      .set({
-        projectRole: change.next.projectRole,
-        sortOrder: change.next.sortOrder,
-        updatedAt: new Date(),
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: projectInitialStakeholders.id,
+        userId: projectInitialStakeholders.userId,
+        projectRole: projectInitialStakeholders.projectRole,
+        sortOrder: projectInitialStakeholders.sortOrder,
       })
-      .where(eq(projectInitialStakeholders.id, change.existing.id));
-  }
-  if (diff.insert.length > 0) {
-    await database.db.insert(projectInitialStakeholders).values(
-      diff.insert.map((row) => ({
-        projectId: input.projectId,
-        userId: row.userId,
-        projectRole: row.projectRole,
-        sortOrder: row.sortOrder,
-        createdBy: input.createdBy ?? null,
-      })),
+      .from(projectInitialStakeholders)
+      .where(eq(projectInitialStakeholders.projectId, input.projectId));
+    const diff = diffReplacement(
+      existing,
+      rows,
+      (row) => row.userId,
+      (row) => row.userId,
+      (prev, row) =>
+        prev.projectRole === row.projectRole && prev.sortOrder === row.sortOrder,
     );
-  }
+    if (diff.remove.length > 0) {
+      await db
+        .delete(projectInitialStakeholders)
+        .where(
+          inArray(
+            projectInitialStakeholders.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    for (const change of diff.update) {
+      await db
+        .update(projectInitialStakeholders)
+        .set({
+          projectRole: change.next.projectRole,
+          sortOrder: change.next.sortOrder,
+          updatedAt: new Date(),
+        })
+        .where(eq(projectInitialStakeholders.id, change.existing.id));
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(projectInitialStakeholders).values(
+        diff.insert.map((row) => ({
+          projectId: input.projectId,
+          userId: row.userId,
+          projectRole: row.projectRole,
+          sortOrder: row.sortOrder,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
 
   return listInitialStakeholders(database, input.projectId);
 }

@@ -72,15 +72,27 @@ import { upsertProjectCostSnapshot } from './project-budget.js';
  * Polymorphic delivery links have no FK. System-created links whose parent
  * is in this project, or whose entity is in the delete set, are deleted.
  * Human links whose entity is in the delete set are removed and reported in
- * `detaches` so the pointer does not dangle. Links, versions, and media of
- * records outside this project are ignored unless the link's entity is in
- * the delete set.
+ * `detaches` so the pointer does not dangle. A skipped record keeps its
+ * versions, media, and links; those children are not conflicts and are not
+ * deleted. Links, versions, and media of records outside this project are
+ * ignored unless the link's entity is in the delete set.
  *
- * AI usage is `tokens_used` / `ai_system_id` on a task plus the system user's
- * `fields_updated` activity. On a kept task the purge restores the previous
- * values when that activity recorded them. Older activities without
- * `metadata.previous` are listed in `unrecoverableAiUsage` and left as-is
- * (guessing null would wipe an unknown human value).
+ * Any import reference outside the target project skips the record or media,
+ * including imports the system user created. Imports are never deleted, so
+ * a cascade would remove another project's join. In-project imports the
+ * system user did not create still conflict.
+ *
+ * System media is deleted only when its knowledge record is in the delete
+ * set, or a system-created import in the target project attaches it.
+ * Unattached system media is skipped with reason `unattached_media`.
+ *
+ * AI usage is `tokens_used` / `ai_system_id` on a task plus every user's
+ * `fields_updated` activity, in time order. If the last write of a field
+ * was not the system user, the value stays. Otherwise the purge restores
+ * the previous value of the first system write after the last human write
+ * (or the earliest system write). A restored `aiSystemId` that is missing
+ * or in the delete set becomes null and is reported. Activities without
+ * `metadata.previous` are listed in `unrecoverableAiUsage`.
  *
  * Issue-key counters are not reclaimed. Budget summary, sprint burndown,
  * and velocity are computed on read. The daily cost snapshot for today is
@@ -208,6 +220,7 @@ export type SystemUserPurgeSnapshot = {
     previousTokensUsed?: number | null;
     recordedAiSystemId?: boolean;
     previousAiSystemId?: string | null;
+    createdAt?: string;
   }>;
   raci: Array<{ id: string; createdBy: string | null; taskId: string }>;
   stakeholders: Array<{
@@ -578,20 +591,6 @@ export function planSystemUserPurge(
     }
   }
 
-  for (const record of snapshot.knowledgeRecords) {
-    if (record.projectId === projectId || candidate.records.has(record.id)) continue;
-    if (
-      record.supersedesRecordId &&
-      candidate.records.has(record.supersedesRecordId)
-    ) {
-      skip(
-        'records',
-        record.supersedesRecordId,
-        'A record outside the target project supersedes this record.',
-      );
-    }
-  }
-
   for (const pointer of snapshot.projectPointers ?? []) {
     if (!candidate.records.has(pointer.recordId)) continue;
     if (pointer.projectId !== projectId) {
@@ -616,7 +615,6 @@ export function planSystemUserPurge(
 
   for (const ref of snapshot.recordImportRefs) {
     if (!candidate.records.has(ref.knowledgeRecordId)) continue;
-    if (ref.importCreatedBy === systemUserId) continue;
     if (refProject(ref.projectId) !== projectId) {
       skip(
         'records',
@@ -626,17 +624,38 @@ export function planSystemUserPurge(
     }
   }
 
+  // Supersedes and system pointers depend on the final delete set. A record
+  // skipped above can itself point at something still queued for deletion.
   const recordWillDelete = (id: string) =>
     candidate.records.has(id) && !skippedIds.records.has(id);
-  for (const record of snapshot.knowledgeRecords) {
-    if (!record.systemId || !candidate.systems.has(record.systemId)) continue;
-    if (recordWillDelete(record.id)) continue;
-    if (record.projectId === projectId) continue;
-    skip(
-      'systems',
-      record.systemId,
-      'A record outside the target project references this system.',
-    );
+  let skipGrew = true;
+  while (skipGrew) {
+    const skippedBefore = skippedIds.records.size + skippedIds.systems.size;
+    for (const record of snapshot.knowledgeRecords) {
+      if (!record.supersedesRecordId || !recordWillDelete(record.supersedesRecordId)) {
+        continue;
+      }
+      const referencerKept = !recordWillDelete(record.id);
+      const inProjectDetach = record.projectId === projectId;
+      if (referencerKept && !inProjectDetach) {
+        skip(
+          'records',
+          record.supersedesRecordId,
+          'A record outside the target project supersedes this record.',
+        );
+      }
+    }
+    for (const record of snapshot.knowledgeRecords) {
+      if (!record.systemId || !candidate.systems.has(record.systemId)) continue;
+      if (recordWillDelete(record.id)) continue;
+      if (record.projectId === projectId) continue;
+      skip(
+        'systems',
+        record.systemId,
+        'A record outside the target project references this system.',
+      );
+    }
+    skipGrew = skippedIds.records.size + skippedIds.systems.size > skippedBefore;
   }
 
   tasks = tasks.filter((row) => !skippedIds.tasks.has(row.id));
@@ -717,22 +736,45 @@ export function planSystemUserPurge(
   const unrecoverable: PurgeUnrecoverable[] = [];
   const aiRestores: PurgeAiRestore[] = [];
   const keptTaskIds = [...projectTaskIds].filter((id) => !taskIds.has(id));
+  const aiUsageByTask = new Map<
+    string,
+    Array<{ activity: (typeof snapshot.activities)[number]; index: number }>
+  >();
+  snapshot.activities.forEach((activity, index) => {
+    if (!isAiUsageActivity(activity)) return;
+    const list = aiUsageByTask.get(activity.taskId) ?? [];
+    list.push({ activity, index });
+    aiUsageByTask.set(activity.taskId, list);
+  });
+  for (const list of aiUsageByTask.values()) {
+    list.sort((a, b) => {
+      if (a.activity.createdAt && b.activity.createdAt) {
+        const cmp = a.activity.createdAt.localeCompare(b.activity.createdAt);
+        if (cmp !== 0) return cmp;
+      }
+      return a.index - b.index;
+    });
+  }
   for (const taskId of keptTaskIds) {
-    const acts = snapshot.activities.filter(
-      (activity) =>
-        activity.taskId === taskId &&
-        activity.actorUserId === systemUserId &&
-        isAiUsageActivity(activity),
-    );
+    const acts = (aiUsageByTask.get(taskId) ?? []).map((row) => row.activity);
     const restore: PurgeAiRestore = { taskId };
     let restoreAny = false;
-    let tokensSeen = false;
-    let systemSeen = false;
-    for (const activity of acts) {
-      if (!tokensSeen && activity.fields.includes('tokensUsed')) {
-        tokensSeen = true;
-        if (activity.recordedTokensUsed) {
-          restore.tokensUsed = activity.previousTokensUsed ?? null;
+    for (const field of ['tokensUsed', 'aiSystemId'] as const) {
+      const writes = acts.filter((activity) => activity.fields.includes(field));
+      if (writes.length === 0) continue;
+      const last = writes[writes.length - 1];
+      if (!last || last.actorUserId !== systemUserId) continue;
+      let lastHuman = -1;
+      writes.forEach((activity, index) => {
+        if (activity.actorUserId !== systemUserId) lastHuman = index;
+      });
+      const firstSystem = writes
+        .slice(lastHuman + 1)
+        .find((activity) => activity.actorUserId === systemUserId);
+      if (!firstSystem) continue;
+      if (field === 'tokensUsed') {
+        if (firstSystem.recordedTokensUsed) {
+          restore.tokensUsed = firstSystem.previousTokensUsed ?? null;
           restoreAny = true;
         } else {
           unrecoverable.push({
@@ -743,22 +785,35 @@ export function planSystemUserPurge(
               'System user overwrote tokensUsed and the activity did not record the previous value.',
           });
         }
+        continue;
       }
-      if (!systemSeen && activity.fields.includes('aiSystemId')) {
-        systemSeen = true;
-        if (activity.recordedAiSystemId) {
-          restore.aiSystemId = activity.previousAiSystemId ?? null;
-          restoreAny = true;
-        } else {
-          unrecoverable.push({
-            entityType: 'task',
-            entityId: taskId,
-            field: 'aiSystemId',
-            reason:
-              'System user overwrote aiSystemId and the activity did not record the previous value.',
-          });
-        }
+      if (!firstSystem.recordedAiSystemId) {
+        unrecoverable.push({
+          entityType: 'task',
+          entityId: taskId,
+          field: 'aiSystemId',
+          reason:
+            'System user overwrote aiSystemId and the activity did not record the previous value.',
+        });
+        continue;
       }
+      let restoredSystem = firstSystem.previousAiSystemId ?? null;
+      if (
+        restoredSystem !== null &&
+        (!systemsById.has(restoredSystem) || systemIds.has(restoredSystem))
+      ) {
+        unrecoverable.push({
+          entityType: 'task',
+          entityId: taskId,
+          field: 'aiSystemId',
+          reason: systemIds.has(restoredSystem)
+            ? 'Restored aiSystemId points at a system this purge deletes.'
+            : 'Restored aiSystemId points at a system that no longer exists.',
+        });
+        restoredSystem = null;
+      }
+      restore.aiSystemId = restoredSystem;
+      restoreAny = true;
     }
     if (restoreAny) aiRestores.push(restore);
   }
@@ -768,9 +823,13 @@ export function planSystemUserPurge(
       .map((row) => [row.taskId, row.aiSystemId ?? null]),
   );
 
+  const parentRecordSkipped = (recordId: string) =>
+    candidate.records.has(recordId) && !recordIds.has(recordId);
+
   const versions: string[] = [];
   for (const version of snapshot.knowledgeRecordVersions) {
     if (!inScopeRecord(version.knowledgeRecordId)) continue;
+    if (parentRecordSkipped(version.knowledgeRecordId)) continue;
     const parentDeleted = recordIds.has(version.knowledgeRecordId);
     if (parentDeleted && !owned(version.createdBy)) {
       conflicts.push({
@@ -830,6 +889,7 @@ export function planSystemUserPurge(
       ? parent.projectId === projectId || parent.projectId === null
       : false;
     const parentDeleted = recordIds.has(link.knowledgeRecordId);
+    if (parentRecordSkipped(link.knowledgeRecordId)) continue;
     const entityDeleted = entityInDeleteSet(link.entityType, link.entityId);
     if (!parentInScope && !entityDeleted) continue;
     if (parentDeleted) {
@@ -922,10 +982,47 @@ export function planSystemUserPurge(
   const mediaRows: Array<(typeof snapshot.media)[number]> = [];
   for (const row of snapshot.media) {
     if (row.workspaceId !== snapshot.workspaceId || !owned(row.createdBy)) continue;
-    if (row.knowledgeRecordId && !recordIds.has(row.knowledgeRecordId)) {
+    const imports = snapshot.mediaImportRefs.filter((ref) => ref.mediaId === row.id);
+    const outsideImport = imports.find(
+      (ref) => refProject(ref.projectId) !== projectId,
+    );
+    if (outsideImport) {
+      skip(
+        'media',
+        row.id,
+        'Media is attached to an import outside the target project.',
+      );
+      continue;
+    }
+    const humanInProjectImport = imports.some(
+      (ref) =>
+        ref.importCreatedBy !== systemUserId &&
+        refProject(ref.projectId) === projectId,
+    );
+    if (row.knowledgeRecordId && parentRecordSkipped(row.knowledgeRecordId)) {
+      skip(
+        'media',
+        row.id,
+        'Media stays with a knowledge record that was skipped.',
+      );
+      continue;
+    }
+    if (row.knowledgeRecordId && recordIds.has(row.knowledgeRecordId)) {
+      if (humanInProjectImport) {
+        conflicts.push({
+          entityType: 'media',
+          entityId: row.id,
+          reason:
+            'Media is attached to a document import the system user did not create.',
+        });
+        continue;
+      }
+      mediaRows.push(row);
+      continue;
+    }
+    if (row.knowledgeRecordId) {
       const parent = recordsById.get(row.knowledgeRecordId);
-      const parentInProject = parent?.projectId === projectId;
-      if (!parentInProject) {
+      if (parent?.projectId !== projectId) {
         skip(
           'media',
           row.id,
@@ -941,21 +1038,7 @@ export function planSystemUserPurge(
       });
       continue;
     }
-    const blocking = snapshot.mediaImportRefs.filter(
-      (ref) => ref.mediaId === row.id && ref.importCreatedBy !== systemUserId,
-    );
-    const outsideImport = blocking.find(
-      (ref) => refProject(ref.projectId) !== projectId,
-    );
-    if (outsideImport) {
-      skip(
-        'media',
-        row.id,
-        'Media is attached to an import outside the target project.',
-      );
-      continue;
-    }
-    if (blocking.length > 0) {
+    if (humanInProjectImport) {
       conflicts.push({
         entityType: 'media',
         entityId: row.id,
@@ -964,7 +1047,16 @@ export function planSystemUserPurge(
       });
       continue;
     }
-    mediaRows.push(row);
+    const systemInProjectImport = imports.some(
+      (ref) =>
+        ref.importCreatedBy === systemUserId &&
+        refProject(ref.projectId) === projectId,
+    );
+    if (systemInProjectImport) {
+      mediaRows.push(row);
+      continue;
+    }
+    skip('media', row.id, 'unattached_media');
   }
 
   const tagOwnerProject = (link: (typeof snapshot.tagLinks)[number]) => {
@@ -1381,6 +1473,7 @@ export async function loadSystemUserPurgeSnapshot(
       taskId: projectTaskActivities.taskId,
       type: projectTaskActivities.type,
       metadataJson: projectTaskActivities.metadataJson,
+      createdAt: projectTaskActivities.createdAt,
     })
     .from(projectTaskActivities)
     .where(inArray(projectTaskActivities.taskId, projectTaskIds))
@@ -1787,6 +1880,7 @@ export async function loadSystemUserPurgeSnapshot(
       type: row.type,
       fields: activityFields(row.metadataJson),
       ...activityPrevious(row.metadataJson),
+      createdAt: row.createdAt.toISOString(),
     })),
     raci: raciRows,
     stakeholders: await db
@@ -2220,6 +2314,10 @@ export async function runSystemUserPurge(
     deleteMedia?: (
       media: { id: string; workspaceId: string },
     ) => Promise<number | void>;
+    refreshCostSnapshot?: (
+      database: Database,
+      projectId: string,
+    ) => Promise<unknown>;
     log?: { error: (obj: unknown, msg?: string) => void };
   },
 ): Promise<SystemUserPurgeResult> {
@@ -2328,7 +2426,10 @@ export async function runSystemUserPurge(
 
   let costSnapshotRefreshed = false;
   try {
-    await upsertProjectCostSnapshot(database, input.projectId);
+    await (input.refreshCostSnapshot ?? upsertProjectCostSnapshot)(
+      database,
+      input.projectId,
+    );
     costSnapshotRefreshed = true;
   } catch (error) {
     input.log?.error({ err: error }, 'Purge cost snapshot refresh failed');

@@ -886,4 +886,417 @@ describe('planSystemUserPurge', () => {
       ]),
     );
   });
+
+  it('skips an in-project record and its version, media, and links together', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        knowledgeRecords: [
+          {
+            id: 'qa-record',
+            createdBy: SYS,
+            projectId: PROJECT,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+        ],
+        knowledgeRecordVersions: [
+          { id: 'v1', createdBy: SYS, knowledgeRecordId: 'qa-record' },
+          { id: 'human-v2', createdBy: HUMAN, knowledgeRecordId: 'qa-record' },
+        ],
+        knowledgeDeliveryLinks: [
+          {
+            id: 'qa-link',
+            createdBy: SYS,
+            knowledgeRecordId: 'qa-record',
+            entityType: 'task',
+            entityId: 'qa-task',
+          },
+        ],
+        media: [
+          {
+            id: 'qa-media',
+            createdBy: SYS,
+            workspaceId: WS,
+            knowledgeRecordId: 'qa-record',
+          },
+        ],
+        changeItems: [
+          {
+            id: 'p2-change',
+            createdBy: HUMAN,
+            projectId: OTHER,
+            knowledgeRecordId: 'qa-record',
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.knowledgeRecords).toEqual([]);
+    expect(plan.deleteIds.knowledgeRecordVersions).toEqual([]);
+    expect(plan.deleteIds.knowledgeDeliveryLinks).toEqual([]);
+    expect(plan.deleteIds.media).toEqual([]);
+    expect(plan.skippedSharedItems.map((row) => row.entityId)).toContain(
+      'qa-record',
+    );
+  });
+
+  it('skips a record linked by a system-created import in another project', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        knowledgeRecords: [
+          {
+            id: 'qa-record',
+            createdBy: SYS,
+            projectId: PROJECT,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+        ],
+        recordImportRefs: [
+          {
+            knowledgeRecordId: 'qa-record',
+            importCreatedBy: SYS,
+            kind: 'document_import',
+            projectId: OTHER,
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.knowledgeRecords).toEqual([]);
+    expect(plan.skippedSharedItems.map((row) => row.entityId)).toContain(
+      'qa-record',
+    );
+  });
+
+  it('skips unattached system media and still deletes media on a deleted record', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        knowledgeRecords: [
+          {
+            id: 'qa-record',
+            createdBy: SYS,
+            projectId: PROJECT,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+        ],
+        media: [
+          {
+            id: 'loose-media',
+            createdBy: SYS,
+            workspaceId: WS,
+            knowledgeRecordId: null,
+          },
+          {
+            id: 'record-media',
+            createdBy: SYS,
+            workspaceId: WS,
+            knowledgeRecordId: 'qa-record',
+          },
+          {
+            id: 'import-media',
+            createdBy: SYS,
+            workspaceId: WS,
+            knowledgeRecordId: null,
+          },
+        ],
+        mediaImportRefs: [
+          {
+            mediaId: 'import-media',
+            importCreatedBy: SYS,
+            projectId: PROJECT,
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.media.sort()).toEqual(['import-media', 'record-media']);
+    expect(plan.skippedSharedItems).toContainEqual({
+      entityType: 'media',
+      entityId: 'loose-media',
+      reason: 'unattached_media',
+    });
+  });
+
+  it('skips media attached to a system-created import outside the project', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        media: [
+          {
+            id: 'outside-import-media',
+            createdBy: SYS,
+            workspaceId: WS,
+            knowledgeRecordId: null,
+          },
+        ],
+        mediaImportRefs: [
+          {
+            mediaId: 'outside-import-media',
+            importCreatedBy: SYS,
+            projectId: OTHER,
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.media).toEqual([]);
+    expect(plan.skippedSharedItems.map((row) => row.entityId)).toContain(
+      'outside-import-media',
+    );
+  });
+
+  it('does not delete a record that a later-skipped record still supersedes', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        knowledgeRecords: [
+          {
+            id: 'target',
+            createdBy: SYS,
+            projectId: PROJECT,
+            workspaceId: WS,
+            systemId: 'qa-system',
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+          {
+            id: 'later-skipped',
+            createdBy: SYS,
+            projectId: null,
+            workspaceId: WS,
+            systemId: 'qa-system',
+            translationGroupId: null,
+            supersedesRecordId: 'target',
+          },
+        ],
+        systems: [
+          {
+            id: 'qa-system',
+            createdBy: SYS,
+            workspaceId: WS,
+            projectId: null,
+          },
+        ],
+        changeItems: [
+          {
+            id: 'p2-change',
+            createdBy: HUMAN,
+            projectId: OTHER,
+            knowledgeRecordId: 'later-skipped',
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.knowledgeRecords).toEqual([]);
+    expect(plan.deleteIds.systems).toEqual([]);
+    expect(plan.skippedSharedItems.map((row) => row.entityId).sort()).toEqual([
+      'later-skipped',
+      'qa-system',
+      'target',
+    ]);
+    expect(plan.detaches.map((row) => row.field)).not.toContain(
+      'supersedesRecordId',
+    );
+  });
+
+  it('restores the value before the system write that followed a human edit', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        tasks: [
+          {
+            id: 'human-task',
+            createdBy: HUMAN,
+            projectId: PROJECT,
+            milestoneId: null,
+            userStoryId: null,
+            sprintId: null,
+            aiSystemId: null,
+          },
+        ],
+        activities: [
+          {
+            id: 'sys-1',
+            actorUserId: SYS,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['tokensUsed'],
+            recordedTokensUsed: true,
+            previousTokensUsed: 0,
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'human',
+            actorUserId: HUMAN,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['tokensUsed'],
+            recordedTokensUsed: true,
+            previousTokensUsed: 100,
+            createdAt: '2026-01-02T00:00:00.000Z',
+          },
+          {
+            id: 'sys-2',
+            actorUserId: SYS,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['tokensUsed'],
+            recordedTokensUsed: true,
+            previousTokensUsed: 200,
+            createdAt: '2026-01-03T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
+
+    expect(plan.aiRestores).toEqual([
+      { taskId: 'human-task', tokensUsed: 200 },
+    ]);
+    expect(plan.unrecoverableAiUsage).toEqual([]);
+  });
+
+  it('leaves a field whose last write was human', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        tasks: [
+          {
+            id: 'human-task',
+            createdBy: HUMAN,
+            projectId: PROJECT,
+            milestoneId: null,
+            userStoryId: null,
+            sprintId: null,
+            aiSystemId: 'kept-system',
+          },
+        ],
+        systems: [
+          {
+            id: 'kept-system',
+            createdBy: HUMAN,
+            workspaceId: WS,
+            projectId: PROJECT,
+          },
+        ],
+        activities: [
+          {
+            id: 'sys',
+            actorUserId: SYS,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['tokensUsed', 'aiSystemId'],
+            recordedTokensUsed: true,
+            previousTokensUsed: 0,
+            recordedAiSystemId: true,
+            previousAiSystemId: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'human',
+            actorUserId: HUMAN,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['tokensUsed', 'aiSystemId'],
+            recordedTokensUsed: true,
+            previousTokensUsed: 100,
+            recordedAiSystemId: true,
+            previousAiSystemId: 'kept-system',
+            createdAt: '2026-01-02T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
+
+    expect(plan.aiRestores).toEqual([]);
+    expect(plan.unrecoverableAiUsage).toEqual([]);
+    expect(plan.detaches.map((row) => row.field)).not.toContain('aiSystemId');
+  });
+
+  it('nulls a restored aiSystemId that the purge deletes or that is missing', () => {
+    const deleted = planSystemUserPurge(
+      snapshot({
+        tasks: [
+          {
+            id: 'human-task',
+            createdBy: HUMAN,
+            projectId: PROJECT,
+            milestoneId: null,
+            userStoryId: null,
+            sprintId: null,
+            aiSystemId: 'qa-system',
+          },
+        ],
+        systems: [
+          {
+            id: 'qa-system',
+            createdBy: SYS,
+            workspaceId: WS,
+            projectId: PROJECT,
+          },
+        ],
+        activities: [
+          {
+            id: 'sys',
+            actorUserId: SYS,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['aiSystemId'],
+            recordedAiSystemId: true,
+            previousAiSystemId: 'qa-system',
+          },
+        ],
+      }),
+    );
+    expect(deleted.aiRestores).toEqual([
+      { taskId: 'human-task', aiSystemId: null },
+    ]);
+    expect(deleted.unrecoverableAiUsage).toEqual([
+      expect.objectContaining({
+        entityId: 'human-task',
+        field: 'aiSystemId',
+      }),
+    ]);
+    expect(deleted.deleteIds.systems).toEqual(['qa-system']);
+
+    const missing = planSystemUserPurge(
+      snapshot({
+        tasks: [
+          {
+            id: 'human-task',
+            createdBy: HUMAN,
+            projectId: PROJECT,
+            milestoneId: null,
+            userStoryId: null,
+            sprintId: null,
+            aiSystemId: null,
+          },
+        ],
+        activities: [
+          {
+            id: 'sys',
+            actorUserId: SYS,
+            taskId: 'human-task',
+            type: 'fields_updated',
+            fields: ['aiSystemId'],
+            recordedAiSystemId: true,
+            previousAiSystemId: 'gone-system',
+          },
+        ],
+      }),
+    );
+    expect(missing.aiRestores).toEqual([
+      { taskId: 'human-task', aiSystemId: null },
+    ]);
+    expect(missing.unrecoverableAiUsage[0]?.reason).toContain('no longer exists');
+  });
 });

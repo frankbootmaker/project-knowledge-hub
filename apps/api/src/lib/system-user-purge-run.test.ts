@@ -52,12 +52,26 @@ function queryDb(options?: {
         const name = getTableName(table as never);
         if (phase === 'tx' && options?.txRows) rows = options.txRows(name);
         else if (name === 'workspace_media' && options?.phaseMedia) {
+          const mediaId = options.phaseMedia();
           rows = [
             {
-              id: options.phaseMedia(),
+              id: mediaId,
               createdBy: SYS,
               workspaceId: WS,
-              knowledgeRecordId: null,
+              knowledgeRecordId: `${mediaId}-record`,
+            },
+          ];
+        } else if (name === 'knowledge_records' && options?.phaseMedia) {
+          const mediaId = options.phaseMedia();
+          rows = [
+            {
+              id: `${mediaId}-record`,
+              createdBy: SYS,
+              projectId: PROJECT,
+              workspaceId: WS,
+              systemId: null,
+              translationGroupId: null,
+              supersedesRecordId: null,
             },
           ];
         } else rows = [];
@@ -203,7 +217,7 @@ describe('runSystemUserPurge', () => {
 
   it('dry-run writes a flagged audit row and does not delete or refresh', async () => {
     const harness = queryDb();
-    let refreshed = false;
+    let refreshCalls = 0;
     const result = await runSystemUserPurge(
       {
         db: {
@@ -216,13 +230,16 @@ describe('runSystemUserPurge', () => {
       {
         ...input,
         dryRun: true,
+        refreshCostSnapshot: async () => {
+          refreshCalls += 1;
+        },
         deleteMedia: async () => {
           throw new Error('dry-run deleted media');
         },
       },
     );
-    refreshed = result.aggregates.costSnapshotRefreshed;
-    expect(refreshed).toBe(false);
+    expect(refreshCalls).toBe(0);
+    expect(result.aggregates.costSnapshotRefreshed).toBe(false);
     expect(result.committed).toBe(false);
     expect(harness.events.filter((event) => event.startsWith('delete:'))).toEqual(
       [],
@@ -240,6 +257,7 @@ describe('runSystemUserPurge', () => {
     let phase: 'preview' | 'tx' = 'preview';
     const seen: string[] = [];
     const isolation: unknown[] = [];
+    let refreshCalls = 0;
     const harness = queryDb({
       phaseMedia: () => (phase === 'tx' ? 'tx-media' : 'preview-media'),
       onTransaction: (opts) => {
@@ -262,6 +280,10 @@ describe('runSystemUserPurge', () => {
       {
         ...input,
         dryRun: false,
+        refreshCostSnapshot: async () => {
+          refreshCalls += 1;
+          harness.events.push('refresh');
+        },
         deleteMedia: async (media) => {
           seen.push(media.id);
           harness.events.push(`media:${media.id}`);
@@ -269,6 +291,9 @@ describe('runSystemUserPurge', () => {
         },
       },
     );
+    expect(refreshCalls).toBe(1);
+    const refreshAt = harness.events.indexOf('refresh');
+    expect(refreshAt).toBeGreaterThan(harness.events.indexOf('committed'));
 
     expect(isolation[0]).toMatchObject({ isolationLevel: 'serializable' });
     expect(seen).toEqual(['tx-media']);
@@ -316,6 +341,7 @@ describe('runSystemUserPurge', () => {
               taskId: 'qa-task',
               type: 'comment',
               metadataJson: { fields: [] },
+              createdAt: new Date('2026-01-01T00:00:00.000Z'),
             },
           ];
         }
@@ -369,5 +395,30 @@ describe('runSystemUserPurge', () => {
     expect(calls).toBe(2);
     expect(result.committed).toBe(true);
     expect(result.counts.media).toBe(1);
+  });
+
+  it('gives up when a second serialization failure happens', async () => {
+    let calls = 0;
+    let refreshCalls = 0;
+    const harness = queryDb();
+    harness.db.transaction = (async () => {
+      calls += 1;
+      const error = new Error('could not serialize access');
+      (error as { code?: string }).code = '40001';
+      throw error;
+    }) as Database['db']['transaction'];
+
+    await expect(
+      runSystemUserPurge({ db: harness.db } as unknown as Database, {
+        ...input,
+        dryRun: false,
+        refreshCostSnapshot: async () => {
+          refreshCalls += 1;
+        },
+      }),
+    ).rejects.toMatchObject({ code: '40001' });
+    expect(calls).toBe(2);
+    expect(refreshCalls).toBe(0);
+    expect(harness.inserts).toEqual([]);
   });
 });

@@ -360,41 +360,44 @@ export async function setChangeDeliveryLinks(
     }
   }
 
-  const existing = await database.db
-    .select({
-      id: projectChangeDeliveryLinks.id,
-      entityType: projectChangeDeliveryLinks.entityType,
-      entityId: projectChangeDeliveryLinks.entityId,
-    })
-    .from(projectChangeDeliveryLinks)
-    .where(eq(projectChangeDeliveryLinks.changeId, input.changeId));
-  const diff = diffReplacement(
-    existing,
-    links,
-    (row) => `${row.entityType}:${row.entityId}`,
-    (row) => `${row.entityType}:${row.entityId}`,
-    () => true,
-  );
-  if (diff.remove.length > 0) {
-    await database.db
-      .delete(projectChangeDeliveryLinks)
-      .where(
-        inArray(
-          projectChangeDeliveryLinks.id,
-          diff.remove.map((row) => row.id),
-        ),
-      );
-  }
-  if (diff.insert.length > 0) {
-    await database.db.insert(projectChangeDeliveryLinks).values(
-      diff.insert.map((link) => ({
-        changeId: input.changeId,
-        entityType: link.entityType,
-        entityId: link.entityId,
-        createdBy: input.createdBy ?? null,
-      })),
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: projectChangeDeliveryLinks.id,
+        entityType: projectChangeDeliveryLinks.entityType,
+        entityId: projectChangeDeliveryLinks.entityId,
+      })
+      .from(projectChangeDeliveryLinks)
+      .where(eq(projectChangeDeliveryLinks.changeId, input.changeId));
+    const diff = diffReplacement(
+      existing,
+      links,
+      (row) => `${row.entityType}:${row.entityId}`,
+      (row) => `${row.entityType}:${row.entityId}`,
+      () => true,
     );
-  }
+    if (diff.remove.length > 0) {
+      await db
+        .delete(projectChangeDeliveryLinks)
+        .where(
+          inArray(
+            projectChangeDeliveryLinks.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(projectChangeDeliveryLinks).values(
+        diff.insert.map((link) => ({
+          changeId: input.changeId,
+          entityType: link.entityType,
+          entityId: link.entityId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
 }
 
 export async function createChangeItem(

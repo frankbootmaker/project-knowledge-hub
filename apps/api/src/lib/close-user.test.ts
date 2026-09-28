@@ -13,7 +13,7 @@ const systemUser = {
   status: 'active',
 };
 
-function mockDb(ownsRows: boolean) {
+function mockDb(ownsRows: boolean, ownedTable?: string) {
   const deletes: string[] = [];
   const select = () => {
     let rows: unknown[] = [];
@@ -22,6 +22,7 @@ function mockDb(ownsRows: boolean) {
       from(table: object) {
         const name = getTableName(table as never);
         if (name === 'users') rows = [systemUser];
+        else if (ownedTable) rows = name === ownedTable ? [{ id: 'owned-row' }] : [];
         else rows = ownsRows ? [{ id: 'owned-row' }] : [];
         return api;
       },
@@ -99,5 +100,22 @@ describe('purgeUserAccount system user', () => {
       expect((error as AppError).message.toLowerCase()).toContain('purge first');
     }
     expect(deletes).toEqual([]);
+  });
+
+  it('refuses a hard delete when the system user only owns an import', async () => {
+    for (const table of ['document_imports', 'conversation_imports']) {
+      const { deletes, database } = mockDb(false, table);
+      await expect(
+        purgeUserAccount(database, {
+          userId: systemUser.id,
+          avatarUploadDir: '/tmp/avatars-missing',
+          appEnv: 'test',
+        }),
+      ).rejects.toMatchObject({
+        code: 'SYSTEM_USER_PURGE_REQUIRED',
+        statusCode: 409,
+      });
+      expect(deletes).toEqual([]);
+    }
   });
 });

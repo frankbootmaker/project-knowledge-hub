@@ -858,53 +858,68 @@ export async function replaceTaskRaci(
     input.entries.map((entry) => entry.userId),
   );
 
-  const existing = await database.db
-    .select({
-      id: projectTaskRaci.id,
-      userId: projectTaskRaci.userId,
-      role: projectTaskRaci.role,
-    })
-    .from(projectTaskRaci)
-    .where(eq(projectTaskRaci.taskId, input.taskId));
-  const diff = diffReplacement(
-    existing,
-    input.entries,
-    (row) => row.userId,
-    (row) => row.userId,
-    (prev, row) => prev.role === row.role,
-  );
-  if (diff.remove.length > 0) {
-    await database.db
-      .delete(projectTaskRaci)
-      .where(
-        inArray(
-          projectTaskRaci.id,
-          diff.remove.map((row) => row.id),
-        ),
-      );
-  }
-  for (const change of diff.update) {
-    await database.db
-      .update(projectTaskRaci)
-      .set({ role: change.next.role })
-      .where(eq(projectTaskRaci.id, change.existing.id));
-  }
-  if (diff.insert.length > 0) {
-    await database.db.insert(projectTaskRaci).values(
-      diff.insert.map((entry) => ({
-        taskId: input.taskId,
-        userId: entry.userId,
-        role: entry.role,
-        createdBy: input.actorUserId ?? null,
-      })),
+  await database.db.transaction(async (tx) => {
+    const scoped = { ...database, db: tx as unknown as Database['db'] };
+    const existing = await scoped.db
+      .select({
+        id: projectTaskRaci.id,
+        userId: projectTaskRaci.userId,
+        role: projectTaskRaci.role,
+      })
+      .from(projectTaskRaci)
+      .where(eq(projectTaskRaci.taskId, input.taskId));
+    const diff = diffReplacement(
+      existing,
+      input.entries,
+      (row) => row.userId,
+      (row) => row.userId,
+      (prev, row) => prev.role === row.role,
     );
-  }
-
-  await recordTaskActivity(database, {
-    taskId: input.taskId,
-    actorUserId: input.actorUserId,
-    type: 'raci_changed',
-    metadata: { entries: input.entries },
+    if (diff.remove.length > 0) {
+      await scoped.db
+        .delete(projectTaskRaci)
+        .where(
+          inArray(
+            projectTaskRaci.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    // One Accountable per task. Demote the current A before promoting or
+    // inserting the replacement, or the partial unique index fails.
+    const demotions = diff.update.filter(
+      (change) => change.existing.role === 'A' && change.next.role !== 'A',
+    );
+    const promotions = diff.update.filter(
+      (change) => change.existing.role !== 'A' && change.next.role === 'A',
+    );
+    const otherUpdates = diff.update.filter(
+      (change) =>
+        !(change.existing.role === 'A' && change.next.role !== 'A') &&
+        !(change.existing.role !== 'A' && change.next.role === 'A'),
+    );
+    for (const change of [...demotions, ...otherUpdates, ...promotions]) {
+      await scoped.db
+        .update(projectTaskRaci)
+        .set({ role: change.next.role })
+        .where(eq(projectTaskRaci.id, change.existing.id));
+    }
+    if (diff.insert.length > 0) {
+      await scoped.db.insert(projectTaskRaci).values(
+        diff.insert.map((entry) => ({
+          taskId: input.taskId,
+          userId: entry.userId,
+          role: entry.role,
+          createdBy: input.actorUserId ?? null,
+        })),
+      );
+    }
+    await recordTaskActivity(scoped, {
+      taskId: input.taskId,
+      actorUserId: input.actorUserId,
+      type: 'raci_changed',
+      metadata: { entries: input.entries },
+    });
   });
 
   const map = await loadRaciForTasks(database, [input.taskId]);

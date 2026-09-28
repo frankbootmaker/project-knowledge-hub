@@ -589,39 +589,42 @@ export async function setRaidTaskLinks(
     }
   }
 
-  const existing = await database.db
-    .select({
-      id: projectRaidTaskLinks.id,
-      taskId: projectRaidTaskLinks.taskId,
-    })
-    .from(projectRaidTaskLinks)
-    .where(eq(projectRaidTaskLinks.raidItemId, input.raidItemId));
-  const diff = diffReplacement(
-    existing,
-    uniqueTaskIds.map((taskId) => ({ taskId })),
-    (row) => row.taskId,
-    (row) => row.taskId,
-    () => true,
-  );
-  if (diff.remove.length > 0) {
-    await database.db
-      .delete(projectRaidTaskLinks)
-      .where(
-        inArray(
-          projectRaidTaskLinks.id,
-          diff.remove.map((row) => row.id),
-        ),
-      );
-  }
-  if (diff.insert.length > 0) {
-    await database.db.insert(projectRaidTaskLinks).values(
-      diff.insert.map((row) => ({
-        raidItemId: input.raidItemId,
-        taskId: row.taskId,
-        createdBy: input.createdBy ?? null,
-      })),
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: projectRaidTaskLinks.id,
+        taskId: projectRaidTaskLinks.taskId,
+      })
+      .from(projectRaidTaskLinks)
+      .where(eq(projectRaidTaskLinks.raidItemId, input.raidItemId));
+    const diff = diffReplacement(
+      existing,
+      uniqueTaskIds.map((taskId) => ({ taskId })),
+      (row) => row.taskId,
+      (row) => row.taskId,
+      () => true,
     );
-  }
+    if (diff.remove.length > 0) {
+      await db
+        .delete(projectRaidTaskLinks)
+        .where(
+          inArray(
+            projectRaidTaskLinks.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(projectRaidTaskLinks).values(
+        diff.insert.map((row) => ({
+          raidItemId: input.raidItemId,
+          taskId: row.taskId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
 
   return getRaidItem(database, input.raidItemId);
 }

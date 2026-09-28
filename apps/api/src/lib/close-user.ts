@@ -1,6 +1,8 @@
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import {
   apiClients,
+  conversationImports,
+  documentImports,
   gitRepositoryConnections,
   knowledgeRecordDeliveryLinks,
   knowledgeRecordVersions,
@@ -329,6 +331,16 @@ async function systemUserOwnsRows(
       .select({ id: projectChangeDeliveryLinks.id })
       .from(projectChangeDeliveryLinks)
       .where(eq(projectChangeDeliveryLinks.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: documentImports.id })
+      .from(documentImports)
+      .where(eq(documentImports.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: conversationImports.id })
+      .from(conversationImports)
+      .where(eq(conversationImports.createdBy, userId))
       .limit(1),
   ];
   for (const query of queries) {
