@@ -703,6 +703,19 @@ export async function upsertProjectStakeholder(
 
     if (existing) {
       rosterId = existing.id;
+
+      const effectiveAssignment = effectiveDateRange({
+        stored: { start: existing.assignmentStart, end: existing.assignmentEnd },
+        patch: { start: input.assignmentStart, end: input.assignmentEnd },
+      });
+      assertDateRange({ start: effectiveAssignment.start, end: effectiveAssignment.end, startField: 'assignmentStart', endField: 'assignmentEnd' });
+
+      const effectiveContract = effectiveDateRange({
+        stored: { start: existing.contractStart, end: existing.contractEnd },
+        patch: { start: input.contractStart, end: input.contractEnd },
+      });
+      assertDateRange({ start: effectiveContract.start, end: effectiveContract.end, startField: 'contractStart', endField: 'contractEnd' });
+
       await database.db
         .update(projectStakeholders)
         .set({

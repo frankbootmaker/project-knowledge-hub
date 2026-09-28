@@ -5,6 +5,8 @@ import { slugify } from '@project-knowledge-hub/auth';
 import { projects, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
+  assertDateRange,
+  effectiveDateRange,
   keyPrefixSchema,
   projectCurrencySchema,
   projectStakeholderRoleSchema,
@@ -228,6 +230,8 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         statusCode: 409,
       });
     }
+
+    assertDateRange({ start: body.startDate, end: body.endDate, startField: 'startDate', endField: 'endDate' });
 
     const keyPrefix =
       body.keyPrefix !== undefined
@@ -490,6 +494,12 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         expectedTypes: ['plan'],
       });
     }
+
+    const effectiveDates = effectiveDateRange({
+      stored: { start: project.startDate, end: project.endDate },
+      patch: { start: body.startDate, end: body.endDate },
+    });
+    assertDateRange({ start: effectiveDates.start, end: effectiveDates.end, startField: 'startDate', endField: 'endDate' });
 
     const nextKeyPrefix =
       body.keyPrefix === undefined
