@@ -1,8 +1,15 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { Database } from '@project-knowledge-hub/database';
 import type { BlobStore } from '@project-knowledge-hub/blob-store';
 import { createWorkspaceMedia } from './workspace-media.js';
+
+vi.mock('node:fs/promises', () => ({
+  mkdir: vi.fn().mockResolvedValue(undefined),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn().mockResolvedValue(Buffer.from('test')),
+  unlink: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe('workspace-media', () => {
   const mockDatabase = {
@@ -28,17 +35,8 @@ describe('workspace-media', () => {
   const uploadDir = '/tmp/test-media';
   const maxBytes = 10 * 1024 * 1024;
 
-  beforeAll(() => {
-    vi.mock('node:fs/promises', () => ({
-      mkdir: vi.fn().mockResolvedValue(undefined),
-      writeFile: vi.fn().mockResolvedValue(undefined),
-      readFile: vi.fn().mockResolvedValue(Buffer.from('test')),
-      unlink: vi.fn().mockResolvedValue(undefined),
-    }));
-  });
-
-  afterAll(() => {
-    vi.restoreAllMocks();
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   describe('createWorkspaceMedia validation', () => {
@@ -190,6 +188,12 @@ describe('workspace-media', () => {
         code: 'MEDIA_CONTENT_MISMATCH',
         statusCode: 400,
       });
+
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(mockBlobStore.put).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
     });
 
     it('rejects HTML declared as JPEG (single-shot upload)', async () => {
@@ -211,6 +215,12 @@ describe('workspace-media', () => {
         code: 'MEDIA_CONTENT_MISMATCH',
         statusCode: 400,
       });
+
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(mockBlobStore.put).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
     });
 
     it('rejects PNG bytes declared as JPEG', async () => {
@@ -232,6 +242,12 @@ describe('workspace-media', () => {
         statusCode: 400,
         message: expect.stringMatching(/declared image\/jpeg.*matches image\/png/),
       });
+
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(mockBlobStore.put).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
     });
 
     it('rejects JPEG bytes declared as PNG', async () => {
@@ -252,6 +268,12 @@ describe('workspace-media', () => {
         code: 'MEDIA_CONTENT_MISMATCH',
         statusCode: 400,
       });
+
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(mockBlobStore.put).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
     });
 
     it('rejects empty buffer', async () => {
@@ -270,6 +292,12 @@ describe('workspace-media', () => {
         code: 'MEDIA_TOO_LARGE',
         statusCode: 400,
       });
+
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(mockBlobStore.put).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
     });
 
     it('rejects truncated buffer', async () => {
@@ -289,6 +317,12 @@ describe('workspace-media', () => {
         statusCode: 400,
         message: expect.stringMatching(/too short/),
       });
+
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(mockBlobStore.put).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
     });
 
     it('rejects unsupported content type', async () => {
@@ -310,6 +344,41 @@ describe('workspace-media', () => {
         code: 'MEDIA_TYPE_UNSUPPORTED',
         statusCode: 400,
       });
+
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(mockBlobStore.put).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('chunked upload path validation', () => {
+    it('rejects HTML chunks declared as image/jpeg on finalize', async () => {
+      const htmlBuffer = Buffer.from(
+        '<html><body>Not an image</body></html>',
+        'utf8',
+      );
+
+      await expect(
+        createWorkspaceMedia(mockDatabase, {
+          workspaceId,
+          contentType: 'image/jpeg',
+          buffer: htmlBuffer,
+          uploadDir,
+          maxBytes,
+          blobStore: mockBlobStore,
+        }),
+      ).rejects.toMatchObject({
+        code: 'MEDIA_CONTENT_MISMATCH',
+        statusCode: 400,
+      });
+
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(mockBlobStore.put).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
     });
   });
 });
