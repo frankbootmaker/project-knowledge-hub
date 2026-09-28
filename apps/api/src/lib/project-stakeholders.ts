@@ -1147,6 +1147,7 @@ export async function deleteProjectStakeholder(
 export async function listWorkspaceMembers(
   database: Database,
   workspaceId: string,
+  options: { includeSystemUsers?: boolean } = {},
 ): Promise<
   Array<{
     userId: string;
@@ -1154,8 +1155,18 @@ export async function listWorkspaceMembers(
     fullName: string | null;
     email: string;
     role: string;
+    userType: string;
   }>
 > {
+  const conditions = [
+    eq(memberships.workspaceId, workspaceId),
+    eq(users.status, 'active'),
+  ];
+  
+  if (!options.includeSystemUsers) {
+    conditions.push(eq(users.userType, 'human'));
+  }
+
   const rows = await database.db
     .select({
       userId: memberships.userId,
@@ -1163,15 +1174,11 @@ export async function listWorkspaceMembers(
       fullName: users.fullName,
       email: users.email,
       role: memberships.role,
+      userType: users.userType,
     })
     .from(memberships)
     .innerJoin(users, eq(memberships.userId, users.id))
-    .where(
-      and(
-        eq(memberships.workspaceId, workspaceId),
-        eq(users.status, 'active'),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(asc(users.displayName));
 
   return rows.map((row) => ({
@@ -1180,5 +1187,6 @@ export async function listWorkspaceMembers(
     fullName: row.fullName,
     email: row.email,
     role: row.role,
+    userType: row.userType,
   }));
 }

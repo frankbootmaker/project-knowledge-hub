@@ -43,18 +43,40 @@ const createUserSchema = z
     sendInvite: z.boolean().optional(),
     status: userStatusSchema.optional(),
     isSystemAdmin: z.boolean().optional(),
+    userType: z.enum(['human', 'system']).optional(),
     idpSource: z.string().min(1).max(64).nullable().optional(),
     idpSubject: z.string().min(1).max(320).nullable().optional(),
   })
   .superRefine((value, ctx) => {
-    // Password required when explicitly not inviting.
-    if (value.sendInvite === false && !value.password) {
+    const isSystem = value.userType === 'system';
+    
+    // System users must not use password or invite flows
+    if (isSystem && (value.password || value.sendInvite)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'System users cannot have passwords or be invited. They authenticate via API tokens only.',
+        path: ['userType'],
+      });
+    }
+    
+    // System users must have status 'active' (skip invitation/approval flows)
+    if (isSystem && value.status && value.status !== 'active') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'System users must have status "active"',
+        path: ['status'],
+      });
+    }
+    
+    // Human users: password required when explicitly not inviting
+    if (!isSystem && value.sendInvite === false && !value.password) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Password is required unless sending an invite',
         path: ['password'],
       });
     }
+    
     const hasSource = Boolean(value.idpSource?.trim());
     const hasSubject = Boolean(value.idpSubject?.trim());
     if (hasSource !== hasSubject) {
@@ -123,7 +145,8 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     requireSystemAdmin(principal);
     const body = createUserSchema.parse(request.body);
     const email = body.email.toLowerCase();
-    const inviteMode = body.sendInvite === true || !body.password;
+    const isSystem = body.userType === 'system';
+    const inviteMode = !isSystem && (body.sendInvite === true || !body.password);
 
     const [existing] = await app.database.db
       .select()
@@ -147,10 +170,13 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
         email,
         displayName: body.displayName,
         fullName: body.fullName?.trim() ? body.fullName.trim() : null,
+        userType: body.userType ?? 'human',
         passwordHash: inviteMode
           ? null
-          : await hashPassword(body.password!),
-        status: inviteMode ? 'invited' : (body.status ?? 'active'),
+          : body.password
+            ? await hashPassword(body.password)
+            : null,
+        status: isSystem ? 'active' : (inviteMode ? 'invited' : (body.status ?? 'active')),
         isSystemAdmin: body.isSystemAdmin ?? false,
         idpSource,
         idpSubject,
@@ -170,12 +196,13 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       organizationId: organization?.id ?? null,
       actorType: 'user',
       actorId: principal.userId,
-      action: inviteMode ? 'user.invite' : 'user.create',
+      action: isSystem ? 'user.create_system' : (inviteMode ? 'user.invite' : 'user.create'),
       entityType: 'user',
       entityId: created.id,
       metadata: {
         email: created.email,
         isSystemAdmin: created.isSystemAdmin,
+        userType: created.userType,
         invited: inviteMode,
       },
       ipAddress: request.ip,

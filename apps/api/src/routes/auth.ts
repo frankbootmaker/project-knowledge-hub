@@ -82,6 +82,14 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    if (user.userType === 'system') {
+      throw new AppError({
+        code: 'SYSTEM_USER_LOGIN_FORBIDDEN',
+        message: 'System users cannot sign in via the web interface. Use API token authentication.',
+        statusCode: 403,
+      });
+    }
+
     const valid = await verifyPassword(body.password, user.passwordHash);
     if (!valid) {
       throw new AppError({
@@ -424,7 +432,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(users.email, email))
       .limit(1);
 
-    if (user && user.status === 'active') {
+    if (user && user.status === 'active' && user.userType !== 'system') {
       const rawToken = await issueAuthToken(app.database, {
         userId: user.id,
         purpose: 'password_reset',

@@ -108,6 +108,10 @@ async function linkExistingByEmail(
   byEmail: typeof users.$inferSelect,
   input: OidcResolveInput,
 ): Promise<OidcResolveResult> {
+  if (byEmail.userType === 'system') {
+    return { status: 'inactive', userId: byEmail.id };
+  }
+
   if (byEmail.status !== 'active') {
     return { status: 'inactive', userId: byEmail.id };
   }
