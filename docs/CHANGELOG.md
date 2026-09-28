@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Task AI system validation (PRO-T-10):** `create_project_task`, `update_project_task`, and `report_project_task_ai_usage` now validate that `aiSystemId` is an AI assistant system linked to the task's project, matching the validation used by `update_project_ai_assistant_cost`. Previously, these tools accepted any catalogue system UUID, including non-AI systems, causing token usage to be charged to systems that were ignored by budget summaries.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.

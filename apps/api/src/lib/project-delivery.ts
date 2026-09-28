@@ -899,6 +899,10 @@ export async function createTask(
   await assertMilestoneInProject(database, input.projectId, input.milestoneId);
   await assertUserStoryInProject(database, input.projectId, input.userStoryId);
   await assertSprintInProject(database, input.projectId, input.sprintId);
+  if (input.aiSystemId) {
+    const { assertAiAssistantForProject } = await import('./project-stakeholders.js');
+    await assertAiAssistantForProject(database, input.projectId, input.aiSystemId);
+  }
   if (input.raci) {
     validateRaciEntries(input.raci);
     await assertWorkspaceMembers(
@@ -1028,6 +1032,14 @@ export async function updateTask(
   }
   if (input.sprintId !== undefined) {
     await assertSprintInProject(database, existing.projectId, input.sprintId);
+  }
+  if (input.aiSystemId !== undefined && input.aiSystemId !== null) {
+    const { assertAiAssistantForProject } = await import('./project-stakeholders.js');
+    await assertAiAssistantForProject(
+      database,
+      existing.projectId,
+      input.aiSystemId,
+    );
   }
   if (input.currentOwnerUserId && input.workspaceId) {
     await assertWorkspaceMembers(database, input.workspaceId, [
