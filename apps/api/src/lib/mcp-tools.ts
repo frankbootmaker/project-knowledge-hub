@@ -654,11 +654,12 @@ export function createMcpToolHandlers(
       const nextKeyPrefix =
         input.keyPrefix === undefined
           ? project.keyPrefix
-          : await assertUniqueKeyPrefix(app.database, {
+          : (await assertUniqueKeyPrefix(app.database, {
               workspaceId: project.workspaceId,
               keyPrefix: input.keyPrefix,
               excludeProjectId: project.id,
-            });
+              checkCrossWorkspace: true,
+            })).keyPrefix;
       const [updated] = await app.database.db
         .update(projects)
         .set({

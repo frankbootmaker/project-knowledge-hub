@@ -10,6 +10,7 @@ import {
   knowledgeRecords,
   projectTasks,
   projectRaidItems,
+  eq,
 } from '@project-knowledge-hub/database';
 import {
   resolveEntityId,
@@ -36,7 +37,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
   let workspace2Id: string;
   let project1Id: string; // CSA in workspace1
   let project2Id: string; // CSA in workspace2
-  let project3Id: string; // PNZ in workspace1
+  let _project3Id: string; // PNZ in workspace1
   let record1Id: string; // CSA-CONV-1 in project1
   let record2Id: string; // CSA-CONV-1 in project2
   let task1Id: string; // CSA-T-1 in project1
@@ -77,7 +78,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
     workspace2Id = ws2!.id;
 
     // Create projects with duplicate prefix CSA in different workspaces
-    const [p1, p2, p3] = await database.db
+    const [p1, p2, _p3] = await database.db
       .insert(projects)
       .values([
         {
@@ -102,7 +103,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       .returning();
     project1Id = p1!.id;
     project2Id = p2!.id;
-    project3Id = p3!.id;
+    _project3Id = _p3!.id;
 
     // Allocate keys and create entities with same human keys in different projects
     const key1 = await allocateIssueNumber(database, project1Id, 'CONV');
@@ -235,12 +236,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       expect(resolved).toBe(record2Id);
     });
 
-    it('should resolve correctly when scoped to multiple workspaces containing the target', async () => {
-      const resolved = await resolveKnowledgeRecordId(database, {
-        idOrKey: 'CSA-CONV-1',
-        workspaceIds: [workspace1Id, workspace2Id],
-      });
-      // Should fail as ambiguous
+    it('should fail with ambiguous error when scoped to multiple workspaces both containing the key', async () => {
       await expect(
         resolveKnowledgeRecordId(database, {
           idOrKey: 'CSA-CONV-1',
@@ -256,6 +252,68 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           workspaceIds: [randomUUID()],
         })
       ).rejects.toThrow(/not found/i);
+    });
+    
+    it('should resolve when prefix matches multiple projects but key exists in only one', async () => {
+      // Create another project with CSA prefix but without CONV-1
+      const [p4] = await database.db
+        .insert(projects)
+        .values({
+          workspaceId: workspace1Id,
+          name: 'Another CSA Project',
+          slug: 'another-csa',
+          keyPrefix: 'CSA',
+        })
+        .returning();
+      
+      // CSA-CONV-1 only exists in project2, so with both workspaces it should resolve
+      const resolved = await resolveKnowledgeRecordId(database, {
+        idOrKey: 'CSA-CONV-1',
+        workspaceIds: [workspace1Id, workspace2Id],
+      });
+      expect(resolved).toBe(record2Id);
+      
+      // Clean up
+      await database.db
+        .delete(projects)
+        .where(eq(projects.id, p4.id));
+    });
+
+    it('should fail with ambiguous when same key exists in multiple projects with shared prefix', async () => {
+      // Create CSA-CONV-1 in project1 as well
+      const key1 = await allocateIssueNumber(database, project1Id, 'CONV');
+      const [rec3] = await database.db
+        .insert(knowledgeRecords)
+        .values({
+          workspaceId: workspace1Id,
+          projectId: project1Id,
+          title: 'Duplicate CONV-1 in project1',
+          slug: 'conv-1-dup',
+          recordType: 'conversation',
+          contentMarkdown: 'Duplicate content',
+          documentKeyType: key1.issueKeyType,
+          documentNumber: key1.issueNumber,
+        })
+        .returning();
+      
+      // Now CSA-CONV-1 exists in both projects
+      await expect(
+        resolveKnowledgeRecordId(database, {
+          idOrKey: 'CSA-CONV-1',
+          workspaceIds: [workspace1Id, workspace2Id],
+        })
+      ).rejects.toThrow(/ambiguous/i);
+      
+      await expect(
+        resolveKnowledgeRecordId(database, {
+          idOrKey: 'CSA-CONV-1',
+        })
+      ).rejects.toThrow(/ambiguous/i);
+      
+      // Clean up
+      await database.db
+        .delete(knowledgeRecords)
+        .where(eq(knowledgeRecords.id, rec3.id));
     });
 
     it('should resolve with projectId scoping', async () => {
@@ -310,6 +368,27 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
         projectId: project2Id,
       });
       expect(resolved).toBe(task2Id);
+    });
+
+    it('should resolve when prefix matches multiple projects but key exists in only one', async () => {
+      // CSA-T-1 exists in both projects, but when scoped to workspace2, only task2 should match
+      const resolved = await resolveEntityId(database, {
+        entityType: 'task',
+        idOrKey: 'CSA-T-1',
+        workspaceIds: [workspace2Id],
+      });
+      expect(resolved).toBe(task2Id);
+    });
+
+    it('should fail with ambiguous when same key exists in multiple projects', async () => {
+      // CSA-T-1 exists in both projects with shared prefix
+      await expect(
+        resolveEntityId(database, {
+          entityType: 'task',
+          idOrKey: 'CSA-T-1',
+          workspaceIds: [workspace1Id, workspace2Id],
+        })
+      ).rejects.toThrow(/ambiguous/i);
     });
   });
 
