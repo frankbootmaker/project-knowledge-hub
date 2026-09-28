@@ -73,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* **MCP translation provenance (PRO-T-12):** `create_record_translation` via MCP now records `ai_generated_draft` + conversation/mcp source (matching `create_knowledge_record`), not hub-managed/manual. REST/web UI path unchanged. MCP tool accepts optional `generatedByModel` / `sourceTitle`.
+* **MCP translation provenance (PRO-T-12):** `create_record_translation` via MCP now records `ai_generated_draft` + conversation/mcp source (matching `create_knowledge_record`), not hub-managed/manual. Provenance passed internally via options; REST/web UI unchanged. When `translateWithAi` is true, server-computed AI model wins over client-supplied `generatedByModel`. MCP tool accepts optional `generatedByModel` / `sourceTitle`; shared `mcpSource` helper centralizes provenance structure across create/translate/update handlers.
 
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 

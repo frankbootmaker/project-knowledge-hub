@@ -886,10 +886,6 @@ export const createTranslationInputSchema = z.object({
   title: z.string().min(1).max(300).optional(),
   summary: z.string().max(1000).nullable().optional(),
   contentMarkdown: z.string().max(500_000).optional(),
-  /** Optional override for source-of-truth mode (MCP callers supply ai_generated_draft). */
-  sourceOfTruthMode: sourceOfTruthModeSchema.optional(),
-  /** Optional override for source provenance (MCP callers supply conversation/mcp source). */
-  source: sourceInputSchema.optional(),
 });
 
 export type CreateTranslationInput = z.infer<typeof createTranslationInputSchema>;
@@ -1003,6 +999,11 @@ export async function listRecordTranslations(
 
 export type CreateRecordTranslationOptions = {
   onProgress?: (event: TranslationProgressEvent) => void;
+  /** Internal: MCP callers supply ai_generated_draft + conversation/mcp provenance. */
+  provenance?: {
+    sourceOfTruthMode: z.infer<typeof sourceOfTruthModeSchema>;
+    source: SourceInput;
+  };
 };
 
 export async function createRecordTranslation(
@@ -1150,6 +1151,32 @@ export async function createRecordTranslation(
   const tagList =
     (await getKnowledgeRecordTags(app.database, [source.id])).get(source.id) ?? [];
 
+  // Determine provenance: MCP callers supply it via options, REST/web UI use defaults.
+  let finalSourceOfTruthMode: z.infer<typeof sourceOfTruthModeSchema>;
+  let finalSource: SourceInput;
+
+  if (options?.provenance) {
+    // MCP path: use provided provenance, but preserve actual AI translation model when applicable
+    finalSourceOfTruthMode = options.provenance.sourceOfTruthMode;
+    finalSource = {
+      ...options.provenance.source,
+      // Server-computed AI translation model wins over client-supplied value
+      generatedByModel: translateWithAi && generatedByModel ? generatedByModel : options.provenance.source.generatedByModel ?? null,
+    };
+  } else {
+    // REST/web UI path: use defaults based on translateWithAi
+    finalSourceOfTruthMode = 'hub_managed';
+    finalSource = {
+      sourceType: translateWithAi ? 'conversation' : 'manual',
+      sourceProvider: translateWithAi ? 'vision_llm' : 'project-knowledge-hub',
+      sourceTitle: translateWithAi
+        ? `AI translation of ${source.slug}`
+        : `Translation of ${source.slug}`,
+      sourceReference: source.id,
+      generatedByModel,
+    };
+  }
+
   const result = await createKnowledgeRecord(
     app,
     {
@@ -1159,22 +1186,14 @@ export async function createRecordTranslation(
       summary: summary ?? undefined,
       recordType: recordTypeSchema.parse(source.recordType),
       lifecycleStatus: 'draft',
-      sourceOfTruthMode: body.sourceOfTruthMode ?? 'hub_managed',
+      sourceOfTruthMode: finalSourceOfTruthMode,
       contentMarkdown,
       language,
       translationGroupId,
       projectId: source.projectId,
       systemId: source.systemId,
       tags: tagList.map((tag) => tag.name),
-      source: body.source ?? {
-        sourceType: translateWithAi ? 'conversation' : 'manual',
-        sourceProvider: translateWithAi ? 'vision_llm' : 'project-knowledge-hub',
-        sourceTitle: translateWithAi
-          ? `AI translation of ${source.slug}`
-          : `Translation of ${source.slug}`,
-        sourceReference: source.id,
-        generatedByModel,
-      },
+      source: finalSource,
     },
     actor,
     ipAddress,
@@ -1199,7 +1218,7 @@ export async function createRecordTranslation(
       translationGroupId,
       slug,
       translateWithAi,
-      generatedByModel,
+      generatedByModel: finalSource.generatedByModel,
     },
     ipAddress: ipAddress ?? null,
   });

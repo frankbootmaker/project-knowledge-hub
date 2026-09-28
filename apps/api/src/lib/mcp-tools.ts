@@ -360,6 +360,24 @@ async function resolveWorkspaceFilter(
   return rows.map((row) => row.id);
 }
 
+/**
+ * Build MCP provenance source for knowledge records and translations.
+ * Centralizes the conversation/mcp source structure used across create/translate handlers.
+ */
+function mcpSource(input: { sourceTitle?: string; generatedByModel?: string }): {
+  sourceType: 'conversation';
+  sourceProvider: 'mcp';
+  sourceTitle: string;
+  generatedByModel: string | null;
+} {
+  return {
+    sourceType: 'conversation',
+    sourceProvider: 'mcp',
+    sourceTitle: input.sourceTitle ?? 'Created via MCP',
+    generatedByModel: input.generatedByModel ?? null,
+  };
+}
+
 export function createMcpToolHandlers(
   app: FastifyInstance,
   client: McpClientContext,
@@ -1111,13 +1129,6 @@ export function createMcpToolHandlers(
           title: input.title,
           summary: input.summary,
           contentMarkdown: input.contentMarkdown,
-          sourceOfTruthMode: 'ai_generated_draft',
-          source: {
-            sourceType: 'conversation',
-            sourceProvider: 'mcp',
-            sourceTitle: input.sourceTitle ?? 'Created via MCP',
-            generatedByModel: input.generatedByModel ?? null,
-          },
         },
         {
           actorType: 'api_client',
@@ -1125,6 +1136,12 @@ export function createMcpToolHandlers(
           userId: actingUserId,
         },
         ipAddress,
+        {
+          provenance: {
+            sourceOfTruthMode: 'ai_generated_draft',
+            source: mcpSource(input),
+          },
+        },
       );
       return {
         knowledgeRecord: {
@@ -1168,12 +1185,7 @@ export function createMcpToolHandlers(
           translationGroupId: input.translationGroupId,
           lifecycleStatus: 'draft',
           sourceOfTruthMode: 'ai_generated_draft',
-          source: {
-            sourceType: 'conversation',
-            sourceProvider: 'mcp',
-            sourceTitle: input.sourceTitle ?? 'Created via MCP',
-            generatedByModel: input.generatedByModel ?? null,
-          },
+          source: mcpSource(input),
         },
         {
           actorType: 'api_client',
@@ -1272,12 +1284,7 @@ export function createMcpToolHandlers(
               }),
           source:
             input.generatedByModel !== undefined || input.sourceTitle !== undefined
-              ? {
-                  sourceType: 'conversation',
-                  sourceProvider: 'mcp',
-                  sourceTitle: input.sourceTitle ?? 'Updated via MCP',
-                  generatedByModel: input.generatedByModel ?? null,
-                }
+              ? mcpSource(input)
               : undefined,
         },
         {
