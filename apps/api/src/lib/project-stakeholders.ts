@@ -29,7 +29,10 @@ import {
   requireProjectContext,
 } from './project-delivery.js';
 import { avatarUrlForUser } from './public-user.js';
-import { activeHumanUserConditions } from './user-category.js';
+import {
+  activeHumanUserConditions,
+  activeMemberConditions,
+} from './user-category.js';
 
 export type StakeholderKind = 'person' | 'ai_assistant' | 'open_role';
 export type StakeholderSource = 'roster' | 'owner' | 'raci' | 'ai_assistant';
@@ -176,7 +179,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        ...activeHumanUserConditions(),
+        ...activeMemberConditions(),
       ),
     );
   if (rows.length !== unique.length) {

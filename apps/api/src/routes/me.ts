@@ -125,18 +125,9 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/v1/me/dashboard-insights', async (request) => {
     const principal = requireAuthenticated(request);
-    const query = z
-      .object({
-        includeSystemUsers: z
-          .enum(['true', 'false'])
-          .optional()
-          .transform((value) => value === 'true'),
-      })
-      .parse(request.query ?? {});
     const insights = await getDashboardInsights(app.database, {
       userId: principal.userId,
       isSystemAdmin: principal.isSystemAdmin,
-      includeSystemUsers: query.includeSystemUsers,
     });
     return { insights };
   });

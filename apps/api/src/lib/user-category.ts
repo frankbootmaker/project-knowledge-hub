@@ -112,13 +112,21 @@ export function categoryChangeEffects(target: UserType): {
 }
 
 /**
- * Active-member filter for pickers and assignment checks.
- * System users are omitted unless includeSystemUsers is set.
+ * Assignment guards (task owner, RACI, RAID/change people, stakeholders).
+ * Any active member qualifies, including system users.
+ */
+export function activeMemberConditions(): SQL[] {
+  return [eq(users.status, 'active')];
+}
+
+/**
+ * Member lists and suggestions. System users are omitted unless
+ * includeSystemUsers is set. Do not use this on write-side validation.
  */
 export function activeHumanUserConditions(
   options: { includeSystemUsers?: boolean } = {},
 ): SQL[] {
-  const conditions: SQL[] = [eq(users.status, 'active')];
+  const conditions = activeMemberConditions();
   if (!options.includeSystemUsers) {
     conditions.push(eq(users.userType, 'human'));
   }
@@ -131,14 +139,6 @@ export function systemUserExclusionCondition(
 ): SQL | undefined {
   if (options.includeSystemUsers) return undefined;
   return eq(users.userType, 'human');
-}
-
-/** Personal dashboard insights are empty for system users unless opted in. */
-export function shouldOmitPersonalInsights(
-  userType: string | null | undefined,
-  options: { includeSystemUsers?: boolean } = {},
-): boolean {
-  return userType === 'system' && !options.includeSystemUsers;
 }
 
 const idpPairRefine = (

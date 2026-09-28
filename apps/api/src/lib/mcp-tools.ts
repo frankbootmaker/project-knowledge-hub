@@ -1885,7 +1885,7 @@ export function createMcpToolHandlers(
       };
     },
 
-    async getMyDashboardInsights(input: { includeSystemUsers?: boolean }) {
+    async getMyDashboardInsights() {
       const actingUserId = requireActingUserId(client);
       const [user] = await app.database.db
         .select({
@@ -1905,7 +1905,6 @@ export function createMcpToolHandlers(
       const insights = await getDashboardInsights(app.database, {
         userId: actingUserId,
         isSystemAdmin: user.isSystemAdmin,
-        includeSystemUsers: input.includeSystemUsers,
       });
       if (client.allowedProjectIds.length === 0) {
         return { insights };

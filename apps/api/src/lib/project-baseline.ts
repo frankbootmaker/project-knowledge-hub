@@ -12,7 +12,7 @@ import {
   projectStakeholderRoleSchema,
   type ProjectStakeholderRole,
 } from '@project-knowledge-hub/domain';
-import { activeHumanUserConditions } from './user-category.js';
+import { activeMemberConditions } from './user-category.js';
 
 export type PublicPinnedRecord = {
   id: string;
@@ -46,7 +46,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        ...activeHumanUserConditions(),
+        ...activeMemberConditions(),
       ),
     );
   if (rows.length !== unique.length) {

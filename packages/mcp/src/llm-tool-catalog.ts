@@ -966,17 +966,9 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_my_dashboard_insights',
     description:
-      'Dashboard insight rollups for the acting user. Empty for system accounts unless includeSystemUsers is true. Requires pm:read + actingUserId.',
+      'Dashboard insight rollups for the acting user. Requires pm:read + actingUserId.',
     scope: 'pm:read',
-    body: {
-      type: 'object',
-      properties: {
-        includeSystemUsers: {
-          type: 'boolean',
-          description: 'Include insights when the acting user is a system account',
-        },
-      },
-    },
+    body: { type: 'object', properties: {} },
   },
   {
     name: 'get_project_budget_summary',

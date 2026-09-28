@@ -256,9 +256,7 @@ export type McpToolHandlers = {
     role?: 'R' | 'A' | 'C' | 'I';
     includeArchived?: boolean;
   }) => Promise<unknown>;
-  getMyDashboardInsights: (input: {
-    includeSystemUsers?: boolean;
-  }) => Promise<unknown>;
+  getMyDashboardInsights: () => Promise<unknown>;
   listProjectDeliveryDocumentLinks: (input: {
     projectId: string;
     entityType?: string;
@@ -1447,11 +1445,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_my_dashboard_insights',
-    'Dashboard insight rollups for the acting user. Empty when the acting user is a system account unless includeSystemUsers is true. Requires pm:read and actingUserId.',
-    { includeSystemUsers: z.boolean().optional() },
-    async (args) =>
+    'Dashboard insight rollups for the acting user (task due buckets, project health RAG, open RAID, budget attention). Requires pm:read and actingUserId.',
+    {},
+    async () =>
       wrap('get_my_dashboard_insights', 'pm:read', () =>
-        handlers.getMyDashboardInsights(args),
+        handlers.getMyDashboardInsights(),
       )(),
   );
 

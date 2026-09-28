@@ -20,7 +20,7 @@ import {
   type ChangeKind,
   type ChangeStatus,
 } from '@project-knowledge-hub/domain';
-import { activeHumanUserConditions } from './user-category.js';
+import { activeMemberConditions } from './user-category.js';
 import {
   assertProjectNotArchived,
   requireProjectContext,
@@ -88,7 +88,7 @@ async function assertWorkspaceMember(
       and(
         eq(memberships.workspaceId, workspaceId),
         eq(memberships.userId, userId),
-        ...activeHumanUserConditions(),
+        ...activeMemberConditions(),
       ),
     )
     .limit(1);

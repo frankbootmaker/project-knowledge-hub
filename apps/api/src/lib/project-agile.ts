@@ -22,7 +22,7 @@ import {
   recordTaskActivity,
   type PublicTask,
 } from './project-delivery.js';
-import { activeHumanUserConditions } from './user-category.js';
+import { activeMemberConditions } from './user-category.js';
 import {
   allocateIssueNumber,
   getProjectKeyPrefix,
@@ -139,7 +139,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        ...activeHumanUserConditions(),
+        ...activeMemberConditions(),
       ),
     );
   if (rows.length !== unique.length) {

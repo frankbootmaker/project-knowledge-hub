@@ -30,7 +30,7 @@ import {
   toHumanKeyFields,
 } from './project-issue-keys.js';
 import { avatarUrlForUser } from './public-user.js';
-import { activeHumanUserConditions } from './user-category.js';
+import { activeMemberConditions } from './user-category.js';
 
 export type PublicRaciEntry = {
   userId: string;
@@ -827,7 +827,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        ...activeHumanUserConditions(),
+        ...activeMemberConditions(),
       ),
     );
   if (rows.length !== unique.length) {

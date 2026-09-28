@@ -4,12 +4,12 @@ import { AppError } from '@project-knowledge-hub/domain';
 import { toPublicUser } from './public-user.js';
 import {
   activeHumanUserConditions,
+  activeMemberConditions,
   assertUserMayUseWebSignIn,
   categoryChangeAuditMetadata,
   categoryChangeEffects,
   changeUserCategorySchema,
   createUserSchema,
-  shouldOmitPersonalInsights,
   systemUserExclusionCondition,
   updateUserSchema,
   validateUserCategoryChange,
@@ -248,17 +248,17 @@ describe('people-list filters', () => {
     expect(included).not.toContain('user_type');
   });
 
+  it('keeps assignment guards active-only, including system users', () => {
+    const assignment = sqlText(activeMemberConditions());
+    expect(assignment).toContain('status');
+    expect(assignment).toContain('active');
+    expect(assignment).not.toContain('user_type');
+    expect(assignment).not.toContain('human');
+    expect(assignment).not.toContain('system');
+  });
+
   it('builds the utilization exclusion only when system users are hidden', () => {
     expect(sqlText(systemUserExclusionCondition())).toContain('human');
     expect(systemUserExclusionCondition({ includeSystemUsers: true })).toBeUndefined();
-  });
-
-  it('omits personal insights for system users unless requested', () => {
-    expect(shouldOmitPersonalInsights('system')).toBe(true);
-    expect(shouldOmitPersonalInsights('system', { includeSystemUsers: true })).toBe(
-      false,
-    );
-    expect(shouldOmitPersonalInsights('human')).toBe(false);
-    expect(shouldOmitPersonalInsights(undefined)).toBe(false);
   });
 });
