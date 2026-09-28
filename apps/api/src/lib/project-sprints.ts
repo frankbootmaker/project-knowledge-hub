@@ -201,31 +201,34 @@ export async function createSprint(
     await assertNoOtherActiveSprint(database, input.projectId);
   }
 
-  const allocated = await allocateIssueNumber(database, input.projectId, 'SP');
-  const [row] = await database.db
-    .insert(projectSprints)
-    .values({
-      projectId: input.projectId,
-      name: input.name,
-      goal: input.goal ?? null,
-      status,
-      startDate: input.startDate ?? null,
-      endDate: input.endDate ?? null,
-      capacityPoints: input.capacityPoints ?? null,
-      sortOrder: input.sortOrder ?? 0,
-      issueKeyType: allocated.issueKeyType,
-      issueNumber: allocated.issueNumber,
-    })
-    .returning();
-  if (!row) {
-    throw new AppError({
-      code: 'SPRINT_CREATE_FAILED',
-      message: 'Failed to create sprint',
-      statusCode: 500,
-    });
-  }
-  return toPublicSprint(row, {
-    keyPrefix: allocated.keyPrefix,
+  const result = await database.db.transaction(async (tx) => {
+    const allocated = await allocateIssueNumber(database, input.projectId, 'SP', tx);
+    const [row] = await tx
+      .insert(projectSprints)
+      .values({
+        projectId: input.projectId,
+        name: input.name,
+        goal: input.goal ?? null,
+        status,
+        startDate: input.startDate ?? null,
+        endDate: input.endDate ?? null,
+        capacityPoints: input.capacityPoints ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        issueKeyType: allocated.issueKeyType,
+        issueNumber: allocated.issueNumber,
+      })
+      .returning();
+    if (!row) {
+      throw new AppError({
+        code: 'SPRINT_CREATE_FAILED',
+        message: 'Failed to create sprint',
+        statusCode: 500,
+      });
+    }
+    return { row, keyPrefix: allocated.keyPrefix };
+  });
+  return toPublicSprint(result.row, {
+    keyPrefix: result.keyPrefix,
     committedPoints: 0,
     donePoints: 0,
   });

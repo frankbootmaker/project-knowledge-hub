@@ -425,40 +425,44 @@ export async function createChangeItem(
   }
 
   const status = input.status ?? 'proposed';
-  const allocated = await allocateIssueNumber(database, input.projectId, 'C');
-  const [created] = await database.db
-    .insert(projectChangeItems)
-    .values({
-      projectId: input.projectId,
-      kind: input.kind,
-      title: input.title.trim(),
-      description: input.description?.trim() || null,
-      rationale: input.rationale?.trim() || null,
-      status,
-      requestedByUserId: input.requestedByUserId ?? null,
-      approvedByUserId: input.approvedByUserId ?? null,
-      decidedAt:
-        status === 'approved' || status === 'rejected' || status === 'implemented'
-          ? new Date()
-          : null,
-      effectiveDate: input.effectiveDate ?? null,
-      baselineStartBefore: input.baselineStartBefore ?? null,
-      baselineStartAfter: input.baselineStartAfter ?? null,
-      baselineEndBefore: input.baselineEndBefore ?? null,
-      baselineEndAfter: input.baselineEndAfter ?? null,
-      knowledgeRecordId: input.knowledgeRecordId ?? null,
-      sortOrder: input.sortOrder ?? 0,
-      issueKeyType: allocated.issueKeyType,
-      issueNumber: allocated.issueNumber,
-    })
-    .returning();
-  if (!created) {
-    throw new AppError({
-      code: 'CHANGE_CREATE_FAILED',
-      message: 'Failed to create change item',
-      statusCode: 500,
-    });
-  }
+  
+  const created = await database.db.transaction(async (tx) => {
+    const allocated = await allocateIssueNumber(database, input.projectId, 'C', tx);
+    const [row] = await tx
+      .insert(projectChangeItems)
+      .values({
+        projectId: input.projectId,
+        kind: input.kind,
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        rationale: input.rationale?.trim() || null,
+        status,
+        requestedByUserId: input.requestedByUserId ?? null,
+        approvedByUserId: input.approvedByUserId ?? null,
+        decidedAt:
+          status === 'approved' || status === 'rejected' || status === 'implemented'
+            ? new Date()
+            : null,
+        effectiveDate: input.effectiveDate ?? null,
+        baselineStartBefore: input.baselineStartBefore ?? null,
+        baselineStartAfter: input.baselineStartAfter ?? null,
+        baselineEndBefore: input.baselineEndBefore ?? null,
+        baselineEndAfter: input.baselineEndAfter ?? null,
+        knowledgeRecordId: input.knowledgeRecordId ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        issueKeyType: allocated.issueKeyType,
+        issueNumber: allocated.issueNumber,
+      })
+      .returning();
+    if (!row) {
+      throw new AppError({
+        code: 'CHANGE_CREATE_FAILED',
+        message: 'Failed to create change item',
+        statusCode: 500,
+      });
+    }
+    return row;
+  });
 
   if (input.deliveryLinks && input.deliveryLinks.length > 0) {
     await setChangeDeliveryLinks(database, {

@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **PRO-T-8: Date validation and error handling (MCP):** All date inputs (tasks, milestones, epics, stories, sprints, stakeholders, RAID, change items, baseline) now validate real calendar dates at the schema layer, rejecting impossible dates such as `2026-02-30`, `2026-13-01`, and non-leap `2027-02-29`. Database errors are sanitized: raw SQL, params, and internal IDs are never returned to clients; instead, known Postgres error codes (22007/22008 invalid date, 23505 unique violation, 23503 foreign key violation) map to clean 4xx errors, while unknown errors return `Internal error (ref: <correlation-id>)` with server-side logging. Issue key allocation now happens in the same transaction as entity inserts, preventing key gaps when a create fails. Shared `isoDateSchema` in `@project-knowledge-hub/domain` with unit tests; error sanitizer with correlation IDs in API and MCP server.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.

@@ -159,6 +159,7 @@ export async function allocateIssueNumber(
   database: Database,
   projectId: string,
   issueKeyType: string,
+  tx?: Parameters<Parameters<typeof database.db.transaction>[0]>[0],
 ): Promise<AllocatedIssueKey> {
   const type = issueKeyType.trim().toUpperCase();
   if (!isValidHumanKeyType(type)) {
@@ -169,8 +170,10 @@ export async function allocateIssueNumber(
     });
   }
 
-  return database.db.transaction(async (tx) => {
-    const [project] = await tx
+  const executor = tx ?? database.db;
+
+  const allocate = async (dbTx: typeof executor) => {
+    const [project] = await dbTx
       .select({
         id: projects.id,
         workspaceId: projects.workspaceId,
@@ -202,7 +205,7 @@ export async function allocateIssueNumber(
         }
         const parsed = keyPrefixSchema.safeParse(candidate);
         if (!parsed.success) continue;
-        const [taken] = await tx
+        const [taken] = await dbTx
           .select({ id: projects.id })
           .from(projects)
           .where(
@@ -231,7 +234,7 @@ export async function allocateIssueNumber(
       ...(project.issueCounters ?? {}),
       [type]: next,
     };
-    await tx
+    await dbTx
       .update(projects)
       .set({
         keyPrefix,
@@ -246,7 +249,12 @@ export async function allocateIssueNumber(
       keyPrefix,
       humanKey: formatHumanKey(keyPrefix, type, next),
     };
-  });
+  };
+
+  if (tx) {
+    return allocate(tx);
+  }
+  return database.db.transaction(allocate);
 }
 
 export type ResolvableEntityType =

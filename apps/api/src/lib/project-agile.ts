@@ -199,29 +199,32 @@ export async function createEpic(
     sortOrder?: number;
   },
 ): Promise<PublicEpic> {
-  const allocated = await allocateIssueNumber(database, input.projectId, 'E');
-  const [row] = await database.db
-    .insert(projectEpics)
-    .values({
-      projectId: input.projectId,
-      title: input.title,
-      description: input.description ?? null,
-      status: input.status ?? 'planned',
-      startDate: input.startDate ?? null,
-      endDate: input.endDate ?? null,
-      sortOrder: input.sortOrder ?? 0,
-      issueKeyType: allocated.issueKeyType,
-      issueNumber: allocated.issueNumber,
-    })
-    .returning();
-  if (!row) {
-    throw new AppError({
-      code: 'EPIC_CREATE_FAILED',
-      message: 'Failed to create epic',
-      statusCode: 500,
-    });
-  }
-  return toPublicEpic(row, allocated.keyPrefix);
+  const result = await database.db.transaction(async (tx) => {
+    const allocated = await allocateIssueNumber(database, input.projectId, 'E', tx);
+    const [row] = await tx
+      .insert(projectEpics)
+      .values({
+        projectId: input.projectId,
+        title: input.title,
+        description: input.description ?? null,
+        status: input.status ?? 'planned',
+        startDate: input.startDate ?? null,
+        endDate: input.endDate ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        issueKeyType: allocated.issueKeyType,
+        issueNumber: allocated.issueNumber,
+      })
+      .returning();
+    if (!row) {
+      throw new AppError({
+        code: 'EPIC_CREATE_FAILED',
+        message: 'Failed to create epic',
+        statusCode: 500,
+      });
+    }
+    return { row, keyPrefix: allocated.keyPrefix };
+  });
+  return toPublicEpic(result.row, result.keyPrefix);
 }
 
 export async function updateEpic(
@@ -356,30 +359,33 @@ export async function createUserStory(
   },
 ): Promise<PublicUserStory> {
   await assertEpicInProject(database, input.projectId, input.epicId);
-  const allocated = await allocateIssueNumber(database, input.projectId, 'S');
-  const [row] = await database.db
-    .insert(projectUserStories)
-    .values({
-      projectId: input.projectId,
-      epicId: input.epicId,
-      title: input.title,
-      description: input.description ?? null,
-      status: input.status ?? 'planned',
-      startDate: input.startDate ?? null,
-      endDate: input.endDate ?? null,
-      sortOrder: input.sortOrder ?? 0,
-      issueKeyType: allocated.issueKeyType,
-      issueNumber: allocated.issueNumber,
-    })
-    .returning();
-  if (!row) {
-    throw new AppError({
-      code: 'USER_STORY_CREATE_FAILED',
-      message: 'Failed to create user story',
-      statusCode: 500,
-    });
-  }
-  return toPublicUserStory(row, allocated.keyPrefix);
+  const result = await database.db.transaction(async (tx) => {
+    const allocated = await allocateIssueNumber(database, input.projectId, 'S', tx);
+    const [row] = await tx
+      .insert(projectUserStories)
+      .values({
+        projectId: input.projectId,
+        epicId: input.epicId,
+        title: input.title,
+        description: input.description ?? null,
+        status: input.status ?? 'planned',
+        startDate: input.startDate ?? null,
+        endDate: input.endDate ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        issueKeyType: allocated.issueKeyType,
+        issueNumber: allocated.issueNumber,
+      })
+      .returning();
+    if (!row) {
+      throw new AppError({
+        code: 'USER_STORY_CREATE_FAILED',
+        message: 'Failed to create user story',
+        statusCode: 500,
+      });
+    }
+    return { row, keyPrefix: allocated.keyPrefix };
+  });
+  return toPublicUserStory(result.row, result.keyPrefix);
 }
 
 export async function updateUserStory(
