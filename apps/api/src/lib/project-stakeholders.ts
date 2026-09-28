@@ -387,7 +387,6 @@ export async function listProjectStakeholders(
   const userMap = await loadUserMap(database, [...userIds]);
   const byPerson = new Map<string, PublicStakeholder>();
   const openRoles: PublicStakeholder[] = [];
-  const rosterSeats: PublicStakeholder[] = [];
 
   const ensurePerson = (userId: string): PublicStakeholder | null => {
     const existing = byPerson.get(userId);
@@ -411,6 +410,30 @@ export async function listProjectStakeholders(
     };
     byPerson.set(userId, entry);
     return entry;
+  };
+
+  const applyRosterFields = (
+    entry: PublicStakeholder,
+    row: typeof projectStakeholders.$inferSelect,
+  ) => {
+    entry.rosterId = row.id;
+    entry.projectRole = projectStakeholderRoleSchema.parse(row.projectRole);
+    entry.jobTitle = row.jobTitle;
+    entry.roleDescription = row.roleDescription;
+    entry.competencies = parseCompetencies(row.competencies);
+    entry.notes = row.notes;
+    entry.reportsToUserId = row.reportsToUserId;
+    entry.hourlyRate = row.hourlyRate;
+    entry.engagementType = parseEngagementType(row.engagementType);
+    entry.assignmentStart = row.assignmentStart;
+    entry.assignmentEnd = row.assignmentEnd;
+    entry.allocatedDailyHours = row.allocatedDailyHours;
+    entry.contractRef = row.contractRef;
+    entry.contractedBudget = row.contractedBudget;
+    entry.contractStart = row.contractStart;
+    entry.contractEnd = row.contractEnd;
+    entry.sortOrder = row.sortOrder;
+    if (!entry.sources.includes('roster')) entry.sources.push('roster');
   };
 
   for (const row of rosterRows) {
@@ -459,92 +482,29 @@ export async function listProjectStakeholders(
       });
       continue;
     }
-    // Each filled roster seat gets its own entry (one entry per row)
-    const profile = userMap.get(row.userId);
-    if (!profile) continue;
-    const seatEntry: PublicStakeholder = {
-      kind: 'person',
-      id: row.id,
-      userId: row.userId,
-      systemId: null,
-      displayName: profile.displayName,
-      fullName: profile.fullName,
-      email: profile.email,
-      projectRole: projectStakeholderRoleSchema.parse(row.projectRole),
-      jobTitle: row.jobTitle,
-      roleDescription: row.roleDescription,
-      competencies: parseCompetencies(row.competencies),
-      staffingStatus: 'assigned',
-      notes: row.notes,
-      reportsToUserId: row.reportsToUserId,
-      hourlyRate: row.hourlyRate,
-      engagementType: parseEngagementType(row.engagementType),
-      assignmentStart: row.assignmentStart,
-      assignmentEnd: row.assignmentEnd,
-      allocatedDailyHours: row.allocatedDailyHours,
-      contractRef: row.contractRef,
-      contractedBudget: row.contractedBudget,
-      contractStart: row.contractStart,
-      contractEnd: row.contractEnd,
-      avatarUrl: profile.avatarUrl,
-      assistantBrand: null,
-      aiCostMode: null,
-      aiFlatMonthlyFee: null,
-      aiTokenRatePer1k: null,
-      aiBudgetAllocation: null,
-      raciRoles: [],
-      taskCount: 0,
-      sources: ['roster'],
-      rosterId: row.id,
-      sortOrder: row.sortOrder,
-      systemSlug: null,
-      systemStatus: null,
-    };
-    rosterSeats.push(seatEntry);
+    const entry = ensurePerson(row.userId);
+    if (!entry) continue;
+    applyRosterFields(entry, row);
+    entry.staffingStatus = 'assigned';
   }
 
-  // Enrich roster seats with RACI roles if the user has them
-  const rosterUserIds = new Set(rosterSeats.map(s => s.userId).filter((id): id is string => Boolean(id)));
-  
   if (project.ownerUserId) {
-    if (!rosterUserIds.has(project.ownerUserId)) {
-      const entry = ensurePerson(project.ownerUserId);
-      if (entry) {
-        if (!entry.sources.includes('owner')) entry.sources.push('owner');
-        if (!entry.projectRole) {
-          entry.projectRole = 'owner';
-        }
-        entry.sortOrder = Math.min(entry.sortOrder, 0);
+    const entry = ensurePerson(project.ownerUserId);
+    if (entry) {
+      if (!entry.sources.includes('owner')) entry.sources.push('owner');
+      if (!entry.projectRole) {
+        entry.projectRole = 'owner';
       }
-    } else {
-      // Enrich roster seat(s) with owner source
-      for (const seat of rosterSeats) {
-        if (seat.userId === project.ownerUserId) {
-          if (!seat.sources.includes('owner')) seat.sources.push('owner');
-          if (!seat.projectRole) seat.projectRole = 'owner';
-          seat.sortOrder = Math.min(seat.sortOrder, 0);
-        }
-      }
+      entry.sortOrder = Math.min(entry.sortOrder, 0);
     }
   }
 
   for (const [userId, agg] of raciByUser) {
-    if (!rosterUserIds.has(userId)) {
-      const entry = ensurePerson(userId);
-      if (!entry) continue;
-      entry.raciRoles = [...agg.raciRoles].sort();
-      entry.taskCount = agg.taskIds.size;
-      if (!entry.sources.includes('raci')) entry.sources.push('raci');
-    } else {
-      // Enrich roster seat(s) with RACI data
-      for (const seat of rosterSeats) {
-        if (seat.userId === userId) {
-          seat.raciRoles = [...agg.raciRoles].sort();
-          seat.taskCount = agg.taskIds.size;
-          if (!seat.sources.includes('raci')) seat.sources.push('raci');
-        }
-      }
-    }
+    const entry = ensurePerson(userId);
+    if (!entry) continue;
+    entry.raciRoles = [...agg.raciRoles].sort();
+    entry.taskCount = agg.taskIds.size;
+    if (!entry.sources.includes('raci')) entry.sources.push('raci');
   }
 
   // Ensure AI-assistant owners appear so org-chart edges can resolve.
@@ -609,7 +569,7 @@ export async function listProjectStakeholders(
     ai_assistant: 2,
   };
   const RACI_ORDER: RaciRole[] = ['A', 'R', 'C', 'I'];
-  return [...rosterSeats, ...byPerson.values(), ...openRoles, ...aiEntries].sort((a, b) => {
+  return [...byPerson.values(), ...openRoles, ...aiEntries].sort((a, b) => {
     if (a.kind !== b.kind) return KIND_ORDER[a.kind] - KIND_ORDER[b.kind];
     if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
     const aRole = a.raciRoles[0] ? RACI_ORDER.indexOf(a.raciRoles[0]) : 99;
@@ -619,8 +579,46 @@ export async function listProjectStakeholders(
   });
 }
 
+export async function getRosterStakeholder(
+  database: Database,
+  rosterId: string,
+): Promise<typeof projectStakeholders.$inferSelect> {
+  const [row] = await database.db
+    .select()
+    .from(projectStakeholders)
+    .where(eq(projectStakeholders.id, rosterId))
+    .limit(1);
+  if (!row) {
+    throw new AppError({
+      code: 'STAKEHOLDER_NOT_FOUND',
+      message: 'Stakeholder roster entry not found',
+      statusCode: 404,
+    });
+  }
+  return row;
+}
+
+export type StakeholderCapacityInput = {
+  engagementType?: StakeholderEngagementType | null;
+  assignmentStart?: string | null;
+  assignmentEnd?: string | null;
+  allocatedDailyHours?: string | null;
+  contractRef?: string | null;
+  contractedBudget?: string | null;
+  contractStart?: string | null;
+  contractEnd?: string | null;
+};
+
+function normalizeCompetenciesInput(
+  value: unknown | undefined,
+): StakeholderCompetencies | undefined {
+  if (value === undefined) return undefined;
+  return stakeholderCompetenciesSchema.parse(value ?? []);
+}
+
 /**
  * Resolve stakeholderId to roster row ID with optional userId fallback.
+ * Exported for testing.
  * 
  * When projectId is NOT provided:
  * - If stakeholderId is a roster ID, returns it (caller must check project access)
@@ -632,7 +630,7 @@ export async function listProjectStakeholders(
  * - If stakeholderId is a userId of multiple seats, throws 400 listing all rosterIds
  * - Otherwise throws NOT_FOUND
  */
-async function resolveStakeholderId(
+export async function resolveStakeholderId(
   database: Database,
   stakeholderId: string,
   projectId?: string,
@@ -699,43 +697,6 @@ async function resolveStakeholderId(
     message: `stakeholderId must be the roster ID. This user holds multiple seats; candidates: "${rosterIds}"`,
     statusCode: 400,
   });
-}
-
-export async function getRosterStakeholder(
-  database: Database,
-  rosterId: string,
-): Promise<typeof projectStakeholders.$inferSelect> {
-  const [row] = await database.db
-    .select()
-    .from(projectStakeholders)
-    .where(eq(projectStakeholders.id, rosterId))
-    .limit(1);
-  if (!row) {
-    throw new AppError({
-      code: 'STAKEHOLDER_NOT_FOUND',
-      message: 'Stakeholder roster entry not found',
-      statusCode: 404,
-    });
-  }
-  return row;
-}
-
-export type StakeholderCapacityInput = {
-  engagementType?: StakeholderEngagementType | null;
-  assignmentStart?: string | null;
-  assignmentEnd?: string | null;
-  allocatedDailyHours?: string | null;
-  contractRef?: string | null;
-  contractedBudget?: string | null;
-  contractStart?: string | null;
-  contractEnd?: string | null;
-};
-
-function normalizeCompetenciesInput(
-  value: unknown | undefined,
-): StakeholderCompetencies | undefined {
-  if (value === undefined) return undefined;
-  return stakeholderCompetenciesSchema.parse(value ?? []);
 }
 
 export async function upsertProjectStakeholder(
@@ -946,7 +907,7 @@ export async function upsertProjectStakeholder(
 
 export async function updateProjectStakeholder(
   database: Database,
-  stakeholderId: string,
+  rosterId: string,
   input: {
     projectRole?: ProjectStakeholderRole;
     jobTitle?: string | null;
@@ -957,9 +918,7 @@ export async function updateProjectStakeholder(
     hourlyRate?: string | null;
     sortOrder?: number;
   } & StakeholderCapacityInput,
-  projectId?: string,
 ): Promise<PublicStakeholder> {
-  const rosterId = await resolveStakeholderId(database, stakeholderId, projectId);
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
@@ -1076,11 +1035,9 @@ export async function updateProjectStakeholder(
 
 export async function assignProjectStakeholder(
   database: Database,
-  stakeholderId: string,
+  rosterId: string,
   userId: string,
-  projectId?: string,
 ): Promise<PublicStakeholder> {
-  const rosterId = await resolveStakeholderId(database, stakeholderId, projectId);
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
@@ -1141,10 +1098,8 @@ export async function assignProjectStakeholder(
 
 export async function unassignProjectStakeholder(
   database: Database,
-  stakeholderId: string,
-  projectId?: string,
+  rosterId: string,
 ): Promise<PublicStakeholder> {
-  const rosterId = await resolveStakeholderId(database, stakeholderId, projectId);
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
@@ -1259,10 +1214,8 @@ export async function updateAiAssistantCost(
 
 export async function deleteProjectStakeholder(
   database: Database,
-  stakeholderId: string,
-  projectId?: string,
+  rosterId: string,
 ): Promise<{ projectId: string; userId: string | null }> {
-  const rosterId = await resolveStakeholderId(database, stakeholderId, projectId);
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
