@@ -196,6 +196,11 @@ export async function createWorkspaceMedia(
     blobStore?: BlobStore;
   },
 ): Promise<WorkspaceMediaRow> {
+  const canonicalContentType = assertMediaBytesMatchContentType(
+    new Uint8Array(input.buffer),
+    input.contentType,
+  );
+
   if (input.buffer.byteLength === 0 || input.buffer.byteLength > input.maxBytes) {
     throw new AppError({
       code: 'MEDIA_TOO_LARGE',
@@ -203,8 +208,6 @@ export async function createWorkspaceMedia(
       statusCode: 400,
     });
   }
-
-  assertMediaBytesMatchContentType(new Uint8Array(input.buffer), input.contentType);
 
   if (input.knowledgeRecordId) {
     await assertRecordInWorkspace(
@@ -217,7 +220,7 @@ export async function createWorkspaceMedia(
   const mediaId = randomUUID();
   await writeMediaBytes(input.uploadDir, input.workspaceId, mediaId, input.buffer, {
     blobStore: input.blobStore,
-    contentType: input.contentType,
+    contentType: canonicalContentType,
   });
 
   const [row] = await database.db
@@ -226,7 +229,7 @@ export async function createWorkspaceMedia(
       id: mediaId,
       workspaceId: input.workspaceId,
       knowledgeRecordId: input.knowledgeRecordId ?? null,
-      contentType: input.contentType,
+      contentType: canonicalContentType,
       byteSize: input.buffer.byteLength,
       originalFilename: input.originalFilename ?? null,
       altText: input.altText ?? null,

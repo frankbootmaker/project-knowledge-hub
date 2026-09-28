@@ -96,17 +96,19 @@ function normalizeContentType(contentType: string): string {
 }
 
 /**
- * Assert that the bytes match the declared content type.
- * Throws AppError with code MEDIA_CONTENT_MISMATCH if they don't match.
+ * Assert that the bytes match the declared content type and return the canonical type.
+ * Normalizes image/jpg to image/jpeg, lowercases, and trims.
+ * Throws AppError with code MEDIA_CONTENT_MISMATCH if bytes don't match the declared type.
  *
  * @param bytes - The file bytes to check
  * @param declaredContentType - The content type declared by the client
+ * @returns The canonical AllowedMediaType to store
  * @throws {AppError} with code MEDIA_CONTENT_MISMATCH if bytes don't match the declared type
  */
 export function assertMediaBytesMatchContentType(
   bytes: Uint8Array,
   declaredContentType: string,
-): void {
+): AllowedMediaType {
   const normalized = normalizeContentType(declaredContentType);
 
   if (!isAllowedMediaType(normalized)) {
@@ -150,4 +152,6 @@ export function assertMediaBytesMatchContentType(
       statusCode: 400,
     });
   }
+
+  return normalized;
 }

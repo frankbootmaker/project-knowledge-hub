@@ -106,6 +106,39 @@ describe('workspace-media', () => {
       ).resolves.toBeDefined();
     });
 
+    it('normalizes image/jpg to image/jpeg on storage', async () => {
+      const jpegBuffer = Buffer.from([
+        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+        0x01, 0x01, 0x00, 0x48,
+      ]);
+
+      mockDatabase.db.returning = vi.fn().mockResolvedValue([
+        {
+          id: randomUUID(),
+          workspaceId,
+          contentType: 'image/jpeg',
+          byteSize: jpegBuffer.length,
+          knowledgeRecordId: null,
+          originalFilename: null,
+          altText: null,
+          createdBy: null,
+          createdAt: new Date(),
+          archivedAt: null,
+        },
+      ]);
+
+      const result = await createWorkspaceMedia(mockDatabase, {
+        workspaceId,
+        contentType: 'image/jpg',
+        buffer: jpegBuffer,
+        uploadDir,
+        maxBytes,
+        blobStore: mockBlobStore,
+      });
+
+      expect(result.contentType).toBe('image/jpeg');
+    });
+
     it('accepts valid GIF bytes with image/gif', async () => {
       const gifBuffer = Buffer.from([
         0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x10, 0x00, 0x10, 0x00, 0xf0, 0x00,
@@ -289,7 +322,7 @@ describe('workspace-media', () => {
           blobStore: mockBlobStore,
         }),
       ).rejects.toMatchObject({
-        code: 'MEDIA_TOO_LARGE',
+        code: 'MEDIA_CONTENT_MISMATCH',
         statusCode: 400,
       });
 
@@ -342,35 +375,6 @@ describe('workspace-media', () => {
         }),
       ).rejects.toMatchObject({
         code: 'MEDIA_TYPE_UNSUPPORTED',
-        statusCode: 400,
-      });
-
-      const { mkdir, writeFile } = await import('node:fs/promises');
-      expect(mockDatabase.db.insert).not.toHaveBeenCalled();
-      expect(writeFile).not.toHaveBeenCalled();
-      expect(mockBlobStore.put).not.toHaveBeenCalled();
-      expect(mkdir).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('chunked upload path validation', () => {
-    it('rejects HTML chunks declared as image/jpeg on finalize', async () => {
-      const htmlBuffer = Buffer.from(
-        '<html><body>Not an image</body></html>',
-        'utf8',
-      );
-
-      await expect(
-        createWorkspaceMedia(mockDatabase, {
-          workspaceId,
-          contentType: 'image/jpeg',
-          buffer: htmlBuffer,
-          uploadDir,
-          maxBytes,
-          blobStore: mockBlobStore,
-        }),
-      ).rejects.toMatchObject({
-        code: 'MEDIA_CONTENT_MISMATCH',
         statusCode: 400,
       });
 

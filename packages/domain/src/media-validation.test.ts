@@ -91,39 +91,52 @@ describe('media-validation', () => {
   });
 
   describe('assertMediaBytesMatchContentType', () => {
-    it('accepts matching PNG', () => {
+    it('accepts matching PNG and returns canonical type', () => {
       const png = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
       ]);
-      expect(() => assertMediaBytesMatchContentType(png, 'image/png')).not.toThrow();
+      const result = assertMediaBytesMatchContentType(png, 'image/png');
+      expect(result).toBe('image/png');
     });
 
-    it('accepts matching JPEG', () => {
+    it('accepts matching JPEG and returns canonical type', () => {
       const jpeg = new Uint8Array([
         0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
       ]);
-      expect(() => assertMediaBytesMatchContentType(jpeg, 'image/jpeg')).not.toThrow();
+      const result = assertMediaBytesMatchContentType(jpeg, 'image/jpeg');
+      expect(result).toBe('image/jpeg');
     });
 
-    it('accepts image/jpg as image/jpeg', () => {
+    it('accepts image/jpg and returns canonical image/jpeg', () => {
       const jpeg = new Uint8Array([
         0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
       ]);
-      expect(() => assertMediaBytesMatchContentType(jpeg, 'image/jpg')).not.toThrow();
+      const result = assertMediaBytesMatchContentType(jpeg, 'image/jpg');
+      expect(result).toBe('image/jpeg');
     });
 
-    it('accepts matching GIF', () => {
+    it('normalizes uppercase and whitespace', () => {
+      const jpeg = new Uint8Array([
+        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+      ]);
+      const result = assertMediaBytesMatchContentType(jpeg, ' IMAGE/JPEG ');
+      expect(result).toBe('image/jpeg');
+    });
+
+    it('accepts matching GIF and returns canonical type', () => {
       const gif = new Uint8Array([
         0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       ]);
-      expect(() => assertMediaBytesMatchContentType(gif, 'image/gif')).not.toThrow();
+      const result = assertMediaBytesMatchContentType(gif, 'image/gif');
+      expect(result).toBe('image/gif');
     });
 
-    it('accepts matching WebP', () => {
+    it('accepts matching WebP and returns canonical type', () => {
       const webp = new Uint8Array([
         0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
       ]);
-      expect(() => assertMediaBytesMatchContentType(webp, 'image/webp')).not.toThrow();
+      const result = assertMediaBytesMatchContentType(webp, 'image/webp');
+      expect(result).toBe('image/webp');
     });
 
     it('rejects plain text declared as PNG', () => {
