@@ -165,6 +165,7 @@ export async function registerWorkspaceMediaRoutes(
     }
 
     reply.header('Content-Type', row.contentType);
+    reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Cache-Control', 'private, max-age=3600');
     if (row.originalFilename) {
       reply.header(

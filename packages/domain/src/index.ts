@@ -63,6 +63,14 @@ export {
   type PasswordStrengthLevel,
 } from './password.js';
 
+export {
+  ALLOWED_MEDIA_TYPES,
+  isAllowedMediaType,
+  sniffMediaContentType,
+  assertMediaBytesMatchContentType,
+  type AllowedMediaType,
+} from './media-validation.js';
+
 export const projectStatusSchema = z.enum([
   'idea',
   'planned',

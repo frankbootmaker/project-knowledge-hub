@@ -1061,7 +1061,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'begin_workspace_media_upload',
-    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. knowledgeRecordId may be UUID or document key. Requires knowledge:write.',
+    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. knowledgeRecordId may be UUID or document key. Allowed types: image/png, image/jpeg, image/gif, image/webp. File bytes are verified against declared type on finalize. Requires knowledge:write.',
     {
       workspaceId: z.string().uuid(),
       contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
@@ -1089,7 +1089,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'append_workspace_media_upload',
-    'Step 2 of image upload (after begin_workspace_media_upload): append one raw base64 chunk (no data: prefix). Use ~recommendedChunkChars (8000); max 12000. Repeat until the full base64 string is sent, then call finalize_workspace_media_upload. Requires knowledge:write.',
+    'Step 2 of image upload (after begin_workspace_media_upload): append one raw base64 chunk (no data: prefix). Use ~recommendedChunkChars (8000); max 12000. Repeat until the full base64 string is sent, then call finalize_workspace_media_upload. Bytes verified on finalize. Requires knowledge:write.',
     {
       uploadId: z.string().uuid(),
       chunkBase64: z.string().min(1).max(12_000),
@@ -1108,7 +1108,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'finalize_workspace_media_upload',
-    'Step 3 of image upload: assemble all chunks, store media, return media.markdownSnippet. Honors insertIntoRecord from begin. Do not call upload_workspace_media instead. Requires knowledge:write.',
+    'Step 3 of image upload: assemble all chunks, verify bytes match declared type, store media, return media.markdownSnippet. Honors insertIntoRecord from begin. Do not call upload_workspace_media instead. Requires knowledge:write.',
     {
       uploadId: z.string().uuid(),
     },
@@ -1120,7 +1120,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'upload_workspace_media',
-    'AVOID for LLM/MCP/ChatGPT clients — single-shot upload often fails when base64 is large. Use begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload instead. Kept only for tiny files or non-LLM integrations. contentBase64 = raw base64 (no data: prefix). Requires knowledge:write.',
+    'AVOID for LLM/MCP/ChatGPT clients — single-shot upload often fails when base64 is large. Use begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload instead. Kept only for tiny files or non-LLM integrations. contentBase64 = raw base64 (no data: prefix). Allowed types: image/png, image/jpeg, image/gif, image/webp. File bytes are verified against declared type. Requires knowledge:write.',
     {
       workspaceId: z.string().uuid(),
       contentBase64: z.string().min(1).max(10_000_000),
