@@ -97,7 +97,7 @@ import {
 import {
   assignProjectStakeholder,
   deleteProjectStakeholder,
-  getRosterStakeholder,
+  getRosterStakeholderWithFallback,
   listProjectStakeholders,
   listWorkspaceMembers as listWorkspaceMembersForStaffing,
   unassignProjectStakeholder,
@@ -2543,8 +2543,9 @@ export function createMcpToolHandlers(
 
     async updateProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRosterStakeholder(
+      const existing = await getRosterStakeholderWithFallback(
         app.database,
+        input.projectId,
         input.stakeholderId,
       );
       const project = await requirePmProject(app, client, existing.projectId, {
@@ -2552,6 +2553,7 @@ export function createMcpToolHandlers(
       });
       const stakeholder = await updateProjectStakeholder(
         app.database,
+        existing.projectId,
         input.stakeholderId,
         {
           projectRole: input.projectRole
@@ -2608,8 +2610,9 @@ export function createMcpToolHandlers(
 
     async assignProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRosterStakeholder(
+      const existing = await getRosterStakeholderWithFallback(
         app.database,
+        input.projectId,
         input.stakeholderId,
       );
       const project = await requirePmProject(app, client, existing.projectId, {
@@ -2617,6 +2620,7 @@ export function createMcpToolHandlers(
       });
       const stakeholder = await assignProjectStakeholder(
         app.database,
+        existing.projectId,
         input.stakeholderId,
         input.userId,
       );
@@ -2640,8 +2644,9 @@ export function createMcpToolHandlers(
 
     async unassignProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRosterStakeholder(
+      const existing = await getRosterStakeholderWithFallback(
         app.database,
+        input.projectId,
         input.stakeholderId,
       );
       const project = await requirePmProject(app, client, existing.projectId, {
@@ -2649,6 +2654,7 @@ export function createMcpToolHandlers(
       });
       const stakeholder = await unassignProjectStakeholder(
         app.database,
+        existing.projectId,
         input.stakeholderId,
       );
       await writeAuditEvent(app.database, {
@@ -2728,8 +2734,9 @@ export function createMcpToolHandlers(
 
     async deleteProjectStakeholder(input) {
       const actingUserId = requireActingUserId(client);
-      const existing = await getRosterStakeholder(
+      const existing = await getRosterStakeholderWithFallback(
         app.database,
+        input.projectId,
         input.stakeholderId,
       );
       const project = await requirePmProject(app, client, existing.projectId, {
@@ -2737,6 +2744,7 @@ export function createMcpToolHandlers(
       });
       const deleted = await deleteProjectStakeholder(
         app.database,
+        existing.projectId,
         input.stakeholderId,
       );
       await writeAuditEvent(app.database, {

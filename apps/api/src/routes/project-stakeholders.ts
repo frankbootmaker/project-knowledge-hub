@@ -244,6 +244,7 @@ export async function registerProjectStakeholderRoutes(
 
     const stakeholder = await updateProjectStakeholder(
       app.database,
+      project.id,
       params.stakeholderId,
       {
         projectRole: body.projectRole,
@@ -297,6 +298,7 @@ export async function registerProjectStakeholderRoutes(
 
       const stakeholder = await assignProjectStakeholder(
         app.database,
+        project.id,
         params.stakeholderId,
         body.userId,
       );
@@ -337,6 +339,7 @@ export async function registerProjectStakeholderRoutes(
 
       const stakeholder = await unassignProjectStakeholder(
         app.database,
+        project.id,
         params.stakeholderId,
       );
 
@@ -432,6 +435,7 @@ export async function registerProjectStakeholderRoutes(
 
     const deleted = await deleteProjectStakeholder(
       app.database,
+      project.id,
       params.stakeholderId,
     );
 

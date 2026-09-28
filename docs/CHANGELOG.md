@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Stakeholder MCP ID consistency (PRO-T-13):** `list_project_stakeholders` and `assign_project_stakeholder` now return `id` set to the roster row ID (rosterId) for all seats (filled and open), with a separate `userId` field (null for open roles). Previously, filled seats returned `id: userId`, causing `unassign_project_stakeholder`, `update_project_stakeholder`, and `delete_project_stakeholder` to fail with "Stakeholder roster entry not found" when an agent passed the returned `id`. The roster mutation tools (`update_project_stakeholder`, `assign_project_stakeholder`, `unassign_project_stakeholder`, `delete_project_stakeholder`) now require `projectId` and accept `stakeholderId` as the roster ID; if a userId is passed by mistake, they return a clear 400 error (`STAKEHOLDER_ID_IS_USER_ID`) with the correct `rosterId` to use. Tool descriptions document that `stakeholderId` expects `rosterId` from list responses.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.

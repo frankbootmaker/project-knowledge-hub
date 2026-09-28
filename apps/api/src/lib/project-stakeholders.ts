@@ -484,6 +484,7 @@ export async function listProjectStakeholders(
     }
     const entry = ensurePerson(row.userId);
     if (!entry) continue;
+    entry.id = row.id;
     applyRosterFields(entry, row);
     entry.staffingStatus = 'assigned';
   }
@@ -579,6 +580,66 @@ export async function listProjectStakeholders(
   });
 }
 
+/**
+ * Resolve stakeholderId to roster row ID.
+ * 
+ * If stakeholderId is a roster ID, returns it.
+ * If stakeholderId is a userId that matches exactly one filled seat in projectId, returns rosterId.
+ * If stakeholderId is a userId that matches multiple seats, throws with candidate rosterIds.
+ * If stakeholderId matches no roster row but IS a userId of a filled seat, throws with rosterId.
+ * Otherwise throws NOT_FOUND.
+ */
+async function resolveStakeholderId(
+  database: Database,
+  projectId: string,
+  stakeholderId: string,
+): Promise<string> {
+  const [direct] = await database.db
+    .select({ id: projectStakeholders.id })
+    .from(projectStakeholders)
+    .where(
+      and(
+        eq(projectStakeholders.projectId, projectId),
+        eq(projectStakeholders.id, stakeholderId),
+      ),
+    )
+    .limit(1);
+  if (direct) return stakeholderId;
+
+  const byUser = await database.db
+    .select({ id: projectStakeholders.id, userId: projectStakeholders.userId })
+    .from(projectStakeholders)
+    .where(
+      and(
+        eq(projectStakeholders.projectId, projectId),
+        eq(projectStakeholders.userId, stakeholderId),
+      ),
+    );
+
+  if (byUser.length === 0) {
+    throw new AppError({
+      code: 'STAKEHOLDER_NOT_FOUND',
+      message: 'Stakeholder roster entry not found',
+      statusCode: 404,
+    });
+  }
+
+  if (byUser.length === 1) {
+    throw new AppError({
+      code: 'STAKEHOLDER_ID_IS_USER_ID',
+      message: `stakeholderId must be the roster ID. Use rosterId="${byUser[0]!.id}" for this user.`,
+      statusCode: 400,
+    });
+  }
+
+  const rosterIds = byUser.map((row) => row.id).join('", "');
+  throw new AppError({
+    code: 'STAKEHOLDER_ID_IS_USER_ID',
+    message: `stakeholderId must be the roster ID. This user holds multiple seats; candidates: "${rosterIds}"`,
+    statusCode: 400,
+  });
+}
+
 export async function getRosterStakeholder(
   database: Database,
   rosterId: string,
@@ -596,6 +657,19 @@ export async function getRosterStakeholder(
     });
   }
   return row;
+}
+
+/**
+ * Get roster stakeholder by ID, with userId fallback resolution.
+ * Throws helpful error if stakeholderId is a userId instead of rosterId.
+ */
+export async function getRosterStakeholderWithFallback(
+  database: Database,
+  projectId: string,
+  stakeholderId: string,
+): Promise<typeof projectStakeholders.$inferSelect> {
+  const resolvedId = await resolveStakeholderId(database, projectId, stakeholderId);
+  return getRosterStakeholder(database, resolvedId);
 }
 
 export type StakeholderCapacityInput = {
@@ -824,7 +898,8 @@ export async function upsertProjectStakeholder(
 
 export async function updateProjectStakeholder(
   database: Database,
-  rosterId: string,
+  projectId: string,
+  stakeholderId: string,
   input: {
     projectRole?: ProjectStakeholderRole;
     jobTitle?: string | null;
@@ -836,6 +911,7 @@ export async function updateProjectStakeholder(
     sortOrder?: number;
   } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
+  const rosterId = await resolveStakeholderId(database, projectId, stakeholderId);
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
@@ -952,9 +1028,11 @@ export async function updateProjectStakeholder(
 
 export async function assignProjectStakeholder(
   database: Database,
-  rosterId: string,
+  projectId: string,
+  stakeholderId: string,
   userId: string,
 ): Promise<PublicStakeholder> {
+  const rosterId = await resolveStakeholderId(database, projectId, stakeholderId);
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
@@ -1015,8 +1093,10 @@ export async function assignProjectStakeholder(
 
 export async function unassignProjectStakeholder(
   database: Database,
-  rosterId: string,
+  projectId: string,
+  stakeholderId: string,
 ): Promise<PublicStakeholder> {
+  const rosterId = await resolveStakeholderId(database, projectId, stakeholderId);
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
@@ -1131,8 +1211,10 @@ export async function updateAiAssistantCost(
 
 export async function deleteProjectStakeholder(
   database: Database,
-  rosterId: string,
+  projectId: string,
+  stakeholderId: string,
 ): Promise<{ projectId: string; userId: string | null }> {
+  const rosterId = await resolveStakeholderId(database, projectId, stakeholderId);
   const existing = await getRosterStakeholder(database, rosterId);
   const { project } = await requireProjectContext(database, existing.projectId);
   assertProjectNotArchived(project);
