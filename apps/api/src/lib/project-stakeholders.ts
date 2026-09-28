@@ -644,6 +644,7 @@ export async function upsertProjectStakeholder(
     reportsToUserId?: string | null;
     hourlyRate?: string | null;
     sortOrder?: number;
+    createdBy?: string | null;
   } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
   const { project } = await requireProjectContext(database, input.projectId);
@@ -790,6 +791,7 @@ export async function upsertProjectStakeholder(
           contractStart: input.contractStart ?? null,
           contractEnd: input.contractEnd ?? null,
           sortOrder: input.sortOrder ?? 0,
+          createdBy: input.createdBy ?? null,
         })
         .returning({ id: projectStakeholders.id });
       rosterId = inserted?.id ?? null;
@@ -816,6 +818,7 @@ export async function upsertProjectStakeholder(
         contractStart: input.contractStart ?? null,
         contractEnd: input.contractEnd ?? null,
         sortOrder: input.sortOrder ?? 0,
+        createdBy: input.createdBy ?? null,
       })
       .returning({ id: projectStakeholders.id });
     rosterId = inserted?.id ?? null;

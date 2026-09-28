@@ -551,7 +551,7 @@ export function createMcpToolHandlers(
         itBudgetAllocation: input.itBudgetAllocation,
         tags: input.tags,
         metadata: input.metadata,
-      });
+      }, { createdBy: actingUserId });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -1653,6 +1653,7 @@ export function createMcpToolHandlers(
         startDate: input.startDate,
         targetDate: input.targetDate,
         sortOrder: input.sortOrder,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -1734,6 +1735,7 @@ export function createMcpToolHandlers(
         endDate: input.endDate,
         capacityPoints: input.capacityPoints,
         sortOrder: input.sortOrder,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2234,6 +2236,7 @@ export function createMcpToolHandlers(
         startDate: input.startDate,
         endDate: input.endDate,
         sortOrder: input.sortOrder,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2318,6 +2321,7 @@ export function createMcpToolHandlers(
         startDate: input.startDate,
         endDate: input.endDate,
         sortOrder: input.sortOrder,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2524,6 +2528,7 @@ export function createMcpToolHandlers(
             : parseBudgetAmount(input.contractedBudget) ?? null,
         contractStart: input.contractStart,
         contractEnd: input.contractEnd,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2801,6 +2806,7 @@ export function createMcpToolHandlers(
         dueDate: input.dueDate,
         sortOrder: input.sortOrder,
         taskIds,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2876,6 +2882,7 @@ export function createMcpToolHandlers(
         app.database,
         raidItemId,
         input.targetKind,
+        actingUserId,
       );
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2923,6 +2930,7 @@ export function createMcpToolHandlers(
         raidItemId,
         projectId: project.id,
         taskIds,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -3035,6 +3043,7 @@ export function createMcpToolHandlers(
         knowledgeRecordId: knowledgeRecordId ?? null,
         sortOrder: input.sortOrder,
         deliveryLinks,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -3127,6 +3136,7 @@ export function createMcpToolHandlers(
         sortOrder: input.sortOrder,
         archived: input.archived,
         deliveryLinks,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -3175,6 +3185,7 @@ export function createMcpToolHandlers(
       const deliveryLinks = await setDeliveryLinksForRecord(app.database, {
         knowledgeRecordId: recordId,
         links,
+        createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,

@@ -448,6 +448,7 @@ export async function createMilestone(
     startDate?: string | null;
     targetDate?: string | null;
     sortOrder?: number;
+    createdBy?: string | null;
   },
 ): Promise<PublicMilestone> {
   const allocated = await allocateIssueNumber(database, input.projectId, 'M');
@@ -463,6 +464,7 @@ export async function createMilestone(
       sortOrder: input.sortOrder ?? 0,
       issueKeyType: allocated.issueKeyType,
       issueNumber: allocated.issueNumber,
+      createdBy: input.createdBy ?? null,
     })
     .returning();
   if (!row) {
@@ -865,6 +867,7 @@ export async function replaceTaskRaci(
         taskId: input.taskId,
         userId: entry.userId,
         role: entry.role,
+        createdBy: input.actorUserId ?? null,
       })),
     );
   }
@@ -964,6 +967,7 @@ export async function createTask(
         taskId: createdTask.id,
         userId: entry.userId,
         role: entry.role,
+        createdBy: input.createdBy ?? null,
       })),
     );
   }

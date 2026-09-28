@@ -147,16 +147,22 @@ export async function deleteMediaBytes(
   uploadDir: string,
   workspaceId: string,
   mediaId: string,
-  options?: { blobStore?: BlobStore },
+  options?: {
+    blobStore?: BlobStore;
+    onError?: (error: unknown, where: 'blob' | 'file') => void;
+  },
 ): Promise<void> {
   const store = options?.blobStore;
   if (store && store.provider !== 'disabled') {
-    await store.delete(mediaBlobKey(workspaceId, mediaId)).catch(() => undefined);
+    await store.delete(mediaBlobKey(workspaceId, mediaId)).catch((error: unknown) => {
+      options?.onError?.(error, 'blob');
+    });
   }
   try {
     await unlink(mediaFilePath(uploadDir, workspaceId, mediaId));
-  } catch {
-    // missing is fine
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') options?.onError?.(error, 'file');
   }
 }
 

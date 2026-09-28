@@ -328,6 +328,7 @@ export async function createRaidItem(
     dueDate?: string | null;
     sortOrder?: number;
     taskIds?: string[];
+    createdBy?: string | null;
   },
 ): Promise<PublicRaidItem> {
   const { project } = await requireProjectContext(database, input.projectId);
@@ -356,6 +357,7 @@ export async function createRaidItem(
       sortOrder: input.sortOrder ?? 0,
       issueKeyType: allocated.issueKeyType,
       issueNumber: allocated.issueNumber,
+      createdBy: input.createdBy ?? null,
     })
     .returning();
   if (!created) {
@@ -371,6 +373,7 @@ export async function createRaidItem(
       raidItemId: created.id,
       projectId: input.projectId,
       taskIds: input.taskIds,
+      createdBy: input.createdBy,
     });
   }
 
@@ -448,6 +451,7 @@ export async function transferRaidItem(
   database: Database,
   raidItemId: string,
   targetKind: 'risk' | 'issue',
+  createdBy?: string | null,
 ): Promise<{ source: PublicRaidItem; target: PublicRaidItem }> {
   const source = await getRaidItem(database, raidItemId);
   const { project } = await requireProjectContext(database, source.projectId);
@@ -503,6 +507,7 @@ export async function transferRaidItem(
       issueKeyType: allocated.issueKeyType,
       issueNumber: allocated.issueNumber,
       transferredFromRaidItemId: source.id,
+      createdBy: createdBy ?? null,
     })
     .returning();
   if (!created) {
@@ -519,6 +524,7 @@ export async function transferRaidItem(
       raidItemId: created.id,
       projectId: source.projectId,
       taskIds,
+      createdBy,
     });
   }
 
@@ -557,6 +563,7 @@ export async function setRaidTaskLinks(
     raidItemId: string;
     projectId: string;
     taskIds: string[];
+    createdBy?: string | null;
   },
 ): Promise<PublicRaidItem> {
   const uniqueTaskIds = [...new Set(input.taskIds)];
@@ -590,6 +597,7 @@ export async function setRaidTaskLinks(
       uniqueTaskIds.map((taskId) => ({
         raidItemId: input.raidItemId,
         taskId,
+        createdBy: input.createdBy ?? null,
       })),
     );
   }

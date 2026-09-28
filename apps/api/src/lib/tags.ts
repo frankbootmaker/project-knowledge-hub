@@ -12,6 +12,7 @@ export async function resolveTagsForOrganization(
   database: Database,
   organizationId: string,
   tagNames: string[],
+  createdBy?: string | null,
 ): Promise<Array<{ id: string; name: string; slug: string }>> {
   const normalized = [
     ...new Set(
@@ -63,6 +64,7 @@ export async function resolveTagsForOrganization(
         organizationId,
         name: item.name,
         slug: item.slug,
+        createdBy: createdBy ?? null,
       })
       .returning();
     if (inserted) {
@@ -78,8 +80,14 @@ export async function setProjectTags(
   projectId: string,
   organizationId: string,
   tagNames: string[],
+  createdBy?: string | null,
 ): Promise<Array<{ id: string; name: string; slug: string }>> {
-  const resolved = await resolveTagsForOrganization(database, organizationId, tagNames);
+  const resolved = await resolveTagsForOrganization(
+    database,
+    organizationId,
+    tagNames,
+    createdBy,
+  );
   await database.db.delete(projectTags).where(eq(projectTags.projectId, projectId));
   if (resolved.length > 0) {
     await database.db.insert(projectTags).values(
@@ -97,8 +105,14 @@ export async function setSystemTags(
   systemId: string,
   organizationId: string,
   tagNames: string[],
+  createdBy?: string | null,
 ): Promise<Array<{ id: string; name: string; slug: string }>> {
-  const resolved = await resolveTagsForOrganization(database, organizationId, tagNames);
+  const resolved = await resolveTagsForOrganization(
+    database,
+    organizationId,
+    tagNames,
+    createdBy,
+  );
   await database.db.delete(systemTags).where(eq(systemTags.systemId, systemId));
   if (resolved.length > 0) {
     await database.db.insert(systemTags).values(
@@ -172,8 +186,14 @@ export async function setKnowledgeRecordTags(
   knowledgeRecordId: string,
   organizationId: string,
   tagNames: string[],
+  createdBy?: string | null,
 ): Promise<Array<{ id: string; name: string; slug: string }>> {
-  const resolved = await resolveTagsForOrganization(database, organizationId, tagNames);
+  const resolved = await resolveTagsForOrganization(
+    database,
+    organizationId,
+    tagNames,
+    createdBy,
+  );
   await database.db
     .delete(knowledgeRecordTags)
     .where(eq(knowledgeRecordTags.knowledgeRecordId, knowledgeRecordId));

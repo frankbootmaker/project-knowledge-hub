@@ -579,6 +579,7 @@ export async function createKnowledgeRecord(
     finalRecord.id,
     workspace.organizationId,
     body.tags ?? [],
+    actor.userId,
   );
 
   const source =
@@ -834,6 +835,7 @@ export async function updateKnowledgeRecord(
       finalRecord.id,
       workspace.organizationId,
       body.tags,
+      actor.userId,
     );
   }
 

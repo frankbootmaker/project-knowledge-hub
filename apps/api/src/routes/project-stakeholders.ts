@@ -214,6 +214,7 @@ export async function registerProjectStakeholderRoutes(
           : parseBudgetAmount(body.hourlyRate) ?? null,
       sortOrder: body.sortOrder,
       ...mapCapacityBody(body),
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {

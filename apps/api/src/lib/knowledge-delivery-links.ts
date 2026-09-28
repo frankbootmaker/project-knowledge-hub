@@ -172,6 +172,7 @@ export async function setDeliveryLinksForRecord(
   input: {
     knowledgeRecordId: string;
     links: Array<{ entityType: DeliveryLinkEntityType; entityId: string }>;
+    createdBy?: string | null;
   },
 ): Promise<PublicDeliveryLink[]> {
   const record = await getKnowledgeRecordProjectContext(
@@ -208,6 +209,7 @@ export async function setDeliveryLinksForRecord(
         knowledgeRecordId: input.knowledgeRecordId,
         entityType: link.entityType,
         entityId: link.entityId,
+        createdBy: input.createdBy ?? null,
       })),
     );
   }

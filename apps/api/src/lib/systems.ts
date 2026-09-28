@@ -292,6 +292,7 @@ export async function createSystem(
           ? null
           : parseBudgetAmount(input.itBudgetAllocation) ?? null,
       metadataJson: input.metadata ?? null,
+      createdBy: opts.defaultOwnerUserId,
       updatedAt: new Date(),
     })
     .returning();
@@ -309,6 +310,7 @@ export async function createSystem(
     created.id,
     workspace.organizationId,
     input.tags ?? [],
+    opts.defaultOwnerUserId,
   );
   if (created.projectId && itCostMode) {
     await upsertProjectCostSnapshot(database, created.projectId);
@@ -345,6 +347,7 @@ export async function updateSystem(
   database: Database,
   systemId: string,
   input: UpdateSystemInput,
+  opts?: { createdBy?: string | null },
 ): Promise<PublicSystem> {
   const system = await getSystemRow(database, systemId, {
     includeArchived: true,
@@ -482,6 +485,7 @@ export async function updateSystem(
       updated.id,
       workspace.organizationId,
       input.tags,
+      opts?.createdBy,
     );
   }
 

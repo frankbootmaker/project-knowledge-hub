@@ -171,7 +171,9 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
     });
     requireWorkspaceMaintainer(principal, existing.workspaceId);
 
-    const system = await updateSystem(app.database, params.systemId, body);
+    const system = await updateSystem(app.database, params.systemId, body, {
+      createdBy: principal.userId,
+    });
 
     const [workspace] = await app.database.db
       .select({ organizationId: workspaces.organizationId })

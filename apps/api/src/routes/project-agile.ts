@@ -140,6 +140,7 @@ export async function registerProjectAgileRoutes(
     const epic = await createEpic(app.database, {
       projectId: project.id,
       ...body,
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {
@@ -246,6 +247,7 @@ export async function registerProjectAgileRoutes(
     const userStory = await createUserStory(app.database, {
       projectId: project.id,
       ...body,
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {

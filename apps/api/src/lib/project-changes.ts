@@ -329,6 +329,7 @@ export async function setChangeDeliveryLinks(
     changeId: string;
     projectId: string;
     links: Array<{ entityType: ChangeDeliveryEntityType; entityId: string }>;
+    createdBy?: string | null;
   },
 ): Promise<void> {
   const unique = new Map<string, { entityType: ChangeDeliveryEntityType; entityId: string }>();
@@ -367,6 +368,7 @@ export async function setChangeDeliveryLinks(
         changeId: input.changeId,
         entityType: link.entityType,
         entityId: link.entityId,
+        createdBy: input.createdBy ?? null,
       })),
     );
   }
@@ -395,6 +397,7 @@ export async function createChangeItem(
       entityType: ChangeDeliveryEntityType;
       entityId: string;
     }>;
+    createdBy?: string | null;
   },
 ): Promise<PublicChangeItem> {
   const { project } = await requireProjectContext(database, input.projectId);
@@ -454,6 +457,7 @@ export async function createChangeItem(
       sortOrder: input.sortOrder ?? 0,
       issueKeyType: allocated.issueKeyType,
       issueNumber: allocated.issueNumber,
+      createdBy: input.createdBy ?? null,
     })
     .returning();
   if (!created) {
@@ -469,6 +473,7 @@ export async function createChangeItem(
       changeId: created.id,
       projectId: input.projectId,
       links: input.deliveryLinks,
+      createdBy: input.createdBy,
     });
   }
 
@@ -499,6 +504,7 @@ export async function updateChangeItem(
       entityType: ChangeDeliveryEntityType;
       entityId: string;
     }>;
+    createdBy?: string | null;
   },
 ): Promise<PublicChangeItem> {
   const existing = await getChangeItem(database, changeId);
@@ -581,6 +587,7 @@ export async function updateChangeItem(
       changeId,
       projectId: existing.projectId,
       links: input.deliveryLinks,
+      createdBy: input.createdBy,
     });
   }
 
