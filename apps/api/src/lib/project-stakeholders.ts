@@ -29,52 +29,13 @@ import {
   requireProjectContext,
 } from './project-delivery.js';
 import { avatarUrlForUser } from './public-user.js';
+import { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
 
 export type StakeholderKind = 'person' | 'ai_assistant' | 'open_role';
 export type StakeholderSource = 'roster' | 'owner' | 'raci' | 'ai_assistant';
 
 /** Catalogue systems with this type appear as AI-assistant stakeholders (not general Systems). */
-export const AI_ASSISTANT_SYSTEM_TYPE = 'ai_assistant';
-
-/**
- * Validates that the given systemId is an AI assistant linked to the project.
- * Throws an AppError if the system doesn't exist, is archived, isn't an AI assistant,
- * or isn't linked to the project.
- * Returns the system record if valid.
- */
-export async function assertAiAssistantForProject(
-  database: Database,
-  projectId: string,
-  systemId: string,
-): Promise<typeof systems.$inferSelect> {
-  const [system] = await database.db
-    .select()
-    .from(systems)
-    .where(eq(systems.id, systemId))
-    .limit(1);
-  if (!system || system.archivedAt) {
-    throw new AppError({
-      code: 'SYSTEM_NOT_FOUND',
-      message: 'AI assistant system not found',
-      statusCode: 404,
-    });
-  }
-  if (system.systemType !== AI_ASSISTANT_SYSTEM_TYPE) {
-    throw new AppError({
-      code: 'SYSTEM_NOT_AI_ASSISTANT',
-      message: 'System is not an AI assistant',
-      statusCode: 400,
-    });
-  }
-  if (system.projectId !== projectId) {
-    throw new AppError({
-      code: 'SYSTEM_NOT_FOUND',
-      message: 'AI assistant system not found',
-      statusCode: 404,
-    });
-  }
-  return system;
-}
+export { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
 
 export type PublicStakeholder = {
   kind: StakeholderKind;
@@ -1111,15 +1072,28 @@ export async function updateAiAssistantCost(
     .from(systems)
     .where(eq(systems.id, systemId))
     .limit(1);
-  if (!system?.projectId) {
+  if (!system || system.archivedAt) {
     throw new AppError({
       code: 'SYSTEM_NOT_FOUND',
       message: 'AI assistant system not found',
       statusCode: 404,
     });
   }
+  if (system.systemType !== AI_ASSISTANT_SYSTEM_TYPE) {
+    throw new AppError({
+      code: 'SYSTEM_NOT_AI_ASSISTANT',
+      message: 'System is not an AI assistant',
+      statusCode: 400,
+    });
+  }
+  if (!system.projectId) {
+    throw new AppError({
+      code: 'SYSTEM_NOT_PROJECT_SCOPED',
+      message: 'AI assistant must be linked to a project',
+      statusCode: 400,
+    });
+  }
 
-  await assertAiAssistantForProject(database, system.projectId, systemId);
   const { project } = await requireProjectContext(database, system.projectId);
   assertProjectNotArchived(project);
 

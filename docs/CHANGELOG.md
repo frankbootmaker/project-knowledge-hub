@@ -73,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* **Task AI system validation (PRO-T-10):** `create_project_task`, `update_project_task`, and `report_project_task_ai_usage` now validate that `aiSystemId` is an AI assistant system linked to the task's project, matching the validation used by `update_project_ai_assistant_cost`. Previously, these tools accepted any catalogue system UUID, including non-AI systems, causing token usage to be charged to systems that were ignored by budget summaries.
+* **Task AI system validation (PRO-T-10):** `create_project_task`, `update_project_task`, and `report_project_task_ai_usage` now validate that `aiSystemId` is an AI assistant system linked to the task's project, matching the validation used by `update_project_ai_assistant_cost`. Error order avoids leaking information: 404 `SYSTEM_NOT_FOUND` for missing/archived/cross-workspace systems, 400 `SYSTEM_NOT_AI_ASSISTANT` for same-workspace non-AI systems, 400 `AI_SYSTEM_NOT_IN_PROJECT` for AI assistants linked to a different project. Previously, these tools accepted any catalogue system UUID, including non-AI systems, causing token usage to be charged to systems that were ignored by budget summaries. Tasks with legacy non-AI `aiSystemId` can still report usage without re-validation.
 
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
