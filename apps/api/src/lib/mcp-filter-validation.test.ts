@@ -1,146 +1,391 @@
 import { describe, expect, it } from 'vitest';
 import { AppError } from '@project-knowledge-hub/domain';
+import { assertFilterEntityInProject } from './mcp-tools.js';
+import type { FilterEntityType, EntityRow, RequestedProject } from './mcp-tools.js';
 
 /**
  * Unit tests for cross-project filter validation (PRO-T-7).
- * These tests verify that list tools return clear error messages when a filter entity
- * (milestone, sprint, epic, user story) exists but belongs to a different project.
+ * Tests the pure validation logic that checks if a filter entity belongs to the requested project.
  */
 
-describe('MCP filter validation (PRO-T-7)', () => {
-  describe('resolveFilterEntity helper', () => {
-    it('should return a clear error when milestone belongs to another project', () => {
-      // Mock scenario: FUR-M-1 exists in project FUR, but we're listing tasks for project PRO
-      const error = new AppError({
-        code: 'ENTITY_NOT_IN_PROJECT',
-        message: 'Milestone FUR-M-1 does not belong to project PRO',
-        statusCode: 400,
-      });
-      
-      expect(error.code).toBe('ENTITY_NOT_IN_PROJECT');
-      expect(error.message).toContain('FUR-M-1');
-      expect(error.message).toContain('does not belong to');
-      expect(error.message).toContain('PRO');
-      expect(error.statusCode).toBe(400);
+describe('assertFilterEntityInProject (PRO-T-7)', () => {
+  const requestedProject: RequestedProject = {
+    id: 'project-pro-id',
+    workspaceId: 'workspace-1',
+    keyPrefix: 'PRO',
+    name: 'Project PRO',
+  };
+
+  const otherProject = {
+    id: 'project-fur-id',
+    workspaceId: 'workspace-1',
+    keyPrefix: 'FUR',
+    name: 'Project FUR',
+  };
+
+  const otherWorkspaceProject = {
+    id: 'project-pnz-id',
+    workspaceId: 'workspace-2',
+    keyPrefix: 'PNZ',
+    name: 'Project PNZ',
+  };
+
+  describe('milestone filter', () => {
+    it('should allow milestone in the requested project', () => {
+      const entityRow: EntityRow = {
+        projectId: requestedProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'PRO',
+        issueKeyType: 'M',
+        issueNumber: 1,
+      };
+
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'milestone',
+          entityRow,
+          requestedProject,
+          idOrKey: 'PRO-M-1',
+        }),
+      ).not.toThrow();
     });
 
-    it('should return a clear error when sprint belongs to another project', () => {
-      const error = new AppError({
-        code: 'ENTITY_NOT_IN_PROJECT',
-        message: 'Sprint PNZ-SP-1 does not belong to project PRO',
-        statusCode: 400,
-      });
-      
-      expect(error.code).toBe('ENTITY_NOT_IN_PROJECT');
-      expect(error.message).toContain('PNZ-SP-1');
-      expect(error.message).toContain('does not belong to');
-      expect(error.message).toContain('PRO');
+    it('should reject milestone from another project in the same workspace', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'FUR',
+        issueKeyType: 'M',
+        issueNumber: 1,
+      };
+
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'milestone',
+          entityRow,
+          requestedProject,
+          idOrKey: 'FUR-M-1',
+        }),
+      ).toThrow(
+        new AppError({
+          code: 'ENTITY_NOT_IN_PROJECT',
+          message: 'Milestone FUR-M-1 does not belong to project PRO',
+          statusCode: 400,
+        }),
+      );
     });
 
-    it('should return a clear error when epic belongs to another project', () => {
-      const error = new AppError({
-        code: 'ENTITY_NOT_IN_PROJECT',
-        message: 'Epic FUR-E-1 does not belong to project PRO',
-        statusCode: 400,
-      });
-      
-      expect(error.code).toBe('ENTITY_NOT_IN_PROJECT');
-      expect(error.message).toContain('FUR-E-1');
-      expect(error.message).toContain('does not belong to');
-      expect(error.message).toContain('PRO');
+    it('should return generic not-found for milestone in a different workspace', () => {
+      const entityRow: EntityRow = {
+        projectId: otherWorkspaceProject.id,
+        workspaceId: otherWorkspaceProject.workspaceId,
+        keyPrefix: 'PNZ',
+        issueKeyType: 'M',
+        issueNumber: 1,
+      };
+
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'milestone',
+          entityRow,
+          requestedProject,
+          idOrKey: 'PNZ-M-1',
+        }),
+      ).toThrow(
+        new AppError({
+          code: 'ENTITY_NOT_FOUND',
+          message: 'Milestone PNZ-M-1 not found in project PRO',
+          statusCode: 404,
+        }),
+      );
     });
 
-    it('should return a clear error when user story belongs to another project', () => {
-      const error = new AppError({
-        code: 'ENTITY_NOT_IN_PROJECT',
-        message: 'User story FUR-S-1 does not belong to project PRO',
-        statusCode: 400,
-      });
-      
-      expect(error.code).toBe('ENTITY_NOT_IN_PROJECT');
-      expect(error.message).toContain('FUR-S-1');
-      expect(error.message).toContain('does not belong to');
-      expect(error.message).toContain('PRO');
-    });
+    it('should handle UUID with same error for cross-project in same workspace', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'FUR',
+        issueKeyType: 'M',
+        issueNumber: 1,
+      };
 
-    it('should not mislead with "No project found for key prefix"', () => {
-      // The old error message that we're fixing
-      const oldError = new AppError({
-        code: 'ISSUE_KEY_NOT_FOUND',
-        message: 'No project found for key prefix FUR',
-        statusCode: 404,
-      });
-      
-      // This is what we DON'T want to see anymore
-      expect(oldError.message).toContain('No project found for key prefix');
-      
-      // The new error should be different
-      const newError = new AppError({
-        code: 'ENTITY_NOT_IN_PROJECT',
-        message: 'Milestone FUR-M-1 does not belong to project PRO',
-        statusCode: 400,
-      });
-      
-      expect(newError.message).not.toContain('No project found for key prefix');
-      expect(newError.code).not.toBe('ISSUE_KEY_NOT_FOUND');
-      expect(newError.statusCode).toBe(400); // Validation error, not 404
-    });
+      const uuid = 'a0b1c2d3-e4f5-6789-abcd-ef0123456789';
 
-    it('should handle UUID-based filters consistently with key-based filters', () => {
-      // When passing a UUID that exists but belongs to another project,
-      // the error should be the same as when passing a human key
-      const errorByKey = new AppError({
-        code: 'ENTITY_NOT_IN_PROJECT',
-        message: 'Milestone FUR-M-1 does not belong to project PRO',
-        statusCode: 400,
-      });
-      
-      const errorByUuid = new AppError({
-        code: 'ENTITY_NOT_IN_PROJECT',
-        message: 'Milestone FUR-M-1 does not belong to project PRO',
-        statusCode: 400,
-      });
-      
-      expect(errorByKey.code).toBe(errorByUuid.code);
-      expect(errorByKey.statusCode).toBe(errorByUuid.statusCode);
-      // Both should mention the entity's human key for clarity
-      expect(errorByKey.message).toContain('FUR-M-1');
-      expect(errorByUuid.message).toContain('FUR-M-1');
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'milestone',
+          entityRow,
+          requestedProject,
+          idOrKey: uuid,
+        }),
+      ).toThrow(
+        new AppError({
+          code: 'ENTITY_NOT_IN_PROJECT',
+          message: 'Milestone FUR-M-1 does not belong to project PRO',
+          statusCode: 400,
+        }),
+      );
     });
   });
 
-  describe('Affected MCP tools', () => {
-    const affectedTools = [
-      'list_project_tasks',
-      'list_project_user_stories',
-      'create_project_task',
-      'update_project_task',
-      'create_project_user_story',
-      'update_project_user_story',
-    ];
+  describe('sprint filter', () => {
+    it('should allow sprint in the requested project', () => {
+      const entityRow: EntityRow = {
+        projectId: requestedProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'PRO',
+        issueKeyType: 'SP',
+        issueNumber: 1,
+      };
 
-    affectedTools.forEach((toolName) => {
-      it(`should be fixed in ${toolName}`, () => {
-        // This test documents which tools have been updated with the fix
-        expect(toolName).toBeTruthy();
-      });
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'sprint',
+          entityRow,
+          requestedProject,
+          idOrKey: 'PRO-SP-1',
+        }),
+      ).not.toThrow();
+    });
+
+    it('should reject sprint from another project in the same workspace', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'PNZ',
+        issueKeyType: 'SP',
+        issueNumber: 1,
+      };
+
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'sprint',
+          entityRow,
+          requestedProject,
+          idOrKey: 'PNZ-SP-1',
+        }),
+      ).toThrow(
+        new AppError({
+          code: 'ENTITY_NOT_IN_PROJECT',
+          message: 'Sprint PNZ-SP-1 does not belong to project PRO',
+          statusCode: 400,
+        }),
+      );
     });
   });
 
-  describe('Filter types', () => {
-    const filterTypes = [
-      { name: 'milestoneId', entity: 'milestone' },
-      { name: 'sprintId', entity: 'sprint' },
-      { name: 'epicId', entity: 'epic' },
-      { name: 'userStoryId', entity: 'user story' },
-    ];
+  describe('epic filter', () => {
+    it('should allow epic in the requested project', () => {
+      const entityRow: EntityRow = {
+        projectId: requestedProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'PRO',
+        issueKeyType: 'E',
+        issueNumber: 1,
+      };
 
-    filterTypes.forEach(({ name, entity }) => {
-      it(`should validate ${name} cross-project references`, () => {
-        // This test documents which filter types are validated
-        expect(name).toBeTruthy();
-        expect(entity).toBeTruthy();
-      });
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'epic',
+          entityRow,
+          requestedProject,
+          idOrKey: 'PRO-E-1',
+        }),
+      ).not.toThrow();
+    });
+
+    it('should reject epic from another project in the same workspace', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'FUR',
+        issueKeyType: 'E',
+        issueNumber: 1,
+      };
+
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'epic',
+          entityRow,
+          requestedProject,
+          idOrKey: 'FUR-E-1',
+        }),
+      ).toThrow(
+        new AppError({
+          code: 'ENTITY_NOT_IN_PROJECT',
+          message: 'Epic FUR-E-1 does not belong to project PRO',
+          statusCode: 400,
+        }),
+      );
+    });
+  });
+
+  describe('user story filter', () => {
+    it('should allow user story in the requested project', () => {
+      const entityRow: EntityRow = {
+        projectId: requestedProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'PRO',
+        issueKeyType: 'S',
+        issueNumber: 1,
+      };
+
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'user_story',
+          entityRow,
+          requestedProject,
+          idOrKey: 'PRO-S-1',
+        }),
+      ).not.toThrow();
+    });
+
+    it('should reject user story from another project in the same workspace', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'FUR',
+        issueKeyType: 'S',
+        issueNumber: 1,
+      };
+
+      expect(() =>
+        assertFilterEntityInProject({
+          entityType: 'user_story',
+          entityRow,
+          requestedProject,
+          idOrKey: 'FUR-S-1',
+        }),
+      ).toThrow(
+        new AppError({
+          code: 'ENTITY_NOT_IN_PROJECT',
+          message: 'User story FUR-S-1 does not belong to project PRO',
+          statusCode: 400,
+        }),
+      );
+    });
+  });
+
+  describe('entity type labels', () => {
+    it('should use "Milestone" for milestone type', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'FUR',
+        issueKeyType: 'M',
+        issueNumber: 1,
+      };
+
+      try {
+        assertFilterEntityInProject({
+          entityType: 'milestone',
+          entityRow,
+          requestedProject,
+          idOrKey: 'FUR-M-1',
+        });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AppError);
+        expect((error as AppError).message).toContain('Milestone');
+      }
+    });
+
+    it('should use "Sprint" for sprint type', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'FUR',
+        issueKeyType: 'SP',
+        issueNumber: 1,
+      };
+
+      try {
+        assertFilterEntityInProject({
+          entityType: 'sprint',
+          entityRow,
+          requestedProject,
+          idOrKey: 'FUR-SP-1',
+        });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AppError);
+        expect((error as AppError).message).toContain('Sprint');
+      }
+    });
+
+    it('should use "Epic" for epic type', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'FUR',
+        issueKeyType: 'E',
+        issueNumber: 1,
+      };
+
+      try {
+        assertFilterEntityInProject({
+          entityType: 'epic',
+          entityRow,
+          requestedProject,
+          idOrKey: 'FUR-E-1',
+        });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AppError);
+        expect((error as AppError).message).toContain('Epic');
+      }
+    });
+
+    it('should use "User story" for user_story type', () => {
+      const entityRow: EntityRow = {
+        projectId: otherProject.id,
+        workspaceId: requestedProject.workspaceId,
+        keyPrefix: 'FUR',
+        issueKeyType: 'S',
+        issueNumber: 1,
+      };
+
+      try {
+        assertFilterEntityInProject({
+          entityType: 'user_story',
+          entityRow,
+          requestedProject,
+          idOrKey: 'FUR-S-1',
+        });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AppError);
+        expect((error as AppError).message).toContain('User story');
+      }
+    });
+  });
+
+  describe('information leak prevention', () => {
+    it('should not reveal cross-workspace entities exist', () => {
+      const entityRow: EntityRow = {
+        projectId: otherWorkspaceProject.id,
+        workspaceId: otherWorkspaceProject.workspaceId,
+        keyPrefix: 'PNZ',
+        issueKeyType: 'M',
+        issueNumber: 1,
+      };
+
+      try {
+        assertFilterEntityInProject({
+          entityType: 'milestone',
+          entityRow,
+          requestedProject,
+          idOrKey: 'PNZ-M-1',
+        });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AppError);
+        const appError = error as AppError;
+        expect(appError.code).toBe('ENTITY_NOT_FOUND');
+        expect(appError.statusCode).toBe(404);
+        expect(appError.message).toContain('not found in project');
+        expect(appError.message).not.toContain('does not belong to');
+      }
     });
   });
 });

@@ -1260,7 +1260,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_tasks',
-    'List tasks for a project (optional milestone/sprint filter). Includes RACI. Requires pm:read.',
+    'List tasks for a project (optional milestone/sprint filter). milestoneId and sprintId must belong to the given project. Includes RACI. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       milestoneId: entityRef.optional(),
@@ -1467,7 +1467,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Requires pm:write.',
+    'Create a project task with optional RACI, user story, sprint, story points, and current owner. milestoneId, sprintId, and userStoryId must belong to the given project. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1511,7 +1511,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. Requires pm:write.',
+    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. milestoneId, sprintId, and userStoryId must belong to the task\'s project. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1632,7 +1632,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_user_stories',
-    'List user stories for a project (optional epic filter). Requires pm:read.',
+    'List user stories for a project (optional epic filter). epicId must belong to the given project. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       epicId: entityRef.optional(),
@@ -1649,7 +1649,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_user_story',
-    'Create a user story under an epic. Requires pm:write.',
+    'Create a user story under an epic. epicId must belong to the given project. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       epicId: entityRef,
@@ -1671,7 +1671,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_user_story',
-    'Update a user story. Requires pm:write.',
+    'Update a user story. epicId must belong to the story\'s project. Requires pm:write.',
     {
       storyId: entityRef,
       title: z.string().min(1).max(200).optional(),

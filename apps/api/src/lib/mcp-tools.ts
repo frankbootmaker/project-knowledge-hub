@@ -3,6 +3,10 @@ import type { FastifyInstance } from 'fastify';
 import {
   knowledgeRecords,
   knowledgeSources,
+  projectEpics,
+  projectMilestones,
+  projectSprints,
+  projectUserStories,
   projects,
   systems,
   users,
@@ -16,6 +20,8 @@ import {
   changeStatusSchema,
   deliveryLinkEntityTypeSchema,
   epicStatusSchema,
+  formatHumanKey,
+  isUuid,
   milestoneStatusSchema,
   aiCostModeSchema,
   projectCurrencySchema,
@@ -209,132 +215,174 @@ async function resolveDeliveryEntityRef(
   return resolveEntityId(database, { entityType, idOrKey, projectId });
 }
 
+type FilterEntityType = 'milestone' | 'sprint' | 'epic' | 'user_story';
+
+type EntityRow = {
+  projectId: string;
+  workspaceId: string;
+  keyPrefix: string | null;
+  issueKeyType: string | null;
+  issueNumber: number | null;
+};
+
+type RequestedProject = {
+  id: string;
+  workspaceId: string;
+  keyPrefix: string | null;
+  name: string;
+};
+
+export type { FilterEntityType, EntityRow, RequestedProject };
+
 /**
- * Resolve and validate a filter entity (milestone, sprint, epic, user story) for list operations.
- * Returns the resolved UUID, or throws a clear validation error if the entity exists but doesn't
- * belong to the requested project. This avoids the misleading 'No project found for key prefix'
- * error when a human key references a valid entity in another project.
+ * Pure validation function: checks if an entity belongs to the requested project.
+ * Throws a clear error if the entity exists but belongs to a different project in the same workspace,
+ * or returns a generic not-found error if the entity is in a different workspace (information leak prevention).
+ */
+export function assertFilterEntityInProject(input: {
+  entityType: FilterEntityType;
+  entityRow: EntityRow;
+  requestedProject: RequestedProject;
+  idOrKey: string;
+}): void {
+  const { entityType, entityRow, requestedProject, idOrKey } = input;
+
+  if (entityRow.projectId === requestedProject.id) {
+    // Entity belongs to the requested project - OK
+    return;
+  }
+
+  // Check if entity is in a different workspace - must not reveal it exists
+  if (entityRow.workspaceId !== requestedProject.workspaceId) {
+    const labelMap: Record<FilterEntityType, string> = {
+      milestone: 'Milestone',
+      sprint: 'Sprint',
+      epic: 'Epic',
+      user_story: 'User story',
+    };
+    throw new AppError({
+      code: 'ENTITY_NOT_FOUND',
+      message: `${labelMap[entityType]} ${idOrKey} not found in project ${requestedProject.keyPrefix || requestedProject.name}`,
+      statusCode: 404,
+    });
+  }
+
+  // Entity is in the same workspace but different project - provide clear validation error
+  const labelMap: Record<FilterEntityType, string> = {
+    milestone: 'Milestone',
+    sprint: 'Sprint',
+    epic: 'Epic',
+    user_story: 'User story',
+  };
+
+  const entityHumanKey = formatHumanKey(
+    entityRow.keyPrefix,
+    entityRow.issueKeyType,
+    entityRow.issueNumber,
+  );
+
+  throw new AppError({
+    code: 'ENTITY_NOT_IN_PROJECT',
+    message: `${labelMap[entityType]} ${entityHumanKey || idOrKey} does not belong to project ${requestedProject.keyPrefix || requestedProject.name}`,
+    statusCode: 400,
+  });
+}
+
+/**
+ * Resolve and validate a filter entity (milestone, sprint, epic, user story) for list/create/update operations.
+ * First tries to resolve within the requested project (existing behaviour). If that fails, performs a diagnostic
+ * lookup restricted to the same workspace to provide a clear error message when the entity exists but belongs
+ * to a different project.
  */
 async function resolveFilterEntity(
   database: Parameters<typeof resolveEntityId>[0],
   input: {
-    entityType: ResolvableEntityType;
+    entityType: FilterEntityType;
     idOrKey: string;
     requestedProjectId: string;
   },
 ): Promise<string> {
   const { entityType, idOrKey, requestedProjectId } = input;
-  
+
+  // First, try the standard scoped resolution (existing behaviour)
   try {
-    // First, try to resolve the entity without project scoping to see if it exists at all
-    const entityId = await resolveEntityId(database, {
+    return await resolveEntityId(database, {
       entityType,
       idOrKey,
+      projectId: requestedProjectId,
     });
-    
-    // Now check if this entity belongs to the requested project
-    const entityTableMap = {
-      milestone: 'projectMilestones',
-      sprint: 'projectSprints',
-      epic: 'projectEpics',
-      user_story: 'projectUserStories',
-      task: 'projectTasks',
-      raid: 'projectRaidItems',
-      change: 'projectChangeItems',
-    };
-    
-    const { projectMilestones, projectSprints, projectEpics, projectUserStories, projectTasks, projectRaidItems, projectChangeItems, projects: projectsTable } = await import('@project-knowledge-hub/database');
-    
-    const tableMap: Record<string, any> = {
-      projectMilestones,
-      projectSprints,
-      projectEpics,
-      projectUserStories,
-      projectTasks,
-      projectRaidItems,
-      projectChangeItems,
-    };
-    
-    const tableName = entityTableMap[entityType];
-    if (!tableName) {
-      throw new AppError({
-        code: 'VALIDATION_ERROR',
-        message: `Unsupported entity type for filter validation: ${entityType}`,
-        statusCode: 400,
-      });
+  } catch (error) {
+    // If it's not a not-found error, re-throw immediately
+    if (!(error instanceof AppError) || error.code !== 'ISSUE_KEY_NOT_FOUND') {
+      throw error;
     }
-    
-    const table = tableMap[tableName];
-    if (!table) {
-      throw new AppError({
-        code: 'VALIDATION_ERROR',
-        message: `Table not found for entity type: ${entityType}`,
-        statusCode: 400,
-      });
+
+    // Entity not found in the requested project. If it's a UUID, check if it exists elsewhere
+    // in the same workspace to provide a better error message.
+    if (!isUuid(idOrKey)) {
+      // For human keys, the error from resolveEntityId is already good enough
+      throw error;
     }
-    
-    // Check which project this entity belongs to
-    const { eq } = await import('drizzle-orm');
-    const [row] = await database.db
+
+    // Diagnostic lookup for UUID: check if it exists in another project in the same workspace
+    const tableMap: Record<FilterEntityType, typeof projectMilestones> = {
+      milestone: projectMilestones,
+      sprint: projectSprints,
+      epic: projectEpics,
+      user_story: projectUserStories,
+    };
+
+    const table = tableMap[entityType];
+
+    const [requestedProject] = await database.db
       .select({
-        projectId: table.projectId,
-        issueKeyType: table.issueKeyType,
-        issueNumber: table.issueNumber,
-        keyPrefix: projectsTable.keyPrefix,
+        id: projects.id,
+        workspaceId: projects.workspaceId,
+        keyPrefix: projects.keyPrefix,
+        name: projects.name,
       })
-      .from(table)
-      .innerJoin(projectsTable, eq(table.projectId, projectsTable.id))
-      .where(eq(table.id, entityId))
+      .from(projects)
+      .where(eq(projects.id, requestedProjectId))
       .limit(1);
-    
-    if (!row) {
-      // Entity was found by resolveEntityId but doesn't exist anymore (rare race condition)
+
+    if (!requestedProject) {
       throw new AppError({
-        code: 'ENTITY_NOT_FOUND',
-        message: `${entityType} not found`,
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found',
         statusCode: 404,
       });
     }
-    
-    if (row.projectId !== requestedProjectId) {
-      // Get the requested project's info for a better error message
-      const [requestedProject] = await database.db
-        .select({
-          keyPrefix: projectsTable.keyPrefix,
-          name: projectsTable.name,
-        })
-        .from(projectsTable)
-        .where(eq(projectsTable.id, requestedProjectId))
-        .limit(1);
-      
-      const { formatHumanKey } = await import('@project-knowledge-hub/domain');
-      const entityHumanKey = formatHumanKey(
-        row.keyPrefix,
-        row.issueKeyType,
-        row.issueNumber,
-      );
-      const requestedProjectKey = requestedProject?.keyPrefix || requestedProject?.name || requestedProjectId.substring(0, 8);
-      
-      throw new AppError({
-        code: 'ENTITY_NOT_IN_PROJECT',
-        message: `${entityType.charAt(0).toUpperCase() + entityType.slice(1).replace('_', ' ')} ${entityHumanKey || entityId.substring(0, 8)} does not belong to project ${requestedProjectKey}`,
-        statusCode: 400,
+
+    // Check if the UUID exists in another project in the same workspace
+    const [entityRow] = await database.db
+      .select({
+        projectId: table.projectId,
+        workspaceId: projects.workspaceId,
+        keyPrefix: projects.keyPrefix,
+        issueKeyType: table.issueKeyType,
+        issueNumber: table.issueNumber,
+      })
+      .from(table)
+      .innerJoin(projects, eq(table.projectId, projects.id))
+      .where(
+        and(
+          eq(table.id, idOrKey),
+          eq(projects.workspaceId, requestedProject.workspaceId),
+        ),
+      )
+      .limit(1);
+
+    if (entityRow) {
+      // Entity exists in the same workspace but different project
+      assertFilterEntityInProject({
+        entityType,
+        entityRow,
+        requestedProject,
+        idOrKey,
       });
     }
-    
-    return entityId;
-  } catch (error) {
-    // If resolveEntityId couldn't find it at all, re-throw that error unchanged
-    if (error instanceof AppError && error.code === 'ISSUE_KEY_NOT_FOUND') {
-      // Try to improve the error message if it's the misleading "No project found" one
-      if (error.message.includes('No project found for key prefix')) {
-        throw new AppError({
-          code: 'ENTITY_NOT_FOUND',
-          message: `${entityType.charAt(0).toUpperCase() + entityType.slice(1).replace('_', ' ')} ${idOrKey} not found`,
-          statusCode: 404,
-        });
-      }
-    }
+
+    // Entity doesn't exist in this workspace at all - return the original not-found error
     throw error;
   }
 }
