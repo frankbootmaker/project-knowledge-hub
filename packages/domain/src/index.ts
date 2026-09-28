@@ -15,6 +15,8 @@ export {
   knowledgeSourceTypeSchema,
   getRecordTypeDefinition,
   buildKnowledgeRecordMetadata,
+  createKnowledgeRecordInputSchema,
+  updateKnowledgeRecordInputSchema,
   type RecordType,
   type RecordTypeCategory,
   type RecordTypeDefinition,
@@ -24,6 +26,8 @@ export {
   type FieldRequirement,
   type KnowledgeRecordFieldGuide,
   type KnowledgeRecordMetadata,
+  type CreateKnowledgeRecordInput,
+  type UpdateKnowledgeRecordInput,
 } from './record-types.js';
 
 export {

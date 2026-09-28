@@ -4,6 +4,8 @@ import {
   RECORD_TYPE_CATALOG,
   buildKnowledgeRecordMetadata,
   recordTypeSchema,
+  createKnowledgeRecordInputSchema,
+  updateKnowledgeRecordInputSchema,
 } from './record-types.js';
 
 describe('record types catalog', () => {
@@ -124,6 +126,19 @@ describe('record types catalog', () => {
         expect(meta.updateKnowledgeRecord.optionalFields).toContain(field.name);
       }
     }
+    
+    // PRO-T-4: update guide should include ignored_on_mcp_write fields
+    const lifecycleStatusField = meta.updateKnowledgeRecord.fields.find(
+      (f) => f.name === 'lifecycleStatus',
+    );
+    expect(lifecycleStatusField).toBeDefined();
+    expect(lifecycleStatusField?.requirement).toBe('ignored_on_mcp_write');
+    
+    const sourceOfTruthModeField = meta.updateKnowledgeRecord.fields.find(
+      (f) => f.name === 'sourceOfTruthMode',
+    );
+    expect(sourceOfTruthModeField).toBeDefined();
+    expect(sourceOfTruthModeField?.requirement).toBe('ignored_on_mcp_write');
   });
 
   it('buildKnowledgeRecordMetadata create guide requirement values are correct', () => {
@@ -146,6 +161,124 @@ describe('record types catalog', () => {
       } else if (field.requirement === 'optional') {
         expect(meta.createKnowledgeRecord.optionalFields).toContain(field.name);
       }
+    }
+  });
+
+  it('PRO-T-4: create guide matches createKnowledgeRecordInputSchema', () => {
+    const meta = buildKnowledgeRecordMetadata();
+    const schemaShape = createKnowledgeRecordInputSchema.shape;
+    
+    // Fields that are deliberately excluded from the guide
+    const excludedFromGuide = new Set<string>([
+      // None currently excluded for create
+    ]);
+    
+    // Fields that MCP ignores (documented but not in the tool schema)
+    const ignoredOnMcpWrite = new Set<string>([
+      'lifecycleStatus',
+      'sourceOfTruthMode',
+    ]);
+    
+    // Every schema property should appear in the guide (except excluded or ignored)
+    for (const fieldName of Object.keys(schemaShape)) {
+      if (excludedFromGuide.has(fieldName)) continue;
+      const field = meta.createKnowledgeRecord.fields.find(
+        (f) => f.name === fieldName,
+      );
+      expect(field, `Schema field "${fieldName}" should be in guide fields`).toBeDefined();
+      
+      // Check required/optional status matches
+      const zodField = schemaShape[fieldName as keyof typeof schemaShape];
+      const isOptional = zodField.isOptional();
+      
+      if (isOptional) {
+        expect(field?.requirement, `Field "${fieldName}" should be optional`).toBe('optional');
+        expect(
+          meta.createKnowledgeRecord.optionalFields,
+          `Optional field "${fieldName}" should be in optionalFields list`,
+        ).toContain(fieldName);
+      } else {
+        expect(field?.requirement, `Field "${fieldName}" should be required`).toBe('required');
+        expect(
+          meta.createKnowledgeRecord.requiredFields,
+          `Required field "${fieldName}" should be in requiredFields list`,
+        ).toContain(fieldName);
+      }
+    }
+    
+    // Every guide field with requirement required/optional should exist in schema or be ignored
+    for (const field of meta.createKnowledgeRecord.fields) {
+      if (field.requirement === 'ignored_on_mcp_write') {
+        expect(
+          ignoredOnMcpWrite.has(field.name),
+          `Ignored field "${field.name}" should be in ignoredOnMcpWrite set`,
+        ).toBe(true);
+        continue;
+      }
+      
+      expect(
+        schemaShape,
+        `Guide field "${field.name}" should exist in schema`,
+      ).toHaveProperty(field.name);
+    }
+  });
+
+  it('PRO-T-4: update guide matches updateKnowledgeRecordInputSchema', () => {
+    const meta = buildKnowledgeRecordMetadata();
+    const schemaShape = updateKnowledgeRecordInputSchema.shape;
+    
+    // Fields that are deliberately excluded from the guide
+    const excludedFromGuide = new Set<string>([
+      // None currently excluded for update
+    ]);
+    
+    // Fields that MCP ignores (documented but not in the tool schema)
+    const ignoredOnMcpWrite = new Set<string>([
+      'lifecycleStatus',
+      'sourceOfTruthMode',
+    ]);
+    
+    // Every schema property should appear in the guide (except excluded or ignored)
+    for (const fieldName of Object.keys(schemaShape)) {
+      if (excludedFromGuide.has(fieldName)) continue;
+      const field = meta.updateKnowledgeRecord.fields.find(
+        (f) => f.name === fieldName,
+      );
+      expect(field, `Schema field "${fieldName}" should be in guide fields`).toBeDefined();
+      
+      // Check required/optional status matches
+      const zodField = schemaShape[fieldName as keyof typeof schemaShape];
+      const isOptional = zodField.isOptional();
+      
+      if (isOptional) {
+        expect(field?.requirement, `Field "${fieldName}" should be optional`).toBe('optional');
+        expect(
+          meta.updateKnowledgeRecord.optionalFields,
+          `Optional field "${fieldName}" should be in optionalFields list`,
+        ).toContain(fieldName);
+      } else {
+        expect(field?.requirement, `Field "${fieldName}" should be required`).toBe('required');
+        expect(
+          meta.updateKnowledgeRecord.requiredFields,
+          `Required field "${fieldName}" should be in requiredFields list`,
+        ).toContain(fieldName);
+      }
+    }
+    
+    // Every guide field with requirement required/optional should exist in schema or be ignored
+    for (const field of meta.updateKnowledgeRecord.fields) {
+      if (field.requirement === 'ignored_on_mcp_write') {
+        expect(
+          ignoredOnMcpWrite.has(field.name),
+          `Ignored field "${field.name}" should be in ignoredOnMcpWrite set`,
+        ).toBe(true);
+        continue;
+      }
+      
+      expect(
+        schemaShape,
+        `Guide field "${field.name}" should exist in schema`,
+      ).toHaveProperty(field.name);
     }
   });
 });
