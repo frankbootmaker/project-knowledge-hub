@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   knowledgeRecords,
@@ -264,6 +264,7 @@ export async function resolveEntityId(
     entityType: ResolvableEntityType;
     idOrKey: string;
     projectId?: string;
+    workspaceIds?: string[];
   },
 ): Promise<string> {
   const raw = input.idOrKey.trim();
@@ -328,21 +329,33 @@ export async function resolveEntityId(
   if (input.projectId) {
     projectConditions.push(eq(projects.id, input.projectId));
   }
-  const [project] = await database.db
+  if (input.workspaceIds && input.workspaceIds.length > 0) {
+    projectConditions.push(inArray(projects.workspaceId, input.workspaceIds));
+  }
+  const candidates = await database.db
     .select({
       id: projects.id,
       keyPrefix: projects.keyPrefix,
+      workspaceId: projects.workspaceId,
     })
     .from(projects)
     .where(and(...projectConditions))
-    .limit(1);
-  if (!project) {
+    .limit(2);
+  if (candidates.length === 0) {
     throw new AppError({
       code: 'ISSUE_KEY_NOT_FOUND',
       message: `No project found for key prefix ${parsed.prefix}`,
       statusCode: 404,
     });
   }
+  if (candidates.length > 1) {
+    throw new AppError({
+      code: 'ISSUE_KEY_AMBIGUOUS',
+      message: `Key prefix ${parsed.prefix} matches multiple projects. Please use the full UUID instead.`,
+      statusCode: 400,
+    });
+  }
+  const project = candidates[0]!;
 
   const type = parsed.issueKeyType;
   const number = parsed.issueNumber;
@@ -462,6 +475,7 @@ export async function resolveKnowledgeRecordId(
     idOrKey: string;
     projectId?: string;
     workspaceId?: string;
+    workspaceIds?: string[];
   },
 ): Promise<string> {
   const raw = input.idOrKey.trim();
@@ -487,18 +501,29 @@ export async function resolveKnowledgeRecordId(
   if (input.workspaceId) {
     projectConditions.push(eq(projects.workspaceId, input.workspaceId));
   }
-  const [project] = await database.db
-    .select({ id: projects.id })
+  if (input.workspaceIds && input.workspaceIds.length > 0) {
+    projectConditions.push(inArray(projects.workspaceId, input.workspaceIds));
+  }
+  const candidates = await database.db
+    .select({ id: projects.id, workspaceId: projects.workspaceId })
     .from(projects)
     .where(and(...projectConditions))
-    .limit(1);
-  if (!project) {
+    .limit(2);
+  if (candidates.length === 0) {
     throw new AppError({
       code: 'ISSUE_KEY_NOT_FOUND',
       message: `No project found for key prefix ${parsed.prefix}`,
       statusCode: 404,
     });
   }
+  if (candidates.length > 1) {
+    throw new AppError({
+      code: 'ISSUE_KEY_AMBIGUOUS',
+      message: `Key prefix ${parsed.prefix} matches multiple projects. Please use the full UUID instead.`,
+      statusCode: 400,
+    });
+  }
+  const project = candidates[0]!
 
   const conditions = [
     eq(knowledgeRecords.projectId, project.id),

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **PRO-T-3: Human key resolution workspace scoping:** Project key prefixes (e.g. `CSA`, `PNZ`) are enforced unique only within a workspace, but human key resolution (document keys like `CSA-CONV-1`, task keys `WEB-T-15`, epic keys, milestone/sprint keys, RAID keys, change keys) now properly scopes to the caller's accessible workspaces. Previously, when two projects in different workspaces shared a prefix, key lookups would silently pick the first match globally, causing "not found" errors when the matched project was inaccessible. Resolution now returns a clear "ambiguous key" error when multiple projects match across accessible workspaces, and succeeds when scoped to one workspace. Affects all MCP tools and REST API endpoints that accept human keys: `get_knowledge_record`, `get_record_provenance`, `list_record_translations`, `create_record_translation`, `update_knowledge_record`, `get_project_task`, `update_project_task`, `update_project_milestone`, `update_project_sprint`, `update_project_epic`, `update_project_user_story`, `update_project_raid_item`, `transfer_project_raid_item`, and all other delivery entity operations accepting human keys. No database migration required; existing duplicate prefixes across workspaces remain valid.
+
 ### Added
 
 * **Admin SSO settings:** Admin → SSO (`/admin/sso`) stores OIDC issuer, client id/secret, button label, IdP source, optional redirect URI, enable toggle, and JIT in `platform_settings` (`oidc_config`). Values override `OIDC_*` env at request time (no rebuild/restart). GET never returns the secret. “Reset to .env” clears the override. Login status/start/callback use the resolved config. Briefs [`OIDC_IDP.md`](product/OIDC_IDP.md), [`OIDC_AUTHENTIK_INTEGRATION_GUIDE.md`](product/OIDC_AUTHENTIK_INTEGRATION_GUIDE.md).

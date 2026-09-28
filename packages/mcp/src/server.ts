@@ -993,7 +993,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including truncated markdown content and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    'Retrieve a knowledge record including truncated markdown content and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2). When using a human key, if the prefix matches multiple projects across accessible workspaces, returns an ambiguous key error; use the full UUID instead.',
     { recordId: z.string().min(1).max(80) },
     async (args) =>
       wrap(
@@ -1006,7 +1006,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_record_provenance',
-    'Retrieve verification and source provenance for a knowledge record. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    'Retrieve verification and source provenance for a knowledge record. recordId may be a UUID or project document key (e.g. HL1-VIS-2). When using a human key, if the prefix matches multiple projects across accessible workspaces, returns an ambiguous key error; use the full UUID instead.',
     { recordId: entityRef },
     async (args) =>
       wrap(
@@ -1280,7 +1280,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_task',
-    'Get one project task with RACI. taskId may be a UUID or human key (e.g. HL1-T-12). Requires pm:read.',
+    'Get one project task with RACI. taskId may be a UUID or human key (e.g. HL1-T-12). When using a human key, if the prefix matches multiple projects across accessible workspaces, returns an ambiguous key error; use the full UUID instead. Requires pm:read.',
     { taskId: entityRef },
     async (args) =>
       wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
