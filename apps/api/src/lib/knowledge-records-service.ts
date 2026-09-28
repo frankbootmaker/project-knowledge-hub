@@ -905,6 +905,55 @@ export function translationSlug(sourceSlug: string, language: string): string {
   return slugify(`${base}${suffix}`) || `record${suffix}`.slice(0, SLUG_MAX_LENGTH);
 }
 
+/**
+ * Resolve translation provenance based on caller type and AI translation status.
+ * Exported for testing.
+ */
+export function resolveTranslationProvenance(params: {
+  provenance?: {
+    sourceOfTruthMode: z.infer<typeof sourceOfTruthModeSchema>;
+    source: SourceInput;
+  };
+  translateWithAi: boolean;
+  generatedByModel: string | null;
+  sourceSlug: string;
+  sourceId: string;
+}): {
+  sourceOfTruthMode: z.infer<typeof sourceOfTruthModeSchema>;
+  source: SourceInput;
+} {
+  if (params.provenance) {
+    // MCP path: use provided provenance, but preserve actual AI translation model when applicable
+    return {
+      sourceOfTruthMode: params.provenance.sourceOfTruthMode,
+      source: {
+        ...params.provenance.source,
+        // Server-computed AI translation model wins over client-supplied value
+        generatedByModel:
+          params.translateWithAi && params.generatedByModel
+            ? params.generatedByModel
+            : params.provenance.source.generatedByModel ?? null,
+        // Always preserve sourceReference for translations
+        sourceReference: params.sourceId,
+      },
+    };
+  } else {
+    // REST/web UI path: use defaults based on translateWithAi
+    return {
+      sourceOfTruthMode: 'hub_managed',
+      source: {
+        sourceType: params.translateWithAi ? 'conversation' : 'manual',
+        sourceProvider: params.translateWithAi ? 'vision_llm' : 'project-knowledge-hub',
+        sourceTitle: params.translateWithAi
+          ? `AI translation of ${params.sourceSlug}`
+          : `Translation of ${params.sourceSlug}`,
+        sourceReference: params.sourceId,
+        generatedByModel: params.generatedByModel,
+      },
+    };
+  }
+}
+
 async function allocateUniqueRecordSlug(
   database: Database,
   workspaceId: string,
@@ -1152,30 +1201,14 @@ export async function createRecordTranslation(
     (await getKnowledgeRecordTags(app.database, [source.id])).get(source.id) ?? [];
 
   // Determine provenance: MCP callers supply it via options, REST/web UI use defaults.
-  let finalSourceOfTruthMode: z.infer<typeof sourceOfTruthModeSchema>;
-  let finalSource: SourceInput;
-
-  if (options?.provenance) {
-    // MCP path: use provided provenance, but preserve actual AI translation model when applicable
-    finalSourceOfTruthMode = options.provenance.sourceOfTruthMode;
-    finalSource = {
-      ...options.provenance.source,
-      // Server-computed AI translation model wins over client-supplied value
-      generatedByModel: translateWithAi && generatedByModel ? generatedByModel : options.provenance.source.generatedByModel ?? null,
-    };
-  } else {
-    // REST/web UI path: use defaults based on translateWithAi
-    finalSourceOfTruthMode = 'hub_managed';
-    finalSource = {
-      sourceType: translateWithAi ? 'conversation' : 'manual',
-      sourceProvider: translateWithAi ? 'vision_llm' : 'project-knowledge-hub',
-      sourceTitle: translateWithAi
-        ? `AI translation of ${source.slug}`
-        : `Translation of ${source.slug}`,
-      sourceReference: source.id,
+  const { sourceOfTruthMode: finalSourceOfTruthMode, source: finalSource } =
+    resolveTranslationProvenance({
+      provenance: options?.provenance,
+      translateWithAi,
       generatedByModel,
-    };
-  }
+      sourceSlug: source.slug,
+      sourceId: source.id,
+    });
 
   const result = await createKnowledgeRecord(
     app,

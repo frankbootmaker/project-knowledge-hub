@@ -364,7 +364,10 @@ async function resolveWorkspaceFilter(
  * Build MCP provenance source for knowledge records and translations.
  * Centralizes the conversation/mcp source structure used across create/translate handlers.
  */
-function mcpSource(input: { sourceTitle?: string; generatedByModel?: string }): {
+function mcpSource(
+  input: { sourceTitle?: string; generatedByModel?: string },
+  defaultTitle = 'Created via MCP',
+): {
   sourceType: 'conversation';
   sourceProvider: 'mcp';
   sourceTitle: string;
@@ -373,7 +376,7 @@ function mcpSource(input: { sourceTitle?: string; generatedByModel?: string }): 
   return {
     sourceType: 'conversation',
     sourceProvider: 'mcp',
-    sourceTitle: input.sourceTitle ?? 'Created via MCP',
+    sourceTitle: input.sourceTitle ?? defaultTitle,
     generatedByModel: input.generatedByModel ?? null,
   };
 }
@@ -1284,7 +1287,7 @@ export function createMcpToolHandlers(
               }),
           source:
             input.generatedByModel !== undefined || input.sourceTitle !== undefined
-              ? mcpSource(input)
+              ? mcpSource(input, 'Updated via MCP')
               : undefined,
         },
         {
