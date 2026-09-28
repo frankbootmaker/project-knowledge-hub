@@ -86,6 +86,8 @@ export const users = pgTable(
     /** Formal / legal name; UI may fall back to displayName when null. */
     fullName: text('full_name'),
     passwordHash: text('password_hash'),
+    /** User category: 'human' (default) or 'system' (service accounts). */
+    userType: text('user_type').notNull().default('human'),
     status: text('status').notNull().default('active'),
     isSystemAdmin: boolean('is_system_admin').notNull().default(false),
     /** Future SSO provider key (oidc, entra, github, keycloak, …). */
