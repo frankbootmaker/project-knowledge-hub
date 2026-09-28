@@ -395,6 +395,78 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     return { user: updated ? toPublicUser(updated) : null };
   });
 
+  app.post('/api/v1/users/:userId/change-category', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+    const body = z.object({
+      userType: z.enum(['human', 'system']),
+    }).parse(request.body);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, params.userId))
+      .limit(1);
+
+    if (!existing) {
+      throw new AppError({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      });
+    }
+
+    if (existing.userType === body.userType) {
+      throw new AppError({
+        code: 'USER_CATEGORY_UNCHANGED',
+        message: `User is already a ${body.userType} user`,
+        statusCode: 400,
+      });
+    }
+
+    // Additional validation: changing to system requires no password/active status
+    if (body.userType === 'system') {
+      if (existing.status !== 'active') {
+        throw new AppError({
+          code: 'USER_MUST_BE_ACTIVE',
+          message: 'Only active users can be converted to system users',
+          statusCode: 400,
+        });
+      }
+    }
+
+    const [updated] = await app.database.db
+      .update(users)
+      .set({
+        userType: body.userType,
+        // Clear password when converting to system user
+        passwordHash: body.userType === 'system' ? null : existing.passwordHash,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, params.userId))
+      .returning();
+
+    const organization = await getDefaultOrganization(app.database);
+    await writeAuditEvent(app.database, {
+      organizationId: organization?.id ?? null,
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'user.change_category',
+      entityType: 'user',
+      entityId: params.userId,
+      metadata: {
+        from: existing.userType,
+        to: body.userType,
+        email: existing.email,
+      },
+      ipAddress: request.ip,
+    });
+
+    return { user: updated ? toPublicUser(updated) : null };
+  });
+
   app.post('/api/v1/users/:userId/approve', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
