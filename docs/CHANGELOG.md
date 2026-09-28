@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **PRO-T-6: Consistent numeric field types in MCP tools:** All money, rate, and hour fields (`initialBudget`, `approvedBudget`, `itBudgetAllocation`, `hourlyRate`, `forecastHours`, `actualHours`, `allocatedDailyHours`, `contractedBudget`, etc.) now consistently return as JSON numbers from all MCP read and write tools. Previously, PostgreSQL `numeric` columns were returned as strings from some tools (e.g., `get_project`, `get_system`, `list_project_stakeholders`) while other tools (e.g., `get_project_budget_summary`) returned numbers, causing type mismatches for LLM and MCP clients. Fixed by configuring Drizzle numeric columns with `mode: 'number'` and updating all DTOs and parsers.
+
 ### Added
 
 * **Admin SSO settings:** Admin → SSO (`/admin/sso`) stores OIDC issuer, client id/secret, button label, IdP source, optional redirect URI, enable toggle, and JIT in `platform_settings` (`oidc_config`). Values override `OIDC_*` env at request time (no rebuild/restart). GET never returns the secret. “Reset to .env” clears the override. Login status/start/callback use the resolved config. Briefs [`OIDC_IDP.md`](product/OIDC_IDP.md), [`OIDC_AUTHENTIK_INTEGRATION_GUIDE.md`](product/OIDC_AUTHENTIK_INTEGRATION_GUIDE.md).

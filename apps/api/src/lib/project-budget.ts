@@ -105,14 +105,9 @@ export type ProjectBudgetSummary = {
   epics: EpicBudgetRollup[];
 };
 
-function parseNumeric(value: string | null | undefined): number | null {
-  if (value == null || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function moneyString(value: number): string {
-  return value.toFixed(2);
+function parseNumeric(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  return Number.isFinite(value) ? value : null;
 }
 
 function todayYmd(now = new Date()): string {
@@ -581,8 +576,8 @@ function rollupEpics(
 export function computeEvmFromCosts(
   project: {
     currency: string;
-    initialBudget: string | null;
-    approvedBudget: string | null;
+    initialBudget: number | null;
+    approvedBudget: number | null;
     startDate: string | null;
     endDate: string | null;
   },
@@ -682,10 +677,10 @@ export async function upsertProjectCostSnapshot(
     await database.db
       .update(projectCostSnapshots)
       .set({
-        bac: moneyString(merged.bac),
-        pv: merged.pv == null ? null : moneyString(merged.pv),
-        ev: moneyString(merged.ev),
-        ac: moneyString(merged.ac),
+        bac: merged.bac,
+        pv: merged.pv,
+        ev: merged.ev,
+        ac: merged.ac,
         updatedAt: new Date(),
       })
       .where(eq(projectCostSnapshots.id, existing.id));
@@ -695,10 +690,10 @@ export async function upsertProjectCostSnapshot(
   await database.db.insert(projectCostSnapshots).values({
     projectId,
     capturedOn,
-    bac: moneyString(merged.bac),
-    pv: merged.pv == null ? null : moneyString(merged.pv),
-    ev: moneyString(merged.ev),
-    ac: moneyString(merged.ac),
+    bac: merged.bac,
+    pv: merged.pv,
+    ev: merged.ev,
+    ac: merged.ac,
   });
 }
 
@@ -766,7 +761,7 @@ export async function getProjectBudgetSummary(
 /** Returns `undefined` when input is omitted (leave column unchanged). */
 export function parseBudgetAmount(
   value: number | string | null | undefined,
-): string | null | undefined {
+): number | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
   const n = typeof value === 'number' ? value : Number(value);
@@ -777,13 +772,13 @@ export function parseBudgetAmount(
       statusCode: 400,
     });
   }
-  return moneyString(n);
+  return n;
 }
 
 /** Returns `undefined` when input is omitted (leave column unchanged). */
 export function parseHours(
   value: number | string | null | undefined,
-): string | null | undefined {
+): number | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
   const n = typeof value === 'number' ? value : Number(value);
@@ -794,12 +789,12 @@ export function parseHours(
       statusCode: 400,
     });
   }
-  return moneyString(n);
+  return n;
 }
 
 export function parseTokenRate(
   value: number | string | null | undefined,
-): string | null | undefined {
+): number | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
   const n = typeof value === 'number' ? value : Number(value);
@@ -810,7 +805,7 @@ export function parseTokenRate(
       statusCode: 400,
     });
   }
-  return n.toFixed(4);
+  return n;
 }
 
 export async function assertProjectCurrency(

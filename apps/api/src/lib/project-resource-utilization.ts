@@ -44,10 +44,9 @@ export type ProjectResourceUtilization = {
   };
 };
 
-function parseNumeric(value: string | null | undefined): number | null {
-  if (value == null || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+function parseNumeric(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  return Number.isFinite(value) ? value : null;
 }
 
 function parseYmd(value: string): number {
