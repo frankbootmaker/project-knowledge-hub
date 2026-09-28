@@ -170,9 +170,9 @@ export async function allocateIssueNumber(
     });
   }
 
-  const executor = tx ?? database.db;
+  type DbExecutor = typeof database.db;
 
-  const allocate = async (dbTx: typeof executor) => {
+  const allocate = async (dbTx: DbExecutor) => {
     const [project] = await dbTx
       .select({
         id: projects.id,

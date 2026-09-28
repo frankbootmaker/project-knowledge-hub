@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import { allocateIssueNumber } from './project-issue-keys.js';
 import type { Database } from '@project-knowledge-hub/database';
 
@@ -37,6 +37,7 @@ describe('allocateIssueNumber transactional behavior', () => {
       mockDatabase,
       'project-123',
       'T',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockTx as any,
     );
 
@@ -124,7 +125,13 @@ describe('allocateIssueNumber transactional behavior', () => {
     } as unknown as Database;
 
     await expect(
-      allocateIssueNumber(mockDatabase, 'project-123', 'T', mockTx as any),
+      allocateIssueNumber(
+        mockDatabase,
+        'project-123',
+        'T',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockTx as any,
+      ),
     ).rejects.toThrow('Insert failed');
   });
 });
