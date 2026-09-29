@@ -3,6 +3,10 @@ import type { FastifyInstance } from 'fastify';
 import {
   knowledgeRecords,
   knowledgeSources,
+  projectEpics,
+  projectMilestones,
+  projectSprints,
+  projectUserStories,
   projects,
   systems,
   users,
@@ -16,8 +20,12 @@ import {
   changeStatusSchema,
   deliveryLinkEntityTypeSchema,
   epicStatusSchema,
+  formatHumanKey,
+  isUuid,
   milestoneStatusSchema,
   aiCostModeSchema,
+  normalizeKeyPrefix,
+  parseHumanKey,
   projectCurrencySchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
@@ -208,6 +216,274 @@ async function resolveDeliveryEntityRef(
   workspaceIds?: string[],
 ): Promise<string> {
   return resolveEntityId(database, { entityType, idOrKey, projectId, workspaceIds });
+}
+
+type FilterEntityType = 'milestone' | 'sprint' | 'epic' | 'user_story';
+
+type EntityRow = {
+  projectId: string;
+  workspaceId: string;
+  keyPrefix: string | null;
+  issueKeyType: string | null;
+  issueNumber: number | null;
+};
+
+type RequestedProject = {
+  id: string;
+  workspaceId: string;
+  keyPrefix: string | null;
+  name: string;
+};
+
+export type { FilterEntityType, EntityRow, RequestedProject };
+
+const ENTITY_TYPE_LABELS: Record<FilterEntityType, string> = {
+  milestone: 'Milestone',
+  sprint: 'Sprint',
+  epic: 'Epic',
+  user_story: 'User story',
+};
+
+/**
+ * Pure validation function: checks if an entity belongs to the requested project.
+ * Throws a clear error if the entity exists but belongs to a different project in the same workspace,
+ * or returns a generic not-found error if the entity is in a different workspace (information leak prevention).
+ */
+export function assertFilterEntityInProject(input: {
+  entityType: FilterEntityType;
+  entityRow: EntityRow;
+  requestedProject: RequestedProject;
+  idOrKey: string;
+}): void {
+  const { entityType, entityRow, requestedProject, idOrKey } = input;
+
+  if (entityRow.projectId === requestedProject.id) {
+    // Entity belongs to the requested project - OK
+    return;
+  }
+
+  // Check if entity is in a different workspace - must not reveal it exists
+  if (entityRow.workspaceId !== requestedProject.workspaceId) {
+    throw new AppError({
+      code: 'ENTITY_NOT_FOUND',
+      message: `${ENTITY_TYPE_LABELS[entityType]} ${idOrKey} not found in project ${requestedProject.keyPrefix || requestedProject.name}`,
+      statusCode: 404,
+    });
+  }
+
+  // Entity is in the same workspace but different project - provide clear validation error
+  const entityHumanKey = formatHumanKey(
+    entityRow.keyPrefix,
+    entityRow.issueKeyType,
+    entityRow.issueNumber,
+  );
+
+  throw new AppError({
+    code: 'ENTITY_NOT_IN_PROJECT',
+    message: `${ENTITY_TYPE_LABELS[entityType]} ${entityHumanKey || idOrKey} does not belong to project ${requestedProject.keyPrefix || requestedProject.name}`,
+    statusCode: 400,
+  });
+}
+
+/**
+ * Resolve and validate a filter entity (milestone, sprint, epic, user story) for list/create/update operations.
+ * Provides clear error messages when an entity exists but belongs to a different project, and prevents
+ * cross-workspace information leaks.
+ */
+export async function resolveFilterEntity(
+  database: Parameters<typeof resolveEntityId>[0],
+  input: {
+    entityType: FilterEntityType;
+    idOrKey: string;
+    requestedProjectId: string;
+  },
+): Promise<string> {
+  const { entityType, idOrKey, requestedProjectId } = input;
+
+  // Load the requested project once
+  const [requestedProject] = await database.db
+    .select({
+      id: projects.id,
+      workspaceId: projects.workspaceId,
+      keyPrefix: projects.keyPrefix,
+      name: projects.name,
+    })
+    .from(projects)
+    .where(eq(projects.id, requestedProjectId))
+    .limit(1);
+
+  if (!requestedProject) {
+    throw new AppError({
+      code: 'PROJECT_NOT_FOUND',
+      message: 'Project not found',
+      statusCode: 404,
+    });
+  }
+
+  const tableMap: Record<FilterEntityType, typeof projectMilestones> = {
+    milestone: projectMilestones,
+    sprint: projectSprints,
+    epic: projectEpics,
+    user_story: projectUserStories,
+  };
+
+  const table = tableMap[entityType];
+
+  // Branch 1: UUID input
+  if (isUuid(idOrKey)) {
+    const [entityRow] = await database.db
+      .select({
+        id: table.id,
+        projectId: table.projectId,
+        workspaceId: projects.workspaceId,
+        keyPrefix: projects.keyPrefix,
+        issueKeyType: table.issueKeyType,
+        issueNumber: table.issueNumber,
+      })
+      .from(table)
+      .innerJoin(projects, eq(table.projectId, projects.id))
+      .where(eq(table.id, idOrKey))
+      .limit(1);
+
+    if (!entityRow) {
+      // UUID doesn't exist at all
+      throw new AppError({
+        code: 'ENTITY_NOT_FOUND',
+        message: `${ENTITY_TYPE_LABELS[entityType]} ${idOrKey} not found in project ${requestedProject.keyPrefix || requestedProject.name}`,
+        statusCode: 404,
+      });
+    }
+
+    if (entityRow.workspaceId !== requestedProject.workspaceId) {
+      // UUID exists in a different workspace - don't reveal it exists
+      throw new AppError({
+        code: 'ENTITY_NOT_FOUND',
+        message: `${ENTITY_TYPE_LABELS[entityType]} ${idOrKey} not found in project ${requestedProject.keyPrefix || requestedProject.name}`,
+        statusCode: 404,
+      });
+    }
+
+    if (entityRow.projectId === requestedProject.id) {
+      // UUID is in the requested project - OK
+      return entityRow.id;
+    }
+
+    // UUID is in a different project in the same workspace
+    assertFilterEntityInProject({
+      entityType,
+      entityRow,
+      requestedProject,
+      idOrKey,
+    });
+
+    // assertFilterEntityInProject always throws, but TypeScript doesn't know that
+    throw new Error('unreachable');
+  }
+
+  // Branch 2: Human key input
+  try {
+    // First try scoped resolution
+    return await resolveEntityId(database, {
+      entityType,
+      idOrKey,
+      projectId: requestedProjectId,
+    });
+  } catch (error) {
+    if (!(error instanceof AppError)) {
+      throw error;
+    }
+
+    // Pass through validation errors unchanged
+    if (
+      error.code === 'ISSUE_KEY_INVALID' ||
+      error.code === 'ISSUE_KEY_TYPE_MISMATCH'
+    ) {
+      throw error;
+    }
+
+    // Handle not-found errors
+    if (error.code === 'ISSUE_KEY_NOT_FOUND') {
+      // Parse the human key
+      const parsed = parseHumanKey(idOrKey);
+      if (!parsed) {
+        // Invalid format - throw a clear error instead of the misleading message
+        throw new AppError({
+          code: 'ENTITY_NOT_FOUND',
+          message: `${ENTITY_TYPE_LABELS[entityType]} ${idOrKey} not found in project ${requestedProject.keyPrefix || requestedProject.name}`,
+          statusCode: 404,
+        });
+      }
+
+      // Look up a project in the same workspace with matching key prefix
+      const [foreignProject] = await database.db
+        .select({
+          id: projects.id,
+          workspaceId: projects.workspaceId,
+          keyPrefix: projects.keyPrefix,
+        })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.workspaceId, requestedProject.workspaceId),
+            sql`upper(${projects.keyPrefix}) = ${normalizeKeyPrefix(parsed.prefix)}`,
+          ),
+        )
+        .limit(1);
+
+      if (!foreignProject) {
+        // Prefix doesn't exist in this workspace at all
+        throw new AppError({
+          code: 'ENTITY_NOT_FOUND',
+          message: `${ENTITY_TYPE_LABELS[entityType]} ${idOrKey} not found in project ${requestedProject.keyPrefix || requestedProject.name}`,
+          statusCode: 404,
+        });
+      }
+
+      // Look up the entity in that project
+      const [entityRow] = await database.db
+        .select({
+          id: table.id,
+          projectId: table.projectId,
+          workspaceId: projects.workspaceId,
+          keyPrefix: projects.keyPrefix,
+          issueKeyType: table.issueKeyType,
+          issueNumber: table.issueNumber,
+        })
+        .from(table)
+        .innerJoin(projects, eq(table.projectId, projects.id))
+        .where(
+          and(
+            eq(table.projectId, foreignProject.id),
+            eq(table.issueKeyType, parsed.issueKeyType),
+            eq(table.issueNumber, parsed.issueNumber),
+          ),
+        )
+        .limit(1);
+
+      if (!entityRow) {
+        // Entity doesn't exist with that number in the foreign project
+        throw new AppError({
+          code: 'ENTITY_NOT_FOUND',
+          message: `${ENTITY_TYPE_LABELS[entityType]} ${idOrKey} not found in project ${requestedProject.keyPrefix || requestedProject.name}`,
+          statusCode: 404,
+        });
+      }
+
+      // Entity exists in a different project in the same workspace
+      assertFilterEntityInProject({
+        entityType,
+        entityRow,
+        requestedProject,
+        idOrKey,
+      });
+
+      // assertFilterEntityInProject always throws
+      throw new Error('unreachable');
+    }
+
+    // Unknown error - rethrow
+    throw error;
+  }
 }
 
 async function resolveOptionalKnowledgeRecordId(
@@ -1636,20 +1912,20 @@ export function createMcpToolHandlers(
         ? null
         : input.milestoneId;
       if (typeof milestoneId === 'string') {
-        milestoneId = await resolveEntityId(app.database, {
+        milestoneId = await resolveFilterEntity(app.database, {
           entityType: 'milestone',
           idOrKey: milestoneId,
-          projectId: input.projectId,
+          requestedProjectId: input.projectId,
         });
       }
       let sprintId: string | null | undefined = input.unassignedSprint
         ? null
         : input.sprintId;
       if (typeof sprintId === 'string') {
-        sprintId = await resolveEntityId(app.database, {
+        sprintId = await resolveFilterEntity(app.database, {
           entityType: 'sprint',
           idOrKey: sprintId,
-          projectId: input.projectId,
+          requestedProjectId: input.projectId,
         });
       }
       return {
@@ -2028,26 +2304,26 @@ export function createMcpToolHandlers(
       const milestoneId =
         input.milestoneId == null
           ? input.milestoneId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'milestone',
               idOrKey: input.milestoneId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const userStoryId =
         input.userStoryId == null
           ? input.userStoryId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'user_story',
               idOrKey: input.userStoryId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const sprintId =
         input.sprintId == null
           ? input.sprintId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'sprint',
               idOrKey: input.sprintId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const task = await createTask(app.database, {
         projectId: project.id,
@@ -2121,26 +2397,26 @@ export function createMcpToolHandlers(
       const milestoneId =
         input.milestoneId === undefined || input.milestoneId === null
           ? input.milestoneId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'milestone',
               idOrKey: input.milestoneId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const userStoryId =
         input.userStoryId === undefined || input.userStoryId === null
           ? input.userStoryId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'user_story',
               idOrKey: input.userStoryId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const sprintId =
         input.sprintId === undefined || input.sprintId === null
           ? input.sprintId
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'sprint',
               idOrKey: input.sprintId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const task = await updateTask(app.database, taskId, {
         title: input.title,
@@ -2348,10 +2624,10 @@ export function createMcpToolHandlers(
     async listProjectUserStories(input) {
       await requirePmProject(app, client, input.projectId);
       const epicId = input.epicId
-        ? await resolveEntityId(app.database, {
+        ? await resolveFilterEntity(app.database, {
             entityType: 'epic',
             idOrKey: input.epicId,
-            projectId: input.projectId,
+            requestedProjectId: input.projectId,
           })
         : undefined;
       return {
@@ -2367,10 +2643,10 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
-      const epicId = await resolveEntityId(app.database, {
+      const epicId = await resolveFilterEntity(app.database, {
         entityType: 'epic',
         idOrKey: input.epicId,
-        projectId: project.id,
+        requestedProjectId: project.id,
       });
       const userStory = await createUserStory(app.database, {
         projectId: project.id,
@@ -2414,10 +2690,10 @@ export function createMcpToolHandlers(
       const epicId =
         input.epicId === undefined
           ? undefined
-          : await resolveEntityId(app.database, {
+          : await resolveFilterEntity(app.database, {
               entityType: 'epic',
               idOrKey: input.epicId,
-              projectId: project.id,
+              requestedProjectId: project.id,
             });
       const userStory = await updateUserStory(app.database, storyId, {
         title: input.title,
