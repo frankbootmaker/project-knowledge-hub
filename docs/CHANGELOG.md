@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **MCP list_record_metadata (PRO-T-4):** `updateKnowledgeRecord` guide now correctly marks `title`, `recordType`, and `contentMarkdown` as optional (not required), documents `recordId` and `archived` fields, and ensures field `requirement` values match the `requiredFields` / `optionalFields` lists and the `update_knowledge_record` tool schema.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.

@@ -403,42 +403,12 @@ export type KnowledgeRecordFieldGuide = {
   appliesTo: Array<'create' | 'update' | 'human_api'>;
 };
 
-const CREATE_FIELDS: KnowledgeRecordFieldGuide[] = [
-  {
-    name: 'workspaceId',
-    requirement: 'required',
-    description: 'Target workspace UUID (must be on the API client allowlist for writes).',
-    appliesTo: ['create'],
-  },
-  {
-    name: 'title',
-    requirement: 'required',
-    description: 'Human-readable title (1–300 chars).',
-    appliesTo: ['create', 'update'],
-  },
-  {
-    name: 'recordType',
-    requirement: 'required',
-    description: 'One of the catalog recordType values from this metadata payload.',
-    appliesTo: ['create', 'update'],
-  },
-  {
-    name: 'contentMarkdown',
-    requirement: 'required',
-    description: 'Markdown body of the record.',
-    appliesTo: ['create', 'update'],
-  },
+const SHARED_OPTIONAL_FIELDS: KnowledgeRecordFieldGuide[] = [
   {
     name: 'summary',
     requirement: 'optional',
     description: 'Short summary (≤1000 chars).',
     appliesTo: ['create', 'update'],
-  },
-  {
-    name: 'slug',
-    requirement: 'optional',
-    description: 'URL slug; auto-derived from title when omitted.',
-    appliesTo: ['create'],
   },
   {
     name: 'projectId',
@@ -483,12 +453,9 @@ const CREATE_FIELDS: KnowledgeRecordFieldGuide[] = [
     description: 'Human label for the originating conversation or document.',
     appliesTo: ['create', 'update'],
   },
-  {
-    name: 'changeMessage',
-    requirement: 'required',
-    description: 'Required on update: why the change was made.',
-    appliesTo: ['update'],
-  },
+];
+
+const IGNORED_ON_MCP_WRITE_FIELDS: KnowledgeRecordFieldGuide[] = [
   {
     name: 'lifecycleStatus',
     requirement: 'ignored_on_mcp_write',
@@ -503,6 +470,82 @@ const CREATE_FIELDS: KnowledgeRecordFieldGuide[] = [
       'Human/session API may set this. MCP writes always force ai_generated_draft.',
     appliesTo: ['human_api'],
   },
+];
+
+const CREATE_FIELDS: KnowledgeRecordFieldGuide[] = [
+  {
+    name: 'workspaceId',
+    requirement: 'required',
+    description: 'Target workspace UUID (must be on the API client allowlist for writes).',
+    appliesTo: ['create'],
+  },
+  {
+    name: 'title',
+    requirement: 'required',
+    description: 'Human-readable title (1–300 chars).',
+    appliesTo: ['create'],
+  },
+  {
+    name: 'recordType',
+    requirement: 'required',
+    description: 'One of the catalog recordType values from this metadata payload.',
+    appliesTo: ['create'],
+  },
+  {
+    name: 'contentMarkdown',
+    requirement: 'required',
+    description: 'Markdown body of the record.',
+    appliesTo: ['create'],
+  },
+  {
+    name: 'slug',
+    requirement: 'optional',
+    description: 'URL slug; auto-derived from title when omitted.',
+    appliesTo: ['create'],
+  },
+  ...SHARED_OPTIONAL_FIELDS,
+  ...IGNORED_ON_MCP_WRITE_FIELDS,
+];
+
+const UPDATE_FIELDS: KnowledgeRecordFieldGuide[] = [
+  {
+    name: 'recordId',
+    requirement: 'required',
+    description: 'UUID or project document key (e.g. HL1-VIS-2) of the record to update.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'changeMessage',
+    requirement: 'required',
+    description: 'Required on update: why the change was made.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'title',
+    requirement: 'optional',
+    description: 'Human-readable title (1–300 chars).',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'recordType',
+    requirement: 'optional',
+    description: 'One of the catalog recordType values from this metadata payload.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'contentMarkdown',
+    requirement: 'optional',
+    description: 'Markdown body of the record.',
+    appliesTo: ['update'],
+  },
+  ...SHARED_OPTIONAL_FIELDS,
+  {
+    name: 'archived',
+    requirement: 'optional',
+    description: 'Set true to soft-archive the record, or false to restore it.',
+    appliesTo: ['update'],
+  },
+  ...IGNORED_ON_MCP_WRITE_FIELDS,
 ];
 
 export type KnowledgeRecordMetadata = {
@@ -538,6 +581,164 @@ export type KnowledgeRecordMetadata = {
   };
   guidance: string[];
 };
+
+/**
+ * MCP tool input schemas for knowledge records.
+ * Single source of truth - used by packages/mcp/src/server.ts.
+ * These are intentionally more restrictive than the API schemas
+ * (no lifecycleStatus, sourceOfTruthMode, metadata, source fields).
+ */
+export const createKnowledgeRecordInputSchema = z.object({
+  workspaceId: z
+    .string()
+    .uuid()
+    .describe('Target workspace UUID (must be on the API client allowlist for writes).'),
+  title: z
+    .string()
+    .min(1)
+    .max(300)
+    .describe('Human-readable title (1–300 chars).'),
+  recordType: z
+    .string()
+    .min(1)
+    .max(64)
+    .describe('One of the catalog recordType values from list_record_metadata.'),
+  contentMarkdown: z
+    .string()
+    .max(500_000)
+    .describe('Markdown body of the record.'),
+  summary: z
+    .string()
+    .max(1000)
+    .optional()
+    .describe('Short summary (≤1000 chars).'),
+  slug: z
+    .string()
+    .min(1)
+    .max(96)
+    .optional()
+    .describe('URL slug; auto-derived from title when omitted.'),
+  projectId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe('Optional project UUID to scope the record.'),
+  systemId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe('Optional system UUID to scope the record.'),
+  tags: z
+    .array(z.string().min(1).max(64))
+    .max(30)
+    .optional()
+    .describe('Up to 30 tag strings.'),
+  language: z
+    .string()
+    .min(2)
+    .max(16)
+    .optional()
+    .describe('BCP 47 / short language code (e.g. en, de, hu).'),
+  translationGroupId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe('Optional UUID shared by translation siblings (same group id).'),
+  generatedByModel: z
+    .string()
+    .max(160)
+    .optional()
+    .describe('Model identifier for provenance (MCP conversation source).'),
+  sourceTitle: z
+    .string()
+    .max(300)
+    .optional()
+    .describe('Human label for the originating conversation or document.'),
+});
+
+export const updateKnowledgeRecordInputSchema = z.object({
+  recordId: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe('UUID or project document key (e.g. HL1-VIS-2) of the record to update.'),
+  changeMessage: z
+    .string()
+    .min(1)
+    .max(500)
+    .describe('Required: why the change was made.'),
+  title: z
+    .string()
+    .min(1)
+    .max(300)
+    .optional()
+    .describe('Human-readable title (1–300 chars).'),
+  summary: z
+    .string()
+    .max(1000)
+    .nullable()
+    .optional()
+    .describe('Short summary (≤1000 chars).'),
+  recordType: z
+    .string()
+    .min(1)
+    .max(64)
+    .optional()
+    .describe('One of the catalog recordType values from list_record_metadata.'),
+  contentMarkdown: z
+    .string()
+    .max(500_000)
+    .optional()
+    .describe('Markdown body of the record.'),
+  projectId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe('Optional project UUID to scope the record.'),
+  systemId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe('Optional system UUID to scope the record.'),
+  tags: z
+    .array(z.string().min(1).max(64))
+    .max(30)
+    .optional()
+    .describe('Up to 30 tag strings.'),
+  language: z
+    .string()
+    .min(2)
+    .max(16)
+    .nullable()
+    .optional()
+    .describe('BCP 47 / short language code (e.g. en, de, hu).'),
+  translationGroupId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe('Optional UUID shared by translation siblings (same group id).'),
+  generatedByModel: z
+    .string()
+    .max(160)
+    .optional()
+    .describe('Model identifier for provenance (MCP conversation source).'),
+  sourceTitle: z
+    .string()
+    .max(300)
+    .optional()
+    .describe('Human label for the originating conversation or document.'),
+  archived: z
+    .boolean()
+    .optional()
+    .describe('Set true to soft-archive the record, or false to restore it.'),
+});
+
+export type CreateKnowledgeRecordInput = z.infer<typeof createKnowledgeRecordInputSchema>;
+export type UpdateKnowledgeRecordInput = z.infer<typeof updateKnowledgeRecordInputSchema>;
 
 export function getRecordTypeDefinition(value: string): RecordTypeDefinition | undefined {
   return RECORD_TYPE_CATALOG.find((entry) => entry.value === value);
@@ -637,8 +838,9 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
         'translationGroupId',
         'generatedByModel',
         'sourceTitle',
+        'archived',
       ],
-      fields: CREATE_FIELDS.filter((field) => field.appliesTo.includes('update')),
+      fields: UPDATE_FIELDS,
     },
     workspaceMedia: {
       tools: [
