@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { AppError } from '@project-knowledge-hub/domain';
 import { assertFilterEntityInProject, resolveFilterEntity } from './mcp-tools.js';
-import type { FilterEntityType, EntityRow, RequestedProject } from './mcp-tools.js';
+import type { EntityRow, RequestedProject } from './mcp-tools.js';
 
 /**
  * Unit tests for cross-project filter validation (PRO-T-7).
@@ -402,7 +402,7 @@ describe('resolveFilterEntity', () => {
 
     return {
       db: queryChain,
-    } as any;
+    } as unknown as Parameters<typeof resolveFilterEntity>[0];
   }
 
   const requestedProjectId = 'project-pro-id';

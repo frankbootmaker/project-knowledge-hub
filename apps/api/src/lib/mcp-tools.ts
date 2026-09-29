@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import {
   knowledgeRecords,
@@ -325,11 +325,16 @@ export async function resolveFilterEntity(
     });
   }
 
-  const tableMap: Record<FilterEntityType, typeof projectMilestones> = {
+  // Shared key columns only. The tables are not the same Drizzle type
+  // (different names and extra columns such as createdBy), but every lookup
+  // below uses id, projectId, issueKeyType, and issueNumber. The cast keeps
+  // the runtime table so SQL still targets the right relation.
+  type FilterEntityTable = typeof projectMilestones;
+  const tableMap: Record<FilterEntityType, FilterEntityTable> = {
     milestone: projectMilestones,
-    sprint: projectSprints,
-    epic: projectEpics,
-    user_story: projectUserStories,
+    sprint: projectSprints as unknown as FilterEntityTable,
+    epic: projectEpics as unknown as FilterEntityTable,
+    user_story: projectUserStories as unknown as FilterEntityTable,
   };
 
   const table = tableMap[entityType];
