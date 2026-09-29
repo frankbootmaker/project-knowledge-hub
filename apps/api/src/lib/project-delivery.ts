@@ -15,6 +15,8 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  assertDateRange,
+  effectiveDateRange,
   milestoneStatusSchema,
   raciRoleSchema,
   taskActivityTypeSchema,
@@ -443,6 +445,7 @@ export async function createMilestone(
     sortOrder?: number;
   },
 ): Promise<PublicMilestone> {
+  assertDateRange({ start: input.startDate, end: input.targetDate, startField: 'startDate', endField: 'targetDate' });
   const result = await database.db.transaction(async (tx) => {
     const allocated = await allocateIssueNumber(database, input.projectId, 'M', tx);
     const [row] = await tx
@@ -496,6 +499,12 @@ export async function updateMilestone(
       statusCode: 404,
     });
   }
+
+  const effectiveDates = effectiveDateRange({
+    stored: { start: existing.startDate, end: existing.targetDate },
+    patch: { start: input.startDate, end: input.targetDate },
+  });
+  assertDateRange({ start: effectiveDates.start, end: effectiveDates.end, startField: 'startDate', endField: 'targetDate' });
 
   const [row] = await database.db
     .update(projectMilestones)

@@ -7,6 +7,8 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  assertDateRange,
+  effectiveDateRange,
   sprintStatusSchema,
   type SprintStatus,
 } from '@project-knowledge-hub/domain';
@@ -196,6 +198,7 @@ export async function createSprint(
     sortOrder?: number;
   },
 ): Promise<PublicSprint> {
+  assertDateRange({ start: input.startDate, end: input.endDate, startField: 'startDate', endField: 'endDate' });
   const status = input.status ?? 'planned';
   if (status === 'active') {
     await assertNoOtherActiveSprint(database, input.projectId);
@@ -278,6 +281,13 @@ export async function updateSprint(
   },
 ): Promise<PublicSprint> {
   const existing = await getSprint(database, sprintId);
+
+  const effectiveDates = effectiveDateRange({
+    stored: { start: existing.startDate, end: existing.endDate },
+    patch: { start: input.startDate, end: input.endDate },
+  });
+  assertDateRange({ start: effectiveDates.start, end: effectiveDates.end, startField: 'startDate', endField: 'endDate' });
+
   const nextStatus = input.status ?? sprintStatusSchema.parse(existing.status);
 
   if (nextStatus === 'active' && existing.status !== 'active') {
