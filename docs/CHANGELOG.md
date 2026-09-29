@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **PRO-T-3: Human key resolution workspace scoping with intelligent ambiguity handling:** Project key prefixes (e.g. `CSA`, `PNZ`) are enforced unique only within a workspace, but human key resolution (document keys like `CSA-CONV-1`, task keys `WEB-T-15`, epic keys, milestone/sprint keys, RAID keys, change keys) now properly scopes to the caller's accessible workspaces with intelligent entity-based disambiguation. Previously, when two projects in different workspaces shared a prefix, key lookups would silently pick the first match globally, causing "not found" errors when the matched project was inaccessible or writes landing in wrong projects. **New behavior**: When multiple projects share a prefix across accessible workspaces, the resolver checks which ones actually contain the entity; resolves successfully if entity exists in exactly one project, returns clear "ambiguous key" error with project names only if entity exists in 2+ projects. REST API scopes by user's workspace memberships (system admins see all). MCP tools pass `allowedWorkspaceIds`. Cross-workspace prefix collision warnings added to project creation/update to prevent new ambiguous cases. Affects all MCP tools and REST API endpoints accepting human keys. No database migration required; existing duplicate prefixes remain valid. Comprehensive test coverage (23 tests) added.
+
 ### Added
 
 * **Admin SSO settings:** Admin → SSO (`/admin/sso`) stores OIDC issuer, client id/secret, button label, IdP source, optional redirect URI, enable toggle, and JIT in `platform_settings` (`oidc_config`). Values override `OIDC_*` env at request time (no rebuild/restart). GET never returns the secret. “Reset to .env” clears the override. Login status/start/callback use the resolved config. Briefs [`OIDC_IDP.md`](product/OIDC_IDP.md), [`OIDC_AUTHENTIK_INTEGRATION_GUIDE.md`](product/OIDC_AUTHENTIK_INTEGRATION_GUIDE.md).

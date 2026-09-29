@@ -231,10 +231,11 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
 
     const keyPrefix =
       body.keyPrefix !== undefined
-        ? await assertUniqueKeyPrefix(app.database, {
+        ? (await assertUniqueKeyPrefix(app.database, {
             workspaceId: body.workspaceId,
             keyPrefix: body.keyPrefix,
-          })
+            checkCrossWorkspace: true,
+          })).keyPrefix
         : await allocateUniqueKeyPrefix(app.database, {
             workspaceId: body.workspaceId,
             nameOrSlug: slug || body.name,
@@ -494,11 +495,12 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     const nextKeyPrefix =
       body.keyPrefix === undefined
         ? project.keyPrefix
-        : await assertUniqueKeyPrefix(app.database, {
+        : (await assertUniqueKeyPrefix(app.database, {
             workspaceId: project.workspaceId,
             keyPrefix: body.keyPrefix,
             excludeProjectId: project.id,
-          });
+            checkCrossWorkspace: true,
+          })).keyPrefix;
 
     const [updated] = await app.database.db
       .update(projects)

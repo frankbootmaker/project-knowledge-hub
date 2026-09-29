@@ -815,7 +815,7 @@ export function createKnowledgeHubMcpServer(
     'JPY',
   ]);
 
-  /** UUID or human key such as HL1-T-12 / HL1-RR-3. */
+  /** UUID or human key such as HL1-T-12 / HL1-RR-3. When using a human key, if the prefix matches multiple projects across accessible workspaces and the key exists in more than one, returns an ambiguous key error with candidate project names; use the full UUID or specify projectId in that case. */
   const entityRef = z.string().min(1).max(80);
 
   server.tool(

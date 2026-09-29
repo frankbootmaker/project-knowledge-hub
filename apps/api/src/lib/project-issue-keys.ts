@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   knowledgeRecords,
@@ -90,8 +90,9 @@ export async function assertUniqueKeyPrefix(
     workspaceId: string;
     keyPrefix: string;
     excludeProjectId?: string;
+    checkCrossWorkspace?: boolean;
   },
-): Promise<string> {
+): Promise<{ keyPrefix: string; warning?: string }> {
   const parsed = keyPrefixSchema.safeParse(input.keyPrefix);
   if (!parsed.success) {
     throw new AppError({
@@ -103,6 +104,8 @@ export async function assertUniqueKeyPrefix(
     });
   }
   const keyPrefix = parsed.data;
+  
+  // Check within same workspace (strict requirement)
   const conditions = [
     eq(projects.workspaceId, input.workspaceId),
     sql`upper(${projects.keyPrefix}) = ${keyPrefix}`,
@@ -122,7 +125,35 @@ export async function assertUniqueKeyPrefix(
       statusCode: 409,
     });
   }
-  return keyPrefix;
+  
+  // Check across other workspaces (warning only)
+  let warning: string | undefined;
+  if (input.checkCrossWorkspace) {
+    const crossWorkspaceConditions = [
+      ne(projects.workspaceId, input.workspaceId),
+      sql`upper(${projects.keyPrefix}) = ${keyPrefix}`,
+    ];
+    if (input.excludeProjectId) {
+      crossWorkspaceConditions.push(ne(projects.id, input.excludeProjectId));
+    }
+    const crossWorkspaceProjects = await database.db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        workspaceId: projects.workspaceId,
+      })
+      .from(projects)
+      .where(and(...crossWorkspaceConditions))
+      .limit(3);
+    
+    if (crossWorkspaceProjects.length > 0) {
+      const projectNames = crossWorkspaceProjects.map((p) => p.name).join(', ');
+      const more = crossWorkspaceProjects.length === 3 ? ' and possibly more' : '';
+      warning = `Key prefix ${keyPrefix} is also used by project(s) in other workspace(s): ${projectNames}${more}. This may cause ambiguous key resolution when accessing multiple workspaces.`;
+    }
+  }
+  
+  return { keyPrefix, warning };
 }
 
 export async function allocateUniqueKeyPrefix(
@@ -137,10 +168,11 @@ export async function allocateUniqueKeyPrefix(
       candidate = `${letters}${attempt % 10}`;
     }
     try {
-      return await assertUniqueKeyPrefix(database, {
+      const result = await assertUniqueKeyPrefix(database, {
         workspaceId: input.workspaceId,
         keyPrefix: candidate,
       });
+      return result.keyPrefix;
     } catch (error) {
       if (error instanceof AppError && error.code === 'KEY_PREFIX_TAKEN') {
         continue;
@@ -258,12 +290,122 @@ export type ResolvableEntityType =
   | 'raid'
   | 'change';
 
+async function findProjectsContainingEntity(
+  database: Database,
+  projectIds: string[],
+  entityType: ResolvableEntityType,
+  issueKeyType: string,
+  issueNumber: number,
+): Promise<string[]> {
+  const type = issueKeyType;
+  const number = issueNumber;
+  const found: string[] = [];
+
+  if (entityType === 'epic' || type === 'E') {
+    const rows = await database.db
+      .select({ projectId: projectEpics.projectId })
+      .from(projectEpics)
+      .where(
+        and(
+          inArray(projectEpics.projectId, projectIds),
+          eq(projectEpics.issueKeyType, type),
+          eq(projectEpics.issueNumber, number),
+        ),
+      );
+    found.push(...rows.map((r) => r.projectId));
+  }
+  if (entityType === 'user_story' || type === 'S') {
+    const rows = await database.db
+      .select({ projectId: projectUserStories.projectId })
+      .from(projectUserStories)
+      .where(
+        and(
+          inArray(projectUserStories.projectId, projectIds),
+          eq(projectUserStories.issueKeyType, type),
+          eq(projectUserStories.issueNumber, number),
+        ),
+      );
+    found.push(...rows.map((r) => r.projectId));
+  }
+  if (entityType === 'milestone' || type === 'M') {
+    const rows = await database.db
+      .select({ projectId: projectMilestones.projectId })
+      .from(projectMilestones)
+      .where(
+        and(
+          inArray(projectMilestones.projectId, projectIds),
+          eq(projectMilestones.issueKeyType, type),
+          eq(projectMilestones.issueNumber, number),
+        ),
+      );
+    found.push(...rows.map((r) => r.projectId));
+  }
+  if (entityType === 'task' || type === 'T') {
+    const rows = await database.db
+      .select({ projectId: projectTasks.projectId })
+      .from(projectTasks)
+      .where(
+        and(
+          inArray(projectTasks.projectId, projectIds),
+          eq(projectTasks.issueKeyType, type),
+          eq(projectTasks.issueNumber, number),
+        ),
+      );
+    found.push(...rows.map((r) => r.projectId));
+  }
+  if (entityType === 'sprint' || type === 'SP') {
+    const rows = await database.db
+      .select({ projectId: projectSprints.projectId })
+      .from(projectSprints)
+      .where(
+        and(
+          inArray(projectSprints.projectId, projectIds),
+          eq(projectSprints.issueKeyType, type),
+          eq(projectSprints.issueNumber, number),
+        ),
+      );
+    found.push(...rows.map((r) => r.projectId));
+  }
+  if (entityType === 'change' || type === 'C') {
+    const rows = await database.db
+      .select({ projectId: projectChangeItems.projectId })
+      .from(projectChangeItems)
+      .where(
+        and(
+          inArray(projectChangeItems.projectId, projectIds),
+          eq(projectChangeItems.issueKeyType, type),
+          eq(projectChangeItems.issueNumber, number),
+        ),
+      );
+    found.push(...rows.map((r) => r.projectId));
+  }
+  if (
+    entityType === 'raid' ||
+    (isDeliveryIssueKeyType(type) && issueKeyTypeToRaidKind(type))
+  ) {
+    const rows = await database.db
+      .select({ projectId: projectRaidItems.projectId })
+      .from(projectRaidItems)
+      .where(
+        and(
+          inArray(projectRaidItems.projectId, projectIds),
+          eq(projectRaidItems.issueKeyType, type),
+          eq(projectRaidItems.issueNumber, number),
+        ),
+      );
+    found.push(...rows.map((r) => r.projectId));
+  }
+
+  return found;
+}
+
 export async function resolveEntityId(
   database: Database,
   input: {
     entityType: ResolvableEntityType;
     idOrKey: string;
     projectId?: string;
+    workspaceIds?: string[];
   },
 ): Promise<string> {
   const raw = input.idOrKey.trim();
@@ -328,21 +470,56 @@ export async function resolveEntityId(
   if (input.projectId) {
     projectConditions.push(eq(projects.id, input.projectId));
   }
-  const [project] = await database.db
+  if (input.workspaceIds && input.workspaceIds.length > 0) {
+    projectConditions.push(inArray(projects.workspaceId, input.workspaceIds));
+  }
+  const candidates = await database.db
     .select({
       id: projects.id,
       keyPrefix: projects.keyPrefix,
+      workspaceId: projects.workspaceId,
+      name: projects.name,
     })
     .from(projects)
-    .where(and(...projectConditions))
-    .limit(1);
-  if (!project) {
+    .where(and(...projectConditions));
+  if (candidates.length === 0) {
     throw new AppError({
       code: 'ISSUE_KEY_NOT_FOUND',
       message: `No project found for key prefix ${parsed.prefix}`,
       statusCode: 404,
     });
   }
+  
+  // If multiple candidate projects, check which ones actually contain the entity
+  let project = candidates[0]!;
+  if (candidates.length > 1) {
+    const projectsWithEntity = await findProjectsContainingEntity(
+      database,
+      candidates.map((c) => c.id),
+      input.entityType,
+      parsed.issueKeyType,
+      parsed.issueNumber,
+    );
+    if (projectsWithEntity.length === 0) {
+      throw new AppError({
+        code: 'ISSUE_KEY_NOT_FOUND',
+        message: `No ${input.entityType} found for key ${raw}`,
+        statusCode: 404,
+      });
+    }
+    if (projectsWithEntity.length > 1) {
+      const projectNames = candidates
+        .filter((c) => projectsWithEntity.includes(c.id))
+        .map((c) => `${c.name} (${c.id})`)
+        .join(', ');
+      throw new AppError({
+        code: 'ISSUE_KEY_AMBIGUOUS',
+        message: `Key ${raw} exists in multiple projects: ${projectNames}. Please use the full UUID or specify projectId.`,
+        statusCode: 400,
+      });
+    }
+    project = candidates.find((c) => c.id === projectsWithEntity[0])!;
+  };
 
   const type = parsed.issueKeyType;
   const number = parsed.issueNumber;
@@ -462,6 +639,7 @@ export async function resolveKnowledgeRecordId(
     idOrKey: string;
     projectId?: string;
     workspaceId?: string;
+    workspaceIds?: string[];
   },
 ): Promise<string> {
   const raw = input.idOrKey.trim();
@@ -487,17 +665,62 @@ export async function resolveKnowledgeRecordId(
   if (input.workspaceId) {
     projectConditions.push(eq(projects.workspaceId, input.workspaceId));
   }
-  const [project] = await database.db
-    .select({ id: projects.id })
+  if (input.workspaceIds && input.workspaceIds.length > 0) {
+    projectConditions.push(inArray(projects.workspaceId, input.workspaceIds));
+  }
+  const candidates = await database.db
+    .select({ 
+      id: projects.id, 
+      workspaceId: projects.workspaceId,
+      name: projects.name,
+    })
     .from(projects)
-    .where(and(...projectConditions))
-    .limit(1);
-  if (!project) {
+    .where(and(...projectConditions));
+  if (candidates.length === 0) {
     throw new AppError({
       code: 'ISSUE_KEY_NOT_FOUND',
       message: `No project found for key prefix ${parsed.prefix}`,
       statusCode: 404,
     });
+  }
+  
+  // If multiple candidate projects, check which ones actually contain the record
+  let project = candidates[0]!;
+  if (candidates.length > 1) {
+    const conditions = [
+      inArray(knowledgeRecords.projectId, candidates.map((c) => c.id)),
+      eq(knowledgeRecords.documentKeyType, parsed.issueKeyType),
+      eq(knowledgeRecords.documentNumber, parsed.issueNumber),
+      isNull(knowledgeRecords.archivedAt),
+    ];
+    if (input.workspaceId) {
+      conditions.push(eq(knowledgeRecords.workspaceId, input.workspaceId));
+    }
+    const recordsInProjects = await database.db
+      .select({ projectId: knowledgeRecords.projectId })
+      .from(knowledgeRecords)
+      .where(and(...conditions));
+    
+    const projectsWithRecord = [...new Set(recordsInProjects.map((r) => r.projectId))];
+    if (projectsWithRecord.length === 0) {
+      throw new AppError({
+        code: 'ISSUE_KEY_NOT_FOUND',
+        message: `No knowledge record found for key ${raw}`,
+        statusCode: 404,
+      });
+    }
+    if (projectsWithRecord.length > 1) {
+      const projectNames = candidates
+        .filter((c) => projectsWithRecord.includes(c.id))
+        .map((c) => `${c.name} (${c.id})`)
+        .join(', ');
+      throw new AppError({
+        code: 'ISSUE_KEY_AMBIGUOUS',
+        message: `Key ${raw} exists in multiple projects: ${projectNames}. Please use the full UUID or specify projectId.`,
+        statusCode: 400,
+      });
+    }
+    project = candidates.find((c) => c.id === projectsWithRecord[0])!;
   }
 
   const conditions = [
