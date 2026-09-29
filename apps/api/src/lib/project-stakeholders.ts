@@ -619,6 +619,89 @@ function normalizeCompetenciesInput(
   return stakeholderCompetenciesSchema.parse(value ?? []);
 }
 
+/**
+ * Resolve stakeholderId to roster row ID with optional userId fallback.
+ * Exported for testing.
+ * 
+ * When projectId is NOT provided:
+ * - If stakeholderId is a roster ID, returns it (caller must check project access)
+ * - Otherwise throws NOT_FOUND with message to use rosterId from list
+ * 
+ * When projectId IS provided:
+ * - If stakeholderId is a roster ID for this project, returns it
+ * - If stakeholderId is a userId of exactly one seat in this project, throws 400 with rosterId
+ * - If stakeholderId is a userId of multiple seats, throws 400 listing all rosterIds
+ * - Otherwise throws NOT_FOUND
+ */
+export async function resolveStakeholderId(
+  database: Database,
+  stakeholderId: string,
+  projectId?: string,
+): Promise<string> {
+  if (!projectId) {
+    // Without projectId, only check if it's a valid roster ID (any project)
+    const [direct] = await database.db
+      .select({ id: projectStakeholders.id })
+      .from(projectStakeholders)
+      .where(eq(projectStakeholders.id, stakeholderId))
+      .limit(1);
+    if (direct) return stakeholderId;
+    
+    throw new AppError({
+      code: 'STAKEHOLDER_NOT_FOUND',
+      message: 'stakeholderId must be the roster row ID (rosterId from list_project_stakeholders)',
+      statusCode: 404,
+    });
+  }
+
+  // With projectId, check if it's a roster ID in this project
+  const [direct] = await database.db
+    .select({ id: projectStakeholders.id })
+    .from(projectStakeholders)
+    .where(
+      and(
+        eq(projectStakeholders.projectId, projectId),
+        eq(projectStakeholders.id, stakeholderId),
+      ),
+    )
+    .limit(1);
+  if (direct) return stakeholderId;
+
+  // Try userId fallback only when projectId is provided
+  const byUser = await database.db
+    .select({ id: projectStakeholders.id, userId: projectStakeholders.userId })
+    .from(projectStakeholders)
+    .where(
+      and(
+        eq(projectStakeholders.projectId, projectId),
+        eq(projectStakeholders.userId, stakeholderId),
+      ),
+    );
+
+  if (byUser.length === 0) {
+    throw new AppError({
+      code: 'STAKEHOLDER_NOT_FOUND',
+      message: 'Stakeholder roster entry not found',
+      statusCode: 404,
+    });
+  }
+
+  if (byUser.length === 1) {
+    throw new AppError({
+      code: 'STAKEHOLDER_ID_IS_USER_ID',
+      message: `stakeholderId must be the roster ID. Use rosterId="${byUser[0]!.id}" for this user.`,
+      statusCode: 400,
+    });
+  }
+
+  const rosterIds = byUser.map((row) => row.id).join('", "');
+  throw new AppError({
+    code: 'STAKEHOLDER_ID_IS_USER_ID',
+    message: `stakeholderId must be the roster ID. This user holds multiple seats; candidates: "${rosterIds}"`,
+    statusCode: 400,
+  });
+}
+
 export async function upsertProjectStakeholder(
   database: Database,
   input: {
