@@ -16,6 +16,60 @@ import {
   DEFAULT_EXCLUDED_LIFECYCLE_STATUSES,
 } from '@project-knowledge-hub/search';
 
+/**
+ * Safely converts a PostgreSQL timestamp (Date object or string) to ISO 8601 UTC format.
+ * Returns null for null/undefined/invalid inputs without throwing.
+ * Normalizes PostgreSQL timestamp strings like '2026-09-28 11:29:24.478+00' to ISO 8601.
+ */
+export function toIsoTimestamp(value: Date | string | null | undefined): string | null {
+  if (value == null) {
+    return null;
+  }
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      console.warn('toIsoTimestamp: Invalid Date object');
+      return null;
+    }
+    return value.toISOString();
+  }
+  if (typeof value === 'string') {
+    // Normalize PostgreSQL timestamp format: replace space with 'T' and '+00' with 'Z'
+    // Handles: '2026-09-28 11:29:24.478+00', '2026-09-28 11:29:24+05:30', etc.
+    let normalized = value.trim();
+    
+    // Replace space between date and time with 'T'
+    normalized = normalized.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2');
+    
+    // Replace '+00' timezone with 'Z' for UTC
+    normalized = normalized.replace(/\+00(:00)?$/, 'Z');
+    
+    try {
+      const date = new Date(normalized);
+      if (Number.isNaN(date.getTime())) {
+        console.warn(`toIsoTimestamp: Could not parse timestamp: ${value}`);
+        return null;
+      }
+      return date.toISOString();
+    } catch (error) {
+      console.warn(`toIsoTimestamp: Error parsing timestamp: ${value}`, error);
+      return null;
+    }
+  }
+  console.warn(`toIsoTimestamp: Unexpected value type: ${typeof value}`);
+  return null;
+}
+
+/**
+ * Rounds a score to 4 decimal places.
+ * Returns null for null inputs.
+ */
+export function roundScore(value: number | null): number | null {
+  if (value === null) {
+    return null;
+  }
+  return Math.round(value * 10000) / 10000;
+}
+
 export const searchBodySchema = z.object({
   workspaceId: z.string().uuid(),
   query: z.string().min(1).max(300),
@@ -273,60 +327,67 @@ export async function runSearch(app: FastifyInstance, input: SearchInput) {
 
   const rows = (await app.database.client.unsafe(sql, params as never[])) as SearchRow[];
 
-  const results = rows
-    .map((row) => {
-      const vectorScore = vectorScores.get(row.id) ?? null;
-      const score = useHybrid
-        ? combineHybridScore({
-            tsRank: Number(row.ts_rank) || 0,
-            vectorScore,
-            title: row.title,
-            query: input.query,
-            lifecycleStatus: row.lifecycle_status,
-          })
-        : combineSearchScore({
-            tsRank: Number(row.ts_rank) || 0,
-            title: row.title,
-            query: input.query,
-            lifecycleStatus: row.lifecycle_status,
-          });
-      const excerptSource = row.summary?.trim()
-        ? `${row.summary}\n\n${row.content_markdown}`
-        : row.content_markdown;
-      return {
-        id: row.id,
-        workspaceId: row.workspace_id,
-        projectId: row.project_id,
-        systemId: row.system_id,
-        title: row.title,
-        slug: row.slug,
-        summary: row.summary,
-        recordType: row.record_type,
-        lifecycleStatus: row.lifecycle_status,
-        verified: Boolean(row.verified_at) ||
-          row.lifecycle_status === 'verified' ||
-          row.lifecycle_status === 'current',
-        project: row.project_id
-          ? { id: row.project_id, name: row.project_name, slug: row.project_slug }
-          : null,
-        system: row.system_id
-          ? { id: row.system_id, name: row.system_name, slug: row.system_slug }
-          : null,
-        tags: row.tag_names
-          ? row.tag_names.split(', ').filter(Boolean)
-          : [],
-        sourceType: row.source_type,
-        sourceProvider: row.source_provider,
-        excerpt: buildSnippet(excerptSource, input.query),
-        updatedAt: row.updated_at instanceof Date
-          ? row.updated_at.toISOString()
-          : String(row.updated_at),
-        score,
-        vectorScore,
-      };
-    })
+  // Map rows with raw scores for accurate sorting
+  const resultsWithRawScores = rows.map((row) => {
+    const vectorScore = vectorScores.get(row.id) ?? null;
+    const score = useHybrid
+      ? combineHybridScore({
+          tsRank: Number(row.ts_rank) || 0,
+          vectorScore,
+          title: row.title,
+          query: input.query,
+          lifecycleStatus: row.lifecycle_status,
+        })
+      : combineSearchScore({
+          tsRank: Number(row.ts_rank) || 0,
+          title: row.title,
+          query: input.query,
+          lifecycleStatus: row.lifecycle_status,
+        });
+    const excerptSource = row.summary?.trim()
+      ? `${row.summary}\n\n${row.content_markdown}`
+      : row.content_markdown;
+    
+    return {
+      id: row.id,
+      workspaceId: row.workspace_id,
+      projectId: row.project_id,
+      systemId: row.system_id,
+      title: row.title,
+      slug: row.slug,
+      summary: row.summary,
+      recordType: row.record_type,
+      lifecycleStatus: row.lifecycle_status,
+      verified: Boolean(row.verified_at) ||
+        row.lifecycle_status === 'verified' ||
+        row.lifecycle_status === 'current',
+      project: row.project_id
+        ? { id: row.project_id, name: row.project_name, slug: row.project_slug }
+        : null,
+      system: row.system_id
+        ? { id: row.system_id, name: row.system_name, slug: row.system_slug }
+        : null,
+      tags: row.tag_names
+        ? row.tag_names.split(', ').filter(Boolean)
+        : [],
+      sourceType: row.source_type,
+      sourceProvider: row.source_provider,
+      excerpt: buildSnippet(excerptSource, input.query),
+      updatedAt: toIsoTimestamp(row.updated_at),
+      score,
+      vectorScore,
+    };
+  });
+
+  // Sort by raw scores, then slice, then round for output
+  const results = resultsWithRawScores
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .slice(0, limit)
+    .map((result) => ({
+      ...result,
+      score: roundScore(result.score) ?? 0,
+      vectorScore: roundScore(result.vectorScore),
+    }));
 
   return {
     query: input.query,

@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **MCP list_record_metadata (PRO-T-4):** `updateKnowledgeRecord` guide now correctly marks `title`, `recordType`, and `contentMarkdown` as optional (not required), documents `recordId` and `archived` fields, and ensures field `requirement` values match the `requiredFields` / `optionalFields` lists and the `update_knowledge_record` tool schema.
 
+* **MCP `search_knowledge` timestamp format (PRO-T-5):** `updatedAt` now returns ISO 8601 UTC (`2026-09-28T11:29:24.478Z`) instead of raw PostgreSQL format (`2026-09-28 11:29:24.478+00`), consistent with `get_knowledge_record` and `list_knowledge_records`. Also rounds `score` and `vectorScore` to 4 decimal places for cleaner output.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.
