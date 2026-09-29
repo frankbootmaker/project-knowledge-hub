@@ -987,6 +987,55 @@ export function translationSlug(sourceSlug: string, language: string): string {
   return slugify(`${base}${suffix}`) || `record${suffix}`.slice(0, SLUG_MAX_LENGTH);
 }
 
+/**
+ * Resolve translation provenance based on caller type and AI translation status.
+ * Exported for testing.
+ */
+export function resolveTranslationProvenance(params: {
+  provenance?: {
+    sourceOfTruthMode: z.infer<typeof sourceOfTruthModeSchema>;
+    source: SourceInput;
+  };
+  translateWithAi: boolean;
+  generatedByModel: string | null;
+  sourceSlug: string;
+  sourceId: string;
+}): {
+  sourceOfTruthMode: z.infer<typeof sourceOfTruthModeSchema>;
+  source: SourceInput;
+} {
+  if (params.provenance) {
+    // MCP path: use provided provenance, but preserve actual AI translation model when applicable
+    return {
+      sourceOfTruthMode: params.provenance.sourceOfTruthMode,
+      source: {
+        ...params.provenance.source,
+        // Server-computed AI translation model wins over client-supplied value
+        generatedByModel:
+          params.translateWithAi && params.generatedByModel
+            ? params.generatedByModel
+            : params.provenance.source.generatedByModel ?? null,
+        // Always preserve sourceReference for translations
+        sourceReference: params.sourceId,
+      },
+    };
+  } else {
+    // REST/web UI path: use defaults based on translateWithAi
+    return {
+      sourceOfTruthMode: 'hub_managed',
+      source: {
+        sourceType: params.translateWithAi ? 'conversation' : 'manual',
+        sourceProvider: params.translateWithAi ? 'vision_llm' : 'project-knowledge-hub',
+        sourceTitle: params.translateWithAi
+          ? `AI translation of ${params.sourceSlug}`
+          : `Translation of ${params.sourceSlug}`,
+        sourceReference: params.sourceId,
+        generatedByModel: params.generatedByModel,
+      },
+    };
+  }
+}
+
 async function allocateUniqueRecordSlug(
   database: Database,
   workspaceId: string,
@@ -1081,6 +1130,11 @@ export async function listRecordTranslations(
 
 export type CreateRecordTranslationOptions = {
   onProgress?: (event: TranslationProgressEvent) => void;
+  /** Internal: MCP callers supply ai_generated_draft + conversation/mcp provenance. */
+  provenance?: {
+    sourceOfTruthMode: z.infer<typeof sourceOfTruthModeSchema>;
+    source: SourceInput;
+  };
 };
 
 export async function createRecordTranslation(
@@ -1228,6 +1282,16 @@ export async function createRecordTranslation(
   const tagList =
     (await getKnowledgeRecordTags(app.database, [source.id])).get(source.id) ?? [];
 
+  // Determine provenance: MCP callers supply it via options, REST/web UI use defaults.
+  const { sourceOfTruthMode: finalSourceOfTruthMode, source: finalSource } =
+    resolveTranslationProvenance({
+      provenance: options?.provenance,
+      translateWithAi,
+      generatedByModel,
+      sourceSlug: source.slug,
+      sourceId: source.id,
+    });
+
   const result = await createKnowledgeRecord(
     app,
     {
@@ -1237,22 +1301,14 @@ export async function createRecordTranslation(
       summary: summary ?? undefined,
       recordType: recordTypeSchema.parse(source.recordType),
       lifecycleStatus: 'draft',
-      sourceOfTruthMode: 'hub_managed',
+      sourceOfTruthMode: finalSourceOfTruthMode,
       contentMarkdown,
       language,
       translationGroupId,
       projectId: source.projectId,
       systemId: source.systemId,
       tags: tagList.map((tag) => tag.name),
-      source: {
-        sourceType: translateWithAi ? 'conversation' : 'manual',
-        sourceProvider: translateWithAi ? 'vision_llm' : 'project-knowledge-hub',
-        sourceTitle: translateWithAi
-          ? `AI translation of ${source.slug}`
-          : `Translation of ${source.slug}`,
-        sourceReference: source.id,
-        generatedByModel,
-      },
+      source: finalSource,
     },
     actor,
     ipAddress,
@@ -1277,7 +1333,7 @@ export async function createRecordTranslation(
       translationGroupId,
       slug,
       translateWithAi,
-      generatedByModel,
+      generatedByModel: finalSource.generatedByModel,
     },
     ipAddress: ipAddress ?? null,
   });

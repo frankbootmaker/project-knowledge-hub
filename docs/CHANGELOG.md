@@ -93,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **Media content type validation (PRO-T-11):** workspace media uploads (`upload_workspace_media` and chunked `begin` → `append` → `finalize_workspace_media_upload`) now verify file bytes against the declared content type using magic-byte signatures (PNG, JPEG, GIF, WebP). Uploads with mismatched or unrecognized content are rejected with `MEDIA_CONTENT_MISMATCH` before persisting. Media download responses now include `X-Content-Type-Options: nosniff` to prevent content-type confusion attacks.
 
+* **MCP translation provenance (PRO-T-12):** `create_record_translation` via MCP now records `ai_generated_draft` + conversation/mcp source (matching `create_knowledge_record`), not hub-managed/manual. Provenance passed internally via options; REST/web UI unchanged. When `translateWithAi` is true, server-computed AI model wins over client-supplied `generatedByModel`. MCP tool accepts optional `generatedByModel` / `sourceTitle`; shared `mcpSource` helper centralizes provenance structure across create/translate/update handlers.
+
 * **Knowledge-record Mermaid (Turbopack):** alias `d3-path` so diagrams load in the Next 16 / Turbopack dev graph.
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.

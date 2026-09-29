@@ -125,6 +125,8 @@ export type McpToolHandlers = {
     title?: string;
     summary?: string | null;
     contentMarkdown?: string;
+    generatedByModel?: string;
+    sourceTitle?: string;
   }) => Promise<unknown>;
   listRecordMetadata: () => Promise<unknown>;
   createKnowledgeRecord: (input: {
@@ -1076,6 +1078,8 @@ export function createKnowledgeHubMcpServer(
       title: z.string().min(1).max(300).optional(),
       summary: z.string().max(1000).nullable().optional(),
       contentMarkdown: z.string().max(500_000).optional(),
+      generatedByModel: z.string().max(160).optional(),
+      sourceTitle: z.string().max(300).optional(),
     },
     async (args) =>
       wrap(
