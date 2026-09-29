@@ -6,6 +6,7 @@ import {
 } from '@project-knowledge-hub/domain';
 import { hasMcpScope, type McpScope } from './scopes.js';
 import { enforceResponseSize, MCP_MAX_LIST_LIMIT } from './limits.js';
+import { isoDateNullableSchema, sanitizeError, AppError } from '@project-knowledge-hub/domain';
 
 export type McpClientContext = {
   id: string;
@@ -517,6 +518,12 @@ export type McpToolHandlers = {
     ok: boolean,
     context?: McpToolCallContext,
   ) => Promise<void>;
+  /**
+   * Optional logger for error reporting. If not provided, falls back to console.error.
+   */
+  logger?: {
+    error: (obj: Record<string, unknown>, msg?: string) => void;
+  };
 };
 
 export type McpToolCallContext = {
@@ -531,6 +538,42 @@ function requireScope(client: McpClientContext, scope: McpScope): void {
   if (!hasMcpScope(client.scopes, scope)) {
     throw new Error(`Missing required scope: ${scope}`);
   }
+}
+
+/**
+ * Convert an error to an MCP error result, sanitizing sensitive information.
+ * Only AppError messages are returned verbatim; all other errors are sanitized.
+ * 
+ * @param error - The error to convert
+ * @param logger - Optional logger for server-side error logging
+ * @returns MCP error result with safe message
+ */
+export function toMcpErrorResult(
+  error: unknown,
+  logger?: { error: (obj: Record<string, unknown>, msg?: string) => void },
+): { isError: true; content: Array<{ type: 'text'; text: string }> } {
+  // Only return safe error messages to MCP clients
+  if (error instanceof AppError) {
+    return {
+      isError: true,
+      content: [{ type: 'text' as const, text: error.message }],
+    };
+  }
+
+  // Sanitize all other errors (database, internal, etc.)
+  const sanitized = sanitizeError(error);
+  if (sanitized.logPayload) {
+    if (logger) {
+      logger.error({ err: error, ...sanitized.logPayload }, 'MCP tool error');
+    } else {
+      console.error('[MCP Error]', { err: error, ...sanitized.logPayload });
+    }
+  }
+  
+  return {
+    isError: true,
+    content: [{ type: 'text' as const, text: sanitized.message }],
+  };
 }
 
 function textResult(data: unknown) {
@@ -618,11 +661,7 @@ export function createKnowledgeHubMcpServer(
         return textResult(data);
       } catch (error) {
         await handlers.onToolCall?.(toolName, false, argContext);
-        const message = error instanceof Error ? error.message : 'Tool failed';
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: message }],
-        };
+        return toMcpErrorResult(error, handlers.logger);
       }
     };
 
@@ -827,16 +866,8 @@ export function createKnowledgeHubMcpServer(
     'Update project baseline window, pinned docs, Definition of Done, currency, budgets, and issue key prefix. Budget fields accept number or string; returned as JSON numbers. Requires pm:write.',
     {
       projectId: z.string().uuid(),
-      startDate: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional(),
-      endDate: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional(),
+      startDate: isoDateNullableSchema.optional(),
+      endDate: isoDateNullableSchema.optional(),
       charterRecordId: z.string().uuid().nullable().optional(),
       initialPlanRecordId: z.string().uuid().nullable().optional(),
       definitionOfDone: z.string().max(20000).nullable().optional(),
@@ -1261,10 +1292,7 @@ export function createKnowledgeHubMcpServer(
       wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
   );
 
-  const ymdDate = z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable();
+  const ymdDate = isoDateNullableSchema;
 
   server.tool(
     'create_project_milestone',
@@ -1450,11 +1478,7 @@ export function createKnowledgeHubMcpServer(
       status: z
         .enum(['todo', 'in_progress', 'blocked', 'done', 'cancelled'])
         .optional(),
-      dueDate: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional(),
+      dueDate: isoDateNullableSchema.optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
       tokensUsed: z.number().int().min(0).nullable().optional(),
@@ -1494,11 +1518,7 @@ export function createKnowledgeHubMcpServer(
       status: z
         .enum(['todo', 'in_progress', 'blocked', 'done', 'cancelled'])
         .optional(),
-      dueDate: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional(),
+      dueDate: isoDateNullableSchema.optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
       tokensUsed: z.number().int().min(0).nullable().optional(),
@@ -1738,10 +1758,7 @@ export function createKnowledgeHubMcpServer(
   );
 
   const engagementEnum = z.enum(['employee', 'contractor']);
-  const ymdNullable = z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable();
+  const ymdNullable = isoDateNullableSchema;
   const competencyItemSchema = z.union([
     z.string().trim().min(1).max(80),
     z.object({
@@ -1900,11 +1917,7 @@ export function createKnowledgeHubMcpServer(
       status: raidStatusEnum.optional(),
       severity: raidSeverityEnum.optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
-      dueDate: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional(),
+      dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       taskIds: z.array(entityRef).max(100).optional(),
     },
@@ -1928,11 +1941,7 @@ export function createKnowledgeHubMcpServer(
       status: raidStatusEnum.optional(),
       severity: raidSeverityEnum.optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
-      dueDate: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .nullable()
-        .optional(),
+      dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
     },

@@ -665,6 +665,37 @@ export {
   type IssueCounters,
 } from './issue-keys.js';
 
+export { sanitizeError, type SanitizedError } from './error-sanitizer.js';
+
+/**
+ * Validate that a YYYY-MM-DD string is a real calendar date.
+ * Rejects impossible dates such as 2026-02-30, 2026-13-01, and non-leap 2027-02-29.
+ */
+export const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
+  .refine(
+    (value) => {
+      const parts = value.split('-').map(Number);
+      const [year, month, day] = parts;
+      if (year === undefined || month === undefined || day === undefined) {
+        return false;
+      }
+      const date = new Date(Date.UTC(year, month - 1, day));
+      return (
+        date.getUTCFullYear() === year &&
+        date.getUTCMonth() === month - 1 &&
+        date.getUTCDate() === day
+      );
+    },
+    { message: 'Invalid calendar date' },
+  );
+
+/**
+ * Nullable version of isoDateSchema for optional date fields.
+ */
+export const isoDateNullableSchema = isoDateSchema.nullable();
+
 export class AppError extends Error {
   readonly code: string;
   readonly statusCode: number;

@@ -443,29 +443,32 @@ export async function createMilestone(
     sortOrder?: number;
   },
 ): Promise<PublicMilestone> {
-  const allocated = await allocateIssueNumber(database, input.projectId, 'M');
-  const [row] = await database.db
-    .insert(projectMilestones)
-    .values({
-      projectId: input.projectId,
-      title: input.title,
-      description: input.description ?? null,
-      status: input.status ?? 'planned',
-      startDate: input.startDate ?? null,
-      targetDate: input.targetDate ?? null,
-      sortOrder: input.sortOrder ?? 0,
-      issueKeyType: allocated.issueKeyType,
-      issueNumber: allocated.issueNumber,
-    })
-    .returning();
-  if (!row) {
-    throw new AppError({
-      code: 'MILESTONE_CREATE_FAILED',
-      message: 'Failed to create milestone',
-      statusCode: 500,
-    });
-  }
-  return toPublicMilestone(row, allocated.keyPrefix);
+  const result = await database.db.transaction(async (tx) => {
+    const allocated = await allocateIssueNumber(database, input.projectId, 'M', tx);
+    const [row] = await tx
+      .insert(projectMilestones)
+      .values({
+        projectId: input.projectId,
+        title: input.title,
+        description: input.description ?? null,
+        status: input.status ?? 'planned',
+        startDate: input.startDate ?? null,
+        targetDate: input.targetDate ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        issueKeyType: allocated.issueKeyType,
+        issueNumber: allocated.issueNumber,
+      })
+      .returning();
+    if (!row) {
+      throw new AppError({
+        code: 'MILESTONE_CREATE_FAILED',
+        message: 'Failed to create milestone',
+        statusCode: 500,
+      });
+    }
+    return { row, keyPrefix: allocated.keyPrefix };
+  });
+  return toPublicMilestone(result.row, result.keyPrefix);
 }
 
 export async function updateMilestone(
@@ -917,49 +920,52 @@ export async function createTask(
     input.currentOwnerUserId ??
     defaultOwnerFromRaci(input.raci ?? [], input.createdBy);
 
-  const allocated = await allocateIssueNumber(database, input.projectId, 'T');
-  const [row] = await database.db
-    .insert(projectTasks)
-    .values({
-      projectId: input.projectId,
-      milestoneId: input.milestoneId ?? null,
-      userStoryId: input.userStoryId ?? null,
-      sprintId: input.sprintId ?? null,
-      title: input.title,
-      description: input.description ?? null,
-      status: input.status ?? 'todo',
-      dueDate: input.dueDate ?? null,
-      forecastHours: input.forecastHours ?? null,
-      actualHours: input.actualHours ?? null,
-      storyPoints: input.storyPoints ?? null,
-      tokensUsed: input.tokensUsed ?? null,
-      aiSystemId: input.aiSystemId ?? null,
-      sortOrder: input.sortOrder ?? 0,
-      createdBy: input.createdBy ?? null,
-      currentOwnerUserId: ownerUserId,
-      issueKeyType: allocated.issueKeyType,
-      issueNumber: allocated.issueNumber,
-    })
-    .returning();
+  const createdTask = await database.db.transaction(async (tx) => {
+    const allocated = await allocateIssueNumber(database, input.projectId, 'T', tx);
+    const [row] = await tx
+      .insert(projectTasks)
+      .values({
+        projectId: input.projectId,
+        milestoneId: input.milestoneId ?? null,
+        userStoryId: input.userStoryId ?? null,
+        sprintId: input.sprintId ?? null,
+        title: input.title,
+        description: input.description ?? null,
+        status: input.status ?? 'todo',
+        dueDate: input.dueDate ?? null,
+        forecastHours: input.forecastHours ?? null,
+        actualHours: input.actualHours ?? null,
+        storyPoints: input.storyPoints ?? null,
+        tokensUsed: input.tokensUsed ?? null,
+        aiSystemId: input.aiSystemId ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        createdBy: input.createdBy ?? null,
+        currentOwnerUserId: ownerUserId,
+        issueKeyType: allocated.issueKeyType,
+        issueNumber: allocated.issueNumber,
+      })
+      .returning();
 
-  if (!row) {
-    throw new AppError({
-      code: 'TASK_CREATE_FAILED',
-      message: 'Failed to create task',
-      statusCode: 500,
-    });
-  }
-  const createdTask = row;
+    if (!row) {
+      throw new AppError({
+        code: 'TASK_CREATE_FAILED',
+        message: 'Failed to create task',
+        statusCode: 500,
+      });
+    }
 
-  if (input.raci && input.raci.length > 0) {
-    await database.db.insert(projectTaskRaci).values(
-      input.raci.map((entry) => ({
-        taskId: createdTask.id,
-        userId: entry.userId,
-        role: entry.role,
-      })),
-    );
-  }
+    if (input.raci && input.raci.length > 0) {
+      await tx.insert(projectTaskRaci).values(
+        input.raci.map((entry) => ({
+          taskId: row.id,
+          userId: entry.userId,
+          role: entry.role,
+        })),
+      );
+    }
+
+    return row;
+  });
 
   await recordTaskActivity(database, {
     taskId: createdTask.id,

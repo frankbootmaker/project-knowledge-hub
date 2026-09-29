@@ -478,9 +478,9 @@ export async function createKnowledgeRecord(
     verifiedAt = now;
   }
 
-  let documentKeyType: string | null = null;
-  let documentNumber: number | null = null;
+  let created: typeof knowledgeRecords.$inferSelect;
   let keyPrefix: string | null = null;
+
   if (body.projectId) {
     const docCode = getDocKeyCode(body.recordType);
     if (!docCode) {
@@ -490,49 +490,89 @@ export async function createKnowledgeRecord(
         statusCode: 400,
       });
     }
-    const allocated = await allocateIssueNumber(
-      app.database,
-      body.projectId,
-      docCode,
-    );
-    documentKeyType = allocated.issueKeyType;
-    documentNumber = allocated.issueNumber;
-    keyPrefix = allocated.keyPrefix;
-  }
+    
+    const result = await app.database.db.transaction(async (tx) => {
+      const allocated = await allocateIssueNumber(
+        app.database,
+        body.projectId!,
+        docCode,
+        tx,
+      );
+      const [row] = await tx
+        .insert(knowledgeRecords)
+        .values({
+          workspaceId: body.workspaceId,
+          projectId: body.projectId ?? null,
+          systemId: body.systemId ?? null,
+          title: body.title,
+          slug,
+          summary: body.summary ?? null,
+          recordType: body.recordType,
+          documentKeyType: allocated.issueKeyType,
+          documentNumber: allocated.issueNumber,
+          lifecycleStatus,
+          sourceOfTruthMode: body.sourceOfTruthMode ?? 'hub_managed',
+          contentMarkdown,
+          contentHtmlCache: rendered.html,
+          language: body.language ?? 'en',
+          translationGroupId: body.translationGroupId ?? null,
+          metadataJson,
+          currentVersionNumber: 1,
+          createdBy: actor.userId,
+          reviewedBy,
+          verifiedAt,
+          updatedAt: now,
+        })
+        .returning();
 
-  const [created] = await app.database.db
-    .insert(knowledgeRecords)
-    .values({
-      workspaceId: body.workspaceId,
-      projectId: body.projectId ?? null,
-      systemId: body.systemId ?? null,
-      title: body.title,
-      slug,
-      summary: body.summary ?? null,
-      recordType: body.recordType,
-      documentKeyType,
-      documentNumber,
-      lifecycleStatus,
-      sourceOfTruthMode: body.sourceOfTruthMode ?? 'hub_managed',
-      contentMarkdown,
-      contentHtmlCache: rendered.html,
-      language: body.language ?? 'en',
-      translationGroupId: body.translationGroupId ?? null,
-      metadataJson,
-      currentVersionNumber: 1,
-      createdBy: actor.userId,
-      reviewedBy,
-      verifiedAt,
-      updatedAt: now,
-    })
-    .returning();
-
-  if (!created) {
-    throw new AppError({
-      code: 'KNOWLEDGE_RECORD_CREATE_FAILED',
-      message: 'Failed to create knowledge record',
-      statusCode: 500,
+      if (!row) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_CREATE_FAILED',
+          message: 'Failed to create knowledge record',
+          statusCode: 500,
+        });
+      }
+      return { created: row, keyPrefix: allocated.keyPrefix };
     });
+    
+    created = result.created;
+    keyPrefix = result.keyPrefix;
+  } else {
+    const [row] = await app.database.db
+      .insert(knowledgeRecords)
+      .values({
+        workspaceId: body.workspaceId,
+        projectId: body.projectId ?? null,
+        systemId: body.systemId ?? null,
+        title: body.title,
+        slug,
+        summary: body.summary ?? null,
+        recordType: body.recordType,
+        documentKeyType: null,
+        documentNumber: null,
+        lifecycleStatus,
+        sourceOfTruthMode: body.sourceOfTruthMode ?? 'hub_managed',
+        contentMarkdown,
+        contentHtmlCache: rendered.html,
+        language: body.language ?? 'en',
+        translationGroupId: body.translationGroupId ?? null,
+        metadataJson,
+        currentVersionNumber: 1,
+        createdBy: actor.userId,
+        reviewedBy,
+        verifiedAt,
+        updatedAt: now,
+      })
+      .returning();
+
+    if (!row) {
+      throw new AppError({
+        code: 'KNOWLEDGE_RECORD_CREATE_FAILED',
+        message: 'Failed to create knowledge record',
+        statusCode: 500,
+      });
+    }
+    created = row;
   }
 
   await insertVersionSnapshot(app.database, {
@@ -719,6 +759,8 @@ export async function updateKnowledgeRecord(
   let nextDocumentKeyType = record.documentKeyType;
   let nextDocumentNumber = record.documentNumber;
   let keyPrefix: string | null = null;
+  let updated: typeof knowledgeRecords.$inferSelect;
+
   if (nextProjectId && nextDocumentNumber == null) {
     const docCode = getDocKeyCode(nextRecordType);
     if (!docCode) {
@@ -728,31 +770,69 @@ export async function updateKnowledgeRecord(
         statusCode: 400,
       });
     }
-    const allocated = await allocateIssueNumber(
-      app.database,
-      nextProjectId,
-      docCode,
-    );
-    nextDocumentKeyType = allocated.issueKeyType;
-    nextDocumentNumber = allocated.issueNumber;
-    keyPrefix = allocated.keyPrefix;
-  } else if (nextProjectId) {
-    keyPrefix = await loadProjectKeyPrefix(app.database, nextProjectId);
-  }
 
-  const [updated] = await app.database.db
-    .update(knowledgeRecords)
-    .set({
-      title: nextTitle,
-      summary: nextSummary,
-      recordType: nextRecordType,
-      documentKeyType: nextDocumentKeyType,
-      documentNumber: nextDocumentNumber,
-      lifecycleStatus,
-      sourceOfTruthMode: body.sourceOfTruthMode ?? record.sourceOfTruthMode,
-      contentMarkdown: nextContent,
-      contentHtmlCache: rendered.html,
-      language: nextLanguage,
+    const result = await app.database.db.transaction(async (tx) => {
+      const allocated = await allocateIssueNumber(
+        app.database,
+        nextProjectId,
+        docCode,
+        tx,
+      );
+      const [row] = await tx
+        .update(knowledgeRecords)
+        .set({
+          title: nextTitle,
+          summary: nextSummary,
+          recordType: nextRecordType,
+          documentKeyType: allocated.issueKeyType,
+          documentNumber: allocated.issueNumber,
+          lifecycleStatus,
+          sourceOfTruthMode: body.sourceOfTruthMode ?? record.sourceOfTruthMode,
+          contentMarkdown: nextContent,
+          contentHtmlCache: rendered.html,
+          language: nextLanguage,
+          translationGroupId: nextTranslationGroupId,
+          metadataJson: nextMetadata,
+          currentVersionNumber: nextVersionNumber,
+          reviewedBy,
+          verifiedAt,
+          updatedAt: now,
+        })
+        .where(eq(knowledgeRecords.id, recordId))
+        .returning();
+
+      if (!row) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_UPDATE_FAILED',
+          message: 'Failed to update knowledge record',
+          statusCode: 500,
+        });
+      }
+      return { updated: row, keyPrefix: allocated.keyPrefix };
+    });
+
+    updated = result.updated;
+    keyPrefix = result.keyPrefix;
+    nextDocumentKeyType = updated.documentKeyType;
+    nextDocumentNumber = updated.documentNumber;
+  } else {
+    if (nextProjectId) {
+      keyPrefix = await loadProjectKeyPrefix(app.database, nextProjectId);
+    }
+
+    const [row] = await app.database.db
+      .update(knowledgeRecords)
+      .set({
+        title: nextTitle,
+        summary: nextSummary,
+        recordType: nextRecordType,
+        documentKeyType: nextDocumentKeyType,
+        documentNumber: nextDocumentNumber,
+        lifecycleStatus,
+        sourceOfTruthMode: body.sourceOfTruthMode ?? record.sourceOfTruthMode,
+        contentMarkdown: nextContent,
+        contentHtmlCache: rendered.html,
+        language: nextLanguage,
       translationGroupId: nextTranslationGroupId,
       projectId: nextProjectId,
       systemId: nextSystemId,
@@ -777,12 +857,14 @@ export async function updateKnowledgeRecord(
     .where(eq(knowledgeRecords.id, recordId))
     .returning();
 
-  if (!updated) {
-    throw new AppError({
-      code: 'KNOWLEDGE_RECORD_UPDATE_FAILED',
-      message: 'Failed to update knowledge record',
-      statusCode: 500,
-    });
+    if (!row) {
+      throw new AppError({
+        code: 'KNOWLEDGE_RECORD_UPDATE_FAILED',
+        message: 'Failed to update knowledge record',
+        statusCode: 500,
+      });
+    }
+    updated = row;
   }
 
   if (shouldVersion) {

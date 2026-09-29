@@ -65,6 +65,7 @@ import {
   createResolvingMailTransport,
   resolveMailConfig,
 } from './lib/mail-settings.js';
+import { sanitizeError } from '@project-knowledge-hub/domain';
 
 export type ApiDependencies = {
   env: AppEnv;
@@ -160,14 +161,15 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
       });
     }
 
-    const statusCode =
-      'statusCode' in error && typeof error.statusCode === 'number' ? error.statusCode : 500;
-
-    request.log.error({ err: error }, 'Unhandled API error');
-    return reply.status(statusCode).send({
+    const sanitized = sanitizeError(error, { preserveClientErrors: true });
+    if (sanitized.logPayload) {
+      request.log.error({ err: error, ...sanitized.logPayload }, 'Database or internal error');
+    }
+    return reply.status(sanitized.statusCode).send({
       error: {
-        code: 'INTERNAL_SERVER_ERROR',
-        message: statusCode >= 500 ? 'Internal server error' : error.message,
+        code: sanitized.code,
+        message: sanitized.message,
+        correlationId: sanitized.correlationId,
         details: null,
       },
     });

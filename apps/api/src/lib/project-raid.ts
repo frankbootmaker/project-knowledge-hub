@@ -332,35 +332,39 @@ export async function createRaidItem(
     await assertWorkspaceMember(database, input.workspaceId, input.ownerUserId);
   }
 
-  const allocated = await allocateIssueNumber(
-    database,
-    input.projectId,
-    raidKindToIssueKeyType(input.kind),
-  );
+  const created = await database.db.transaction(async (tx) => {
+    const allocated = await allocateIssueNumber(
+      database,
+      input.projectId,
+      raidKindToIssueKeyType(input.kind),
+      tx,
+    );
 
-  const [created] = await database.db
-    .insert(projectRaidItems)
-    .values({
-      projectId: input.projectId,
-      kind: input.kind,
-      title: input.title.trim(),
-      description: input.description?.trim() || null,
-      status: input.status ?? 'open',
-      severity: input.severity ?? 'medium',
-      ownerUserId: input.ownerUserId ?? null,
-      dueDate: input.dueDate ?? null,
-      sortOrder: input.sortOrder ?? 0,
-      issueKeyType: allocated.issueKeyType,
-      issueNumber: allocated.issueNumber,
-    })
-    .returning();
-  if (!created) {
-    throw new AppError({
-      code: 'RAID_CREATE_FAILED',
-      message: 'Failed to create RAID item',
-      statusCode: 500,
-    });
-  }
+    const [row] = await tx
+      .insert(projectRaidItems)
+      .values({
+        projectId: input.projectId,
+        kind: input.kind,
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        status: input.status ?? 'open',
+        severity: input.severity ?? 'medium',
+        ownerUserId: input.ownerUserId ?? null,
+        dueDate: input.dueDate ?? null,
+        sortOrder: input.sortOrder ?? 0,
+        issueKeyType: allocated.issueKeyType,
+        issueNumber: allocated.issueNumber,
+      })
+      .returning();
+    if (!row) {
+      throw new AppError({
+        code: 'RAID_CREATE_FAILED',
+        message: 'Failed to create RAID item',
+        statusCode: 500,
+      });
+    }
+    return row;
+  });
 
   if (input.taskIds && input.taskIds.length > 0) {
     await setRaidTaskLinks(database, {
@@ -478,36 +482,40 @@ export async function transferRaidItem(
     });
   }
 
-  const allocated = await allocateIssueNumber(
-    database,
-    source.projectId,
-    raidKindToIssueKeyType(targetKind),
-  );
+  const created = await database.db.transaction(async (tx) => {
+    const allocated = await allocateIssueNumber(
+      database,
+      source.projectId,
+      raidKindToIssueKeyType(targetKind),
+      tx,
+    );
 
-  const [created] = await database.db
-    .insert(projectRaidItems)
-    .values({
-      projectId: source.projectId,
-      kind: targetKind,
-      title: source.title,
-      description: source.description,
-      status: source.status,
-      severity: source.severity,
-      ownerUserId: source.ownerUserId,
-      dueDate: source.dueDate,
-      sortOrder: source.sortOrder,
-      issueKeyType: allocated.issueKeyType,
-      issueNumber: allocated.issueNumber,
-      transferredFromRaidItemId: source.id,
-    })
-    .returning();
-  if (!created) {
-    throw new AppError({
-      code: 'RAID_TRANSFER_FAILED',
-      message: 'Failed to create transfer target RAID item',
-      statusCode: 500,
-    });
-  }
+    const [row] = await tx
+      .insert(projectRaidItems)
+      .values({
+        projectId: source.projectId,
+        kind: targetKind,
+        title: source.title,
+        description: source.description,
+        status: source.status,
+        severity: source.severity,
+        ownerUserId: source.ownerUserId,
+        dueDate: source.dueDate,
+        sortOrder: source.sortOrder,
+        issueKeyType: allocated.issueKeyType,
+        issueNumber: allocated.issueNumber,
+        transferredFromRaidItemId: source.id,
+      })
+      .returning();
+    if (!row) {
+      throw new AppError({
+        code: 'RAID_TRANSFER_FAILED',
+        message: 'Failed to create transfer target RAID item',
+        statusCode: 500,
+      });
+    }
+    return row;
+  });
 
   const taskIds = source.tasks.map((task) => task.id);
   if (taskIds.length > 0) {
