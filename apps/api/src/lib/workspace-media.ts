@@ -11,17 +11,14 @@ import {
   workspaceMedia,
   type Database,
 } from '@project-knowledge-hub/database';
-import { AppError } from '@project-knowledge-hub/domain';
-
-const ALLOWED_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-]);
+import {
+  AppError,
+  assertMediaBytesMatchContentType,
+  isAllowedMediaType,
+} from '@project-knowledge-hub/domain';
 
 export function isAllowedMediaContentType(value: string): boolean {
-  return ALLOWED_TYPES.has(value);
+  return isAllowedMediaType(value);
 }
 
 export function mediaPublicUrl(mediaId: string): string {
@@ -199,13 +196,11 @@ export async function createWorkspaceMedia(
     blobStore?: BlobStore;
   },
 ): Promise<WorkspaceMediaRow> {
-  if (!isAllowedMediaContentType(input.contentType)) {
-    throw new AppError({
-      code: 'MEDIA_TYPE_UNSUPPORTED',
-      message: 'Media must be JPEG, PNG, or WebP',
-      statusCode: 400,
-    });
-  }
+  const canonicalContentType = assertMediaBytesMatchContentType(
+    new Uint8Array(input.buffer),
+    input.contentType,
+  );
+
   if (input.buffer.byteLength === 0 || input.buffer.byteLength > input.maxBytes) {
     throw new AppError({
       code: 'MEDIA_TOO_LARGE',
@@ -213,6 +208,7 @@ export async function createWorkspaceMedia(
       statusCode: 400,
     });
   }
+
   if (input.knowledgeRecordId) {
     await assertRecordInWorkspace(
       database,
@@ -224,7 +220,7 @@ export async function createWorkspaceMedia(
   const mediaId = randomUUID();
   await writeMediaBytes(input.uploadDir, input.workspaceId, mediaId, input.buffer, {
     blobStore: input.blobStore,
-    contentType: input.contentType,
+    contentType: canonicalContentType,
   });
 
   const [row] = await database.db
@@ -233,7 +229,7 @@ export async function createWorkspaceMedia(
       id: mediaId,
       workspaceId: input.workspaceId,
       knowledgeRecordId: input.knowledgeRecordId ?? null,
-      contentType: input.contentType,
+      contentType: canonicalContentType,
       byteSize: input.buffer.byteLength,
       originalFilename: input.originalFilename ?? null,
       altText: input.altText ?? null,
