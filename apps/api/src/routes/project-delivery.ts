@@ -393,8 +393,7 @@ export async function registerProjectDeliveryRoutes(
 
     const task = await updateTask(app.database, params.taskId, {
       tokensUsed: body.tokensUsed,
-      aiSystemId:
-        body.aiSystemId === undefined ? existing.aiSystemId : body.aiSystemId,
+      aiSystemId: body.aiSystemId,
       actorUserId: principal.userId,
       workspaceId: project.workspaceId,
     });

@@ -1470,7 +1470,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Requires pm:write.',
+    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1510,7 +1510,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. Requires pm:write.',
+    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1537,7 +1537,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'report_project_task_ai_usage',
-    'Record AI token usage on a task (prefer when marking done). Stores tokensUsed and optional aiSystemId, then refreshes the cost snapshot. Billable when the AI system cost mode is flat/api/mixed; note_only records usage at $0. Requires pm:write.',
+    'Record AI token usage on a task (prefer when marking done). Stores tokensUsed and optional aiSystemId, then refreshes the cost snapshot. Billable when the AI system cost mode is flat/api/mixed; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
       tokensUsed: z.number().int().min(0),

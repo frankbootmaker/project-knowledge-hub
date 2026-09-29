@@ -32,6 +32,7 @@ import {
   toHumanKeyFields,
 } from './project-issue-keys.js';
 import { avatarUrlForUser } from './public-user.js';
+import { assertAiAssistantForProject } from './ai-assistant-systems.js';
 
 export type PublicRaciEntry = {
   userId: string;
@@ -911,6 +912,14 @@ export async function createTask(
   await assertMilestoneInProject(database, input.projectId, input.milestoneId);
   await assertUserStoryInProject(database, input.projectId, input.userStoryId);
   await assertSprintInProject(database, input.projectId, input.sprintId);
+  if (input.aiSystemId) {
+    await assertAiAssistantForProject(
+      database,
+      input.projectId,
+      input.workspaceId,
+      input.aiSystemId,
+    );
+  }
   if (input.raci) {
     validateRaciEntries(input.raci);
     await assertWorkspaceMembers(
@@ -1043,6 +1052,26 @@ export async function updateTask(
   }
   if (input.sprintId !== undefined) {
     await assertSprintInProject(database, existing.projectId, input.sprintId);
+  }
+  if (input.aiSystemId !== undefined && input.aiSystemId !== null) {
+    const [project] = await database.db
+      .select({ workspaceId: projects.workspaceId })
+      .from(projects)
+      .where(eq(projects.id, existing.projectId))
+      .limit(1);
+    if (!project) {
+      throw new AppError({
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found',
+        statusCode: 404,
+      });
+    }
+    await assertAiAssistantForProject(
+      database,
+      existing.projectId,
+      project.workspaceId,
+      input.aiSystemId,
+    );
   }
   if (input.currentOwnerUserId && input.workspaceId) {
     await assertWorkspaceMembers(database, input.workspaceId, [

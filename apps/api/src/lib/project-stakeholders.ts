@@ -31,12 +31,13 @@ import {
   requireProjectContext,
 } from './project-delivery.js';
 import { avatarUrlForUser } from './public-user.js';
+import { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
 
 export type StakeholderKind = 'person' | 'ai_assistant' | 'open_role';
 export type StakeholderSource = 'roster' | 'owner' | 'raci' | 'ai_assistant';
 
 /** Catalogue systems with this type appear as AI-assistant stakeholders (not general Systems). */
-export const AI_ASSISTANT_SYSTEM_TYPE = 'ai_assistant';
+export { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
 
 export type PublicStakeholder = {
   kind: StakeholderKind;

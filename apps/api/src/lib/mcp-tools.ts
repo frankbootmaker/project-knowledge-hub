@@ -2489,10 +2489,7 @@ export function createMcpToolHandlers(
       });
       const task = await updateTask(app.database, taskId, {
         tokensUsed: input.tokensUsed,
-        aiSystemId:
-          input.aiSystemId === undefined
-            ? existing.aiSystemId
-            : input.aiSystemId,
+        aiSystemId: input.aiSystemId,
         actorUserId: actingUserId,
         workspaceId: project.workspaceId,
       });
