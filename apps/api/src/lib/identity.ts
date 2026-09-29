@@ -10,6 +10,7 @@ import {
 } from '@project-knowledge-hub/database';
 import { membershipRoleSchema, type MembershipRole } from '@project-knowledge-hub/domain';
 import type { AuthPrincipal } from '@project-knowledge-hub/permissions';
+import { webSignInBlockReason } from './user-category.js';
 
 export async function writeAuditEvent(
   database: Database,
@@ -50,6 +51,7 @@ export async function loadPrincipalBySessionToken(
       email: users.email,
       displayName: users.displayName,
       status: users.status,
+      userType: users.userType,
       isSystemAdmin: users.isSystemAdmin,
     })
     .from(sessions)
@@ -63,7 +65,7 @@ export async function loadPrincipalBySessionToken(
     )
     .limit(1);
 
-  if (!session || session.status !== 'active') {
+  if (!session || webSignInBlockReason(session)) {
     return null;
   }
 

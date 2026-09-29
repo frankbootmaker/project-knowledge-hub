@@ -24,6 +24,7 @@ import {
   recordTaskActivity,
   type PublicTask,
 } from './project-delivery.js';
+import { activeMemberConditions } from './user-category.js';
 import {
   allocateIssueNumber,
   getProjectKeyPrefix,
@@ -71,6 +72,7 @@ export type PublicTaskActivity = {
   actorUserId: string | null;
   actorDisplayName: string | null;
   actorEmail: string | null;
+  actorUserType: string | null;
   type: TaskActivityType;
   body: string | null;
   metadata: Record<string, unknown> | null;
@@ -139,7 +141,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        eq(users.status, 'active'),
+        ...activeMemberConditions(),
       ),
     );
   if (rows.length !== unique.length) {
@@ -502,6 +504,7 @@ export async function listTaskActivities(
       createdAt: projectTaskActivities.createdAt,
       actorDisplayName: users.displayName,
       actorEmail: users.email,
+      actorUserType: users.userType,
     })
     .from(projectTaskActivities)
     .leftJoin(users, eq(projectTaskActivities.actorUserId, users.id))
@@ -514,6 +517,7 @@ export async function listTaskActivities(
     actorUserId: row.actorUserId,
     actorDisplayName: row.actorDisplayName,
     actorEmail: row.actorEmail,
+    actorUserType: row.actorUserType,
     type: taskActivityTypeSchema.parse(row.type),
     body: row.body,
     metadata: row.metadataJson ?? null,

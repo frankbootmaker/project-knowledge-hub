@@ -756,6 +756,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       id: approver.userId,
       displayName: approver.displayName,
       email: approver.email,
+      userType: approver.userType,
     };
 
     await writeAuditEvent(app.database, {
@@ -770,6 +771,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
           userId: approver.userId,
           displayName: approver.displayName,
           email: approver.email,
+          userType: approver.userType,
         },
       },
       ipAddress: request.ip,
@@ -877,6 +879,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
                 userId: reviewedByUser.id,
                 displayName: reviewedByUser.displayName,
                 email: reviewedByUser.email,
+                userType: reviewedByUser.userType,
               },
             }
           : {}),

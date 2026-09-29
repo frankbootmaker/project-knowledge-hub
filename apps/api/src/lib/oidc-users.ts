@@ -1,6 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import { users } from '@project-knowledge-hub/database';
+import { webSignInBlockReason } from './user-category.js';
 
 export type OidcResolveInput = {
   idpSource: string;
@@ -48,7 +49,7 @@ export async function resolveOidcUser(
     .limit(1);
 
   if (bySubject) {
-    if (bySubject.status !== 'active') {
+    if (webSignInBlockReason(bySubject)) {
       return { status: 'inactive', userId: bySubject.id };
     }
     return { status: 'ok', user: bySubject, linked: false, created: false };
@@ -108,7 +109,7 @@ async function linkExistingByEmail(
   byEmail: typeof users.$inferSelect,
   input: OidcResolveInput,
 ): Promise<OidcResolveResult> {
-  if (byEmail.status !== 'active') {
+  if (webSignInBlockReason(byEmail)) {
     return { status: 'inactive', userId: byEmail.id };
   }
 

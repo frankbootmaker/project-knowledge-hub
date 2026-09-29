@@ -26,6 +26,7 @@ export function toPublicUser(user: typeof users.$inferSelect) {
     displayName: user.displayName,
     fullName: user.fullName ?? null,
     status: user.status,
+    userType: user.userType,
     isSystemAdmin: user.isSystemAdmin,
     idpSource: user.idpSource ?? null,
     idpSubject: user.idpSubject ?? null,

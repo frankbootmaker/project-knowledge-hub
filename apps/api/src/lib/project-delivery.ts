@@ -33,11 +33,13 @@ import {
 } from './project-issue-keys.js';
 import { avatarUrlForUser } from './public-user.js';
 import { assertAiAssistantForProject } from './ai-assistant-systems.js';
+import { activeMemberConditions } from './user-category.js';
 
 export type PublicRaciEntry = {
   userId: string;
   displayName: string;
   email: string;
+  userType: string;
   role: RaciRole;
   avatarUrl: string | null;
 };
@@ -46,6 +48,7 @@ export type PublicTaskOwner = {
   userId: string;
   displayName: string;
   email: string;
+  userType: string;
   avatarUrl: string | null;
 };
 
@@ -212,6 +215,7 @@ async function loadTaskContext(
         userId: users.id,
         displayName: users.displayName,
         email: users.email,
+        userType: users.userType,
         avatarContentType: users.avatarContentType,
         updatedAt: users.updatedAt,
       })
@@ -222,6 +226,7 @@ async function loadTaskContext(
         userId: owner.userId,
         displayName: owner.displayName,
         email: owner.email,
+        userType: owner.userType,
         avatarUrl: avatarUrlForUser(
           owner.userId,
           owner.avatarContentType ?? null,
@@ -383,6 +388,7 @@ async function loadRaciForTasks(
       role: projectTaskRaci.role,
       displayName: users.displayName,
       email: users.email,
+      userType: users.userType,
       avatarContentType: users.avatarContentType,
       updatedAt: users.updatedAt,
     })
@@ -395,6 +401,7 @@ async function loadRaciForTasks(
       userId: row.userId,
       displayName: row.displayName,
       email: row.email,
+      userType: row.userType,
       role: raciRoleSchema.parse(row.role),
       avatarUrl: avatarUrlForUser(
         row.userId,
@@ -833,7 +840,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        eq(users.status, 'active'),
+        ...activeMemberConditions(),
       ),
     );
   if (rows.length !== unique.length) {

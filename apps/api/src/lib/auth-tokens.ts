@@ -10,6 +10,7 @@ import {
   type Database,
 } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
+import { assertUserMayUseWebSignIn, webSignInBlockReason } from './user-category.js';
 
 export type AuthTokenPurpose = 'password_reset' | 'invite' | 'email_confirm';
 
@@ -67,6 +68,8 @@ export async function previewAuthToken(
       expiresAt: authTokens.expiresAt,
       usedAt: authTokens.usedAt,
       email: users.email,
+      userType: users.userType,
+      status: users.status,
     })
     .from(authTokens)
     .innerJoin(users, eq(users.id, authTokens.userId))
@@ -74,6 +77,11 @@ export async function previewAuthToken(
     .limit(1);
 
   if (!row) {
+    return { status: 'invalid' };
+  }
+
+  // Outstanding reset/invite links must not look usable for system accounts.
+  if (webSignInBlockReason(row, { requireActive: false }) === 'system') {
     return { status: 'invalid' };
   }
 
@@ -148,6 +156,21 @@ export async function consumeAuthTokenAndSetPassword(
       message: 'This link is invalid or has already been used',
       statusCode: 400,
     });
+  }
+
+  try {
+    // Invite accept is for non-active invited humans. System users are refused
+    // even when a token was issued before the category change.
+    assertUserMayUseWebSignIn(user, { requireActive: false });
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'WEB_SIGN_IN_FORBIDDEN') {
+      throw new AppError({
+        code: 'AUTH_TOKEN_INVALID',
+        message: 'This link is invalid or has already been used',
+        statusCode: 400,
+      });
+    }
+    throw error;
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -228,6 +251,19 @@ export async function consumeEmailConfirmToken(
       message: 'This link is invalid or has already been used',
       statusCode: 400,
     });
+  }
+
+  try {
+    assertUserMayUseWebSignIn(user, { requireActive: false });
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'WEB_SIGN_IN_FORBIDDEN') {
+      throw new AppError({
+        code: 'AUTH_TOKEN_INVALID',
+        message: 'This link is invalid or has already been used',
+        statusCode: 400,
+      });
+    }
+    throw error;
   }
 
   await database.db

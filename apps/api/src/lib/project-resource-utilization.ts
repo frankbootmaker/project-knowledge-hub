@@ -15,11 +15,13 @@ import {
   type StakeholderEngagementType,
 } from '@project-knowledge-hub/domain';
 import { requireProjectContext } from './project-delivery.js';
+import { systemUserExclusionCondition } from './user-category.js';
 import type { ProjectRagStatus } from './project-budget.js';
 
 export type ResourcePersonUtilization = {
   userId: string;
   displayName: string;
+  userType: string;
   engagementType: StakeholderEngagementType | null;
   capacityHours: number | null;
   plannedHours: number;
@@ -153,6 +155,7 @@ export async function getProjectResourceUtilization(
   database: Database,
   projectId: string,
   viewInput: string = 'planned',
+  options: { includeSystemUsers?: boolean } = {},
 ): Promise<ProjectResourceUtilization> {
   await requireProjectContext(database, projectId);
   const viewParsed = resourceUtilizationViewSchema.safeParse(viewInput);
@@ -160,6 +163,7 @@ export async function getProjectResourceUtilization(
     ? viewParsed.data
     : 'planned';
 
+  const hideSystemUsers = systemUserExclusionCondition(options);
   const rosterRows = await database.db
     .select({
       userId: projectStakeholders.userId,
@@ -172,10 +176,16 @@ export async function getProjectResourceUtilization(
       displayName: users.displayName,
       fullName: users.fullName,
       email: users.email,
+      userType: users.userType,
     })
     .from(projectStakeholders)
     .innerJoin(users, eq(projectStakeholders.userId, users.id))
-    .where(eq(projectStakeholders.projectId, projectId));
+    .where(
+      and(
+        eq(projectStakeholders.projectId, projectId),
+        ...(hideSystemUsers ? [hideSystemUsers] : []),
+      ),
+    );
 
   const tasks = await database.db
     .select({
@@ -263,6 +273,7 @@ export async function getProjectResourceUtilization(
     return {
       userId: row.userId,
       displayName: row.fullName || row.displayName || row.email || row.userId,
+      userType: row.userType,
       engagementType,
       capacityHours,
       plannedHours,

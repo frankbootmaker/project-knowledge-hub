@@ -12,6 +12,7 @@ import {
   projectStakeholderRoleSchema,
   type ProjectStakeholderRole,
 } from '@project-knowledge-hub/domain';
+import { activeMemberConditions } from './user-category.js';
 
 export type PublicPinnedRecord = {
   id: string;
@@ -25,6 +26,7 @@ export type PublicInitialStakeholder = {
   userId: string;
   displayName: string;
   email: string;
+  userType: string;
   projectRole: ProjectStakeholderRole;
   sortOrder: number;
 };
@@ -44,7 +46,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        eq(users.status, 'active'),
+        ...activeMemberConditions(),
       ),
     );
   if (rows.length !== unique.length) {
@@ -134,6 +136,7 @@ export async function listInitialStakeholders(
       sortOrder: projectInitialStakeholders.sortOrder,
       displayName: users.displayName,
       email: users.email,
+      userType: users.userType,
     })
     .from(projectInitialStakeholders)
     .innerJoin(users, eq(projectInitialStakeholders.userId, users.id))
@@ -147,6 +150,7 @@ export async function listInitialStakeholders(
     userId: row.userId,
     displayName: row.displayName,
     email: row.email,
+    userType: row.userType,
     projectRole: projectStakeholderRoleSchema.parse(row.projectRole),
     sortOrder: row.sortOrder,
   }));

@@ -510,6 +510,8 @@ export const userStatusSchema = z.enum([
   'pending_approval',
 ]);
 
+export const userTypeSchema = z.enum(['human', 'system']);
+
 /** UI / email locale preference (matches web next-intl locales). */
 export const APP_LOCALES = ['en', 'de', 'hu'] as const;
 export const appLocaleSchema = z.enum(APP_LOCALES);
@@ -687,6 +689,7 @@ export type SystemItDetails = z.infer<typeof systemItDetailsSchema>;
 export type SystemItDetailsPatch = z.infer<typeof systemItDetailsPatchSchema>;
 export type MembershipRole = z.infer<typeof membershipRoleSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
+export type UserType = z.infer<typeof userTypeSchema>;
 export type MilestoneStatus = z.infer<typeof milestoneStatusSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export type SprintStatus = z.infer<typeof sprintStatusSchema>;

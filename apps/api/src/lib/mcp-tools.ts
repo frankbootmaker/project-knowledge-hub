@@ -1063,6 +1063,7 @@ export function createMcpToolHandlers(
     async getProjectResourceUtilization(input: {
       projectId: string;
       view?: 'planned' | 'burn' | 'combined';
+      includeSystemUsers?: boolean;
     }) {
       await requirePmProject(app, client, input.projectId);
       return {
@@ -1070,6 +1071,7 @@ export function createMcpToolHandlers(
           app.database,
           input.projectId,
           input.view ?? 'planned',
+          { includeSystemUsers: input.includeSystemUsers },
         ),
       };
     },
@@ -2864,6 +2866,7 @@ export function createMcpToolHandlers(
         members: await listWorkspaceMembersForStaffing(
           app.database,
           input.workspaceId,
+          { includeSystemUsers: input.includeSystemUsers },
         ),
       };
     },

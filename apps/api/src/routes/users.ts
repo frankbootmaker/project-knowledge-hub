@@ -2,8 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { hashPassword } from '@project-knowledge-hub/auth';
-import { memberships, users, workspaces } from '@project-knowledge-hub/database';
-import { AppError, passwordSchema, userStatusSchema } from '@project-knowledge-hub/domain';
+import {
+  auditEvents,
+  authTokens,
+  memberships,
+  sessions,
+  users,
+  workspaces,
+} from '@project-knowledge-hub/database';
+import { AppError } from '@project-knowledge-hub/domain';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import {
   assertMutatingOrigin,
@@ -20,6 +27,14 @@ import { issueAuthToken } from '../lib/auth-tokens.js';
 import { closeUserAccount, purgeUserAccount } from '../lib/close-user.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { toPublicUser } from '../lib/public-user.js';
+import {
+  categoryChangeAuditMetadata,
+  categoryChangeEffects,
+  changeUserCategorySchema,
+  createUserSchema,
+  updateUserSchema,
+  validateUserCategoryChange,
+} from '../lib/user-category.js';
 
 const assignableRoleSchema = z.enum(['workspace_admin', 'maintainer', 'reader']);
 
@@ -33,77 +48,6 @@ const approveUserSchema = z.object({
     )
     .min(1),
 });
-
-const createUserSchema = z
-  .object({
-    email: z.string().email().max(320),
-    displayName: z.string().min(1).max(160),
-    fullName: z.string().max(200).nullable().optional(),
-    password: passwordSchema.optional(),
-    sendInvite: z.boolean().optional(),
-    status: userStatusSchema.optional(),
-    isSystemAdmin: z.boolean().optional(),
-    idpSource: z.string().min(1).max(64).nullable().optional(),
-    idpSubject: z.string().min(1).max(320).nullable().optional(),
-  })
-  .superRefine((value, ctx) => {
-    // Password required when explicitly not inviting.
-    if (value.sendInvite === false && !value.password) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Password is required unless sending an invite',
-        path: ['password'],
-      });
-    }
-    const hasSource = Boolean(value.idpSource?.trim());
-    const hasSubject = Boolean(value.idpSubject?.trim());
-    if (hasSource !== hasSubject) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'IdP source and subject must be set together',
-        path: ['idpSource'],
-      });
-    }
-  });
-
-const updateUserSchema = z
-  .object({
-    displayName: z.string().min(1).max(160).optional(),
-    fullName: z.string().max(200).nullable().optional(),
-    status: userStatusSchema.optional(),
-    isSystemAdmin: z.boolean().optional(),
-    password: passwordSchema.optional(),
-    idpSource: z.string().min(1).max(64).nullable().optional(),
-    idpSubject: z.string().min(1).max(320).nullable().optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.idpSource !== undefined || value.idpSubject !== undefined) {
-      const source = value.idpSource;
-      const subject = value.idpSubject;
-      const clearing =
-        (source === null || source === '') &&
-        (subject === null || subject === '');
-      const bothSet =
-        typeof source === 'string' &&
-        source.trim().length > 0 &&
-        typeof subject === 'string' &&
-        subject.trim().length > 0;
-      if (!clearing && !bothSet && (source !== undefined || subject !== undefined)) {
-        // Allow partial omit (undefined) when only one field is in the patch
-        // if the other is also provided as null to clear, or both set.
-        if (
-          (source === null && subject !== null && subject !== undefined) ||
-          (subject === null && source !== null && source !== undefined)
-        ) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'IdP source and subject must be cleared or set together',
-            path: ['idpSource'],
-          });
-        }
-      }
-    }
-  });
 
 export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/users', async (request) => {
@@ -123,7 +67,8 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
     requireSystemAdmin(principal);
     const body = createUserSchema.parse(request.body);
     const email = body.email.toLowerCase();
-    const inviteMode = body.sendInvite === true || !body.password;
+    const isSystem = body.userType === 'system';
+    const inviteMode = !isSystem && (body.sendInvite === true || !body.password);
 
     const [existing] = await app.database.db
       .select()
@@ -147,10 +92,13 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
         email,
         displayName: body.displayName,
         fullName: body.fullName?.trim() ? body.fullName.trim() : null,
+        userType: body.userType ?? 'human',
         passwordHash: inviteMode
           ? null
-          : await hashPassword(body.password!),
-        status: inviteMode ? 'invited' : (body.status ?? 'active'),
+          : body.password
+            ? await hashPassword(body.password)
+            : null,
+        status: isSystem ? 'active' : (inviteMode ? 'invited' : (body.status ?? 'active')),
         isSystemAdmin: body.isSystemAdmin ?? false,
         idpSource,
         idpSubject,
@@ -170,12 +118,13 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
       organizationId: organization?.id ?? null,
       actorType: 'user',
       actorId: principal.userId,
-      action: inviteMode ? 'user.invite' : 'user.create',
+      action: isSystem ? 'user.create_system' : (inviteMode ? 'user.invite' : 'user.create'),
       entityType: 'user',
       entityId: created.id,
       metadata: {
         email: created.email,
         isSystemAdmin: created.isSystemAdmin,
+        userType: created.userType,
         invited: inviteMode,
       },
       ipAddress: request.ip,
@@ -363,6 +312,82 @@ export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
         passwordChanged: Boolean(body.password),
       },
       ipAddress: request.ip,
+    });
+
+    return { user: updated ? toPublicUser(updated) : null };
+  });
+
+  app.post('/api/v1/users/:userId/change-category', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+    const body = changeUserCategorySchema.parse(request.body);
+
+    const [existing] = await app.database.db
+      .select()
+      .from(users)
+      .where(eq(users.id, params.userId))
+      .limit(1);
+
+    if (!existing) {
+      throw new AppError({
+        code: 'USER_NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      });
+    }
+
+    validateUserCategoryChange({
+      existing,
+      target: body.userType,
+      actorUserId: principal.userId,
+    });
+
+    const effects = categoryChangeEffects(body.userType);
+    const organization = await getDefaultOrganization(app.database);
+    const now = new Date();
+
+    const updated = await app.database.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(users)
+        .set({
+          userType: body.userType,
+          passwordHash: effects.clearPassword ? null : existing.passwordHash,
+          updatedAt: now,
+        })
+        .where(eq(users.id, params.userId))
+        .returning();
+
+      if (effects.revokeWebAccess) {
+        await tx
+          .update(sessions)
+          .set({ revokedAt: now })
+          .where(and(eq(sessions.userId, params.userId), isNull(sessions.revokedAt)));
+        await tx
+          .update(authTokens)
+          .set({ usedAt: now })
+          .where(
+            and(eq(authTokens.userId, params.userId), isNull(authTokens.usedAt)),
+          );
+      }
+
+      await tx.insert(auditEvents).values({
+        organizationId: organization?.id ?? null,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'user.change_category',
+        entityType: 'user',
+        entityId: params.userId,
+        metadataJson: categoryChangeAuditMetadata({
+          from: existing.userType,
+          to: body.userType,
+          email: existing.email,
+        }),
+        ipAddress: request.ip,
+      });
+
+      return row ?? null;
     });
 
     return { user: updated ? toPublicUser(updated) : null };

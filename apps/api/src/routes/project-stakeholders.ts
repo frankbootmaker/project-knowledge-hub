@@ -168,6 +168,10 @@ export async function registerProjectStakeholderRoutes(
       const query = z
         .object({
           view: resourceUtilizationViewSchema.optional(),
+          includeSystemUsers: z
+            .enum(['true', 'false'])
+            .optional()
+            .transform((value) => value === 'true'),
         })
         .parse(request.query);
       const { project } = await requireProjectContext(
@@ -180,6 +184,7 @@ export async function registerProjectStakeholderRoutes(
           app.database,
           project.id,
           query.view ?? 'planned',
+          { includeSystemUsers: query.includeSystemUsers },
         ),
       };
     },

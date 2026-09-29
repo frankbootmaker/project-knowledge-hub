@@ -32,6 +32,10 @@ import {
 } from './project-delivery.js';
 import { avatarUrlForUser } from './public-user.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
+import {
+  activeHumanUserConditions,
+  activeMemberConditions,
+} from './user-category.js';
 
 export type StakeholderKind = 'person' | 'ai_assistant' | 'open_role';
 export type StakeholderSource = 'roster' | 'owner' | 'raci' | 'ai_assistant';
@@ -51,6 +55,8 @@ export type PublicStakeholder = {
   displayName: string;
   fullName: string | null;
   email: string | null;
+  /** human | system for people; null for open roles and AI assistants. */
+  userType: string | null;
   projectRole: ProjectStakeholderRole | null;
   jobTitle: string | null;
   roleDescription: string | null;
@@ -176,7 +182,7 @@ async function assertWorkspaceMembers(
       and(
         eq(memberships.workspaceId, workspaceId),
         inArray(memberships.userId, unique),
-        eq(users.status, 'active'),
+        ...activeMemberConditions(),
       ),
     );
   if (rows.length !== unique.length) {
@@ -198,6 +204,7 @@ async function loadUserMap(
       displayName: string;
       fullName: string | null;
       email: string;
+      userType: string;
       avatarUrl: string | null;
     }
   >
@@ -208,6 +215,7 @@ async function loadUserMap(
       displayName: string;
       fullName: string | null;
       email: string;
+      userType: string;
       avatarUrl: string | null;
     }
   >();
@@ -218,6 +226,7 @@ async function loadUserMap(
       displayName: users.displayName,
       fullName: users.fullName,
       email: users.email,
+      userType: users.userType,
       avatarContentType: users.avatarContentType,
       updatedAt: users.updatedAt,
     })
@@ -228,6 +237,7 @@ async function loadUserMap(
       displayName: row.displayName,
       fullName: row.fullName,
       email: row.email,
+      userType: row.userType,
       avatarUrl: avatarUrlForUser(
         row.id,
         row.avatarContentType ?? null,
@@ -404,6 +414,7 @@ export async function listProjectStakeholders(
       displayName: profile.displayName,
       fullName: profile.fullName,
       email: profile.email,
+      userType: profile.userType,
       projectRole: null,
       jobTitle: null,
       ...emptyPersonFields(),
@@ -453,6 +464,7 @@ export async function listProjectStakeholders(
         displayName: roleLabel,
         fullName: null,
         email: null,
+        userType: null,
         projectRole: projectStakeholderRoleSchema.parse(row.projectRole),
         jobTitle: row.jobTitle,
         roleDescription: row.roleDescription,
@@ -530,6 +542,7 @@ export async function listProjectStakeholders(
       displayName: assistant.name,
       fullName: null,
       email: null,
+      userType: null,
       projectRole: null,
       jobTitle: 'AI assistant',
       roleDescription: null,
@@ -1261,6 +1274,7 @@ export async function deleteProjectStakeholder(
 export async function listWorkspaceMembers(
   database: Database,
   workspaceId: string,
+  options: { includeSystemUsers?: boolean } = {},
 ): Promise<
   Array<{
     userId: string;
@@ -1268,8 +1282,14 @@ export async function listWorkspaceMembers(
     fullName: string | null;
     email: string;
     role: string;
+    userType: string;
   }>
 > {
+  const conditions = [
+    eq(memberships.workspaceId, workspaceId),
+    ...activeHumanUserConditions(options),
+  ];
+
   const rows = await database.db
     .select({
       userId: memberships.userId,
@@ -1277,15 +1297,11 @@ export async function listWorkspaceMembers(
       fullName: users.fullName,
       email: users.email,
       role: memberships.role,
+      userType: users.userType,
     })
     .from(memberships)
     .innerJoin(users, eq(memberships.userId, users.id))
-    .where(
-      and(
-        eq(memberships.workspaceId, workspaceId),
-        eq(users.status, 'active'),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(asc(users.displayName));
 
   return rows.map((row) => ({
@@ -1294,5 +1310,6 @@ export async function listWorkspaceMembers(
     fullName: row.fullName,
     email: row.email,
     role: row.role,
+    userType: row.userType,
   }));
 }

@@ -965,7 +965,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'get_my_dashboard_insights',
-    description: 'Dashboard insight rollups for the acting user. Requires pm:read + actingUserId.',
+    description:
+      'Dashboard insight rollups for the acting user. Requires pm:read + actingUserId.',
     scope: 'pm:read',
     body: { type: 'object', properties: {} },
   },
@@ -981,7 +982,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'get_project_resource_utilization',
-    description: 'Per-person capacity vs demand. Requires pm:read.',
+    description:
+      'Per-person capacity vs demand for roster members. System users omitted unless includeSystemUsers is true. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -989,6 +991,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         view: { type: 'string', enum: ['planned', 'burn', 'combined'] },
+        includeSystemUsers: {
+          type: 'boolean',
+          description: 'Include system users in the roster totals',
+        },
       },
     },
   },
@@ -1006,12 +1012,18 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_workspace_members',
     description:
-      'List active workspace members (userId, name, email, role) for assigning open roles. Requires projects:read. Via call_hub_tool on ChatGPT.',
+      'List active workspace members (userId, name, email, role, userType). System users omitted unless includeSystemUsers is true. Requires projects:read. Via call_hub_tool on ChatGPT.',
     scope: 'projects:read',
     body: {
       type: 'object',
       required: ['workspaceId'],
-      properties: { workspaceId: uuidProp('Workspace id') },
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        includeSystemUsers: {
+          type: 'boolean',
+          description: 'Include system users in the member list',
+        },
+      },
     },
   },
   {

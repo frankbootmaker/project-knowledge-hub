@@ -102,7 +102,10 @@ async function accessibleWorkspaceIds(
 
 export async function getDashboardInsights(
   database: Database,
-  input: { userId: string; isSystemAdmin: boolean },
+  input: {
+    userId: string;
+    isSystemAdmin: boolean;
+  },
 ): Promise<DashboardInsights> {
   const today = todayYmd();
   const soon = addDaysYmd(today, 7);
