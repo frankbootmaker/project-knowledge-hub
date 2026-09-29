@@ -889,8 +889,8 @@ export function planSystemUserPurge(
       ? parent.projectId === projectId || parent.projectId === null
       : false;
     const parentDeleted = recordIds.has(link.knowledgeRecordId);
-    if (parentRecordSkipped(link.knowledgeRecordId)) continue;
     const entityDeleted = entityInDeleteSet(link.entityType, link.entityId);
+    if (parentRecordSkipped(link.knowledgeRecordId) && !entityDeleted) continue;
     if (!parentInScope && !entityDeleted) continue;
     if (parentDeleted) {
       if (owned(link.createdBy)) knowledgeDeliveryLinks.push(link.id);

@@ -943,6 +943,66 @@ describe('planSystemUserPurge', () => {
     );
   });
 
+  it('removes links from a skipped record when they target a purged epic', () => {
+    const plan = planSystemUserPurge(
+      snapshot({
+        epics: [{ id: 'qa-epic', createdBy: SYS, projectId: PROJECT }],
+        knowledgeRecords: [
+          {
+            id: 'qa-record',
+            createdBy: SYS,
+            projectId: PROJECT,
+            workspaceId: WS,
+            systemId: null,
+            translationGroupId: null,
+            supersedesRecordId: null,
+          },
+        ],
+        knowledgeDeliveryLinks: [
+          {
+            id: 'human-link',
+            createdBy: HUMAN,
+            knowledgeRecordId: 'qa-record',
+            entityType: 'epic',
+            entityId: 'qa-epic',
+          },
+          {
+            id: 'system-link',
+            createdBy: SYS,
+            knowledgeRecordId: 'qa-record',
+            entityType: 'epic',
+            entityId: 'qa-epic',
+          },
+        ],
+        changeItems: [
+          {
+            id: 'p2-change',
+            createdBy: HUMAN,
+            projectId: OTHER,
+            knowledgeRecordId: 'qa-record',
+          },
+        ],
+      }),
+    );
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.deleteIds.epics).toEqual(['qa-epic']);
+    expect(plan.deleteIds.knowledgeRecords).toEqual([]);
+    expect(plan.deleteIds.knowledgeDeliveryLinks.sort()).toEqual([
+      'human-link',
+      'system-link',
+    ]);
+    expect(plan.detaches).toContainEqual({
+      entityType: 'knowledge_delivery_link',
+      entityId: 'human-link',
+      field: 'entityId',
+    });
+    expect(plan.detaches.map((row) => row.entityId)).not.toContain('system-link');
+    expect(plan.skippedSharedItems.map((row) => row.entityId)).toContain(
+      'qa-record',
+    );
+  });
+
   it('skips a record linked by a system-created import in another project', () => {
     const plan = planSystemUserPurge(
       snapshot({
