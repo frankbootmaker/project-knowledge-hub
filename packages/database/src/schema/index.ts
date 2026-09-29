@@ -174,9 +174,9 @@ export const projects = pgTable(
     /** Project currency for budget and stakeholder rates (no FX). */
     currency: text('currency').notNull().default('EUR'),
     /** Kickoff baseline budget amount in project currency. */
-    initialBudget: numeric('initial_budget', { precision: 14, scale: 2 }),
+    initialBudget: numeric('initial_budget', { precision: 14, scale: 2, mode: 'number' }),
     /** Working BAC; falls back to initialBudget when null. */
-    approvedBudget: numeric('approved_budget', { precision: 14, scale: 2 }),
+    approvedBudget: numeric('approved_budget', { precision: 14, scale: 2, mode: 'number' }),
     /** Workspace-unique 3-char prefix for human issue keys (AAA or AA0). */
     keyPrefix: text('key_prefix'),
     /** Per issue-key-type counters: { "T": 12, "RR": 3, ... }. */
@@ -226,14 +226,14 @@ export const systems = pgTable(
       .default({}),
     /** Non-AI catalogue OpEx: flat | one_time | note_only. */
     itCostMode: text('it_cost_mode'),
-    itFlatMonthlyFee: numeric('it_flat_monthly_fee', { precision: 14, scale: 2 }),
-    itOneTimeCost: numeric('it_one_time_cost', { precision: 14, scale: 2 }),
-    itBudgetAllocation: numeric('it_budget_allocation', { precision: 14, scale: 2 }),
+    itFlatMonthlyFee: numeric('it_flat_monthly_fee', { precision: 14, scale: 2, mode: 'number' }),
+    itOneTimeCost: numeric('it_one_time_cost', { precision: 14, scale: 2, mode: 'number' }),
+    itBudgetAllocation: numeric('it_budget_allocation', { precision: 14, scale: 2, mode: 'number' }),
     /** AI assistant cost mode: flat | api | mixed | note_only. */
     aiCostMode: text('ai_cost_mode'),
-    aiFlatMonthlyFee: numeric('ai_flat_monthly_fee', { precision: 14, scale: 2 }),
-    aiTokenRatePer1k: numeric('ai_token_rate_per_1k', { precision: 14, scale: 4 }),
-    aiBudgetAllocation: numeric('ai_budget_allocation', { precision: 14, scale: 2 }),
+    aiFlatMonthlyFee: numeric('ai_flat_monthly_fee', { precision: 14, scale: 2, mode: 'number' }),
+    aiTokenRatePer1k: numeric('ai_token_rate_per_1k', { precision: 14, scale: 4, mode: 'number' }),
+    aiBudgetAllocation: numeric('ai_budget_allocation', { precision: 14, scale: 2, mode: 'number' }),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
     lastValidatedAt: timestamp('last_validated_at', {
       withTimezone: true,
@@ -1165,8 +1165,8 @@ export const projectTasks = pgTable(
     description: text('description'),
     status: text('status').notNull().default('todo'),
     dueDate: date('due_date', { mode: 'string' }),
-    forecastHours: numeric('forecast_hours', { precision: 10, scale: 2 }),
-    actualHours: numeric('actual_hours', { precision: 10, scale: 2 }),
+    forecastHours: numeric('forecast_hours', { precision: 10, scale: 2, mode: 'number' }),
+    actualHours: numeric('actual_hours', { precision: 10, scale: 2, mode: 'number' }),
     storyPoints: integer('story_points'),
     sortOrder: integer('sort_order').notNull().default(0),
     createdBy: uuid('created_by').references(() => users.id, {
@@ -1286,7 +1286,7 @@ export const projectStakeholders = pgTable(
       onDelete: 'set null',
     }),
     /** Hourly rate in the project's currency. */
-    hourlyRate: numeric('hourly_rate', { precision: 12, scale: 2 }),
+    hourlyRate: numeric('hourly_rate', { precision: 12, scale: 2, mode: 'number' }),
     /** employee | contractor */
     engagementType: text('engagement_type'),
     assignmentStart: date('assignment_start', { mode: 'string' }),
@@ -1294,9 +1294,10 @@ export const projectStakeholders = pgTable(
     allocatedDailyHours: numeric('allocated_daily_hours', {
       precision: 6,
       scale: 2,
+      mode: 'number',
     }),
     contractRef: text('contract_ref'),
-    contractedBudget: numeric('contracted_budget', { precision: 14, scale: 2 }),
+    contractedBudget: numeric('contracted_budget', { precision: 14, scale: 2, mode: 'number' }),
     contractStart: date('contract_start', { mode: 'string' }),
     contractEnd: date('contract_end', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
@@ -1518,10 +1519,10 @@ export const projectCostSnapshots = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     capturedOn: date('captured_on', { mode: 'string' }).notNull(),
-    bac: numeric('bac', { precision: 14, scale: 2 }).notNull(),
-    pv: numeric('pv', { precision: 14, scale: 2 }),
-    ev: numeric('ev', { precision: 14, scale: 2 }).notNull(),
-    ac: numeric('ac', { precision: 14, scale: 2 }).notNull(),
+    bac: numeric('bac', { precision: 14, scale: 2, mode: 'number' }).notNull(),
+    pv: numeric('pv', { precision: 14, scale: 2, mode: 'number' }),
+    ev: numeric('ev', { precision: 14, scale: 2, mode: 'number' }).notNull(),
+    ac: numeric('ac', { precision: 14, scale: 2, mode: 'number' }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),

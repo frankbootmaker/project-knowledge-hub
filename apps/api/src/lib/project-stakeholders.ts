@@ -55,13 +55,13 @@ export type PublicStakeholder = {
   staffingStatus: StakeholderStaffingStatus | null;
   notes: string | null;
   reportsToUserId: string | null;
-  hourlyRate: string | null;
+  hourlyRate: number | null;
   engagementType: StakeholderEngagementType | null;
   assignmentStart: string | null;
   assignmentEnd: string | null;
-  allocatedDailyHours: string | null;
+  allocatedDailyHours: number | null;
   contractRef: string | null;
-  contractedBudget: string | null;
+  contractedBudget: number | null;
   contractStart: string | null;
   contractEnd: string | null;
   /** Profile photo URL for people; null when unset (UI uses monogram). */
@@ -70,9 +70,9 @@ export type PublicStakeholder = {
   assistantBrand: AssistantBrand | null;
   /** AI cost mode when kind is ai_assistant. */
   aiCostMode: AiCostMode | null;
-  aiFlatMonthlyFee: string | null;
-  aiTokenRatePer1k: string | null;
-  aiBudgetAllocation: string | null;
+  aiFlatMonthlyFee: number | null;
+  aiTokenRatePer1k: number | null;
+  aiBudgetAllocation: number | null;
   raciRoles: RaciRole[];
   taskCount: number;
   sources: StakeholderSource[];
@@ -602,9 +602,9 @@ export type StakeholderCapacityInput = {
   engagementType?: StakeholderEngagementType | null;
   assignmentStart?: string | null;
   assignmentEnd?: string | null;
-  allocatedDailyHours?: string | null;
+  allocatedDailyHours?: number | null;
   contractRef?: string | null;
-  contractedBudget?: string | null;
+  contractedBudget?: number | null;
   contractStart?: string | null;
   contractEnd?: string | null;
 };
@@ -629,7 +629,7 @@ export async function upsertProjectStakeholder(
     competencies?: StakeholderCompetencies;
     notes?: string | null;
     reportsToUserId?: string | null;
-    hourlyRate?: string | null;
+    hourlyRate?: number | null;
     sortOrder?: number;
   } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
@@ -832,7 +832,7 @@ export async function updateProjectStakeholder(
     competencies?: StakeholderCompetencies;
     notes?: string | null;
     reportsToUserId?: string | null;
-    hourlyRate?: string | null;
+    hourlyRate?: number | null;
     sortOrder?: number;
   } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
@@ -1061,9 +1061,9 @@ export async function updateAiAssistantCost(
   systemId: string,
   input: {
     aiCostMode?: AiCostMode | null;
-    aiFlatMonthlyFee?: string | null;
-    aiTokenRatePer1k?: string | null;
-    aiBudgetAllocation?: string | null;
+    aiFlatMonthlyFee?: number | null;
+    aiTokenRatePer1k?: number | null;
+    aiBudgetAllocation?: number | null;
   },
 ): Promise<PublicStakeholder> {
   const [system] = await database.db

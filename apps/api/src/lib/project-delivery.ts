@@ -73,8 +73,8 @@ export type PublicTask = {
   description: string | null;
   status: TaskStatus;
   dueDate: string | null;
-  forecastHours: string | null;
-  actualHours: string | null;
+  forecastHours: number | null;
+  actualHours: number | null;
   storyPoints: number | null;
   tokensUsed: number | null;
   aiSystemId: string | null;
@@ -882,8 +882,8 @@ export async function createTask(
     description?: string | null;
     status?: TaskStatus;
     dueDate?: string | null;
-    forecastHours?: string | null;
-    actualHours?: string | null;
+    forecastHours?: number | null;
+    actualHours?: number | null;
     tokensUsed?: number | null;
     aiSystemId?: string | null;
     milestoneId?: string | null;
@@ -992,8 +992,8 @@ export async function updateTask(
     description?: string | null;
     status?: TaskStatus;
     dueDate?: string | null;
-    forecastHours?: string | null;
-    actualHours?: string | null;
+    forecastHours?: number | null;
+    actualHours?: number | null;
     tokensUsed?: number | null;
     aiSystemId?: string | null;
     milestoneId?: string | null;
