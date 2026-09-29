@@ -544,9 +544,18 @@ export type McpToolCallContext = {
   mediaId?: string;
 };
 
+/**
+ * Permission failures must be AppError. A plain Error is sanitized to
+ * "Internal error (ref: …)" and the missing scope never reaches the client.
+ */
 function requireScope(client: McpClientContext, scope: McpScope): void {
   if (!hasMcpScope(client.scopes, scope)) {
-    throw new Error(`Missing required scope: ${scope}`);
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: `Missing required scope: ${scope}`,
+      statusCode: 403,
+      details: { scope },
+    });
   }
 }
 

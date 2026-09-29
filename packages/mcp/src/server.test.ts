@@ -1,6 +1,88 @@
 import { describe, test, expect, vi } from 'vitest';
-import { toMcpErrorResult } from './server.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import {
+  createKnowledgeHubMcpServer,
+  toMcpErrorResult,
+  type McpClientContext,
+  type McpToolHandlers,
+} from './server.js';
 import { AppError } from '@project-knowledge-hub/domain';
+
+function testClient(scopes: string[]): McpClientContext {
+  return {
+    id: '00000000-0000-4000-8000-000000000001',
+    name: 'test-client',
+    organizationId: '00000000-0000-4000-8000-000000000002',
+    scopes,
+    allowedWorkspaceIds: [],
+    allowedProjectIds: [],
+    actingUserId: null,
+  };
+}
+
+async function callPlatformStatus(
+  scopes: string[],
+  handlers: Partial<McpToolHandlers>,
+) {
+  const server = createKnowledgeHubMcpServer(
+    testClient(scopes),
+    handlers as McpToolHandlers,
+  );
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'scope-test', version: '0.0.0' });
+  await Promise.all([
+    client.connect(clientTransport),
+    server.connect(serverTransport),
+  ]);
+  try {
+    return await client.callTool({
+      name: 'get_platform_status',
+      arguments: {},
+    });
+  } finally {
+    await client.close();
+    await server.close();
+  }
+}
+
+describe('requireScope through the MCP sanitizer', () => {
+  test('missing monitoring:read returns the scope message', async () => {
+    const getPlatformStatus = vi.fn();
+    const result = await callPlatformStatus(['projects:read'], { getPlatformStatus });
+
+    expect(getPlatformStatus).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+    expect(text).toBe('Missing required scope: monitoring:read');
+    expect(text).not.toContain('Internal error');
+  });
+
+  test('unexpected handler error stays sanitized', async () => {
+    const logger = { error: vi.fn() };
+    const getPlatformStatus = vi.fn(async () => {
+      throw new Error('postgres://user:secret@db/knowledge');
+    });
+    const result = await callPlatformStatus(['monitoring:read'], {
+      getPlatformStatus,
+      logger,
+    });
+
+    expect(getPlatformStatus).toHaveBeenCalledOnce();
+    expect(result.isError).toBe(true);
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+    expect(text).toContain('Internal error (ref:');
+    expect(text).not.toContain('postgres://');
+    expect(text).not.toContain('secret');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        correlationId: expect.any(String),
+        errorMessage: 'postgres://user:secret@db/knowledge',
+      }),
+      'MCP tool error',
+    );
+  });
+});
 
 describe('toMcpErrorResult', () => {
   test('AppError message passes through verbatim', () => {
