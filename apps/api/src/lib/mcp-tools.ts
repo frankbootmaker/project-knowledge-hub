@@ -36,6 +36,7 @@ import {
   systemCriticalitySchema,
   systemItCostModeSchema,
   systemItDetailsSchema,
+  systemItDetailsPatchSchema,
   systemStatusSchema,
   raidKindSchema,
   raidSeveritySchema,
@@ -842,7 +843,7 @@ export function createMcpToolHandlers(
             ? undefined
             : input.itDetails == null
               ? null
-              : systemItDetailsSchema.parse(input.itDetails),
+              : systemItDetailsPatchSchema.parse(input.itDetails),
         itCostMode:
           input.itCostMode === undefined
             ? undefined

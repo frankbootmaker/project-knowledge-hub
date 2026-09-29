@@ -101,6 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **Dashboard recent dates:** render timestamps with `LocalDateTime` to avoid hydration mismatch.
 
+* **MCP `update_system` itDetails merge (PRO-T-14):** `itDetails` updates now merge by key (omitted keys preserved, `null` removes a key, arrays replaced). Previously, sending a partial `itDetails` silently replaced the entire object and deleted unmentioned fields. Web UI now sends explicit `null` for cleared fields. Added `systemItDetailsPatchSchema` for REST PATCH and MCP update validation.
+
 * **Dokploy PDF export (Chromium crashpad):** API entrypoint sets a writable `HOME` / `XDG_*` for `knowledgehub` after `setpriv` (was inheriting `/root`); Puppeteer launch uses `/tmp` user-data + crash-dump flags so Chrome no longer fails with `chrome_crashpad_handler: --database is required`.
 
 * **Long AI translate via Next:** `experimental.proxyTimeout` raised so Next rewrites no longer return opaque HTTP 500 after ~30s while the API/Ollama call is still running. Traefik/Dokploy gateway timeouts documented in `DOKPLOY.md`.

@@ -754,6 +754,64 @@ export function createKnowledgeHubMcpServer(
     notes: z.string().max(5000).optional(),
   });
 
+  const systemItDetailsPatchObject = z.object({
+    hostname: z.string().max(253).nullable().optional(),
+    primaryUrl: z.string().max(2000).nullable().optional(),
+    ipAddresses: z.array(z.string().max(80)).max(20).nullable().optional(),
+    ports: z
+      .array(
+        z.object({
+          port: z.number().int().min(1).max(65535),
+          protocol: z.string().max(40).optional(),
+          service: z.string().max(80).optional(),
+        }),
+      )
+      .max(40)
+      .nullable()
+      .optional(),
+    endpoints: z
+      .array(
+        z.object({
+          name: z.string().max(120),
+          url: z.string().max(2000),
+        }),
+      )
+      .max(20)
+      .nullable()
+      .optional(),
+    networkZone: z.string().max(80).nullable().optional(),
+    location: z.string().max(200).nullable().optional(),
+    deploymentModel: z
+      .enum([
+        'saas',
+        'paas',
+        'iaas',
+        'on_prem',
+        'vm',
+        'container',
+        'kubernetes',
+        'network',
+        'endpoint',
+        'other',
+      ])
+      .nullable()
+      .optional(),
+    vendor: z.string().max(120).nullable().optional(),
+    product: z.string().max(120).nullable().optional(),
+    platform: z.string().max(120).nullable().optional(),
+    dataClassification: z
+      .enum(['public', 'internal', 'confidential', 'restricted'])
+      .nullable()
+      .optional(),
+    backupPolicy: z.string().max(500).nullable().optional(),
+    supportContact: z.string().max(200).nullable().optional(),
+    documentationUrl: z.string().max(2000).nullable().optional(),
+    assetTag: z.string().max(80).nullable().optional(),
+    externalId: z.string().max(120).nullable().optional(),
+    dependencies: z.array(z.string().max(200)).max(50).nullable().optional(),
+    notes: z.string().max(5000).nullable().optional(),
+  });
+
   server.tool(
     'list_systems',
     'List accessible systems (IT catalogue) with type, environment, criticality, version, and primary URL when set. Requires systems:read.',
@@ -810,7 +868,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_system',
-    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Money/rate fields accept number or string; returned as JSON numbers. Does not archive/purge. Requires catalogue:write.',
+    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Money/rate fields accept number or string; returned as JSON numbers. Does not archive/purge. itDetails updates are merged by key: omitted keys are preserved, keys set to null are removed, and array fields (ports, endpoints, ipAddresses, dependencies) are replaced entirely. Requires catalogue:write.',
     {
       systemId: z.string().uuid(),
       projectId: z.string().uuid().nullable().optional(),
@@ -823,7 +881,7 @@ export function createKnowledgeHubMcpServer(
       environment: z.string().max(80).nullable().optional(),
       version: z.string().max(80).nullable().optional(),
       criticality: systemCriticalityEnum.nullable().optional(),
-      itDetails: systemItDetailsObject.nullable().optional(),
+      itDetails: systemItDetailsPatchObject.nullable().optional(),
       itCostMode: systemItCostModeEnum.nullable().optional(),
       itFlatMonthlyFee: moneyInput.optional(),
       itOneTimeCost: moneyInput.optional(),

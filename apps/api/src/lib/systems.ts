@@ -18,6 +18,7 @@ import {
   type SystemCriticality,
   type SystemItCostMode,
   type SystemItDetails,
+  type SystemItDetailsPatch,
   type SystemStatus,
 } from '@project-knowledge-hub/domain';
 import { getSystemTags, setSystemTags } from './tags.js';
@@ -26,6 +27,7 @@ import {
   parseTokenRate,
   upsertProjectCostSnapshot,
 } from './project-budget.js';
+import { mergeItDetails } from './systems-it-details.js';
 
 export type PublicSystemTag = { id: string; name: string; slug: string };
 
@@ -327,7 +329,7 @@ export type UpdateSystemInput = {
   environment?: string | null;
   version?: string | null;
   criticality?: string | null;
-  itDetails?: SystemItDetails | null;
+  itDetails?: SystemItDetailsPatch | null;
   itCostMode?: SystemItCostMode | null;
   itFlatMonthlyFee?: number | string | null;
   itOneTimeCost?: number | string | null;
@@ -394,8 +396,12 @@ export async function updateSystem(
 
   let nextItDetails = system.itDetails;
   if (input.itDetails !== undefined) {
-    nextItDetails =
-      input.itDetails == null ? {} : parseItDetails(input.itDetails);
+    if (input.itDetails == null) {
+      nextItDetails = {};
+    } else {
+      const existing = parseItDetails(system.itDetails);
+      nextItDetails = mergeItDetails(existing, input.itDetails);
+    }
   }
 
   const [updated] = await database.db
