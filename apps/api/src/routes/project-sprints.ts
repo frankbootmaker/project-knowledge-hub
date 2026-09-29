@@ -111,6 +111,7 @@ export async function registerProjectSprintRoutes(
     const sprint = await createSprint(app.database, {
       projectId: project.id,
       ...body,
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {

@@ -1,11 +1,30 @@
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import {
   apiClients,
+  conversationImports,
+  documentImports,
   gitRepositoryConnections,
-  knowledgeRecords,
+  knowledgeRecordDeliveryLinks,
   knowledgeRecordVersions,
+  knowledgeRecords,
+  projectChangeDeliveryLinks,
+  projectChangeItems,
+  projectEpics,
+  projectInitialStakeholders,
+  projectMilestones,
+  projectRaidItems,
+  projectRaidTaskLinks,
+  projectSprints,
+  projectStakeholders,
+  projectTaskActivities,
+  projectTaskRaci,
+  projectTasks,
+  projectUserStories,
   sessions,
+  systems,
+  tags,
   users,
+  workspaceMedia,
   type Database,
 } from '@project-knowledge-hub/database';
 import type { BlobStore } from '@project-knowledge-hub/blob-store';
@@ -160,6 +179,17 @@ export async function purgeUserAccount(
   }
 
   await assertNotLastSystemAdmin(database, existing);
+  if (
+    existing.userType === 'system' &&
+    (await systemUserOwnsRows(database, existing.id))
+  ) {
+    throw new AppError({
+      code: 'SYSTEM_USER_PURGE_REQUIRED',
+      message:
+        'Purge first: this system user still owns rows. Run the project purge before hard-deleting the account.',
+      statusCode: 409,
+    });
+  }
   await deleteAvatarFile(input.avatarUploadDir, existing.id, {
     blobStore: input.blobStore,
   });
@@ -200,4 +230,122 @@ export async function purgeUserAccount(
   }
 
   return deleted;
+}
+
+async function systemUserOwnsRows(
+  database: Database,
+  userId: string,
+): Promise<boolean> {
+  const queries = [
+    database.db
+      .select({ id: projectTasks.id })
+      .from(projectTasks)
+      .where(eq(projectTasks.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectTaskActivities.id })
+      .from(projectTaskActivities)
+      .where(eq(projectTaskActivities.actorUserId, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectTaskRaci.id })
+      .from(projectTaskRaci)
+      .where(eq(projectTaskRaci.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectMilestones.id })
+      .from(projectMilestones)
+      .where(eq(projectMilestones.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectEpics.id })
+      .from(projectEpics)
+      .where(eq(projectEpics.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectUserStories.id })
+      .from(projectUserStories)
+      .where(eq(projectUserStories.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectSprints.id })
+      .from(projectSprints)
+      .where(eq(projectSprints.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectRaidItems.id })
+      .from(projectRaidItems)
+      .where(eq(projectRaidItems.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectChangeItems.id })
+      .from(projectChangeItems)
+      .where(eq(projectChangeItems.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectStakeholders.id })
+      .from(projectStakeholders)
+      .where(eq(projectStakeholders.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectInitialStakeholders.id })
+      .from(projectInitialStakeholders)
+      .where(eq(projectInitialStakeholders.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: systems.id })
+      .from(systems)
+      .where(eq(systems.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(eq(tags.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: knowledgeRecords.id })
+      .from(knowledgeRecords)
+      .where(eq(knowledgeRecords.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: knowledgeRecordVersions.id })
+      .from(knowledgeRecordVersions)
+      .where(eq(knowledgeRecordVersions.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: workspaceMedia.id })
+      .from(workspaceMedia)
+      .where(eq(workspaceMedia.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectRaidTaskLinks.id })
+      .from(projectRaidTaskLinks)
+      .where(eq(projectRaidTaskLinks.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: knowledgeRecordDeliveryLinks.id })
+      .from(knowledgeRecordDeliveryLinks)
+      .where(eq(knowledgeRecordDeliveryLinks.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: projectChangeDeliveryLinks.id })
+      .from(projectChangeDeliveryLinks)
+      .where(eq(projectChangeDeliveryLinks.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: documentImports.id })
+      .from(documentImports)
+      .where(eq(documentImports.createdBy, userId))
+      .limit(1),
+    database.db
+      .select({ id: conversationImports.id })
+      .from(conversationImports)
+      .where(eq(conversationImports.createdBy, userId))
+      .limit(1),
+  ];
+  for (const query of queries) {
+    const rows = await query;
+    if (rows.length > 0) return true;
+  }
+  return false;
 }

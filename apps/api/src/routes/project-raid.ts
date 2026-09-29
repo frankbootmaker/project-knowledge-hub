@@ -121,6 +121,7 @@ export async function registerProjectRaidRoutes(
       projectId: project.id,
       workspaceId: project.workspaceId,
       ...body,
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {
@@ -238,6 +239,7 @@ export async function registerProjectRaidRoutes(
         app.database,
         params.raidItemId,
         body.targetKind,
+        principal.userId,
       );
 
       await writeAuditEvent(app.database, {
@@ -282,6 +284,7 @@ export async function registerProjectRaidRoutes(
       raidItemId: params.raidItemId,
       projectId: project.id,
       taskIds: body.taskIds,
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {

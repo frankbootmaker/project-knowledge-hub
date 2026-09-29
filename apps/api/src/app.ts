@@ -55,6 +55,7 @@ import { registerRootRoutes } from './routes/root.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerSystemRoutes } from './routes/systems.js';
 import { registerUserRoutes } from './routes/users.js';
+import { registerSystemUserPurgeRoutes } from './routes/system-user-purge.js';
 import { registerMeRoutes } from './routes/me.js';
 import { registerConversationImportRoutes } from './routes/conversation-imports.js';
 import { registerDocumentImportRoutes } from './routes/document-imports.js';
@@ -234,6 +235,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerGitConnectionRoutes(app);
   await registerOrganizationRoutes(app);
   await registerUserRoutes(app);
+  await registerSystemUserPurgeRoutes(app);
   await registerMailSettingsRoutes(app);
   await registerOidcSettingsRoutes(app);
   await registerBrandSettingsRoutes(app);

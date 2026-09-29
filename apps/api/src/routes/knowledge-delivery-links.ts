@@ -97,6 +97,7 @@ export async function registerKnowledgeDeliveryLinkRoutes(
       const deliveryLinks = await setDeliveryLinksForRecord(app.database, {
         knowledgeRecordId: params.recordId,
         links: body.links,
+        createdBy: principal.userId,
       });
 
       await writeAuditEvent(app.database, {

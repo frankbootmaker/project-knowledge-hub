@@ -109,6 +109,7 @@ export async function registerProjectChangeRoutes(
       workspaceId: project.workspaceId,
       ...body,
       requestedByUserId: body.requestedByUserId ?? principal.userId,
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {
@@ -157,6 +158,7 @@ export async function registerProjectChangeRoutes(
     const changeItem = await updateChangeItem(app.database, params.changeId, {
       workspaceId: project.workspaceId,
       ...body,
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {

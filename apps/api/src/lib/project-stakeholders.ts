@@ -730,6 +730,7 @@ export async function upsertProjectStakeholder(
     reportsToUserId?: string | null;
     hourlyRate?: number | null;
     sortOrder?: number;
+    createdBy?: string | null;
   } & StakeholderCapacityInput,
 ): Promise<PublicStakeholder> {
   assertDateRange({ start: input.assignmentStart, end: input.assignmentEnd, startField: 'assignmentStart', endField: 'assignmentEnd' });
@@ -891,6 +892,7 @@ export async function upsertProjectStakeholder(
           contractStart: input.contractStart ?? null,
           contractEnd: input.contractEnd ?? null,
           sortOrder: input.sortOrder ?? 0,
+          createdBy: input.createdBy ?? null,
         })
         .returning({ id: projectStakeholders.id });
       rosterId = inserted?.id ?? null;
@@ -917,6 +919,7 @@ export async function upsertProjectStakeholder(
         contractStart: input.contractStart ?? null,
         contractEnd: input.contractEnd ?? null,
         sortOrder: input.sortOrder ?? 0,
+        createdBy: input.createdBy ?? null,
       })
       .returning({ id: projectStakeholders.id });
     rosterId = inserted?.id ?? null;

@@ -242,12 +242,16 @@ export const systems = pgTable(
       mode: 'date',
     }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
   },
   (table) => [
     uniqueIndex('systems_workspace_slug_uidx').on(table.workspaceId, table.slug),
     index('systems_workspace_id_idx').on(table.workspaceId),
     index('systems_project_id_idx').on(table.projectId),
+    index('systems_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -401,6 +405,9 @@ export const tags = pgTable(
       .references(() => organizations.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
@@ -408,6 +415,7 @@ export const tags = pgTable(
   (table) => [
     uniqueIndex('tags_organization_slug_uidx').on(table.organizationId, table.slug),
     index('tags_organization_id_idx').on(table.organizationId),
+    index('tags_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1034,11 +1042,15 @@ export const projectMilestones = pgTable(
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_milestones_project_id_idx').on(table.projectId),
+    index('project_milestones_created_by_idx').on(table.createdBy),
     index('project_milestones_project_status_idx').on(table.projectId, table.status),
     uniqueIndex('project_milestones_project_key_uidx').on(
       table.projectId,
@@ -1064,11 +1076,15 @@ export const projectEpics = pgTable(
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_epics_project_id_idx').on(table.projectId),
+    index('project_epics_created_by_idx').on(table.createdBy),
     index('project_epics_project_status_idx').on(table.projectId, table.status),
     uniqueIndex('project_epics_project_key_uidx').on(
       table.projectId,
@@ -1097,11 +1113,15 @@ export const projectUserStories = pgTable(
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_user_stories_project_id_idx').on(table.projectId),
+    index('project_user_stories_created_by_idx').on(table.createdBy),
     index('project_user_stories_epic_id_idx').on(table.epicId),
     index('project_user_stories_project_status_idx').on(table.projectId, table.status),
     uniqueIndex('project_user_stories_project_key_uidx').on(
@@ -1129,11 +1149,15 @@ export const projectSprints = pgTable(
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_sprints_project_id_idx').on(table.projectId),
+    index('project_sprints_created_by_idx').on(table.createdBy),
     index('project_sprints_project_status_idx').on(table.projectId, table.status),
     uniqueIndex('project_sprints_project_key_uidx').on(
       table.projectId,
@@ -1241,12 +1265,16 @@ export const projectTaskRaci = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
   },
   (table) => [
     uniqueIndex('project_task_raci_task_user_uidx').on(table.taskId, table.userId),
+    index('project_task_raci_created_by_idx').on(table.createdBy),
     uniqueIndex('project_task_raci_one_accountable_uidx')
       .on(table.taskId)
       .where(sql`${table.role} = 'A'`),
@@ -1303,6 +1331,9 @@ export const projectStakeholders = pgTable(
     contractStart: date('contract_start', { mode: 'string' }),
     contractEnd: date('contract_end', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
   },
   (table) => [
@@ -1311,6 +1342,7 @@ export const projectStakeholders = pgTable(
       .where(sql`${table.userId} IS NOT NULL`),
     index('project_stakeholders_project_id_idx').on(table.projectId),
     index('project_stakeholders_reports_to_idx').on(table.reportsToUserId),
+    index('project_stakeholders_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1342,11 +1374,15 @@ export const projectRaidItems = pgTable(
       (): AnyPgColumn => projectRaidItems.id,
       { onDelete: 'set null' },
     ),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_raid_items_project_id_idx').on(table.projectId),
+    index('project_raid_items_created_by_idx').on(table.createdBy),
     index('project_raid_items_project_kind_idx').on(table.projectId, table.kind),
     index('project_raid_items_project_status_idx').on(table.projectId, table.status),
     uniqueIndex('project_raid_items_project_key_uidx').on(
@@ -1368,6 +1404,9 @@ export const projectRaidTaskLinks = pgTable(
     taskId: uuid('task_id')
       .notNull()
       .references(() => projectTasks.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
@@ -1378,6 +1417,7 @@ export const projectRaidTaskLinks = pgTable(
       table.taskId,
     ),
     index('project_raid_task_links_task_id_idx').on(table.taskId),
+    index('project_raid_task_links_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1394,6 +1434,9 @@ export const knowledgeRecordDeliveryLinks = pgTable(
       .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
     entityType: text('entity_type').notNull(),
     entityId: uuid('entity_id').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
@@ -1409,6 +1452,7 @@ export const knowledgeRecordDeliveryLinks = pgTable(
       table.entityId,
     ),
     index('knowledge_record_delivery_links_record_idx').on(table.knowledgeRecordId),
+    index('knowledge_record_delivery_links_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1423,6 +1467,9 @@ export const projectInitialStakeholders = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     projectRole: text('project_role').notNull().default('stakeholder'),
     sortOrder: integer('sort_order').notNull().default(0),
     ...timestamps,
@@ -1433,6 +1480,7 @@ export const projectInitialStakeholders = pgTable(
       table.userId,
     ),
     index('project_initial_stakeholders_project_id_idx').on(table.projectId),
+    index('project_initial_stakeholders_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1471,11 +1519,15 @@ export const projectChangeItems = pgTable(
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
     index('project_change_items_project_id_idx').on(table.projectId),
+    index('project_change_items_created_by_idx').on(table.createdBy),
     index('project_change_items_project_status_idx').on(table.projectId, table.status),
     uniqueIndex('project_change_items_project_key_uidx').on(
       table.projectId,
@@ -1495,6 +1547,9 @@ export const projectChangeDeliveryLinks = pgTable(
       .references(() => projectChangeItems.id, { onDelete: 'cascade' }),
     entityType: text('entity_type').notNull(),
     entityId: uuid('entity_id').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
@@ -1509,6 +1564,7 @@ export const projectChangeDeliveryLinks = pgTable(
       table.entityType,
       table.entityId,
     ),
+    index('project_change_delivery_links_created_by_idx').on(table.createdBy),
   ],
 );
 

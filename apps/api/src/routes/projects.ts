@@ -318,6 +318,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       created.id,
       workspace.organizationId,
       body.tags ?? [],
+      principal.userId,
     );
 
     await writeAuditEvent(app.database, {
@@ -417,6 +418,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     const initialStakeholders = await setInitialStakeholders(app.database, {
       projectId: project.id,
       workspaceId: project.workspaceId,
+      createdBy: principal.userId,
       stakeholders: body.stakeholders,
     });
 
@@ -565,6 +567,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         updated.id,
         workspace.organizationId,
         body.tags,
+        principal.userId,
       );
     }
 

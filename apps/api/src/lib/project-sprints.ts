@@ -196,6 +196,7 @@ export async function createSprint(
     endDate?: string | null;
     capacityPoints?: number | null;
     sortOrder?: number;
+    createdBy?: string | null;
   },
 ): Promise<PublicSprint> {
   assertDateRange({ start: input.startDate, end: input.endDate, startField: 'startDate', endField: 'endDate' });
@@ -219,6 +220,7 @@ export async function createSprint(
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
+        createdBy: input.createdBy ?? null,
       })
       .returning();
     if (!row) {

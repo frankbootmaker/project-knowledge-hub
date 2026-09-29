@@ -13,6 +13,7 @@ import {
   deliveryLinkEntityTypeSchema,
   type DeliveryLinkEntityType,
 } from '@project-knowledge-hub/domain';
+import { diffReplacement } from './replace-diff.js';
 
 export type PublicDeliveryLink = {
   id: string;
@@ -172,6 +173,7 @@ export async function setDeliveryLinksForRecord(
   input: {
     knowledgeRecordId: string;
     links: Array<{ entityType: DeliveryLinkEntityType; entityId: string }>;
+    createdBy?: string | null;
   },
 ): Promise<PublicDeliveryLink[]> {
   const record = await getKnowledgeRecordProjectContext(
@@ -193,24 +195,49 @@ export async function setDeliveryLinksForRecord(
   const links = [...unique.values()];
   await assertEntitiesBelongToProject(database, record.projectId, links);
 
-  await database.db
-    .delete(knowledgeRecordDeliveryLinks)
-    .where(
-      eq(
-        knowledgeRecordDeliveryLinks.knowledgeRecordId,
-        input.knowledgeRecordId,
-      ),
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: knowledgeRecordDeliveryLinks.id,
+        entityType: knowledgeRecordDeliveryLinks.entityType,
+        entityId: knowledgeRecordDeliveryLinks.entityId,
+      })
+      .from(knowledgeRecordDeliveryLinks)
+      .where(
+        eq(
+          knowledgeRecordDeliveryLinks.knowledgeRecordId,
+          input.knowledgeRecordId,
+        ),
+      );
+    const diff = diffReplacement(
+      existing,
+      links,
+      (row) => `${row.entityType}:${row.entityId}`,
+      (row) => `${row.entityType}:${row.entityId}`,
+      () => true,
     );
-
-  if (links.length > 0) {
-    await database.db.insert(knowledgeRecordDeliveryLinks).values(
-      links.map((link) => ({
-        knowledgeRecordId: input.knowledgeRecordId,
-        entityType: link.entityType,
-        entityId: link.entityId,
-      })),
-    );
-  }
+    if (diff.remove.length > 0) {
+      await db
+        .delete(knowledgeRecordDeliveryLinks)
+        .where(
+          inArray(
+            knowledgeRecordDeliveryLinks.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(knowledgeRecordDeliveryLinks).values(
+        diff.insert.map((link) => ({
+          knowledgeRecordId: input.knowledgeRecordId,
+          entityType: link.entityType,
+          entityId: link.entityId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
 
   return listDeliveryLinksForRecord(database, input.knowledgeRecordId);
 }

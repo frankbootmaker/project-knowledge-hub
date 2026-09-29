@@ -12,6 +12,7 @@ import {
   projectStakeholderRoleSchema,
   type ProjectStakeholderRole,
 } from '@project-knowledge-hub/domain';
+import { diffReplacement } from './replace-diff.js';
 import { activeMemberConditions } from './user-category.js';
 
 export type PublicPinnedRecord = {
@@ -161,6 +162,7 @@ export async function setInitialStakeholders(
   input: {
     projectId: string;
     workspaceId: string;
+    createdBy?: string | null;
     stakeholders: Array<{
       userId: string;
       projectRole?: ProjectStakeholderRole;
@@ -186,20 +188,57 @@ export async function setInitialStakeholders(
     rows.map((row) => row.userId),
   );
 
-  await database.db
-    .delete(projectInitialStakeholders)
-    .where(eq(projectInitialStakeholders.projectId, input.projectId));
-
-  if (rows.length > 0) {
-    await database.db.insert(projectInitialStakeholders).values(
-      rows.map((row) => ({
-        projectId: input.projectId,
-        userId: row.userId,
-        projectRole: row.projectRole,
-        sortOrder: row.sortOrder,
-      })),
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: projectInitialStakeholders.id,
+        userId: projectInitialStakeholders.userId,
+        projectRole: projectInitialStakeholders.projectRole,
+        sortOrder: projectInitialStakeholders.sortOrder,
+      })
+      .from(projectInitialStakeholders)
+      .where(eq(projectInitialStakeholders.projectId, input.projectId));
+    const diff = diffReplacement(
+      existing,
+      rows,
+      (row) => row.userId,
+      (row) => row.userId,
+      (prev, row) =>
+        prev.projectRole === row.projectRole && prev.sortOrder === row.sortOrder,
     );
-  }
+    if (diff.remove.length > 0) {
+      await db
+        .delete(projectInitialStakeholders)
+        .where(
+          inArray(
+            projectInitialStakeholders.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    for (const change of diff.update) {
+      await db
+        .update(projectInitialStakeholders)
+        .set({
+          projectRole: change.next.projectRole,
+          sortOrder: change.next.sortOrder,
+          updatedAt: new Date(),
+        })
+        .where(eq(projectInitialStakeholders.id, change.existing.id));
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(projectInitialStakeholders).values(
+        diff.insert.map((row) => ({
+          projectId: input.projectId,
+          userId: row.userId,
+          projectRole: row.projectRole,
+          sortOrder: row.sortOrder,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
 
   return listInitialStakeholders(database, input.projectId);
 }

@@ -18,6 +18,7 @@ import {
   type RaidSeverity,
   type RaidStatus,
 } from '@project-knowledge-hub/domain';
+import { diffReplacement } from './replace-diff.js';
 import { activeMemberConditions } from './user-category.js';
 import {
   assertProjectNotArchived,
@@ -328,6 +329,7 @@ export async function createRaidItem(
     dueDate?: string | null;
     sortOrder?: number;
     taskIds?: string[];
+    createdBy?: string | null;
   },
 ): Promise<PublicRaidItem> {
   const { project } = await requireProjectContext(database, input.projectId);
@@ -358,6 +360,7 @@ export async function createRaidItem(
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
+        createdBy: input.createdBy ?? null,
       })
       .returning();
     if (!row) {
@@ -375,6 +378,7 @@ export async function createRaidItem(
       raidItemId: created.id,
       projectId: input.projectId,
       taskIds: input.taskIds,
+      createdBy: input.createdBy,
     });
   }
 
@@ -452,6 +456,7 @@ export async function transferRaidItem(
   database: Database,
   raidItemId: string,
   targetKind: 'risk' | 'issue',
+  createdBy?: string | null,
 ): Promise<{ source: PublicRaidItem; target: PublicRaidItem }> {
   const source = await getRaidItem(database, raidItemId);
   const { project } = await requireProjectContext(database, source.projectId);
@@ -509,6 +514,7 @@ export async function transferRaidItem(
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
         transferredFromRaidItemId: source.id,
+        createdBy: createdBy ?? null,
       })
       .returning();
     if (!row) {
@@ -527,6 +533,7 @@ export async function transferRaidItem(
       raidItemId: created.id,
       projectId: source.projectId,
       taskIds,
+      createdBy,
     });
   }
 
@@ -565,6 +572,7 @@ export async function setRaidTaskLinks(
     raidItemId: string;
     projectId: string;
     taskIds: string[];
+    createdBy?: string | null;
   },
 ): Promise<PublicRaidItem> {
   const uniqueTaskIds = [...new Set(input.taskIds)];
@@ -589,18 +597,42 @@ export async function setRaidTaskLinks(
     }
   }
 
-  await database.db
-    .delete(projectRaidTaskLinks)
-    .where(eq(projectRaidTaskLinks.raidItemId, input.raidItemId));
-
-  if (uniqueTaskIds.length > 0) {
-    await database.db.insert(projectRaidTaskLinks).values(
-      uniqueTaskIds.map((taskId) => ({
-        raidItemId: input.raidItemId,
-        taskId,
-      })),
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: projectRaidTaskLinks.id,
+        taskId: projectRaidTaskLinks.taskId,
+      })
+      .from(projectRaidTaskLinks)
+      .where(eq(projectRaidTaskLinks.raidItemId, input.raidItemId));
+    const diff = diffReplacement(
+      existing,
+      uniqueTaskIds.map((taskId) => ({ taskId })),
+      (row) => row.taskId,
+      (row) => row.taskId,
+      () => true,
     );
-  }
+    if (diff.remove.length > 0) {
+      await db
+        .delete(projectRaidTaskLinks)
+        .where(
+          inArray(
+            projectRaidTaskLinks.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(projectRaidTaskLinks).values(
+        diff.insert.map((row) => ({
+          raidItemId: input.raidItemId,
+          taskId: row.taskId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
 
   return getRaidItem(database, input.raidItemId);
 }

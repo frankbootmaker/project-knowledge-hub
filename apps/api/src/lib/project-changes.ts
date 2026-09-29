@@ -20,6 +20,7 @@ import {
   type ChangeKind,
   type ChangeStatus,
 } from '@project-knowledge-hub/domain';
+import { diffReplacement } from './replace-diff.js';
 import { activeMemberConditions } from './user-category.js';
 import {
   assertProjectNotArchived,
@@ -329,6 +330,7 @@ export async function setChangeDeliveryLinks(
     changeId: string;
     projectId: string;
     links: Array<{ entityType: ChangeDeliveryEntityType; entityId: string }>;
+    createdBy?: string | null;
   },
 ): Promise<void> {
   const unique = new Map<string, { entityType: ChangeDeliveryEntityType; entityId: string }>();
@@ -358,18 +360,44 @@ export async function setChangeDeliveryLinks(
     }
   }
 
-  await database.db
-    .delete(projectChangeDeliveryLinks)
-    .where(eq(projectChangeDeliveryLinks.changeId, input.changeId));
-  if (links.length > 0) {
-    await database.db.insert(projectChangeDeliveryLinks).values(
-      links.map((link) => ({
-        changeId: input.changeId,
-        entityType: link.entityType,
-        entityId: link.entityId,
-      })),
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: projectChangeDeliveryLinks.id,
+        entityType: projectChangeDeliveryLinks.entityType,
+        entityId: projectChangeDeliveryLinks.entityId,
+      })
+      .from(projectChangeDeliveryLinks)
+      .where(eq(projectChangeDeliveryLinks.changeId, input.changeId));
+    const diff = diffReplacement(
+      existing,
+      links,
+      (row) => `${row.entityType}:${row.entityId}`,
+      (row) => `${row.entityType}:${row.entityId}`,
+      () => true,
     );
-  }
+    if (diff.remove.length > 0) {
+      await db
+        .delete(projectChangeDeliveryLinks)
+        .where(
+          inArray(
+            projectChangeDeliveryLinks.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(projectChangeDeliveryLinks).values(
+        diff.insert.map((link) => ({
+          changeId: input.changeId,
+          entityType: link.entityType,
+          entityId: link.entityId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
 }
 
 export async function createChangeItem(
@@ -395,6 +423,7 @@ export async function createChangeItem(
       entityType: ChangeDeliveryEntityType;
       entityId: string;
     }>;
+    createdBy?: string | null;
   },
 ): Promise<PublicChangeItem> {
   const { project } = await requireProjectContext(database, input.projectId);
@@ -456,6 +485,7 @@ export async function createChangeItem(
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
+        createdBy: input.createdBy ?? null,
       })
       .returning();
     if (!row) {
@@ -473,6 +503,7 @@ export async function createChangeItem(
       changeId: created.id,
       projectId: input.projectId,
       links: input.deliveryLinks,
+      createdBy: input.createdBy,
     });
   }
 
@@ -503,6 +534,7 @@ export async function updateChangeItem(
       entityType: ChangeDeliveryEntityType;
       entityId: string;
     }>;
+    createdBy?: string | null;
   },
 ): Promise<PublicChangeItem> {
   const existing = await getChangeItem(database, changeId);
@@ -585,6 +617,7 @@ export async function updateChangeItem(
       changeId,
       projectId: existing.projectId,
       links: input.deliveryLinks,
+      createdBy: input.createdBy,
     });
   }
 

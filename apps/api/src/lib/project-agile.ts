@@ -201,6 +201,7 @@ export async function createEpic(
     startDate?: string | null;
     endDate?: string | null;
     sortOrder?: number;
+    createdBy?: string | null;
   },
 ): Promise<PublicEpic> {
   assertDateRange({ start: input.startDate, end: input.endDate, startField: 'startDate', endField: 'endDate' });
@@ -218,6 +219,7 @@ export async function createEpic(
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
+        createdBy: input.createdBy ?? null,
       })
       .returning();
     if (!row) {
@@ -368,6 +370,7 @@ export async function createUserStory(
     startDate?: string | null;
     endDate?: string | null;
     sortOrder?: number;
+    createdBy?: string | null;
   },
 ): Promise<PublicUserStory> {
   assertDateRange({ start: input.startDate, end: input.endDate, startField: 'startDate', endField: 'endDate' });
@@ -387,6 +390,7 @@ export async function createUserStory(
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
+        createdBy: input.createdBy ?? null,
       })
       .returning();
     if (!row) {

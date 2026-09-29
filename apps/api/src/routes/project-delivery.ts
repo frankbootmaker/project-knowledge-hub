@@ -167,6 +167,7 @@ export async function registerProjectDeliveryRoutes(
     const milestone = await createMilestone(app.database, {
       projectId: project.id,
       ...body,
+      createdBy: principal.userId,
     });
 
     await writeAuditEvent(app.database, {
