@@ -8,6 +8,7 @@ import {
   type McpToolHandlers,
 } from './server.js';
 import { AppError } from '@project-knowledge-hub/domain';
+import { MCP_MAX_RESPONSE_BYTES } from './limits.js';
 
 function testClient(scopes: string[]): McpClientContext {
   return {
@@ -210,5 +211,178 @@ describe('toMcpErrorResult', () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+});
+
+const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+
+function baselineProject(definitionOfDone: string | null) {
+  return {
+    id: PROJECT_ID,
+    workspaceId: '22222222-2222-4222-8222-222222222222',
+    name: 'Demo',
+    slug: 'demo',
+    status: 'active',
+    summary: null,
+    description: null,
+    startDate: null,
+    endDate: null,
+    charterRecordId: null,
+    charterRecord: null,
+    initialPlanRecordId: null,
+    initialPlanRecord: null,
+    definitionOfDone,
+    currency: 'EUR',
+    initialBudget: 100,
+    approvedBudget: null,
+    keyPrefix: 'DEM',
+  };
+}
+
+async function withMcpClient(
+  scopes: string[],
+  handlers: Partial<McpToolHandlers>,
+  run: (client: Client) => Promise<void>,
+) {
+  const server = createKnowledgeHubMcpServer(
+    testClient(scopes),
+    handlers as McpToolHandlers,
+  );
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'dod-test', version: '0.0.0' });
+  await Promise.all([
+    client.connect(clientTransport),
+    server.connect(serverTransport),
+  ]);
+  try {
+    await run(client);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+}
+
+function toolText(result: { content: Array<{ type: string; text?: string }> }): string {
+  const block = result.content[0];
+  return block?.type === 'text' ? (block.text ?? '') : '';
+}
+
+describe('definitionOfDone on project baseline tools', () => {
+  test('tool descriptions and output schemas include definitionOfDone', async () => {
+    await withMcpClient(['projects:read', 'pm:write'], {}, async (client) => {
+      const listed = await client.listTools();
+      for (const name of ['get_project', 'update_project_baseline']) {
+        const tool = listed.tools.find((item) => item.name === name);
+        expect(tool?.description).toContain('definitionOfDone');
+        expect(JSON.stringify(tool?.outputSchema)).toContain('definitionOfDone');
+      }
+    });
+  });
+
+  test('get_project and update_project_baseline return definitionOfDone', async () => {
+    const project = baselineProject('All tests pass');
+    const getProject = vi.fn(async () => ({ project }));
+    const updateProjectBaseline = vi.fn(async () => ({ project }));
+
+    await withMcpClient(
+      ['projects:read', 'pm:write'],
+      { getProject, updateProjectBaseline },
+      async (client) => {
+        const read = await client.callTool({
+          name: 'get_project',
+          arguments: { projectId: PROJECT_ID },
+        });
+        expect(read.isError).not.toBe(true);
+        expect(JSON.parse(toolText(read)).project.definitionOfDone).toBe('All tests pass');
+        expect(read.structuredContent).toEqual({ project });
+
+        const write = await client.callTool({
+          name: 'update_project_baseline',
+          arguments: {
+            projectId: PROJECT_ID,
+            definitionOfDone: 'All tests pass',
+          },
+        });
+        expect(write.isError).not.toBe(true);
+        expect(JSON.parse(toolText(write)).project.definitionOfDone).toBe('All tests pass');
+        expect(write.structuredContent).toEqual({ project });
+        expect(updateProjectBaseline).toHaveBeenCalledWith(
+          expect.objectContaining({
+            projectId: PROJECT_ID,
+            definitionOfDone: 'All tests pass',
+          }),
+        );
+      },
+    );
+  });
+
+  test('a project result without definitionOfDone fails output validation', async () => {
+    const { definitionOfDone: _omitted, ...project } = baselineProject('hidden');
+    const getProject = vi.fn(async () => ({ project }));
+
+    await withMcpClient(['projects:read'], { getProject }, async (client) => {
+      const read = await client.callTool({
+        name: 'get_project',
+        arguments: { projectId: PROJECT_ID },
+      });
+      expect(read.isError).toBe(true);
+      expect(toolText(read)).toContain('Output validation error');
+    });
+  });
+
+  test('an oversized get_project skips output validation', async () => {
+    const getProject = vi.fn(async () => ({
+      project: { notes: 'x'.repeat(MCP_MAX_RESPONSE_BYTES) },
+    }));
+
+    await withMcpClient(['projects:read'], { getProject }, async (client) => {
+      const read = await client.callTool({
+        name: 'get_project',
+        arguments: { projectId: PROJECT_ID },
+      });
+      expect(read.isError).toBe(true);
+      expect(read.structuredContent).toBeUndefined();
+      expect(JSON.parse(toolText(read))).toEqual({
+        error: 'Response exceeds size limit',
+        hint: 'Narrow filters or request a specific record id',
+      });
+      expect(toolText(read)).not.toContain('Output validation error');
+    });
+  });
+});
+
+describe('tools without an output schema', () => {
+  test('list_projects stays a success and omits structuredContent', async () => {
+    const projects = [{ id: PROJECT_ID, name: 'Demo' }];
+    const listProjects = vi.fn(async () => ({ projects }));
+
+    await withMcpClient(['projects:read'], { listProjects }, async (client) => {
+      const result = await client.callTool({
+        name: 'list_projects',
+        arguments: {},
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(JSON.parse(toolText(result))).toEqual({ projects });
+    });
+  });
+
+  test('an oversized list_projects stays a success without structuredContent', async () => {
+    const listProjects = vi.fn(async () => ({
+      blob: 'x'.repeat(MCP_MAX_RESPONSE_BYTES),
+    }));
+
+    await withMcpClient(['projects:read'], { listProjects }, async (client) => {
+      const result = await client.callTool({
+        name: 'list_projects',
+        arguments: {},
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(JSON.parse(toolText(result))).toEqual({
+        error: 'Response exceeds size limit',
+        hint: 'Narrow filters or request a specific record id',
+      });
+    });
   });
 });

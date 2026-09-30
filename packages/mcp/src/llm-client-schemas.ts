@@ -120,7 +120,7 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
             description: 'Tool result JSON',
             content: {
               'application/json': {
-                schema: { $ref: '#/components/schemas/ToolResult' },
+                schema: tool.output ?? { $ref: '#/components/schemas/ToolResult' },
               },
             },
           },

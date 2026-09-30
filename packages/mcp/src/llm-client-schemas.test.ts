@@ -10,6 +10,7 @@ import {
   buildCursorMcpConfig,
   buildGeminiFunctionDeclarations,
   buildLlmOpenApiDocument,
+  findLlmTool,
   llmOpenApiUrlFromMcpUrl,
 } from './llm-client-schemas.js';
 
@@ -74,17 +75,29 @@ describe('llm-client-schemas', () => {
         post: {
           responses: {
             '200': {
-              content: { 'application/json': { schema: { $ref?: string } } };
+              content: {
+                'application/json': {
+                  schema: { $ref?: string; properties?: Record<string, unknown> };
+                };
+              };
             };
           };
         };
       }
     >;
-    for (const path of Object.values(paths)) {
-      expect(path.post.responses['200'].content['application/json'].schema.$ref).toBe(
-        '#/components/schemas/ToolResult',
-      );
+    for (const [path, operation] of Object.entries(paths)) {
+      const schema = operation.post.responses['200'].content['application/json'].schema;
+      if (path.endsWith('/get_project')) {
+        expect(schema.$ref).toBeUndefined();
+        expect(JSON.stringify(schema)).toContain('definitionOfDone');
+      } else {
+        expect(schema.$ref).toBe('#/components/schemas/ToolResult');
+      }
     }
+
+    const baseline = findLlmTool('update_project_baseline');
+    expect(baseline?.description).toContain('definitionOfDone');
+    expect(JSON.stringify(baseline?.output)).toContain('definitionOfDone');
   });
 
   it('builds Antigravity stdio proxy MCP config and setup steps', () => {
