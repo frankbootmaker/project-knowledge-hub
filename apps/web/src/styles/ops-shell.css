@@ -256,19 +256,25 @@
   color: var(--kh-ink);
 }
 
+.kh-ops-nav-items a:focus-visible,
+.kh-ops-nav-items button:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: 2px;
+}
+
 .kh-ops-nav-items a.active {
-  background: color-mix(in oklch, var(--kh-accent), white 88%);
-  color: var(--kh-ink);
+  background: var(--kh-selected-bg);
+  color: var(--kh-selected-fg);
   font-weight: 650;
+}
+
+.kh-ops-nav-items a.active:hover {
+  background: var(--kh-selected-hover-bg);
+  color: var(--kh-selected-fg);
 }
 
 .kh-ops-nav-items a.active .kh-ops-icon {
   color: var(--kh-brand);
-}
-
-.dark .kh-ops-nav-items a.active,
-html[data-theme='dark'] .kh-ops-nav-items a.active {
-  background: color-mix(in oklch, var(--kh-accent), var(--kh-panel-solid) 82%);
 }
 
 .kh-ops-nav-label,
@@ -1500,14 +1506,31 @@ a.kh-ops-health-card:hover {
   padding: 2px 7px;
   border: 1px solid var(--kh-line);
   background: var(--kh-panel-solid);
-  color: inherit;
+  color: var(--kh-ink);
   font-size: 11px;
   text-decoration: none;
 }
 
+.kh-ops-lang-chip:hover {
+  border-color: var(--kh-line-strong);
+  background: var(--kh-neutral-soft);
+  color: var(--kh-ink);
+}
+
+.kh-ops-lang-chip:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: 2px;
+}
+
 .kh-ops-lang-chip[aria-current='page'] {
-  border-color: color-mix(in oklch, var(--kh-accent), var(--kh-line) 55%);
-  background: color-mix(in oklch, var(--kh-accent), white 91%);
+  border-color: var(--kh-selected-border);
+  background: var(--kh-selected-bg);
+  color: var(--kh-selected-fg);
+}
+
+.kh-ops-lang-chip[aria-current='page']:hover {
+  background: var(--kh-selected-hover-bg);
+  color: var(--kh-selected-fg);
 }
 
 .kh-ops-confirm {
@@ -1549,7 +1572,13 @@ a.kh-ops-health-card:hover {
 }
 
 .kh-ops-cal-day:hover {
-  background: var(--kh-bg);
+  background: var(--kh-neutral-soft);
+  color: var(--kh-ink);
+}
+
+.kh-ops-cal-day:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: 2px;
 }
 
 .kh-ops-cal-day small {
@@ -1558,10 +1587,12 @@ a.kh-ops-health-card:hover {
 }
 
 .kh-ops-cal-day[data-events='true'] {
-  background: color-mix(in oklch, var(--kh-accent), white 95%);
+  background: var(--kh-accent-soft);
+  color: var(--kh-ink);
 }
 
-.kh-ops-cal-day[data-selected='true'] {
+.kh-ops-cal-day[data-selected='true'],
+.kh-ops-cal-day[data-selected='true']:hover {
   background: var(--kh-ink);
   color: var(--kh-panel-solid);
 }
@@ -1592,8 +1623,19 @@ a.kh-ops-health-card:hover {
 }
 
 button.kh-ops-type-chip {
-  color: inherit;
+  color: var(--kh-ink);
   cursor: pointer;
+}
+
+button.kh-ops-type-chip:hover {
+  border-color: var(--kh-line-strong);
+  background: var(--kh-neutral-soft);
+  color: var(--kh-ink);
+}
+
+button.kh-ops-type-chip:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: 2px;
 }
 
 .kh-ops-type-chip[data-tone='completed'] {
@@ -1624,7 +1666,8 @@ button.kh-ops-type-chip {
   color: var(--kh-ink-muted);
 }
 
-.kh-ops-type-chip[aria-pressed='true'] {
+.kh-ops-type-chip[aria-pressed='true'],
+.kh-ops-type-chip[aria-pressed='true']:hover {
   border-color: var(--kh-ink);
   background: var(--kh-ink);
   color: var(--kh-panel-solid);
@@ -1835,7 +1878,13 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   color: var(--kh-ink);
 }
 
-.kh-ops-delivery-modes button[aria-pressed='true'] {
+.kh-ops-delivery-modes button:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: -2px;
+}
+
+.kh-ops-delivery-modes button[aria-pressed='true'],
+.kh-ops-delivery-modes button[aria-pressed='true']:hover {
   background: var(--kh-ink);
   color: var(--kh-panel-solid);
 }
@@ -2232,7 +2281,13 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 
 .kh-ops-day:hover,
 .kh-ops-day[aria-pressed='true'] {
-  background: color-mix(in oklch, var(--kh-accent), var(--kh-panel-solid) 92%);
+  background: var(--kh-selected-bg);
+  color: var(--kh-selected-fg);
+}
+
+.kh-ops-day:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: -2px;
 }
 
 .kh-ops-day-num {
