@@ -602,24 +602,33 @@ export function toMcpErrorResult(
 }
 
 function textResult(data: unknown) {
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify(enforceResponseSize(data), null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Result for tools that declare an outputSchema. structuredContent is what
+ * the SDK validates. An oversized payload does not match that schema, so it
+ * is returned as text with isError set, which skips output validation.
+ */
+function structuredTextResult(data: unknown) {
   const sized = enforceResponseSize(data);
   const text = JSON.stringify(sized, null, 2);
   if (sized !== data) {
-    // Size-limit envelope is not a tool's declared output. Mark it as an
-    // error so output-schema validation is skipped.
     return {
       isError: true as const,
       content: [{ type: 'text' as const, text }],
     };
   }
-  if (sized && typeof sized === 'object' && !Array.isArray(sized)) {
-    return {
-      content: [{ type: 'text' as const, text }],
-      structuredContent: sized as Record<string, unknown>,
-    };
-  }
   return {
     content: [{ type: 'text' as const, text }],
+    structuredContent: sized as Record<string, unknown>,
   };
 }
 
@@ -685,6 +694,11 @@ export function createKnowledgeHubMcpServer(
       scope: McpScope,
       fn: () => Promise<unknown>,
       argContext?: McpToolCallContext,
+      present: (data: unknown) => {
+        content: Array<{ type: 'text'; text: string }>;
+        isError?: true;
+        structuredContent?: Record<string, unknown>;
+      } = textResult,
     ) =>
     async () => {
       try {
@@ -694,7 +708,7 @@ export function createKnowledgeHubMcpServer(
           ...argContext,
           ...extractToolContext(data),
         });
-        return textResult(data);
+        return present(data);
       } catch (error) {
         await handlers.onToolCall?.(toolName, false, argContext);
         return toMcpErrorResult(error, handlers.logger);
@@ -984,9 +998,13 @@ export function createKnowledgeHubMcpServer(
       outputSchema: projectBaselineOutput,
     },
     async (args) =>
-      wrap('get_project', 'projects:read', () => handlers.getProject(args), {
-        projectId: args.projectId,
-      })(),
+      wrap(
+        'get_project',
+        'projects:read',
+        () => handlers.getProject(args),
+        { projectId: args.projectId },
+        structuredTextResult,
+      )(),
   );
 
   /** UUID or human key such as HL1-T-12 / HL1-RR-3. When using a human key, if the prefix matches multiple projects across accessible workspaces and the key exists in more than one, returns an ambiguous key error with candidate project names; use the full UUID or specify projectId in that case. */
@@ -1021,6 +1039,7 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.updateProjectBaseline(args),
         { projectId: args.projectId },
+        structuredTextResult,
       )(),
   );
 

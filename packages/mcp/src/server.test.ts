@@ -8,6 +8,7 @@ import {
   type McpToolHandlers,
 } from './server.js';
 import { AppError } from '@project-knowledge-hub/domain';
+import { MCP_MAX_RESPONSE_BYTES } from './limits.js';
 
 function testClient(scopes: string[]): McpClientContext {
   return {
@@ -326,6 +327,62 @@ describe('definitionOfDone on project baseline tools', () => {
       });
       expect(read.isError).toBe(true);
       expect(toolText(read)).toContain('Output validation error');
+    });
+  });
+
+  test('an oversized get_project skips output validation', async () => {
+    const getProject = vi.fn(async () => ({
+      project: { notes: 'x'.repeat(MCP_MAX_RESPONSE_BYTES) },
+    }));
+
+    await withMcpClient(['projects:read'], { getProject }, async (client) => {
+      const read = await client.callTool({
+        name: 'get_project',
+        arguments: { projectId: PROJECT_ID },
+      });
+      expect(read.isError).toBe(true);
+      expect(read.structuredContent).toBeUndefined();
+      expect(JSON.parse(toolText(read))).toEqual({
+        error: 'Response exceeds size limit',
+        hint: 'Narrow filters or request a specific record id',
+      });
+      expect(toolText(read)).not.toContain('Output validation error');
+    });
+  });
+});
+
+describe('tools without an output schema', () => {
+  test('list_projects stays a success and omits structuredContent', async () => {
+    const projects = [{ id: PROJECT_ID, name: 'Demo' }];
+    const listProjects = vi.fn(async () => ({ projects }));
+
+    await withMcpClient(['projects:read'], { listProjects }, async (client) => {
+      const result = await client.callTool({
+        name: 'list_projects',
+        arguments: {},
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(JSON.parse(toolText(result))).toEqual({ projects });
+    });
+  });
+
+  test('an oversized list_projects stays a success without structuredContent', async () => {
+    const listProjects = vi.fn(async () => ({
+      blob: 'x'.repeat(MCP_MAX_RESPONSE_BYTES),
+    }));
+
+    await withMcpClient(['projects:read'], { listProjects }, async (client) => {
+      const result = await client.callTool({
+        name: 'list_projects',
+        arguments: {},
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(JSON.parse(toolText(result))).toEqual({
+        error: 'Response exceeds size limit',
+        hint: 'Narrow filters or request a specific record id',
+      });
     });
   });
 });
