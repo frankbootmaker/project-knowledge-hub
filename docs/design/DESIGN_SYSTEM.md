@@ -41,6 +41,7 @@ Before considering UI work done:
 | `--kh-bg` | Page/strip background (alias of `--kh-surface`; prototype `--bg`) |
 | `--kh-line` / `--kh-line-strong` | Borders |
 | `--kh-accent*` / `--kh-warn*` / `--kh-danger*` | Status |
+| `--kh-selected-bg` / `--kh-selected-fg` / `--kh-selected-border` / `--kh-selected-hover-bg` | Soft selected controls (language chips, active nav, pressed calendar days). Wash follows the theme so dark-mode ink text stays readable |
 | `--kh-radius-*` | Square Ops Console radii (`3px` / `3px` / `4px`) |
 | `--kh-rail` / `--kh-rail-compact` | Authenticated left rail width (`224px` / `64px`) |
 | `--kh-z-rail` / `--kh-z-header` | Rail and sticky header stacking |
@@ -162,7 +163,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-connection-row` | Compact on-duty / connection rows |
 | `.kh-ops-stamp-grid` / `.kh-ops-stamp` | Monitoring archived-count stamps |
 | `.kh-ops-profile-photo` | Account profile avatar row |
-| `.kh-ops-lang-chip` | Knowledge translation language chips |
+| `.kh-ops-lang-chip` | Knowledge translation language chips. Current language uses `[aria-current='page']` with `--kh-selected-*` (not a white wash) |
 | `.kh-ops-confirm` / `.kh-ops-inset` | Archive/purge confirms and nested pickers |
 | `.kh-ops-cal-day` | Compact admin audit calendar cells |
 | `.kh-ops-auth-page` / `.kh-ops-auth-card` / `.kh-ops-auth-brand` / `.kh-ops-auth-body` | Public auth screens |
@@ -238,6 +239,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-09-30
 
+* **Selected language contrast** — Document language chips (`.kh-ops-lang-chip[aria-current='page']`) use `--kh-selected-bg` / `--kh-selected-fg` instead of a white accent wash, so the selected label stays WCAG AA in dark mode. The same tokens cover active rail links and pressed delivery-calendar days. Hover and focus on language chips, type-chip filters, and delivery mode buttons keep an explicit ink or inverted foreground.
 * **Linked knowledge records** — Task, epic, story, milestone, and sprint document titles are real anchors (`.kh-ops-record-link`) to `/workspaces/{slug}/records/{recordSlug}`.
 * **Move project** — Project Manage adds a Move item with two sections in the same modal: pick a destination workspace (grouped by organization), then review the dry-run summary or conflicts. Another organization requires an acknowledgement checkbox. No step-strip wizard.
 

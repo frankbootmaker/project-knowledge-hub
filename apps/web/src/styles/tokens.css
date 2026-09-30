@@ -24,6 +24,13 @@
   --kh-brand-soft: color-mix(in oklch, var(--kh-brand) 12%, var(--kh-panel));
   --kh-accent: oklch(58% 0.16 145);
   --kh-accent-soft: color-mix(in oklch, var(--kh-accent) 12%, white);
+  /* Soft selected controls. Re-specified under .dark so these var() aliases
+     are not baked to the light-theme values. */
+  --kh-selected-bg: var(--kh-accent-soft);
+  --kh-selected-fg: var(--kh-ink);
+  --kh-selected-border: color-mix(in oklch, var(--kh-accent) 55%, var(--kh-line));
+  /* white, not --kh-panel: panel's oklch hue 0 pulls this wash toward red. */
+  --kh-selected-hover-bg: color-mix(in oklch, var(--kh-accent) 22%, white);
   --kh-warn: oklch(68% 0.14 78);
   --kh-warn-soft: color-mix(in oklch, var(--kh-warn) 14%, white);
   --kh-danger: oklch(58% 0.18 28);
@@ -98,6 +105,11 @@ html[data-theme='dark'] {
   --kh-selection: color-mix(in oklch, var(--kh-accent) 35%, transparent);
   --kh-grid-line: oklch(23% 0.015 245 / 0.5);
   --kh-focus-ring: color-mix(in oklch, var(--kh-accent) 35%, transparent);
+  /* Re-specify so var() resolves against dark ink / accent-soft, not the light values. */
+  --kh-selected-bg: var(--kh-accent-soft);
+  --kh-selected-fg: var(--kh-ink);
+  --kh-selected-border: color-mix(in oklch, var(--kh-accent) 55%, var(--kh-line));
+  --kh-selected-hover-bg: color-mix(in oklch, var(--kh-accent) 30%, var(--kh-panel));
 
   color-scheme: dark;
 }
