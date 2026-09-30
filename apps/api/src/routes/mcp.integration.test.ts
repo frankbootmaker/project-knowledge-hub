@@ -327,6 +327,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
         recordType: 'runbook',
         contentMarkdown: '# Agent draft\n\nSteps here.\n',
         summary: 'Created by MCP test',
+        tags: ['Runbook', 'Ops'],
         generatedByModel: 'test-model',
       },
     });
@@ -365,6 +366,37 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     };
     expect(updated.knowledgeRecord?.lifecycleStatus).toBe('draft');
     expect(updated.knowledgeRecord?.versioned).toBe(true);
+
+    const getRecord = await mcpCall(app!, writeToken, 22, 'tools/call', {
+      name: 'get_knowledge_record',
+      arguments: { recordId },
+    });
+    expect(getRecord.statusCode).toBe(200);
+    const getRecordBody = getRecord.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(getRecordBody.result?.isError).toBeFalsy();
+    const detail = JSON.parse(getRecordBody.result?.content?.[0]?.text ?? '{}') as {
+      knowledgeRecord?: { tags?: string[] };
+    };
+    expect(detail.knowledgeRecord?.tags).toEqual(['Ops', 'Runbook']);
+
+    const listed = await mcpCall(app!, writeToken, 23, 'tools/call', {
+      name: 'list_knowledge_records',
+      arguments: { workspaceId, limit: 25 },
+    });
+    expect(listed.statusCode).toBe(200);
+    const listedBody = listed.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(listedBody.result?.isError).toBeFalsy();
+    const list = JSON.parse(listedBody.result?.content?.[0]?.text ?? '{}') as {
+      knowledgeRecords?: Array<{ id: string; tags?: string[] }>;
+    };
+    expect(list.knowledgeRecords?.find((row) => row.id === recordId)?.tags).toEqual([
+      'Ops',
+      'Runbook',
+    ]);
   });
 
   it('denies write to a workspace outside the allowlist', async () => {

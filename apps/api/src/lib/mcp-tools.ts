@@ -172,6 +172,7 @@ import {
   upsertProjectCostSnapshot,
 } from './project-budget.js';
 import { moveProjectToWorkspace } from './project-move.js';
+import { getKnowledgeRecordTags } from './tags.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -683,6 +684,16 @@ async function resolveWorkspaceFilter(
       ),
     );
   return rows.map((row) => row.id);
+}
+
+/** Tag names in the same shape as search_knowledge (`tags: string[]`). */
+function knowledgeRecordTagNames(
+  tagMap: Map<string, Array<{ name: string }>>,
+  recordId: string,
+): string[] {
+  return (tagMap.get(recordId) ?? [])
+    .map((tag) => tag.name)
+    .sort((left, right) => left.localeCompare(right));
 }
 
 /**
@@ -1266,6 +1277,10 @@ export function createMcpToolHandlers(
         app.database,
         allowed.map((row) => row.projectId),
       );
+      const tagMap = await getKnowledgeRecordTags(
+        app.database,
+        allowed.map((row) => row.id),
+      );
       return {
         knowledgeRecords: allowed.map((row) => {
           const keyPrefix = row.projectId
@@ -1290,6 +1305,7 @@ export function createMcpToolHandlers(
             documentKeyType: documentKeys.documentKeyType,
             documentNumber: documentKeys.documentNumber,
             humanKey: documentKeys.humanKey,
+            tags: knowledgeRecordTagNames(tagMap, row.id),
             verifiedAt: row.verifiedAt?.toISOString() ?? null,
             updatedAt: row.updatedAt.toISOString(),
           };
@@ -1400,6 +1416,7 @@ export function createMcpToolHandlers(
         keyPrefix && record.documentKeyType && record.documentNumber != null
           ? `${keyPrefix}-${record.documentKeyType}-${record.documentNumber}`
           : null;
+      const tagMap = await getKnowledgeRecordTags(app.database, [record.id]);
       return {
         knowledgeRecord: {
           id: record.id,
@@ -1423,6 +1440,7 @@ export function createMcpToolHandlers(
           reviewedBy: record.reviewedBy,
           reviewedByUser,
           updatedAt: record.updatedAt.toISOString(),
+          tags: knowledgeRecordTagNames(tagMap, record.id),
           media: mediaRows.map(toPublicMedia),
         },
       };

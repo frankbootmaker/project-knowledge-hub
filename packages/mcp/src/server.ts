@@ -1079,7 +1079,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_knowledge_records',
-    'List knowledge records in a workspace (excludes archived by default). Prefer language: "en" unless the user asks for another locale.',
+    'List knowledge records in a workspace (excludes archived by default). Each record includes tags as a string array of tag names, the same shape as search_knowledge. Prefer language: "en" unless the user asks for another locale.',
     {
       workspaceId: z.string().uuid(),
       projectId: z.string().uuid().optional(),
@@ -1130,7 +1130,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including truncated markdown content and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    'Retrieve a knowledge record including truncated markdown content, tags (string array of tag names, same shape as search_knowledge), and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     { recordId: z.string().min(1).max(80) },
     async (args) =>
       wrap(

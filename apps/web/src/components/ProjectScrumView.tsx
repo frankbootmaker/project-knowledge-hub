@@ -28,11 +28,19 @@ import {
 import { todayYmd } from '../lib/delivery-schedule';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import type { RatePerson } from '../lib/task-costing';
+import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
 import {
   BurndownLegendHelp,
   SprintPointBurndownChart,
   type PointBurndownRow,
 } from './SprintPointBurndownChart';
+
+type SprintLinkedDocument = {
+  knowledgeRecordId: string;
+  title: string;
+  recordType: string;
+  slug: string;
+};
 
 export type ScrumSprint = {
   id: string;
@@ -117,6 +125,7 @@ export function ProjectScrumView({
 }: Props) {
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
+  const tRecords = useTranslations('records');
   const tStakeholders = useTranslations('stakeholders');
   const tProjects = useTranslations('projects');
   const { pushToast } = useToast();
@@ -153,6 +162,9 @@ export function ProjectScrumView({
   >([]);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<string[]>([]);
   const [reviewGuests, setReviewGuests] = useState<string[]>([]);
+  const [linkedDocuments, setLinkedDocuments] = useState<SprintLinkedDocument[]>(
+    [],
+  );
   const [guestDraft, setGuestDraft] = useState('');
   const [stakeholdersLoading, setStakeholdersLoading] = useState(false);
   const [retroWentWell, setRetroWentWell] = useState('');
@@ -189,6 +201,33 @@ export function ProjectScrumView({
   }, [loadSprints]);
 
   const selected = sprints.find((sprint) => sprint.id === selectedSprintId) ?? null;
+
+  useEffect(() => {
+    if (!selectedSprintId) {
+      setLinkedDocuments([]);
+      return;
+    }
+    let cancelled = false;
+    void fetch(
+      `/api/v1/projects/${projectId}/delivery-document-links?entityType=sprint&entityId=${selectedSprintId}`,
+    )
+      .then(async (response) => {
+        if (!response.ok) return [];
+        const payload = (await response.json()) as {
+          documentLinks?: SprintLinkedDocument[];
+        };
+        return payload.documentLinks ?? [];
+      })
+      .then((links) => {
+        if (!cancelled) setLinkedDocuments(links);
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedDocuments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, selectedSprintId]);
   const sprintTasks = useMemo(
     () =>
       tasks.filter((task) =>
@@ -936,6 +975,20 @@ export function ProjectScrumView({
             <small>{t('scrumDaysLeft')}</small>
             <strong>{sprintDaysLeft == null ? '—' : sprintDaysLeft}</strong>
           </div>
+        </div>
+      ) : null}
+
+      {selected && linkedDocuments.length > 0 ? (
+        <div className="kh-ops-inset mb-3">
+          <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
+          <ul className="m-0 grid list-none gap-1 p-0">
+            {linkedDocuments.map((doc) => (
+              <li key={doc.knowledgeRecordId} className="text-sm">
+                <Badge>{tRecords(`typeLabels.${doc.recordType}`)}</Badge>{' '}
+                <LinkedKnowledgeRecord slug={doc.slug} title={doc.title} />
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

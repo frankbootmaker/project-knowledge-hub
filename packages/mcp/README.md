@@ -66,6 +66,6 @@ Do **not** put `data:image/...;base64,...` URIs in `contentMarkdown`. Instead:
 1. **ChatGPT Actions:** `begin_workspace_media_upload` → split raw base64 into ~8000-char chunks → `append_workspace_media_upload` each → `finalize_workspace_media_upload`.
 2. **Single-shot (small files):** `upload_workspace_media` with `workspaceId`, `contentType`, and raw `contentBase64` (no `data:` prefix).
 3. Either paste `media.markdownSnippet` (e.g. `![chart](/api/v1/media/{id})`) into `create_knowledge_record` / `update_knowledge_record`, **or** pass `knowledgeRecordId` + `insertIntoRecord: true` on begin/upload to append it automatically.
-4. `get_knowledge_record` returns linked `media[]` metadata for that record.
+4. `get_knowledge_record` and `list_knowledge_records` return `tags` as a string array of tag names (same shape as `search_knowledge`). `get_knowledge_record` also returns linked `media[]` metadata for that record.
 
 Mounted by the API at `POST|GET|DELETE /mcp` with bearer API client tokens.

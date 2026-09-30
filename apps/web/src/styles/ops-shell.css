@@ -3059,6 +3059,17 @@ button.kh-ops-project-card:disabled {
   text-decoration: underline;
 }
 
+a.kh-ops-record-link {
+  color: var(--kh-ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a.kh-ops-record-link:hover {
+  color: var(--kh-accent);
+}
+
 .kh-ops-storage-choice {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -238,6 +238,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-09-30
 
+* **Linked knowledge records** — Task, epic, story, milestone, and sprint document titles are real anchors (`.kh-ops-record-link`) to `/workspaces/{slug}/records/{recordSlug}`.
 * **Move project** — Project Manage adds a Move item with two sections in the same modal: pick a destination workspace (grouped by organization), then review the dry-run summary or conflicts. Another organization requires an acknowledgement checkbox. No step-strip wizard.
 
 ### 2026-08-28

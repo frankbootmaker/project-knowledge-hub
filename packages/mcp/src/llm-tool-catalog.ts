@@ -138,7 +138,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_knowledge_records',
     description:
-      'List knowledge records (excludes archived). Prefer language en unless asked otherwise. Returns humanKey when present.',
+      'List knowledge records (excludes archived). Prefer language en unless asked otherwise. Returns humanKey when present and tags as a string array of tag names (same shape as search_knowledge).',
     scope: 'knowledge:read',
     openApi: true,
     defaults: { limit: 50 },
@@ -182,7 +182,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (truncated markdown + media). recordId may be UUID or document key.',
+      'Get a knowledge record (truncated markdown, tags as tag-name strings, and media). recordId may be UUID or document key.',
     scope: 'knowledge:read',
     openApi: true,
     body: {

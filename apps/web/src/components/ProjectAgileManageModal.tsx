@@ -20,6 +20,7 @@ import {
   sumEffortRollup,
   type RatePerson,
 } from '../lib/task-costing';
+import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
 
 const STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 
@@ -625,7 +626,7 @@ export function ProjectAgileManageModal({
               {linkedDocuments.map((doc) => (
                 <li key={doc.knowledgeRecordId} className="text-sm">
                   <Badge>{tRecords(`typeLabels.${doc.recordType}`)}</Badge>{' '}
-                  {doc.title}
+                  <LinkedKnowledgeRecord slug={doc.slug} title={doc.title} />
                 </li>
               ))}
             </ul>

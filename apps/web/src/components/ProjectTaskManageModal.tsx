@@ -25,6 +25,7 @@ import {
   resolveRatePerson,
   type RatePerson,
 } from '../lib/task-costing';
+import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
 
 type RaciEntry = {
   userId: string;
@@ -863,7 +864,7 @@ export function ProjectTaskManageModal({
                     <span>
                       <strong>{tRecords(`typeLabels.${doc.recordType}`)}</strong>
                       {' · '}
-                      {doc.title}
+                      <LinkedKnowledgeRecord slug={doc.slug} title={doc.title} />
                     </span>
                   </div>
                 ))}
