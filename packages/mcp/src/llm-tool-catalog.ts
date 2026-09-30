@@ -19,6 +19,8 @@ export type LlmToolDef = {
    */
   openApi?: boolean;
   body: Record<string, unknown>;
+  /** JSON Schema of a successful result, when the shape is stable. */
+  output?: Record<string, unknown>;
   /** Merged into the request body before invoking the MCP handler. */
   defaults?: Record<string, unknown>;
 };
@@ -79,6 +81,80 @@ const sprintStatus = {
 
 const raciRole = { type: 'string', enum: ['R', 'A', 'C', 'I'] };
 
+const nullableString = { type: 'string', nullable: true };
+
+const pinnedRecordOutput = {
+  type: 'object',
+  nullable: true,
+  required: ['id', 'title', 'slug', 'recordType'],
+  properties: {
+    id: uuidProp('Pinned knowledge record id'),
+    title: stringProp('Record title'),
+    slug: stringProp('Record slug'),
+    recordType: stringProp('Knowledge record type'),
+  },
+};
+
+/** Shared result of get_project and update_project_baseline. */
+const projectBaselineResult = {
+  type: 'object',
+  required: ['project'],
+  properties: {
+    project: {
+      type: 'object',
+      required: [
+        'id',
+        'workspaceId',
+        'name',
+        'slug',
+        'status',
+        'summary',
+        'description',
+        'startDate',
+        'endDate',
+        'charterRecordId',
+        'charterRecord',
+        'initialPlanRecordId',
+        'initialPlanRecord',
+        'definitionOfDone',
+        'currency',
+        'initialBudget',
+        'approvedBudget',
+        'keyPrefix',
+      ],
+      properties: {
+        id: uuidProp('Project id'),
+        workspaceId: uuidProp('Workspace id'),
+        name: stringProp('Project name'),
+        slug: stringProp('Project slug'),
+        status: stringProp('Project status'),
+        summary: nullableString,
+        description: nullableString,
+        startDate: { ...ymd, nullable: true },
+        endDate: { ...ymd, nullable: true },
+        charterRecordId: { ...uuidProp('Pinned charter id'), nullable: true },
+        charterRecord: pinnedRecordOutput,
+        initialPlanRecordId: { ...uuidProp('Pinned plan id'), nullable: true },
+        initialPlanRecord: pinnedRecordOutput,
+        definitionOfDone: {
+          type: 'string',
+          nullable: true,
+          maxLength: 20000,
+          description: 'Scrum Definition of Done. Null when unset.',
+        },
+        currency: stringProp('Project currency'),
+        initialBudget: money,
+        approvedBudget: money,
+        keyPrefix: {
+          type: 'string',
+          nullable: true,
+          description: 'Issue key prefix AAA or AA0',
+        },
+      },
+    },
+  },
+};
+
 /** Full tool surface for Gemini + call_hub_tool. */
 export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   // —— Knowledge / catalogue (OpenAPI first-class) ——
@@ -114,9 +190,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'get_project',
-    description: 'Get a project by id (baseline, DoD, keyPrefix, budgets)',
+    description:
+      'Get a project by id. Returns baseline, definitionOfDone, keyPrefix, and budgets.',
     scope: 'projects:read',
     openApi: true,
+    output: projectBaselineResult,
     body: {
       type: 'object',
       required: ['projectId'],
@@ -1333,9 +1411,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_baseline',
     description:
-      'Update baseline window, DoD, currency, budgets, keyPrefix. Requires pm:write.',
+      'Update baseline window, DoD, currency, budgets, and keyPrefix. Returns saved definitionOfDone. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    output: projectBaselineResult,
     body: {
       type: 'object',
       required: ['projectId'],

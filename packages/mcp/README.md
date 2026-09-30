@@ -52,10 +52,10 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 * `create_project_raid_item` / `update_project_raid_item` / `set_project_raid_task_links` — RAID register (+ task links)
 * `transfer_project_raid_item` — move risk↔issue (new key; archives source). Do not use `update_project_raid_item` to change kind between risk and issue.
 * `create_project_change_item` / `update_project_change_item` — change register (+ delivery links; entity/knowledge ids may be human keys)
-* `update_project_baseline` — dates, pins, DoD, currency, budgets, and optional `keyPrefix` (workspace-unique `AAA` / `AA0`)
+* `update_project_baseline` — dates, pins, DoD, currency, budgets, and optional `keyPrefix` (workspace-unique `AAA` / `AA0`). The response includes the saved `definitionOfDone`.
 * `move_project` — move a project to another workspace. Same organization requires both workspaces on the allowlist. Another organization requires `confirmCrossOrganization` (Git tokens and conversation imports travel with the project) and the client cannot keep the destination on its allowlist, so it loses access after the move. `dryRun` returns conflicts without writing.
 
-**Human keys:** Delivery, RAID, change, and knowledge DTOs include `humanKey` (e.g. `HL1-T-12`, `HL1-RR-3`, `HL1-VIS-2`). Get/update tools accept **UUID or human key** for entity and document ids. `get_project` returns `keyPrefix`. Setup wizards can opt into `pm:read` / `pm:write`.
+**Human keys:** Delivery, RAID, change, and knowledge DTOs include `humanKey` (e.g. `HL1-T-12`, `HL1-RR-3`, `HL1-VIS-2`). Get/update tools accept **UUID or human key** for entity and document ids. `get_project` returns `keyPrefix` and `definitionOfDone`. Setup wizards can opt into `pm:read` / `pm:write`.
 
 **AI spend:** When an AI system worked a task, call `report_project_task_ai_usage` (or set `tokensUsed` on update) so `api`/`mixed` modes feed AC; `note_only` records usage at $0.
 

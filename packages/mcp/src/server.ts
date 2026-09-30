@@ -602,13 +602,24 @@ export function toMcpErrorResult(
 }
 
 function textResult(data: unknown) {
+  const sized = enforceResponseSize(data);
+  const text = JSON.stringify(sized, null, 2);
+  if (sized !== data) {
+    // Size-limit envelope is not a tool's declared output. Mark it as an
+    // error so output-schema validation is skipped.
+    return {
+      isError: true as const,
+      content: [{ type: 'text' as const, text }],
+    };
+  }
+  if (sized && typeof sized === 'object' && !Array.isArray(sized)) {
+    return {
+      content: [{ type: 'text' as const, text }],
+      structuredContent: sized as Record<string, unknown>,
+    };
+  }
   return {
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify(enforceResponseSize(data), null, 2),
-      },
-    ],
+    content: [{ type: 'text' as const, text }],
   };
 }
 
@@ -914,16 +925,6 @@ export function createKnowledgeHubMcpServer(
       })(),
   );
 
-  server.tool(
-    'get_project',
-    'Get a project by id (includes baseline dates and pinned charter/plan). Money fields (initialBudget, approvedBudget) are returned as JSON numbers.',
-    { projectId: z.string().uuid() },
-    async (args) =>
-      wrap('get_project', 'projects:read', () => handlers.getProject(args), {
-        projectId: args.projectId,
-      })(),
-  );
-
   const projectCurrencyEnum = z.enum([
     'EUR',
     'USD',
@@ -940,28 +941,79 @@ export function createKnowledgeHubMcpServer(
     'AUD',
     'JPY',
   ]);
+  const nullableText = z.string().nullable();
+  const pinnedRecordOutput = z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      slug: z.string(),
+      recordType: z.string(),
+    })
+    .nullable();
+  const projectBaselineOutput = {
+    project: z.object({
+      id: z.string(),
+      workspaceId: z.string(),
+      name: z.string(),
+      slug: z.string(),
+      status: z.string(),
+      summary: nullableText,
+      description: nullableText,
+      startDate: nullableText,
+      endDate: nullableText,
+      charterRecordId: nullableText,
+      charterRecord: pinnedRecordOutput,
+      initialPlanRecordId: nullableText,
+      initialPlanRecord: pinnedRecordOutput,
+      definitionOfDone: nullableText.describe(
+        'Scrum Definition of Done. Null when unset.',
+      ),
+      currency: projectCurrencyEnum,
+      initialBudget: z.number().nullable(),
+      approvedBudget: z.number().nullable(),
+      keyPrefix: nullableText,
+    }),
+  };
+
+  server.registerTool(
+    'get_project',
+    {
+      description:
+        'Get a project by id. Returns baseline dates, pinned charter/plan, keyPrefix, budgets, and definitionOfDone (string or null). Money fields (initialBudget, approvedBudget) are JSON numbers.',
+      inputSchema: { projectId: z.string().uuid() },
+      outputSchema: projectBaselineOutput,
+    },
+    async (args) =>
+      wrap('get_project', 'projects:read', () => handlers.getProject(args), {
+        projectId: args.projectId,
+      })(),
+  );
 
   /** UUID or human key such as HL1-T-12 / HL1-RR-3. When using a human key, if the prefix matches multiple projects across accessible workspaces and the key exists in more than one, returns an ambiguous key error with candidate project names; use the full UUID or specify projectId in that case. */
   const entityRef = z.string().min(1).max(80);
 
-  server.tool(
+  server.registerTool(
     'update_project_baseline',
-    'Update project baseline window, pinned docs, Definition of Done, currency, budgets, and issue key prefix. Budget fields accept number or string; returned as JSON numbers. Requires pm:write.',
     {
-      projectId: z.string().uuid(),
-      startDate: isoDateNullableSchema.optional(),
-      endDate: isoDateNullableSchema.optional(),
-      charterRecordId: z.string().uuid().nullable().optional(),
-      initialPlanRecordId: z.string().uuid().nullable().optional(),
-      definitionOfDone: z.string().max(20000).nullable().optional(),
-      currency: projectCurrencyEnum.optional(),
-      initialBudget: moneyInput.optional(),
-      approvedBudget: moneyInput.optional(),
-      keyPrefix: z
-        .string()
-        .trim()
-        .regex(/^([A-Za-z]{3}|[A-Za-z]{2}[0-9])$/)
-        .optional(),
+      description:
+        'Update project baseline window, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. Returns the saved project, including definitionOfDone (string or null). Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
+      inputSchema: {
+        projectId: z.string().uuid(),
+        startDate: isoDateNullableSchema.optional(),
+        endDate: isoDateNullableSchema.optional(),
+        charterRecordId: z.string().uuid().nullable().optional(),
+        initialPlanRecordId: z.string().uuid().nullable().optional(),
+        definitionOfDone: z.string().max(20000).nullable().optional(),
+        currency: projectCurrencyEnum.optional(),
+        initialBudget: moneyInput.optional(),
+        approvedBudget: moneyInput.optional(),
+        keyPrefix: z
+          .string()
+          .trim()
+          .regex(/^([A-Za-z]{3}|[A-Za-z]{2}[0-9])$/)
+          .optional(),
+      },
+      outputSchema: projectBaselineOutput,
     },
     async (args) =>
       wrap(

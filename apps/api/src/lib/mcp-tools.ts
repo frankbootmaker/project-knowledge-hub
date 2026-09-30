@@ -696,6 +696,36 @@ function knowledgeRecordTagNames(
     .sort((left, right) => left.localeCompare(right));
 }
 
+function toMcpProject(
+  project: typeof projects.$inferSelect,
+  pinned: Awaited<ReturnType<typeof loadPinnedRecords>>,
+) {
+  return {
+    id: project.id,
+    workspaceId: project.workspaceId,
+    name: project.name,
+    slug: project.slug,
+    status: project.status,
+    summary: project.summary,
+    description: project.description,
+    startDate: project.startDate,
+    endDate: project.endDate,
+    charterRecordId: project.charterRecordId,
+    charterRecord: project.charterRecordId
+      ? (pinned.get(project.charterRecordId) ?? null)
+      : null,
+    initialPlanRecordId: project.initialPlanRecordId,
+    initialPlanRecord: project.initialPlanRecordId
+      ? (pinned.get(project.initialPlanRecordId) ?? null)
+      : null,
+    definitionOfDone: project.definitionOfDone,
+    currency: projectCurrencySchema.parse(project.currency),
+    initialBudget: project.initialBudget,
+    approvedBudget: project.approvedBudget,
+    keyPrefix: project.keyPrefix,
+  };
+}
+
 /**
  * Build MCP provenance source for knowledge records and translations.
  * Centralizes the conversation/mcp source structure used across create/translate handlers.
@@ -941,31 +971,7 @@ export function createMcpToolHandlers(
         project.charterRecordId,
         project.initialPlanRecordId,
       ]);
-      return {
-        project: {
-          id: project.id,
-          workspaceId: project.workspaceId,
-          name: project.name,
-          slug: project.slug,
-          status: project.status,
-          summary: project.summary,
-          description: project.description,
-          startDate: project.startDate,
-          endDate: project.endDate,
-          charterRecordId: project.charterRecordId,
-          charterRecord: project.charterRecordId
-            ? pinned.get(project.charterRecordId) ?? null
-            : null,
-          initialPlanRecordId: project.initialPlanRecordId,
-          initialPlanRecord: project.initialPlanRecordId
-            ? pinned.get(project.initialPlanRecordId) ?? null
-            : null,
-          currency: projectCurrencySchema.parse(project.currency),
-          initialBudget: project.initialBudget,
-          approvedBudget: project.approvedBudget,
-          keyPrefix: project.keyPrefix,
-        },
-      };
+      return { project: toMcpProject(project, pinned) };
     },
 
     async updateProjectBaseline(input: {
@@ -1079,31 +1085,7 @@ export function createMcpToolHandlers(
         updated.charterRecordId,
         updated.initialPlanRecordId,
       ]);
-      return {
-        project: {
-          id: updated.id,
-          workspaceId: updated.workspaceId,
-          name: updated.name,
-          slug: updated.slug,
-          status: updated.status,
-          summary: updated.summary,
-          description: updated.description,
-          startDate: updated.startDate,
-          endDate: updated.endDate,
-          charterRecordId: updated.charterRecordId,
-          charterRecord: updated.charterRecordId
-            ? pinned.get(updated.charterRecordId) ?? null
-            : null,
-          initialPlanRecordId: updated.initialPlanRecordId,
-          initialPlanRecord: updated.initialPlanRecordId
-            ? pinned.get(updated.initialPlanRecordId) ?? null
-            : null,
-          currency: projectCurrencySchema.parse(updated.currency),
-          initialBudget: updated.initialBudget,
-          approvedBudget: updated.approvedBudget,
-          keyPrefix: updated.keyPrefix,
-        },
-      };
+      return { project: toMcpProject(updated, pinned) };
     },
 
     async moveProject(input: {
