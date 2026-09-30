@@ -236,6 +236,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-09-30
+
+* **Move project** — Project Manage adds a Move item with two sections in the same modal: pick a destination workspace (grouped by organization), then review the dry-run summary or conflicts. Another organization requires an acknowledgement checkbox. No step-strip wizard.
+
 ### 2026-08-28
 
 * **Admin SSO** — `/admin/sso` (Admin rail / sidebar, same pattern as Email) for OIDC issuer, client, secret, button label, IdP source, redirect URI, enable, and JIT. Stored in `platform_settings`; login uses the override immediately. Overview setup card next to Email (per-browser hide/restore).

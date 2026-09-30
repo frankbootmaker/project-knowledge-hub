@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { slugify } from '@project-knowledge-hub/auth';
-import { memberships, users, workspaces } from '@project-knowledge-hub/database';
+import { memberships, organizations, users, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
   workspaceColorSchema,
@@ -51,13 +51,22 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
       .parse(request.query);
 
     if (principal.isSystemAdmin) {
+      const queryBuilder = app.database.db
+        .select({
+          workspace: workspaces,
+          organizationName: organizations.name,
+        })
+        .from(workspaces)
+        .innerJoin(organizations, eq(organizations.id, workspaces.organizationId));
       const rows = query.includeArchived
-        ? await app.database.db.select().from(workspaces)
-        : await app.database.db
-            .select()
-            .from(workspaces)
-            .where(isNull(workspaces.archivedAt));
-      return { workspaces: rows.map(toPublicWorkspace) };
+        ? await queryBuilder
+        : await queryBuilder.where(isNull(workspaces.archivedAt));
+      return {
+        workspaces: rows.map((row) => ({
+          ...toPublicWorkspace(row.workspace),
+          organizationName: row.organizationName,
+        })),
+      };
     }
 
     const accessibleIds = principal.memberships.map((membership) => membership.workspaceId);
@@ -66,15 +75,24 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     }
 
     const rows = await app.database.db
-      .select()
+      .select({
+        workspace: workspaces,
+        organizationName: organizations.name,
+      })
       .from(workspaces)
+      .innerJoin(organizations, eq(organizations.id, workspaces.organizationId))
       .where(
         query.includeArchived
           ? inArray(workspaces.id, accessibleIds)
           : and(inArray(workspaces.id, accessibleIds), isNull(workspaces.archivedAt)),
       );
 
-    return { workspaces: rows.map(toPublicWorkspace) };
+    return {
+      workspaces: rows.map((row) => ({
+        ...toPublicWorkspace(row.workspace),
+        organizationName: row.organizationName,
+      })),
+    };
   });
 
   app.post('/api/v1/workspaces', async (request) => {

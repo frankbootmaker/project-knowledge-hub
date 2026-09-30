@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   knowledgeRecords,
   knowledgeSources,
+  memberships,
   projectEpics,
   projectMilestones,
   projectSprints,
@@ -170,6 +171,7 @@ import {
   parseTokenRate,
   upsertProjectCostSnapshot,
 } from './project-budget.js';
+import { moveProjectToWorkspace } from './project-move.js';
 
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
@@ -196,6 +198,41 @@ function assertWriteWorkspaceAllowed(client: McpClientContext, workspaceId: stri
     throw new AppError({
       code: 'FORBIDDEN',
       message: 'Workspace is not allowed for this API client',
+      statusCode: 403,
+    });
+  }
+}
+
+async function assertActingWorkspaceMaintainer(
+  app: FastifyInstance,
+  userId: string,
+  workspaceId: string,
+): Promise<void> {
+  const [user] = await app.database.db
+    .select({ isSystemAdmin: users.isSystemAdmin, status: users.status })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user || user.status !== 'active') {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Acting user cannot administer this workspace',
+      statusCode: 403,
+    });
+  }
+  if (user.isSystemAdmin) return;
+  const [membership] = await app.database.db
+    .select({ role: memberships.role })
+    .from(memberships)
+    .where(and(eq(memberships.userId, userId), eq(memberships.workspaceId, workspaceId)))
+    .limit(1);
+  if (
+    !membership ||
+    (membership.role !== 'workspace_admin' && membership.role !== 'maintainer')
+  ) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Workspace maintainer privileges are required',
       statusCode: 403,
     });
   }
@@ -1056,6 +1093,61 @@ export function createMcpToolHandlers(
           keyPrefix: updated.keyPrefix,
         },
       };
+    },
+
+    async moveProject(input: {
+      projectId: string;
+      targetWorkspaceId: string;
+      dryRun?: boolean;
+      confirmCrossOrganization?: boolean;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId);
+      assertWriteWorkspaceAllowed(client, project.workspaceId);
+      assertProjectAllowed(client, project.id);
+
+      const [sourceWorkspace] = await app.database.db
+        .select({ organizationId: workspaces.organizationId })
+        .from(workspaces)
+        .where(eq(workspaces.id, project.workspaceId))
+        .limit(1);
+      const [targetWorkspace] = await app.database.db
+        .select({
+          id: workspaces.id,
+          organizationId: workspaces.organizationId,
+        })
+        .from(workspaces)
+        .where(eq(workspaces.id, input.targetWorkspaceId))
+        .limit(1);
+      if (!sourceWorkspace || !targetWorkspace) {
+        throw new AppError({
+          code: 'WORKSPACE_NOT_FOUND',
+          message: 'Workspace not found',
+          statusCode: 404,
+        });
+      }
+      const crossOrganization =
+        sourceWorkspace.organizationId !== targetWorkspace.organizationId;
+      if (!crossOrganization) {
+        assertWriteWorkspaceAllowed(client, targetWorkspace.id);
+      }
+      await assertActingWorkspaceMaintainer(app, actingUserId, project.workspaceId);
+      await assertActingWorkspaceMaintainer(app, actingUserId, targetWorkspace.id);
+
+      const { store: blobStore } = await app.getBlobStore();
+      const move = await moveProjectToWorkspace(app.database, {
+        projectId: project.id,
+        targetWorkspaceId: targetWorkspace.id,
+        dryRun: input.dryRun,
+        confirmCrossOrganization: input.confirmCrossOrganization,
+        actorType: 'api_client',
+        actorId: client.id,
+        ipAddress: ipAddress ?? null,
+        uploadDir: app.env.MEDIA_UPLOAD_DIR,
+        blobStore,
+        viaMcp: true,
+      });
+      return { move };
     },
 
     async getProjectBudgetSummary(input: { projectId: string }) {

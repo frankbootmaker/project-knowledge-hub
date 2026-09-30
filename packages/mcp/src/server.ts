@@ -79,6 +79,12 @@ export type McpToolHandlers = {
     approvedBudget?: number | string | null;
     keyPrefix?: string;
   }) => Promise<unknown>;
+  moveProject: (input: {
+    projectId: string;
+    targetWorkspaceId: string;
+    dryRun?: boolean;
+    confirmCrossOrganization?: boolean;
+  }) => Promise<unknown>;
   getProjectBudgetSummary: (input: { projectId: string }) => Promise<unknown>;
   getProjectResourceUtilization: (input: {
     projectId: string;
@@ -963,6 +969,24 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.updateProjectBaseline(args),
         { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'move_project',
+    'Move a project to another workspace, including a workspace in another organization. Requires pm:write and an acting user who maintains both workspaces. Same-organization destinations must be on the client allowlist. Cross-organization moves require confirmCrossOrganization and the client loses access afterwards. dryRun lists conflicts without writing.',
+    {
+      projectId: z.string().uuid(),
+      targetWorkspaceId: z.string().uuid(),
+      dryRun: z.boolean().optional(),
+      confirmCrossOrganization: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap(
+        'move_project',
+        'pm:write',
+        () => handlers.moveProject(args),
+        { projectId: args.projectId, workspaceId: args.targetWorkspaceId },
       )(),
   );
 

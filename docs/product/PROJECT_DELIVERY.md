@@ -117,7 +117,9 @@ Append-only `project_task_activities`: `created`, `status_changed`, `comment`, `
 | `GET` | `/api/v1/workspaces/:workspaceId/members` | Active members (view) for pickers |
 | `GET` | `/api/v1/me/tasks` | Cross-project tasks where the caller holds a RACI role (`?role=`, `?includeArchived=`) |
 
-Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archived projects are read-only.
+Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archived projects are read-only, except **move**, which an archived project may still use.
+
+`POST /api/v1/projects/:projectId/move` with `{ targetWorkspaceId, dryRun?, confirmCrossOrganization? }` moves the project to another workspace, including one in another organization. The caller must maintain both workspaces. `dryRun` returns conflicts, counts, and tag remaps without writing. A cross-organization move requires `confirmCrossOrganization` because Git tokens and conversation imports travel with the project. See [ADR-024](../adr/ADR-024-project-workspace-move.md).
 
 ## MCP
 
@@ -125,7 +127,7 @@ Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archiv
 | --- | --- |
 | `pm:read` | milestones/tasks/epics/stories/activities/stakeholders list + `get_project_task` |
 | `projects:read` | `list_workspace_members` (for staffing userId pickers) |
-| `pm:write` | create/update milestone, epic, story, task; `set_project_task_raci`; `add_project_task_comment`; `handoff_project_task`; stakeholder CRUD + assign/unassign open roles |
+| `pm:write` | create/update milestone, epic, story, task; `set_project_task_raci`; `add_project_task_comment`; `handoff_project_task`; stakeholder CRUD + assign/unassign open roles; `move_project` |
 
 `pm:write` requires `actingUserId` + non-empty `allowedWorkspaceIds` (same gate pattern as `knowledge:write`). Optional `allowedProjectIds` restricts project scope. Mutations audit as `actorType: api_client`.
 

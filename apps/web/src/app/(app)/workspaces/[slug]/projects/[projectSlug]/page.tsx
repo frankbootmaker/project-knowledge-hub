@@ -66,7 +66,13 @@ function ragNavClass(rag: ProjectRagStatus | null): string {
 
 export const dynamic = 'force-dynamic';
 
-type Workspace = { id: string; slug: string; name: string };
+type Workspace = {
+  id: string;
+  slug: string;
+  name: string;
+  organizationId: string;
+  organizationName: string;
+};
 type Project = {
   id: string;
   name: string;
@@ -159,6 +165,16 @@ export default async function ProjectDetailPage({
   if (!workspace) {
     notFound();
   }
+
+  const moveTargets = workspacesPayload.workspaces.filter((item) => {
+    if (item.id === workspace.id) return false;
+    if (session.user.isSystemAdmin) return true;
+    return session.memberships.some(
+      (membership) =>
+        membership.workspaceId === item.id &&
+        (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
+    );
+  });
 
   const projectsResponse = await apiFetch(
     `/api/v1/projects?workspaceId=${workspace.id}&includeArchived=true`,
@@ -461,6 +477,7 @@ export default async function ProjectDetailPage({
               canMutate={canMutate}
               canPurge={canPurge}
               knowledgeRecords={knowledgeRecords}
+              moveTargets={moveTargets}
             />
           </div>
         }

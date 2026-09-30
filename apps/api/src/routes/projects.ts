@@ -39,6 +39,7 @@ import {
   assertUniqueKeyPrefix,
 } from '../lib/project-issue-keys.js';
 import { listProjectOverallRags } from '../lib/project-overall-rag.js';
+import { moveProjectToWorkspace } from '../lib/project-move.js';
 
 const createProjectSchema = z.object({
   workspaceId: z.string().uuid(),
@@ -648,6 +649,48 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
           )
         : null,
     };
+  });
+
+  app.post('/api/v1/projects/:projectId/move', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
+    const body = z
+      .object({
+        targetWorkspaceId: z.string().uuid(),
+        dryRun: z.boolean().optional(),
+        confirmCrossOrganization: z.boolean().optional(),
+      })
+      .parse(request.body);
+
+    const [project] = await app.database.db
+      .select({ workspaceId: projects.workspaceId })
+      .from(projects)
+      .where(eq(projects.id, params.projectId))
+      .limit(1);
+    if (!project) {
+      throw new AppError({
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found',
+        statusCode: 404,
+      });
+    }
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    requireWorkspaceMaintainer(principal, body.targetWorkspaceId);
+
+    const { store: blobStore } = await app.getBlobStore();
+    const move = await moveProjectToWorkspace(app.database, {
+      projectId: params.projectId,
+      targetWorkspaceId: body.targetWorkspaceId,
+      dryRun: body.dryRun,
+      confirmCrossOrganization: body.confirmCrossOrganization,
+      actorType: 'user',
+      actorId: principal.userId,
+      ipAddress: request.ip,
+      uploadDir: app.env.MEDIA_UPLOAD_DIR,
+      blobStore,
+    });
+    return { move };
   });
 
   /** Permanent delete — linked systems/records/git keep their rows but lose projectId. */

@@ -58,7 +58,41 @@ type KnowledgeOption = {
   recordType: string;
 };
 
-type Section = 'menu' | 'details' | 'edit' | 'archive' | 'delete' | 'reports';
+type Section = 'menu' | 'details' | 'edit' | 'archive' | 'delete' | 'reports' | 'move' | 'move-review';
+
+export type MoveWorkspaceOption = {
+  id: string;
+  name: string;
+  slug: string;
+  organizationId: string;
+  organizationName: string;
+};
+
+type MoveConflict = {
+  type: string;
+  entity?: string;
+  slug?: string;
+  keyPrefix?: string;
+  displayName?: string;
+  name?: string;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+};
+
+type MovePreview = {
+  crossOrganization: boolean;
+  conflicts: MoveConflict[];
+  counts: {
+    systems: number;
+    knowledgeRecords: number;
+    gitConnections: number;
+    conversationImports: number;
+    documentImports: number;
+  };
+  tagRemaps: Array<{ name: string; reused: boolean }>;
+  project: { slug: string; workspaceSlug: string };
+};
 
 export function ProjectManageMenu(props: {
   workspaceSlug: string;
@@ -66,6 +100,7 @@ export function ProjectManageMenu(props: {
   canMutate: boolean;
   canPurge: boolean;
   knowledgeRecords?: KnowledgeOption[];
+  moveTargets?: MoveWorkspaceOption[];
 }) {
   const t = useTranslations('projects');
   const tBaseline = useTranslations('baseline');
@@ -98,6 +133,9 @@ export function ProjectManageMenu(props: {
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [moveTargetId, setMoveTargetId] = useState('');
+  const [movePreview, setMovePreview] = useState<MovePreview | null>(null);
+  const [confirmOrg, setConfirmOrg] = useState(false);
   const { openReport, reportLoading, reportViewer } = useProjectReportPreview(
     props.project,
     {
@@ -134,6 +172,7 @@ export function ProjectManageMenu(props: {
     if (section === 'details') return t('manageDetails');
     if (section === 'edit') return t('manageEdit');
     if (section === 'reports') return t('manageReports');
+    if (section === 'move' || section === 'move-review') return t('moveTitle');
     if (section === 'delete') return t('manageDelete');
     return archived ? t('manageRestore') : t('manageArchive');
   }
@@ -185,6 +224,110 @@ export function ProjectManageMenu(props: {
     }
   }
 
+  function describeConflict(conflict: MoveConflict): string {
+    if (conflict.type === 'slug') {
+      return t('moveConflictSlug', {
+        entity: conflict.entity ?? 'item',
+        slug: conflict.slug ?? '',
+      });
+    }
+    if (conflict.type === 'key_prefix') {
+      return t('moveConflictPrefix', { prefix: conflict.keyPrefix ?? '' });
+    }
+    if (conflict.type === 'membership') {
+      return t('moveConflictMember', { name: conflict.displayName ?? '' });
+    }
+    if (conflict.type === 'shared_system') {
+      return t('moveConflictSystem', { name: conflict.name ?? '' });
+    }
+    return t('moveConflictGit', {
+      owner: conflict.owner ?? '',
+      repo: conflict.repo ?? '',
+      branch: conflict.branch ?? '',
+    });
+  }
+
+  async function reviewMove() {
+    if (!moveTargetId) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/projects/${props.project.id}/move`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({ targetWorkspaceId: moveTargetId, dryRun: true }),
+      });
+      const payload = (await response.json()) as {
+        move?: MovePreview;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.move) {
+        throw new Error(payload.error?.message ?? t('moveFailed'));
+      }
+      setMovePreview(payload.move);
+      setConfirmOrg(false);
+      setSection('move-review');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('moveFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function commitMove() {
+    if (!moveTargetId || !movePreview) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/projects/${props.project.id}/move`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({
+          targetWorkspaceId: moveTargetId,
+          confirmCrossOrganization: movePreview.crossOrganization ? confirmOrg : undefined,
+        }),
+      });
+      const payload = (await response.json()) as {
+        move?: MovePreview;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.move) {
+        throw new Error(payload.error?.message ?? t('moveFailed'));
+      }
+      pushToast(t('moveSuccess'));
+      router.push(
+        `/workspaces/${payload.move.project.workspaceSlug}/projects/${payload.move.project.slug}`,
+      );
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('moveFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const moveGroups = new Map<
+    string,
+    { id: string; name: string; workspaces: MoveWorkspaceOption[] }
+  >();
+  for (const workspace of props.moveTargets ?? []) {
+    const group = moveGroups.get(workspace.organizationId) ?? {
+      id: workspace.organizationId,
+      name: workspace.organizationName,
+      workspaces: [],
+    };
+    group.workspaces.push(workspace);
+    moveGroups.set(workspace.organizationId, group);
+  }
+
   return (
     <>
       <ManageToolbar>
@@ -223,6 +366,17 @@ export function ProjectManageMenu(props: {
                 title={t('manageEdit')}
                 hint={t('manageEditHintBaseline')}
                 onClick={() => setSection('edit')}
+              />
+            ) : null}
+            {props.canMutate ? (
+              <ManageMenuItem
+                title={t('manageMove')}
+                hint={t('manageMoveHint')}
+                onClick={() => {
+                  setError(null);
+                  setMovePreview(null);
+                  setSection('move');
+                }}
               />
             ) : null}
             {props.canMutate ? (
@@ -411,6 +565,127 @@ export function ProjectManageMenu(props: {
                 onClick={() => {
                   setError(null);
                   setSection('menu');
+                }}
+              >
+                {tCommon('back')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {section === 'move' ? (
+          <div className="grid gap-4">
+            {(props.moveTargets ?? []).length === 0 ? (
+              <p className="m-0 text-sm text-ink-muted">{t('moveNoDestinations')}</p>
+            ) : (
+              <Field label={t('moveDestination')}>
+                <Select
+                  value={moveTargetId}
+                  onChange={(event) => setMoveTargetId(event.target.value)}
+                >
+                  <option value="">{tCommon('none')}</option>
+                  {[...moveGroups.values()].map((group) => (
+                    <optgroup key={group.id} label={group.name}>
+                      {group.workspaces.map((workspace) => (
+                        <option key={workspace.id} value={workspace.id}>
+                          {workspace.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            {error ? <ErrorText>{error}</ErrorText> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={pending || !moveTargetId}
+                onClick={() => void reviewMove()}
+              >
+                {pending ? tCommon('saving') : t('moveContinue')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => {
+                  setError(null);
+                  setSection('menu');
+                }}
+              >
+                {tCommon('back')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {section === 'move-review' && movePreview ? (
+          <div className="grid gap-4">
+            {movePreview.conflicts.length > 0 ? (
+              <>
+                <p className="m-0 text-sm text-ink-muted">{t('moveConflicts')}</p>
+                <ul className="m-0 grid list-disc gap-1 pl-5 text-sm">
+                  {movePreview.conflicts.map((conflict, index) => (
+                    <li key={`${conflict.type}-${index}`}>{describeConflict(conflict)}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <>
+                <p className="m-0 text-sm text-ink-muted">{t('moveSummary')}</p>
+                <p className="m-0 text-sm">
+                  {t('moveCounts', {
+                    systems: movePreview.counts.systems,
+                    records: movePreview.counts.knowledgeRecords,
+                    git: movePreview.counts.gitConnections,
+                    conversations: movePreview.counts.conversationImports,
+                    documents: movePreview.counts.documentImports,
+                  })}
+                </p>
+                {movePreview.tagRemaps.length > 0 ? (
+                  <ul className="m-0 grid list-disc gap-1 pl-5 text-sm">
+                    {movePreview.tagRemaps.map((tag) => (
+                      <li key={tag.name}>
+                        {tag.reused
+                          ? t('moveTagReused', { name: tag.name })
+                          : t('moveTagRemap', { name: tag.name })}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {movePreview.crossOrganization ? (
+                  <label className="kh-ops-scope-check">
+                    <input
+                      type="checkbox"
+                      checked={confirmOrg}
+                      onChange={(event) => setConfirmOrg(event.target.checked)}
+                    />
+                    <span>{t('moveConfirmOrg')}</span>
+                  </label>
+                ) : null}
+              </>
+            )}
+            {error ? <ErrorText>{error}</ErrorText> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={
+                  pending ||
+                  movePreview.conflicts.length > 0 ||
+                  (movePreview.crossOrganization && !confirmOrg)
+                }
+                onClick={() => void commitMove()}
+              >
+                {pending ? tCommon('saving') : t('moveButton')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => {
+                  setError(null);
+                  setSection('move');
                 }}
               >
                 {tCommon('back')}

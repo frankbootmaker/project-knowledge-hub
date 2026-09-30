@@ -1369,6 +1369,23 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
     },
   },
   {
+    name: 'move_project',
+    description:
+      'Move a project to another workspace. Cross-organization requires confirmCrossOrganization. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['projectId', 'targetWorkspaceId'],
+      properties: {
+        projectId: uuidProp('Project id'),
+        targetWorkspaceId: uuidProp('Destination workspace id'),
+        dryRun: { type: 'boolean' },
+        confirmCrossOrganization: { type: 'boolean' },
+      },
+    },
+  },
+  {
     name: 'get_knowledge_record_delivery_links',
     description:
       'List epic/story/task/sprint links for a knowledge record. Requires knowledge:read.',
