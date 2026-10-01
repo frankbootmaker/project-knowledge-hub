@@ -271,6 +271,25 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(text.toLowerCase()).toContain('bridge');
   });
 
+  it('lists workspaces with access info', async () => {
+    const listWs = await mcpCall(app!, readToken, 4, 'tools/call', {
+      name: 'list_workspaces',
+      arguments: {},
+    });
+    expect(listWs.statusCode).toBe(200);
+    const body = listWs.json() as {
+      result?: { content?: Array<{ text?: string }>; isError?: boolean };
+    };
+    expect(body.result?.isError).toBeFalsy();
+    const data = JSON.parse(body.result?.content?.[0]?.text ?? '{}') as {
+      workspaces?: Array<{ id: string; name: string; writeAllowed: boolean }>;
+    };
+    expect(data.workspaces?.length).toBeGreaterThan(0);
+    const ws = data.workspaces?.find((w) => w.id === workspaceId);
+    expect(ws).toBeDefined();
+    expect(ws?.writeAllowed).toBe(true);
+  });
+
   it('denies create without knowledge:write scope', async () => {
     const response = await mcpCall(app!, readToken, 10, 'tools/call', {
       name: 'create_knowledge_record',
@@ -454,5 +473,220 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(detail.knowledgeRecord?.media?.some((m) => m.id === uploaded.media!.id)).toBe(
       true,
     );
+  });
+
+  it('creates project via MCP with AI provenance', async () => {
+    const pmWrite = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        organizationId,
+        name: 'PM write client',
+        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
+        allowedWorkspaceIds: [workspaceId],
+        actingUserId: adminUserId,
+      },
+    });
+    expect(pmWrite.statusCode).toBe(200);
+    const pmToken = (pmWrite.json() as { token: string }).token;
+
+    const create = await mcpCall(app!, pmToken, 50, 'tools/call', {
+      name: 'create_project',
+      arguments: {
+        workspaceId,
+        name: 'AI Agent Project',
+        keyPrefix: 'AGT',
+        description: 'Created by AI agent via MCP',
+        currency: 'USD',
+        methodology: 'scrum',
+        generatedByModel: 'test-model-v1',
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const body = create.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBeFalsy();
+    const data = JSON.parse(body.result?.content?.[0]?.text ?? '{}') as {
+      project?: {
+        id: string;
+        name: string;
+        keyPrefix: string;
+        lifecycleStage: string;
+        createdByType: string;
+        createdByModel: string;
+        url: string;
+      };
+    };
+    expect(data.project?.id).toBeTruthy();
+    expect(data.project?.name).toBe('AI Agent Project');
+    expect(data.project?.keyPrefix).toBe('AGT');
+    expect(data.project?.lifecycleStage).toBe('idea');
+    expect(data.project?.createdByType).toBe('api_client');
+    expect(data.project?.createdByModel).toBe('test-model-v1');
+    expect(data.project?.url).toContain('/projects/');
+
+    const getProj = await mcpCall(app!, pmToken, 51, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectId: data.project!.id },
+    });
+    expect(getProj.statusCode).toBe(200);
+    const getBody = getProj.json() as {
+      result?: { content?: Array<{ text?: string }> };
+    };
+    const proj = JSON.parse(getBody.result?.content?.[0]?.text ?? '{}') as {
+      project?: { lifecycleStage: string; createdByModel: string };
+    };
+    expect(proj.project?.lifecycleStage).toBe('idea');
+    expect(proj.project?.createdByModel).toBe('test-model-v1');
+  });
+
+  it('rejects duplicate project name', async () => {
+    const pmWrite = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        organizationId,
+        name: 'PM write client 2',
+        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
+        allowedWorkspaceIds: [workspaceId],
+        actingUserId: adminUserId,
+      },
+    });
+    const pmToken = (pmWrite.json() as { token: string }).token;
+
+    const dup = await mcpCall(app!, pmToken, 52, 'tools/call', {
+      name: 'create_project',
+      arguments: {
+        workspaceId,
+        name: 'MCP Project',
+      },
+    });
+    expect(dup.statusCode).toBe(200);
+    const body = dup.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBe(true);
+    expect(body.result?.content?.[0]?.text ?? '').toContain('already exists');
+  });
+
+  it('updates project lifecycle stage and metadata', async () => {
+    const pmWrite = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        organizationId,
+        name: 'PM write client 3',
+        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
+        allowedWorkspaceIds: [workspaceId],
+        actingUserId: adminUserId,
+      },
+    });
+    const pmToken = (pmWrite.json() as { token: string }).token;
+
+    const create = await mcpCall(app!, pmToken, 53, 'tools/call', {
+      name: 'create_project',
+      arguments: {
+        workspaceId,
+        name: 'Test Lifecycle Project',
+        keyPrefix: 'TLC',
+      },
+    });
+    const createBody = create.json() as {
+      result?: { content?: Array<{ text?: string }> };
+    };
+    const created = JSON.parse(createBody.result?.content?.[0]?.text ?? '{}') as {
+      project?: { id: string };
+    };
+    const projectId = created.project!.id;
+
+    const update = await mcpCall(app!, pmToken, 54, 'tools/call', {
+      name: 'update_project',
+      arguments: {
+        projectId,
+        lifecycleStage: 'active',
+        description: 'Updated description',
+        methodology: 'kanban',
+      },
+    });
+    expect(update.statusCode).toBe(200);
+    const updateBody = update.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(updateBody.result?.isError).toBeFalsy();
+    const updated = JSON.parse(updateBody.result?.content?.[0]?.text ?? '{}') as {
+      project?: { lifecycleStage: string; description: string };
+    };
+    expect(updated.project?.lifecycleStage).toBe('active');
+    expect(updated.project?.description).toBe('Updated description');
+  });
+
+  it('filters projects by lifecycle stage', async () => {
+    const pmWrite = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        organizationId,
+        name: 'PM write client 4',
+        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
+        allowedWorkspaceIds: [workspaceId],
+        actingUserId: adminUserId,
+      },
+    });
+    const pmToken = (pmWrite.json() as { token: string }).token;
+
+    const listIdea = await mcpCall(app!, pmToken, 55, 'tools/call', {
+      name: 'list_projects',
+      arguments: {
+        workspaceId,
+        lifecycleStage: 'idea',
+        limit: 100,
+      },
+    });
+    expect(listIdea.statusCode).toBe(200);
+    const body = listIdea.json() as {
+      result?: { content?: Array<{ text?: string }> };
+    };
+    const data = JSON.parse(body.result?.content?.[0]?.text ?? '{}') as {
+      projects?: Array<{ lifecycleStage: string; name: string }>;
+    };
+    expect(data.projects?.some((p) => p.lifecycleStage === 'idea')).toBe(true);
+    expect(data.projects?.every((p) => p.lifecycleStage === 'idea')).toBe(true);
+  });
+
+  it('returns distinct error for archived project', async () => {
+    const response = await mcpCall(app!, readToken, 60, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectId: '00000000-0000-0000-0000-000000000000' },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBe(true);
+  });
+
+  it('returns workspace not allowed error with workspaceId', async () => {
+    const record = await mcpCall(app!, readToken, 61, 'tools/call', {
+      name: 'create_knowledge_record',
+      arguments: {
+        workspaceId: otherWorkspaceId,
+        title: 'Should fail',
+        recordType: 'runbook',
+        contentMarkdown: '# Fail\n',
+      },
+    });
+    expect(record.statusCode).toBe(200);
+    const body = record.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBe(true);
+    const text = body.result?.content?.[0]?.text ?? '';
+    expect(text.toLowerCase()).toContain('workspace');
+    expect(text.toLowerCase()).toContain('not allowed');
   });
 });
