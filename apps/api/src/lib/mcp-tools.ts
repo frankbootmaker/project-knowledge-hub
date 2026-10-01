@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   knowledgeRecords,
   knowledgeSources,
+  memberships,
   projects,
   systems,
   users,
@@ -150,9 +151,10 @@ function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): 
     !client.allowedWorkspaceIds.includes(workspaceId)
   ) {
     throw new AppError({
-      code: 'FORBIDDEN',
+      code: 'WORKSPACE_NOT_ALLOWED',
       message: 'Workspace is not allowed for this API client',
       statusCode: 403,
+      details: { workspaceId },
     });
   }
 }
@@ -167,9 +169,10 @@ function assertWriteWorkspaceAllowed(client: McpClientContext, workspaceId: stri
   }
   if (!client.allowedWorkspaceIds.includes(workspaceId)) {
     throw new AppError({
-      code: 'FORBIDDEN',
+      code: 'WORKSPACE_NOT_ALLOWED',
       message: 'Workspace is not allowed for this API client',
       statusCode: 403,
+      details: { workspaceId },
     });
   }
 }
@@ -337,15 +340,82 @@ export function createMcpToolHandlers(
   ipAddress?: string | null,
 ): McpToolHandlers {
   return {
-    async listProjects({ workspaceId, limit }) {
+    async listWorkspaces() {
+      const workspaceIds =
+        client.allowedWorkspaceIds.length > 0
+          ? client.allowedWorkspaceIds
+          : (
+              await app.database.db
+                .select({ id: workspaces.id })
+                .from(workspaces)
+                .where(
+                  and(
+                    eq(workspaces.organizationId, client.organizationId),
+                    isNull(workspaces.archivedAt),
+                  ),
+                )
+            ).map((row) => row.id);
+
+      if (workspaceIds.length === 0) {
+        return { workspaces: [] };
+      }
+
+      const rows = await app.database.db
+        .select()
+        .from(workspaces)
+        .where(and(inArray(workspaces.id, workspaceIds), isNull(workspaces.archivedAt)));
+
+      const actingUserId = client.actingUserId;
+      const actingUserMemberships =
+        actingUserId && rows.length > 0
+          ? await app.database.db
+              .select({ workspaceId: memberships.workspaceId, role: memberships.role })
+              .from(memberships)
+              .where(
+                and(
+                  eq(memberships.userId, actingUserId),
+                  inArray(
+                    memberships.workspaceId,
+                    rows.map((r) => r.id),
+                  ),
+                ),
+              )
+          : [];
+
+      const membershipByWorkspace = new Map(
+        actingUserMemberships.map((m) => [m.workspaceId, m.role]),
+      );
+
+      return {
+        workspaces: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          organizationId: row.organizationId,
+          writeAllowed:
+            client.allowedWorkspaceIds.length === 0 ||
+            client.allowedWorkspaceIds.includes(row.id),
+          actingUserRole: actingUserId ? membershipByWorkspace.get(row.id) ?? null : null,
+        })),
+      };
+    },
+
+    async listProjects({ workspaceId, lifecycleStage, limit }) {
       const workspaceIds = await resolveWorkspaceFilter(app, client, workspaceId);
       if (workspaceIds.length === 0) {
         return { projects: [] };
       }
+      const conditions = [
+        inArray(projects.workspaceId, workspaceIds),
+        isNull(projects.archivedAt),
+      ];
+      if (lifecycleStage) {
+        conditions.push(eq(projects.lifecycleStage, lifecycleStage));
+      }
       const rows = await app.database.db
         .select()
         .from(projects)
-        .where(and(inArray(projects.workspaceId, workspaceIds), isNull(projects.archivedAt)))
+        .where(and(...conditions))
         .limit(limit);
       const filtered = rows.filter((row) => {
         try {
@@ -364,6 +434,9 @@ export function createMcpToolHandlers(
           status: row.status,
           summary: row.summary,
           keyPrefix: row.keyPrefix,
+          lifecycleStage: row.lifecycleStage,
+          createdByType: row.createdByType,
+          createdByModel: row.createdByModel,
         })),
       };
     },
@@ -414,13 +487,21 @@ export function createMcpToolHandlers(
       const [project] = await app.database.db
         .select()
         .from(projects)
-        .where(and(eq(projects.id, projectId), isNull(projects.archivedAt)))
+        .where(eq(projects.id, projectId))
         .limit(1);
       if (!project) {
         throw new AppError({
           code: 'PROJECT_NOT_FOUND',
           message: 'Project not found',
           statusCode: 404,
+        });
+      }
+      if (project.archivedAt) {
+        throw new AppError({
+          code: 'PROJECT_ARCHIVED',
+          message: 'Project is archived',
+          statusCode: 410,
+          details: { projectId, workspaceId: project.workspaceId },
         });
       }
       assertWorkspaceAllowed(client, project.workspaceId);
@@ -452,6 +533,310 @@ export function createMcpToolHandlers(
           initialBudget: project.initialBudget,
           approvedBudget: project.approvedBudget,
           keyPrefix: project.keyPrefix,
+          lifecycleStage: project.lifecycleStage,
+          createdByType: project.createdByType,
+          createdByModel: project.createdByModel,
+        },
+      };
+    },
+
+    async createProject(input: {
+      workspaceId: string;
+      name: string;
+      keyPrefix?: string;
+      description?: string | null;
+      currency?: string;
+      methodology?: string;
+      generatedByModel?: string;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      assertWriteWorkspaceAllowed(client, input.workspaceId);
+
+      const [workspace] = await app.database.db
+        .select()
+        .from(workspaces)
+        .where(and(eq(workspaces.id, input.workspaceId), isNull(workspaces.archivedAt)))
+        .limit(1);
+
+      if (!workspace) {
+        throw new AppError({
+          code: 'WORKSPACE_NOT_FOUND',
+          message: 'Workspace not found',
+          statusCode: 404,
+        });
+      }
+
+      const { slugify } = await import('@project-knowledge-hub/auth');
+      const slug = slugify(input.name);
+      if (!slug) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'Project name cannot be converted to a valid slug',
+          statusCode: 400,
+        });
+      }
+
+      const [existingByName] = await app.database.db
+        .select()
+        .from(projects)
+        .where(
+          and(
+            eq(projects.workspaceId, input.workspaceId),
+            eq(projects.name, input.name),
+            isNull(projects.archivedAt),
+          ),
+        )
+        .limit(1);
+
+      if (existingByName) {
+        throw new AppError({
+          code: 'PROJECT_NAME_CONFLICT',
+          message:
+            'A project with this name already exists in the workspace. Use a different name or pass confirm=true to create anyway.',
+          statusCode: 409,
+          details: { existingProjectId: existingByName.id },
+        });
+      }
+
+      const [existingBySlug] = await app.database.db
+        .select()
+        .from(projects)
+        .where(
+          and(
+            eq(projects.workspaceId, input.workspaceId),
+            eq(projects.slug, slug),
+            isNull(projects.archivedAt),
+          ),
+        )
+        .limit(1);
+
+      if (existingBySlug) {
+        throw new AppError({
+          code: 'PROJECT_SLUG_CONFLICT',
+          message: 'A project with this slug already exists in the workspace',
+          statusCode: 409,
+          details: { slug, existingProjectId: existingBySlug.id },
+        });
+      }
+
+      let keyPrefix: string;
+      if (input.keyPrefix) {
+        keyPrefix = await assertUniqueKeyPrefix(app.database, {
+          workspaceId: input.workspaceId,
+          keyPrefix: input.keyPrefix,
+        });
+      } else {
+        const { allocateUniqueKeyPrefix } = await import('./project-issue-keys.js');
+        keyPrefix = await allocateUniqueKeyPrefix(app.database, {
+          workspaceId: input.workspaceId,
+          nameOrSlug: slug,
+        });
+      }
+
+      const currency = input.currency
+        ? projectCurrencySchema.parse(input.currency)
+        : 'EUR';
+
+      const [created] = await app.database.db
+        .insert(projects)
+        .values({
+          workspaceId: input.workspaceId,
+          name: input.name,
+          slug,
+          description: input.description ?? null,
+          status: 'idea',
+          lifecycleStage: 'idea',
+          currency,
+          keyPrefix,
+          issueCounters: {},
+          createdByType: 'api_client',
+          createdById: client.id,
+          createdByModel: input.generatedByModel ?? null,
+          metadataJson: input.methodology ? { methodology: input.methodology } : null,
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      if (!created) {
+        throw new AppError({
+          code: 'PROJECT_CREATE_FAILED',
+          message: 'Failed to create project',
+          statusCode: 500,
+        });
+      }
+
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.created',
+        entityType: 'project',
+        entityId: created.id,
+        metadata: {
+          name: created.name,
+          keyPrefix: created.keyPrefix,
+          lifecycleStage: created.lifecycleStage,
+          via: 'mcp',
+          actingUserId,
+          generatedByModel: input.generatedByModel ?? null,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+
+      const publicUrl = `${app.env.WEB_URL}/workspaces/${workspace.slug}/projects/${created.slug}`;
+
+      return {
+        project: {
+          id: created.id,
+          workspaceId: created.workspaceId,
+          name: created.name,
+          slug: created.slug,
+          description: created.description,
+          status: created.status,
+          lifecycleStage: created.lifecycleStage,
+          currency: projectCurrencySchema.parse(created.currency),
+          keyPrefix: created.keyPrefix,
+          url: publicUrl,
+          createdByType: created.createdByType,
+          createdByModel: created.createdByModel,
+        },
+      };
+    },
+
+    async updateProject(input: {
+      projectId: string;
+      name?: string;
+      description?: string | null;
+      methodology?: string;
+      currency?: string;
+      lifecycleStage?: string;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+
+      const updates: Partial<typeof projects.$inferInsert> = {
+        updatedAt: new Date(),
+      };
+
+      if (input.name !== undefined) {
+        updates.name = input.name;
+        const { slugify } = await import('@project-knowledge-hub/auth');
+        const newSlug = slugify(input.name);
+        if (!newSlug) {
+          throw new AppError({
+            code: 'VALIDATION_ERROR',
+            message: 'Project name cannot be converted to a valid slug',
+            statusCode: 400,
+          });
+        }
+        if (newSlug !== project.slug) {
+          const [existingBySlug] = await app.database.db
+            .select()
+            .from(projects)
+            .where(
+              and(
+                eq(projects.workspaceId, project.workspaceId),
+                eq(projects.slug, newSlug),
+                isNull(projects.archivedAt),
+              ),
+            )
+            .limit(1);
+          if (existingBySlug && existingBySlug.id !== project.id) {
+            throw new AppError({
+              code: 'PROJECT_SLUG_CONFLICT',
+              message: 'A project with this slug already exists in the workspace',
+              statusCode: 409,
+            });
+          }
+          updates.slug = newSlug;
+        }
+      }
+
+      if (input.description !== undefined) {
+        updates.description = input.description;
+      }
+
+      if (input.currency !== undefined) {
+        updates.currency = projectCurrencySchema.parse(input.currency);
+      }
+
+      if (input.lifecycleStage !== undefined) {
+        const { projectLifecycleStageSchema } = await import(
+          '@project-knowledge-hub/domain'
+        );
+        const nextStage = projectLifecycleStageSchema.parse(input.lifecycleStage);
+        const currentStage = project.lifecycleStage;
+
+        const allowedTransitions: Record<string, string[]> = {
+          idea: ['draft', 'proposal', 'active', 'archived'],
+          draft: ['proposal', 'active', 'archived'],
+          proposal: ['active', 'idea', 'archived'],
+          active: ['completed', 'archived'],
+          completed: ['active', 'archived'],
+          archived: ['active'],
+        };
+
+        if (
+          !allowedTransitions[currentStage]?.includes(nextStage) &&
+          currentStage !== nextStage
+        ) {
+          throw new AppError({
+            code: 'INVALID_LIFECYCLE_TRANSITION',
+            message: `Cannot transition from ${currentStage} to ${nextStage}. Allowed: ${allowedTransitions[currentStage]?.join(', ') ?? 'none'}`,
+            statusCode: 400,
+          });
+        }
+
+        updates.lifecycleStage = nextStage;
+      }
+
+      if (input.methodology !== undefined) {
+        const current = (project.metadataJson as Record<string, unknown> | null) ?? {};
+        updates.metadataJson = { ...current, methodology: input.methodology };
+      }
+
+      const [updated] = await app.database.db
+        .update(projects)
+        .set(updates)
+        .where(eq(projects.id, project.id))
+        .returning();
+
+      if (!updated) {
+        throw new AppError({
+          code: 'PROJECT_NOT_FOUND',
+          message: 'Project not found',
+          statusCode: 404,
+        });
+      }
+
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.updated',
+        entityType: 'project',
+        entityId: updated.id,
+        metadata: {
+          via: 'mcp',
+          actingUserId,
+          fields: Object.keys(input).filter((k) => k !== 'projectId'),
+        },
+        ipAddress: ipAddress ?? null,
+      });
+
+      return {
+        project: {
+          id: updated.id,
+          workspaceId: updated.workspaceId,
+          name: updated.name,
+          slug: updated.slug,
+          description: updated.description,
+          status: updated.status,
+          lifecycleStage: updated.lifecycleStage,
+          currency: projectCurrencySchema.parse(updated.currency),
+          keyPrefix: updated.keyPrefix,
         },
       };
     },
