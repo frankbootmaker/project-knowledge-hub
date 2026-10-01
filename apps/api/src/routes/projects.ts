@@ -136,6 +136,10 @@ async function toPublicProject(
     keyPrefix: project.keyPrefix,
     metadata: project.metadataJson,
     tags: tagList,
+    lifecycleStage: project.lifecycleStage,
+    createdByType: project.createdByType,
+    createdById: project.createdById,
+    createdByModel: project.createdByModel,
     archivedAt: project.archivedAt?.toISOString() ?? null,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
@@ -269,6 +273,9 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         keyPrefix,
         issueCounters: {},
         metadataJson: body.metadata ?? null,
+        createdByType: 'user',
+        createdById: principal.userId,
+        lifecycleStage: 'active',
         updatedAt: new Date(),
       })
       .returning();
