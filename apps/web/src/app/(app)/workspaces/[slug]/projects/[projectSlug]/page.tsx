@@ -96,6 +96,9 @@ type Project = {
   } | null;
   definitionOfDone?: string | null;
   keyPrefix?: string | null;
+  lifecycleStage?: string;
+  createdByType?: string | null;
+  createdByModel?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -420,6 +423,16 @@ export default async function ProjectDetailPage({
             >
               {t('ragOverall')}: {t(`rag.${overallRag}`)}
             </Badge>
+            {project.lifecycleStage && !['active', 'completed', 'archived'].includes(project.lifecycleStage) && (
+              <Badge tone="neutral" title={t('lifecycleStageLabel')}>
+                {t(`lifecycleStage.${project.lifecycleStage}`)}
+              </Badge>
+            )}
+            {project.createdByType === 'api_client' && (
+              <Badge tone="neutral" title={t('aiCreated')}>
+                {project.createdByModel ? `🤖 ${project.createdByModel}` : '🤖 AI'}
+              </Badge>
+            )}
           </span>
         }
         nav={

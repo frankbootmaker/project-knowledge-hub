@@ -612,6 +612,21 @@
       "amber": "At risk",
       "red": "Off track"
     },
+    "lifecycleStageLabel": "Lifecycle stage",
+    "lifecycleStage": {
+      "idea": "Idea",
+      "draft": "Draft",
+      "proposal": "Proposal",
+      "active": "Active",
+      "completed": "Completed",
+      "archived": "Archived"
+    },
+    "aiCreated": "Created by AI agent",
+    "promoteToActive": "Promote to active",
+    "promoteToActiveHint": "Move this AI-created project from {stage} to active stage",
+    "promoting": "Promoting…",
+    "promoted": "Project promoted to active.",
+    "promoteFailed": "Failed to promote project",
     "manageReports": "Reports",
     "manageReportsHint": "Preview status, delivery, or stakeholder reports, then export or print.",
     "reportStatus": "Project status report",

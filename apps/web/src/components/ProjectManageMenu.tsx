@@ -57,6 +57,9 @@ export type ProjectManageDetails = {
     slug: string;
     recordType: string;
   } | null;
+  lifecycleStage?: string;
+  createdByType?: string | null;
+  createdByModel?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -90,6 +93,7 @@ export function ProjectManageMenu(props: {
   const { pushToast } = useToast();
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<Section>('menu');
+  const [promoting, setPromoting] = useState(false);
   const [name, setName] = useState(props.project.name);
   const [summary, setSummary] = useState(props.project.summary ?? '');
   const [description, setDescription] = useState(props.project.description ?? '');
@@ -204,6 +208,29 @@ export function ProjectManageMenu(props: {
       setError(err instanceof Error ? err.message : t('failedUpdate'));
     } finally {
       setPending(false);
+    }
+  }
+
+  async function promoteToActive() {
+    setPromoting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/projects/${props.project.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lifecycleStage: 'active' }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error ?? t('promoteFailed'));
+      }
+      pushToast(t('promoted'));
+      router.refresh();
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('promoteFailed'));
+    } finally {
+      setPromoting(false);
     }
   }
 
@@ -371,6 +398,18 @@ export function ProjectManageMenu(props: {
               hint={t('manageDetailsHint')}
               onClick={() => setSection('details')}
             />
+            {props.canMutate &&
+              !archived &&
+              props.project.lifecycleStage &&
+              ['idea', 'draft', 'proposal'].includes(props.project.lifecycleStage) &&
+              props.project.createdByType === 'api_client' ? (
+              <ManageMenuItem
+                title={t('promoteToActive')}
+                hint={t('promoteToActiveHint', { stage: t(`lifecycleStage.${props.project.lifecycleStage}`) })}
+                onClick={promoteToActive}
+                disabled={promoting}
+              />
+            ) : null}
             <ManageMenuItem
               title={t('manageReports')}
               hint={t('manageReportsHint')}

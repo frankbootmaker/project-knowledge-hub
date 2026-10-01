@@ -812,7 +812,7 @@ export function ProjectDeliveryTimeline({
       autoRange.endMs - autoRange.startMs,
     );
     const maxSpan = Math.max(autoSpan * 4, currentSpan);
-    let nextSpan = clamp(currentSpan * factor, MIN_ZOOM_SPAN_MS, maxSpan);
+    const nextSpan = clamp(currentSpan * factor, MIN_ZOOM_SPAN_MS, maxSpan);
     let nextStart = center - nextSpan / 2;
     let nextEnd = center + nextSpan / 2;
     nextStart = parseYmd(formatYmd(nextStart));
@@ -854,7 +854,7 @@ export function ProjectDeliveryTimeline({
       return { startMs: addDays(today, -14), endMs: addDays(today, 60) };
     }
     const values = candidates.map(parseYmd);
-    let startMs = Math.min(...values);
+    const startMs = Math.min(...values);
     let endMs = Math.max(...values);
     if (endMs <= startMs) endMs = addDays(startMs, 30);
     return { startMs, endMs };

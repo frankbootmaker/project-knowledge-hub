@@ -27,6 +27,9 @@ export type WorkspaceCatalogueProject = {
   tags: Array<{ name: string }>;
   updatedAt: string;
   overallRag?: 'green' | 'amber' | 'red';
+  lifecycleStage?: string;
+  createdByType?: string | null;
+  createdByModel?: string | null;
 };
 
 export type WorkspaceCatalogueSystem = {
@@ -103,17 +106,40 @@ export function WorkspaceCatalogueSections({
         : overallRag === 'amber'
           ? ('warn' as const)
           : ('success' as const);
+    
+    const statusBadges: Array<{ label: string; tone: 'success' | 'warn' | 'danger' | 'neutral'; title?: string }> = [
+      {
+        label: `${tProjects('ragOverall')}: ${tProjects(`rag.${overallRag}`)}`,
+        tone: ragTone,
+        title: tProjects('ragLabel'),
+      },
+    ];
+    
+    // Add lifecycle stage badge for non-active projects
+    if (project.lifecycleStage && !['active', 'completed', 'archived'].includes(project.lifecycleStage)) {
+      statusBadges.push({
+        label: tProjects(`lifecycleStage.${project.lifecycleStage}`),
+        tone: 'neutral',
+        title: tProjects('lifecycleStageLabel'),
+      });
+    }
+    
+    // Add AI-created indicator
+    if (project.createdByType === 'api_client') {
+      statusBadges.push({
+        label: project.createdByModel 
+          ? `🤖 ${project.createdByModel}`
+          : '🤖 AI',
+        tone: 'neutral',
+        title: tProjects('aiCreated'),
+      });
+    }
+    
     return {
       id: project.id,
       title: project.name,
       href: `/workspaces/${workspaceSlug}/projects/${project.slug}`,
-      statusBadges: [
-        {
-          label: `${tProjects('ragOverall')}: ${tProjects(`rag.${overallRag}`)}`,
-          tone: ragTone,
-          title: tProjects('ragLabel'),
-        },
-      ],
+      statusBadges,
       primaryBadge: project.status,
       subtitle: project.summary,
       updatedAt: project.updatedAt,

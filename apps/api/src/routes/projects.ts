@@ -7,6 +7,7 @@ import {
   AppError,
   keyPrefixSchema,
   projectCurrencySchema,
+  projectLifecycleStageSchema,
   projectStakeholderRoleSchema,
   projectStatusSchema,
 } from '@project-knowledge-hub/domain';
@@ -85,6 +86,7 @@ const updateProjectSchema = z.object({
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
   archived: z.boolean().optional(),
+  lifecycleStage: projectLifecycleStageSchema.optional(),
 });
 
 const initialStakeholdersSchema = z.object({
@@ -537,6 +539,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
             : parseBudgetAmount(body.approvedBudget) ?? null,
         keyPrefix: nextKeyPrefix,
         metadataJson: body.metadata === undefined ? project.metadataJson : body.metadata,
+        lifecycleStage: body.lifecycleStage ?? project.lifecycleStage,
         archivedAt:
           body.archived === undefined
             ? project.archivedAt
@@ -575,14 +578,29 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       await upsertProjectCostSnapshot(app.database, updated.id);
     }
 
+    const auditAction =
+      body.lifecycleStage === 'active' && project.lifecycleStage !== 'active'
+        ? 'project.lifecycle.promoted'
+        : 'project.update';
+
     await writeAuditEvent(app.database, {
       organizationId: workspace?.organizationId ?? null,
       actorType: 'user',
       actorId: principal.userId,
-      action: 'project.update',
+      action: auditAction,
       entityType: 'project',
       entityId: updated.id,
-      metadata: body,
+      metadata: {
+        ...body,
+        ...(auditAction === 'project.lifecycle.promoted'
+          ? {
+              fromStage: project.lifecycleStage,
+              toStage: 'active',
+              createdByType: project.createdByType,
+              createdByModel: project.createdByModel,
+            }
+          : {}),
+      },
       ipAddress: request.ip,
     });
 
