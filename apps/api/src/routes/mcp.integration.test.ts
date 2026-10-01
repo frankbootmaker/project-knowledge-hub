@@ -570,9 +570,41 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     };
     expect(body.result?.isError).toBe(true);
     expect(body.result?.content?.[0]?.text ?? '').toContain('already exists');
+    expect(body.result?.content?.[0]?.text ?? '').toContain('confirm=true');
   });
 
-  it('updates project lifecycle stage and metadata', async () => {
+  it('allows duplicate project with confirm=true', async () => {
+    const pmWrite = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        organizationId,
+        name: 'PM write client 2b',
+        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
+        allowedWorkspaceIds: [workspaceId],
+        actingUserId: adminUserId,
+      },
+    });
+    const pmToken = (pmWrite.json() as { token: string }).token;
+
+    const create = await mcpCall(app!, pmToken, 52.5, 'tools/call', {
+      name: 'create_project',
+      arguments: {
+        workspaceId,
+        name: 'MCP Project',
+        keyPrefix: 'MP2',
+        confirm: true,
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const body = create.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBeFalsy();
+  });
+
+  it('rejects MCP promotion to active', async () => {
     const pmWrite = await app!.inject({
       method: 'POST',
       url: '/api/v1/api-clients',
@@ -603,24 +635,41 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     };
     const projectId = created.project!.id;
 
-    const update = await mcpCall(app!, pmToken, 54, 'tools/call', {
+    const promoteAttempt = await mcpCall(app!, pmToken, 54, 'tools/call', {
       name: 'update_project',
       arguments: {
         projectId,
         lifecycleStage: 'active',
+      },
+    });
+    expect(promoteAttempt.statusCode).toBe(200);
+    const promoteBody = promoteAttempt.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(promoteBody.result?.isError).toBe(true);
+    const errorText = promoteBody.result?.content?.[0]?.text ?? '';
+    expect(errorText.toLowerCase()).toContain('mcp');
+    expect(errorText.toLowerCase()).toContain('human');
+
+    // But can transition between draft stages
+    const draftUpdate = await mcpCall(app!, pmToken, 54.5, 'tools/call', {
+      name: 'update_project',
+      arguments: {
+        projectId,
+        lifecycleStage: 'draft',
         description: 'Updated description',
         methodology: 'kanban',
       },
     });
-    expect(update.statusCode).toBe(200);
-    const updateBody = update.json() as {
+    expect(draftUpdate.statusCode).toBe(200);
+    const draftBody = draftUpdate.json() as {
       result?: { isError?: boolean; content?: Array<{ text?: string }> };
     };
-    expect(updateBody.result?.isError).toBeFalsy();
-    const updated = JSON.parse(updateBody.result?.content?.[0]?.text ?? '{}') as {
+    expect(draftBody.result?.isError).toBeFalsy();
+    const updated = JSON.parse(draftBody.result?.content?.[0]?.text ?? '{}') as {
       project?: { lifecycleStage: string; description: string };
     };
-    expect(updated.project?.lifecycleStage).toBe('active');
+    expect(updated.project?.lifecycleStage).toBe('draft');
     expect(updated.project?.description).toBe('Updated description');
   });
 
@@ -658,8 +707,38 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(data.projects?.every((p) => p.lifecycleStage === 'idea')).toBe(true);
   });
 
-  it('returns distinct error for archived project', async () => {
+  it('returns PROJECT_ARCHIVED (410) for archived projects', async () => {
+    // Create and archive a project
+    const create = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: { workspaceId, name: 'To Archive', keyPrefix: 'ARC' },
+    });
+    const projectId = (create.json() as { project: { id: string } }).project.id;
+
+    await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: { archived: true },
+    });
+
     const response = await mcpCall(app!, readToken, 60, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectId },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBe(true);
+    const errorText = body.result?.content?.[0]?.text ?? '';
+    expect(errorText.toLowerCase()).toContain('archived');
+  });
+
+  it('returns PROJECT_NOT_FOUND (404) for non-existent projects', async () => {
+    const response = await mcpCall(app!, readToken, 61, 'tools/call', {
       name: 'get_project',
       arguments: { projectId: '00000000-0000-0000-0000-000000000000' },
     });
@@ -668,10 +747,12 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
       result?: { isError?: boolean; content?: Array<{ text?: string }> };
     };
     expect(body.result?.isError).toBe(true);
+    const errorText = body.result?.content?.[0]?.text ?? '';
+    expect(errorText.toLowerCase()).toContain('not found');
   });
 
   it('returns workspace not allowed error with workspaceId', async () => {
-    const record = await mcpCall(app!, readToken, 61, 'tools/call', {
+    const record = await mcpCall(app!, readToken, 62, 'tools/call', {
       name: 'create_knowledge_record',
       arguments: {
         workspaceId: otherWorkspaceId,

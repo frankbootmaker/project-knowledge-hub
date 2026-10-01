@@ -150,6 +150,7 @@ function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): 
     client.allowedWorkspaceIds.length > 0 &&
     !client.allowedWorkspaceIds.includes(workspaceId)
   ) {
+    // Include workspaceId in details (only revealed to clients in same org via API client creation)
     throw new AppError({
       code: 'WORKSPACE_NOT_ALLOWED',
       message: 'Workspace is not allowed for this API client',
@@ -496,6 +497,10 @@ export function createMcpToolHandlers(
           statusCode: 404,
         });
       }
+      // Check access before disclosing details
+      assertWorkspaceAllowed(client, project.workspaceId);
+      assertProjectAllowed(client, project.id);
+      
       if (project.archivedAt) {
         throw new AppError({
           code: 'PROJECT_ARCHIVED',
@@ -504,8 +509,6 @@ export function createMcpToolHandlers(
           details: { projectId, workspaceId: project.workspaceId },
         });
       }
-      assertWorkspaceAllowed(client, project.workspaceId);
-      assertProjectAllowed(client, project.id);
       const pinned = await loadPinnedRecords(app.database, [
         project.charterRecordId,
         project.initialPlanRecordId,
@@ -548,6 +551,7 @@ export function createMcpToolHandlers(
       currency?: string;
       methodology?: string;
       generatedByModel?: string;
+      confirm?: boolean;
     }) {
       const actingUserId = requireActingUserId(client);
       assertWriteWorkspaceAllowed(client, input.workspaceId);
@@ -576,46 +580,34 @@ export function createMcpToolHandlers(
         });
       }
 
-      const [existingByName] = await app.database.db
+      // Check for similar names (case-insensitive, same slug)
+      const existing = await app.database.db
         .select()
         .from(projects)
         .where(
           and(
             eq(projects.workspaceId, input.workspaceId),
-            eq(projects.name, input.name),
             isNull(projects.archivedAt),
           ),
-        )
-        .limit(1);
+        );
 
-      if (existingByName) {
+      const exactMatch = existing.find(
+        (p) => p.name.toLowerCase() === input.name.toLowerCase(),
+      );
+      const slugMatch = existing.find((p) => p.slug === slug);
+
+      if ((exactMatch || slugMatch) && !input.confirm) {
         throw new AppError({
           code: 'PROJECT_NAME_CONFLICT',
           message:
-            'A project with this name already exists in the workspace. Use a different name or pass confirm=true to create anyway.',
+            'A project with this name or slug already exists in the workspace. Pass confirm=true to create anyway.',
           statusCode: 409,
-          details: { existingProjectId: existingByName.id },
-        });
-      }
-
-      const [existingBySlug] = await app.database.db
-        .select()
-        .from(projects)
-        .where(
-          and(
-            eq(projects.workspaceId, input.workspaceId),
-            eq(projects.slug, slug),
-            isNull(projects.archivedAt),
-          ),
-        )
-        .limit(1);
-
-      if (existingBySlug) {
-        throw new AppError({
-          code: 'PROJECT_SLUG_CONFLICT',
-          message: 'A project with this slug already exists in the workspace',
-          statusCode: 409,
-          details: { slug, existingProjectId: existingBySlug.id },
+          details: {
+            existingProjectId: (exactMatch || slugMatch)!.id,
+            existingName: (exactMatch || slugMatch)!.name,
+            existingSlug: (exactMatch || slugMatch)!.slug,
+            matchType: exactMatch ? 'name' : 'slug',
+          },
         });
       }
 
@@ -624,6 +616,7 @@ export function createMcpToolHandlers(
         keyPrefix = await assertUniqueKeyPrefix(app.database, {
           workspaceId: input.workspaceId,
           keyPrefix: input.keyPrefix,
+          suggestAlternative: true,
         });
       } else {
         const { allocateUniqueKeyPrefix } = await import('./project-issue-keys.js');
@@ -644,7 +637,7 @@ export function createMcpToolHandlers(
           name: input.name,
           slug,
           description: input.description ?? null,
-          status: 'idea',
+          status: 'planned',
           lifecycleStage: 'idea',
           currency,
           keyPrefix,
@@ -769,22 +762,38 @@ export function createMcpToolHandlers(
         const nextStage = projectLifecycleStageSchema.parse(input.lifecycleStage);
         const currentStage = project.lifecycleStage;
 
-        const allowedTransitions: Record<string, string[]> = {
-          idea: ['draft', 'proposal', 'active', 'archived'],
-          draft: ['proposal', 'active', 'archived'],
-          proposal: ['active', 'idea', 'archived'],
-          active: ['completed', 'archived'],
-          completed: ['active', 'archived'],
-          archived: ['active'],
+        // MCP can only manage draft stages; promotion to active requires human approval
+        const mcpAllowedTransitions: Record<string, string[]> = {
+          idea: ['draft', 'proposal', 'archived'],
+          draft: ['idea', 'proposal', 'archived'],
+          proposal: ['idea', 'draft', 'archived'],
+          active: ['archived'],
+          completed: ['archived'],
+          archived: [],
         };
 
+        // Block promotion to active/completed via MCP
         if (
-          !allowedTransitions[currentStage]?.includes(nextStage) &&
+          (nextStage === 'active' || nextStage === 'completed') &&
+          currentStage !== nextStage &&
+          currentStage !== 'active' &&
+          currentStage !== 'completed'
+        ) {
+          throw new AppError({
+            code: 'MCP_LIFECYCLE_RESTRICTED',
+            message:
+              'MCP cannot promote projects to active or completed stage. Only humans can promote via UI/API.',
+            statusCode: 403,
+          });
+        }
+
+        if (
+          !mcpAllowedTransitions[currentStage]?.includes(nextStage) &&
           currentStage !== nextStage
         ) {
           throw new AppError({
             code: 'INVALID_LIFECYCLE_TRANSITION',
-            message: `Cannot transition from ${currentStage} to ${nextStage}. Allowed: ${allowedTransitions[currentStage]?.join(', ') ?? 'none'}`,
+            message: `Cannot transition from ${currentStage} to ${nextStage}. MCP-allowed: ${mcpAllowedTransitions[currentStage]?.join(', ') ?? 'none'}. Promotion to active requires human approval.`,
             statusCode: 400,
           });
         }

@@ -34,6 +34,7 @@ export type McpToolHandlers = {
     currency?: string;
     methodology?: string;
     generatedByModel?: string;
+    confirm?: boolean;
   }) => Promise<unknown>;
   updateProject: (input: {
     projectId: string;
@@ -662,7 +663,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project',
-    'Create a new project (MCP-created projects start in idea/draft lifecycle stage; humans promote to active). Requires pm:write. Returns id, keyPrefix, and URL. AI can immediately create records, epics, tasks, RAID items. If keyPrefix is omitted or taken, system suggests an available one. Duplicate name returns 409 with existingProjectId.',
+    'Create a new project (MCP-created projects start in idea/draft lifecycle stage; humans promote to active). Requires pm:write. Returns id, keyPrefix, and URL. AI can immediately create records, epics, tasks, RAID items. If keyPrefix is taken, error includes suggestedKeyPrefix. Duplicate name returns 409 unless confirm=true.',
     {
       workspaceId: z.string().uuid(),
       name: z.string().min(1).max(160),
@@ -675,6 +676,7 @@ export function createKnowledgeHubMcpServer(
       currency: projectCurrencyEnum.optional(),
       methodology: z.enum(['scrum', 'kanban', 'waterfall', 'hybrid', 'other']).optional(),
       generatedByModel: z.string().max(100).optional(),
+      confirm: z.boolean().optional(),
     },
     async (args) =>
       wrap('create_project', 'pm:write', () => handlers.createProject(args), {
@@ -684,7 +686,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project',
-    'Update project name, description, methodology, currency, or lifecycle stage. Requires pm:write. Lifecycle transitions: idea→draft/proposal/active, draft→proposal/active, proposal→active/idea, active→completed, completed→active, any→archived, archived→active.',
+    'Update project name, description, methodology, currency, or lifecycle stage. Requires pm:write. MCP can only manage draft stages (idea↔draft↔proposal, any→archived). Promotion to active/completed requires human approval via UI.',
     {
       projectId: z.string().uuid(),
       name: z.string().min(1).max(160).optional(),

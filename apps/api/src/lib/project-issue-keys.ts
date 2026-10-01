@@ -90,6 +90,7 @@ export async function assertUniqueKeyPrefix(
     workspaceId: string;
     keyPrefix: string;
     excludeProjectId?: string;
+    suggestAlternative?: boolean;
   },
 ): Promise<string> {
   const parsed = keyPrefixSchema.safeParse(input.keyPrefix);
@@ -116,10 +117,33 @@ export async function assertUniqueKeyPrefix(
     .where(and(...conditions))
     .limit(1);
   if (existing) {
+    let suggestedKeyPrefix: string | undefined;
+    if (input.suggestAlternative) {
+      // Try to suggest an alternative
+      const base = keyPrefix.replace(/[^A-Z]/g, '').slice(0, 2).padEnd(2, 'X');
+      for (let i = 0; i < 10; i++) {
+        const candidate = `${base}${i}`;
+        const [exists] = await database.db
+          .select({ id: projects.id })
+          .from(projects)
+          .where(
+            and(
+              eq(projects.workspaceId, input.workspaceId),
+              sql`upper(${projects.keyPrefix}) = ${candidate}`,
+            ),
+          )
+          .limit(1);
+        if (!exists) {
+          suggestedKeyPrefix = candidate;
+          break;
+        }
+      }
+    }
     throw new AppError({
       code: 'KEY_PREFIX_TAKEN',
       message: `Issue key prefix ${keyPrefix} is already used by another project in this workspace`,
       statusCode: 409,
+      details: suggestedKeyPrefix ? { suggestedKeyPrefix } : undefined,
     });
   }
   return keyPrefix;
