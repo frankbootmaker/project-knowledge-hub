@@ -778,7 +778,8 @@
     "rag": {
       "green": "On track",
       "amber": "At risk",
-      "red": "Off track"
+      "red": "Off track",
+      "none": "No budget"
     },
     "manageReports": "Reports",
     "manageReportsHint": "Preview status, delivery, or stakeholder reports, then export or print.",

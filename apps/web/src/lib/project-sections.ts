@@ -8,7 +8,19 @@ export const PROJECT_SECTION_STATUS_SOURCES = ['timeline', 'financial', 'risk', 
 
 export type ProjectSectionStatusSource = (typeof PROJECT_SECTION_STATUS_SOURCES)[number];
 
-export type ProjectSectionStatuses = Partial<Record<ProjectSectionStatusSource, ProjectRagStatus>>;
+/** Rail/header status. `none` is neutral (no budget), not a RAG colour. */
+export type ProjectSectionStatusValue = ProjectRagStatus | 'none';
+
+export type ProjectSectionStatuses = Partial<
+  Record<ProjectSectionStatusSource, ProjectSectionStatusValue>
+>;
+
+export function projectSectionStatusesEqual(
+  left: ProjectSectionStatuses,
+  right: ProjectSectionStatuses,
+): boolean {
+  return PROJECT_SECTION_STATUS_SOURCES.every((key) => left[key] === right[key]);
+}
 
 /**
  * Project page sections shared by the header shortcuts and the Control rail.

@@ -81,7 +81,7 @@
     "jumpEmpty": "Keine passenden Ansichten",
     "sections": "Navigationsbereiche",
     "sectionPersonal": "Persönlich",
-    "sectionDelivery": "Lieferung & Finanzen",
+    "sectionDelivery": "Umsetzung & Finanzen",
     "sectionControl": "Steuerung",
     "sectionKnowledge": "Wissen",
     "sectionOps": "Ops",
@@ -772,7 +772,8 @@
     "rag": {
       "green": "Im Plan",
       "amber": "Gefährdet",
-      "red": "Verzögert"
+      "red": "Verzögert",
+      "none": "Kein Budget"
     },
     "manageReports": "Berichte",
     "manageReportsHint": "Status-, Umsetzungs- oder Stakeholder-Berichte ansehen, dann exportieren oder drucken.",

@@ -772,7 +772,8 @@
     "rag": {
       "green": "Rendben",
       "amber": "Problémás",
-      "red": "Kritikus"
+      "red": "Kritikus",
+      "none": "Nincs költségvetés"
     },
     "manageReports": "Jelentések",
     "manageReportsHint": "Státusz-, teljesítés- vagy stakeholder-jelentés megtekintése, majd export vagy nyomtatás.",

@@ -1,18 +1,15 @@
 import { getTranslations } from 'next-intl/server';
 import { buttonClassName } from './ui';
 import { cn } from '../lib/cn';
-import type { ProjectRagStatus } from '../lib/delivery-schedule';
-import { PROJECT_SECTIONS, type ProjectSectionStatuses } from '../lib/project-sections';
+import {
+  PROJECT_SECTIONS,
+  type ProjectSectionStatusValue,
+  type ProjectSectionStatuses,
+} from '../lib/project-sections';
 
-function ragNavClass(rag: ProjectRagStatus | null): string {
-  if (rag === 'red') {
-    return 'border-danger/35 bg-danger-soft text-danger hover:bg-danger-soft';
-  }
-  if (rag === 'amber') {
-    return 'border-warn/40 bg-warn-soft text-warn hover:bg-warn-soft';
-  }
-  if (rag === 'green') {
-    return 'border-accent/35 bg-accent-soft text-accent hover:bg-accent-soft';
+function ragNavClass(rag: ProjectSectionStatusValue | null): string {
+  if (rag === 'red' || rag === 'amber' || rag === 'green' || rag === 'none') {
+    return 'kh-section-status';
   }
   return '';
 }
@@ -34,10 +31,12 @@ export async function ProjectShortcutNav({ statuses }: { statuses: ProjectSectio
             key={section.id}
             href={`#${section.anchor}`}
             className={cn(buttonClassName('secondary', '!px-2.5 !py-1 text-xs'), ragNavClass(rag))}
+            data-rag={rag ?? undefined}
             title={status ? accessible : undefined}
             aria-label={accessible}
           >
             {label}
+            {rag === 'none' && status ? <span className="font-semibold">{status}</span> : null}
           </a>
         );
       })}

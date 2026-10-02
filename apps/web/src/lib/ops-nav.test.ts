@@ -10,6 +10,7 @@ import {
   navAvailabilityContext,
   parseAppPath,
   parseNavSection,
+  projectIndexPath,
   projectTopHref,
   resolveActiveNavSection,
   visibleNavItems,
@@ -30,6 +31,10 @@ describe('ops nav', () => {
     });
     expect(parseAppPath('/dashboard')).toEqual({
       workspaceSlug: null,
+      projectSlug: null,
+    });
+    expect(parseAppPath('/workspaces/platform/projects/new')).toEqual({
+      workspaceSlug: 'platform',
       projectSlug: null,
     });
   });
@@ -57,6 +62,59 @@ describe('ops nav', () => {
         '?delivery=scrum',
       ),
     ).toBe('delivery-finance');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal',
+        'project-delivery',
+        '?delivery=timeline',
+      ),
+    ).toBe('delivery-finance');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal',
+        'project-delivery',
+        '?delivery=calendar',
+      ),
+    ).toBe('delivery-finance');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal',
+        'project-raid',
+        '?delivery=scrum',
+      ),
+    ).toBe('control');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal',
+        'project-change',
+        '?delivery=board',
+      ),
+    ).toBe('control');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal',
+        'project-top',
+        '?delivery=timeline',
+      ),
+    ).toBe('control');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal',
+        'project-delivery',
+        '?delivery=board',
+      ),
+    ).toBe('control');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal',
+        'project-delivery',
+        '?delivery=list',
+      ),
+    ).toBe('control');
+    expect(inferNavSection('/workspaces/platform/projects/github-sync')).toBe('control');
+    expect(inferNavSection('/workspaces/platform/git')).toBe('ops');
+    expect(inferNavSection('/workspaces/platform/git/connections')).toBe('ops');
+    expect(inferNavSection('/workspaces/platform/projects/new')).toBe('control');
   });
 
   it('rejects unknown stored sections', () => {
@@ -257,6 +315,57 @@ describe('ops nav', () => {
       true,
     );
     expect(isRailItemActive(overview, ctx, path, '', '', null)).toBe(true);
+    const delivery = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'delivery',
+    )!;
+    const scrum = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'scrum',
+    )!;
+    const timeline = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'timeline',
+    )!;
+    const calendar = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'calendar',
+    )!;
+    expect(
+      isRailItemActive(delivery, ctx, path, 'project-delivery', '?delivery=board', 'project-delivery'),
+    ).toBe(true);
+    expect(
+      isRailItemActive(delivery, ctx, path, 'project-delivery', '?delivery=list', 'project-delivery'),
+    ).toBe(true);
+    expect(
+      isRailItemActive(delivery, ctx, path, 'project-delivery', '', 'project-delivery'),
+    ).toBe(true);
+    expect(
+      isRailItemActive(delivery, ctx, path, 'project-delivery', '?delivery=scrum', 'project-delivery'),
+    ).toBe(false);
+    expect(
+      isRailItemActive(scrum, ctx, path, 'project-delivery', '?delivery=scrum', 'project-delivery'),
+    ).toBe(true);
+    expect(
+      isRailItemActive(
+        timeline,
+        ctx,
+        path,
+        'project-delivery',
+        '?delivery=timeline',
+        'project-delivery',
+      ),
+    ).toBe(true);
+    expect(
+      isRailItemActive(
+        calendar,
+        ctx,
+        path,
+        'project-delivery',
+        '?delivery=calendar',
+        'project-delivery',
+      ),
+    ).toBe(true);
+    expect(
+      findActiveNavItem(ctx, path, 'project-delivery', '?delivery=board')?.id,
+    ).toBe('delivery');
+    expect(findActiveNavItem(ctx, path, 'project-delivery', '?delivery=scrum')?.id).toBe('scrum');
   });
 
   it('falls back when the preferred section is not visible', () => {
@@ -285,6 +394,19 @@ describe('ops nav', () => {
       projectSlug: 'renewal',
       isAdmin: true,
     });
+    expect(navAvailabilityContext('/workspaces/platform/projects/new', false)).toEqual({
+      workspaceSlug: 'platform',
+      projectSlug: null,
+      isAdmin: false,
+    });
+    expect(
+      visibleNavSections(navAvailabilityContext('/workspaces/platform/projects/new', false)).map(
+        (section) => section.id,
+      ),
+    ).not.toContain('control');
+    expect(
+      projectIndexPath({ workspaceSlug: 'platform', projectSlug: 'new', isAdmin: false }),
+    ).toBeNull();
     expect(
       visibleNavSections(navAvailabilityContext('/dashboard', false)).map((section) => section.id),
     ).toEqual(['personal']);

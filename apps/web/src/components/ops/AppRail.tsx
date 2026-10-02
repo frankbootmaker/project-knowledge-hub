@@ -15,6 +15,7 @@ import { cn } from '../../lib/cn';
 import { logoutAction } from '../../lib/logout-action';
 import { userMonogram } from '../../lib/monogram';
 import {
+  findActiveNavItem,
   inferNavSection,
   isRailItemActive,
   navAvailabilityContext,
@@ -144,6 +145,10 @@ export function AppRail({
     [pathname, session.user.isSystemAdmin],
   );
   const visibleSections = useMemo(() => visibleNavSections(availabilityCtx), [availabilityCtx]);
+  const pageItemId = useMemo(
+    () => findActiveNavItem(availabilityCtx, pathname, hash, search)?.id ?? null,
+    [availabilityCtx, pathname, hash, search],
+  );
 
   useEffect(() => {
     const inferred = inferNavSection(pathname, hash, search);
@@ -214,17 +219,15 @@ export function AppRail({
   }
 
   function onProjectTopClick(event: ReactMouseEvent<HTMLAnchorElement>) {
-    const index = projectIndexPath(ctx);
+    const index = projectIndexPath(availabilityCtx);
     if (!index || pathname !== index) {
       return;
     }
     event.preventDefault();
     scrollToProjectAnchor(PROJECT_TOP_ANCHOR);
-    const nextHash = `#${PROJECT_TOP_ANCHOR}`;
-    if (window.location.hash !== nextHash) {
-      window.history.pushState(null, '', nextHash);
-    }
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    const nextUrl = `${index}#${PROJECT_TOP_ANCHOR}`;
+    window.history.replaceState(null, '', nextUrl);
+    setHash(PROJECT_TOP_ANCHOR);
   }
 
   const monogram = userMonogram(session.user.displayName, session.user.fullName);
@@ -387,6 +390,8 @@ export function AppRail({
                       : null;
                     const statusLabel = rag ? tProject(`rag.${rag}`) : null;
                     const accessible = statusLabel ? `${label}: ${statusLabel}` : label;
+                    const pageActive = pageItemId === item.id;
+                    const locationActive = active && !pageActive;
                     return (
                       <Link
                         key={item.id}
@@ -394,7 +399,9 @@ export function AppRail({
                         title={accessible}
                         aria-label={accessible}
                         className={active ? 'active' : undefined}
-                        aria-current={active ? 'page' : undefined}
+                        aria-current={
+                          pageActive ? 'page' : locationActive ? 'location' : undefined
+                        }
                       >
                         <span className="kh-ops-nav-icon">
                           <NavIcon name={item.icon} />

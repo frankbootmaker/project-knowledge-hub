@@ -139,8 +139,13 @@ function projectHref(ctx: NavContext, hash = '', search = ''): string {
   return `${index}${search}${hash}`;
 }
 
+/** Create-project route shares `[projectSlug]`; it is not a project. */
+export function isProjectSlug(slug: string | null | undefined): slug is string {
+  return Boolean(slug) && slug !== 'new';
+}
+
 export function projectIndexPath(ctx: NavContext): string | null {
-  if (!ctx.workspaceSlug || !ctx.projectSlug) {
+  if (!ctx.workspaceSlug || !isProjectSlug(ctx.projectSlug)) {
     return null;
   }
   return `/workspaces/${ctx.workspaceSlug}/projects/${ctx.projectSlug}`;
@@ -410,7 +415,7 @@ export function isNavItemAvailable(item: NavItemDef, ctx: NavContext): boolean {
   if (item.adminOnly && !ctx.isAdmin) {
     return false;
   }
-  if (item.requires === 'project' && !ctx.projectSlug) {
+  if (item.requires === 'project' && !isProjectSlug(ctx.projectSlug)) {
     return false;
   }
   if (item.requires === 'workspace' && !ctx.workspaceSlug) {
@@ -463,8 +468,24 @@ export function parseAppPath(pathname: string): {
     return { workspaceSlug: null, projectSlug: null };
   }
   const workspaceSlug = parts[1];
-  const projectSlug = parts[2] === 'projects' && parts[3] ? parts[3] : null;
+  const rawSlug = parts[2] === 'projects' && parts[3] ? parts[3] : null;
+  const projectSlug = isProjectSlug(rawSlug) ? rawSlug : null;
   return { workspaceSlug, projectSlug };
+}
+
+/** Scrum, Timeline, and Calendar are the only delivery views with a rail item. */
+const RAIL_DELIVERY_VIEWS = new Set(['scrum', 'timeline', 'calendar']);
+
+function isRailDeliveryView(value: string | null): boolean {
+  return value != null && RAIL_DELIVERY_VIEWS.has(value);
+}
+
+function readSearchParams(search: string): URLSearchParams {
+  return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+}
+
+function hashId(hash: string): string {
+  return hash.startsWith('#') ? hash.slice(1) : hash;
 }
 
 export function inferNavSection(pathname: string, hash = '', search = ''): NavSectionId {
@@ -500,23 +521,28 @@ export function inferNavSection(pathname: string, hash = '', search = ''): NavSe
   if (pathname.includes('/records')) {
     return 'knowledge';
   }
-  if (pathname.includes('/git')) {
+  if (/^\/workspaces\/[^/]+\/git(\/|$)/.test(pathname)) {
     return 'ops';
   }
   if (pathname.includes('/systems')) {
     return 'control';
   }
+  if (/^\/workspaces\/[^/]+\/projects\/new\/?$/.test(pathname)) {
+    return 'control';
+  }
   if (projectSlug) {
-    const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-    if (params.has('delivery')) {
-      return 'delivery-finance';
-    }
-    if (
-      hash === '' ||
-      hash === PROJECT_TOP_ANCHOR ||
-      PROJECT_SECTIONS.some((section) => section.anchor === hash)
-    ) {
+    const anchor = hashId(hash);
+    const controlSection =
+      anchor === PROJECT_TOP_ANCHOR ||
+      PROJECT_SECTIONS.some(
+        (section) => section.anchor === anchor && section.anchor !== 'project-delivery',
+      );
+    if (controlSection) {
       return 'control';
+    }
+    const deliveryView = readSearchParams(search).get('delivery');
+    if (anchor === 'project-delivery' && isRailDeliveryView(deliveryView)) {
+      return 'delivery-finance';
     }
     return 'control';
   }
@@ -586,7 +612,7 @@ export function matchNavItem(
     return pathname.startsWith('/admin/brand');
   }
 
-  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const params = readSearchParams(search);
   const hrefParams = new URLSearchParams(hrefQuery);
 
   if (hrefParams.get('delivery')) {
@@ -603,6 +629,9 @@ export function matchNavItem(
     return pathMatches && params.get('utilization') === '1';
   }
   if (hrefHash) {
+    if (item.id === 'delivery' && isRailDeliveryView(params.get('delivery'))) {
+      return false;
+    }
     return pathMatches && hash === hrefHash;
   }
   if (item.adminOnly) {
@@ -646,13 +675,13 @@ export function isRailItemActive(
     return matchNavItem(item, ctx, pathname, hash, search);
   }
 
-  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const params = readSearchParams(search);
   const pathMatches =
     pathname === href.path || (href.path !== '/' && pathname.startsWith(`${href.path}/`));
   if (!pathMatches || href.hash !== activeAnchor) {
     return false;
   }
-  if (params.has('delivery') && activeAnchor === 'project-delivery') {
+  if (activeAnchor === 'project-delivery' && isRailDeliveryView(params.get('delivery'))) {
     return false;
   }
   if (

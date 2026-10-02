@@ -351,12 +351,14 @@ export default async function ProjectDetailPage({
     ...tasks.map((row) => ({ status: row.status, date: row.dueDate })),
   ]);
   const riskRag = computeRiskRag(raidItems);
-  const financialRag = budgetSummary?.financialRag ?? 'green';
+  const financialRag = budgetSummary?.financialRag ?? null;
   const changeRag = computeChangeRag(changeItems);
-  const overallRag = worstProjectRag([timelineRag, riskRag, financialRag]);
+  const overallRag = worstProjectRag(
+    financialRag ? [timelineRag, riskRag, financialRag] : [timelineRag, riskRag],
+  );
   const sectionStatuses: ProjectSectionStatuses = {
     timeline: timelineRag,
-    financial: financialRag,
+    financial: financialRag ?? 'none',
     risk: riskRag,
     change: changeRag,
   };
@@ -412,7 +414,7 @@ export default async function ProjectDetailPage({
               title={[
                 `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,
                 `${t('ragRisks')}: ${t(`rag.${riskRag}`)}`,
-                `${t('ragFinancials')}: ${t(`rag.${financialRag}`)}`,
+                `${t('ragFinancials')}: ${t(financialRag ? `rag.${financialRag}` : 'rag.none')}`,
               ].join(' · ')}
               aria-label={`${t('ragOverall')}: ${t(`rag.${overallRag}`)}`}
             >

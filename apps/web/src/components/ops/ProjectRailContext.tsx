@@ -1,7 +1,10 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
-import type { ProjectSectionStatuses } from '../../lib/project-sections';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  projectSectionStatusesEqual,
+  type ProjectSectionStatuses,
+} from '../../lib/project-sections';
 
 type ProjectRailContextValue = {
   statuses: ProjectSectionStatuses;
@@ -15,8 +18,11 @@ const ProjectRailContext = createContext<ProjectRailContextValue | null>(null);
 const emptyStatuses: ProjectSectionStatuses = {};
 
 export function ProjectRailProvider({ children }: { children: ReactNode }) {
-  const [statuses, setStatuses] = useState<ProjectSectionStatuses>(emptyStatuses);
+  const [statuses, setStatusesState] = useState<ProjectSectionStatuses>(emptyStatuses);
   const [activeAnchor, setActiveAnchor] = useState<string | null>(null);
+  const setStatuses = useCallback((next: ProjectSectionStatuses) => {
+    setStatusesState((prev) => (projectSectionStatusesEqual(prev, next) ? prev : next));
+  }, []);
   const value = useMemo(
     () => ({
       statuses,
@@ -24,7 +30,7 @@ export function ProjectRailProvider({ children }: { children: ReactNode }) {
       setStatuses,
       setActiveAnchor,
     }),
-    [statuses, activeAnchor],
+    [statuses, activeAnchor, setStatuses],
   );
 
   return <ProjectRailContext.Provider value={value}>{children}</ProjectRailContext.Provider>;

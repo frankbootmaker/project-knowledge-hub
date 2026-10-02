@@ -254,25 +254,35 @@ a.kh-ops-group-header:focus-visible {
 
 .kh-ops-rag-dot {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 7px;
-  height: 7px;
+  right: -3px;
+  bottom: -3px;
+  width: 8px;
+  height: 8px;
   border: 1px solid var(--kh-panel-solid);
-  border-radius: 50%;
+  box-sizing: border-box;
   background: var(--kh-ink-muted);
 }
 
 .kh-ops-rag-dot[data-rag='green'] {
-  background: var(--kh-accent);
+  border-radius: 50%;
+  background: var(--kh-rag-on-track);
 }
 
 .kh-ops-rag-dot[data-rag='amber'] {
-  background: var(--kh-warn);
+  border: 0;
+  background: var(--kh-rag-amber-ink);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 
 .kh-ops-rag-dot[data-rag='red'] {
-  background: var(--kh-danger);
+  border-radius: 1px;
+  background: var(--kh-rag-red-ink);
+}
+
+.kh-ops-rag-dot[data-rag='none'] {
+  border-radius: 50%;
+  background: transparent;
+  border-color: var(--kh-ink-muted);
 }
 
 .kh-ops-rag-text {
@@ -284,19 +294,43 @@ a.kh-ops-group-header:focus-visible {
 }
 
 .kh-ops-rag-text[data-rag='green'] {
-  color: var(--kh-accent);
+  color: var(--kh-rag-on-track);
 }
 
 .kh-ops-rag-text[data-rag='amber'] {
-  color: var(--kh-warn);
+  color: var(--kh-rag-amber-ink);
 }
 
 .kh-ops-rag-text[data-rag='red'] {
-  color: var(--kh-danger);
+  color: var(--kh-rag-red-ink);
 }
 
-.kh-ops-nav-items a.active .kh-ops-rag-text {
-  color: var(--kh-selected-fg);
+.kh-ops-rag-text[data-rag='none'] {
+  color: var(--kh-ink-muted);
+}
+
+a.kh-section-status[data-rag='green'] {
+  border-color: color-mix(in oklch, var(--kh-rag-on-track), transparent 65%);
+  background: color-mix(in oklch, var(--kh-rag-on-track) 14%, var(--kh-panel-solid));
+  color: var(--kh-rag-on-track);
+}
+
+a.kh-section-status[data-rag='amber'] {
+  border-color: color-mix(in oklch, var(--kh-rag-amber-ink), transparent 60%);
+  background: color-mix(in oklch, var(--kh-rag-amber-ink) 12%, var(--kh-panel-solid));
+  color: var(--kh-rag-amber-ink);
+}
+
+a.kh-section-status[data-rag='red'] {
+  border-color: color-mix(in oklch, var(--kh-rag-red-ink), transparent 65%);
+  background: color-mix(in oklch, var(--kh-rag-red-ink) 12%, var(--kh-panel-solid));
+  color: var(--kh-rag-red-ink);
+}
+
+a.kh-section-status[data-rag='none'] {
+  border-color: var(--kh-line-strong);
+  background: var(--kh-neutral-soft);
+  color: var(--kh-ink-muted);
 }
 
 .kh-ops-project-top {
