@@ -752,7 +752,8 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   it('returns workspace not allowed error with workspaceId', async () => {
-    const record = await mcpCall(app!, readToken, 62, 'tools/call', {
+    // Use writeToken which has knowledge:write scope but otherWorkspaceId is not in allowlist
+    const record = await mcpCall(app!, writeToken, 62, 'tools/call', {
       name: 'create_knowledge_record',
       arguments: {
         workspaceId: otherWorkspaceId,
