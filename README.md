@@ -68,6 +68,18 @@ infrastructure/docker, compose helpers, scripts
 tests/         integration / e2e / fixtures
 ```
 
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs install, lint, typecheck, test, and build.
+
+Jobs read the repository variable `CI_RUNS_ON` (JSON). For the Strix Halo self-hosted runner set it to:
+
+```json
+["self-hosted","linux","x64","strix-halo","knowhub"]
+```
+
+If `CI_RUNS_ON` is unset, jobs use GitHub-hosted `ubuntu-latest`. The workflow installs Node.js and pnpm itself and starts Postgres and Redis service containers; it does not expect those tools, or `psql` / `jq`, on the runner image. Details: [`docs/development/TESTING.md`](docs/development/TESTING.md).
+
 ## Documentation
 
 Index: [`docs/README.md`](docs/README.md)

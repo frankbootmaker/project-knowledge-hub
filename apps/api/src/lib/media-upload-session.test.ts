@@ -11,16 +11,18 @@ const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
 describe('media-upload-session', () => {
   let redis: Redis;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, lazyConnect: true });
+    await redis.connect();
   });
 
   afterAll(async () => {
-    await redis.quit();
+    if (redis && redis.status !== 'end') {
+      await redis.quit();
+    }
   });
 
   it('assembles chunks in order and consumes the session on finalize', async () => {
-    await redis.connect();
     const started = await beginMediaUploadSession(redis, {
       clientId: 'client-a',
       workspaceId: '11111111-1111-4111-8111-111111111111',
@@ -62,8 +64,6 @@ describe('media-upload-session', () => {
   });
 
   it('stores valid PNG chunks for later validation on finalize', async () => {
-    await redis.connect();
-
     const pngBytes = Buffer.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
       0x49, 0x48, 0x44, 0x52,
@@ -94,8 +94,6 @@ describe('media-upload-session', () => {
   });
 
   it('stores invalid (non-image) chunks but does not validate them until finalize', async () => {
-    await redis.connect();
-
     const textBytes = Buffer.from('This is plain text, not a PNG', 'utf8');
     const textBase64 = textBytes.toString('base64');
 

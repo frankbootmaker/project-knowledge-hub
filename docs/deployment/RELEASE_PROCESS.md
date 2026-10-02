@@ -33,6 +33,8 @@ Prefer immutable tags for Dokploy image builds once registry automation exists. 
 
 GitHub Actions must pass install, lint, typecheck, test, and build before merge.
 
+Jobs use the repository variable `CI_RUNS_ON` (JSON `runs-on`). Unset, they fall back to GitHub-hosted `ubuntu-latest`. The self-hosted value is `["self-hosted","linux","x64","strix-halo","knowhub"]`. See [`TESTING.md`](../development/TESTING.md).
+
 ## Dokploy Dev/UAT deploy
 
 1. Tag or pin the commit to deploy.

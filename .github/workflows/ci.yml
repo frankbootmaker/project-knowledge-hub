@@ -7,7 +7,10 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # JSON runs-on value. Set the repo variable CI_RUNS_ON to
+    # ["self-hosted","linux","x64","strix-halo","knowhub"] for the ephemeral
+    # runner. When the variable is unset, this falls back to ubuntu-latest.
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
 
     services:
       postgres:
@@ -44,6 +47,8 @@ jobs:
       DATABASE_URL: postgres://knowledge_hub:knowledge_hub@localhost:5432/knowledge_hub
       REDIS_URL: redis://localhost:6379
       LOG_LEVEL: silent
+      # Dummy test value only. Not a production secret. Turborepo strict mode
+      # forwards it because turbo.json lists SESSION_SECRET on the test task.
       SESSION_SECRET: ci-session-secret-at-least-32-characters
       SESSION_COOKIE_NAME: kh_session
       SESSION_TTL_SECONDS: 86400

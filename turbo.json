@@ -18,7 +18,18 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_URL", "REDIS_URL", "APP_ENV", "NODE_ENV", "LOG_LEVEL", "API_PORT", "WEB_PORT", "API_URL", "WEB_URL"]
+      "env": [
+        "DATABASE_URL",
+        "REDIS_URL",
+        "APP_ENV",
+        "NODE_ENV",
+        "LOG_LEVEL",
+        "API_PORT",
+        "WEB_PORT",
+        "API_URL",
+        "WEB_URL",
+        "SESSION_SECRET"
+      ]
     }
   }
 }

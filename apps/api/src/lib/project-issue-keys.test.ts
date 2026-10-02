@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, test, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 import { loadEnv } from '@project-knowledge-hub/config';
 import {
   createDatabase,
@@ -7,10 +8,10 @@ import {
   organizations,
   workspaces,
   projects,
+  users,
   knowledgeRecords,
   projectTasks,
   projectRaidItems,
-  eq,
 } from '@project-knowledge-hub/database';
 import {
   resolveEntityId,
@@ -26,13 +27,15 @@ function testEnv() {
     NODE_ENV: 'test',
     APP_ENV: 'test',
     LOG_LEVEL: 'silent',
+    SESSION_SECRET:
+      process.env.SESSION_SECRET ?? 'test-session-secret-at-least-32-chars',
   });
 }
 
 describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
   let database: Database;
   let closeDatabase: () => Promise<void>;
-  let orgId: string;
+  let orgId = '';
   let workspace1Id: string;
   let workspace2Id: string;
   let project1Id: string; // CSA in workspace1
@@ -44,6 +47,8 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
   let task2Id: string; // CSA-T-1 in project2
   let raid1Id: string; // CSA-RR-1 in project1
   let raid2Id: string; // CSA-RR-1 in project2
+  let authorId = '';
+  let pnzRecordId = '';
 
   beforeEach(async () => {
     const env = testEnv();
@@ -57,6 +62,16 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       .values({ name: `Test Org ${suffix}`, slug: `test-org-${suffix}` })
       .returning();
     orgId = org!.id;
+
+    const [author] = await database.db
+      .insert(users)
+      .values({
+        email: `author-${suffix}@example.com`,
+        displayName: 'Author',
+        status: 'active',
+      })
+      .returning();
+    authorId = author!.id;
 
     // Create two workspaces
     const [ws1, ws2] = await database.db
@@ -126,6 +141,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           contentMarkdown: 'Content 1',
           documentKeyType: key1.issueKeyType,
           documentNumber: key1.issueNumber,
+          createdBy: authorId,
         },
         {
           workspaceId: workspace2Id,
@@ -136,11 +152,29 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           contentMarkdown: 'Content 2',
           documentKeyType: key2.issueKeyType,
           documentNumber: key2.issueNumber,
+          createdBy: authorId,
         },
       ])
       .returning();
     record1Id = rec1!.id;
     record2Id = rec2!.id;
+
+    const pnzKey = await allocateIssueNumber(database, _project3Id, 'CONV');
+    const [pnzRecord] = await database.db
+      .insert(knowledgeRecords)
+      .values({
+        workspaceId: workspace1Id,
+        projectId: _project3Id,
+        title: 'Conversation 1 in PNZ',
+        slug: 'pnz-conv-1',
+        recordType: 'conversation',
+        contentMarkdown: 'PNZ content',
+        documentKeyType: pnzKey.issueKeyType,
+        documentNumber: pnzKey.issueNumber,
+        createdBy: authorId,
+      })
+      .returning();
+    pnzRecordId = pnzRecord!.id;
 
     // Create tasks
     const [t1, t2] = await database.db
@@ -192,6 +226,12 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
   });
 
   afterEach(async () => {
+    if (database && orgId) {
+      await database.db.delete(organizations).where(eq(organizations.id, orgId));
+    }
+    if (database && authorId) {
+      await database.db.delete(users).where(eq(users.id, authorId));
+    }
     if (closeDatabase) {
       await closeDatabase();
     }
@@ -209,7 +249,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       const resolved = await resolveKnowledgeRecordId(database, {
         idOrKey: 'PNZ-CONV-1',
       });
-      expect(resolved).toBeDefined();
+      expect(resolved).toBe(pnzRecordId);
     });
 
     it('should fail with ambiguous error when duplicate prefix exists without workspace scoping', async () => {
@@ -217,7 +257,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
         resolveKnowledgeRecordId(database, {
           idOrKey: 'CSA-CONV-1',
         })
-      ).rejects.toThrow(/ambiguous/i);
+      ).rejects.toThrow(/exists in multiple projects/i);
     });
 
     it('should resolve correctly when scoped to workspace1', async () => {
@@ -242,7 +282,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           idOrKey: 'CSA-CONV-1',
           workspaceIds: [workspace1Id, workspace2Id],
         })
-      ).rejects.toThrow(/ambiguous/i);
+      ).rejects.toThrow(/exists in multiple projects/i);
     });
 
     it('should fail with not found when workspace scope excludes the target', async () => {
@@ -251,32 +291,22 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           idOrKey: 'CSA-CONV-1',
           workspaceIds: [randomUUID()],
         })
-      ).rejects.toThrow(/not found/i);
+      ).rejects.toThrow(/no project found/i);
     });
     
     it('should resolve when prefix matches multiple projects but key exists in only one', async () => {
-      // Create another project with CSA prefix but without CONV-1
-      const [p4] = await database.db
-        .insert(projects)
-        .values({
-          workspaceId: workspace1Id,
-          name: 'Another CSA Project',
-          slug: 'another-csa',
-          keyPrefix: 'CSA',
-        })
-        .returning();
-      
-      // CSA-CONV-1 only exists in project2, so with both workspaces it should resolve
+      // Prefix is unique per workspace, so a second CSA project in workspace1
+      // is rejected. Drop the workspace1 record instead: CSA remains on both
+      // projects, but CONV-1 exists only in workspace2.
+      await database.db
+        .delete(knowledgeRecords)
+        .where(eq(knowledgeRecords.id, record1Id));
+
       const resolved = await resolveKnowledgeRecordId(database, {
         idOrKey: 'CSA-CONV-1',
         workspaceIds: [workspace1Id, workspace2Id],
       });
       expect(resolved).toBe(record2Id);
-      
-      // Clean up
-      await database.db
-        .delete(projects)
-        .where(eq(projects.id, p4.id));
     });
 
     it('should fail with ambiguous when same key exists in multiple projects with shared prefix', async () => {
@@ -293,6 +323,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           contentMarkdown: 'Duplicate content',
           documentKeyType: key1.issueKeyType,
           documentNumber: key1.issueNumber,
+          createdBy: authorId,
         })
         .returning();
       
@@ -302,13 +333,13 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           idOrKey: 'CSA-CONV-1',
           workspaceIds: [workspace1Id, workspace2Id],
         })
-      ).rejects.toThrow(/ambiguous/i);
+      ).rejects.toThrow(/exists in multiple projects/i);
       
       await expect(
         resolveKnowledgeRecordId(database, {
           idOrKey: 'CSA-CONV-1',
         })
-      ).rejects.toThrow(/ambiguous/i);
+      ).rejects.toThrow(/exists in multiple projects/i);
       
       // Clean up
       await database.db
@@ -340,7 +371,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           entityType: 'task',
           idOrKey: 'CSA-T-1',
         })
-      ).rejects.toThrow(/ambiguous/i);
+      ).rejects.toThrow(/exists in multiple projects/i);
     });
 
     it('should resolve correctly when scoped to workspace1', async () => {
@@ -388,7 +419,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           idOrKey: 'CSA-T-1',
           workspaceIds: [workspace1Id, workspace2Id],
         })
-      ).rejects.toThrow(/ambiguous/i);
+      ).rejects.toThrow(/exists in multiple projects/i);
     });
   });
 
@@ -407,7 +438,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           entityType: 'raid',
           idOrKey: 'CSA-RR-1',
         })
-      ).rejects.toThrow(/ambiguous/i);
+      ).rejects.toThrow(/exists in multiple projects/i);
     });
 
     it('should resolve correctly when scoped to workspace1', async () => {
