@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import {
   columnKindClass,
+  EMPTY_FILTER_VALUE,
   type ColumnKind,
   type FilterSpec,
   type SortDir,
@@ -34,6 +35,21 @@ export type DataColumn<T> = {
   cell: (row: T) => ReactNode;
 };
 
+const FOCUSABLE = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
+function focusableIn(root: HTMLElement): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (node) => node.tabIndex !== -1,
+  );
+}
+
 function ariaSort<T>(
   column: { id: string; sort?: SortSpec<T> },
   sortKey: string | null,
@@ -54,7 +70,7 @@ function FilterPopover({
   id: string;
   anchor: HTMLElement;
   label: string;
-  onClose: () => void;
+  onClose: (restoreFocus: boolean) => void;
   children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -101,15 +117,39 @@ function FilterPopover({
     );
     (focusable ?? panel)?.focus();
     function onKey(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return;
-      event.stopPropagation();
-      onClose();
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose(true);
+        return;
+      }
+      if (event.key !== 'Tab' || !panel) return;
+      const items = focusableIn(panel);
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      const active = document.activeElement;
+      const inside = active instanceof Node && panel.contains(active);
+      if (event.shiftKey) {
+        if (!inside || active === first) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+      if (!inside || active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
     function onPointer(event: MouseEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (panel?.contains(target) || anchor.contains(target)) return;
-      onClose();
+      onClose(false);
     }
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onPointer);
@@ -168,14 +208,26 @@ export function DataTable<T>({
   footer?: ReactNode;
 }) {
   const t = useTranslations('table');
-  const filterColumns = columns.filter((column) => column.filter);
+  const filterColumns = columns.filter((column) => {
+    const filter = column.filter;
+    if (!filter) return false;
+    if (filter.type === 'text') return true;
+    return (filter.options?.length ?? 0) > 0;
+  });
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const closeFilters = useCallback(() => {
+  const closeFilters = useCallback((restoreFocus: boolean) => {
     setOpen(false);
-    triggerRef.current?.focus();
+    if (restoreFocus) triggerRef.current?.focus();
   }, []);
+  const embedFilters =
+    filterColumns.length > 0 &&
+    columns.some((column) => column.kind === 'actions');
+
+  useEffect(() => {
+    if (open && filterColumns.length === 0) setOpen(false);
+  }, [filterColumns.length, open]);
 
   function toggleValue(columnId: string, value: string, checked: boolean) {
     const current = enumFilters[columnId] ?? [];
@@ -185,10 +237,134 @@ export function DataTable<T>({
     onEnumFilter(columnId, next);
   }
 
+  const filterControl = filterColumns.length > 0 ? (
+    <>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="secondary"
+        className={cn(
+          'kh-ops-filter-btn relative size-[2.0475rem] shrink-0 px-0 py-0',
+          open && 'ring-2 ring-brand/35',
+        )}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={open ? panelId : undefined}
+        aria-label={open ? t('hideFilters') : t('showFilters')}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <FilterToggleIcon />
+        {filtersActive ? (
+          <span className="kh-ops-filter-dot" aria-hidden />
+        ) : null}
+      </Button>
+      {open && triggerRef.current ? (
+        <FilterPopover
+          id={panelId}
+          anchor={triggerRef.current}
+          label={t('filters')}
+          onClose={closeFilters}
+        >
+          <div className="kh-ops-table-filter-body">
+            {filterColumns.map((column) => {
+              const filter = column.filter;
+              if (!filter) return null;
+              if (filter.type === 'text') {
+                return (
+                  <label
+                    key={column.id}
+                    className="kh-ops-table-filter-group"
+                  >
+                    <span>{column.header}</span>
+                    <Input
+                      type="search"
+                      value={textFilters[column.id] ?? ''}
+                      placeholder={t('textPlaceholder')}
+                      aria-label={t('filterColumn', {
+                        column: column.header,
+                      })}
+                      onChange={(event) =>
+                        onTextFilter(column.id, event.target.value)
+                      }
+                    />
+                  </label>
+                );
+              }
+              const declared = filter.options ?? [];
+              const known = new Set(declared.map((option) => option.value));
+              const options = declared.map((option) => ({
+                value: option.value,
+                label:
+                  option.value === EMPTY_FILTER_VALUE ? '—' : option.label,
+              }));
+              for (const value of enumFilters[column.id] ?? []) {
+                if (known.has(value)) continue;
+                options.push({
+                  value,
+                  label: value === EMPTY_FILTER_VALUE ? '—' : value,
+                });
+              }
+              if (options.length === 0) return null;
+              const selected = new Set(enumFilters[column.id] ?? []);
+              return (
+                <fieldset
+                  key={column.id}
+                  className="kh-ops-table-filter-group"
+                >
+                  <legend>{column.header}</legend>
+                  <ul className="kh-ops-check-list">
+                    {options.map((option) => {
+                      const checked = selected.has(option.value);
+                      return (
+                        <li key={option.value}>
+                          <label data-checked={checked ? 'true' : 'false'}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) =>
+                                toggleValue(
+                                  column.id,
+                                  option.value,
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                            {option.label}
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </fieldset>
+              );
+            })}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!filtersActive}
+              onClick={() => {
+                onClearFilters();
+                closeFilters(true);
+              }}
+            >
+              {t('clearFilters')}
+            </Button>
+          </div>
+        </FilterPopover>
+      ) : null}
+    </>
+  ) : null;
+
   return (
     <>
-      <div className="kh-ops-table-wrap">
-        <table className={cn('kh-ops-data-table', tableClassName)}>
+      <div className="kh-ops-table-wrap kh-ops-table-wrap--sticky">
+        <table
+          className={cn(
+            'kh-ops-data-table',
+            'kh-ops-data-table--fluid',
+            tableClassName,
+          )}
+        >
           <thead>
             <tr>
               {columns.map((column) => (
@@ -218,121 +394,13 @@ export function DataTable<T>({
                   ) : (
                     <span className="sr-only">{t('actions')}</span>
                   )}
+                  {embedFilters && column.kind === 'actions'
+                    ? filterControl
+                    : null}
                 </th>
               ))}
-              {filterColumns.length > 0 ? (
-                <th className="kh-ops-cell-actions">
-                  <Button
-                    ref={triggerRef}
-                    type="button"
-                    variant="secondary"
-                    className={cn(
-                      'kh-ops-filter-btn relative size-[2.0475rem] shrink-0 px-0 py-0',
-                      open && 'ring-2 ring-brand/35',
-                    )}
-                    aria-expanded={open}
-                    aria-haspopup="dialog"
-                    aria-controls={open ? panelId : undefined}
-                    aria-label={open ? t('hideFilters') : t('showFilters')}
-                    onClick={() => setOpen((current) => !current)}
-                  >
-                    <FilterToggleIcon />
-                    {filtersActive ? (
-                      <span className="kh-ops-filter-dot" aria-hidden />
-                    ) : null}
-                  </Button>
-                  {open && triggerRef.current ? (
-                    <FilterPopover
-                      id={panelId}
-                      anchor={triggerRef.current}
-                      label={t('filters')}
-                      onClose={closeFilters}
-                    >
-                      <div className="kh-ops-table-filter-body">
-                        {filterColumns.map((column) => {
-                          const filter = column.filter;
-                          if (!filter) return null;
-                          if (filter.type === 'text') {
-                            return (
-                              <label
-                                key={column.id}
-                                className="kh-ops-table-filter-group"
-                              >
-                                <span>{column.header}</span>
-                                <Input
-                                  type="search"
-                                  value={textFilters[column.id] ?? ''}
-                                  placeholder={t('textPlaceholder')}
-                                  aria-label={t('filterColumn', {
-                                    column: column.header,
-                                  })}
-                                  onChange={(event) =>
-                                    onTextFilter(column.id, event.target.value)
-                                  }
-                                />
-                              </label>
-                            );
-                          }
-                          const declared = filter.options ?? [];
-                          const selectedValues = enumFilters[column.id] ?? [];
-                          const known = new Set(declared.map((option) => option.value));
-                          const options = [
-                            ...declared,
-                            ...selectedValues
-                              .filter((value) => !known.has(value))
-                              .map((value) => ({ value, label: value })),
-                          ];
-                          if (options.length === 0) return null;
-                          const selected = new Set(selectedValues);
-                          return (
-                            <fieldset
-                              key={column.id}
-                              className="kh-ops-table-filter-group"
-                            >
-                              <legend>{column.header}</legend>
-                              <ul className="kh-ops-check-list">
-                                {options.map((option) => {
-                                  const checked = selected.has(option.value);
-                                  return (
-                                    <li key={option.value}>
-                                      <label
-                                        data-checked={checked ? 'true' : 'false'}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={checked}
-                                          onChange={(event) =>
-                                            toggleValue(
-                                              column.id,
-                                              option.value,
-                                              event.target.checked,
-                                            )
-                                          }
-                                        />
-                                        {option.label}
-                                      </label>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </fieldset>
-                          );
-                        })}
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={!filtersActive}
-                          onClick={() => {
-                            onClearFilters();
-                            closeFilters();
-                          }}
-                        >
-                          {t('clearFilters')}
-                        </Button>
-                      </div>
-                    </FilterPopover>
-                  ) : null}
-                </th>
+              {!embedFilters && filterColumns.length > 0 ? (
+                <th className="kh-ops-cell-actions">{filterControl}</th>
               ) : null}
             </tr>
           </thead>
@@ -351,7 +419,7 @@ export function DataTable<T>({
                       {column.cell(row)}
                     </td>
                   ))}
-                  {filterColumns.length > 0 ? (
+                  {!embedFilters && filterColumns.length > 0 ? (
                     <td className="kh-ops-cell-actions" />
                   ) : null}
                 </tr>

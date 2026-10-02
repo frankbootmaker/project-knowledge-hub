@@ -1,13 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applyTableView,
+  collectEnumOptions,
   compareSortValues,
   compareText,
+  createDebouncedUrlWriter,
   hasActiveFilters,
   parseTableQuery,
   readTableState,
   reduceTableState,
+  sanitizeEnumFilters,
   serializeTableQuery,
+  URL_WRITE_DELAY_MS,
   type TableQueryState,
 } from './data-table';
 
@@ -105,6 +109,18 @@ describe('compareSortValues', () => {
     expect(compareSortValues(2, 10, 'number', 'en')).toBeLessThan(0);
     expect(compareSortValues(null, 0, 'number', 'en')).toBeLessThan(0);
     expect(compareSortValues(-1, 2, 'number', 'en')).toBeLessThan(0);
+    expect(compareSortValues(null, undefined, 'number', 'en')).toBe(0);
+    expect(compareSortValues('', null, 'number', 'en')).toBe(0);
+  });
+
+  it('reuses one collator per locale', () => {
+    const spy = vi.spyOn(Intl, 'Collator');
+    const locale = 'zu-x-kh-collator';
+    compareText('á', 'b', locale);
+    compareText('b', 'á', locale);
+    const created = spy.mock.calls.filter((call) => call[0] === locale);
+    expect(created).toHaveLength(1);
+    spy.mockRestore();
   });
 
   it('sorts ISO dates and keeps blanks first', () => {
@@ -264,5 +280,77 @@ describe('table query string', () => {
     expect(params.get('dl_q')).toBe('one');
     expect(params.get('lkno_q')).toBe('two');
     expect(params.get('lkno_sort')).toBe('title');
+  });
+});
+
+describe('sanitizeEnumFilters', () => {
+  it('drops unknown values and labels a blank enum as a dash', () => {
+    const next = sanitizeEnumFilters(
+      { kind: ['risk', 'nope'], owner: ['__none__'] },
+      [
+        {
+          id: 'kind',
+          filter: {
+            type: 'enum',
+            getValue: () => 'risk',
+            options: [{ value: 'risk', label: 'Risk' }],
+          },
+        },
+        {
+          id: 'owner',
+          filter: {
+            type: 'enum',
+            getValue: () => '',
+            options: [{ value: '__none__', label: '—' }],
+          },
+        },
+        {
+          id: 'title',
+          filter: { type: 'text', getValue: () => '' },
+        },
+      ],
+    );
+    expect(next).toEqual({ kind: ['risk'], owner: ['__none__'] });
+    expect(
+      collectEnumOptions(
+        [{ owner: null as string | null }],
+        (row) => row.owner ?? '',
+        (value) => value,
+        'en',
+      ),
+    ).toEqual([{ value: '__none__', label: '—' }]);
+  });
+});
+
+describe('createDebouncedUrlWriter', () => {
+  it('writes the latest value after the delay and flushes immediately', () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let value = '';
+    const writer = createDebouncedUrlWriter({
+      write: () => writes.push(value),
+    });
+    value = 'a';
+    writer.push();
+    value = 'ab';
+    writer.push();
+    vi.advanceTimersByTime(URL_WRITE_DELAY_MS - 1);
+    expect(writes).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(writes).toEqual(['ab']);
+
+    value = 'abc';
+    writer.push();
+    writer.flush();
+    expect(writes).toEqual(['ab', 'abc']);
+    vi.advanceTimersByTime(URL_WRITE_DELAY_MS);
+    expect(writes).toEqual(['ab', 'abc']);
+
+    value = 'drop';
+    writer.push();
+    writer.cancel();
+    vi.advanceTimersByTime(URL_WRITE_DELAY_MS);
+    expect(writes).toEqual(['ab', 'abc']);
+    vi.useRealTimers();
   });
 });

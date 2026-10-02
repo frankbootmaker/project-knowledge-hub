@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  createDebouncedUrlWriter,
+  enumFiltersEqual,
   hasActiveFilters,
   readTableState,
   reduceTableState,
+  sanitizeEnumFilters,
   serializeTableQuery,
+  type FilterSpec,
   type SortDir,
   type TableAction,
   type TableQueryState,
@@ -39,39 +43,55 @@ export function useTableState(options: {
   const stateRef = useRef(state);
   stateRef.current = state;
   const hydrated = useRef(false);
+  const defaultsRef = useRef(defaults);
+  defaultsRef.current = defaults;
 
-  const persist = useCallback(
-    (next: TableQueryState) => {
-      try {
-        const url = new URL(window.location.href);
-        const search = serializeTableQuery(
-          url.search,
-          namespace,
-          next,
-          defaults,
-        );
-        const nextHref = `${url.pathname}${search}${url.hash}`;
-        const current = `${url.pathname}${url.search}${url.hash}`;
-        if (nextHref !== current) {
-          window.history.replaceState(null, '', nextHref);
-        }
-      } catch {
-        /* ignore malformed locations */
+  const persist = useCallback((next: TableQueryState) => {
+    try {
+      const url = new URL(window.location.href);
+      const search = serializeTableQuery(
+        url.search,
+        namespace,
+        next,
+        defaultsRef.current,
+      );
+      const nextHref = `${url.pathname}${search}${url.hash}`;
+      const current = `${url.pathname}${url.search}${url.hash}`;
+      if (nextHref !== current) {
+        window.history.replaceState(null, '', nextHref);
       }
-    },
-    [namespace, defaultSortKey, defaultSortDir],
+    } catch {
+      /* ignore malformed locations */
+    }
+  }, [namespace]);
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+
+  const writerRef = useRef<ReturnType<typeof createDebouncedUrlWriter> | null>(
+    null,
   );
+  if (writerRef.current == null) {
+    writerRef.current = createDebouncedUrlWriter({
+      write: () => persistRef.current(stateRef.current),
+    });
+  }
 
   useEffect(() => {
-    const next = readTableState(window.location.search, namespace, defaults);
+    writerRef.current?.cancel();
+    const next = readTableState(
+      window.location.search,
+      namespace,
+      defaultsRef.current,
+    );
     stateRef.current = next;
     setState(next);
     hydrated.current = true;
     function onPopState() {
+      writerRef.current?.cancel();
       const restored = readTableState(
         window.location.search,
         namespace,
-        defaults,
+        defaultsRef.current,
       );
       stateRef.current = restored;
       setState(restored);
@@ -80,15 +100,15 @@ export function useTableState(options: {
     return () => window.removeEventListener('popstate', onPopState);
   }, [namespace, defaultSortKey, defaultSortDir]);
 
-  const dispatch = useCallback(
-    (action: TableAction) => {
-      const next = reduceTableState(stateRef.current, action);
-      stateRef.current = next;
-      setState(next);
-      if (hydrated.current) persist(next);
-    },
-    [persist],
-  );
+  useEffect(() => () => writerRef.current?.flush(), []);
+
+  const dispatch = useCallback((action: TableAction) => {
+    const next = reduceTableState(stateRef.current, action);
+    if (next === stateRef.current) return;
+    stateRef.current = next;
+    setState(next);
+    if (hydrated.current) writerRef.current?.push();
+  }, []);
 
   const setQuery = useCallback(
     (q: string) => dispatch({ type: 'query', q }),
@@ -131,4 +151,28 @@ export function useTableState(options: {
     setExtra,
     clearFilters,
   };
+}
+
+export function useSyncEnumFilters<T>(
+  filters: Record<string, string[]>,
+  columns: Array<{ id: string; filter?: FilterSpec<T> }>,
+  setEnumFilter: (key: string, values: string[]) => void,
+): void {
+  const setRef = useRef(setEnumFilter);
+  setRef.current = setEnumFilter;
+  useEffect(() => {
+    const next = sanitizeEnumFilters(filters, columns);
+    if (enumFiltersEqual(filters, next)) return;
+    const keys = new Set([...Object.keys(filters), ...Object.keys(next)]);
+    for (const key of keys) {
+      const left = filters[key] ?? [];
+      const right = next[key] ?? [];
+      if (
+        left.length !== right.length ||
+        left.some((value, index) => value !== right[index])
+      ) {
+        setRef.current(key, right);
+      }
+    }
+  }, [columns, filters]);
 }

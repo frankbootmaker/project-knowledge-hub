@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Button, Input, Select } from './ui';
@@ -8,7 +9,7 @@ import {
   collectEnumOptions,
   compareText,
 } from '../lib/data-table';
-import { useTableState } from '../lib/use-table-state';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import { toHours } from '../lib/task-costing';
 
 export type DeliveryListKind = 'epic' | 'story' | 'milestone' | 'task';
@@ -31,6 +32,15 @@ export type DeliveryListRow = {
 
 const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
+const DELIVERY_STATUS_RANK: Record<string, number> = {
+  planned: 0,
+  todo: 1,
+  active: 2,
+  in_progress: 3,
+  blocked: 4,
+  done: 5,
+  cancelled: 6,
+};
 const KIND_LABEL = {
   epic: 'kindEpic',
   story: 'kindStory',
@@ -64,33 +74,38 @@ export function ProjectDeliveryList({
     defaultSortDir: 'desc',
   });
 
-  function statusLabel(status: string): string {
-    if ((TASK_STATUSES as readonly string[]).includes(status)) {
-      return t(`taskStatus.${status}`);
-    }
-    return t(`milestoneStatus.${status}`);
-  }
+  const statusOptions = useMemo(
+    () =>
+      Object.keys(DELIVERY_STATUS_RANK).map((value) => ({
+        value,
+        label: (TASK_STATUSES as readonly string[]).includes(value)
+          ? t(`taskStatus.${value}`)
+          : t(`milestoneStatus.${value}`),
+      })),
+    [t],
+  );
+  const ownerOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        rows,
+        (row) => row.owner ?? '',
+        (value) => value,
+        locale,
+      ),
+    [locale, rows],
+  );
+  const sprintOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        rows,
+        (row) => row.sprint ?? '',
+        (value) => value,
+        locale,
+      ),
+    [locale, rows],
+  );
 
-  const statusOptions = collectEnumOptions(
-    rows,
-    (row) => row.status,
-    statusLabel,
-    locale,
-  );
-  const ownerOptions = collectEnumOptions(
-    rows,
-    (row) => row.owner ?? '',
-    (value) => value,
-    locale,
-  );
-  const sprintOptions = collectEnumOptions(
-    rows,
-    (row) => row.sprint ?? '',
-    (value) => value,
-    locale,
-  );
-
-  const columns: Array<DataColumn<DeliveryListRow>> = [
+  const columns = useMemo<Array<DataColumn<DeliveryListRow>>>(() => [
     {
       id: 'id',
       header: t('colId'),
@@ -123,7 +138,10 @@ export function ProjectDeliveryList({
       id: 'status',
       header: t('colStatus'),
       kind: 'status',
-      sort: { type: 'text', getValue: (row) => statusLabel(row.status) },
+      sort: {
+        type: 'number',
+        getValue: (row) => DELIVERY_STATUS_RANK[row.status] ?? 99,
+      },
       filter: {
         type: 'enum',
         getValue: (row) => row.status,
@@ -251,9 +269,19 @@ export function ProjectDeliveryList({
         </Button>
       ),
     },
-  ];
+  ], [
+    canMutate,
+    onManage,
+    onStatusChange,
+    ownerOptions,
+    pending,
+    sprintOptions,
+    statusOptions,
+    t,
+  ]);
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
 
-  const visible = applyTableView({
+  const visible = useMemo(() => applyTableView({
     rows,
     locale,
     query: table.query,
@@ -264,7 +292,16 @@ export function ProjectDeliveryList({
     textFilters: table.textFilters,
     columns,
     tieBreak: (a, b) => compareText(a.title, b.title, locale),
-  });
+  }), [
+    columns,
+    locale,
+    rows,
+    table.filters,
+    table.query,
+    table.sortDir,
+    table.sortKey,
+    table.textFilters,
+  ]);
   const bareEmpty = visible.length === 0 && !table.filtersActive;
 
   return (

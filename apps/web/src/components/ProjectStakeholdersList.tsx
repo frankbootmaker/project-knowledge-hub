@@ -1,17 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { AssistantBrandMark } from './AssistantBrandMark';
 import { UserAvatar } from './UserAvatar';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Badge, Button, Input, Select } from './ui';
-import {
-  applyTableView,
-  collectEnumOptions,
-  compareText,
-} from '../lib/data-table';
-import { useTableState } from '../lib/use-table-state';
+import { applyTableView, compareText } from '../lib/data-table';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import { formatMoney } from '../lib/project-currency';
 import type { Stakeholder } from './ProjectStakeholdersPanel';
 
@@ -20,6 +16,13 @@ function rateNumber(value: string | null | undefined): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : -1;
 }
+
+const STATUS_RANK: Record<string, number> = {
+  open: 0,
+  assigned: 1,
+  ai: 2,
+  derived: 3,
+};
 
 function roleKey(row: Stakeholder): string {
   if (row.kind === 'ai_assistant') return 'kind:ai_assistant';
@@ -58,22 +61,34 @@ export function ProjectStakeholdersList({
     defaultSortKey: 'person',
     defaultSortDir: 'asc',
   });
-  const roleFilter = table.extras.role ?? '';
+  const selectedRoles = table.filters.role ?? [];
 
-  function roleLabel(row: Stakeholder): string {
+  useEffect(() => {
+    const legacy = table.extras.role;
+    if (!legacy) return;
+    if (selectedRoles.length === 0) table.setEnumFilter('role', [legacy]);
+    table.setExtra('role', '');
+  }, [
+    selectedRoles.length,
+    table.extras.role,
+    table.setEnumFilter,
+    table.setExtra,
+  ]);
+
+  const roleLabel = useCallback((row: Stakeholder): string => {
     if (row.kind === 'ai_assistant') return t('kindAiAssistant');
     if (row.kind === 'open_role') return t('kindOpenRole');
     if (row.projectRole) return t(`projectRole.${row.projectRole}`);
     return t('derivedOnly');
-  }
+  }, [t]);
 
-  function statusLabel(row: Stakeholder): string {
+  const statusLabel = useCallback((row: Stakeholder): string => {
     if (row.kind === 'open_role') return t('staffingStatus.open');
     if (row.kind === 'ai_assistant') return t('kindAiAssistant');
     if (row.staffingStatus === 'assigned') return t('staffingStatus.assigned');
     if (row.staffingStatus === 'open') return t('staffingStatus.open');
     return t('derivedOnly');
-  }
+  }, [t]);
 
   function statusKey(row: Stakeholder): string {
     if (row.kind === 'open_role' || row.staffingStatus === 'open') return 'open';
@@ -82,7 +97,7 @@ export function ProjectStakeholdersList({
     return 'derived';
   }
 
-  function engagementLabel(row: Stakeholder): string {
+  const engagementLabel = useCallback((row: Stakeholder): string => {
     if (row.kind === 'ai_assistant' && row.aiCostMode) {
       return t(`aiCostMode.${row.aiCostMode}`);
     }
@@ -94,35 +109,42 @@ export function ProjectStakeholdersList({
       parts.push(t('hoursPerDay', { hours: row.allocatedDailyHours }));
     }
     return parts.join(' · ') || '—';
-  }
+  }, [t]);
 
-  const roleOptions = useMemo(() => {
-    const seen = new Map<string, string>();
+  const labels = useMemo(() => {
+    const role = new Map<string, string>();
+    const engagement = new Map<string, string>();
+    const roleOptions: Array<{ value: string; label: string }> = [];
+    const seen = new Set<string>();
     for (const row of stakeholders) {
+      const roleText = roleLabel(row);
+      role.set(row.id, roleText);
+      engagement.set(row.id, engagementLabel(row));
       const value = roleKey(row);
-      if (!seen.has(value)) seen.set(value, roleLabel(row));
+      if (!seen.has(value)) {
+        seen.add(value);
+        roleOptions.push({ value, label: roleText });
+      }
     }
-    return [...seen.entries()];
-  }, [stakeholders, t]);
+    return { role, engagement, roleOptions };
+  }, [engagementLabel, roleLabel, stakeholders]);
 
-  const statusOptions = collectEnumOptions(
-    stakeholders,
-    statusKey,
-    (value) => {
-      if (value === 'open') return t('staffingStatus.open');
-      if (value === 'ai') return t('kindAiAssistant');
-      if (value === 'assigned') return t('staffingStatus.assigned');
-      return t('derivedOnly');
-    },
-    locale,
+  const statusOptions = useMemo(
+    () => [
+      { value: 'open', label: t('staffingStatus.open') },
+      { value: 'assigned', label: t('staffingStatus.assigned') },
+      { value: 'ai', label: t('kindAiAssistant') },
+      { value: 'derived', label: t('derivedOnly') },
+    ],
+    [t],
   );
 
-  const columns: Array<DataColumn<Stakeholder>> = [
+  const columns = useMemo<Array<DataColumn<Stakeholder>>>(() => {
+    const next: Array<DataColumn<Stakeholder>> = [
     {
       id: 'person',
       header: t('colPerson'),
       kind: 'text',
-      primary: true,
       sort: { type: 'text', getValue: (row) => row.displayName },
       cell: (row) => {
         const isAi = row.kind === 'ai_assistant';
@@ -155,7 +177,15 @@ export function ProjectStakeholdersList({
       id: 'role',
       header: t('colRole'),
       kind: 'text',
-      sort: { type: 'text', getValue: (row) => roleLabel(row) },
+      sort: {
+        type: 'text',
+        getValue: (row) => labels.role.get(row.id) ?? '',
+      },
+      filter: {
+        type: 'enum',
+        getValue: (row) => roleKey(row),
+        options: labels.roleOptions,
+      },
       cell: (row) => {
         const isAi = row.kind === 'ai_assistant';
         const isOpenRole = row.kind === 'open_role';
@@ -175,7 +205,10 @@ export function ProjectStakeholdersList({
       id: 'engagement',
       header: t('colEngagement'),
       kind: 'text',
-      sort: { type: 'text', getValue: (row) => engagementLabel(row) },
+      sort: {
+        type: 'text',
+        getValue: (row) => labels.engagement.get(row.id) ?? '',
+      },
       cell: (row) => engagementLabel(row),
     },
     {
@@ -195,7 +228,10 @@ export function ProjectStakeholdersList({
       id: 'status',
       header: t('colStatus'),
       kind: 'status',
-      sort: { type: 'text', getValue: (row) => statusLabel(row) },
+      sort: {
+        type: 'number',
+        getValue: (row) => STATUS_RANK[statusKey(row)] ?? 99,
+      },
       filter: {
         type: 'enum',
         getValue: statusKey,
@@ -234,9 +270,8 @@ export function ProjectStakeholdersList({
       },
     },
   ];
-
   if (canMutate) {
-    columns.push({
+    next.push({
       id: 'manage',
       header: '',
       kind: 'actions',
@@ -284,12 +319,26 @@ export function ProjectStakeholdersList({
       },
     });
   }
+  return next;
+  }, [
+    canMutate,
+    currency,
+    engagementLabel,
+    labels,
+    locale,
+    onAddDerived,
+    onManage,
+    onManageAi,
+    pending,
+    roleLabel,
+    statusLabel,
+    statusOptions,
+    t,
+  ]);
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
 
-  const roleScoped = roleFilter
-    ? stakeholders.filter((row) => roleKey(row) === roleFilter)
-    : stakeholders;
-  const visible = applyTableView({
-    rows: roleScoped,
+  const visible = useMemo(() => applyTableView({
+    rows: stakeholders,
     locale,
     query: table.query,
     search: (row, needle) =>
@@ -316,7 +365,20 @@ export function ProjectStakeholdersList({
     textFilters: table.textFilters,
     columns,
     tieBreak: (a, b) => compareText(a.displayName, b.displayName, locale),
-  });
+  }), [
+    columns,
+    engagementLabel,
+    locale,
+    nameById,
+    roleLabel,
+    stakeholders,
+    statusLabel,
+    table.filters,
+    table.query,
+    table.sortDir,
+    table.sortKey,
+    table.textFilters,
+  ]);
   const bareEmpty = visible.length === 0 && !table.filtersActive;
 
   return (
@@ -334,14 +396,19 @@ export function ProjectStakeholdersList({
         </label>
         <Select
           className="h-10 min-h-10 w-auto py-1.5 text-xs"
-          value={roleFilter}
-          onChange={(event) => table.setExtra('role', event.target.value)}
+          value={selectedRoles.length === 1 ? selectedRoles[0] : ''}
+          onChange={(event) =>
+            table.setEnumFilter(
+              'role',
+              event.target.value ? [event.target.value] : [],
+            )
+          }
           aria-label={t('filterRole')}
         >
           <option value="">{tWorkspaces('sectionFilterAll')}</option>
-          {roleOptions.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
+          {labels.roleOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
             </option>
           ))}
         </Select>
@@ -356,7 +423,9 @@ export function ProjectStakeholdersList({
           <div className="kh-ops-empty-mark">00</div>
           <h3>{t('emptyTitle')}</h3>
           <p>
-            {table.query.trim() || roleFilter ? t('emptyFiltered') : t('empty')}
+            {table.query.trim() || selectedRoles.length > 0
+              ? t('emptyFiltered')
+              : t('empty')}
           </p>
         </div>
       ) : (

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Badge, Button, Input, raidSeverityTone } from './ui';
@@ -8,12 +9,18 @@ import {
   collectEnumOptions,
   compareText,
 } from '../lib/data-table';
-import { useTableState } from '../lib/use-table-state';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import type { RaidItem } from './ProjectRaidPanel';
 
 const KINDS = ['risk', 'assumption', 'issue', 'dependency'] as const;
-const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
+const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 const STATUSES = ['open', 'mitigating', 'accepted', 'closed', 'cancelled'] as const;
+const SEVERITY_RANK = rankMap(SEVERITIES);
+const STATUS_RANK = rankMap(STATUSES);
+
+function rankMap(order: readonly string[]): Record<string, number> {
+  return Object.fromEntries(order.map((value, index) => [value, index]));
+}
 
 export function ProjectRaidList({
   items,
@@ -34,34 +41,49 @@ export function ProjectRaidList({
     defaultSortKey: 'id',
     defaultSortDir: 'desc',
   });
-  const kindFilter = table.extras.kind ?? 'all';
+  const selectedKinds = table.filters.kind ?? [];
 
-  const severityOptions = collectEnumOptions(
-    items,
-    (item) => item.severity,
-    (value) =>
-      (SEVERITIES as readonly string[]).includes(value)
-        ? t(`severity.${value}`)
-        : value,
-    locale,
-  );
-  const statusOptions = collectEnumOptions(
-    items,
-    (item) => item.status,
-    (value) =>
-      (STATUSES as readonly string[]).includes(value)
-        ? t(`status.${value}`)
-        : value,
-    locale,
-  );
-  const ownerOptions = collectEnumOptions(
-    items,
-    (item) => item.owner?.displayName ?? '',
-    (value) => value,
-    locale,
-  );
+  useEffect(() => {
+    const legacy = table.extras.kind;
+    if (!legacy) return;
+    if (
+      (KINDS as readonly string[]).includes(legacy) &&
+      selectedKinds.length === 0
+    ) {
+      table.setEnumFilter('kind', [legacy]);
+    }
+    table.setExtra('kind', '');
+  }, [selectedKinds.length, table.extras.kind, table.setEnumFilter, table.setExtra]);
 
-  const columns: Array<DataColumn<RaidItem>> = [
+  const kindOptions = useMemo(
+    () => KINDS.map((value) => ({ value, label: t(`kind.${value}`) })),
+    [t],
+  );
+  const severityOptions = useMemo(
+    () => SEVERITIES.map((value) => ({ value, label: t(`severity.${value}`) })),
+    [t],
+  );
+  const statusOptions = useMemo(
+    () => STATUSES.map((value) => ({ value, label: t(`status.${value}`) })),
+    [t],
+  );
+  const ownerOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        items,
+        (item) => item.owner?.displayName ?? '',
+        (value) => value,
+        locale,
+      ),
+    [items, locale],
+  );
+  const kindLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const kind of KINDS) labels[kind] = t(`kind.${kind}`);
+    return labels;
+  }, [t]);
+
+  const columns = useMemo<Array<DataColumn<RaidItem>>>(() => [
     {
       id: 'id',
       header: t('colId'),
@@ -81,7 +103,15 @@ export function ProjectRaidList({
       id: 'kind',
       header: t('colKind'),
       kind: 'status',
-      sort: { type: 'text', getValue: (item) => t(`kind.${item.kind}`) },
+      sort: {
+        type: 'text',
+        getValue: (item) => kindLabels[item.kind] ?? item.kind,
+      },
+      filter: {
+        type: 'enum',
+        getValue: (item) => item.kind,
+        options: kindOptions,
+      },
       cell: (item) => (
         <span className="kh-ops-type-chip">{t(`kind.${item.kind}`)}</span>
       ),
@@ -106,7 +136,10 @@ export function ProjectRaidList({
       id: 'severity',
       header: t('colSeverity'),
       kind: 'status',
-      sort: { type: 'text', getValue: (item) => item.severity },
+      sort: {
+        type: 'number',
+        getValue: (item) => SEVERITY_RANK[item.severity] ?? 99,
+      },
       filter: {
         type: 'enum',
         getValue: (item) => item.severity,
@@ -122,7 +155,10 @@ export function ProjectRaidList({
       id: 'status',
       header: t('colStatus'),
       kind: 'status',
-      sort: { type: 'text', getValue: (item) => item.status },
+      sort: {
+        type: 'number',
+        getValue: (item) => STATUS_RANK[item.status] ?? 99,
+      },
       filter: {
         type: 'enum',
         getValue: (item) => item.status,
@@ -177,14 +213,19 @@ export function ProjectRaidList({
         </Button>
       ),
     },
-  ];
+  ], [
+    kindLabels,
+    kindOptions,
+    onManage,
+    ownerOptions,
+    severityOptions,
+    statusOptions,
+    t,
+  ]);
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
 
-  const kindScoped =
-    kindFilter === 'all'
-      ? items
-      : items.filter((item) => item.kind === kindFilter);
-  const visible = applyTableView({
-    rows: kindScoped,
+  const visible = useMemo(() => applyTableView({
+    rows: items,
     locale,
     query: table.query,
     search: (item, needle) =>
@@ -207,7 +248,16 @@ export function ProjectRaidList({
     textFilters: table.textFilters,
     columns,
     tieBreak: (a, b) => compareText(a.title, b.title, locale),
-  });
+  }), [
+    columns,
+    items,
+    locale,
+    table.filters,
+    table.query,
+    table.sortDir,
+    table.sortKey,
+    table.textFilters,
+  ]);
   const bareEmpty = visible.length === 0 && !table.filtersActive;
 
   return (
@@ -220,8 +270,8 @@ export function ProjectRaidList({
         >
           <button
             type="button"
-            aria-pressed={kindFilter === 'all'}
-            onClick={() => table.setExtra('kind', '')}
+            aria-pressed={selectedKinds.length === 0}
+            onClick={() => table.setEnumFilter('kind', [])}
           >
             {t('kindAll')}
           </button>
@@ -229,8 +279,10 @@ export function ProjectRaidList({
             <button
               key={kind}
               type="button"
-              aria-pressed={kindFilter === kind}
-              onClick={() => table.setExtra('kind', kind)}
+              aria-pressed={
+                selectedKinds.length === 1 && selectedKinds[0] === kind
+              }
+              onClick={() => table.setEnumFilter('kind', [kind])}
             >
               {t(`kind.${kind}`)}
             </button>
@@ -257,7 +309,7 @@ export function ProjectRaidList({
           <div className="kh-ops-empty-mark">00</div>
           <h3>{t('emptyTitle')}</h3>
           <p>
-            {table.query.trim() || kindFilter !== 'all'
+            {table.query.trim() || selectedKinds.length > 0
               ? t('emptyFiltered')
               : t('empty')}
           </p>

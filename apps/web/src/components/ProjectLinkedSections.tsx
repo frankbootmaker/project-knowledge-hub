@@ -11,7 +11,7 @@ import {
   collectEnumOptions,
   compareText,
 } from '../lib/data-table';
-import { useTableState } from '../lib/use-table-state';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import {
   groupRecordsByTranslationFamily,
   normalizeContentLanguage,
@@ -99,32 +99,55 @@ export function ProjectLinkedSections({
     [locale, records],
   );
 
-  const systemStatusOptions = collectEnumOptions(
-    systems,
-    (system) => system.status,
-    (value) => value,
-    locale,
+  const systemStatusOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        systems,
+        (system) => system.status,
+        (value) => value,
+        locale,
+      ),
+    [locale, systems],
   );
-  const typeOptions = collectEnumOptions(
-    recordFamilies,
-    (row) => row.preferred.recordType,
-    (value) => value,
-    locale,
+  const typeOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        recordFamilies,
+        (row) => row.preferred.recordType,
+        (value) => value,
+        locale,
+      ),
+    [locale, recordFamilies],
   );
-  const languageOptions = collectEnumOptions(
-    recordFamilies,
-    (row) => row.languages,
-    (value) => value,
-    locale,
+  const languageOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        recordFamilies,
+        (row) => row.languages,
+        (value) => value,
+        locale,
+      ),
+    [locale, recordFamilies],
   );
-  const lifecycleOptions = collectEnumOptions(
-    recordFamilies,
-    (row) => row.preferred.lifecycleStatus,
-    (value) => lifecycleLabel(value, tRecords),
-    locale,
+  const lifecycleLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const row of recordFamilies) {
+      const status = row.preferred.lifecycleStatus;
+      if (!labels.has(status)) {
+        labels.set(status, lifecycleLabel(status, tRecords));
+      }
+    }
+    return labels;
+  }, [recordFamilies, tRecords]);
+  const lifecycleOptions = useMemo(
+    () =>
+      [...lifecycleLabels.entries()]
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => compareText(a.label, b.label, locale)),
+    [lifecycleLabels, locale],
   );
 
-  const systemColumns: Array<DataColumn<ProjectLinkedSystem>> = [
+  const systemColumns = useMemo<Array<DataColumn<ProjectLinkedSystem>>>(() => [
     {
       id: 'name',
       header: tWorkspaces('colName'),
@@ -165,9 +188,14 @@ export function ProjectLinkedSections({
       },
       cell: (system) => formatUpdated(system.updatedAt, locale),
     },
-  ];
+  ], [locale, systemStatusOptions, tWorkspaces, workspaceSlug]);
+  useSyncEnumFilters(
+    systemsTable.filters,
+    systemColumns,
+    systemsTable.setEnumFilter,
+  );
 
-  const recordColumns: Array<DataColumn<RecordFamily>> = [
+  const recordColumns = useMemo<Array<DataColumn<RecordFamily>>>(() => [
     {
       id: 'key',
       header: tWorkspaces('colKey'),
@@ -230,7 +258,9 @@ export function ProjectLinkedSections({
       kind: 'status',
       sort: {
         type: 'text',
-        getValue: (row) => lifecycleLabel(row.preferred.lifecycleStatus, tRecords),
+        getValue: (row) =>
+          lifecycleLabels.get(row.preferred.lifecycleStatus) ??
+          row.preferred.lifecycleStatus,
       },
       filter: {
         type: 'enum',
@@ -250,9 +280,23 @@ export function ProjectLinkedSections({
       },
       cell: (row) => formatUpdated(row.preferred.updatedAt, locale),
     },
-  ];
+  ], [
+    languageOptions,
+    lifecycleLabels,
+    lifecycleOptions,
+    locale,
+    tRecords,
+    tWorkspaces,
+    typeOptions,
+    workspaceSlug,
+  ]);
+  useSyncEnumFilters(
+    recordsTable.filters,
+    recordColumns,
+    recordsTable.setEnumFilter,
+  );
 
-  const visibleSystems = applyTableView({
+  const visibleSystems = useMemo(() => applyTableView({
     rows: systems,
     locale,
     query: systemsTable.query,
@@ -267,8 +311,17 @@ export function ProjectLinkedSections({
     textFilters: systemsTable.textFilters,
     columns: systemColumns,
     tieBreak: (a, b) => compareText(a.name, b.name, locale),
-  });
-  const visibleRecords = applyTableView({
+  }), [
+    locale,
+    systemColumns,
+    systems,
+    systemsTable.filters,
+    systemsTable.query,
+    systemsTable.sortDir,
+    systemsTable.sortKey,
+    systemsTable.textFilters,
+  ]);
+  const visibleRecords = useMemo(() => applyTableView({
     rows: recordFamilies,
     locale,
     query: recordsTable.query,
@@ -293,7 +346,16 @@ export function ProjectLinkedSections({
     textFilters: recordsTable.textFilters,
     columns: recordColumns,
     tieBreak: (a, b) => compareText(a.preferred.title, b.preferred.title, locale),
-  });
+  }), [
+    locale,
+    recordColumns,
+    recordFamilies,
+    recordsTable.filters,
+    recordsTable.query,
+    recordsTable.sortDir,
+    recordsTable.sortKey,
+    recordsTable.textFilters,
+  ]);
 
   const systemsBare =
     visibleSystems.length === 0 && !systemsTable.filtersActive;

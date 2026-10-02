@@ -1,14 +1,14 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Badge, Button, Input } from './ui';
 import {
   applyTableView,
-  collectEnumOptions,
   compareText,
 } from '../lib/data-table';
-import { useTableState } from '../lib/use-table-state';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import type { ChangeItem } from './ProjectChangePanel';
 
 const KINDS = ['scope', 'timeline', 'stakeholder', 'budget', 'other'] as const;
@@ -19,6 +19,13 @@ const STATUSES = [
   'implemented',
   'cancelled',
 ] as const;
+const STATUS_RANK: Record<string, number> = {
+  proposed: 0,
+  approved: 1,
+  rejected: 2,
+  implemented: 3,
+  cancelled: 4,
+};
 
 export function ProjectChangeList({
   items,
@@ -40,24 +47,21 @@ export function ProjectChangeList({
     defaultSortDir: 'desc',
   });
 
-  const kindOptions = collectEnumOptions(
-    items,
-    (item) => item.kind,
-    (value) =>
-      (KINDS as readonly string[]).includes(value) ? t(`kind.${value}`) : value,
-    locale,
+  const kindOptions = useMemo(
+    () => KINDS.map((value) => ({ value, label: t(`kind.${value}`) })),
+    [t],
   );
-  const statusOptions = collectEnumOptions(
-    items,
-    (item) => item.status,
-    (value) =>
-      (STATUSES as readonly string[]).includes(value)
-        ? t(`status.${value}`)
-        : value,
-    locale,
+  const statusOptions = useMemo(
+    () => STATUSES.map((value) => ({ value, label: t(`status.${value}`) })),
+    [t],
   );
+  const kindLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const kind of KINDS) labels[kind] = t(`kind.${kind}`);
+    return labels;
+  }, [t]);
 
-  const columns: Array<DataColumn<ChangeItem>> = [
+  const columns = useMemo<Array<DataColumn<ChangeItem>>>(() => [
     {
       id: 'id',
       header: t('colId'),
@@ -77,7 +81,10 @@ export function ProjectChangeList({
       id: 'kind',
       header: t('colKind'),
       kind: 'status',
-      sort: { type: 'text', getValue: (item) => t(`kind.${item.kind}`) },
+      sort: {
+        type: 'text',
+        getValue: (item) => kindLabels[item.kind] ?? item.kind,
+      },
       filter: {
         type: 'enum',
         getValue: (item) => item.kind,
@@ -107,7 +114,10 @@ export function ProjectChangeList({
       id: 'status',
       header: t('colStatus'),
       kind: 'status',
-      sort: { type: 'text', getValue: (item) => item.status },
+      sort: {
+        type: 'number',
+        getValue: (item) => STATUS_RANK[item.status] ?? 99,
+      },
       filter: {
         type: 'enum',
         getValue: (item) => item.status,
@@ -151,9 +161,10 @@ export function ProjectChangeList({
         </Button>
       ),
     },
-  ];
+  ], [kindLabels, kindOptions, onManage, statusOptions, t]);
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
 
-  const visible = applyTableView({
+  const visible = useMemo(() => applyTableView({
     rows: items,
     locale,
     query: table.query,
@@ -178,7 +189,16 @@ export function ProjectChangeList({
     textFilters: table.textFilters,
     columns,
     tieBreak: (a, b) => compareText(a.title, b.title, locale),
-  });
+  }), [
+    columns,
+    items,
+    locale,
+    table.filters,
+    table.query,
+    table.sortDir,
+    table.sortKey,
+    table.textFilters,
+  ]);
   const bareEmpty = visible.length === 0 && !table.filtersActive;
 
   return (

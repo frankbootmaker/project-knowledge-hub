@@ -59,8 +59,18 @@ export type TableAction =
   | { type: 'extra'; key: string; value: string }
   | { type: 'clearFilters' };
 
+const collators = new Map<string, Intl.Collator>();
+
+export function textCollator(locale: string): Intl.Collator {
+  const cached = collators.get(locale);
+  if (cached) return cached;
+  const collator = new Intl.Collator(locale, { sensitivity: 'base' });
+  collators.set(locale, collator);
+  return collator;
+}
+
 export function compareText(a: string, b: string, locale: string): number {
-  return a.localeCompare(b, locale, { sensitivity: 'base' });
+  return textCollator(locale).compare(a, b);
 }
 
 function asNumber(value: SortValue): number {
@@ -72,13 +82,20 @@ function asNumber(value: SortValue): number {
   return Number.NEGATIVE_INFINITY;
 }
 
+function compareNumber(a: SortValue, b: SortValue): number {
+  const left = asNumber(a);
+  const right = asNumber(b);
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
 export function compareSortValues(
   a: SortValue,
   b: SortValue,
   type: SortType,
   locale: string,
 ): number {
-  if (type === 'number') return asNumber(a) - asNumber(b);
+  if (type === 'number') return compareNumber(a, b);
   const left = a == null ? '' : String(a);
   const right = b == null ? '' : String(b);
   if (type === 'date') {
@@ -115,6 +132,7 @@ export function reduceTableState(
     case 'hydrate':
       return action.state;
     case 'query':
+      if (state.q === action.q) return state;
       return { ...state, q: action.q };
     case 'toggleSort': {
       if (state.sortKey === action.key) {
@@ -130,24 +148,46 @@ export function reduceTableState(
       };
     }
     case 'enum': {
+      const current = state.filters[action.key] ?? [];
+      const same =
+        current.length === action.values.length &&
+        current.every((value, index) => value === action.values[index]);
+      if (same) return state;
       const filters = { ...state.filters };
       if (action.values.length === 0) delete filters[action.key];
       else filters[action.key] = action.values;
       return { ...state, filters };
     }
     case 'text': {
-      const textFilters = { ...state.textFilters };
-      if (action.value.trim() === '') delete textFilters[action.key];
-      else textFilters[action.key] = action.value;
-      return { ...state, textFilters };
+      const current = state.textFilters[action.key] ?? '';
+      if (action.value.trim() === '') {
+        if (current === '') return state;
+        const textFilters = { ...state.textFilters };
+        delete textFilters[action.key];
+        return { ...state, textFilters };
+      }
+      if (current === action.value) return state;
+      return {
+        ...state,
+        textFilters: { ...state.textFilters, [action.key]: action.value },
+      };
     }
     case 'extra': {
-      const extras = { ...state.extras };
-      if (action.value.trim() === '') delete extras[action.key];
-      else extras[action.key] = action.value;
-      return { ...state, extras };
+      const current = state.extras[action.key] ?? '';
+      if (action.value.trim() === '') {
+        if (current === '') return state;
+        const extras = { ...state.extras };
+        delete extras[action.key];
+        return { ...state, extras };
+      }
+      if (current === action.value) return state;
+      return {
+        ...state,
+        extras: { ...state.extras, [action.key]: action.value },
+      };
     }
     case 'clearFilters':
+      if (!hasActiveFilters(state)) return state;
       return { ...state, filters: {}, textFilters: {} };
     default:
       return state;
@@ -363,5 +403,85 @@ export function readTableState(
     filters: parsed.filters,
     textFilters: parsed.textFilters,
     extras: parsed.extras,
+  };
+}
+
+export function enumFiltersEqual(
+  left: Record<string, string[]>,
+  right: Record<string, string[]>,
+): boolean {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    const a = left[key] ?? [];
+    const b = right[key] ?? [];
+    if (a.length !== b.length) return false;
+    if (a.some((value, index) => value !== b[index])) return false;
+  }
+  return true;
+}
+
+/** Drop enum values that are not in the column's option list. Empty option lists are left alone until options exist. */
+export function sanitizeEnumFilters<T>(
+  filters: Record<string, string[]>,
+  columns: Array<{ id: string; filter?: FilterSpec<T> }>,
+): Record<string, string[]> {
+  const byId = new Map(columns.map((column) => [column.id, column]));
+  const next: Record<string, string[]> = {};
+  for (const [id, selected] of Object.entries(filters)) {
+    if (selected.length === 0) continue;
+    const filter = byId.get(id)?.filter;
+    if (!filter || filter.type !== 'enum') continue;
+    const allowed = new Set((filter.options ?? []).map((option) => option.value));
+    if (allowed.size === 0) {
+      next[id] = selected;
+      continue;
+    }
+    const kept = selected.filter((value) => allowed.has(value));
+    if (kept.length > 0) next[id] = kept;
+  }
+  return next;
+}
+
+export const URL_WRITE_DELAY_MS = 250;
+
+export function createDebouncedUrlWriter(options: {
+  write: () => void;
+  delayMs?: number;
+}): {
+  push: () => void;
+  flush: () => void;
+  cancel: () => void;
+} {
+  const delayMs = options.delayMs ?? URL_WRITE_DELAY_MS;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending = false;
+
+  function flush() {
+    if (timer != null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (!pending) return;
+    pending = false;
+    options.write();
+  }
+
+  return {
+    push() {
+      pending = true;
+      if (timer != null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        if (!pending) return;
+        pending = false;
+        options.write();
+      }, delayMs);
+    },
+    flush,
+    cancel() {
+      if (timer != null) clearTimeout(timer);
+      timer = null;
+      pending = false;
+    },
   };
 }

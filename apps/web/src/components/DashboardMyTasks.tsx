@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { DataTable, type DataColumn } from './ui/DataTable';
@@ -7,11 +8,10 @@ import { Badge, Button, Input, Select } from './ui';
 import { cn } from '../lib/cn';
 import {
   applyTableView,
-  collectEnumOptions,
   compareText,
   type SortDir,
 } from '../lib/data-table';
-import { useTableState } from '../lib/use-table-state';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import {
   deliveryScheduleTone,
   todayYmd,
@@ -97,23 +97,23 @@ export function DashboardMyTasks({
     resetPage();
   }
 
-  const statusOptions = collectEnumOptions(
-    tasks,
-    (task) => task.status,
-    (value) =>
-      (STATUS_ORDER as readonly string[]).includes(value)
-        ? tDelivery(`taskStatus.${value}`)
-        : value,
-    locale,
+  const statusOptions = useMemo(
+    () =>
+      STATUS_ORDER.map((value) => ({
+        value,
+        label: tDelivery(`taskStatus.${value}`),
+      })),
+    [tDelivery],
   );
-  const roleOptions = collectEnumOptions(
-    tasks,
-    (task) => task.myRole,
-    (value) => t(RACI_LABEL[value as DashboardAssignedTask['myRole']]),
-    locale,
+  const roleOptions = useMemo(
+    () =>
+      (Object.keys(RACI_LABEL) as Array<DashboardAssignedTask['myRole']>).map(
+        (value) => ({ value, label: t(RACI_LABEL[value]) }),
+      ),
+    [t],
   );
 
-  const columns: Array<DataColumn<DashboardAssignedTask>> = [
+  const columns = useMemo<Array<DataColumn<DashboardAssignedTask>>>(() => [
     {
       id: 'title',
       header: t('colWorkItem'),
@@ -212,9 +212,10 @@ export function DashboardMyTasks({
         );
       },
     },
-  ];
+  ], [roleOptions, statusOptions, t, tDelivery]);
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
 
-  const filtered = applyTableView({
+  const filtered = useMemo(() => applyTableView({
     rows: tasks,
     locale,
     query: table.query,
@@ -237,7 +238,16 @@ export function DashboardMyTasks({
     textFilters: table.textFilters,
     columns,
     tieBreak: (a, b) => compareText(a.title, b.title, locale),
-  });
+  }), [
+    columns,
+    locale,
+    table.filters,
+    table.query,
+    table.sortDir,
+    table.sortKey,
+    table.textFilters,
+    tasks,
+  ]);
 
   const activeColumnLabel =
     columns.find((column) => column.id === table.sortKey)?.header ?? t('colDue');
