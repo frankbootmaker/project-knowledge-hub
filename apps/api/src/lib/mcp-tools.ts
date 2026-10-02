@@ -571,7 +571,7 @@ export function createMcpToolHandlers(
       }
 
       const { slugify } = await import('@project-knowledge-hub/auth');
-      const slug = slugify(input.name);
+      let slug = slugify(input.name);
       if (!slug) {
         throw new AppError({
           code: 'VALIDATION_ERROR',
@@ -609,6 +609,17 @@ export function createMcpToolHandlers(
             matchType: exactMatch ? 'name' : 'slug',
           },
         });
+      }
+
+      // If confirm=true and slug conflicts, generate unique slug by appending number
+      if (input.confirm && slugMatch) {
+        let counter = 2;
+        let uniqueSlug = `${slug}-${counter}`;
+        while (existing.some((p) => p.slug === uniqueSlug)) {
+          counter++;
+          uniqueSlug = `${slug}-${counter}`;
+        }
+        slug = uniqueSlug;
       }
 
       let keyPrefix: string;
