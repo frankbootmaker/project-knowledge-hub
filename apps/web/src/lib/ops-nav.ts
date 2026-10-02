@@ -161,7 +161,10 @@ function projectSectionNavItem(section: ProjectSectionDef): NavItemDef {
     icon: section.icon,
     labelKey: section.labelKey,
     requires: 'project',
-    href: (ctx) => projectHref(ctx, `#${section.anchor}`),
+    href: (ctx) =>
+      section.navItemId === 'overview'
+        ? projectTopHref(ctx)
+        : projectHref(ctx, `#${section.anchor}`),
   };
 }
 
@@ -561,7 +564,7 @@ export function matchNavItem(
     }
     return (
       pathname === `/workspaces/${ctx.workspaceSlug}/projects/${ctx.projectSlug}` &&
-      (hash === 'project-overview' || hash === '')
+      (hash === PROJECT_TOP_ANCHOR || hash === '')
     );
   }
   if (item.id === 'workspace') {
