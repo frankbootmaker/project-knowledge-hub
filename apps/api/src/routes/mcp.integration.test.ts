@@ -604,6 +604,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     const body = create.json() as {
       result?: { isError?: boolean; content?: Array<{ text?: string }> };
     };
+    if (body.result?.isError) {
+      console.error('MCP error:', body.result.content?.[0]?.text);
+    }
     expect(body.result?.isError).toBeFalsy();
   });
 
