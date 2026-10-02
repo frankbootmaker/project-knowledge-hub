@@ -60,6 +60,17 @@
     "browse": "Browse",
     "noFileChosen": "No file chosen"
   },
+  "table": {
+    "sortBy": "Sort by {column}",
+    "showFilters": "Show filters",
+    "hideFilters": "Hide filters",
+    "filters": "Column filters",
+    "clearFilters": "Clear filters",
+    "filterColumn": "Filter {column}",
+    "textPlaceholder": "Contains…",
+    "emptyFiltered": "No rows match the current filters.",
+    "actions": "Actions"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "workspaces": "Workspaces",
@@ -501,7 +512,6 @@
     "countOpenRaid": "Open RAID",
     "queueTitle": "Priority queue",
     "queueMeta": "Sorted by {column}",
-    "sortBy": "Sort by {column}",
     "pageSize": "Items per page",
     "pageSizeOption": "{count} per page",
     "showing": "Showing {from}–{to} of {total}",
@@ -2236,7 +2246,6 @@
     "subtitle": "Epics, stories, milestones, tasks, dates, and RACI shared by humans and AI agents.",
     "empty": "No delivery items yet.",
     "searchPlaceholder": "Search delivery items…",
-    "filterStatus": "Filter by status",
     "addItem": "Add",
     "modalDescription": "Create a task, milestone, epic, or user story.",
     "itemTitle": "Title",
@@ -2396,7 +2405,6 @@
     "colActual": "Actual h",
     "colPoints": "Points",
     "colUpdated": "Updated",
-    "sortBy": "Sort by {column}",
     "emptyTitle": "No delivery work",
     "emptyFiltered": "No work items match this search.",
     "treeBreakdown": "Work breakdown",
@@ -2611,7 +2619,9 @@
       "overdue": "Overdue",
       "completed": "Done",
       "neutral": "Cancelled"
-    }
+    },
+    "statusField": "Status",
+    "rowStatus": "Status for {item}"
   },
   "stakeholders": {
     "title": "Stakeholders",
@@ -2624,7 +2634,6 @@
     "empty": "No stakeholders yet. Add people to the project team, assign RACI, or link an AI assistant (type ai_assistant) to this project.",
     "emptyTitle": "No stakeholders",
     "emptyFiltered": "No stakeholders match this search or filter.",
-    "sortBy": "Sort by {column}",
     "colPerson": "Person / seat",
     "colRole": "Role",
     "colCompetencies": "Competencies",
@@ -2796,7 +2805,6 @@
     "emptyTitle": "No RAID items",
     "emptyFiltered": "No RAID items match this search or filter.",
     "kindAll": "All",
-    "sortBy": "Sort by {column}",
     "colId": "ID",
     "colKind": "Kind",
     "colTitle": "Description",
@@ -2953,7 +2961,6 @@
     "empty": "No change items yet. Log scope, timeline, stakeholder, or budget changes here.",
     "emptyTitle": "No change items",
     "emptyFiltered": "No change items match this search or filter.",
-    "sortBy": "Sort by {column}",
     "colId": "Change ID",
     "colKind": "Kind",
     "colTitle": "Description",

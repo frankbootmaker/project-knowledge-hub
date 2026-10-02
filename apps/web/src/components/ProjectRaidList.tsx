@@ -1,16 +1,19 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { DataTable, type DataColumn } from './ui/DataTable';
 import { Badge, Button, Input, raidSeverityTone } from './ui';
+import {
+  applyTableView,
+  collectEnumOptions,
+  compareText,
+} from '../lib/data-table';
+import { useTableState } from '../lib/use-table-state';
 import type { RaidItem } from './ProjectRaidPanel';
 
 const KINDS = ['risk', 'assumption', 'issue', 'dependency'] as const;
-type SortKey = 'id' | 'kind' | 'title' | 'severity' | 'status' | 'owner' | 'due';
-
-function compareText(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: 'base' });
-}
+const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
+const STATUSES = ['open', 'mitigating', 'accepted', 'closed', 'cancelled'] as const;
 
 export function ProjectRaidList({
   items,
@@ -24,26 +27,168 @@ export function ProjectRaidList({
   onCreate: () => void;
 }) {
   const t = useTranslations('raid');
-  const [query, setQuery] = useState('');
-  const [kindFilter, setKindFilter] = useState<string>('all');
-  const [sortKey, setSortKey] = useState<SortKey>('id');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const tTable = useTranslations('table');
+  const locale = useLocale();
+  const table = useTableState({
+    namespace: 'raid',
+    defaultSortKey: 'id',
+    defaultSortDir: 'desc',
+  });
+  const kindFilter = table.extras.kind ?? 'all';
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-    setSortKey(key);
-    setSortDir(key === 'due' || key === 'id' ? 'desc' : 'asc');
-  }
+  const severityOptions = collectEnumOptions(
+    items,
+    (item) => item.severity,
+    (value) =>
+      (SEVERITIES as readonly string[]).includes(value)
+        ? t(`severity.${value}`)
+        : value,
+    locale,
+  );
+  const statusOptions = collectEnumOptions(
+    items,
+    (item) => item.status,
+    (value) =>
+      (STATUSES as readonly string[]).includes(value)
+        ? t(`status.${value}`)
+        : value,
+    locale,
+  );
+  const ownerOptions = collectEnumOptions(
+    items,
+    (item) => item.owner?.displayName ?? '',
+    (value) => value,
+    locale,
+  );
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const matched = items.filter((item) => {
-      if (kindFilter !== 'all' && item.kind !== kindFilter) return false;
-      if (!needle) return true;
-      const haystack = [
+  const columns: Array<DataColumn<RaidItem>> = [
+    {
+      id: 'id',
+      header: t('colId'),
+      kind: 'data',
+      sort: {
+        type: 'text',
+        getValue: (item) => item.humanKey ?? item.title,
+        defaultDir: 'desc',
+      },
+      cell: (item) => (
+        <span className="kh-ops-type-chip">
+          {item.humanKey ?? t(`kind.${item.kind}`)}
+        </span>
+      ),
+    },
+    {
+      id: 'kind',
+      header: t('colKind'),
+      kind: 'status',
+      sort: { type: 'text', getValue: (item) => t(`kind.${item.kind}`) },
+      cell: (item) => (
+        <span className="kh-ops-type-chip">{t(`kind.${item.kind}`)}</span>
+      ),
+    },
+    {
+      id: 'title',
+      header: t('colTitle'),
+      kind: 'text',
+      primary: true,
+      sort: { type: 'text', getValue: (item) => item.title },
+      cell: (item) => (
+        <button
+          type="button"
+          className="border-0 bg-transparent p-0 text-left text-inherit"
+          onClick={() => onManage(item.id)}
+        >
+          {item.title}
+        </button>
+      ),
+    },
+    {
+      id: 'severity',
+      header: t('colSeverity'),
+      kind: 'status',
+      sort: { type: 'text', getValue: (item) => item.severity },
+      filter: {
+        type: 'enum',
+        getValue: (item) => item.severity,
+        options: severityOptions,
+      },
+      cell: (item) => (
+        <Badge tone={raidSeverityTone(item.severity)}>
+          {t(`severity.${item.severity}`)}
+        </Badge>
+      ),
+    },
+    {
+      id: 'status',
+      header: t('colStatus'),
+      kind: 'status',
+      sort: { type: 'text', getValue: (item) => item.status },
+      filter: {
+        type: 'enum',
+        getValue: (item) => item.status,
+        options: statusOptions,
+      },
+      cell: (item) => t(`status.${item.status}`),
+    },
+    {
+      id: 'owner',
+      header: t('colOwner'),
+      kind: 'text',
+      sort: { type: 'text', getValue: (item) => item.owner?.displayName ?? '' },
+      filter: {
+        type: 'enum',
+        getValue: (item) => item.owner?.displayName ?? '',
+        options: ownerOptions,
+      },
+      cell: (item) => item.owner?.displayName ?? t('unassigned'),
+    },
+    {
+      id: 'due',
+      header: t('colDue'),
+      kind: 'date',
+      sort: {
+        type: 'date',
+        getValue: (item) => item.dueDate ?? '',
+        defaultDir: 'desc',
+      },
+      cell: (item) => item.dueDate ?? '—',
+    },
+    {
+      id: 'linked',
+      header: t('colLinked'),
+      kind: 'text',
+      cell: (item) =>
+        item.tasks.length > 0
+          ? item.tasks.map((task) => task.humanKey ?? task.title).join(', ')
+          : '—',
+    },
+    {
+      id: 'manage',
+      header: '',
+      kind: 'actions',
+      cell: (item) => (
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-8 min-h-8 px-2 text-xs"
+          onClick={() => onManage(item.id)}
+        >
+          {t('manage')}
+        </Button>
+      ),
+    },
+  ];
+
+  const kindScoped =
+    kindFilter === 'all'
+      ? items
+      : items.filter((item) => item.kind === kindFilter);
+  const visible = applyTableView({
+    rows: kindScoped,
+    locale,
+    query: table.query,
+    search: (item, needle) =>
+      [
         item.title,
         item.humanKey ?? '',
         item.description ?? '',
@@ -54,48 +199,16 @@ export function ProjectRaidList({
         ...item.tasks.map((task) => task.humanKey ?? task.title),
       ]
         .join(' ')
-        .toLowerCase();
-      return haystack.includes(needle);
-    });
-    const dir = sortDir === 'asc' ? 1 : -1;
-    return [...matched].sort((a, b) => {
-      let result = 0;
-      switch (sortKey) {
-        case 'kind':
-          result = compareText(a.kind, b.kind);
-          break;
-        case 'title':
-          result = compareText(a.title, b.title);
-          break;
-        case 'severity':
-          result = compareText(a.severity, b.severity);
-          break;
-        case 'status':
-          result = compareText(a.status, b.status);
-          break;
-        case 'owner':
-          result = compareText(a.owner?.displayName ?? '', b.owner?.displayName ?? '');
-          break;
-        case 'due':
-          result = compareText(a.dueDate ?? '', b.dueDate ?? '');
-          break;
-        default:
-          result = compareText(a.humanKey ?? a.title, b.humanKey ?? b.title);
-      }
-      if (result === 0) result = compareText(a.title, b.title);
-      return result * dir;
-    });
-  }, [items, kindFilter, query, sortDir, sortKey]);
-
-  const columns: Array<{ key: SortKey; label: string }> = [
-    { key: 'id', label: t('colId') },
-    { key: 'kind', label: t('colKind') },
-    { key: 'title', label: t('colTitle') },
-    { key: 'severity', label: t('colSeverity') },
-    { key: 'status', label: t('colStatus') },
-    { key: 'owner', label: t('colOwner') },
-    { key: 'due', label: t('colDue') },
-  ];
+        .toLowerCase()
+        .includes(needle),
+    sortKey: table.sortKey,
+    sortDir: table.sortDir,
+    filters: table.filters,
+    textFilters: table.textFilters,
+    columns,
+    tieBreak: (a, b) => compareText(a.title, b.title, locale),
+  });
+  const bareEmpty = visible.length === 0 && !table.filtersActive;
 
   return (
     <section className="kh-ops-panel">
@@ -108,7 +221,7 @@ export function ProjectRaidList({
           <button
             type="button"
             aria-pressed={kindFilter === 'all'}
-            onClick={() => setKindFilter('all')}
+            onClick={() => table.setExtra('kind', '')}
           >
             {t('kindAll')}
           </button>
@@ -117,7 +230,7 @@ export function ProjectRaidList({
               key={kind}
               type="button"
               aria-pressed={kindFilter === kind}
-              onClick={() => setKindFilter(kind)}
+              onClick={() => table.setExtra('kind', kind)}
             >
               {t(`kind.${kind}`)}
             </button>
@@ -127,8 +240,8 @@ export function ProjectRaidList({
           <span className="sr-only">{t('searchPlaceholder')}</span>
           <Input
             type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
             placeholder={t('searchPlaceholder')}
             className="h-10 min-h-10 py-1.5 text-xs"
           />
@@ -139,87 +252,38 @@ export function ProjectRaidList({
           </Button>
         ) : null}
       </div>
-      {filtered.length === 0 ? (
+      {bareEmpty ? (
         <div className="kh-ops-empty-state">
           <div className="kh-ops-empty-mark">00</div>
           <h3>{t('emptyTitle')}</h3>
-          <p>{query.trim() || kindFilter !== 'all' ? t('emptyFiltered') : t('empty')}</p>
+          <p>
+            {table.query.trim() || kindFilter !== 'all'
+              ? t('emptyFiltered')
+              : t('empty')}
+          </p>
         </div>
       ) : (
-        <div className="kh-ops-table-wrap">
-          <table className="kh-ops-data-table kh-ops-delivery-list">
-            <thead>
-              <tr>
-                {columns.map((column) => (
-                  <th key={column.key}>
-                    <button
-                      type="button"
-                      data-sort-direction={
-                        sortKey === column.key
-                          ? (sortDir === 'asc' ? '↑' : '↓')
-                          : undefined
-                      }
-                      aria-label={t('sortBy', { column: column.label })}
-                      onClick={() => toggleSort(column.key)}
-                    >
-                      {column.label}
-                    </button>
-                  </th>
-                ))}
-                <th>{t('colLinked')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <span className="kh-ops-type-chip">
-                      {item.humanKey ?? t(`kind.${item.kind}`)}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="kh-ops-type-chip">{t(`kind.${item.kind}`)}</span>
-                  </td>
-                  <td className="kh-ops-primary-cell">
-                    <button
-                      type="button"
-                      className="border-0 bg-transparent p-0 text-left text-inherit"
-                      onClick={() => onManage(item.id)}
-                    >
-                      {item.title}
-                    </button>
-                  </td>
-                  <td>
-                    <Badge tone={raidSeverityTone(item.severity)}>
-                      {t(`severity.${item.severity}`)}
-                    </Badge>
-                  </td>
-                  <td>{t(`status.${item.status}`)}</td>
-                  <td>{item.owner?.displayName ?? t('unassigned')}</td>
-                  <td>{item.dueDate ?? '—'}</td>
-                  <td>
-                    {item.tasks.length > 0
-                      ? item.tasks
-                          .map((task) => task.humanKey ?? task.title)
-                          .join(', ')
-                      : '—'}
-                  </td>
-                  <td>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="h-8 min-h-8 px-2 text-xs"
-                      onClick={() => onManage(item.id)}
-                    >
-                      {t('manage')}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={visible}
+          rowKey={(item) => item.id}
+          columns={columns}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onToggleSort={table.toggleSort}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={table.clearFilters}
+          filtersActive={table.filtersActive}
+          tableClassName="kh-ops-delivery-list"
+          empty={
+            <>
+              <h3>{t('emptyTitle')}</h3>
+              <p>{tTable('emptyFiltered')}</p>
+            </>
+          }
+        />
       )}
     </section>
   );

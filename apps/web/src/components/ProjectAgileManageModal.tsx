@@ -557,7 +557,7 @@ export function ProjectAgileManageModal({
             </Select>
           </Field>
         ) : null}
-        <Field label={t('filterStatus')}>
+        <Field label={t('statusField')}>
           <Select
             value={status}
             onChange={(e) => setStatus(e.target.value)}

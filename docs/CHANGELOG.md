@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+* **Shared sortable tables (PRO-T-27, PRO-T-28, PRO-T-29):** Delivery, RAID, change, stakeholder, and dashboard task lists, plus linked systems and linked knowledge, now share `DataTable` and `useTableState`. Columns declare a sort, a kind (wrapping text vs compact status/data/number/date/actions), and optional enum or text filters. A funnel on the header opens a popover (Esc closes, focus returns to the trigger) with an active-filter dot and Clear filters. Sort, filters, and search are stored in namespaced URL params so a view survives reload. Text columns wrap; the delivery list no longer forces a 1040px min-width, and Updated and Manage are separate cells. The delivery status control is announced as a status. `sortBy` and the shared filter strings live once under `table` in en, hu, and de.
+
 ### Fixed
 
 * **PRO-T-2: MCP Definition of Done round-trip:** `update_project_baseline` already persisted `definitionOfDone`, but `get_project` and the update response omitted the field, so clients could not confirm the save. Both tools now return `definitionOfDone` (string or null) and declare it in their descriptions and output schemas.
