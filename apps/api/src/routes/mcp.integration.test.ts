@@ -188,6 +188,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   afterAll(async () => {
+    // Give any pending server operations time to complete before cleanup
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    
     if (app) {
       await app.close();
     }
