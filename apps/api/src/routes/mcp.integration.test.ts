@@ -597,6 +597,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
         confirm: true,
       },
     });
+    if (create.statusCode !== 200) {
+      console.error('create_project failed:', create.statusCode, create.body);
+    }
     expect(create.statusCode).toBe(200);
     const body = create.json() as {
       result?: { isError?: boolean; content?: Array<{ text?: string }> };
