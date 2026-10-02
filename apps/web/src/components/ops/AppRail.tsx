@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { cn } from '../../lib/cn';
 import { logoutAction } from '../../lib/logout-action';
@@ -16,15 +17,24 @@ import { userMonogram } from '../../lib/monogram';
 import {
   findActiveNavItem,
   inferNavSection,
+  isRailItemActive,
   navAvailabilityContext,
   parseAppPath,
   parseNavSection,
+  projectIndexPath,
+  projectTopHref,
   resolveActiveNavSection,
   visibleNavItems,
   visibleNavSections,
   type NavContext,
   type NavSectionId,
 } from '../../lib/ops-nav';
+import {
+  PROJECT_TOP_ANCHOR,
+  projectSectionByNavId,
+  scrollToProjectAnchor,
+} from '../../lib/project-sections';
+import { useProjectRail } from './ProjectRailContext';
 import {
   readLastProject,
   readLastWorkspace,
@@ -60,13 +70,13 @@ export function AppRail({
   onOpenChange: (value: boolean) => void;
 }) {
   const t = useTranslations('nav');
+  const tProject = useTranslations('projects');
   const pathname = usePathname();
+  const { statuses, activeAnchor } = useProjectRail();
   const searchParams = useSearchParams();
   const jumpId = useId();
   const search = searchParams.toString() ? `?${searchParams.toString()}` : '';
-  const [section, setSection] = useState<NavSectionId>(() =>
-    inferNavSection(pathname, '', search),
-  );
+  const [section, setSection] = useState<NavSectionId>(() => inferNavSection(pathname, '', search));
   const [jump, setJump] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -108,16 +118,14 @@ export function AppRail({
 
   const ctx: NavContext = useMemo(() => {
     const workspaceSlug =
-      pathParts.workspaceSlug
-      || lastProject?.workspaceSlug
-      || lastWorkspace
-      || workspaces[0]?.slug
-      || null;
+      pathParts.workspaceSlug ||
+      lastProject?.workspaceSlug ||
+      lastWorkspace ||
+      workspaces[0]?.slug ||
+      null;
     const projectSlug =
-      pathParts.projectSlug
-      || (lastProject && lastProject.workspaceSlug === workspaceSlug
-        ? lastProject.projectSlug
-        : null);
+      pathParts.projectSlug ||
+      (lastProject && lastProject.workspaceSlug === workspaceSlug ? lastProject.projectSlug : null);
     return {
       workspaceSlug,
       projectSlug,
@@ -136,9 +144,10 @@ export function AppRail({
     () => navAvailabilityContext(pathname, session.user.isSystemAdmin),
     [pathname, session.user.isSystemAdmin],
   );
-  const visibleSections = useMemo(
-    () => visibleNavSections(availabilityCtx),
-    [availabilityCtx],
+  const visibleSections = useMemo(() => visibleNavSections(availabilityCtx), [availabilityCtx]);
+  const pageItemId = useMemo(
+    () => findActiveNavItem(availabilityCtx, pathname, hash, search)?.id ?? null,
+    [availabilityCtx, pathname, hash, search],
   );
 
   useEffect(() => {
@@ -177,7 +186,6 @@ export function AppRail({
     };
   }, [userOpen]);
 
-  const activeItem = findActiveNavItem(availabilityCtx, pathname, hash, search);
   const currentWorkspace =
     workspaces.find((row) => row.slug === ctx.workspaceSlug) ?? workspaces[0];
 
@@ -191,10 +199,7 @@ export function AppRail({
       for (const item of visibleNavItems(group, availabilityCtx)) {
         const label = t(item.labelKey);
         const sectionLabel = t(group.labelKey);
-        if (
-          label.toLowerCase().includes(query)
-          || sectionLabel.toLowerCase().includes(query)
-        ) {
+        if (label.toLowerCase().includes(query) || sectionLabel.toLowerCase().includes(query)) {
           hits.push({
             href: item.href(ctx),
             label,
@@ -213,10 +218,19 @@ export function AppRail({
     setJump('');
   }
 
-  const monogram = userMonogram(
-    session.user.displayName,
-    session.user.fullName,
-  );
+  function onProjectTopClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+    const index = projectIndexPath(availabilityCtx);
+    if (!index || pathname !== index) {
+      return;
+    }
+    event.preventDefault();
+    scrollToProjectAnchor(PROJECT_TOP_ANCHOR);
+    const nextUrl = `${index}${window.location.search}#${PROJECT_TOP_ANCHOR}`;
+    window.history.replaceState(null, '', nextUrl);
+    setHash(PROJECT_TOP_ANCHOR);
+  }
+
+  const monogram = userMonogram(session.user.displayName, session.user.fullName);
 
   return (
     <>
@@ -276,9 +290,7 @@ export function AppRail({
               <Link
                 key={workspace.id}
                 href={`/workspaces/${workspace.slug}`}
-                className={
-                  workspace.slug === ctx.workspaceSlug ? 'active' : undefined
-                }
+                className={workspace.slug === ctx.workspaceSlug ? 'active' : undefined}
                 onClick={() => {
                   writeLastWorkspace(workspace.slug);
                   setLastWorkspace(workspace.slug);
@@ -307,11 +319,7 @@ export function AppRail({
             <p className="kh-ops-jump-empty">{t('jumpEmpty')}</p>
           ) : (
             jumpHits.map((hit) => (
-              <Link
-                key={`${hit.href}-${hit.label}`}
-                href={hit.href}
-                onClick={() => setJump('')}
-              >
+              <Link key={`${hit.href}-${hit.label}`} href={hit.href} onClick={() => setJump('')}>
                 {hit.label}
                 <span className="kh-ops-jump-kind">{hit.section}</span>
               </Link>
@@ -321,11 +329,7 @@ export function AppRail({
 
         <div className="kh-ops-nav-scroll">
           <nav className="kh-ops-nav" aria-label={t('menu')}>
-            <div
-              className="kh-ops-section-switcher"
-              role="group"
-              aria-label={t('sections')}
-            >
+            <div className="kh-ops-section-switcher" role="group" aria-label={t('sections')}>
               {visibleSections.map((group) => {
                 const active = group.id === section;
                 return (
@@ -348,34 +352,72 @@ export function AppRail({
             {visibleSections.map((group) => (
               <section
                 key={group.id}
-                className={cn(
-                  'kh-ops-nav-group',
-                  group.id === section && 'section-active',
-                )}
+                className={cn('kh-ops-nav-group', group.id === section && 'section-active')}
               >
-                <div className="kh-ops-group-header">
-                  <NavIcon name={group.icon} />
-                  <span className="kh-ops-group-label">{t(group.labelKey)}</span>
-                </div>
+                {group.id === 'control' && projectIndexPath(ctx) ? (
+                  <Link
+                    href={projectTopHref(ctx)}
+                    className="kh-ops-group-header"
+                    aria-label={t('goToProjectTop')}
+                    title={t('goToProjectTop')}
+                    aria-current={hash === PROJECT_TOP_ANCHOR ? 'location' : undefined}
+                    onClick={onProjectTopClick}
+                  >
+                    <NavIcon name={group.icon} />
+                    <span className="kh-ops-group-label">{t(group.labelKey)}</span>
+                  </Link>
+                ) : (
+                  <div className="kh-ops-group-header">
+                    <NavIcon name={group.icon} />
+                    <span className="kh-ops-group-label">{t(group.labelKey)}</span>
+                  </div>
+                )}
                 <div className="kh-ops-nav-items">
                   {visibleNavItems(group, availabilityCtx).map((item) => {
-                      const href = item.href(ctx);
-                      const active = activeItem?.id === item.id;
-                      return (
-                        <Link
-                          key={item.id}
-                          href={href}
-                          title={t(item.labelKey)}
-                          className={active ? 'active' : undefined}
-                          aria-current={active ? 'page' : undefined}
-                        >
+                    const href = item.href(ctx);
+                    const active = isRailItemActive(
+                      item,
+                      availabilityCtx,
+                      pathname,
+                      hash,
+                      search,
+                      activeAnchor,
+                    );
+                    const label = t(item.labelKey);
+                    const section = projectSectionByNavId(item.id);
+                    const rag = section?.statusSource
+                      ? (statuses[section.statusSource] ?? null)
+                      : null;
+                    const statusLabel = rag ? tProject(`rag.${rag}`) : null;
+                    const accessible = statusLabel ? `${label}: ${statusLabel}` : label;
+                    const pageActive = pageItemId === item.id;
+                    const locationActive = active && !pageActive;
+                    return (
+                      <Link
+                        key={item.id}
+                        href={href}
+                        title={accessible}
+                        aria-label={accessible}
+                        className={active ? 'active' : undefined}
+                        aria-current={
+                          pageActive ? 'page' : locationActive ? 'location' : undefined
+                        }
+                      >
+                        <span className="kh-ops-nav-icon">
                           <NavIcon name={item.icon} />
-                          <span className="kh-ops-nav-label">
-                            {t(item.labelKey)}
+                          {rag ? (
+                            <span className="kh-ops-rag-dot" data-rag={rag} aria-hidden />
+                          ) : null}
+                        </span>
+                        <span className="kh-ops-nav-label">{label}</span>
+                        {statusLabel ? (
+                          <span className="kh-ops-rag-text" data-rag={rag}>
+                            {statusLabel}
                           </span>
-                        </Link>
-                      );
-                    })}
+                        ) : null}
+                      </Link>
+                    );
+                  })}
                 </div>
               </section>
             ))}
@@ -415,11 +457,7 @@ export function AppRail({
               <Link href="/account/ai-connections" role="menuitem">
                 {t('aiConnections')}
               </Link>
-              <Link
-                href="/account/close"
-                role="menuitem"
-                className="close-account"
-              >
+              <Link href="/account/close" role="menuitem" className="close-account">
                 {t('closeAccount')}
               </Link>
             </div>
@@ -453,9 +491,7 @@ export function AppRail({
               <small>{t('accountMenu')}</small>
             </span>
           </button>
-          <span className="kh-ops-mode-copy">
-            {compact ? t('compactNav') : t('expandedNav')}
-          </span>
+          <span className="kh-ops-mode-copy">{compact ? t('compactNav') : t('expandedNav')}</span>
         </div>
       </aside>
     </>

@@ -34,6 +34,10 @@
   --kh-warn: oklch(68% 0.14 78);
   --kh-warn-soft: color-mix(in oklch, var(--kh-warn) 14%, white);
   --kh-danger: oklch(58% 0.18 28);
+  /* Status ink is fixed (not --kh-accent). Light values are dark enough for 11px text. */
+  --kh-rag-on-track: oklch(40% 0.13 145);
+  --kh-rag-amber-ink: oklch(40% 0.11 75);
+  --kh-rag-red-ink: oklch(44% 0.16 28);
   --kh-danger-soft: color-mix(in oklch, var(--kh-danger) 12%, white);
 
   /* Atmosphere — 24px ops grid */
@@ -97,6 +101,9 @@ html[data-theme='dark'] {
   --kh-warn: oklch(76% 0.13 78);
   --kh-warn-soft: color-mix(in oklch, var(--kh-warn) 16%, var(--kh-panel));
   --kh-danger: oklch(70% 0.17 28);
+  --kh-rag-on-track: oklch(78% 0.14 145);
+  --kh-rag-amber-ink: oklch(82% 0.12 85);
+  --kh-rag-red-ink: oklch(78% 0.14 25);
   --kh-danger-soft: color-mix(in oklch, var(--kh-danger) 16%, var(--kh-panel));
 
   --kh-bg-glow-a: oklch(23% 0.015 245 / 0.5);

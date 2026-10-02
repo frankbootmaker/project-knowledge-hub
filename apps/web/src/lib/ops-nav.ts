@@ -1,3 +1,5 @@
+import { PROJECT_SECTIONS, PROJECT_TOP_ANCHOR, type ProjectSectionDef } from './project-sections';
+
 export const NAV_SECTION_IDS = [
   'personal',
   'delivery-finance',
@@ -29,6 +31,7 @@ export type NavIconName =
   | 'budget'
   | 'systems'
   | 'raid'
+  | 'change'
   | 'stakeholders'
   | 'utilization'
   | 'org'
@@ -73,11 +76,13 @@ export type NavItemId =
   | 'budget'
   | 'systems'
   | 'raid'
+  | 'change'
   | 'stakeholders'
   | 'utilization'
   | 'org'
   | 'baseline'
   | 'knowledge'
+  | 'project-knowledge'
   | 'media'
   | 'archive'
   | 'import'
@@ -126,17 +131,69 @@ function workspaceHref(ctx: NavContext, suffix = ''): string {
   return `/workspaces/${ctx.workspaceSlug}${suffix}`;
 }
 
-function projectHref(
-  ctx: NavContext,
-  hash = '',
-  search = '',
-): string {
-  if (!ctx.workspaceSlug || !ctx.projectSlug) {
-    return ctx.workspaceSlug
-      ? `/workspaces/${ctx.workspaceSlug}`
-      : '/workspaces';
+function projectHref(ctx: NavContext, hash = '', search = ''): string {
+  const index = projectIndexPath(ctx);
+  if (!index) {
+    return ctx.workspaceSlug ? `/workspaces/${ctx.workspaceSlug}` : '/workspaces';
   }
-  return `/workspaces/${ctx.workspaceSlug}/projects/${ctx.projectSlug}${search}${hash}`;
+  return `${index}${search}${hash}`;
+}
+
+/** Create-project route shares `[projectSlug]`; it is not a project. */
+export function isProjectSlug(slug: string | null | undefined): slug is string {
+  return Boolean(slug) && slug !== 'new';
+}
+
+export function projectIndexPath(ctx: NavContext): string | null {
+  if (!ctx.workspaceSlug || !isProjectSlug(ctx.projectSlug)) {
+    return null;
+  }
+  return `/workspaces/${ctx.workspaceSlug}/projects/${ctx.projectSlug}`;
+}
+
+export function projectTopHref(ctx: NavContext): string {
+  return projectHref(ctx, `#${PROJECT_TOP_ANCHOR}`);
+}
+
+function projectSectionNavItem(section: ProjectSectionDef): NavItemDef {
+  return {
+    id: section.navItemId,
+    icon: section.icon,
+    labelKey: section.labelKey,
+    requires: 'project',
+    href: (ctx) => projectHref(ctx, `#${section.anchor}`),
+  };
+}
+
+/**
+ * Header shortcuts, plus Utilization and Org chart (stakeholder views).
+ * Those two stay in Control and are not header chips.
+ */
+function controlNavItems(): NavItemDef[] {
+  const items: NavItemDef[] = [];
+  for (const section of PROJECT_SECTIONS) {
+    items.push(projectSectionNavItem(section));
+    if (section.navItemId !== 'stakeholders') {
+      continue;
+    }
+    items.push(
+      {
+        id: 'utilization',
+        icon: 'utilization',
+        labelKey: 'utilization',
+        requires: 'project',
+        href: (ctx) => projectHref(ctx, '#project-stakeholders', '?utilization=1'),
+      },
+      {
+        id: 'org',
+        icon: 'org',
+        labelKey: 'orgChart',
+        requires: 'project',
+        href: (ctx) => projectHref(ctx, '#project-stakeholders', '?stakeholders=org'),
+      },
+    );
+  }
+  return items;
 }
 
 export const NAV_SECTIONS: NavSectionDef[] = [
@@ -161,20 +218,6 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     labelKey: 'sectionDelivery',
     items: [
       {
-        id: 'overview',
-        icon: 'overview',
-        labelKey: 'overview',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-overview'),
-      },
-      {
-        id: 'delivery',
-        icon: 'delivery',
-        labelKey: 'delivery',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=board'),
-      },
-      {
         id: 'scrum',
         icon: 'scrum',
         labelKey: 'scrum',
@@ -195,65 +238,13 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         requires: 'project',
         href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=calendar'),
       },
-      {
-        id: 'budget',
-        icon: 'budget',
-        labelKey: 'budget',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-budget'),
-      },
     ],
   },
   {
     id: 'control',
     icon: 'control',
     labelKey: 'sectionControl',
-    items: [
-      {
-        id: 'systems',
-        icon: 'systems',
-        labelKey: 'systems',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-systems'),
-      },
-      {
-        id: 'raid',
-        icon: 'raid',
-        labelKey: 'raid',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-raid'),
-      },
-      {
-        id: 'stakeholders',
-        icon: 'stakeholders',
-        labelKey: 'stakeholders',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-stakeholders'),
-      },
-      {
-        id: 'utilization',
-        icon: 'utilization',
-        labelKey: 'utilization',
-        requires: 'project',
-        href: (ctx) =>
-          projectHref(ctx, '#project-stakeholders', '?utilization=1'),
-      },
-      {
-        id: 'org',
-        icon: 'org',
-        labelKey: 'orgChart',
-        requires: 'project',
-        href: (ctx) =>
-          projectHref(ctx, '#project-stakeholders', '?stakeholders=org'),
-      },
-      {
-        id: 'baseline',
-        icon: 'baseline',
-        labelKey: 'baseline',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-baseline'),
-      },
-    ],
+    items: controlNavItems(),
   },
   {
     id: 'knowledge',
@@ -265,10 +256,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         icon: 'knowledgeItem',
         labelKey: 'knowledgeLibrary',
         requires: 'workspace',
-        href: (ctx) =>
-          ctx.projectSlug
-            ? projectHref(ctx, '#project-knowledge')
-            : workspaceHref(ctx),
+        href: (ctx) => workspaceHref(ctx),
       },
       {
         id: 'media',
@@ -294,18 +282,12 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     ],
   },
   {
+    // Reports moved to Control with the other project sections. Git routes
+    // still infer Ops; with no items the group stays hidden.
     id: 'ops',
     icon: 'ops',
     labelKey: 'sectionOps',
-    items: [
-      {
-        id: 'reports',
-        icon: 'reports',
-        labelKey: 'reports',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-reports'),
-      },
-    ],
+    items: [],
   },
   {
     id: 'admin',
@@ -433,7 +415,7 @@ export function isNavItemAvailable(item: NavItemDef, ctx: NavContext): boolean {
   if (item.adminOnly && !ctx.isAdmin) {
     return false;
   }
-  if (item.requires === 'project' && !ctx.projectSlug) {
+  if (item.requires === 'project' && !isProjectSlug(ctx.projectSlug)) {
     return false;
   }
   if (item.requires === 'workspace' && !ctx.workspaceSlug) {
@@ -443,18 +425,12 @@ export function isNavItemAvailable(item: NavItemDef, ctx: NavContext): boolean {
 }
 
 /** Route-only context for which groups to show — ignores last-used prefs. */
-export function navAvailabilityContext(
-  pathname: string,
-  isAdmin: boolean,
-): NavContext {
+export function navAvailabilityContext(pathname: string, isAdmin: boolean): NavContext {
   const { workspaceSlug, projectSlug } = parseAppPath(pathname);
   return { workspaceSlug, projectSlug, isAdmin };
 }
 
-export function visibleNavItems(
-  section: NavSectionDef,
-  ctx: NavContext,
-): NavItemDef[] {
+export function visibleNavItems(section: NavSectionDef, ctx: NavContext): NavItemDef[] {
   return section.items.filter((item) => isNavItemAvailable(item, ctx));
 }
 
@@ -467,10 +443,7 @@ export function visibleNavSections(ctx: NavContext): NavSectionDef[] {
   });
 }
 
-export function resolveActiveNavSection(
-  preferred: NavSectionId,
-  ctx: NavContext,
-): NavSectionId {
+export function resolveActiveNavSection(preferred: NavSectionId, ctx: NavContext): NavSectionId {
   const visible = visibleNavSections(ctx);
   if (visible.some((section) => section.id === preferred)) {
     return preferred;
@@ -478,15 +451,11 @@ export function resolveActiveNavSection(
   return visible[0]?.id ?? defaultNavSection;
 }
 
-export function isNavSectionId(
-  value: string | undefined | null,
-): value is NavSectionId {
+export function isNavSectionId(value: string | undefined | null): value is NavSectionId {
   return (NAV_SECTION_IDS as readonly string[]).includes(value ?? '');
 }
 
-export function parseNavSection(
-  value: string | undefined | null,
-): NavSectionId {
+export function parseNavSection(value: string | undefined | null): NavSectionId {
   return isNavSectionId(value) ? value : defaultNavSection;
 }
 
@@ -499,16 +468,27 @@ export function parseAppPath(pathname: string): {
     return { workspaceSlug: null, projectSlug: null };
   }
   const workspaceSlug = parts[1];
-  const projectSlug =
-    parts[2] === 'projects' && parts[3] ? parts[3] : null;
+  const rawSlug = parts[2] === 'projects' && parts[3] ? parts[3] : null;
+  const projectSlug = isProjectSlug(rawSlug) ? rawSlug : null;
   return { workspaceSlug, projectSlug };
 }
 
-export function inferNavSection(
-  pathname: string,
-  hash = '',
-  search = '',
-): NavSectionId {
+/** Scrum, Timeline, and Calendar are the only delivery views with a rail item. */
+const RAIL_DELIVERY_VIEWS = new Set(['scrum', 'timeline', 'calendar']);
+
+function isRailDeliveryView(value: string | null): boolean {
+  return value != null && RAIL_DELIVERY_VIEWS.has(value);
+}
+
+function readSearchParams(search: string): URLSearchParams {
+  return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+}
+
+function hashId(hash: string): string {
+  return hash.startsWith('#') ? hash.slice(1) : hash;
+}
+
+export function inferNavSection(pathname: string, hash = '', search = ''): NavSectionId {
   if (pathname.startsWith('/admin')) {
     return 'admin';
   }
@@ -529,45 +509,29 @@ export function inferNavSection(
   }
 
   const { projectSlug } = parseAppPath(pathname);
-  if (pathname.includes('/archived')) {
+  if (
+    /^\/workspaces\/[^/]+\/(?:archived|imports|document-imports|media|records)(\/|$)/.test(
+      pathname,
+    )
+  ) {
     return 'knowledge';
   }
-  if (pathname.includes('/imports') || pathname.includes('/document-imports')) {
-    return 'knowledge';
-  }
-  if (pathname.includes('/media')) {
-    return 'knowledge';
-  }
-  if (pathname.includes('/records')) {
-    return 'knowledge';
-  }
-  if (pathname.includes('/git')) {
+  if (/^\/workspaces\/[^/]+\/git(\/|$)/.test(pathname)) {
     return 'ops';
   }
   if (pathname.includes('/systems')) {
     return 'control';
   }
+  if (/^\/workspaces\/[^/]+\/projects\/new\/?$/.test(pathname)) {
+    return 'control';
+  }
   if (projectSlug) {
-    const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-    if (params.get('stakeholders') === 'org' || params.get('utilization') === '1') {
-      return 'control';
-    }
-    if (hash === 'project-raid' || hash === 'project-stakeholders'
-      || hash === 'project-baseline' || hash === 'project-systems'
-      || hash === 'project-change') {
-      return 'control';
-    }
-    if (hash === 'project-knowledge') {
-      return 'knowledge';
-    }
-    if (hash === 'project-reports') {
-      return 'ops';
-    }
-    if (hash === 'project-budget' || hash === 'project-delivery'
-      || params.has('delivery')) {
+    const anchor = hashId(hash);
+    const deliveryView = readSearchParams(search).get('delivery');
+    if (anchor === 'project-delivery' && isRailDeliveryView(deliveryView)) {
       return 'delivery-finance';
     }
-    return 'delivery-finance';
+    return 'control';
   }
   if (pathname.startsWith('/workspaces/')) {
     return 'knowledge';
@@ -586,8 +550,7 @@ export function matchNavItem(
   const [pathAndQuery = '', hrefHash = ''] = href.split('#');
   const [hrefPath = '', hrefQuery = ''] = pathAndQuery.split('?');
   const pathMatches =
-    pathname === hrefPath ||
-    (hrefPath !== '/' && pathname.startsWith(`${hrefPath}/`));
+    pathname === hrefPath || (hrefPath !== '/' && pathname.startsWith(`${hrefPath}/`));
 
   if (item.id === 'my-work') {
     return pathname === '/dashboard' || pathname === '/';
@@ -597,20 +560,22 @@ export function matchNavItem(
       return false;
     }
     return (
-      pathname === `/workspaces/${ctx.workspaceSlug}/projects/${ctx.projectSlug}`
-      && (hash === 'project-overview' || hash === '')
+      pathname === `/workspaces/${ctx.workspaceSlug}/projects/${ctx.projectSlug}` &&
+      (hash === 'project-overview' || hash === '')
     );
   }
   if (item.id === 'workspace') {
     return (
       pathname === '/workspaces' ||
       pathname === '/workspaces/new' ||
-      (Boolean(ctx.workspaceSlug)
-        && pathname === `/workspaces/${ctx.workspaceSlug}`)
+      (Boolean(ctx.workspaceSlug) && pathname === `/workspaces/${ctx.workspaceSlug}`)
     );
   }
   if (item.id === 'search') {
     return pathname === '/search' || pathname.startsWith('/search/');
+  }
+  if (item.id === 'knowledge') {
+    return Boolean(ctx.workspaceSlug) && pathname === `/workspaces/${ctx.workspaceSlug}`;
   }
   if (item.id === 'archive') {
     return pathname === '/archived' || pathname.includes('/archived');
@@ -634,16 +599,14 @@ export function matchNavItem(
     return pathname.startsWith('/admin/brand');
   }
 
-  const params = new URLSearchParams(
-    search.startsWith('?') ? search.slice(1) : search,
-  );
+  const params = readSearchParams(search);
   const hrefParams = new URLSearchParams(hrefQuery);
 
   if (hrefParams.get('delivery')) {
     return (
-      pathMatches
-      && hash === 'project-delivery'
-      && params.get('delivery') === hrefParams.get('delivery')
+      pathMatches &&
+      hash === 'project-delivery' &&
+      params.get('delivery') === hrefParams.get('delivery')
     );
   }
   if (hrefParams.get('stakeholders') === 'org') {
@@ -653,12 +616,68 @@ export function matchNavItem(
     return pathMatches && params.get('utilization') === '1';
   }
   if (hrefHash) {
+    if (item.id === 'delivery' && isRailDeliveryView(params.get('delivery'))) {
+      return false;
+    }
     return pathMatches && hash === hrefHash;
   }
   if (item.adminOnly) {
     return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
   }
   return pathMatches && !hash;
+}
+
+function hrefParts(href: string): {
+  path: string;
+  query: string;
+  hash: string;
+} {
+  const [pathAndQuery = '', hrefHash = ''] = href.split('#');
+  const [hrefPath = '', hrefQuery = ''] = pathAndQuery.split('?');
+  return { path: hrefPath, query: hrefQuery, hash: hrefHash };
+}
+
+/**
+ * Hash/route match, overridden by the project-page scroll spy when it
+ * reports a visible section. View-query items (scrum, org, utilization)
+ * keep the URL match so they are not double-highlighted with the section.
+ */
+export function isRailItemActive(
+  item: NavItemDef,
+  ctx: NavContext,
+  pathname: string,
+  hash: string,
+  search: string,
+  activeAnchor: string | null,
+): boolean {
+  if (!activeAnchor) {
+    return matchNavItem(item, ctx, pathname, hash, search);
+  }
+
+  const href = hrefParts(item.href(ctx));
+  const hrefParams = new URLSearchParams(href.query);
+  const hasViewQuery =
+    hrefParams.has('delivery') || hrefParams.has('stakeholders') || hrefParams.has('utilization');
+  if (hasViewQuery || !href.hash) {
+    return matchNavItem(item, ctx, pathname, hash, search);
+  }
+
+  const params = readSearchParams(search);
+  const pathMatches =
+    pathname === href.path || (href.path !== '/' && pathname.startsWith(`${href.path}/`));
+  if (!pathMatches || href.hash !== activeAnchor) {
+    return false;
+  }
+  if (activeAnchor === 'project-delivery' && isRailDeliveryView(params.get('delivery'))) {
+    return false;
+  }
+  if (
+    activeAnchor === 'project-stakeholders' &&
+    (params.get('stakeholders') === 'org' || params.get('utilization') === '1')
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function findActiveNavItem(

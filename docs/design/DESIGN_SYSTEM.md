@@ -68,6 +68,7 @@ Intentional, short motion for presence — not decoration. Prefer tokens above o
 | Toast | Slide + slight scale (`kh-toast-in`) |
 | Buttons / file Browse | Color transitions + 1px press (`:active`) |
 | Switch | Thumb `translate` over `--kh-motion-base` |
+| In-page anchors | Project section links call `scrollIntoView` (`smooth`, or `auto` when `prefers-reduced-motion: reduce`). No global `scroll-behavior` on `html` |
 
 `prefers-reduced-motion: reduce` disables entrance animations and press transforms.
 
@@ -82,7 +83,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Viewport | Root layout exports `viewport: { width: 'device-width', initialScale: 1, viewportFit: 'cover' }` |
 | Shell padding / width | Authenticated Ops Console: `.kh-ops-view` padding (`24px 28px`, `14px` below `md`). Legacy `.kh-shell` still used on public/auth pages (`max-w-6xl` + `px-4 sm:px-6`) |
 | Shell content | Ops Console `.kh-ops-view`. Legacy `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
-| Primary nav | Left **section-filter rail** (Personal, Delivery & finance, Control, Knowledge, Ops, Admin). Only one section’s items are visible. Compact rail + hover expand from `md`. Below `md`: mobile bar hamburger opens the rail drawer. Account lives in the rail user menu, not the rail list |
+| Primary nav | Left **section-filter rail** (Personal, Delivery & finance, Control, Knowledge, Ops, Admin). Only one section’s items are visible. Compact rail + hover expand from `md`. Below `md`: mobile bar hamburger opens the rail drawer. Account lives in the rail user menu, not the rail list. **Control** is the project section index (same shortcuts as the project header, plus Utilization and Org chart). Its heading links to `#project-top`. Delivery & finance keeps Scrum, Timeline, and Calendar. Ops stays in the model but is hidden while it has no items |
 | Admin sidebar | Admin destinations live in the Ops rail Admin section. `admin/layout.tsx` no longer renders a second sidebar |
 | Account sidebar | Same grid pattern in `account/layout.tsx` for signed-in users. Rail user menu also links to the same destinations |
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
@@ -120,6 +121,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-text-link` | Inline text links |
 | `.kh-toast-viewport` / `.kh-toast` / `.kh-toast-{success,danger,info}` / `.kh-toast-dismiss` | Toasts |
 | `.kh-ops-shell` / `.kh-ops-rail` / `.kh-ops-subhead` / `.kh-ops-view` | Authenticated Ops Console chrome (rail + header + content) |
+| `.kh-ops-project-top` | Project header anchor (`#project-top`) with scroll margin under the sticky subhead |
+| `.kh-ops-rag-dot` / `.kh-ops-rag-text` | Status on Control rail items (`data-rag`). Colour uses `--kh-rag-on-track` / `--kh-rag-amber-ink` / `--kh-rag-red-ink` (not `--kh-accent`). Compact mode keeps a shape cue (circle / triangle / square / ring). `none` is “No budget”. The word stays in the accessible name and keeps its colour when the row is active |
 | `.kh-ops-view-intro` / `.kh-ops-eyebrow` / `.kh-ops-page-title` / `.kh-ops-subtitle` | Page intro (used by `PageHeader`) |
 | `.kh-ops-count-strip` / `.kh-ops-count-item` | Horizontal count strip |
 | `.kh-ops-stats` / `.kh-ops-stat` / `.kh-ops-stat-label` / `.kh-ops-stat-value` / `.kh-ops-progress` | KPI / insight stat cards |
@@ -244,6 +247,7 @@ Record durable UI / design-system changes here (newest first).
 * **Shared data table** — Delivery, RAID, change, stakeholder, and dashboard task lists, plus project linked systems and linked knowledge, use `DataTable` (`components/ui/DataTable.tsx`). Sort, enum/text column filters, and search persist in namespaced query params (`replaceState`, debounced, same idea as `?delivery=`). Sortable headers expose `aria-sort`. The filter control is the catalogue funnel with an active dot; when the table has an actions column the funnel sits in that header. The popover is `.kh-ops-popover` / `.kh-ops-table-filter`, traps Tab, and returns focus to the trigger on Esc or Clear. A pointer press outside closes it without moving focus. Checked options use `--kh-selected-*`. Blank enum values show as —.
 * **Table wrapping** — Text columns wrap inside the cell. Status, dates, numbers, and actions stay single-line. Only `DataTable` drops the `42rem` min-width (`.kh-ops-data-table--fluid`). Other ops tables keep `42rem`. `.kh-ops-delivery-list` no longer forces `1040px`. Horizontal scroll remains on the wrap when nowrap columns still overflow. Delivery splits Updated and Manage into separate cells. The delivery row status control is labelled as a status, not a filter.
 * **Sticky table header** — Only `.kh-ops-table-wrap--sticky` (added by `DataTable`) is the vertical scrollport (`max-height: min(70vh, 48rem)`) and sticks `thead th` to its top. Other `.kh-ops-table-wrap` tables stay horizontal-scroll only.
+* **Project Control rail** — Header shortcuts and Control items come from one section list (`project-sections.ts`). Control heading is a link to `#project-top` (one `scrollIntoView`, instant when `prefers-reduced-motion: reduce`; no global `html` scroll-behavior). Delivery, Budget, RAID, and Change requests show the same status on the rail (shape + text, `--kh-rag-on-track` / `--kh-rag-amber-ink` / `--kh-rag-red-ink`). Missing budget is neutral “No budget”, not green. The visible section uses the existing `--kh-selected-*` active rail style; status colour stays on the active row.
 
 ### 2026-09-30
 

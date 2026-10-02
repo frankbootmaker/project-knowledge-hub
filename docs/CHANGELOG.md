@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Project header and Control rail (PRO-T-30):** project sections (Overview, Reports, Baseline, Stakeholders, Delivery, Budget, RAID, Change requests, Linked systems, Linked knowledge) are defined once and drive both the project header shortcuts and the Control menu. Utilization and Org chart stay in Control. Scrum, Timeline, and Calendar stay under Delivery & finance. The workspace Knowledge item stays on the workspace catalogue; the project’s linked-knowledge shortcut lives only in Control. Reports left Ops, so that group is hidden until it has items. The Control heading opens `#project-top`. Rail items with a status show the same state as the header (text plus a shape, including compact mode). On track uses a fixed green, not the brand accent. A project with no budget summary shows “No budget” instead of green.
+
 * **Mail chrome:** product emails (including Admin test send) use the Ops Console KnowHub layout — KH mark, IBM Plex stacks, ink CTA, 3px panels, green accent — instead of IN3 navy / “Project Knowledge Hub” chrome.
 
 * **Responsive Delivery / Budgeting UX:** view mode controls use icons below `md` on the section title row; compact mobile header (brand mark, icon auth, menu far right); bottom-sheet modals + full-width toasts on small screens; Budgeting burndown opens on demand in a wide modal below `md`; epic cost rollups use compact cards on mobile and denser tables on desktop; approved-budget field width capped so Save stays visible.
