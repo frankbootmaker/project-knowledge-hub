@@ -63,6 +63,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   let adminUserId = '';
   let readToken = '';
   let writeToken = '';
+  let pmWriteToken = '';
   const password = 'test-password-123';
 
   beforeAll(async () => {
@@ -166,6 +167,21 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(writeClient.statusCode).toBe(200);
     writeToken = (writeClient.json() as { token: string }).token;
 
+    const pmWrite = await app.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        organizationId,
+        name: 'PM write client',
+        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
+        allowedWorkspaceIds: [workspaceId],
+        actingUserId: adminUserId,
+      },
+    });
+    expect(pmWrite.statusCode).toBe(200);
+    pmWriteToken = (pmWrite.json() as { token: string }).token;
+
     await app.inject({
       method: 'POST',
       url: '/api/v1/projects',
@@ -188,9 +204,8 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   afterAll(async () => {
-    // Close database and Redis connections first
-    if (closeDatabase) {
-      await closeDatabase();
+    if (app) {
+      await app.close();
     }
     if (redis) {
       try {
@@ -199,13 +214,8 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
         redis.disconnect();
       }
     }
-    
-    // Give any pending MCP/Fastify operations time to complete
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    
-    // Close Fastify app last
-    if (app) {
-      await app.close();
+    if (closeDatabase) {
+      await closeDatabase();
     }
   });
 
@@ -482,22 +492,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   it('creates project via MCP with AI provenance', async () => {
-    const pmWrite = await app!.inject({
-      method: 'POST',
-      url: '/api/v1/api-clients',
-      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
-      payload: {
-        organizationId,
-        name: 'PM write client',
-        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
-        allowedWorkspaceIds: [workspaceId],
-        actingUserId: adminUserId,
-      },
-    });
-    expect(pmWrite.statusCode).toBe(200);
-    const pmToken = (pmWrite.json() as { token: string }).token;
-
-    const create = await mcpCall(app!, pmToken, 50, 'tools/call', {
+    const create = await mcpCall(app!, pmWriteToken, 50, 'tools/call', {
       name: 'create_project',
       arguments: {
         workspaceId,
@@ -533,7 +528,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(data.project?.createdByModel).toBe('test-model-v1');
     expect(data.project?.url).toContain('/projects/');
 
-    const getProj = await mcpCall(app!, pmToken, 51, 'tools/call', {
+    const getProj = await mcpCall(app!, pmWriteToken, 51, 'tools/call', {
       name: 'get_project',
       arguments: { projectId: data.project!.id },
     });
@@ -549,21 +544,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   it('rejects duplicate project name', async () => {
-    const pmWrite = await app!.inject({
-      method: 'POST',
-      url: '/api/v1/api-clients',
-      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
-      payload: {
-        organizationId,
-        name: 'PM write client 2',
-        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
-        allowedWorkspaceIds: [workspaceId],
-        actingUserId: adminUserId,
-      },
-    });
-    const pmToken = (pmWrite.json() as { token: string }).token;
-
-    const dup = await mcpCall(app!, pmToken, 52, 'tools/call', {
+    const dup = await mcpCall(app!, pmWriteToken, 52, 'tools/call', {
       name: 'create_project',
       arguments: {
         workspaceId,
@@ -580,21 +561,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   it('allows duplicate project with confirm=true', async () => {
-    const pmWrite = await app!.inject({
-      method: 'POST',
-      url: '/api/v1/api-clients',
-      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
-      payload: {
-        organizationId,
-        name: 'PM write client 2b',
-        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
-        allowedWorkspaceIds: [workspaceId],
-        actingUserId: adminUserId,
-      },
-    });
-    const pmToken = (pmWrite.json() as { token: string }).token;
-
-    const create = await mcpCall(app!, pmToken, 525, 'tools/call', {
+    const create = await mcpCall(app!, pmWriteToken, 525, 'tools/call', {
       name: 'create_project',
       arguments: {
         workspaceId,
@@ -611,21 +578,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   it('rejects MCP promotion to active', async () => {
-    const pmWrite = await app!.inject({
-      method: 'POST',
-      url: '/api/v1/api-clients',
-      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
-      payload: {
-        organizationId,
-        name: 'PM write client 3',
-        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
-        allowedWorkspaceIds: [workspaceId],
-        actingUserId: adminUserId,
-      },
-    });
-    const pmToken = (pmWrite.json() as { token: string }).token;
-
-    const create = await mcpCall(app!, pmToken, 53, 'tools/call', {
+    const create = await mcpCall(app!, pmWriteToken, 53, 'tools/call', {
       name: 'create_project',
       arguments: {
         workspaceId,
@@ -641,7 +594,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     };
     const projectId = created.project!.id;
 
-    const promoteAttempt = await mcpCall(app!, pmToken, 54, 'tools/call', {
+    const promoteAttempt = await mcpCall(app!, pmWriteToken, 54, 'tools/call', {
       name: 'update_project',
       arguments: {
         projectId,
@@ -658,7 +611,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(errorText.toLowerCase()).toContain('human');
 
     // But can transition between draft stages
-    const draftUpdate = await mcpCall(app!, pmToken, 545, 'tools/call', {
+    const draftUpdate = await mcpCall(app!, pmWriteToken, 545, 'tools/call', {
       name: 'update_project',
       arguments: {
         projectId,
@@ -680,21 +633,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   it('filters projects by lifecycle stage', async () => {
-    const pmWrite = await app!.inject({
-      method: 'POST',
-      url: '/api/v1/api-clients',
-      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
-      payload: {
-        organizationId,
-        name: 'PM write client 4',
-        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
-        allowedWorkspaceIds: [workspaceId],
-        actingUserId: adminUserId,
-      },
-    });
-    const pmToken = (pmWrite.json() as { token: string }).token;
-
-    const listIdea = await mcpCall(app!, pmToken, 55, 'tools/call', {
+    const listIdea = await mcpCall(app!, pmWriteToken, 55, 'tools/call', {
       name: 'list_projects',
       arguments: {
         workspaceId,
