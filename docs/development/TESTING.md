@@ -22,7 +22,9 @@ If those variables are absent, integration cases are skipped; the unit `/health`
 
 ## CI
 
-GitHub Actions workflow `.github/workflows/ci.yml` installs Node.js 24 and pnpm in the job, starts Postgres (`pgvector/pgvector:pg16`) and Redis (`redis:7-alpine`) service containers, then runs:
+GitHub Actions workflow `.github/workflows/ci.yml` runs on every pull request and on pushes to `master` and `feature/new-design`. There is no `main` branch. Concurrency is grouped by ref; a new commit on an open pull request cancels the previous run for that ref. Pushes to `master` and `feature/new-design` are left to finish.
+
+The job installs Node.js 24 and pnpm, starts Postgres (`pgvector/pgvector:pg16`) and Redis (`redis:7-alpine`) service containers, then runs:
 
 1. install
 2. lint

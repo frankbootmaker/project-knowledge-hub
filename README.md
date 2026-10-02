@@ -70,7 +70,7 @@ tests/         integration / e2e / fixtures
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`) runs install, lint, typecheck, test, and build.
+GitHub Actions (`.github/workflows/ci.yml`) runs install, lint, typecheck, test, and build on pull requests and on pushes to `master` and `feature/new-design`. A newer push to an open pull request cancels the in-progress run for that ref.
 
 Jobs read the repository variable `CI_RUNS_ON` (JSON). For the Strix Halo self-hosted runner set it to:
 
