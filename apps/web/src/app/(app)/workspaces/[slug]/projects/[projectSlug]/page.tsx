@@ -17,6 +17,8 @@ import { ProjectDeliveryPanel } from '../../../../../../components/ProjectDelive
 import { ProjectLinkedSections } from '../../../../../../components/ProjectLinkedSections';
 import { ProjectManageMenu } from '../../../../../../components/ProjectManageMenu';
 import { ProjectReportsPanel } from '../../../../../../components/ProjectReportsPanel';
+import { ProjectShortcutNav } from '../../../../../../components/ProjectShortcutNav';
+import { ProjectSectionSpy } from '../../../../../../components/ops/ProjectSectionSpy';
 import {
   ProjectRaidPanel,
   type RaidItem,
@@ -27,15 +29,14 @@ import {
 } from '../../../../../../components/ProjectStakeholdersPanel';
 import {
   Badge,
-  buttonClassName,
   Page,
   PageHeader,
 } from '../../../../../../components/ui';
-import { cn } from '../../../../../../lib/cn';
 import {
   projectDeliveryRag,
   type ProjectRagStatus,
 } from '../../../../../../lib/delivery-schedule';
+import type { ProjectSectionStatuses } from '../../../../../../lib/project-sections';
 import {
   computeChangeRag,
   computeRiskRag,
@@ -49,19 +50,6 @@ function ragBadgeTone(
   if (rag === 'red') return 'danger';
   if (rag === 'amber') return 'warn';
   return 'success';
-}
-
-function ragNavClass(rag: ProjectRagStatus | null): string {
-  if (rag === 'red') {
-    return 'border-danger/35 bg-danger-soft text-danger hover:bg-danger-soft';
-  }
-  if (rag === 'amber') {
-    return 'border-warn/40 bg-warn-soft text-warn hover:bg-warn-soft';
-  }
-  if (rag === 'green') {
-    return 'border-accent/35 bg-accent-soft text-accent hover:bg-accent-soft';
-  }
-  return '';
 }
 
 export const dynamic = 'force-dynamic';
@@ -140,12 +128,6 @@ export default async function ProjectDetailPage({
   const t = await getTranslations('projects');
   const tArchive = await getTranslations('archive');
   const tCommon = await getTranslations('common');
-  const tBaseline = await getTranslations('baseline');
-  const tStakeholders = await getTranslations('stakeholders');
-  const tDelivery = await getTranslations('delivery');
-  const tBudget = await getTranslations('budget');
-  const tRaid = await getTranslations('raid');
-  const tChange = await getTranslations('changes');
   const { slug, projectSlug } = await params;
   const query = await searchParams;
   const openTaskRaw = query.task;
@@ -372,23 +354,12 @@ export default async function ProjectDetailPage({
   const financialRag = budgetSummary?.financialRag ?? 'green';
   const changeRag = computeChangeRag(changeItems);
   const overallRag = worstProjectRag([timelineRag, riskRag, financialRag]);
-
-  const sectionNav: Array<{
-    id: string;
-    label: string;
-    rag: ProjectRagStatus | null;
-  }> = [
-    { id: 'project-overview', label: t('navOverview'), rag: null },
-    { id: 'project-reports', label: t('manageReports'), rag: null },
-    { id: 'project-baseline', label: tBaseline('title'), rag: null },
-    { id: 'project-stakeholders', label: tStakeholders('title'), rag: null },
-    { id: 'project-delivery', label: tDelivery('title'), rag: timelineRag },
-    { id: 'project-budget', label: tBudget('title'), rag: financialRag },
-    { id: 'project-raid', label: tRaid('title'), rag: riskRag },
-    { id: 'project-change', label: tChange('title'), rag: changeRag },
-    { id: 'project-systems', label: t('linkedSystems'), rag: null },
-    { id: 'project-knowledge', label: t('linkedKnowledge'), rag: null },
-  ];
+  const sectionStatuses: ProjectSectionStatuses = {
+    timeline: timelineRag,
+    financial: financialRag,
+    risk: riskRag,
+    change: changeRag,
+  };
 
   const ratePeople = stakeholders
     .filter((row) => row.kind === 'person' && row.userId)
@@ -410,6 +381,8 @@ export default async function ProjectDetailPage({
 
   return (
     <Page wide>
+      <ProjectSectionSpy statuses={sectionStatuses} />
+      <div id="project-top" className="kh-ops-project-top">
       <PageHeader
         eyebrow={
           <>
@@ -424,33 +397,7 @@ export default async function ProjectDetailPage({
           </>
         }
         title={project.name}
-        nav={
-          <nav
-            aria-label={t('sectionNav')}
-            className="flex flex-wrap items-center gap-2"
-          >
-            {sectionNav.map((item) => (
-              <a
-                key={item.id}
-                href={`#${item.id}`}
-                className={cn(
-                  buttonClassName('secondary', '!px-2.5 !py-1 text-xs'),
-                  ragNavClass(item.rag),
-                )}
-                title={
-                  item.rag ? `${item.label}: ${t(`rag.${item.rag}`)}` : undefined
-                }
-                aria-label={
-                  item.rag
-                    ? `${item.label}: ${t(`rag.${item.rag}`)}`
-                    : item.label
-                }
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
-        }
+        nav={<ProjectShortcutNav statuses={sectionStatuses} />}
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
             <span>{project.summary || project.slug}</span>
@@ -482,6 +429,7 @@ export default async function ProjectDetailPage({
           </div>
         }
       />
+      </div>
 
       <div className="kh-ops-stats">
         <div className="kh-ops-stat">

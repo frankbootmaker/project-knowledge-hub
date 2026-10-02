@@ -35,6 +35,13 @@ const paths: Record<NavIconName, ReactNode> = {
   budget: <path d="M4 7h16v12H4zM7 7V5h10v2M8 12h8M8 15h5" />,
   systems: <path d="M12 3l8 4.5-8 4.5-8-4.5zM4 12l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5" />,
   raid: <path d="M12 3l9 17H3zM12 9v4M12 17h.01" />,
+  change: (
+    <>
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-8 8" />
+      <path d="M4 8h7M4 12h10M4 16h12" />
+    </>
+  ),
   stakeholders: (
     <>
       <circle cx="9" cy="8" r="3" />
@@ -68,12 +75,8 @@ const paths: Record<NavIconName, ReactNode> = {
       <path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
     </>
   ),
-  aiProviders: (
-    <path d="M12 3l1.6 6.4L20 11l-6.4 1.6L12 19l-1.6-6.4L4 11l6.4-1.6z" />
-  ),
-  backups: (
-    <path d="M5 12a7 7 0 0112.5-4.2M19 4v5h-5M19 12a7 7 0 01-12.5 4.2M5 20v-5h5" />
-  ),
+  aiProviders: <path d="M12 3l1.6 6.4L20 11l-6.4 1.6L12 19l-1.6-6.4L4 11l6.4-1.6z" />,
+  backups: <path d="M5 12a7 7 0 0112.5-4.2M19 4v5h-5M19 12a7 7 0 01-12.5 4.2M5 20v-5h5" />,
   mcpSetup: <path d="M9 3v5M15 3v5M7 8h10v6a5 5 0 01-10 0zM12 14v4" />,
   brand: (
     <>
@@ -126,20 +129,9 @@ const paths: Record<NavIconName, ReactNode> = {
   ),
 };
 
-export function NavIcon({
-  name,
-  className,
-}: {
-  name: NavIconName;
-  className?: string;
-}) {
+export function NavIcon({ name, className }: { name: NavIconName; className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className={cn('kh-ops-icon', className)}
-      fill="none"
-    >
+    <svg viewBox="0 0 24 24" aria-hidden className={cn('kh-ops-icon', className)} fill="none">
       {paths[name]}
     </svg>
   );

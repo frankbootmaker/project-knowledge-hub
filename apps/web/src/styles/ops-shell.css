@@ -226,10 +226,91 @@
   pointer-events: none;
 }
 
+a.kh-ops-group-header {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+a.kh-ops-group-header:hover,
+a.kh-ops-group-header:focus-visible {
+  color: var(--kh-brand);
+}
+
+a.kh-ops-group-header:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: 2px;
+}
+
+.kh-ops-nav-icon {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.kh-ops-rag-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--kh-panel-solid);
+  border-radius: 50%;
+  background: var(--kh-ink-muted);
+}
+
+.kh-ops-rag-dot[data-rag='green'] {
+  background: var(--kh-accent);
+}
+
+.kh-ops-rag-dot[data-rag='amber'] {
+  background: var(--kh-warn);
+}
+
+.kh-ops-rag-dot[data-rag='red'] {
+  background: var(--kh-danger);
+}
+
+.kh-ops-rag-text {
+  flex: none;
+  margin-left: auto;
+  color: var(--kh-ink-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.kh-ops-rag-text[data-rag='green'] {
+  color: var(--kh-accent);
+}
+
+.kh-ops-rag-text[data-rag='amber'] {
+  color: var(--kh-warn);
+}
+
+.kh-ops-rag-text[data-rag='red'] {
+  color: var(--kh-danger);
+}
+
+.kh-ops-nav-items a.active .kh-ops-rag-text {
+  color: var(--kh-selected-fg);
+}
+
+.kh-ops-project-top {
+  scroll-margin-top: 76px;
+}
+
 .kh-ops-nav-items {
   display: grid;
   gap: 2px;
   padding: 0;
+}
+
+.kh-ops-nav-items a .kh-ops-nav-label {
+  flex: 1;
 }
 
 .kh-ops-nav-items a,
@@ -673,6 +754,7 @@
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail-search,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-group-label,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-nav-label,
+.kh-ops-shell[data-rail-compact='true'] .kh-ops-rag-text,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-user-copy,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-mode-copy {
   display: none;
@@ -730,6 +812,8 @@
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:focus-within .kh-ops-group-label,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:hover .kh-ops-nav-label,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:focus-within .kh-ops-nav-label,
+.kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:hover .kh-ops-rag-text,
+.kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:focus-within .kh-ops-rag-text,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:hover .kh-ops-user-copy,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:focus-within .kh-ops-user-copy,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:hover .kh-ops-mode-copy,
@@ -849,6 +933,16 @@
   .kh-ops-shell[data-rail-compact='true'] .kh-ops-user-copy,
   .kh-ops-shell[data-rail-compact='true'] .kh-ops-mode-copy {
     display: block;
+  }
+
+  .kh-ops-shell[data-rail-compact='true'] .kh-ops-rag-text {
+    display: inline;
+  }
+
+  .kh-ops-shell[data-rail-compact='true'] .kh-ops-group-header {
+    display: grid;
+    justify-content: initial;
+    padding: 0 8px;
   }
 
   .kh-ops-shell[data-rail-compact='true'] .kh-ops-brand-row {

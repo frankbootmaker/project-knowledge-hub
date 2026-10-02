@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { PROJECT_SECTIONS } from './project-sections';
 import {
   findActiveNavItem,
   inferNavSection,
   isNavItemAvailable,
+  isRailItemActive,
   matchNavItem,
   NAV_SECTIONS,
   navAvailabilityContext,
   parseAppPath,
   parseNavSection,
+  projectTopHref,
   resolveActiveNavSection,
   visibleNavItems,
   visibleNavSections,
@@ -35,22 +38,25 @@ describe('ops nav', () => {
     expect(inferNavSection('/dashboard')).toBe('personal');
     expect(inferNavSection('/admin/users')).toBe('admin');
     expect(inferNavSection('/account/ai-connections')).toBe('personal');
-    expect(inferNavSection('/workspaces/platform/projects/renewal')).toBe(
-      'delivery-finance',
+    expect(inferNavSection('/workspaces/platform/projects/renewal')).toBe('control');
+    expect(inferNavSection('/workspaces/platform/projects/renewal', 'project-raid')).toBe(
+      'control',
+    );
+    expect(inferNavSection('/workspaces/platform/projects/renewal', 'project-top')).toBe('control');
+    expect(inferNavSection('/workspaces/platform/projects/renewal', 'project-knowledge')).toBe(
+      'control',
+    );
+    expect(inferNavSection('/workspaces/platform/media')).toBe('knowledge');
+    expect(inferNavSection('/workspaces/platform/projects/renewal', 'project-reports')).toBe(
+      'control',
     );
     expect(
       inferNavSection(
         '/workspaces/platform/projects/renewal',
-        'project-raid',
+        'project-delivery',
+        '?delivery=scrum',
       ),
-    ).toBe('control');
-    expect(inferNavSection('/workspaces/platform/media')).toBe('knowledge');
-    expect(
-      inferNavSection(
-        '/workspaces/platform/projects/renewal',
-        'project-reports',
-      ),
-    ).toBe('ops');
+    ).toBe('delivery-finance');
   });
 
   it('rejects unknown stored sections', () => {
@@ -69,9 +75,9 @@ describe('ops nav', () => {
   });
 
   it('matches delivery view query params', () => {
-    const delivery = NAV_SECTIONS
-      .flatMap((section) => section.items)
-      .find((item) => item.id === 'scrum');
+    const delivery = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'scrum',
+    );
     expect(delivery).toBeTruthy();
     expect(
       matchNavItem(
@@ -94,19 +100,13 @@ describe('ops nav', () => {
   });
 
   it('treats a project page with no hash as overview', () => {
-    const overview = NAV_SECTIONS
-      .flatMap((section) => section.items)
-      .find((item) => item.id === 'overview');
+    const overview = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'overview',
+    );
     expect(overview).toBeTruthy();
-    expect(
-      matchNavItem(
-        overview!,
-        ctx,
-        '/workspaces/platform/projects/renewal',
-        '',
-        '',
-      ),
-    ).toBe(true);
+    expect(matchNavItem(overview!, ctx, '/workspaces/platform/projects/renewal', '', '')).toBe(
+      true,
+    );
   });
 
   it('finds my work on the dashboard', () => {
@@ -118,42 +118,26 @@ describe('ops nav', () => {
   });
 
   it('points media library at the workspace media catalogue', () => {
-    const media = NAV_SECTIONS
-      .flatMap((section) => section.items)
-      .find((item) => item.id === 'media');
+    const media = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'media',
+    );
     expect(media).toBeTruthy();
     expect(media!.href(ctx)).toBe('/workspaces/platform/media');
-    expect(
-      matchNavItem(media!, ctx, '/workspaces/platform/media'),
-    ).toBe(true);
-    expect(
-      matchNavItem(media!, ctx, '/workspaces/platform/document-imports/new'),
-    ).toBe(false);
+    expect(matchNavItem(media!, ctx, '/workspaces/platform/media')).toBe(true);
+    expect(matchNavItem(media!, ctx, '/workspaces/platform/document-imports/new')).toBe(false);
   });
 
   it('points reports at the project reports section', () => {
-    const reports = NAV_SECTIONS
-      .flatMap((section) => section.items)
-      .find((item) => item.id === 'reports');
-    expect(reports).toBeTruthy();
-    expect(reports!.href(ctx)).toBe(
-      '/workspaces/platform/projects/renewal#project-reports',
+    const reports = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'reports',
     );
+    expect(reports).toBeTruthy();
+    expect(reports!.href(ctx)).toBe('/workspaces/platform/projects/renewal#project-reports');
     expect(
-      matchNavItem(
-        reports!,
-        ctx,
-        '/workspaces/platform/projects/renewal',
-        'project-reports',
-      ),
+      matchNavItem(reports!, ctx, '/workspaces/platform/projects/renewal', 'project-reports'),
     ).toBe(true);
     expect(
-      matchNavItem(
-        reports!,
-        ctx,
-        '/workspaces/platform/projects/renewal',
-        'project-overview',
-      ),
+      matchNavItem(reports!, ctx, '/workspaces/platform/projects/renewal', 'project-overview'),
     ).toBe(false);
   });
 
@@ -188,14 +172,7 @@ describe('ops nav', () => {
 
   it('shows delivery and control when a project is set', () => {
     const ids = visibleNavSections(ctx).map((section) => section.id);
-    expect(ids).toEqual([
-      'personal',
-      'delivery-finance',
-      'control',
-      'knowledge',
-      'ops',
-      'admin',
-    ]);
+    expect(ids).toEqual(['personal', 'delivery-finance', 'control', 'knowledge', 'admin']);
   });
 
   it('hides admin for non-admins', () => {
@@ -204,23 +181,82 @@ describe('ops nav', () => {
       projectSlug: 'renewal',
       isAdmin: false,
     };
-    expect(visibleNavSections(member).map((section) => section.id)).not.toContain(
-      'admin',
-    );
+    expect(visibleNavSections(member).map((section) => section.id)).not.toContain('admin');
   });
 
-  it('hides ops reports without a project', () => {
-    const workspaceOnly = {
-      workspaceSlug: 'platform',
-      projectSlug: null,
-      isAdmin: false,
-    };
+  it('keeps reports in control and hides the empty ops group', () => {
     const ops = NAV_SECTIONS.find((section) => section.id === 'ops')!;
-    const available = visibleNavItems(ops, workspaceOnly).map((item) => item.id);
-    expect(available).toEqual([]);
-    const reports = ops.items.find((item) => item.id === 'reports')!;
-    expect(isNavItemAvailable(reports, workspaceOnly)).toBe(false);
+    expect(ops.items).toEqual([]);
+    expect(visibleNavItems(ops, ctx)).toEqual([]);
+    expect(visibleNavSections(ctx).map((section) => section.id)).not.toContain('ops');
+    const reports = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'reports',
+    )!;
+    expect(
+      isNavItemAvailable(reports, {
+        workspaceSlug: 'platform',
+        projectSlug: null,
+        isAdmin: false,
+      }),
+    ).toBe(false);
     expect(isNavItemAvailable(reports, ctx)).toBe(true);
+    expect(reports.href(ctx)).toBe('/workspaces/platform/projects/renewal#project-reports');
+  });
+
+  it('puts every project section in control once, and keeps stakeholder views', () => {
+    const control = NAV_SECTIONS.find((section) => section.id === 'control')!;
+    expect(control.items.map((item) => item.id)).toEqual([
+      'overview',
+      'reports',
+      'baseline',
+      'stakeholders',
+      'utilization',
+      'org',
+      'delivery',
+      'budget',
+      'raid',
+      'change',
+      'systems',
+      'project-knowledge',
+    ]);
+    const delivery = NAV_SECTIONS.find((section) => section.id === 'delivery-finance')!;
+    expect(delivery.items.map((item) => item.id)).toEqual(['scrum', 'timeline', 'calendar']);
+    const ids = NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const section of PROJECT_SECTIONS) {
+      const item = control.items.find((row) => row.id === section.navItemId);
+      expect(item?.href(ctx)).toBe(`/workspaces/platform/projects/renewal#${section.anchor}`);
+    }
+    const library = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'knowledge',
+    )!;
+    expect(library.href(ctx)).toBe('/workspaces/platform');
+    expect(matchNavItem(library, ctx, '/workspaces/platform')).toBe(true);
+    expect(matchNavItem(library, ctx, '/workspaces/platform/media')).toBe(false);
+    expect(projectTopHref(ctx)).toBe('/workspaces/platform/projects/renewal#project-top');
+  });
+
+  it('uses the scroll spy anchor for section links', () => {
+    const path = '/workspaces/platform/projects/renewal';
+    const budget = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'budget',
+    )!;
+    const overview = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'overview',
+    )!;
+    const stakeholders = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'stakeholders',
+    )!;
+    const org = NAV_SECTIONS.flatMap((section) => section.items).find((item) => item.id === 'org')!;
+    expect(isRailItemActive(budget, ctx, path, '', '', 'project-budget')).toBe(true);
+    expect(isRailItemActive(overview, ctx, path, '', '', 'project-budget')).toBe(false);
+    expect(
+      isRailItemActive(stakeholders, ctx, path, '', '?stakeholders=org', 'project-stakeholders'),
+    ).toBe(false);
+    expect(isRailItemActive(org, ctx, path, '', '?stakeholders=org', 'project-stakeholders')).toBe(
+      true,
+    );
+    expect(isRailItemActive(overview, ctx, path, '', '', null)).toBe(true);
   });
 
   it('falls back when the preferred section is not visible', () => {
@@ -239,24 +275,18 @@ describe('ops nav', () => {
       projectSlug: null,
       isAdmin: false,
     });
-    expect(
-      navAvailabilityContext('/workspaces/platform', false),
-    ).toEqual({
+    expect(navAvailabilityContext('/workspaces/platform', false)).toEqual({
       workspaceSlug: 'platform',
       projectSlug: null,
       isAdmin: false,
     });
-    expect(
-      navAvailabilityContext('/workspaces/platform/projects/renewal', true),
-    ).toEqual({
+    expect(navAvailabilityContext('/workspaces/platform/projects/renewal', true)).toEqual({
       workspaceSlug: 'platform',
       projectSlug: 'renewal',
       isAdmin: true,
     });
     expect(
-      visibleNavSections(navAvailabilityContext('/dashboard', false)).map(
-        (section) => section.id,
-      ),
+      visibleNavSections(navAvailabilityContext('/dashboard', false)).map((section) => section.id),
     ).toEqual(['personal']);
   });
 });
