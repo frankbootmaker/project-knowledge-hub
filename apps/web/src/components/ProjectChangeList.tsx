@@ -1,15 +1,31 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useMemo, useRef } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { DataTable, type DataColumn } from './ui/DataTable';
 import { Badge, Button, Input } from './ui';
+import {
+  applyTableView,
+  compareText,
+} from '../lib/data-table';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import type { ChangeItem } from './ProjectChangePanel';
 
-type SortKey = 'id' | 'kind' | 'title' | 'status' | 'requested' | 'effective';
-
-function compareText(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: 'base' });
-}
+const KINDS = ['scope', 'timeline', 'stakeholder', 'budget', 'other'] as const;
+const STATUSES = [
+  'proposed',
+  'approved',
+  'rejected',
+  'implemented',
+  'cancelled',
+] as const;
+const STATUS_RANK: Record<string, number> = {
+  proposed: 0,
+  approved: 1,
+  rejected: 2,
+  implemented: 3,
+  cancelled: 4,
+};
 
 export function ProjectChangeList({
   items,
@@ -23,77 +39,169 @@ export function ProjectChangeList({
   onCreate: () => void;
 }) {
   const t = useTranslations('changes');
-  const [query, setQuery] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('id');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const tTable = useTranslations('table');
+  const locale = useLocale();
+  const onManageRef = useRef(onManage);
+  onManageRef.current = onManage;
+  const table = useTableState({
+    namespace: 'chg',
+    defaultSortKey: 'id',
+    defaultSortDir: 'desc',
+  });
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-    setSortKey(key);
-    setSortDir(key === 'effective' || key === 'id' ? 'desc' : 'asc');
-  }
+  const kindOptions = useMemo(
+    () => KINDS.map((value) => ({ value, label: t(`kind.${value}`) })),
+    [t],
+  );
+  const statusOptions = useMemo(
+    () => STATUSES.map((value) => ({ value, label: t(`status.${value}`) })),
+    [t],
+  );
+  const kindLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const kind of KINDS) labels[kind] = t(`kind.${kind}`);
+    return labels;
+  }, [t]);
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const matched = needle
-      ? items.filter((item) =>
-          [
-            item.title,
-            item.humanKey ?? '',
-            item.description ?? '',
-            item.rationale ?? '',
-            item.kind,
-            item.status,
-            item.requestedBy?.displayName ?? '',
-            item.knowledgeRecordTitle ?? '',
-            ...item.deliveryLinks.map((link) => link.entityTitle ?? ''),
-          ]
-            .join(' ')
-            .toLowerCase()
-            .includes(needle),
-        )
-      : items;
-    const dir = sortDir === 'asc' ? 1 : -1;
-    return [...matched].sort((a, b) => {
-      let result = 0;
-      switch (sortKey) {
-        case 'kind':
-          result = compareText(a.kind, b.kind);
-          break;
-        case 'title':
-          result = compareText(a.title, b.title);
-          break;
-        case 'status':
-          result = compareText(a.status, b.status);
-          break;
-        case 'requested':
-          result = compareText(
-            a.requestedBy?.displayName ?? '',
-            b.requestedBy?.displayName ?? '',
-          );
-          break;
-        case 'effective':
-          result = compareText(a.effectiveDate ?? '', b.effectiveDate ?? '');
-          break;
-        default:
-          result = compareText(a.humanKey ?? a.title, b.humanKey ?? b.title);
-      }
-      if (result === 0) result = compareText(a.title, b.title);
-      return result * dir;
-    });
-  }, [items, query, sortDir, sortKey]);
+  const columns = useMemo<Array<DataColumn<ChangeItem>>>(() => [
+    {
+      id: 'id',
+      header: t('colId'),
+      kind: 'data',
+      sort: {
+        type: 'text',
+        getValue: (item) => item.humanKey ?? item.title,
+        defaultDir: 'desc',
+      },
+      cell: (item) => (
+        <span className="kh-ops-type-chip">
+          {item.humanKey ?? t(`kind.${item.kind}`)}
+        </span>
+      ),
+    },
+    {
+      id: 'kind',
+      header: t('colKind'),
+      kind: 'status',
+      sort: {
+        type: 'text',
+        getValue: (item) => kindLabels[item.kind] ?? item.kind,
+      },
+      filter: {
+        type: 'enum',
+        getValue: (item) => item.kind,
+        options: kindOptions,
+      },
+      cell: (item) => (
+        <span className="kh-ops-type-chip">{t(`kind.${item.kind}`)}</span>
+      ),
+    },
+    {
+      id: 'title',
+      header: t('colTitle'),
+      kind: 'text',
+      primary: true,
+      sort: { type: 'text', getValue: (item) => item.title },
+      cell: (item) => (
+        <button
+          type="button"
+          className="border-0 bg-transparent p-0 text-left text-inherit"
+          onClick={() => onManageRef.current(item.id)}
+        >
+          {item.title}
+        </button>
+      ),
+    },
+    {
+      id: 'status',
+      header: t('colStatus'),
+      kind: 'status',
+      sort: {
+        type: 'number',
+        getValue: (item) => STATUS_RANK[item.status] ?? 99,
+      },
+      filter: {
+        type: 'enum',
+        getValue: (item) => item.status,
+        options: statusOptions,
+      },
+      cell: (item) => <Badge>{t(`status.${item.status}`)}</Badge>,
+    },
+    {
+      id: 'requested',
+      header: t('colRequestedBy'),
+      kind: 'text',
+      sort: {
+        type: 'text',
+        getValue: (item) => item.requestedBy?.displayName ?? '',
+      },
+      cell: (item) => item.requestedBy?.displayName ?? t('unassigned'),
+    },
+    {
+      id: 'effective',
+      header: t('colEffective'),
+      kind: 'date',
+      sort: {
+        type: 'date',
+        getValue: (item) => item.effectiveDate ?? '',
+        defaultDir: 'desc',
+      },
+      cell: (item) => item.effectiveDate ?? '—',
+    },
+    {
+      id: 'manage',
+      header: '',
+      kind: 'actions',
+      cell: (item) => (
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-8 min-h-8 px-2 text-xs"
+          onClick={() => onManageRef.current(item.id)}
+        >
+          {t('manage')}
+        </Button>
+      ),
+    },
+  ], [kindLabels, kindOptions, statusOptions, t]);
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
 
-  const columns: Array<{ key: SortKey; label: string }> = [
-    { key: 'id', label: t('colId') },
-    { key: 'kind', label: t('colKind') },
-    { key: 'title', label: t('colTitle') },
-    { key: 'status', label: t('colStatus') },
-    { key: 'requested', label: t('colRequestedBy') },
-    { key: 'effective', label: t('colEffective') },
-  ];
+  const visible = useMemo(() => applyTableView({
+    rows: items,
+    locale,
+    query: table.query,
+    search: (item, needle) =>
+      [
+        item.title,
+        item.humanKey ?? '',
+        item.description ?? '',
+        item.rationale ?? '',
+        item.kind,
+        item.status,
+        item.requestedBy?.displayName ?? '',
+        item.knowledgeRecordTitle ?? '',
+        ...item.deliveryLinks.map((link) => link.entityTitle ?? ''),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(needle),
+    sortKey: table.sortKey,
+    sortDir: table.sortDir,
+    filters: table.filters,
+    textFilters: table.textFilters,
+    columns,
+    tieBreak: (a, b) => compareText(a.title, b.title, locale),
+  }), [
+    columns,
+    items,
+    locale,
+    table.filters,
+    table.query,
+    table.sortDir,
+    table.sortKey,
+    table.textFilters,
+  ]);
+  const bareEmpty = visible.length === 0 && !table.filtersActive;
 
   return (
     <section className="kh-ops-panel">
@@ -102,8 +210,8 @@ export function ProjectChangeList({
           <span className="sr-only">{t('searchPlaceholder')}</span>
           <Input
             type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
             placeholder={t('searchPlaceholder')}
             className="h-10 min-h-10 py-1.5 text-xs"
           />
@@ -114,76 +222,34 @@ export function ProjectChangeList({
           </Button>
         ) : null}
       </div>
-      {filtered.length === 0 ? (
+      {bareEmpty ? (
         <div className="kh-ops-empty-state">
           <div className="kh-ops-empty-mark">00</div>
           <h3>{t('emptyTitle')}</h3>
-          <p>{query.trim() ? t('emptyFiltered') : t('empty')}</p>
+          <p>{table.query.trim() ? t('emptyFiltered') : t('empty')}</p>
         </div>
       ) : (
-        <div className="kh-ops-table-wrap">
-          <table className="kh-ops-data-table kh-ops-delivery-list">
-            <thead>
-              <tr>
-                {columns.map((column) => (
-                  <th key={column.key}>
-                    <button
-                      type="button"
-                      data-sort-direction={
-                        sortKey === column.key
-                          ? (sortDir === 'asc' ? '↑' : '↓')
-                          : undefined
-                      }
-                      aria-label={t('sortBy', { column: column.label })}
-                      onClick={() => toggleSort(column.key)}
-                    >
-                      {column.label}
-                    </button>
-                  </th>
-                ))}
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <span className="kh-ops-type-chip">
-                      {item.humanKey ?? t(`kind.${item.kind}`)}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="kh-ops-type-chip">{t(`kind.${item.kind}`)}</span>
-                  </td>
-                  <td className="kh-ops-primary-cell">
-                    <button
-                      type="button"
-                      className="border-0 bg-transparent p-0 text-left text-inherit"
-                      onClick={() => onManage(item.id)}
-                    >
-                      {item.title}
-                    </button>
-                  </td>
-                  <td>
-                    <Badge>{t(`status.${item.status}`)}</Badge>
-                  </td>
-                  <td>{item.requestedBy?.displayName ?? t('unassigned')}</td>
-                  <td>{item.effectiveDate ?? '—'}</td>
-                  <td>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="h-8 min-h-8 px-2 text-xs"
-                      onClick={() => onManage(item.id)}
-                    >
-                      {t('manage')}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={visible}
+          rowKey={(item) => item.id}
+          columns={columns}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onToggleSort={table.toggleSort}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={table.clearFilters}
+          filtersActive={table.filtersActive}
+          tableClassName="kh-ops-delivery-list"
+          empty={
+            <>
+              <h3>{t('emptyTitle')}</h3>
+              <p>{tTable('emptyFiltered')}</p>
+            </>
+          }
+        />
       )}
     </section>
   );

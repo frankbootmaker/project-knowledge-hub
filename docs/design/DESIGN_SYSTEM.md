@@ -125,9 +125,11 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-stats` / `.kh-ops-stat` / `.kh-ops-stat-label` / `.kh-ops-stat-value` / `.kh-ops-progress` | KPI / insight stat cards |
 | `.kh-ops-panel` / `.kh-ops-panel-head` / `.kh-ops-panel-title` / `.kh-ops-panel-meta` | Square panel with 13px display header |
 | `.kh-ops-toolbar` | List/admin search+filter chrome (also on `FunctionHeader`) |
-| `.kh-ops-data-table` / `.kh-ops-table-wrap` / `.kh-ops-data-item` / `.kh-ops-stack` | Dense tables and catalogue rows |
+| `.kh-ops-data-table` / `.kh-ops-table-wrap` / `.kh-ops-data-item` / `.kh-ops-stack` | Dense tables and catalogue rows. The wrap scrolls horizontally (`overflow-x: auto`) and tables keep `min-width: 42rem`. `DataTable` adds `.kh-ops-table-wrap--sticky` (scrollport `max-height: min(70vh, 48rem)`, sticky header) and `.kh-ops-data-table--fluid` (`min-width: 0`) |
+| `.kh-ops-cell-text` / `.kh-ops-cell-data` / `.kh-ops-cell-status` / `.kh-ops-cell-number` / `.kh-ops-cell-date` / `.kh-ops-cell-actions` | Column kinds on `DataTable`. Text wraps (`overflow-wrap: anywhere`); data, status, number, date, and actions stay one line |
+| `.kh-ops-sort-btn` / `.kh-ops-filter-btn` / `.kh-ops-filter-dot` / `.kh-ops-table-filter` | Sortable header (arrow + `aria-sort`) and column-filter popover. Popover reuses `.kh-ops-popover` and is portaled (`--kh-z-popover`) |
 | `.kh-ops-delivery-modes` / `.kh-ops-board` / `.kh-ops-lane` / `.kh-ops-task-card` | Delivery view strip, kanban lanes, and task cards |
-| `.kh-ops-delivery-list` / `.kh-ops-delivery-tree-*` / `.kh-ops-tree-*` | Sortable delivery table and work-breakdown tree |
+| `.kh-ops-delivery-list` / `.kh-ops-delivery-tree-*` / `.kh-ops-tree-*` | Delivery list density (no fixed 1040px min-width) and work-breakdown tree |
 | `.kh-ops-sprint-head` / `.kh-ops-scrum-board` | Scrum sprint metrics + board density |
 | `.kh-ops-calendar-layout` / `.kh-ops-month` / `.kh-ops-day` / `.kh-ops-event-dot` | Delivery calendar month + day list |
 | `.kh-ops-timeline-scroll` / `.kh-ops-time-bar` | Timeline chart chrome and epic/story bars |
@@ -236,6 +238,12 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-10-02
+
+* **Shared data table** — Delivery, RAID, change, stakeholder, and dashboard task lists, plus project linked systems and linked knowledge, use `DataTable` (`components/ui/DataTable.tsx`). Sort, enum/text column filters, and search persist in namespaced query params (`replaceState`, debounced, same idea as `?delivery=`). Sortable headers expose `aria-sort`. The filter control is the catalogue funnel with an active dot; when the table has an actions column the funnel sits in that header. The popover is `.kh-ops-popover` / `.kh-ops-table-filter`, traps Tab, and returns focus to the trigger on Esc or Clear. A pointer press outside closes it without moving focus. Checked options use `--kh-selected-*`. Blank enum values show as —.
+* **Table wrapping** — Text columns wrap inside the cell. Status, dates, numbers, and actions stay single-line. Only `DataTable` drops the `42rem` min-width (`.kh-ops-data-table--fluid`). Other ops tables keep `42rem`. `.kh-ops-delivery-list` no longer forces `1040px`. Horizontal scroll remains on the wrap when nowrap columns still overflow. Delivery splits Updated and Manage into separate cells. The delivery row status control is labelled as a status, not a filter.
+* **Sticky table header** — Only `.kh-ops-table-wrap--sticky` (added by `DataTable`) is the vertical scrollport (`max-height: min(70vh, 48rem)`) and sticks `thead th` to its top. Other `.kh-ops-table-wrap` tables stay horizontal-scroll only.
 
 ### 2026-09-30
 
