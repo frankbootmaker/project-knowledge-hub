@@ -38,6 +38,9 @@ type Project = {
   tags: Array<{ name: string }>;
   updatedAt: string;
   overallRag?: 'green' | 'amber' | 'red';
+  lifecycleStage?: string;
+  createdByType?: string | null;
+  createdByModel?: string | null;
 };
 
 type System = {

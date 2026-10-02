@@ -185,6 +185,14 @@ export const projects = pgTable(
       .notNull()
       .default({}),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
+    /** Actor type that created project: user, api_client, mcp. */
+    createdByType: text('created_by_type'),
+    /** Actor ID (user UUID or API client UUID). */
+    createdById: text('created_by_id'),
+    /** Optional LLM model identifier for AI-created projects. */
+    createdByModel: text('created_by_model'),
+    /** Lifecycle stage: idea, draft, proposal, active, completed, archived. */
+    lifecycleStage: text('lifecycle_stage').notNull().default('active'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
@@ -194,6 +202,7 @@ export const projects = pgTable(
       .on(table.workspaceId, sql`upper(${table.keyPrefix})`)
       .where(sql`${table.keyPrefix} IS NOT NULL`),
     index('projects_workspace_id_idx').on(table.workspaceId),
+    index('projects_lifecycle_stage_idx').on(table.lifecycleStage),
   ],
 );
 

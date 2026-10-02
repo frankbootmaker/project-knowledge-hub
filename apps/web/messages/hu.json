@@ -606,6 +606,21 @@
       "amber": "Problémás",
       "red": "Kritikus"
     },
+    "lifecycleStageLabel": "Életciklus-fázis",
+    "lifecycleStage": {
+      "idea": "Ötlet",
+      "draft": "Tervezet",
+      "proposal": "Javaslat",
+      "active": "Aktív",
+      "completed": "Befejezett",
+      "archived": "Archivált"
+    },
+    "aiCreated": "AI ügynök által létrehozva",
+    "promoteToActive": "Előléptetés aktívra",
+    "promoteToActiveHint": "AI által létrehozott projekt áthelyezése {stage} fázisból aktív fázisba",
+    "promoting": "Előléptetés…",
+    "promoted": "Projekt aktívra előléptetve.",
+    "promoteFailed": "Előléptetés sikertelen",
     "manageReports": "Jelentések",
     "manageReportsHint": "Státusz-, szállítás- vagy stakeholder-jelentés megtekintése, majd export vagy nyomtatás.",
     "reportStatus": "Projekt státuszjelentés",

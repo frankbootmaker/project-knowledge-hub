@@ -63,6 +63,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   let adminUserId = '';
   let readToken = '';
   let writeToken = '';
+  let pmWriteToken = '';
   const password = 'test-password-123';
 
   beforeAll(async () => {
@@ -165,6 +166,21 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     });
     expect(writeClient.statusCode).toBe(200);
     writeToken = (writeClient.json() as { token: string }).token;
+
+    const pmWrite = await app.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        organizationId,
+        name: 'PM write client',
+        scopes: [...DEFAULT_MCP_SCOPES, 'pm:write'],
+        allowedWorkspaceIds: [workspaceId],
+        actingUserId: adminUserId,
+      },
+    });
+    expect(pmWrite.statusCode).toBe(200);
+    pmWriteToken = (pmWrite.json() as { token: string }).token;
 
     await app.inject({
       method: 'POST',
@@ -269,6 +285,25 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(searchBody.result?.isError).toBeFalsy();
     const text = searchBody.result?.content?.[0]?.text ?? '';
     expect(text.toLowerCase()).toContain('bridge');
+  });
+
+  it('lists workspaces with access info', async () => {
+    const listWs = await mcpCall(app!, readToken, 4, 'tools/call', {
+      name: 'list_workspaces',
+      arguments: {},
+    });
+    expect(listWs.statusCode).toBe(200);
+    const body = listWs.json() as {
+      result?: { content?: Array<{ text?: string }>; isError?: boolean };
+    };
+    expect(body.result?.isError).toBeFalsy();
+    const data = JSON.parse(body.result?.content?.[0]?.text ?? '{}') as {
+      workspaces?: Array<{ id: string; name: string; writeAllowed: boolean }>;
+    };
+    expect(data.workspaces?.length).toBeGreaterThan(0);
+    const ws = data.workspaces?.find((w) => w.id === workspaceId);
+    expect(ws).toBeDefined();
+    expect(ws?.writeAllowed).toBe(true);
   });
 
   it('denies create without knowledge:write scope', async () => {
@@ -454,5 +489,231 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(detail.knowledgeRecord?.media?.some((m) => m.id === uploaded.media!.id)).toBe(
       true,
     );
+  });
+
+  it('creates project via MCP with AI provenance', async () => {
+    const create = await mcpCall(app!, pmWriteToken, 50, 'tools/call', {
+      name: 'create_project',
+      arguments: {
+        workspaceId,
+        name: 'AI Agent Project',
+        keyPrefix: 'AGT',
+        description: 'Created by AI agent via MCP',
+        currency: 'USD',
+        methodology: 'scrum',
+        generatedByModel: 'test-model-v1',
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const body = create.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBeFalsy();
+    const data = JSON.parse(body.result?.content?.[0]?.text ?? '{}') as {
+      project?: {
+        id: string;
+        name: string;
+        keyPrefix: string;
+        lifecycleStage: string;
+        createdByType: string;
+        createdByModel: string;
+        url: string;
+      };
+    };
+    expect(data.project?.id).toBeTruthy();
+    expect(data.project?.name).toBe('AI Agent Project');
+    expect(data.project?.keyPrefix).toBe('AGT');
+    expect(data.project?.lifecycleStage).toBe('idea');
+    expect(data.project?.createdByType).toBe('api_client');
+    expect(data.project?.createdByModel).toBe('test-model-v1');
+    expect(data.project?.url).toContain('/projects/');
+
+    const getProj = await mcpCall(app!, pmWriteToken, 51, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectId: data.project!.id },
+    });
+    expect(getProj.statusCode).toBe(200);
+    const getBody = getProj.json() as {
+      result?: { content?: Array<{ text?: string }> };
+    };
+    const proj = JSON.parse(getBody.result?.content?.[0]?.text ?? '{}') as {
+      project?: { lifecycleStage: string; createdByModel: string };
+    };
+    expect(proj.project?.lifecycleStage).toBe('idea');
+    expect(proj.project?.createdByModel).toBe('test-model-v1');
+  });
+
+  it('rejects duplicate project name', async () => {
+    const dup = await mcpCall(app!, pmWriteToken, 52, 'tools/call', {
+      name: 'create_project',
+      arguments: {
+        workspaceId,
+        name: 'MCP Project',
+      },
+    });
+    expect(dup.statusCode).toBe(200);
+    const body = dup.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBe(true);
+    expect(body.result?.content?.[0]?.text ?? '').toContain('already exists');
+    expect(body.result?.content?.[0]?.text ?? '').toContain('confirm=true');
+  });
+
+  it('allows duplicate project with confirm=true', async () => {
+    const create = await mcpCall(app!, pmWriteToken, 525, 'tools/call', {
+      name: 'create_project',
+      arguments: {
+        workspaceId,
+        name: 'MCP Project',
+        keyPrefix: 'MP2',
+        confirm: true,
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const body = create.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBeFalsy();
+  });
+
+  it('rejects MCP promotion to active', async () => {
+    const create = await mcpCall(app!, pmWriteToken, 53, 'tools/call', {
+      name: 'create_project',
+      arguments: {
+        workspaceId,
+        name: 'Test Lifecycle Project',
+        keyPrefix: 'TLC',
+      },
+    });
+    const createBody = create.json() as {
+      result?: { content?: Array<{ text?: string }> };
+    };
+    const created = JSON.parse(createBody.result?.content?.[0]?.text ?? '{}') as {
+      project?: { id: string };
+    };
+    const projectId = created.project!.id;
+
+    const promoteAttempt = await mcpCall(app!, pmWriteToken, 54, 'tools/call', {
+      name: 'update_project',
+      arguments: {
+        projectId,
+        lifecycleStage: 'active',
+      },
+    });
+    expect(promoteAttempt.statusCode).toBe(200);
+    const promoteBody = promoteAttempt.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(promoteBody.result?.isError).toBe(true);
+    const errorText = promoteBody.result?.content?.[0]?.text ?? '';
+    expect(errorText.toLowerCase()).toContain('mcp');
+    expect(errorText.toLowerCase()).toContain('human');
+
+    // But can transition between draft stages
+    const draftUpdate = await mcpCall(app!, pmWriteToken, 545, 'tools/call', {
+      name: 'update_project',
+      arguments: {
+        projectId,
+        lifecycleStage: 'draft',
+        description: 'Updated description',
+        methodology: 'kanban',
+      },
+    });
+    expect(draftUpdate.statusCode).toBe(200);
+    const draftBody = draftUpdate.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(draftBody.result?.isError).toBeFalsy();
+    const updated = JSON.parse(draftBody.result?.content?.[0]?.text ?? '{}') as {
+      project?: { lifecycleStage: string; description: string };
+    };
+    expect(updated.project?.lifecycleStage).toBe('draft');
+    expect(updated.project?.description).toBe('Updated description');
+  });
+
+  it('filters projects by lifecycle stage', async () => {
+    const listIdea = await mcpCall(app!, pmWriteToken, 55, 'tools/call', {
+      name: 'list_projects',
+      arguments: {
+        workspaceId,
+        lifecycleStage: 'idea',
+        limit: 25,
+      },
+    });
+    expect(listIdea.statusCode).toBe(200);
+    const body = listIdea.json() as {
+      result?: { content?: Array<{ text?: string }> };
+    };
+    const data = JSON.parse(body.result?.content?.[0]?.text ?? '{}') as {
+      projects?: Array<{ lifecycleStage: string; name: string }>;
+    };
+    expect(data.projects?.some((p) => p.lifecycleStage === 'idea')).toBe(true);
+    expect(data.projects?.every((p) => p.lifecycleStage === 'idea')).toBe(true);
+  });
+
+  it('returns PROJECT_ARCHIVED (410) for archived projects', async () => {
+    // Create and archive a project
+    const create = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: { workspaceId, name: 'To Archive', keyPrefix: 'ARC' },
+    });
+    const projectId = (create.json() as { project: { id: string } }).project.id;
+
+    await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: { archived: true },
+    });
+
+    const response = await mcpCall(app!, readToken, 60, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectId },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBe(true);
+    const errorText = body.result?.content?.[0]?.text ?? '';
+    expect(errorText.toLowerCase()).toContain('archived');
+  });
+
+  it('returns PROJECT_NOT_FOUND (404) for non-existent projects', async () => {
+    const response = await mcpCall(app!, readToken, 61, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectId: '00000000-0000-0000-0000-000000000000' },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBe(true);
+    const errorText = body.result?.content?.[0]?.text ?? '';
+    expect(errorText.toLowerCase()).toContain('not found');
+  });
+
+  it('returns workspace not allowed error with workspaceId', async () => {
+    // Use writeToken which has knowledge:write scope but otherWorkspaceId is not in allowlist
+    const record = await mcpCall(app!, writeToken, 62, 'tools/call', {
+      name: 'create_knowledge_record',
+      arguments: {
+        workspaceId: otherWorkspaceId,
+        title: 'Should fail',
+        recordType: 'runbook',
+        contentMarkdown: '# Fail\n',
+      },
+    });
+    expect(record.statusCode).toBe(200);
+    const body = record.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(body.result?.isError).toBe(true);
+    const text = body.result?.content?.[0]?.text ?? '';
+    expect(text.toLowerCase()).toContain('workspace');
+    expect(text.toLowerCase()).toContain('not allowed');
   });
 });

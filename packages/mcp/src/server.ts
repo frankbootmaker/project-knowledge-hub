@@ -14,13 +14,36 @@ export type McpClientContext = {
 };
 
 export type McpToolHandlers = {
-  listProjects: (input: { workspaceId?: string; limit: number }) => Promise<unknown>;
+  listWorkspaces: () => Promise<unknown>;
+  listProjects: (input: {
+    workspaceId?: string;
+    lifecycleStage?: string;
+    limit: number;
+  }) => Promise<unknown>;
   listSystems: (input: {
     workspaceId?: string;
     projectId?: string;
     limit: number;
   }) => Promise<unknown>;
   getProject: (input: { projectId: string }) => Promise<unknown>;
+  createProject: (input: {
+    workspaceId: string;
+    name: string;
+    keyPrefix?: string;
+    description?: string | null;
+    currency?: string;
+    methodology?: string;
+    generatedByModel?: string;
+    confirm?: boolean;
+  }) => Promise<unknown>;
+  updateProject: (input: {
+    projectId: string;
+    name?: string;
+    description?: string | null;
+    methodology?: string;
+    currency?: string;
+    lifecycleStage?: string;
+  }) => Promise<unknown>;
   updateProjectBaseline: (input: {
     projectId: string;
     startDate?: string | null;
@@ -567,16 +590,26 @@ export function createKnowledgeHubMcpServer(
     };
 
   server.tool(
+    'list_workspaces',
+    'List workspaces the API client can access, with write permissions and acting user role',
+    {},
+    async () =>
+      wrap('list_workspaces', 'projects:read', () => handlers.listWorkspaces())(),
+  );
+
+  server.tool(
     'list_projects',
-    'List accessible projects in allowed workspaces',
+    'List accessible projects in allowed workspaces. Filter by lifecycleStage: idea, draft, proposal, active, completed, archived.',
     {
       workspaceId: z.string().uuid().optional(),
+      lifecycleStage: z.string().optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
     },
     async (args) =>
       wrap('list_projects', 'projects:read', () =>
         handlers.listProjects({
           workspaceId: args.workspaceId,
+          lifecycleStage: args.lifecycleStage,
           limit: args.limit ?? MCP_MAX_LIST_LIMIT,
         }),
       )(),
@@ -627,6 +660,46 @@ export function createKnowledgeHubMcpServer(
     'JPY',
   ]);
   const moneyInput = z.union([z.number(), z.string()]).nullable();
+
+  server.tool(
+    'create_project',
+    'Create a new project (MCP-created projects start in idea/draft lifecycle stage; humans promote to active). Requires pm:write. Returns id, keyPrefix, and URL. AI can immediately create records, epics, tasks, RAID items. If keyPrefix is taken, error includes suggestedKeyPrefix. Duplicate name returns 409 unless confirm=true.',
+    {
+      workspaceId: z.string().uuid(),
+      name: z.string().min(1).max(160),
+      keyPrefix: z
+        .string()
+        .trim()
+        .regex(/^([A-Za-z]{3}|[A-Za-z]{2}[0-9])$/)
+        .optional(),
+      description: z.string().max(10000).nullable().optional(),
+      currency: projectCurrencyEnum.optional(),
+      methodology: z.enum(['scrum', 'kanban', 'waterfall', 'hybrid', 'other']).optional(),
+      generatedByModel: z.string().max(100).optional(),
+      confirm: z.boolean().optional(),
+    },
+    async (args) =>
+      wrap('create_project', 'pm:write', () => handlers.createProject(args), {
+        workspaceId: args.workspaceId,
+      })(),
+  );
+
+  server.tool(
+    'update_project',
+    'Update project name, description, methodology, currency, or lifecycle stage. Requires pm:write. MCP can only manage draft stages (idea↔draft↔proposal, any→archived). Promotion to active/completed requires human approval via UI.',
+    {
+      projectId: z.string().uuid(),
+      name: z.string().min(1).max(160).optional(),
+      description: z.string().max(10000).nullable().optional(),
+      methodology: z.enum(['scrum', 'kanban', 'waterfall', 'hybrid', 'other']).optional(),
+      currency: projectCurrencyEnum.optional(),
+      lifecycleStage: z.enum(['idea', 'draft', 'proposal', 'active', 'completed', 'archived']).optional(),
+    },
+    async (args) =>
+      wrap('update_project', 'pm:write', () => handlers.updateProject(args), {
+        projectId: args.projectId,
+      })(),
+  );
 
   /** UUID or human key such as HL1-T-12 / HL1-RR-3. */
   const entityRef = z.string().min(1).max(80);

@@ -309,6 +309,13 @@
       "when": 1786389600000,
       "tag": "0043_project_definition_of_done",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790917572370,
+      "tag": "0044_mcp_project_creation",
+      "breakpoints": true
     }
   ]
 }

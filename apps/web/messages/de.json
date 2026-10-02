@@ -606,6 +606,21 @@
       "amber": "Gefährdet",
       "red": "Verzögert"
     },
+    "lifecycleStageLabel": "Lebenszyklus-Phase",
+    "lifecycleStage": {
+      "idea": "Idee",
+      "draft": "Entwurf",
+      "proposal": "Vorschlag",
+      "active": "Aktiv",
+      "completed": "Abgeschlossen",
+      "archived": "Archiviert"
+    },
+    "aiCreated": "Von KI-Agent erstellt",
+    "promoteToActive": "Auf aktiv hochstufen",
+    "promoteToActiveHint": "Dieses KI-erstellte Projekt von {stage} auf aktiv verschieben",
+    "promoting": "Hochstufen…",
+    "promoted": "Projekt auf aktiv hochgestuft.",
+    "promoteFailed": "Hochstufung fehlgeschlagen",
     "manageReports": "Berichte",
     "manageReportsHint": "Status-, Umsetzungs- oder Stakeholder-Berichte ansehen, dann exportieren oder drucken.",
     "reportStatus": "Projektstatusbericht",

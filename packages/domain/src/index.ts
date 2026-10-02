@@ -73,6 +73,25 @@ export const projectStatusSchema = z.enum([
   'archived',
 ]);
 
+/** Project lifecycle stage (separate from status): idea/draft/proposal = MCP-created, awaiting promotion */
+export const projectLifecycleStageSchema = z.enum([
+  'idea',
+  'draft',
+  'proposal',
+  'active',
+  'completed',
+  'archived',
+]);
+
+/** Project methodology/type for MCP create_project */
+export const projectMethodologySchema = z.enum([
+  'scrum',
+  'kanban',
+  'waterfall',
+  'hybrid',
+  'other',
+]);
+
 /** Project Delivery (NF-018): milestone lifecycle. */
 export const milestoneStatusSchema = z.enum([
   'planned',
@@ -472,6 +491,8 @@ export function mergeDisplayPrefs(value: unknown): DisplayPrefs {
 }
 
 export type ProjectStatus = z.infer<typeof projectStatusSchema>;
+export type ProjectLifecycleStage = z.infer<typeof projectLifecycleStageSchema>;
+export type ProjectMethodology = z.infer<typeof projectMethodologySchema>;
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 export type MembershipRole = z.infer<typeof membershipRoleSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
