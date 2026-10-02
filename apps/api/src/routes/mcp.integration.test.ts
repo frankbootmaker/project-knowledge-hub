@@ -188,11 +188,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   afterAll(async () => {
-    // Give any pending server operations time to complete before cleanup
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    
-    if (app) {
-      await app.close();
+    // Close database and Redis connections first
+    if (closeDatabase) {
+      await closeDatabase();
     }
     if (redis) {
       try {
@@ -201,8 +199,13 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
         redis.disconnect();
       }
     }
-    if (closeDatabase) {
-      await closeDatabase();
+    
+    // Give any pending MCP/Fastify operations time to complete
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    
+    // Close Fastify app last
+    if (app) {
+      await app.close();
     }
   });
 
