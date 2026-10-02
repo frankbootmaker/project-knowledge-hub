@@ -26,6 +26,8 @@ function testEnv() {
     NODE_ENV: 'test',
     APP_ENV: 'test',
     LOG_LEVEL: 'silent',
+    SESSION_SECRET:
+      process.env.SESSION_SECRET ?? 'test-session-secret-at-least-32-chars',
   });
 }
 
