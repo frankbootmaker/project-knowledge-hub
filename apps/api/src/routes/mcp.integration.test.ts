@@ -597,16 +597,10 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
         confirm: true,
       },
     });
-    if (create.statusCode !== 200) {
-      console.error('create_project failed:', create.statusCode, create.body);
-    }
     expect(create.statusCode).toBe(200);
     const body = create.json() as {
       result?: { isError?: boolean; content?: Array<{ text?: string }> };
     };
-    if (body.result?.isError) {
-      console.error('MCP error:', body.result.content?.[0]?.text);
-    }
     expect(body.result?.isError).toBeFalsy();
   });
 
@@ -704,13 +698,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     });
     expect(listIdea.statusCode).toBe(200);
     const body = listIdea.json() as {
-      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+      result?: { content?: Array<{ text?: string }> };
     };
-    const textContent = body.result?.content?.[0]?.text ?? '{}';
-    if (body.result?.isError) {
-      console.error('list_projects error:', textContent);
-    }
-    const data = JSON.parse(textContent) as {
+    const data = JSON.parse(body.result?.content?.[0]?.text ?? '{}') as {
       projects?: Array<{ lifecycleStage: string; name: string }>;
     };
     expect(data.projects?.some((p) => p.lifecycleStage === 'idea')).toBe(true);
