@@ -675,7 +675,7 @@ export function createKnowledgeHubMcpServer(
       description: z.string().max(10000).nullable().optional(),
       currency: projectCurrencyEnum.optional(),
       methodology: z.enum(['scrum', 'kanban', 'waterfall', 'hybrid', 'other']).optional(),
-      generatedByModel: z.string().max(100).optional().transform(v => v || undefined),
+      generatedByModel: z.string().max(100).optional(),
       confirm: z.boolean().optional(),
     },
     async (args) =>

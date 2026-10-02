@@ -644,7 +644,7 @@ export function createMcpToolHandlers(
           issueCounters: {},
           createdByType: 'api_client',
           createdById: client.id,
-          createdByModel: input.generatedByModel ?? null,
+          createdByModel: input.generatedByModel && input.generatedByModel.trim() ? input.generatedByModel : null,
           metadataJson: input.methodology ? { methodology: input.methodology } : null,
           updatedAt: new Date(),
         })
