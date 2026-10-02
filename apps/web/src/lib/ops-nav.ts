@@ -155,6 +155,11 @@ export function projectTopHref(ctx: NavContext): string {
   return projectHref(ctx, `#${PROJECT_TOP_ANCHOR}`);
 }
 
+/** Name and tooltip for a rail link. Compact mode hides the visible label. */
+export function railItemAccessibleName(label: string, statusLabel: string | null): string {
+  return statusLabel ? `${label}: ${statusLabel}` : label;
+}
+
 function projectSectionNavItem(section: ProjectSectionDef): NavItemDef {
   return {
     id: section.navItemId,

@@ -77,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-* **Control Overview target:** the Control rail Overview item opens `#project-top` (same scroll as the Control heading, query kept) and is active at the top of the project page. Rail status is the shape cue only; the status word remains on the project header chips, with a visually hidden name and tooltip on the rail mark.
+* **Control Overview target:** the Control rail Overview item opens `#project-top` (same scroll as the Control heading, query kept) and is active at the top of the project page. Rail status is the shape cue only. Each rail link is named `Label` or `Label: status`, and the status mark keeps a tooltip. The status word remains on the project header chips.
 
 * **Project header and Control rail (PRO-T-30):** project sections (Overview, Reports, Baseline, Stakeholders, Delivery, Budget, RAID, Change requests, Linked systems, Linked knowledge) are defined once and drive both the project header shortcuts and the Control menu. Utilization and Org chart stay in Control. Scrum, Timeline, and Calendar stay under Delivery & finance. The workspace Knowledge item stays on the workspace catalogue; the project’s linked-knowledge shortcut lives only in Control. Reports left Ops, so that group is hidden until it has items. The Control heading opens `#project-top`. Rail items with a status show the same state as the header (text plus a shape, including compact mode). On track uses a fixed green, not the brand accent. A project with no budget summary shows “No budget” instead of green.
 

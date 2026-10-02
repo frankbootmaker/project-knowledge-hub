@@ -23,6 +23,7 @@ import {
   parseNavSection,
   projectIndexPath,
   projectTopHref,
+  railItemAccessibleName,
   resolveActiveNavSection,
   visibleNavItems,
   visibleNavSections,
@@ -389,12 +390,15 @@ export function AppRail({
                       ? (statuses[section.statusSource] ?? null)
                       : null;
                     const statusLabel = rag ? tProject(`rag.${rag}`) : null;
+                    const accessible = railItemAccessibleName(label, statusLabel);
                     const pageActive = pageItemId === item.id;
                     const locationActive = active && !pageActive;
                     return (
                       <Link
                         key={item.id}
                         href={href}
+                        title={accessible}
+                        aria-label={accessible}
                         className={active ? 'active' : undefined}
                         aria-current={
                           pageActive ? 'page' : locationActive ? 'location' : undefined
@@ -404,9 +408,12 @@ export function AppRail({
                         <span className="kh-ops-nav-icon">
                           <NavIcon name={item.icon} />
                           {statusLabel ? (
-                            <span className="kh-ops-rag-dot" data-rag={rag} title={statusLabel}>
-                              <span className="sr-only">{statusLabel}</span>
-                            </span>
+                            <span
+                              className="kh-ops-rag-dot"
+                              data-rag={rag}
+                              title={statusLabel}
+                              aria-hidden
+                            />
                           ) : null}
                         </span>
                         <span className="kh-ops-nav-label">{label}</span>

@@ -12,6 +12,7 @@ import {
   parseNavSection,
   projectIndexPath,
   projectTopHref,
+  railItemAccessibleName,
   resolveActiveNavSection,
   visibleNavItems,
   visibleNavSections,
@@ -314,6 +315,12 @@ describe('ops nav', () => {
     expect(matchNavItem(library, ctx, '/workspaces/platform')).toBe(true);
     expect(matchNavItem(library, ctx, '/workspaces/platform/media')).toBe(false);
     expect(projectTopHref(ctx)).toBe('/workspaces/platform/projects/renewal#project-top');
+  });
+
+  it('names a rail item with its label, then status when present', () => {
+    expect(railItemAccessibleName('Overview', null)).toBe('Overview');
+    expect(railItemAccessibleName('Delivery', 'On track')).toBe('Delivery: On track');
+    expect(railItemAccessibleName('Budgeting', 'No budget')).toBe('Budgeting: No budget');
   });
 
   it('uses the scroll spy anchor for section links', () => {
