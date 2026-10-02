@@ -225,7 +225,7 @@ export function AppRail({
     }
     event.preventDefault();
     scrollToProjectAnchor(PROJECT_TOP_ANCHOR);
-    const nextUrl = `${index}#${PROJECT_TOP_ANCHOR}`;
+    const nextUrl = `${index}${window.location.search}#${PROJECT_TOP_ANCHOR}`;
     window.history.replaceState(null, '', nextUrl);
     setHash(PROJECT_TOP_ANCHOR);
   }

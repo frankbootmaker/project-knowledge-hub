@@ -112,6 +112,14 @@ describe('ops nav', () => {
       ),
     ).toBe('control');
     expect(inferNavSection('/workspaces/platform/projects/github-sync')).toBe('control');
+    expect(inferNavSection('/workspaces/platform/projects/media-portal')).toBe('control');
+    expect(inferNavSection('/workspaces/platform/projects/records-migration')).toBe('control');
+    expect(inferNavSection('/workspaces/platform/projects/imports-team')).toBe('control');
+    expect(inferNavSection('/workspaces/platform/projects/archived-sites')).toBe('control');
+    expect(inferNavSection('/workspaces/platform/records/note')).toBe('knowledge');
+    expect(inferNavSection('/workspaces/platform/imports')).toBe('knowledge');
+    expect(inferNavSection('/workspaces/platform/document-imports/job')).toBe('knowledge');
+    expect(inferNavSection('/workspaces/platform/archived')).toBe('knowledge');
     expect(inferNavSection('/workspaces/platform/git')).toBe('ops');
     expect(inferNavSection('/workspaces/platform/git/connections')).toBe('ops');
     expect(inferNavSection('/workspaces/platform/projects/new')).toBe('control');

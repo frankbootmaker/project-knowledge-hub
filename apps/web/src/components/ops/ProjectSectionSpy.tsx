@@ -13,9 +13,7 @@ import { useProjectRail } from './ProjectRailContext';
 const SECTION_MARKER_PX = 96;
 
 function isProjectAnchor(id: string): boolean {
-  return (
-    id === PROJECT_TOP_ANCHOR || PROJECT_SECTIONS.some((section) => section.anchor === id)
-  );
+  return id === PROJECT_TOP_ANCHOR || PROJECT_SECTIONS.some((section) => section.anchor === id);
 }
 
 /** Last section whose top has reached the sticky header. Re-reads layout each pass. */
@@ -140,7 +138,10 @@ export function ProjectSectionSpy({ statuses }: { statuses: ProjectSectionStatus
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule);
     const observer = new MutationObserver(schedule);
-    observer.observe(document.body, { childList: true, subtree: true });
+    const pageRoot = document.getElementById(PROJECT_TOP_ANCHOR)?.parentElement;
+    if (pageRoot) {
+      observer.observe(pageRoot, { childList: true, subtree: true });
+    }
 
     return () => {
       window.cancelAnimationFrame(frame);

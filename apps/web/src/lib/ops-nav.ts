@@ -509,16 +509,11 @@ export function inferNavSection(pathname: string, hash = '', search = ''): NavSe
   }
 
   const { projectSlug } = parseAppPath(pathname);
-  if (pathname.includes('/archived')) {
-    return 'knowledge';
-  }
-  if (pathname.includes('/imports') || pathname.includes('/document-imports')) {
-    return 'knowledge';
-  }
-  if (pathname.includes('/media')) {
-    return 'knowledge';
-  }
-  if (pathname.includes('/records')) {
+  if (
+    /^\/workspaces\/[^/]+\/(?:archived|imports|document-imports|media|records)(\/|$)/.test(
+      pathname,
+    )
+  ) {
     return 'knowledge';
   }
   if (/^\/workspaces\/[^/]+\/git(\/|$)/.test(pathname)) {
@@ -532,14 +527,6 @@ export function inferNavSection(pathname: string, hash = '', search = ''): NavSe
   }
   if (projectSlug) {
     const anchor = hashId(hash);
-    const controlSection =
-      anchor === PROJECT_TOP_ANCHOR ||
-      PROJECT_SECTIONS.some(
-        (section) => section.anchor === anchor && section.anchor !== 'project-delivery',
-      );
-    if (controlSection) {
-      return 'control';
-    }
     const deliveryView = readSearchParams(search).get('delivery');
     if (anchor === 'project-delivery' && isRailDeliveryView(deliveryView)) {
       return 'delivery-finance';
