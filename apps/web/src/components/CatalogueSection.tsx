@@ -15,6 +15,7 @@ import {
   Select,
 } from './ui';
 import { LocalDateTime } from './LocalDateTime';
+import { FilterToggleIcon } from './ui/FilterToggleIcon';
 
 const DEFAULT_PAGE_SIZE = 5;
 /** Include a size below typical short lists so page-size changes are visible. */
@@ -25,24 +26,6 @@ const DEFAULT_SORT: SortOption = 'latest';
 
 function isPageSizeOption(value: number): value is PageSizeOption {
   return (PAGE_SIZE_OPTIONS as readonly number[]).includes(value);
-}
-
-function FilterToggleIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className="size-4 shrink-0"
-      fill="none"
-    >
-      <path
-        d="M4 6h16M7 12h10M10 18h4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 export type CatalogueLocaleVariant = {

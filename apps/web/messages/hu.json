@@ -60,6 +60,17 @@
     "browse": "Tallózás",
     "noFileChosen": "Nincs fájl kiválasztva"
   },
+  "table": {
+    "sortBy": "Rendezés: {column}",
+    "showFilters": "Szűrők megjelenítése",
+    "hideFilters": "Szűrők elrejtése",
+    "filters": "Oszlopszűrők",
+    "clearFilters": "Szűrők törlése",
+    "filterColumn": "Szűrés: {column}",
+    "textPlaceholder": "Tartalmazza…",
+    "emptyFiltered": "Nincs a szűrésnek megfelelő sor.",
+    "actions": "Műveletek"
+  },
   "nav": {
     "dashboard": "Irányítópult",
     "workspaces": "Munkaterületek",
@@ -504,7 +515,6 @@
     "countOpenRaid": "Nyitott RAID",
     "queueTitle": "Prioritási sor",
     "queueMeta": "Rendezés: {column}",
-    "sortBy": "Rendezés: {column}",
     "pageSize": "Elemek oldalanként",
     "pageSizeOption": "{count} / oldal",
     "showing": "{from}–{to} / {total}",
@@ -2240,7 +2250,6 @@
     "subtitle": "Epikek, storyk, mérföldkövek, feladatok, határidők és RACI — emberek és AI ügynökök számára.",
     "empty": "Még nincsenek teljesítési elemek.",
     "searchPlaceholder": "Teljesítési elemek keresése…",
-    "filterStatus": "Szűrés állapot szerint",
     "addItem": "Hozzáadás",
     "modalDescription": "Feladat, mérföldkő, epik vagy user story létrehozása.",
     "itemTitle": "Cím",
@@ -2394,7 +2403,6 @@
     "colActual": "Tény óra",
     "colPoints": "Pont",
     "colUpdated": "Frissítve",
-    "sortBy": "Rendezés: {column}",
     "emptyTitle": "Nincs teljesítési munka",
     "emptyFiltered": "Nincs a keresésnek megfelelő tétel.",
     "treeBreakdown": "Munkalebontás",
@@ -2615,7 +2623,9 @@
     "tokensUsed": "Felhasznált AI tokenek",
     "tokensUsedPlaceholder": "pl. 12000",
     "aiSystemId": "AI rendszer azonosító",
-    "aiSystemIdPlaceholder": "Opcionális UUID az AI asszisztens rendszerhez"
+    "aiSystemIdPlaceholder": "Opcionális UUID az AI asszisztens rendszerhez",
+    "statusField": "Állapot",
+    "rowStatus": "Állapot: {item}"
   },
   "stakeholders": {
     "title": "Stakeholders",
@@ -2628,7 +2638,6 @@
     "empty": "Még nincsenek stakeholderek. Adj hozzá embereket a projektcsapathoz, állíts be RACI-t, vagy kapcsold az ai_assistant típusú AI asszisztenst a projekthez.",
     "emptyTitle": "Nincsenek stakeholderek",
     "emptyFiltered": "Nincs stakeholder, ami illeszkedik a kereséshez vagy szűrőhöz.",
-    "sortBy": "Rendezés: {column}",
     "colPerson": "Személy / hely",
     "colRole": "Szerep",
     "colCompetencies": "Kompetenciák",
@@ -2800,7 +2809,6 @@
     "emptyTitle": "Nincsenek RAID tételek",
     "emptyFiltered": "Nincs RAID tétel, ami illeszkedik a kereséshez vagy szűrőhöz.",
     "kindAll": "Mind",
-    "sortBy": "Rendezés: {column}",
     "colId": "ID",
     "colKind": "Típus",
     "colTitle": "Leírás",
@@ -2905,7 +2913,6 @@
     "empty": "Még nincsenek változások. Itt naplózd a hatókör-, ütemezés-, érintett- vagy költségvetés-változásokat.",
     "emptyTitle": "Nincsenek változások",
     "emptyFiltered": "Nincs változás, ami illeszkedik a kereséshez vagy szűrőhöz.",
-    "sortBy": "Rendezés: {column}",
     "colId": "Változás ID",
     "colKind": "Típus",
     "colTitle": "Leírás",

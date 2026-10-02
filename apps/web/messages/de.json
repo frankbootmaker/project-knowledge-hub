@@ -60,6 +60,17 @@
     "browse": "Durchsuchen",
     "noFileChosen": "Keine Datei ausgewählt"
   },
+  "table": {
+    "sortBy": "Sortieren nach {column}",
+    "showFilters": "Filter anzeigen",
+    "hideFilters": "Filter ausblenden",
+    "filters": "Spaltenfilter",
+    "clearFilters": "Filter zurücksetzen",
+    "filterColumn": "{column} filtern",
+    "textPlaceholder": "Enthält…",
+    "emptyFiltered": "Keine Zeilen entsprechen den aktuellen Filtern.",
+    "actions": "Aktionen"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "workspaces": "Workspaces",
@@ -504,7 +515,6 @@
     "countOpenRaid": "Offenes RAID",
     "queueTitle": "Prioritätsliste",
     "queueMeta": "Sortiert nach {column}",
-    "sortBy": "Sortieren nach {column}",
     "pageSize": "Einträge pro Seite",
     "pageSizeOption": "{count} pro Seite",
     "showing": "{from}–{to} von {total}",
@@ -2240,7 +2250,6 @@
     "subtitle": "Epics, Stories, Meilensteine, Aufgaben, Termine und RACI — gemeinsam für Menschen und KI-Agenten.",
     "empty": "Noch keine Umsetzungseinträge.",
     "searchPlaceholder": "Umsetzungseinträge suchen…",
-    "filterStatus": "Nach Status filtern",
     "addItem": "Hinzufügen",
     "modalDescription": "Aufgabe, Meilenstein, Epic oder User Story anlegen.",
     "itemTitle": "Titel",
@@ -2394,7 +2403,6 @@
     "colActual": "Ist-h",
     "colPoints": "Punkte",
     "colUpdated": "Aktualisiert",
-    "sortBy": "Sortieren nach {column}",
     "emptyTitle": "Keine Lieferarbeit",
     "emptyFiltered": "Keine Arbeitseinträge passen zu dieser Suche.",
     "treeBreakdown": "Arbeitspaketstruktur",
@@ -2615,7 +2623,9 @@
     "scrumBurndownEmpty": "Sprint-Daten und Story Points setzen, um den Burndown zu sehen.",
     "scrumBurndownLegend": "Gestrichelt: ideale Restpunkte. Durchgezogen: Restpunkte (erledigt nach Tag).",
     "scrumBurndownHelp": "Burndown-Linien erklären",
-    "scrumBurndownAria": "Sprint-Punkt-Burndown-Diagramm"
+    "scrumBurndownAria": "Sprint-Punkt-Burndown-Diagramm",
+    "statusField": "Status",
+    "rowStatus": "Status für {item}"
   },
   "stakeholders": {
     "title": "Stakeholder",
@@ -2628,7 +2638,6 @@
     "empty": "Noch keine Stakeholder. Personen zum Projektteam hinzufügen, RACI zuweisen oder einen KI-Assistenten (Typ ai_assistant) verknüpfen.",
     "emptyTitle": "Keine Stakeholder",
     "emptyFiltered": "Keine Stakeholder passen zu Suche oder Filter.",
-    "sortBy": "Sortieren nach {column}",
     "colPerson": "Person / Sitz",
     "colRole": "Rolle",
     "colCompetencies": "Kompetenzen",
@@ -2800,7 +2809,6 @@
     "emptyTitle": "Keine RAID-Einträge",
     "emptyFiltered": "Keine RAID-Einträge passen zu Suche oder Filter.",
     "kindAll": "Alle",
-    "sortBy": "Sortieren nach {column}",
     "colId": "ID",
     "colKind": "Art",
     "colTitle": "Beschreibung",
@@ -2905,7 +2913,6 @@
     "empty": "Noch keine Changes. Erfasse hier Scope-, Zeitplan-, Stakeholder- oder Budgetänderungen.",
     "emptyTitle": "Keine Changes",
     "emptyFiltered": "Keine Changes passen zu Suche oder Filter.",
-    "sortBy": "Sortieren nach {column}",
     "colId": "Change-ID",
     "colKind": "Art",
     "colTitle": "Beschreibung",
