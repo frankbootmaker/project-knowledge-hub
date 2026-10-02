@@ -31,7 +31,7 @@ Prefer immutable tags for Dokploy image builds once registry automation exists. 
 
 ## CI gates
 
-GitHub Actions must pass install, lint, typecheck, test, and build before merge.
+GitHub Actions must pass install, lint, typecheck, test, and build before merge. CI runs on pull requests and on pushes to `master` and `feature/new-design` (there is no `main` branch). A newer push to an open pull request cancels the in-progress run for that ref.
 
 Jobs use the repository variable `CI_RUNS_ON` (JSON `runs-on`). Unset, they fall back to GitHub-hosted `ubuntu-latest`. The self-hosted value is `["self-hosted","linux","x64","strix-halo","knowhub"]`. See [`TESTING.md`](../development/TESTING.md).
 
