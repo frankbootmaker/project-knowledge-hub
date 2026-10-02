@@ -699,7 +699,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
       arguments: {
         workspaceId,
         lifecycleStage: 'idea',
-        limit: 100,
+        limit: 25,
       },
     });
     expect(listIdea.statusCode).toBe(200);
