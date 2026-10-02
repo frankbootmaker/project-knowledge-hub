@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { AssistantBrandMark } from './AssistantBrandMark';
 import { UserAvatar } from './UserAvatar';
@@ -56,6 +56,12 @@ export function ProjectStakeholdersList({
   const tWorkspaces = useTranslations('workspaces');
   const tTable = useTranslations('table');
   const locale = useLocale();
+  const onManageRef = useRef(onManage);
+  const onManageAiRef = useRef(onManageAi);
+  const onAddDerivedRef = useRef(onAddDerived);
+  onManageRef.current = onManage;
+  onManageAiRef.current = onManageAi;
+  onAddDerivedRef.current = onAddDerived;
   const table = useTableState({
     namespace: 'stk',
     defaultSortKey: 'person',
@@ -91,9 +97,10 @@ export function ProjectStakeholdersList({
   }, [t]);
 
   function statusKey(row: Stakeholder): string {
-    if (row.kind === 'open_role' || row.staffingStatus === 'open') return 'open';
+    if (row.kind === 'open_role') return 'open';
     if (row.kind === 'ai_assistant') return 'ai';
     if (row.staffingStatus === 'assigned') return 'assigned';
+    if (row.staffingStatus === 'open') return 'open';
     return 'derived';
   }
 
@@ -286,7 +293,7 @@ export function ProjectStakeholdersList({
               variant="secondary"
               className="h-8 min-h-8 px-2 text-xs"
               disabled={pending}
-              onClick={() => onManageAi(row)}
+              onClick={() => onManageAiRef.current(row)}
             >
               {t('manageAiCost')}
             </Button>
@@ -299,7 +306,7 @@ export function ProjectStakeholdersList({
               variant="secondary"
               className="h-8 min-h-8 px-2 text-xs"
               disabled={pending}
-              onClick={() => onManage(row)}
+              onClick={() => onManageRef.current(row)}
             >
               {isOpenRole ? t('manageOpenRole') : t('manage')}
             </Button>
@@ -311,7 +318,7 @@ export function ProjectStakeholdersList({
             variant="secondary"
             className="h-8 min-h-8 px-2 text-xs"
             disabled={pending}
-            onClick={() => onAddDerived(row)}
+            onClick={() => onAddDerivedRef.current(row)}
           >
             {t('addToRoster')}
           </Button>
@@ -326,9 +333,6 @@ export function ProjectStakeholdersList({
     engagementLabel,
     labels,
     locale,
-    onAddDerived,
-    onManage,
-    onManageAi,
     pending,
     roleLabel,
     statusLabel,

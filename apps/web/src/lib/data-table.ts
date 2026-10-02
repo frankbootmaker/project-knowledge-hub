@@ -64,7 +64,10 @@ const collators = new Map<string, Intl.Collator>();
 export function textCollator(locale: string): Intl.Collator {
   const cached = collators.get(locale);
   if (cached) return cached;
-  const collator = new Intl.Collator(locale, { sensitivity: 'base' });
+  const collator = new Intl.Collator(locale, {
+    sensitivity: 'base',
+    numeric: true,
+  });
   collators.set(locale, collator);
   return collator;
 }
@@ -447,6 +450,8 @@ export const URL_WRITE_DELAY_MS = 250;
 export function createDebouncedUrlWriter(options: {
   write: () => void;
   delayMs?: number;
+  /** Current pathname. Captured on push; a later flush is skipped if it changed. */
+  pathname?: () => string;
 }): {
   push: () => void;
   flush: () => void;
@@ -455,26 +460,37 @@ export function createDebouncedUrlWriter(options: {
   const delayMs = options.delayMs ?? URL_WRITE_DELAY_MS;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending = false;
+  let scheduledPath: string | null = null;
+
+  function commit() {
+    if (!pending) return;
+    pending = false;
+    if (
+      options.pathname &&
+      scheduledPath != null &&
+      options.pathname() !== scheduledPath
+    ) {
+      return;
+    }
+    options.write();
+  }
 
   function flush() {
     if (timer != null) {
       clearTimeout(timer);
       timer = null;
     }
-    if (!pending) return;
-    pending = false;
-    options.write();
+    commit();
   }
 
   return {
     push() {
       pending = true;
+      scheduledPath = options.pathname?.() ?? null;
       if (timer != null) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        if (!pending) return;
-        pending = false;
-        options.write();
+        commit();
       }, delayMs);
     },
     flush,
@@ -482,6 +498,7 @@ export function createDebouncedUrlWriter(options: {
       if (timer != null) clearTimeout(timer);
       timer = null;
       pending = false;
+      scheduledPath = null;
     },
   };
 }

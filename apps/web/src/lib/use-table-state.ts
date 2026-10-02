@@ -45,10 +45,12 @@ export function useTableState(options: {
   const hydrated = useRef(false);
   const defaultsRef = useRef(defaults);
   defaultsRef.current = defaults;
+  const scheduledPathRef = useRef<string | null>(null);
 
   const persist = useCallback((next: TableQueryState) => {
     try {
       const url = new URL(window.location.href);
+      if (url.pathname !== scheduledPathRef.current) return;
       const search = serializeTableQuery(
         url.search,
         namespace,
@@ -73,6 +75,7 @@ export function useTableState(options: {
   if (writerRef.current == null) {
     writerRef.current = createDebouncedUrlWriter({
       write: () => persistRef.current(stateRef.current),
+      pathname: () => window.location.pathname,
     });
   }
 
@@ -107,7 +110,10 @@ export function useTableState(options: {
     if (next === stateRef.current) return;
     stateRef.current = next;
     setState(next);
-    if (hydrated.current) writerRef.current?.push();
+    if (hydrated.current) {
+      scheduledPathRef.current = window.location.pathname;
+      writerRef.current?.push();
+    }
   }, []);
 
   const setQuery = useCallback(

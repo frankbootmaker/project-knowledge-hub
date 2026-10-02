@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Button, Input, Select } from './ui';
@@ -68,6 +68,10 @@ export function ProjectDeliveryList({
   const t = useTranslations('delivery');
   const tTable = useTranslations('table');
   const locale = useLocale();
+  const onManageRef = useRef(onManage);
+  const onStatusChangeRef = useRef(onStatusChange);
+  onManageRef.current = onManage;
+  onStatusChangeRef.current = onStatusChange;
   const table = useTableState({
     namespace: 'dl',
     defaultSortKey: 'updated',
@@ -128,7 +132,7 @@ export function ProjectDeliveryList({
         <button
           type="button"
           className="border-0 bg-transparent p-0 text-left text-inherit"
-          onClick={() => onManage(row.kind, row.entityId)}
+          onClick={() => onManageRef.current(row.kind, row.entityId)}
         >
           {row.title}
         </button>
@@ -166,7 +170,7 @@ export function ProjectDeliveryList({
             disabled={pending}
             aria-label={t('rowStatus', { item: row.title })}
             onChange={(event) =>
-              onStatusChange(row.kind, row.entityId, event.target.value)
+              onStatusChangeRef.current(row.kind, row.entityId, event.target.value)
             }
           >
             {statusOptionsForRow.map((status) => (
@@ -263,7 +267,7 @@ export function ProjectDeliveryList({
           type="button"
           variant="secondary"
           className="h-8 min-h-8 px-2 text-xs"
-          onClick={() => onManage(row.kind, row.entityId)}
+          onClick={() => onManageRef.current(row.kind, row.entityId)}
         >
           {t('manage')}
         </Button>
@@ -271,8 +275,6 @@ export function ProjectDeliveryList({
     },
   ], [
     canMutate,
-    onManage,
-    onStatusChange,
     ownerOptions,
     pending,
     sprintOptions,

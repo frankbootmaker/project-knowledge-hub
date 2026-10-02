@@ -258,7 +258,10 @@ export function DashboardMyTasks({
   const pageItems = filtered.slice(pageStart, pageStart + pageSize);
   const rangeFrom = filtered.length === 0 ? 0 : pageStart + 1;
   const rangeTo = Math.min(pageStart + pageSize, filtered.length);
-  const bareEmpty = filtered.length === 0 && !table.filtersActive;
+  const bareEmpty =
+    filtered.length === 0 &&
+    !table.filtersActive &&
+    table.query.trim() === '';
 
   return (
     <section className="kh-ops-panel">

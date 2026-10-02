@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Badge, Button, Input, raidSeverityTone } from './ui';
@@ -36,6 +36,8 @@ export function ProjectRaidList({
   const t = useTranslations('raid');
   const tTable = useTranslations('table');
   const locale = useLocale();
+  const onManageRef = useRef(onManage);
+  onManageRef.current = onManage;
   const table = useTableState({
     namespace: 'raid',
     defaultSortKey: 'id',
@@ -126,7 +128,7 @@ export function ProjectRaidList({
         <button
           type="button"
           className="border-0 bg-transparent p-0 text-left text-inherit"
-          onClick={() => onManage(item.id)}
+          onClick={() => onManageRef.current(item.id)}
         >
           {item.title}
         </button>
@@ -207,7 +209,7 @@ export function ProjectRaidList({
           type="button"
           variant="secondary"
           className="h-8 min-h-8 px-2 text-xs"
-          onClick={() => onManage(item.id)}
+          onClick={() => onManageRef.current(item.id)}
         >
           {t('manage')}
         </Button>
@@ -216,7 +218,6 @@ export function ProjectRaidList({
   ], [
     kindLabels,
     kindOptions,
-    onManage,
     ownerOptions,
     severityOptions,
     statusOptions,

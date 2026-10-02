@@ -102,6 +102,7 @@ describe('compareSortValues', () => {
   it('sorts text with the active locale', () => {
     expect(compareText('Álom', 'Beta', 'hu')).toBeLessThan(0);
     expect(compareText('alpha', 'Beta', 'en')).toBeLessThan(0);
+    expect(compareText('RAID-9', 'RAID-10', 'en')).toBeLessThan(0);
     expect(compareSortValues('Álom', 'Beta', 'text', 'hu')).toBeLessThan(0);
   });
 
@@ -120,6 +121,7 @@ describe('compareSortValues', () => {
     compareText('b', 'á', locale);
     const created = spy.mock.calls.filter((call) => call[0] === locale);
     expect(created).toHaveLength(1);
+    expect(created[0]?.[1]).toEqual({ sensitivity: 'base', numeric: true });
     spy.mockRestore();
   });
 
@@ -351,6 +353,26 @@ describe('createDebouncedUrlWriter', () => {
     writer.cancel();
     vi.advanceTimersByTime(URL_WRITE_DELAY_MS);
     expect(writes).toEqual(['ab', 'abc']);
+    vi.useRealTimers();
+  });
+
+  it('skips a flush when the pathname changed after it was scheduled', () => {
+    vi.useFakeTimers();
+    let path = '/workspaces/acme/projects/one';
+    const writes: string[] = [];
+    const writer = createDebouncedUrlWriter({
+      write: () => writes.push(path),
+      pathname: () => path,
+    });
+    writer.push();
+    path = '/workspaces/acme/projects/one/tasks/raid-9';
+    writer.flush();
+    vi.advanceTimersByTime(URL_WRITE_DELAY_MS);
+    expect(writes).toEqual([]);
+
+    writer.push();
+    vi.advanceTimersByTime(URL_WRITE_DELAY_MS);
+    expect(writes).toEqual(['/workspaces/acme/projects/one/tasks/raid-9']);
     vi.useRealTimers();
   });
 });

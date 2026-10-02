@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Badge, Button, Input } from './ui';
@@ -41,6 +41,8 @@ export function ProjectChangeList({
   const t = useTranslations('changes');
   const tTable = useTranslations('table');
   const locale = useLocale();
+  const onManageRef = useRef(onManage);
+  onManageRef.current = onManage;
   const table = useTableState({
     namespace: 'chg',
     defaultSortKey: 'id',
@@ -104,7 +106,7 @@ export function ProjectChangeList({
         <button
           type="button"
           className="border-0 bg-transparent p-0 text-left text-inherit"
-          onClick={() => onManage(item.id)}
+          onClick={() => onManageRef.current(item.id)}
         >
           {item.title}
         </button>
@@ -155,13 +157,13 @@ export function ProjectChangeList({
           type="button"
           variant="secondary"
           className="h-8 min-h-8 px-2 text-xs"
-          onClick={() => onManage(item.id)}
+          onClick={() => onManageRef.current(item.id)}
         >
           {t('manage')}
         </Button>
       ),
     },
-  ], [kindLabels, kindOptions, onManage, statusOptions, t]);
+  ], [kindLabels, kindOptions, statusOptions, t]);
   useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
 
   const visible = useMemo(() => applyTableView({
