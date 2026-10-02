@@ -12,6 +12,7 @@ import {
   parseNavSection,
   projectIndexPath,
   projectTopHref,
+  railItemAccessibleName,
   resolveActiveNavSection,
   visibleNavItems,
   visibleNavSections,
@@ -173,6 +174,19 @@ describe('ops nav', () => {
     expect(matchNavItem(overview!, ctx, '/workspaces/platform/projects/renewal', '', '')).toBe(
       true,
     );
+    expect(
+      matchNavItem(overview!, ctx, '/workspaces/platform/projects/renewal', 'project-top', ''),
+    ).toBe(true);
+    expect(
+      matchNavItem(
+        overview!,
+        ctx,
+        '/workspaces/platform/projects/renewal',
+        'project-overview',
+        '',
+      ),
+    ).toBe(false);
+    expect(overview!.href(ctx)).toBe('/workspaces/platform/projects/renewal#project-top');
   });
 
   it('finds my work on the dashboard', () => {
@@ -291,7 +305,8 @@ describe('ops nav', () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const section of PROJECT_SECTIONS) {
       const item = control.items.find((row) => row.id === section.navItemId);
-      expect(item?.href(ctx)).toBe(`/workspaces/platform/projects/renewal#${section.anchor}`);
+      const anchor = section.navItemId === 'overview' ? 'project-top' : section.anchor;
+      expect(item?.href(ctx)).toBe(`/workspaces/platform/projects/renewal#${anchor}`);
     }
     const library = NAV_SECTIONS.flatMap((section) => section.items).find(
       (item) => item.id === 'knowledge',
@@ -300,6 +315,12 @@ describe('ops nav', () => {
     expect(matchNavItem(library, ctx, '/workspaces/platform')).toBe(true);
     expect(matchNavItem(library, ctx, '/workspaces/platform/media')).toBe(false);
     expect(projectTopHref(ctx)).toBe('/workspaces/platform/projects/renewal#project-top');
+  });
+
+  it('names a rail item with its label, then status when present', () => {
+    expect(railItemAccessibleName('Overview', null)).toBe('Overview');
+    expect(railItemAccessibleName('Delivery', 'On track')).toBe('Delivery: On track');
+    expect(railItemAccessibleName('Budgeting', 'No budget')).toBe('Budgeting: No budget');
   });
 
   it('uses the scroll spy anchor for section links', () => {
@@ -316,6 +337,8 @@ describe('ops nav', () => {
     const org = NAV_SECTIONS.flatMap((section) => section.items).find((item) => item.id === 'org')!;
     expect(isRailItemActive(budget, ctx, path, '', '', 'project-budget')).toBe(true);
     expect(isRailItemActive(overview, ctx, path, '', '', 'project-budget')).toBe(false);
+    expect(isRailItemActive(overview, ctx, path, 'project-raid', '', 'project-top')).toBe(true);
+    expect(isRailItemActive(budget, ctx, path, 'project-raid', '', 'project-top')).toBe(false);
     expect(
       isRailItemActive(stakeholders, ctx, path, '', '?stakeholders=org', 'project-stakeholders'),
     ).toBe(false);

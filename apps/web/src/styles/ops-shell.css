@@ -285,30 +285,6 @@ a.kh-ops-group-header:focus-visible {
   border-color: var(--kh-ink-muted);
 }
 
-.kh-ops-rag-text {
-  flex: none;
-  margin-left: auto;
-  color: var(--kh-ink-muted);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.kh-ops-rag-text[data-rag='green'] {
-  color: var(--kh-rag-on-track);
-}
-
-.kh-ops-rag-text[data-rag='amber'] {
-  color: var(--kh-rag-amber-ink);
-}
-
-.kh-ops-rag-text[data-rag='red'] {
-  color: var(--kh-rag-red-ink);
-}
-
-.kh-ops-rag-text[data-rag='none'] {
-  color: var(--kh-ink-muted);
-}
-
 a.kh-section-status[data-rag='green'] {
   border-color: color-mix(in oklch, var(--kh-rag-on-track), transparent 65%);
   background: color-mix(in oklch, var(--kh-rag-on-track) 14%, var(--kh-panel-solid));
@@ -788,7 +764,6 @@ a.kh-section-status[data-rag='none'] {
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail-search,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-group-label,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-nav-label,
-.kh-ops-shell[data-rail-compact='true'] .kh-ops-rag-text,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-user-copy,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-mode-copy {
   display: none;
@@ -846,8 +821,6 @@ a.kh-section-status[data-rag='none'] {
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:focus-within .kh-ops-group-label,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:hover .kh-ops-nav-label,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:focus-within .kh-ops-nav-label,
-.kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:hover .kh-ops-rag-text,
-.kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:focus-within .kh-ops-rag-text,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:hover .kh-ops-user-copy,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:focus-within .kh-ops-user-copy,
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail:hover .kh-ops-mode-copy,
@@ -967,10 +940,6 @@ a.kh-section-status[data-rag='none'] {
   .kh-ops-shell[data-rail-compact='true'] .kh-ops-user-copy,
   .kh-ops-shell[data-rail-compact='true'] .kh-ops-mode-copy {
     display: block;
-  }
-
-  .kh-ops-shell[data-rail-compact='true'] .kh-ops-rag-text {
-    display: inline;
   }
 
   .kh-ops-shell[data-rail-compact='true'] .kh-ops-group-header {

@@ -155,13 +155,21 @@ export function projectTopHref(ctx: NavContext): string {
   return projectHref(ctx, `#${PROJECT_TOP_ANCHOR}`);
 }
 
+/** Name and tooltip for a rail link. Compact mode hides the visible label. */
+export function railItemAccessibleName(label: string, statusLabel: string | null): string {
+  return statusLabel ? `${label}: ${statusLabel}` : label;
+}
+
 function projectSectionNavItem(section: ProjectSectionDef): NavItemDef {
   return {
     id: section.navItemId,
     icon: section.icon,
     labelKey: section.labelKey,
     requires: 'project',
-    href: (ctx) => projectHref(ctx, `#${section.anchor}`),
+    href: (ctx) =>
+      section.navItemId === 'overview'
+        ? projectTopHref(ctx)
+        : projectHref(ctx, `#${section.anchor}`),
   };
 }
 
@@ -561,7 +569,7 @@ export function matchNavItem(
     }
     return (
       pathname === `/workspaces/${ctx.workspaceSlug}/projects/${ctx.projectSlug}` &&
-      (hash === 'project-overview' || hash === '')
+      (hash === PROJECT_TOP_ANCHOR || hash === '')
     );
   }
   if (item.id === 'workspace') {

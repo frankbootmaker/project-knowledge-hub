@@ -120,8 +120,7 @@ export function ProjectSectionSpy({ statuses }: { statuses: ProjectSectionStatus
     let frame = 0;
 
     function pick() {
-      const next = currentSectionAnchor();
-      setActiveAnchor(next);
+      setActiveAnchor(currentSectionAnchor() ?? PROJECT_TOP_ANCHOR);
     }
 
     function schedule() {

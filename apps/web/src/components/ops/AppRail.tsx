@@ -23,6 +23,7 @@ import {
   parseNavSection,
   projectIndexPath,
   projectTopHref,
+  railItemAccessibleName,
   resolveActiveNavSection,
   visibleNavItems,
   visibleNavSections,
@@ -389,7 +390,7 @@ export function AppRail({
                       ? (statuses[section.statusSource] ?? null)
                       : null;
                     const statusLabel = rag ? tProject(`rag.${rag}`) : null;
-                    const accessible = statusLabel ? `${label}: ${statusLabel}` : label;
+                    const accessible = railItemAccessibleName(label, statusLabel);
                     const pageActive = pageItemId === item.id;
                     const locationActive = active && !pageActive;
                     return (
@@ -402,19 +403,20 @@ export function AppRail({
                         aria-current={
                           pageActive ? 'page' : locationActive ? 'location' : undefined
                         }
+                        onClick={item.id === 'overview' ? onProjectTopClick : undefined}
                       >
                         <span className="kh-ops-nav-icon">
                           <NavIcon name={item.icon} />
-                          {rag ? (
-                            <span className="kh-ops-rag-dot" data-rag={rag} aria-hidden />
+                          {statusLabel ? (
+                            <span
+                              className="kh-ops-rag-dot"
+                              data-rag={rag}
+                              title={statusLabel}
+                              aria-hidden
+                            />
                           ) : null}
                         </span>
                         <span className="kh-ops-nav-label">{label}</span>
-                        {statusLabel ? (
-                          <span className="kh-ops-rag-text" data-rag={rag}>
-                            {statusLabel}
-                          </span>
-                        ) : null}
                       </Link>
                     );
                   })}
