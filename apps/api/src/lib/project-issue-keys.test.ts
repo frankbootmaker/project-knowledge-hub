@@ -7,6 +7,7 @@ import {
   organizations,
   workspaces,
   projects,
+  users,
   knowledgeRecords,
   projectTasks,
   projectRaidItems,
@@ -46,6 +47,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
   let task2Id: string; // CSA-T-1 in project2
   let raid1Id: string; // CSA-RR-1 in project1
   let raid2Id: string; // CSA-RR-1 in project2
+  let authorId: string;
 
   beforeEach(async () => {
     const env = testEnv();
@@ -59,6 +61,16 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       .values({ name: `Test Org ${suffix}`, slug: `test-org-${suffix}` })
       .returning();
     orgId = org!.id;
+
+    const [author] = await database.db
+      .insert(users)
+      .values({
+        email: `author-${suffix}@example.com`,
+        displayName: 'Author',
+        status: 'active',
+      })
+      .returning();
+    authorId = author!.id;
 
     // Create two workspaces
     const [ws1, ws2] = await database.db
@@ -128,6 +140,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           contentMarkdown: 'Content 1',
           documentKeyType: key1.issueKeyType,
           documentNumber: key1.issueNumber,
+          createdBy: authorId,
         },
         {
           workspaceId: workspace2Id,
@@ -138,6 +151,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           contentMarkdown: 'Content 2',
           documentKeyType: key2.issueKeyType,
           documentNumber: key2.issueNumber,
+          createdBy: authorId,
         },
       ])
       .returning();
@@ -295,6 +309,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           contentMarkdown: 'Duplicate content',
           documentKeyType: key1.issueKeyType,
           documentNumber: key1.issueNumber,
+          createdBy: authorId,
         })
         .returning();
       
