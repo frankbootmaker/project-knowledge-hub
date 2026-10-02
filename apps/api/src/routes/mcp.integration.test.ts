@@ -588,7 +588,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     });
     const pmToken = (pmWrite.json() as { token: string }).token;
 
-    const create = await mcpCall(app!, pmToken, 52.5, 'tools/call', {
+    const create = await mcpCall(app!, pmToken, 525, 'tools/call', {
       name: 'create_project',
       arguments: {
         workspaceId,
@@ -655,7 +655,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(errorText.toLowerCase()).toContain('human');
 
     // But can transition between draft stages
-    const draftUpdate = await mcpCall(app!, pmToken, 54.5, 'tools/call', {
+    const draftUpdate = await mcpCall(app!, pmToken, 545, 'tools/call', {
       name: 'update_project',
       arguments: {
         projectId,
