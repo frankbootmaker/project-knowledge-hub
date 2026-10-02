@@ -704,9 +704,13 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     });
     expect(listIdea.statusCode).toBe(200);
     const body = listIdea.json() as {
-      result?: { content?: Array<{ text?: string }> };
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
     };
-    const data = JSON.parse(body.result?.content?.[0]?.text ?? '{}') as {
+    const textContent = body.result?.content?.[0]?.text ?? '{}';
+    if (body.result?.isError) {
+      console.error('list_projects error:', textContent);
+    }
+    const data = JSON.parse(textContent) as {
       projects?: Array<{ lifecycleStage: string; name: string }>;
     };
     expect(data.projects?.some((p) => p.lifecycleStage === 'idea')).toBe(true);
