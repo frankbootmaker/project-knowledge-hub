@@ -246,6 +246,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-03
 
 * **Inline table selects** — Delivery row status (and any `select` in a `DataTable` cell) uses `.kh-ops-inline-select`: at least `10rem`, sized to the current label (`field-sizing: content`), with end padding so the chevron does not cover the text. The stakeholder role filter uses the same control. RAID and change status cells stay nowrap text/badges (no select). Text columns still wrap; the table wrap scrolls if nowrap columns overflow.
+* **Workspace switcher** — The rail menu lists workspaces by display name (`Intl.Collator`, `sensitivity: 'base'`, current UI locale). The shared workspaces API stays in creation order for catalogues and admin lists.
 
 ### 2026-10-02
 
