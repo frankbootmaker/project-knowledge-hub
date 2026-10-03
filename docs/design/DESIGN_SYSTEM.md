@@ -130,6 +130,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-toolbar` | List/admin search+filter chrome (also on `FunctionHeader`) |
 | `.kh-ops-data-table` / `.kh-ops-table-wrap` / `.kh-ops-data-item` / `.kh-ops-stack` | Dense tables and catalogue rows. The wrap scrolls horizontally (`overflow-x: auto`) and tables keep `min-width: 42rem`. `DataTable` adds `.kh-ops-table-wrap--sticky` (scrollport `max-height: min(70vh, 48rem)`, sticky header) and `.kh-ops-data-table--fluid` (`min-width: 0`) |
 | `.kh-ops-cell-text` / `.kh-ops-cell-data` / `.kh-ops-cell-status` / `.kh-ops-cell-number` / `.kh-ops-cell-date` / `.kh-ops-cell-actions` | Column kinds on `DataTable`. Text wraps (`overflow-wrap: anywhere`); data, status, number, date, and actions stay one line |
+| `.kh-ops-inline-select` | Native select in a fluid table cell or list toolbar. `min-width: 10rem`, `field-sizing: content` (grows for a longer current label), extra end padding so the label stays clear of the chevron. Also applied to any `select.kh-input` inside a `DataTable` cell |
 | `.kh-ops-sort-btn` / `.kh-ops-filter-btn` / `.kh-ops-filter-dot` / `.kh-ops-table-filter` | Sortable header (arrow + `aria-sort`) and column-filter popover. Popover reuses `.kh-ops-popover` and is portaled (`--kh-z-popover`) |
 | `.kh-ops-delivery-modes` / `.kh-ops-board` / `.kh-ops-lane` / `.kh-ops-task-card` | Delivery view strip, kanban lanes, and task cards |
 | `.kh-ops-delivery-list` / `.kh-ops-delivery-tree-*` / `.kh-ops-tree-*` | Delivery list density (no fixed 1040px min-width) and work-breakdown tree |
@@ -241,6 +242,11 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-10-03
+
+* **Inline table selects** — Delivery row status (and any `select` in a `DataTable` cell) uses `.kh-ops-inline-select`: at least `10rem`, sized to the current label (`field-sizing: content`), with end padding so the chevron does not cover the text. The stakeholder role filter uses the same control. RAID and change status cells stay nowrap text/badges (no select). Text columns still wrap; the table wrap scrolls if nowrap columns overflow.
+* **Workspace switcher** — The rail menu lists workspaces by display name (`Intl.Collator`, `sensitivity: 'base'`, current UI locale). The shared workspaces API stays in creation order for catalogues and admin lists.
 
 ### 2026-10-02
 

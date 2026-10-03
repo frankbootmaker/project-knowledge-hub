@@ -165,7 +165,7 @@ export function ProjectDeliveryList({
         }
         return (
           <Select
-            className="h-9 min-h-9 py-0 text-xs"
+            className="kh-ops-inline-select h-9 min-h-9 py-0 text-xs"
             value={row.status}
             disabled={pending}
             aria-label={t('rowStatus', { item: row.title })}

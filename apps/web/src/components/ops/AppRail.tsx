@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   useEffect,
   useId,
@@ -46,6 +46,7 @@ import {
   writeRailCompact,
 } from '../../lib/ops-prefs';
 import type { SessionPayload } from '../../lib/session';
+import { sortWorkspacesByName } from '../../lib/workspace-sort';
 import { UserAvatar } from '../UserAvatar';
 import { NavIcon, RailModeIcon, SearchGlyphIcon } from './NavIcons';
 
@@ -71,6 +72,11 @@ export function AppRail({
   onOpenChange: (value: boolean) => void;
 }) {
   const t = useTranslations('nav');
+  const locale = useLocale();
+  const orderedWorkspaces = useMemo(
+    () => sortWorkspacesByName(workspaces, locale),
+    [locale, workspaces],
+  );
   const tProject = useTranslations('projects');
   const pathname = usePathname();
   const { statuses, activeAnchor } = useProjectRail();
@@ -287,7 +293,7 @@ export function AppRail({
             >
               {t('allWorkspaces')}
             </Link>
-            {workspaces.map((workspace) => (
+            {orderedWorkspaces.map((workspace) => (
               <Link
                 key={workspace.id}
                 href={`/workspaces/${workspace.slug}`}
