@@ -1240,6 +1240,31 @@ a.kh-section-status[data-rag='none'] {
   white-space: nowrap;
 }
 
+/* `.kh-input` is width:100% and min-width:0. Inside a width:1% nowrap cell
+   that collapses a native <select> to the chevron plus one letter. These
+   rules are unlayered so they beat the components-layer input recipe.
+   The floor fits the longest delivery / RAID / change status and stakeholder
+   role label in en, hu, and de; field-sizing still grows for a longer
+   current value. Text columns stay wrapping. */
+.kh-ops-data-table td:has(> select.kh-input) {
+  width: auto;
+  min-width: max-content;
+}
+
+.kh-ops-inline-select,
+.kh-ops-data-table td select.kh-input {
+  box-sizing: border-box;
+  width: max-content;
+  /* fit-content is not a valid max() argument, so the floor is a length.
+     field-sizing grows past this when the current label is longer. */
+  min-width: 10rem;
+  max-width: none;
+  flex-shrink: 0;
+  field-sizing: content;
+  padding-inline-end: 2rem;
+  white-space: nowrap;
+}
+
 .kh-ops-data-table td.kh-ops-cell-text .kh-ops-competency-list,
 .kh-ops-data-table td.kh-ops-cell-text .kh-ops-roster-person-copy small {
   max-width: none;

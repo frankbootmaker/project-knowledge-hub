@@ -399,7 +399,7 @@ export function ProjectStakeholdersList({
           />
         </label>
         <Select
-          className="h-10 min-h-10 w-auto py-1.5 text-xs"
+          className="kh-ops-inline-select h-10 min-h-10 w-auto py-1.5 text-xs"
           value={selectedRoles.length === 1 ? selectedRoles[0] : ''}
           onChange={(event) =>
             table.setEnumFilter(
