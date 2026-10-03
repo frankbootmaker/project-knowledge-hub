@@ -13,10 +13,8 @@ function source(relativePath: string): string {
 }
 
 /**
- * Content box inside a 10rem select after 0.75rem start padding and 2rem end
- * padding (chevron). Measured in Chrome at 12px: about 114px. The longest
- * current label ("Product Owner") is about 80px in Liberation Sans, so 16
- * characters leaves headroom before the floor must grow.
+ * Labels longer than this still render: field-sizing grows past the 7.5rem
+ * floor. 16 characters matches the longest current status and role strings.
  */
 const MAX_LABEL_CHARS = 16;
 
@@ -48,18 +46,18 @@ function labels(messages: Messages, locale: string): Array<[string, string]> {
 describe('inline table selects', () => {
   const css = source('ops-shell.css');
 
-  it('keeps a 10rem floor and chevron padding on data-table selects', () => {
+  it('keeps a 7.5rem floor and chevron padding on data-table selects', () => {
     expect(css).toContain('.kh-ops-data-table td:has(> select.kh-input)');
     const rule = css.match(
       /\.kh-ops-inline-select,\s*\.kh-ops-data-table td select\.kh-input \{([^}]*)\}/,
     );
     expect(rule).not.toBeNull();
     const body = rule?.[1] ?? '';
-    expect(body).toContain('min-width: 10rem');
+    expect(body).toContain('min-width: 7.5rem');
     expect(body).toContain('width: max-content');
     expect(body).toContain('max-width: none');
     expect(body).toContain('field-sizing: content');
-    expect(body).toContain('padding-inline-end: 2rem');
+    expect(body).toContain('padding-inline-end: 1.75rem');
     expect(body).toContain('white-space: nowrap');
     expect(body).toContain('flex-shrink: 0');
   });
@@ -82,7 +80,7 @@ describe('inline table selects', () => {
     expect(source('../components/ProjectChangeList.tsx')).not.toContain('<Select');
   });
 
-  it('fits en, hu, and de status and role labels inside the 10rem floor', () => {
+  it('keeps en, hu, and de status and role labels short enough to show', () => {
     const all = [
       ...labels(en as Messages, 'en'),
       ...labels(hu as Messages, 'hu'),
