@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Control rail section clicks:** a Control rail click pins the same active section as the matching header shortcut. Hash-only rail links are handled in-page, so the highlight is not left on an earlier section. Back and forward follow `hashchange` and `popstate`.
+
 * **Project section highlight:** header shortcuts and the Control rail follow the same active section. Clicking a section keeps that highlight until the user scrolls, including short sections at the bottom of the page.
 
 * **Control Overview target:** the Control rail Overview item opens `#project-top` (same scroll as the Control heading, query kept) and is active at the top of the project page. Rail status is the shape cue only. Each rail link is named `Label` or `Label: status`, and the status mark keeps a tooltip. The status word remains on the project header chips.

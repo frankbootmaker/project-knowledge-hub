@@ -30,10 +30,8 @@ import {
   type NavContext,
   type NavSectionId,
 } from '../../lib/ops-nav';
-import {
-  PROJECT_TOP_ANCHOR,
-  projectSectionByNavId,
-} from '../../lib/project-sections';
+import { PROJECT_TOP_ANCHOR, projectSectionByNavId } from '../../lib/project-sections';
+import { useFollowProjectAnchor } from './followProjectAnchor';
 import { useProjectRail } from './ProjectRailContext';
 import {
   readLastProject,
@@ -78,7 +76,8 @@ export function AppRail({
   );
   const tProject = useTranslations('projects');
   const pathname = usePathname();
-  const { statuses, activeAnchor, scrollToPinnedAnchor } = useProjectRail();
+  const { statuses, activeAnchor } = useProjectRail();
+  const followProjectAnchor = useFollowProjectAnchor();
   const searchParams = useSearchParams();
   const jumpId = useId();
   const search = searchParams.toString() ? `?${searchParams.toString()}` : '';
@@ -103,7 +102,11 @@ export function AppRail({
     const sync = () => setHash(window.location.hash.replace(/^#/, ''));
     sync();
     window.addEventListener('hashchange', sync);
-    return () => window.removeEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
+    return () => {
+      window.removeEventListener('hashchange', sync);
+      window.removeEventListener('popstate', sync);
+    };
   }, [pathname]);
 
   const pathParts = parseAppPath(pathname);
@@ -224,16 +227,11 @@ export function AppRail({
     setJump('');
   }
 
-  function onProjectTopClick(event: ReactMouseEvent<HTMLAnchorElement>) {
-    const index = projectIndexPath(availabilityCtx);
-    if (!index || pathname !== index) {
+  function onProjectAnchorClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
     }
-    event.preventDefault();
-    scrollToPinnedAnchor(PROJECT_TOP_ANCHOR);
-    const nextUrl = `${index}${window.location.search}#${PROJECT_TOP_ANCHOR}`;
-    window.history.replaceState(null, '', nextUrl);
-    setHash(PROJECT_TOP_ANCHOR);
+    followProjectAnchor(event.currentTarget.getAttribute('href') ?? '', event);
   }
 
   const monogram = userMonogram(session.user.displayName, session.user.fullName);
@@ -325,7 +323,22 @@ export function AppRail({
             <p className="kh-ops-jump-empty">{t('jumpEmpty')}</p>
           ) : (
             jumpHits.map((hit) => (
-              <Link key={`${hit.href}-${hit.label}`} href={hit.href} onClick={() => setJump('')}>
+              <Link
+                key={`${hit.href}-${hit.label}`}
+                href={hit.href}
+                onClick={(event) => {
+                  if (
+                    event.button === 0 &&
+                    !event.metaKey &&
+                    !event.ctrlKey &&
+                    !event.shiftKey &&
+                    !event.altKey
+                  ) {
+                    followProjectAnchor(event.currentTarget.getAttribute('href') ?? hit.href, event);
+                  }
+                  setJump('');
+                }}
+              >
                 {hit.label}
                 <span className="kh-ops-jump-kind">{hit.section}</span>
               </Link>
@@ -367,7 +380,7 @@ export function AppRail({
                     aria-label={t('goToProjectTop')}
                     title={t('goToProjectTop')}
                     aria-current={hash === PROJECT_TOP_ANCHOR ? 'location' : undefined}
-                    onClick={onProjectTopClick}
+                    onClick={onProjectAnchorClick}
                   >
                     <NavIcon name={group.icon} />
                     <span className="kh-ops-group-label">{t(group.labelKey)}</span>
@@ -408,7 +421,7 @@ export function AppRail({
                         aria-current={
                           pageActive ? 'page' : locationActive ? 'location' : undefined
                         }
-                        onClick={item.id === 'overview' ? onProjectTopClick : undefined}
+                        onClick={onProjectAnchorClick}
                       >
                         <span className="kh-ops-nav-icon">
                           <NavIcon name={item.icon} />

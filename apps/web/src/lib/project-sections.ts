@@ -62,6 +62,79 @@ export function isHeaderShortcutActive(sectionAnchor: string, activeAnchor: stri
   return activeAnchor === PROJECT_TOP_ANCHOR && sectionAnchor === 'project-overview';
 }
 
+export function isProjectSectionAnchor(id: string): boolean {
+  return id === PROJECT_TOP_ANCHOR || PROJECT_SECTIONS.some((section) => section.anchor === id);
+}
+
+/** Hash from `hashchange` or `popstate`. Unknown fragments are ignored. */
+export function projectAnchorFromHash(hash: string): string | null {
+  let id = hash.startsWith('#') ? hash.slice(1) : hash;
+  if (!id) {
+    return null;
+  }
+  try {
+    id = decodeURIComponent(id);
+  } catch {
+    return null;
+  }
+  return isProjectSectionAnchor(id) ? id : null;
+}
+
+export type ProjectAnchorClickPlan = {
+  anchor: string;
+  /**
+   * Same page and no explicit query change. The click must be handled in-page.
+   * A Next.js `<Link>` would `preventDefault` and `router.push` first, which
+   * never fires `hashchange` and never reaches the scroll spy.
+   */
+  inPage: boolean;
+  /** `#project-top` replaces the current entry so Overview does not stack history. */
+  history: 'push' | 'replace';
+  nextUrl: string;
+};
+
+function normalizeSearch(search: string): string {
+  if (!search) {
+    return '';
+  }
+  return search.startsWith('?') ? search : `?${search}`;
+}
+
+/**
+ * Shared plan for a header shortcut (`#anchor`) and a Control rail link
+ * (`/projects/:slug#anchor`). Both produce the same anchor for the header.
+ */
+export function planProjectAnchorClick(input: {
+  href: string;
+  pathname: string;
+  search: string;
+}): ProjectAnchorClickPlan | null {
+  const href = input.href.trim();
+  if (!href) {
+    return null;
+  }
+  const currentSearch = normalizeSearch(input.search);
+  let url: URL;
+  try {
+    url = new URL(href, `https://knowhub.local${input.pathname}${currentSearch}`);
+  } catch {
+    return null;
+  }
+  const anchor = projectAnchorFromHash(url.hash);
+  if (!anchor || url.pathname !== input.pathname) {
+    return null;
+  }
+  const specifiesSearch = href.includes('?');
+  const inPage = !specifiesSearch || url.search === currentSearch;
+  const nextSearch = specifiesSearch ? url.search : currentSearch;
+  return {
+    anchor,
+    inPage,
+    history: anchor === PROJECT_TOP_ANCHOR ? 'replace' : 'push',
+    nextUrl: `${input.pathname}${nextSearch}#${anchor}`,
+  };
+}
+
 export const PROJECT_SECTION_STATUS_SOURCES = ['timeline', 'financial', 'risk', 'change'] as const;
 
 export type ProjectSectionStatusSource = (typeof PROJECT_SECTION_STATUS_SOURCES)[number];

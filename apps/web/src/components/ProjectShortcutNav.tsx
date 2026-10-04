@@ -9,6 +9,7 @@ import {
   type ProjectSectionStatusValue,
   type ProjectSectionStatuses,
 } from '../lib/project-sections';
+import { useFollowProjectAnchor } from './ops/followProjectAnchor';
 import { useProjectRail } from './ops/ProjectRailContext';
 
 function ragNavClass(rag: ProjectSectionStatusValue | null): string {
@@ -23,6 +24,7 @@ export function ProjectShortcutNav({ statuses }: { statuses: ProjectSectionStatu
   const tNav = useTranslations('nav');
   const tProject = useTranslations('projects');
   const { activeAnchor } = useProjectRail();
+  const followProjectAnchor = useFollowProjectAnchor();
 
   return (
     <nav aria-label={tProject('sectionNav')} className="flex flex-wrap items-center gap-2">
@@ -45,6 +47,18 @@ export function ProjectShortcutNav({ statuses }: { statuses: ProjectSectionStatu
             title={status ? accessible : undefined}
             aria-label={accessible}
             aria-current={current ? 'location' : undefined}
+            onClick={(event) => {
+              if (
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+              ) {
+                return;
+              }
+              followProjectAnchor(`#${section.anchor}`, event);
+            }}
           >
             {label}
             {rag === 'none' && status ? <span className="font-semibold">{status}</span> : null}

@@ -246,6 +246,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-04
 
 * **Section highlight sync** — Header shortcuts and the Control rail share one active anchor. A click keeps that section until the user scrolls. At the bottom of the page, the last section whose top is still in the viewport is chosen, so a short section is not left on an earlier taller one.
+* **Rail section clicks** — Control rail section links use the same in-page handler as the header shortcuts (pin that anchor, one scroll, keep the current query). Hash-only clicks do not go through the Next.js router: that router marks the click handled before the scroll spy and does not emit `hashchange`. Back and forward update the pin from `popstate` as well as `hashchange`.
 
 ### 2026-10-03
 
