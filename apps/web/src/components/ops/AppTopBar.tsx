@@ -6,9 +6,9 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../lib/cn';
 import {
-  findActiveNavItem,
   headerCrumbs,
   parseAppPath,
+  resolveActiveNavItem,
   type NavContext,
 } from '../../lib/ops-nav';
 import { readLastProject, readLastWorkspace } from '../../lib/ops-prefs';
@@ -17,6 +17,7 @@ import { LandingLangSegment } from '../landing/LandingLangSegment';
 import { LandingThemeSegment } from '../landing/LandingThemeSegment';
 import type { ShellWorkspace } from './AppRail';
 import { MenuGlyphIcon, SearchGlyphIcon } from './NavIcons';
+import { useProjectRail } from './ProjectRailContext';
 
 export function AppTopBar({
   workspaces,
@@ -33,6 +34,7 @@ export function AppTopBar({
   const tCommon = useTranslations('common');
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { activeAnchor } = useProjectRail();
   const [hash, setHash] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
@@ -51,7 +53,11 @@ export function AppTopBar({
     const sync = () => setHash(window.location.hash.replace(/^#/, ''));
     sync();
     window.addEventListener('hashchange', sync);
-    return () => window.removeEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
+    return () => {
+      window.removeEventListener('hashchange', sync);
+      window.removeEventListener('popstate', sync);
+    };
   }, [pathname]);
 
   useEffect(() => {
@@ -104,7 +110,7 @@ export function AppTopBar({
   ]);
 
   const search = searchParams.toString() ? `?${searchParams.toString()}` : '';
-  const activeItem = findActiveNavItem(ctx, pathname, hash, search);
+  const activeItem = resolveActiveNavItem(ctx, pathname, hash, search, activeAnchor);
   const workspace = workspaces.find((row) => row.slug === ctx.workspaceSlug);
   const crumbs = headerCrumbs(pathname, {
     workspaceName: workspace?.name,

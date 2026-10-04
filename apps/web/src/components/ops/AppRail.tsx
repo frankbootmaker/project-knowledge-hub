@@ -15,7 +15,6 @@ import { cn } from '../../lib/cn';
 import { logoutAction } from '../../lib/logout-action';
 import { userMonogram } from '../../lib/monogram';
 import {
-  findActiveNavItem,
   inferNavSection,
   isRailItemActive,
   navAvailabilityContext,
@@ -154,10 +153,6 @@ export function AppRail({
     [pathname, session.user.isSystemAdmin],
   );
   const visibleSections = useMemo(() => visibleNavSections(availabilityCtx), [availabilityCtx]);
-  const pageItemId = useMemo(
-    () => findActiveNavItem(availabilityCtx, pathname, hash, search)?.id ?? null,
-    [availabilityCtx, pathname, hash, search],
-  );
 
   useEffect(() => {
     const inferred = inferNavSection(pathname, hash, search);
@@ -409,8 +404,6 @@ export function AppRail({
                       : null;
                     const statusLabel = rag ? tProject(`rag.${rag}`) : null;
                     const accessible = railItemAccessibleName(label, statusLabel);
-                    const pageActive = pageItemId === item.id;
-                    const locationActive = active && !pageActive;
                     return (
                       <Link
                         key={item.id}
@@ -419,7 +412,7 @@ export function AppRail({
                         aria-label={accessible}
                         className={active ? 'active' : undefined}
                         aria-current={
-                          pageActive ? 'page' : locationActive ? 'location' : undefined
+                          active ? (activeAnchor ? 'location' : 'page') : undefined
                         }
                         onClick={onProjectAnchorClick}
                       >

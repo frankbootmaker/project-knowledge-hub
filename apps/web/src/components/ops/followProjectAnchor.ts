@@ -1,14 +1,17 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
-import { planProjectAnchorClick } from '../../lib/project-sections';
+import { planProjectAnchorClick, scrollToProjectAnchor } from '../../lib/project-sections';
 import { useProjectRail } from './ProjectRailContext';
 
 /**
  * Header shortcuts and Control rail links both call this.
- * Hash-only clicks are taken over so Next.js `<Link>` cannot swallow them.
+ * A hash-only click is taken over so Next.js `<Link>` cannot swallow the pin.
+ * Dropping a section view query goes through the router so the page state updates.
  */
 export function useFollowProjectAnchor() {
+  const router = useRouter();
   const { scrollToPinnedAnchor, pinAnchor, noteProgrammaticScroll } = useProjectRail();
 
   return useCallback(
@@ -21,24 +24,28 @@ export function useFollowProjectAnchor() {
       if (!plan) {
         return false;
       }
+      event?.preventDefault();
       if (!plan.inPage) {
         pinAnchor(plan.anchor);
         noteProgrammaticScroll();
-        return false;
+        const navigate = plan.history === 'replace' ? router.replace : router.push;
+        navigate(plan.nextUrl, { scroll: false });
+        scrollToProjectAnchor(plan.anchor);
+        return true;
       }
-      event?.preventDefault();
       scrollToPinnedAnchor(plan.anchor);
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (current !== plan.nextUrl) {
+        const state = window.history.state;
         if (plan.history === 'replace') {
-          window.history.replaceState(null, '', plan.nextUrl);
+          window.history.replaceState(state, '', plan.nextUrl);
         } else {
-          window.history.pushState(null, '', plan.nextUrl);
+          window.history.pushState(state, '', plan.nextUrl);
         }
         window.dispatchEvent(new HashChangeEvent('hashchange'));
       }
       return true;
     },
-    [noteProgrammaticScroll, pinAnchor, scrollToPinnedAnchor],
+    [noteProgrammaticScroll, pinAnchor, router, scrollToPinnedAnchor],
   );
 }

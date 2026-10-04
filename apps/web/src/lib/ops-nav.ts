@@ -1,4 +1,9 @@
-import { PROJECT_SECTIONS, PROJECT_TOP_ANCHOR, type ProjectSectionDef } from './project-sections';
+import {
+  PROJECT_SECTIONS,
+  PROJECT_TOP_ANCHOR,
+  projectAnchorFromHash,
+  type ProjectSectionDef,
+} from './project-sections';
 
 export const NAV_SECTION_IDS = [
   'personal',
@@ -618,13 +623,27 @@ export function matchNavItem(
     );
   }
   if (hrefParams.get('stakeholders') === 'org') {
-    return pathMatches && params.get('stakeholders') === 'org';
+    return (
+      pathMatches &&
+      params.get('stakeholders') === 'org' &&
+      hashId(hash) === 'project-stakeholders'
+    );
   }
   if (hrefParams.get('utilization') === '1') {
-    return pathMatches && params.get('utilization') === '1';
+    return (
+      pathMatches &&
+      params.get('utilization') === '1' &&
+      hashId(hash) === 'project-stakeholders'
+    );
   }
   if (hrefHash) {
     if (item.id === 'delivery' && isRailDeliveryView(params.get('delivery'))) {
+      return false;
+    }
+    if (
+      item.id === 'stakeholders' &&
+      (params.get('stakeholders') === 'org' || params.get('utilization') === '1')
+    ) {
       return false;
     }
     return pathMatches && hash === hrefHash;
@@ -646,9 +665,47 @@ function hrefParts(href: string): {
 }
 
 /**
- * Hash/route match, overridden by the project-page scroll spy when it
- * reports a visible section. View-query items (scrum, org, utilization)
- * keep the URL match so they are not double-highlighted with the section.
+ * One rail id for the pinned or scrolled section.
+ * A view query only distinguishes items that share that section
+ * (org chart vs stakeholders, scrum vs delivery). It never highlights
+ * a different section.
+ */
+export function navItemIdForActiveAnchor(activeAnchor: string, search: string): string | null {
+  const params = readSearchParams(search);
+  if (activeAnchor === PROJECT_TOP_ANCHOR || activeAnchor === 'project-overview') {
+    return 'overview';
+  }
+  const section = PROJECT_SECTIONS.find((row) => row.anchor === activeAnchor);
+  if (!section) {
+    return null;
+  }
+  if (activeAnchor === 'project-stakeholders') {
+    if (params.get('utilization') === '1') {
+      return 'utilization';
+    }
+    if (params.get('stakeholders') === 'org') {
+      return 'org';
+    }
+    return 'stakeholders';
+  }
+  if (activeAnchor === 'project-delivery') {
+    const delivery = params.get('delivery');
+    if (isRailDeliveryView(delivery)) {
+      return delivery;
+    }
+    return 'delivery';
+  }
+  return section.navItemId;
+}
+
+function navItemOnPath(item: NavItemDef, ctx: NavContext, pathname: string): boolean {
+  const href = hrefParts(item.href(ctx));
+  return pathname === href.path || (href.path !== '/' && pathname.startsWith(`${href.path}/`));
+}
+
+/**
+ * The single highlighted rail item. A pinned or spied anchor wins over the URL.
+ * View queries do not select a second item.
  */
 export function isRailItemActive(
   item: NavItemDef,
@@ -658,45 +715,13 @@ export function isRailItemActive(
   search: string,
   activeAnchor: string | null,
 ): boolean {
-  if (!activeAnchor) {
-    return matchNavItem(item, ctx, pathname, hash, search);
+  if (activeAnchor) {
+    if (item.id !== navItemIdForActiveAnchor(activeAnchor, search)) {
+      return false;
+    }
+    return navItemOnPath(item, ctx, pathname);
   }
-
-  if (
-    item.id === 'overview' &&
-    (activeAnchor === PROJECT_TOP_ANCHOR || activeAnchor === 'project-overview')
-  ) {
-    const overviewHref = hrefParts(item.href(ctx));
-    return (
-      pathname === overviewHref.path ||
-      (overviewHref.path !== '/' && pathname.startsWith(`${overviewHref.path}/`))
-    );
-  }
-
-  const href = hrefParts(item.href(ctx));
-  const hrefParams = new URLSearchParams(href.query);
-  const hasViewQuery =
-    hrefParams.has('delivery') || hrefParams.has('stakeholders') || hrefParams.has('utilization');
-  if (hasViewQuery || !href.hash) {
-    return matchNavItem(item, ctx, pathname, hash, search);
-  }
-
-  const params = readSearchParams(search);
-  const pathMatches =
-    pathname === href.path || (href.path !== '/' && pathname.startsWith(`${href.path}/`));
-  if (!pathMatches || href.hash !== activeAnchor) {
-    return false;
-  }
-  if (activeAnchor === 'project-delivery' && isRailDeliveryView(params.get('delivery'))) {
-    return false;
-  }
-  if (
-    activeAnchor === 'project-stakeholders' &&
-    (params.get('stakeholders') === 'org' || params.get('utilization') === '1')
-  ) {
-    return false;
-  }
-  return true;
+  return matchNavItem(item, ctx, pathname, hash, search);
 }
 
 export function findActiveNavItem(
@@ -716,6 +741,35 @@ export function findActiveNavItem(
     }
   }
   return null;
+}
+
+/** Header title and the one rail highlight. The anchor wins over view queries. */
+export function resolveActiveNavItem(
+  ctx: NavContext,
+  pathname: string,
+  hash: string,
+  search: string,
+  activeAnchor: string | null,
+): NavItemDef | null {
+  const anchor = activeAnchor || projectAnchorFromHash(hash.startsWith('#') ? hash : hash ? `#${hash}` : '');
+  if (anchor) {
+    const id = navItemIdForActiveAnchor(anchor, search);
+    if (!id) {
+      return null;
+    }
+    for (const section of NAV_SECTIONS) {
+      for (const item of section.items) {
+        if (item.id !== id || !isNavItemAvailable(item, ctx)) {
+          continue;
+        }
+        if (navItemOnPath(item, ctx, pathname)) {
+          return item;
+        }
+      }
+    }
+    return null;
+  }
+  return findActiveNavItem(ctx, pathname, hash, search);
 }
 
 export type HeaderCrumb = {

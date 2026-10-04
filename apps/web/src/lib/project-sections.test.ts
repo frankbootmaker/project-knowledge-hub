@@ -143,8 +143,8 @@ describe('project sections', () => {
       nextUrl: `${path}#project-systems`,
     });
     expect(header?.anchor).toBe(rail?.anchor);
-    expect(header?.inPage).toBe(true);
-    expect(header?.nextUrl).toBe(`${path}?delivery=list#project-systems`);
+    expect(header?.inPage).toBe(false);
+    expect(header?.nextUrl).toBe(`${path}#project-systems`);
     expect(isHeaderShortcutActive('project-systems', rail?.anchor ?? null)).toBe(true);
     expect(isHeaderShortcutActive('project-raid', rail?.anchor ?? null)).toBe(false);
     expect(
@@ -167,9 +167,19 @@ describe('project sections', () => {
     });
     expect(top).toMatchObject({
       anchor: 'project-top',
-      inPage: true,
+      inPage: false,
       history: 'replace',
-      nextUrl: `${path}?delivery=list#project-top`,
+      nextUrl: `${path}#project-top`,
+    });
+    const raidWhileOrg = planProjectAnchorClick({
+      href: `${path}#project-raid`,
+      pathname: path,
+      search: '?stakeholders=org&task=abc',
+    });
+    expect(raidWhileOrg).toMatchObject({
+      anchor: 'project-raid',
+      inPage: false,
+      nextUrl: `${path}?task=abc#project-raid`,
     });
     const scrum = planProjectAnchorClick({
       href: `${path}?delivery=scrum#project-delivery`,

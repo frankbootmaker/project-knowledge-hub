@@ -100,6 +100,18 @@ function normalizeSearch(search: string): string {
   return search.startsWith('?') ? search : `?${search}`;
 }
 
+/** View switches. They choose a rail item only for their own section, and a hash-only click drops them. */
+const SECTION_VIEW_PARAMS = ['stakeholders', 'utilization', 'delivery'] as const;
+
+export function searchWithoutSectionViews(search: string): string {
+  const params = new URLSearchParams(normalizeSearch(search).slice(1));
+  for (const key of SECTION_VIEW_PARAMS) {
+    params.delete(key);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
 /**
  * Shared plan for a header shortcut (`#anchor`) and a Control rail link
  * (`/projects/:slug#anchor`). Both produce the same anchor for the header.
@@ -125,11 +137,10 @@ export function planProjectAnchorClick(input: {
     return null;
   }
   const specifiesSearch = href.includes('?');
-  const inPage = !specifiesSearch || url.search === currentSearch;
-  const nextSearch = specifiesSearch ? url.search : currentSearch;
+  const nextSearch = specifiesSearch ? url.search : searchWithoutSectionViews(currentSearch);
   return {
     anchor,
-    inPage,
+    inPage: nextSearch === currentSearch,
     history: anchor === PROJECT_TOP_ANCHOR ? 'replace' : 'push',
     nextUrl: `${input.pathname}${nextSearch}#${anchor}`,
   };
