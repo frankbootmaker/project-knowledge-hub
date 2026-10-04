@@ -33,7 +33,6 @@ import {
 import {
   PROJECT_TOP_ANCHOR,
   projectSectionByNavId,
-  scrollToProjectAnchor,
 } from '../../lib/project-sections';
 import { useProjectRail } from './ProjectRailContext';
 import {
@@ -79,7 +78,7 @@ export function AppRail({
   );
   const tProject = useTranslations('projects');
   const pathname = usePathname();
-  const { statuses, activeAnchor } = useProjectRail();
+  const { statuses, activeAnchor, scrollToPinnedAnchor } = useProjectRail();
   const searchParams = useSearchParams();
   const jumpId = useId();
   const search = searchParams.toString() ? `?${searchParams.toString()}` : '';
@@ -231,7 +230,7 @@ export function AppRail({
       return;
     }
     event.preventDefault();
-    scrollToProjectAnchor(PROJECT_TOP_ANCHOR);
+    scrollToPinnedAnchor(PROJECT_TOP_ANCHOR);
     const nextUrl = `${index}${window.location.search}#${PROJECT_TOP_ANCHOR}`;
     window.history.replaceState(null, '', nextUrl);
     setHash(PROJECT_TOP_ANCHOR);

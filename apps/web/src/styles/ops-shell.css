@@ -309,6 +309,11 @@ a.kh-section-status[data-rag='none'] {
   color: var(--kh-ink-muted);
 }
 
+a.kh-section-shortcut[aria-current='location'] {
+  box-shadow: inset 0 0 0 2px var(--kh-ink);
+  font-weight: 700;
+}
+
 .kh-ops-project-top {
   scroll-margin-top: 76px;
 }
