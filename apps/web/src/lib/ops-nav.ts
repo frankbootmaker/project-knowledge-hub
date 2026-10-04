@@ -662,6 +662,17 @@ export function isRailItemActive(
     return matchNavItem(item, ctx, pathname, hash, search);
   }
 
+  if (
+    item.id === 'overview' &&
+    (activeAnchor === PROJECT_TOP_ANCHOR || activeAnchor === 'project-overview')
+  ) {
+    const overviewHref = hrefParts(item.href(ctx));
+    return (
+      pathname === overviewHref.path ||
+      (overviewHref.path !== '/' && pathname.startsWith(`${overviewHref.path}/`))
+    );
+  }
+
   const href = hrefParts(item.href(ctx));
   const hrefParams = new URLSearchParams(href.query);
   const hasViewQuery =

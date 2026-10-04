@@ -243,6 +243,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-04
+
+* **Section highlight sync** — Header shortcuts and the Control rail share one active anchor. A click keeps that section until the user scrolls. At the bottom of the page, the last section whose top is still in the viewport is chosen, so a short section is not left on an earlier taller one.
+
 ### 2026-10-03
 
 * **Narrower inline selects** — `.kh-ops-inline-select` floor is `7.5rem` with `1.75rem` end padding. `field-sizing: content` still grows when the current label is longer than the floor, so the chevron does not cover the text.

@@ -338,6 +338,12 @@ describe('ops nav', () => {
     expect(isRailItemActive(budget, ctx, path, '', '', 'project-budget')).toBe(true);
     expect(isRailItemActive(overview, ctx, path, '', '', 'project-budget')).toBe(false);
     expect(isRailItemActive(overview, ctx, path, 'project-raid', '', 'project-top')).toBe(true);
+    expect(isRailItemActive(overview, ctx, path, 'project-overview', '', 'project-overview')).toBe(
+      true,
+    );
+    expect(isRailItemActive(budget, ctx, path, 'project-overview', '', 'project-overview')).toBe(
+      false,
+    );
     expect(isRailItemActive(budget, ctx, path, 'project-raid', '', 'project-top')).toBe(false);
     expect(
       isRailItemActive(stakeholders, ctx, path, '', '?stakeholders=org', 'project-stakeholders'),

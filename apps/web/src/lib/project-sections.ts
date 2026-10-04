@@ -4,6 +4,64 @@ import type { NavIconName, NavItemId } from './ops-nav';
 /** In-page target for the Control rail heading (project header). */
 export const PROJECT_TOP_ANCHOR = 'project-top';
 
+/** Sticky header offset used when choosing the section in view. */
+export const SECTION_MARKER_PX = 96;
+
+export type SectionViewportOffset = {
+  id: string;
+  /** `getBoundingClientRect().top` relative to the viewport. */
+  top: number;
+};
+
+/**
+ * Section to mark active.
+ * A click pin wins until the caller clears it.
+ * Otherwise the last section whose top has reached the marker.
+ * At the bottom of the page, later short sections never reach that marker,
+ * so the last section whose top is still inside the viewport wins instead.
+ */
+export function pickActiveProjectSection(input: {
+  sections: readonly SectionViewportOffset[];
+  marker?: number;
+  viewportHeight: number;
+  atBottom: boolean;
+  pinnedAnchor?: string | null;
+}): string | null {
+  if (input.pinnedAnchor) {
+    return input.pinnedAnchor;
+  }
+  const marker = input.marker ?? SECTION_MARKER_PX;
+  if (input.atBottom) {
+    let lastVisible: string | null = null;
+    for (const section of input.sections) {
+      if (section.top < input.viewportHeight) {
+        lastVisible = section.id;
+      }
+    }
+    if (lastVisible) {
+      return lastVisible;
+    }
+  }
+  let current: string | null = null;
+  for (const section of input.sections) {
+    if (section.top <= marker) {
+      current = section.id;
+    }
+  }
+  return current;
+}
+
+/** Header chip that matches the rail's active anchor. Overview also covers the page top. */
+export function isHeaderShortcutActive(sectionAnchor: string, activeAnchor: string | null): boolean {
+  if (!activeAnchor) {
+    return false;
+  }
+  if (activeAnchor === sectionAnchor) {
+    return true;
+  }
+  return activeAnchor === PROJECT_TOP_ANCHOR && sectionAnchor === 'project-overview';
+}
+
 export const PROJECT_SECTION_STATUS_SOURCES = ['timeline', 'financial', 'risk', 'change'] as const;
 
 export type ProjectSectionStatusSource = (typeof PROJECT_SECTION_STATUS_SOURCES)[number];
