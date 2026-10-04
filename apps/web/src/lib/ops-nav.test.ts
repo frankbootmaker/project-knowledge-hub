@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PROJECT_SECTIONS } from './project-sections';
+import { isHeaderShortcutActive, planProjectAnchorClick, PROJECT_SECTIONS } from './project-sections';
 import {
   findActiveNavItem,
   inferNavSection,
@@ -321,6 +321,27 @@ describe('ops nav', () => {
     expect(railItemAccessibleName('Overview', null)).toBe('Overview');
     expect(railItemAccessibleName('Delivery', 'On track')).toBe('Delivery: On track');
     expect(railItemAccessibleName('Budgeting', 'No budget')).toBe('Budgeting: No budget');
+  });
+
+  it('a control rail click activates the matching header shortcut', () => {
+    const path = '/workspaces/platform/projects/renewal';
+    const items = NAV_SECTIONS.flatMap((section) => section.items);
+    const budget = items.find((item) => item.id === 'budget')!;
+    const raid = items.find((item) => item.id === 'raid')!;
+    const plan = planProjectAnchorClick({
+      href: budget.href(ctx),
+      pathname: path,
+      search: '',
+    });
+    expect(plan?.anchor).toBe('project-budget');
+    expect(isHeaderShortcutActive('project-budget', plan?.anchor ?? null)).toBe(true);
+    expect(isHeaderShortcutActive('project-raid', plan?.anchor ?? null)).toBe(false);
+    expect(isRailItemActive(budget, ctx, path, 'project-raid', '', plan?.anchor ?? null)).toBe(
+      true,
+    );
+    expect(isRailItemActive(raid, ctx, path, 'project-raid', '', plan?.anchor ?? null)).toBe(
+      false,
+    );
   });
 
   it('uses the scroll spy anchor for section links', () => {

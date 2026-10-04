@@ -7,6 +7,8 @@ import {
   PROJECT_TOP_ANCHOR,
   isHeaderShortcutActive,
   pickActiveProjectSection,
+  planProjectAnchorClick,
+  projectAnchorFromHash,
   projectAnchorScrollBehavior,
   projectSectionByNavId,
   type SectionViewportOffset,
@@ -112,6 +114,70 @@ describe('project sections', () => {
         atBottom: false,
       }),
     ).toBeNull();
+  });
+
+  it('a rail click updates the header active item', () => {
+    const path = '/workspaces/platform/projects/renewal';
+    const sections: SectionViewportOffset[] = [
+      { id: 'project-delivery', top: -480 },
+      { id: 'project-budget', top: -220 },
+      { id: 'project-raid', top: 40 },
+      { id: 'project-change', top: 320 },
+      { id: 'project-systems', top: 540 },
+      { id: 'project-knowledge', top: 760 },
+    ];
+    const rail = planProjectAnchorClick({
+      href: `${path}#project-systems`,
+      pathname: path,
+      search: '',
+    });
+    const header = planProjectAnchorClick({
+      href: '#project-systems',
+      pathname: path,
+      search: '?delivery=list',
+    });
+    expect(rail).toEqual({
+      anchor: 'project-systems',
+      inPage: true,
+      history: 'push',
+      nextUrl: `${path}#project-systems`,
+    });
+    expect(header?.anchor).toBe(rail?.anchor);
+    expect(header?.inPage).toBe(true);
+    expect(header?.nextUrl).toBe(`${path}?delivery=list#project-systems`);
+    expect(isHeaderShortcutActive('project-systems', rail?.anchor ?? null)).toBe(true);
+    expect(isHeaderShortcutActive('project-raid', rail?.anchor ?? null)).toBe(false);
+    expect(
+      pickActiveProjectSection({
+        sections,
+        viewportHeight: 800,
+        atBottom: true,
+        pinnedAnchor: rail?.anchor,
+      }),
+    ).toBe('project-systems');
+    expect(projectAnchorFromHash('#project-change')).toBe('project-change');
+    expect(isHeaderShortcutActive('project-change', projectAnchorFromHash('#project-change'))).toBe(
+      true,
+    );
+    expect(projectAnchorFromHash('#not-a-section')).toBeNull();
+    const top = planProjectAnchorClick({
+      href: `${path}#project-top`,
+      pathname: path,
+      search: '?delivery=list',
+    });
+    expect(top).toMatchObject({
+      anchor: 'project-top',
+      inPage: true,
+      history: 'replace',
+      nextUrl: `${path}?delivery=list#project-top`,
+    });
+    const scrum = planProjectAnchorClick({
+      href: `${path}?delivery=scrum#project-delivery`,
+      pathname: path,
+      search: '',
+    });
+    expect(scrum?.inPage).toBe(false);
+    expect(isHeaderShortcutActive('project-delivery', scrum?.anchor ?? null)).toBe(true);
   });
 
   it('highlights the same header chip as the active rail anchor', () => {

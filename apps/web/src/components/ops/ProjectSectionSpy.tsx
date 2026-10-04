@@ -7,24 +7,13 @@ import {
   PROJECT_TOP_ANCHOR,
   SECTION_MARKER_PX,
   pickActiveProjectSection,
+  projectAnchorFromHash,
   scrollToProjectAnchor,
   type ProjectSectionStatuses,
   type SectionViewportOffset,
 } from '../../lib/project-sections';
+import { useFollowProjectAnchor } from './followProjectAnchor';
 import { useProjectRail } from './ProjectRailContext';
-
-function isProjectAnchor(id: string): boolean {
-  return id === PROJECT_TOP_ANCHOR || PROJECT_SECTIONS.some((section) => section.anchor === id);
-}
-
-function hashFromHref(href: string): string | null {
-  const hashIndex = href.indexOf('#');
-  if (hashIndex < 0) {
-    return null;
-  }
-  const id = href.slice(hashIndex + 1);
-  return id || null;
-}
 
 function measureSections(): SectionViewportOffset[] {
   const sections: SectionViewportOffset[] = [];
@@ -60,6 +49,7 @@ export function ProjectSectionSpy({ statuses }: { statuses: ProjectSectionStatus
     releasePinForUserScroll,
     releasePinForUserIntent,
   } = useProjectRail();
+  const followProjectAnchor = useFollowProjectAnchor();
 
   useEffect(() => {
     setStatuses(statuses);
@@ -123,9 +113,9 @@ export function ProjectSectionSpy({ statuses }: { statuses: ProjectSectionStatus
       onUserIntent();
     }
 
-    const hash = window.location.hash.replace(/^#/, '');
+    const hash = projectAnchorFromHash(window.location.hash);
     let mountFrame = 0;
-    if (isProjectAnchor(hash)) {
+    if (hash) {
       pinAnchor(hash);
       noteProgrammaticScroll();
       mountFrame = window.requestAnimationFrame(() => {
@@ -133,13 +123,22 @@ export function ProjectSectionSpy({ statuses }: { statuses: ProjectSectionStatus
       });
     }
 
-    function onHash() {
-      const next = window.location.hash.replace(/^#/, '');
-      if (!isProjectAnchor(next) || readPinnedAnchor() === next) {
+    function onLocationAnchor(nextHash: string) {
+      const next = projectAnchorFromHash(nextHash);
+      if (!next) {
+        releasePinForUserIntent();
+        schedule();
+        return;
+      }
+      if (readPinnedAnchor() === next) {
         return;
       }
       pinAnchor(next);
       noteProgrammaticScroll();
+    }
+
+    function onHashOrPop() {
+      onLocationAnchor(window.location.hash);
     }
 
     function onAnchorClick(event: MouseEvent) {
@@ -157,37 +156,11 @@ export function ProjectSectionSpy({ statuses }: { statuses: ProjectSectionStatus
       if (!(target instanceof Element)) {
         return;
       }
-      const link = target.closest('a[href]');
-      const href = link?.getAttribute('href');
+      const href = target.closest('a[href]')?.getAttribute('href');
       if (!href) {
         return;
       }
-      const id = hashFromHref(href);
-      if (!id || !isProjectAnchor(id) || !document.getElementById(id)) {
-        return;
-      }
-      let url: URL;
-      try {
-        url = new URL(href, window.location.href);
-      } catch {
-        return;
-      }
-      if (url.pathname !== window.location.pathname) {
-        return;
-      }
-      pinAnchor(id);
-      noteProgrammaticScroll();
-      if (!href.startsWith('#')) {
-        return;
-      }
-      event.preventDefault();
-      scrollToProjectAnchor(id);
-      const nextUrl = `${window.location.pathname}${window.location.search}#${id}`;
-      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (current !== nextUrl) {
-        window.history.pushState(null, '', nextUrl);
-        window.dispatchEvent(new HashChangeEvent('hashchange'));
-      }
+      followProjectAnchor(href, event);
     }
 
     schedule();
@@ -196,7 +169,8 @@ export function ProjectSectionSpy({ statuses }: { statuses: ProjectSectionStatus
     window.addEventListener('wheel', onUserIntent, { passive: true });
     window.addEventListener('touchmove', onUserIntent, { passive: true });
     window.addEventListener('keydown', onKey);
-    window.addEventListener('hashchange', onHash);
+    window.addEventListener('hashchange', onHashOrPop);
+    window.addEventListener('popstate', onHashOrPop);
     document.addEventListener('click', onAnchorClick);
     const observer = new MutationObserver(schedule);
     const pageRoot = document.getElementById(PROJECT_TOP_ANCHOR)?.parentElement;
@@ -212,13 +186,15 @@ export function ProjectSectionSpy({ statuses }: { statuses: ProjectSectionStatus
       window.removeEventListener('wheel', onUserIntent);
       window.removeEventListener('touchmove', onUserIntent);
       window.removeEventListener('keydown', onKey);
-      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('hashchange', onHashOrPop);
+      window.removeEventListener('popstate', onHashOrPop);
       document.removeEventListener('click', onAnchorClick);
       observer.disconnect();
       setActiveAnchor(null);
     };
   }, [
     pathname,
+    followProjectAnchor,
     isProgrammaticScroll,
     noteProgrammaticScroll,
     pinAnchor,
