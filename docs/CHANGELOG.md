@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **One active project section:** the header title and the Control rail follow the pinned or scrolled section. `?stakeholders=org` highlights Org chart only while that section is active. Choosing another section drops that view query so the title and rail do not stay on Org chart.
+
 * **Control rail section clicks:** a Control rail click pins the same active section as the matching header shortcut. Hash-only rail links are handled in-page, so the highlight is not left on an earlier section. Back and forward follow `hashchange` and `popstate`.
 
 * **Project section highlight:** header shortcuts and the Control rail follow the same active section. Clicking a section keeps that highlight until the user scrolls, including short sections at the bottom of the page.

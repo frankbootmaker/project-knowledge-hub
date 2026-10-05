@@ -5,6 +5,8 @@ import {
   inferNavSection,
   isNavItemAvailable,
   isRailItemActive,
+  navItemIdForActiveAnchor,
+  resolveActiveNavItem,
   matchNavItem,
   NAV_SECTIONS,
   navAvailabilityContext,
@@ -342,6 +344,56 @@ describe('ops nav', () => {
     expect(isRailItemActive(raid, ctx, path, 'project-raid', '', plan?.anchor ?? null)).toBe(
       false,
     );
+  });
+
+  it('does not let ?stakeholders=org highlight a second section', () => {
+    const path = '/workspaces/platform/projects/renewal';
+    const search = '?stakeholders=org';
+    const items = NAV_SECTIONS.flatMap((section) => section.items);
+    const org = items.find((item) => item.id === 'org')!;
+    const stakeholders = items.find((item) => item.id === 'stakeholders')!;
+    const budget = items.find((item) => item.id === 'budget')!;
+    const active = items.filter((item) =>
+      isRailItemActive(item, ctx, path, 'project-raid', search, 'project-raid'),
+    );
+    expect(active.map((item) => item.id)).toEqual(['raid']);
+    expect(isRailItemActive(org, ctx, path, 'project-raid', search, 'project-raid')).toBe(false);
+    expect(isRailItemActive(stakeholders, ctx, path, 'project-raid', search, 'project-raid')).toBe(
+      false,
+    );
+    expect(resolveActiveNavItem(ctx, path, 'project-raid', search, 'project-raid')?.id).toBe(
+      'raid',
+    );
+    expect(findActiveNavItem(ctx, path, 'project-raid', search)?.id).toBe('raid');
+    const header = planProjectAnchorClick({
+      href: '#project-budget',
+      pathname: path,
+      search,
+    });
+    expect(header?.inPage).toBe(false);
+    expect(header?.nextUrl).toBe(`${path}#project-budget`);
+    expect(header?.anchor).toBe('project-budget');
+    expect(resolveActiveNavItem(ctx, path, 'project-raid', search, header?.anchor ?? null)?.id).toBe(
+      'budget',
+    );
+    expect(isRailItemActive(budget, ctx, path, 'project-raid', search, header?.anchor ?? null)).toBe(
+      true,
+    );
+    expect(isRailItemActive(org, ctx, path, 'project-raid', search, header?.anchor ?? null)).toBe(
+      false,
+    );
+    expect(navItemIdForActiveAnchor('project-stakeholders', search)).toBe('org');
+    const onOrg = items.filter((item) =>
+      isRailItemActive(item, ctx, path, 'project-stakeholders', search, 'project-stakeholders'),
+    );
+    expect(onOrg.map((item) => item.id)).toEqual(['org']);
+    const orgWithoutPin = items.filter((item) =>
+      isRailItemActive(item, ctx, path, 'project-stakeholders', search, null),
+    );
+    expect(orgWithoutPin.map((item) => item.id)).toEqual(['org']);
+    expect(
+      resolveActiveNavItem(ctx, path, 'project-raid', search, 'project-budget')?.id,
+    ).toBe('budget');
   });
 
   it('uses the scroll spy anchor for section links', () => {
