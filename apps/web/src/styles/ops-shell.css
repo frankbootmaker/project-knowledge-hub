@@ -1214,9 +1214,28 @@ a.kh-section-shortcut[aria-current='location'] {
   min-width: 56rem;
 }
 
-.kh-ops-data-table th.kh-ops-cell-wrap,
+/* Headers must not break mid-word. overflow-wrap: anywhere let a long
+   uppercase label (hu Elkötelezettség) drop its last letter onto a second
+   line and stretch the header row. Text headers stay one line, and the
+   column is at least as wide as the label so the wrap scrolls instead of
+   clipping. Wrap-class headers (long admin phrases) still break, on spaces
+   only. Body text cells keep overflow-wrap: anywhere. */
+.kh-ops-data-table th.kh-ops-cell-text {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  min-width: max-content;
+}
+
+.kh-ops-data-table th.kh-ops-cell-wrap {
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  min-width: min-content;
+  vertical-align: top;
+}
+
 .kh-ops-data-table td.kh-ops-cell-wrap,
-.kh-ops-data-table th.kh-ops-cell-text,
 .kh-ops-data-table td.kh-ops-cell-text {
   white-space: normal;
   overflow-wrap: anywhere;
@@ -2178,6 +2197,9 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
   cursor: pointer;
 }
 

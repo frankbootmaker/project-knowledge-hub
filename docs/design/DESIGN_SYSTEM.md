@@ -129,7 +129,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-panel` / `.kh-ops-panel-head` / `.kh-ops-panel-title` / `.kh-ops-panel-meta` | Square panel with 13px display header |
 | `.kh-ops-toolbar` | List/admin search+filter chrome (also on `FunctionHeader`) |
 | `.kh-ops-data-table` / `.kh-ops-table-wrap` / `.kh-ops-data-item` / `.kh-ops-stack` | Dense tables and catalogue rows. The wrap scrolls horizontally (`overflow-x: auto`) and tables keep `min-width: 42rem`. `DataTable` adds `.kh-ops-table-wrap--sticky` (scrollport `max-height: min(70vh, 48rem)`, sticky header) and `.kh-ops-data-table--fluid` (`min-width: 0`) |
-| `.kh-ops-cell-text` / `.kh-ops-cell-data` / `.kh-ops-cell-status` / `.kh-ops-cell-number` / `.kh-ops-cell-date` / `.kh-ops-cell-actions` | Column kinds on `DataTable`. Text wraps (`overflow-wrap: anywhere`); data, status, number, date, and actions stay one line |
+| `.kh-ops-cell-text` / `.kh-ops-cell-data` / `.kh-ops-cell-status` / `.kh-ops-cell-number` / `.kh-ops-cell-date` / `.kh-ops-cell-actions` | Column kinds on `DataTable`. Text cells wrap (`overflow-wrap: anywhere`). Text headers stay one line (`nowrap`, no mid-word break) and the column is at least as wide as the label. `.kh-ops-cell-wrap` headers break on spaces only. Data, status, number, date, and actions stay one line |
 | `.kh-ops-inline-select` | Native select in a fluid table cell or list toolbar. `min-width: 7.5rem`, `field-sizing: content` (grows for a longer current label), `padding-inline-end: 1.75rem` so the label stays clear of the chevron. Also applied to any `select.kh-input` inside a `DataTable` cell |
 | `.kh-ops-sort-btn` / `.kh-ops-filter-btn` / `.kh-ops-filter-dot` / `.kh-ops-table-filter` | Sortable header (arrow + `aria-sort`) and column-filter popover. Popover reuses `.kh-ops-popover` and is portaled (`--kh-z-popover`) |
 | `.kh-ops-delivery-modes` / `.kh-ops-board` / `.kh-ops-lane` / `.kh-ops-task-card` | Delivery view strip, kanban lanes, and task cards |
@@ -245,6 +245,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-05
 
+* **Table header labels** — DataTable text headers (`.kh-ops-cell-text`) stay on one line. A long uppercase word such as Hungarian Elkötelezettség no longer breaks after the last letter. The column is at least as wide as the label; the table wrap scrolls when that exceeds the pane. `.kh-ops-cell-wrap` headers still wrap, but only on spaces. Body text cells still use `overflow-wrap: anywhere`.
 * **AI cost and task usage fields** — The stakeholder AI cost dialog adds input, output, and cache rates plus a short note, using the existing `Field`, `Input`, and `Textarea`. Task manage adds the token breakdown, model, tier, usage date, and billing month with the same controls. Budget AC split shows the AI flat vs token totals in the existing muted line.
 
 ### 2026-10-04

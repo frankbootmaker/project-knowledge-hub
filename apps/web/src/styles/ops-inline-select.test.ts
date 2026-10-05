@@ -62,10 +62,39 @@ describe('inline table selects', () => {
     expect(body).toContain('flex-shrink: 0');
   });
 
-  it('still wraps text columns and nowraps status columns', () => {
-    expect(css).toMatch(
-      /\.kh-ops-data-table th\.kh-ops-cell-text,[\s\S]*?white-space: normal;[\s\S]*?overflow-wrap: anywhere;/,
+  it('wraps text cells, keeps text headers on one line, and nowraps status columns', () => {
+    const textHeader = css.match(
+      /\.kh-ops-data-table th\.kh-ops-cell-text \{([^}]*)\}/,
     );
+    expect(textHeader).not.toBeNull();
+    const headerBody = textHeader?.[1] ?? '';
+    expect(headerBody).toContain('white-space: nowrap');
+    expect(headerBody).toContain('overflow-wrap: normal');
+    expect(headerBody).toContain('min-width: max-content');
+    expect(headerBody).not.toContain('overflow-wrap: anywhere');
+
+    const wrapHeader = css.match(
+      /\.kh-ops-data-table th\.kh-ops-cell-wrap \{([^}]*)\}/,
+    );
+    expect(wrapHeader).not.toBeNull();
+    const wrapBody = wrapHeader?.[1] ?? '';
+    expect(wrapBody).toContain('white-space: normal');
+    expect(wrapBody).toContain('overflow-wrap: normal');
+    expect(wrapBody).toContain('min-width: min-content');
+    expect(wrapBody).not.toContain('overflow-wrap: anywhere');
+
+    const textCell = css.match(
+      /\.kh-ops-data-table td\.kh-ops-cell-wrap,\s*\.kh-ops-data-table td\.kh-ops-cell-text \{([^}]*)\}/,
+    );
+    expect(textCell).not.toBeNull();
+    const cellBody = textCell?.[1] ?? '';
+    expect(cellBody).toContain('white-space: normal');
+    expect(cellBody).toContain('overflow-wrap: anywhere');
+
+    const sortBtn = css.match(/\.kh-ops-sort-btn \{([^}]*)\}/);
+    expect(sortBtn?.[1] ?? '').toContain('white-space: nowrap');
+    expect(sortBtn?.[1] ?? '').toContain('overflow-wrap: normal');
+
     expect(css).toMatch(
       /\.kh-ops-data-table \.kh-ops-cell-status,[\s\S]*?width: 1%;[\s\S]*?white-space: nowrap;/,
     );
