@@ -5,6 +5,7 @@ import { systems, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
   aiCostModeSchema,
+  parseAiCostNotes,
   projectStakeholderRoleSchema,
   resourceUtilizationViewSchema,
   stakeholderCompetenciesSchema,
@@ -122,6 +123,10 @@ const aiCostSchema = z.object({
   aiCostMode: aiCostModeSchema.nullable().optional(),
   aiFlatMonthlyFee: moneySchema.optional(),
   aiTokenRatePer1k: moneySchema.optional(),
+  aiTokenRateInputPer1k: moneySchema.optional(),
+  aiTokenRateOutputPer1k: moneySchema.optional(),
+  aiTokenRateCachePer1k: moneySchema.optional(),
+  aiCostNotes: z.string().max(500).nullable().optional(),
   aiBudgetAllocation: moneySchema.optional(),
 });
 
@@ -403,6 +408,22 @@ export async function registerProjectStakeholderRoutes(
           body.aiTokenRatePer1k === undefined
             ? undefined
             : parseTokenRate(body.aiTokenRatePer1k) ?? null,
+        aiTokenRateInputPer1k:
+          body.aiTokenRateInputPer1k === undefined
+            ? undefined
+            : parseTokenRate(body.aiTokenRateInputPer1k) ?? null,
+        aiTokenRateOutputPer1k:
+          body.aiTokenRateOutputPer1k === undefined
+            ? undefined
+            : parseTokenRate(body.aiTokenRateOutputPer1k) ?? null,
+        aiTokenRateCachePer1k:
+          body.aiTokenRateCachePer1k === undefined
+            ? undefined
+            : parseTokenRate(body.aiTokenRateCachePer1k) ?? null,
+        aiCostNotes:
+          body.aiCostNotes === undefined
+            ? undefined
+            : parseAiCostNotes(body.aiCostNotes) ?? null,
         aiBudgetAllocation:
           body.aiBudgetAllocation === undefined
             ? undefined

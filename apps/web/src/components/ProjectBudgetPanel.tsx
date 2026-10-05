@@ -64,6 +64,8 @@ export type ProjectBudgetSummary = {
   ac: number;
   personAc: number;
   aiAc: number;
+  aiFlatAc?: number;
+  aiTokenAc?: number;
   systemAc: number;
   aiNoteOnlyTokens: number;
   aiSystems: AiBudgetBreakdown[];
@@ -472,6 +474,19 @@ export function ProjectBudgetPanel({
                 })}
               </div>
               <div className="kh-ops-card-body grid gap-1 text-[11px] text-ink-muted">
+                {(summary.aiFlatAc != null || summary.aiTokenAc != null) &&
+                ((summary.aiFlatAc ?? 0) > 0 || (summary.aiTokenAc ?? 0) > 0) ? (
+                  <p className="m-0">
+                    {t('aiFlatVsToken', {
+                      flat: formatMoney(summary.aiFlatAc ?? 0, currency, locale),
+                      tokens: formatMoney(
+                        summary.aiTokenAc ?? 0,
+                        currency,
+                        locale,
+                      ),
+                    })}
+                  </p>
+                ) : null}
                 {(summary.aiNoteOnlyTokens ?? 0) > 0 ? (
                   <p className="m-0">
                     {t('aiNoteOnlyTokens', { count: summary.aiNoteOnlyTokens })}

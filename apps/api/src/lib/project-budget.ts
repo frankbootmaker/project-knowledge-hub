@@ -16,6 +16,7 @@ import {
   aiCostModeSchema,
   projectCurrencySchema,
   systemItCostModeSchema,
+  usageHasTokenBreakdown,
   type AiCostMode,
   type ProjectCurrency,
   type SystemItCostMode,
@@ -90,6 +91,10 @@ export type ProjectBudgetSummary = {
   personAc: number;
   /** Billable AI flat + token costs. */
   aiAc: number;
+  /** Billable AI flat fees (project-window accrual). */
+  aiFlatAc: number;
+  /** Billable AI token cost (blended and split rates). */
+  aiTokenAc: number;
   /** Billable non-AI catalogue system OpEx. */
   systemAc: number;
   aiNoteOnlyTokens: number;
@@ -216,6 +221,137 @@ export function tokenCostFromUsage(
   return Math.round((tokensUsed / 1000) * ratePer1k * 100) / 100;
 }
 
+export type AiTokenRates = {
+  blendedPer1k: number | null;
+  inputPer1k: number | null;
+  outputPer1k: number | null;
+  cachePer1k: number | null;
+};
+
+export type AiUsageForCost = {
+  tokensUsed: number | null;
+  tokensInput: number | null;
+  tokensOutput: number | null;
+  tokensCache: number | null;
+};
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** Null split rate uses the blended rate. An explicit 0 does not. */
+function componentRate(
+  specific: number | null,
+  blended: number | null,
+): number {
+  if (specific != null) return specific;
+  return blended ?? 0;
+}
+
+function tokenCostForBreakdown(
+  usage: AiUsageForCost,
+  rates: AiTokenRates,
+): number {
+  const input = tokenCostFromUsage(
+    usage.tokensInput ?? 0,
+    componentRate(rates.inputPer1k, rates.blendedPer1k),
+  );
+  const output = tokenCostFromUsage(
+    usage.tokensOutput ?? 0,
+    componentRate(rates.outputPer1k, rates.blendedPer1k),
+  );
+  const cache = tokenCostFromUsage(
+    usage.tokensCache ?? 0,
+    componentRate(rates.cachePer1k, rates.blendedPer1k),
+  );
+  return roundMoney(input + output + cache);
+}
+
+/**
+ * Token cost for a set of task usages.
+ * Tasks with only `tokensUsed` are summed first, then priced once, so rounding
+ * matches the pre-breakdown bill. Breakdown rows are priced with split rates.
+ */
+export function tokenCostForUsages(
+  usages: readonly AiUsageForCost[],
+  rates: AiTokenRates,
+): number {
+  let blendedTokens = 0;
+  let splitCost = 0;
+  for (const usage of usages) {
+    if (usageHasTokenBreakdown(usage)) {
+      splitCost += tokenCostForBreakdown(usage, rates);
+    } else {
+      blendedTokens += usage.tokensUsed ?? 0;
+    }
+  }
+  return roundMoney(
+    tokenCostFromUsage(blendedTokens, rates.blendedPer1k ?? 0) + splitCost,
+  );
+}
+
+export function usageTokenTotal(usage: AiUsageForCost): number {
+  if (usageHasTokenBreakdown(usage)) {
+    if (usage.tokensUsed != null) return usage.tokensUsed;
+    return (
+      (usage.tokensInput ?? 0) +
+      (usage.tokensOutput ?? 0) +
+      (usage.tokensCache ?? 0)
+    );
+  }
+  return usage.tokensUsed ?? 0;
+}
+
+/**
+ * One AI assistant's contribution to AC.
+ * Mixed = flat fee accrued over the project window + token cost.
+ * API = token cost only. Flat = accrued fee only. note_only / unset = $0.
+ */
+export function billAiAssistantUsage(input: {
+  costMode: AiCostMode | null;
+  flatMonthlyFee: number;
+  rates: AiTokenRates;
+  usages: readonly AiUsageForCost[];
+  startDate: string | null;
+  endDate: string | null;
+  today?: string;
+}): {
+  flatAccruedCost: number;
+  tokenCost: number;
+  noteOnlyTokens: number;
+  billableCost: number;
+} {
+  const tokens = input.usages.reduce(
+    (sum, usage) => sum + usageTokenTotal(usage),
+    0,
+  );
+  let flatAccruedCost = 0;
+  let tokenCost = 0;
+  let noteOnlyTokens = 0;
+
+  if (input.costMode === 'flat' || input.costMode === 'mixed') {
+    flatAccruedCost = accrueFlatMonthlyFee(
+      input.flatMonthlyFee,
+      input.startDate,
+      input.endDate,
+      input.today,
+    );
+  }
+  if (input.costMode === 'api' || input.costMode === 'mixed') {
+    tokenCost = tokenCostForUsages(input.usages, input.rates);
+  }
+  if (input.costMode === 'note_only') {
+    noteOnlyTokens = tokens;
+  }
+
+  const billableCost =
+    input.costMode === 'note_only' || input.costMode == null
+      ? 0
+      : roundMoney(flatAccruedCost + tokenCost);
+
+  return { flatAccruedCost, tokenCost, noteOnlyTokens, billableCost };
+}
+
 export async function computeAiBudgetCosts(
   database: Database,
   projectId: string,
@@ -227,6 +363,8 @@ export async function computeAiBudgetCosts(
 ): Promise<{
   aiBillableCost: number;
   aiNoteOnlyTokens: number;
+  aiFlatAc: number;
+  aiTokenAc: number;
   aiSystems: AiBudgetBreakdown[];
 }> {
   const assistantRows = await database.db
@@ -236,6 +374,9 @@ export async function computeAiBudgetCosts(
       aiCostMode: systems.aiCostMode,
       aiFlatMonthlyFee: systems.aiFlatMonthlyFee,
       aiTokenRatePer1k: systems.aiTokenRatePer1k,
+      aiTokenRateInputPer1k: systems.aiTokenRateInputPer1k,
+      aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
+      aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
       aiBudgetAllocation: systems.aiBudgetAllocation,
     })
     .from(systems)
@@ -250,6 +391,9 @@ export async function computeAiBudgetCosts(
   const taskRows = await database.db
     .select({
       tokensUsed: projectTasks.tokensUsed,
+      tokensInput: projectTasks.tokensInput,
+      tokensOutput: projectTasks.tokensOutput,
+      tokensCache: projectTasks.tokensCache,
       aiSystemId: projectTasks.aiSystemId,
       status: projectTasks.status,
     })
@@ -258,24 +402,31 @@ export async function computeAiBudgetCosts(
       and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)),
     );
 
-  const tokensBySystem = new Map<string, number>();
+  const usagesBySystem = new Map<string, AiUsageForCost[]>();
   let orphanTokens = 0;
   for (const task of taskRows) {
     if (task.status === 'cancelled') continue;
-    const tokens = task.tokensUsed ?? 0;
-    if (tokens <= 0) continue;
+    const usage: AiUsageForCost = {
+      tokensUsed: task.tokensUsed,
+      tokensInput: task.tokensInput,
+      tokensOutput: task.tokensOutput,
+      tokensCache: task.tokensCache,
+    };
+    const tokens = usageTokenTotal(usage);
+    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
     if (task.aiSystemId) {
-      tokensBySystem.set(
-        task.aiSystemId,
-        (tokensBySystem.get(task.aiSystemId) ?? 0) + tokens,
-      );
-    } else {
+      const list = usagesBySystem.get(task.aiSystemId) ?? [];
+      list.push(usage);
+      usagesBySystem.set(task.aiSystemId, list);
+    } else if (tokens > 0) {
       orphanTokens += tokens;
     }
   }
 
   const aiSystems: AiBudgetBreakdown[] = [];
   let aiBillableCost = 0;
+  let aiFlatAc = 0;
+  let aiTokenAc = 0;
   let aiNoteOnlyTokens = orphanTokens;
 
   for (const row of assistantRows) {
@@ -283,54 +434,45 @@ export async function computeAiBudgetCosts(
       ? aiCostModeSchema.safeParse(row.aiCostMode)
       : null;
     const costMode = modeParsed?.success ? modeParsed.data : null;
-    const flatFee = parseNumeric(row.aiFlatMonthlyFee) ?? 0;
-    const tokenRate = parseNumeric(row.aiTokenRatePer1k) ?? 0;
     const allocation = parseNumeric(row.aiBudgetAllocation);
-    const tokens = tokensBySystem.get(row.id) ?? 0;
+    const billed = billAiAssistantUsage({
+      costMode,
+      flatMonthlyFee: parseNumeric(row.aiFlatMonthlyFee) ?? 0,
+      rates: {
+        blendedPer1k: parseNumeric(row.aiTokenRatePer1k),
+        inputPer1k: parseNumeric(row.aiTokenRateInputPer1k),
+        outputPer1k: parseNumeric(row.aiTokenRateOutputPer1k),
+        cachePer1k: parseNumeric(row.aiTokenRateCachePer1k),
+      },
+      usages: usagesBySystem.get(row.id) ?? [],
+      startDate: project.startDate,
+      endDate: project.endDate,
+      today,
+    });
 
-    let flatAccruedCost = 0;
-    let tokenCost = 0;
-    let noteOnlyTokens = 0;
-
-    if (costMode === 'flat' || costMode === 'mixed') {
-      flatAccruedCost = accrueFlatMonthlyFee(
-        flatFee,
-        project.startDate,
-        project.endDate,
-        today,
-      );
-    }
-    if (costMode === 'api' || costMode === 'mixed') {
-      tokenCost = tokenCostFromUsage(tokens, tokenRate);
-    }
-    if (costMode === 'note_only') {
-      noteOnlyTokens = tokens;
-    }
-
-    const billableCost =
-      costMode === 'note_only' || costMode == null
-        ? 0
-        : Math.round((flatAccruedCost + tokenCost) * 100) / 100;
-
-    aiBillableCost += billableCost;
-    aiNoteOnlyTokens += noteOnlyTokens;
+    aiBillableCost += billed.billableCost;
+    aiFlatAc += billed.flatAccruedCost;
+    aiTokenAc += billed.tokenCost;
+    aiNoteOnlyTokens += billed.noteOnlyTokens;
 
     aiSystems.push({
       systemId: row.id,
       name: row.name,
       costMode,
-      flatAccruedCost,
-      tokenCost,
-      noteOnlyTokens,
-      billableCost,
+      flatAccruedCost: billed.flatAccruedCost,
+      tokenCost: billed.tokenCost,
+      noteOnlyTokens: billed.noteOnlyTokens,
+      billableCost: billed.billableCost,
       budgetAllocation: allocation,
       overAllocation:
-        allocation != null && billableCost > allocation,
+        allocation != null && billed.billableCost > allocation,
     });
   }
 
   return {
-    aiBillableCost: Math.round(aiBillableCost * 100) / 100,
+    aiBillableCost: roundMoney(aiBillableCost),
+    aiFlatAc: roundMoney(aiFlatAc),
+    aiTokenAc: roundMoney(aiTokenAc),
     aiNoteOnlyTokens,
     aiSystems,
   };
@@ -741,6 +883,8 @@ export async function getProjectBudgetSummary(
 
   return {
     ...merged,
+    aiFlatAc: ai.aiFlatAc,
+    aiTokenAc: ai.aiTokenAc,
     aiNoteOnlyTokens: ai.aiNoteOnlyTokens,
     aiSystems: ai.aiSystems,
     itSystems: it.itSystems,

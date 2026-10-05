@@ -241,6 +241,68 @@ describe('task aiSystemId validation', () => {
     expect(insertMock).not.toHaveBeenCalled();
   });
 
+  it('updateTask rejects non-AI aiSystemId when a token breakdown is reported', async () => {
+    const mockTask = {
+      id: 'task-1',
+      projectId: 'proj-123',
+      title: 'Test task',
+      aiSystemId: null,
+      status: 'todo',
+      tokensUsed: null,
+    };
+    const mockProject = { workspaceId: 'ws-1' };
+    const mockSystem = {
+      id: 'sys-456',
+      projectId: 'proj-123',
+      workspaceId: 'ws-1',
+      systemType: 'service',
+      archivedAt: null,
+    };
+    const selectMock = vi.fn();
+    selectMock
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([mockTask]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([mockProject]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([mockSystem]),
+          }),
+        }),
+      });
+    vi.mocked(mockDb.db.select).mockImplementation(selectMock);
+    const updateMock = vi.fn();
+    vi.mocked(mockDb.db.update).mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: updateMock,
+      }),
+    } as unknown as ReturnType<typeof mockDb.db.update>);
+
+    await expect(
+      updateTask(mockDb, 'task-1', {
+        aiSystemId: 'sys-456',
+        tokensInput: 800,
+        tokensOutput: 200,
+        tokensCache: 50,
+      }),
+    ).rejects.toMatchObject({
+      code: 'SYSTEM_NOT_AI_ASSISTANT',
+      statusCode: 400,
+    });
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
   it('updateTask rejects non-AI system before write', async () => {
     const mockTask = {
       id: 'task-1',

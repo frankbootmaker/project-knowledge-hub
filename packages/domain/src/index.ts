@@ -785,6 +785,26 @@ export {
   effectiveDateRange,
 } from './date-validation.js';
 
+export {
+  AI_COST_NOTES_MAX,
+  AI_MODEL_ID_MAX,
+  AI_PRICING_TIER_MAX,
+  MAX_TOKEN_COUNT,
+  aiBillingPeriodSchema,
+  assertReportedAiUsage,
+  mergeAiUsage,
+  parseAiCostNotes,
+  parseAiModelId,
+  parseAiPricingTier,
+  parseBillingPeriod,
+  parseUsageOccurredAt,
+  tokenBreakdownSum,
+  tokenCountSchema,
+  usageHasTokenBreakdown,
+  type AiUsageCounts,
+  type AiUsagePatch,
+} from './ai-cost.js';
+
 export class AppError extends Error {
   readonly code: string;
   readonly statusCode: number;

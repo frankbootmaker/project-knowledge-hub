@@ -43,12 +43,12 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 * `create_project_epic` / `update_project_epic`
 * `create_project_user_story` / `update_project_user_story`
 * `create_project_sprint` / `update_project_sprint` — activate/close; unfinished work → backlog or another sprint
-* `create_project_task` / `update_project_task` (optional story + sprint + points + current owner; optional `tokensUsed` / `aiSystemId`)
-* `report_project_task_ai_usage` — record AI tokens on a task (prefer on completion); refreshes cost snapshot
+* `create_project_task` / `update_project_task` (optional story + sprint + points + current owner; optional `tokensUsed` or `tokensInput`/`tokensOutput`/`tokensCache`, plus `aiSystemId`)
+* `report_project_task_ai_usage` — record AI tokens on a task (prefer on completion); `tokensUsed` alone uses the blended rate; a breakdown uses split rates; refreshes cost snapshot
 * `set_project_task_raci` — replace RACI; workspace members only; at most one Accountable (`A`)
 * `add_project_task_comment` / `handoff_project_task` — activity timeline; handoff moves current owner only
 * `create_project_stakeholder` / `update_project_stakeholder` / `delete_project_stakeholder` — durable roster (+ reports-to, engagement, capacity, contract)
-* `update_project_ai_assistant_cost` — AI cost mode (`flat`|`api`|`mixed`|`note_only`), fees, soft allocation
+* `update_project_ai_assistant_cost` — AI cost mode (`flat`|`api`|`mixed`|`note_only`), flat fee, blended `aiTokenRatePer1k`, optional input/output/cache rates, `aiCostNotes`, soft allocation
 * `create_project_raid_item` / `update_project_raid_item` / `set_project_raid_task_links` — RAID register (+ task links)
 * `transfer_project_raid_item` — move risk↔issue (new key; archives source). Do not use `update_project_raid_item` to change kind between risk and issue.
 * `create_project_change_item` / `update_project_change_item` — change register (+ delivery links; entity/knowledge ids may be human keys)
@@ -57,7 +57,7 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 
 **Human keys:** Delivery, RAID, change, and knowledge DTOs include `humanKey` (e.g. `HL1-T-12`, `HL1-RR-3`, `HL1-VIS-2`). Get/update tools accept **UUID or human key** for entity and document ids. `get_project` returns `keyPrefix` and `definitionOfDone`. Setup wizards can opt into `pm:read` / `pm:write`.
 
-**AI spend:** When an AI system worked a task, call `report_project_task_ai_usage` (or set `tokensUsed` on update) so `api`/`mixed` modes feed AC; `note_only` records usage at $0.
+**AI spend:** When an AI system worked a task, call `report_project_task_ai_usage` (or set tokens on create/update). `tokensUsed` alone bills `aiTokenRatePer1k`. `tokensInput` / `tokensOutput` / `tokensCache` bill the matching per-1k rates, falling back to the blended rate when a split rate is null. `api` and `mixed` add that token cost to AC. `mixed` also adds the flat monthly fee accrued over the project start→end dates. `flat` bills only that fee. `note_only` records usage at $0. `modelId`, `pricingTier`, `usageOccurredAt`, and `billingPeriod` are audit tags and do not move the flat-fee window.
 
 ## Embedding images in knowledge Markdown
 

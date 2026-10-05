@@ -17,10 +17,13 @@ import {
   AppError,
   assertDateRange,
   effectiveDateRange,
+  mergeAiUsage,
   milestoneStatusSchema,
   raciRoleSchema,
   taskActivityTypeSchema,
   taskStatusSchema,
+  type AiUsageCounts,
+  type AiUsagePatch,
   type MilestoneStatus,
   type RaciRole,
   type TaskActivityType,
@@ -84,6 +87,13 @@ export type PublicTask = {
   actualHours: number | null;
   storyPoints: number | null;
   tokensUsed: number | null;
+  tokensInput: number | null;
+  tokensOutput: number | null;
+  tokensCache: number | null;
+  modelId: string | null;
+  pricingTier: string | null;
+  usageOccurredAt: string | null;
+  billingPeriod: string | null;
   aiSystemId: string | null;
   sortOrder: number;
   createdBy: string | null;
@@ -169,6 +179,13 @@ function toPublicTask(
     actualHours: row.actualHours,
     storyPoints: row.storyPoints ?? null,
     tokensUsed: row.tokensUsed ?? null,
+    tokensInput: row.tokensInput ?? null,
+    tokensOutput: row.tokensOutput ?? null,
+    tokensCache: row.tokensCache ?? null,
+    modelId: row.aiModelId ?? null,
+    pricingTier: row.aiPricingTier ?? null,
+    usageOccurredAt: row.usageOccurredAt?.toISOString() ?? null,
+    billingPeriod: row.billingPeriod ?? null,
     aiSystemId: row.aiSystemId ?? null,
     sortOrder: row.sortOrder,
     createdBy: row.createdBy,
@@ -939,6 +956,185 @@ export async function replaceTaskRaci(
   return map.get(input.taskId) ?? [];
 }
 
+type StoredAiUsage = AiUsageCounts & {
+  modelId: string | null;
+  pricingTier: string | null;
+  usageOccurredAt: Date | null;
+  billingPeriod: string | null;
+};
+
+type AiUsageWrite = AiUsagePatch & {
+  modelId?: string | null;
+  pricingTier?: string | null;
+  usageOccurredAt?: Date | null;
+  billingPeriod?: string | null;
+};
+
+const EMPTY_AI_USAGE: StoredAiUsage = {
+  tokensUsed: null,
+  tokensInput: null,
+  tokensOutput: null,
+  tokensCache: null,
+  modelId: null,
+  pricingTier: null,
+  usageOccurredAt: null,
+  billingPeriod: null,
+};
+
+function storedAiUsage(row: {
+  tokensUsed: number | null;
+  tokensInput?: number | null;
+  tokensOutput?: number | null;
+  tokensCache?: number | null;
+  aiModelId?: string | null;
+  aiPricingTier?: string | null;
+  usageOccurredAt?: Date | null;
+  billingPeriod?: string | null;
+}): StoredAiUsage {
+  return {
+    tokensUsed: row.tokensUsed ?? null,
+    tokensInput: row.tokensInput ?? null,
+    tokensOutput: row.tokensOutput ?? null,
+    tokensCache: row.tokensCache ?? null,
+    modelId: row.aiModelId ?? null,
+    pricingTier: row.aiPricingTier ?? null,
+    usageOccurredAt: row.usageOccurredAt ?? null,
+    billingPeriod: row.billingPeriod ?? null,
+  };
+}
+
+function resolveAiUsageWrite(
+  existing: StoredAiUsage,
+  input: AiUsageWrite,
+): StoredAiUsage {
+  const counts = mergeAiUsage(existing, input);
+  return {
+    ...counts,
+    modelId:
+      input.modelId !== undefined ? input.modelId ?? null : existing.modelId,
+    pricingTier:
+      input.pricingTier !== undefined
+        ? input.pricingTier ?? null
+        : existing.pricingTier,
+    usageOccurredAt:
+      input.usageOccurredAt !== undefined
+        ? input.usageOccurredAt ?? null
+        : existing.usageOccurredAt,
+    billingPeriod:
+      input.billingPeriod !== undefined
+        ? input.billingPeriod ?? null
+        : existing.billingPeriod,
+  };
+}
+
+function sameInstant(left: Date | null, right: Date | null): boolean {
+  if (left == null || right == null) return left == null && right == null;
+  return left.getTime() === right.getTime();
+}
+
+function usageActivityDelta(
+  before: StoredAiUsage,
+  after: StoredAiUsage,
+  input: AiUsageWrite,
+  aiSystem: { before: string | null; after: string | null; touched: boolean },
+): { fields: string[]; previous: Record<string, unknown> } {
+  const fields: string[] = [];
+  const previous: Record<string, unknown> = {};
+  const consider = (
+    key: string,
+    touched: boolean,
+    prev: unknown,
+    changed: boolean,
+  ) => {
+    if (!touched && !changed) return;
+    fields.push(key);
+    previous[key] = prev;
+  };
+  consider(
+    'tokensUsed',
+    input.tokensUsed !== undefined,
+    before.tokensUsed,
+    before.tokensUsed !== after.tokensUsed,
+  );
+  consider(
+    'tokensInput',
+    input.tokensInput !== undefined,
+    before.tokensInput,
+    before.tokensInput !== after.tokensInput,
+  );
+  consider(
+    'tokensOutput',
+    input.tokensOutput !== undefined,
+    before.tokensOutput,
+    before.tokensOutput !== after.tokensOutput,
+  );
+  consider(
+    'tokensCache',
+    input.tokensCache !== undefined,
+    before.tokensCache,
+    before.tokensCache !== after.tokensCache,
+  );
+  consider(
+    'modelId',
+    input.modelId !== undefined,
+    before.modelId,
+    before.modelId !== after.modelId,
+  );
+  consider(
+    'pricingTier',
+    input.pricingTier !== undefined,
+    before.pricingTier,
+    before.pricingTier !== after.pricingTier,
+  );
+  consider(
+    'usageOccurredAt',
+    input.usageOccurredAt !== undefined,
+    before.usageOccurredAt?.toISOString() ?? null,
+    !sameInstant(before.usageOccurredAt, after.usageOccurredAt),
+  );
+  consider(
+    'billingPeriod',
+    input.billingPeriod !== undefined,
+    before.billingPeriod,
+    before.billingPeriod !== after.billingPeriod,
+  );
+  consider(
+    'aiSystemId',
+    aiSystem.touched,
+    aiSystem.before,
+    aiSystem.before !== aiSystem.after,
+  );
+  return { fields, previous };
+}
+
+export function taskTouchesCost(input: {
+  forecastHours?: unknown;
+  actualHours?: unknown;
+  tokensUsed?: unknown;
+  tokensInput?: unknown;
+  tokensOutput?: unknown;
+  tokensCache?: unknown;
+  modelId?: unknown;
+  pricingTier?: unknown;
+  usageOccurredAt?: unknown;
+  billingPeriod?: unknown;
+  aiSystemId?: unknown;
+}): boolean {
+  return (
+    input.forecastHours !== undefined ||
+    input.actualHours !== undefined ||
+    input.tokensUsed !== undefined ||
+    input.tokensInput !== undefined ||
+    input.tokensOutput !== undefined ||
+    input.tokensCache !== undefined ||
+    input.modelId !== undefined ||
+    input.pricingTier !== undefined ||
+    input.usageOccurredAt !== undefined ||
+    input.billingPeriod !== undefined ||
+    input.aiSystemId !== undefined
+  );
+}
+
 export async function createTask(
   database: Database,
   input: {
@@ -951,6 +1147,13 @@ export async function createTask(
     forecastHours?: number | null;
     actualHours?: number | null;
     tokensUsed?: number | null;
+    tokensInput?: number | null;
+    tokensOutput?: number | null;
+    tokensCache?: number | null;
+    modelId?: string | null;
+    pricingTier?: string | null;
+    usageOccurredAt?: Date | null;
+    billingPeriod?: string | null;
     aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
@@ -990,6 +1193,7 @@ export async function createTask(
   const ownerUserId =
     input.currentOwnerUserId ??
     defaultOwnerFromRaci(input.raci ?? [], input.createdBy);
+  const usage = resolveAiUsageWrite(EMPTY_AI_USAGE, input);
 
   const createdTask = await database.db.transaction(async (tx) => {
     const allocated = await allocateIssueNumber(database, input.projectId, 'T', tx);
@@ -1007,7 +1211,14 @@ export async function createTask(
         forecastHours: input.forecastHours ?? null,
         actualHours: input.actualHours ?? null,
         storyPoints: input.storyPoints ?? null,
-        tokensUsed: input.tokensUsed ?? null,
+        tokensUsed: usage.tokensUsed,
+        tokensInput: usage.tokensInput,
+        tokensOutput: usage.tokensOutput,
+        tokensCache: usage.tokensCache,
+        aiModelId: usage.modelId,
+        aiPricingTier: usage.pricingTier,
+        usageOccurredAt: usage.usageOccurredAt,
+        billingPeriod: usage.billingPeriod,
         aiSystemId: input.aiSystemId ?? null,
         sortOrder: input.sortOrder ?? 0,
         createdBy: input.createdBy ?? null,
@@ -1062,21 +1273,6 @@ export async function deleteTask(
   return { id: existing.id, projectId: existing.projectId };
 }
 
-function aiUsagePrevious(
-  changedFields: readonly string[],
-  existing: { tokensUsed: number | null; aiSystemId: string | null },
-): { previous?: { tokensUsed?: number | null; aiSystemId?: string | null } } {
-  const previous: { tokensUsed?: number | null; aiSystemId?: string | null } = {};
-  if (changedFields.includes('tokensUsed')) {
-    previous.tokensUsed = existing.tokensUsed;
-  }
-  if (changedFields.includes('aiSystemId')) {
-    previous.aiSystemId = existing.aiSystemId;
-  }
-  if (Object.keys(previous).length === 0) return {};
-  return { previous };
-}
-
 export async function updateTask(
   database: Database,
   taskId: string,
@@ -1088,6 +1284,13 @@ export async function updateTask(
     forecastHours?: number | null;
     actualHours?: number | null;
     tokensUsed?: number | null;
+    tokensInput?: number | null;
+    tokensOutput?: number | null;
+    tokensCache?: number | null;
+    modelId?: string | null;
+    pricingTier?: string | null;
+    usageOccurredAt?: Date | null;
+    billingPeriod?: string | null;
     aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
@@ -1153,6 +1356,10 @@ export async function updateTask(
     input.currentOwnerUserId !== undefined
       ? input.currentOwnerUserId
       : existing.currentOwnerUserId;
+  const beforeUsage = storedAiUsage(existing);
+  const usage = resolveAiUsageWrite(beforeUsage, input);
+  const nextAiSystemId =
+    input.aiSystemId !== undefined ? input.aiSystemId : existing.aiSystemId;
 
   await database.db
     .update(projectTasks)
@@ -1170,10 +1377,15 @@ export async function updateTask(
         input.actualHours !== undefined
           ? input.actualHours
           : existing.actualHours,
-      tokensUsed:
-        input.tokensUsed !== undefined ? input.tokensUsed : existing.tokensUsed,
-      aiSystemId:
-        input.aiSystemId !== undefined ? input.aiSystemId : existing.aiSystemId,
+      tokensUsed: usage.tokensUsed,
+      tokensInput: usage.tokensInput,
+      tokensOutput: usage.tokensOutput,
+      tokensCache: usage.tokensCache,
+      aiModelId: usage.modelId,
+      aiPricingTier: usage.pricingTier,
+      usageOccurredAt: usage.usageOccurredAt,
+      billingPeriod: usage.billingPeriod,
+      aiSystemId: nextAiSystemId,
       milestoneId:
         input.milestoneId !== undefined ? input.milestoneId : existing.milestoneId,
       userStoryId:
@@ -1221,23 +1433,29 @@ export async function updateTask(
     'dueDate',
     'forecastHours',
     'actualHours',
-    'tokensUsed',
-    'aiSystemId',
     'milestoneId',
     'userStoryId',
     'sortOrder',
     'archived',
   ] as const;
   const changedFields = fieldKeys.filter((key) => input[key] !== undefined);
-  if (changedFields.length > 0) {
+  const usageDelta = usageActivityDelta(beforeUsage, usage, input, {
+    before: existing.aiSystemId,
+    after: nextAiSystemId,
+    touched: input.aiSystemId !== undefined,
+  });
+  const fields = [...changedFields, ...usageDelta.fields];
+  if (fields.length > 0) {
     await recordTaskActivity(database, {
       taskId,
       actorUserId: input.actorUserId,
       type: 'fields_updated',
       metadata: {
-      fields: changedFields,
-      ...aiUsagePrevious(changedFields, existing),
-    },
+        fields,
+        ...(Object.keys(usageDelta.previous).length > 0
+          ? { previous: usageDelta.previous }
+          : {}),
+      },
     });
   }
 
