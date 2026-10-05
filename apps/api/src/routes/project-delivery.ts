@@ -4,6 +4,12 @@ import { z } from 'zod';
 import { workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
+  MAX_TOKEN_COUNT,
+  assertReportedAiUsage,
+  parseAiModelId,
+  parseAiPricingTier,
+  parseBillingPeriod,
+  parseUsageOccurredAt,
   milestoneStatusSchema,
   raciRoleSchema,
   taskStatusSchema,
@@ -30,6 +36,7 @@ import {
   listTasks,
   replaceTaskRaci,
   requireProjectContext,
+  taskTouchesCost,
   updateMilestone,
   updateTask,
 } from '../lib/project-delivery.js';
@@ -83,6 +90,50 @@ const updateMilestoneSchema = z.object({
 });
 
 const hoursSchema = z.union([z.number(), z.string()]).nullable();
+const tokenCountSchema = z.number().int().min(0).max(MAX_TOKEN_COUNT);
+
+const aiUsageBodyFields = {
+  tokensUsed: tokenCountSchema.nullable().optional(),
+  tokensInput: tokenCountSchema.nullable().optional(),
+  tokensOutput: tokenCountSchema.nullable().optional(),
+  tokensCache: tokenCountSchema.nullable().optional(),
+  modelId: z.string().max(80).nullable().optional(),
+  pricingTier: z.string().max(32).nullable().optional(),
+  usageOccurredAt: z.string().max(40).nullable().optional(),
+  billingPeriod: z.string().max(7).nullable().optional(),
+};
+
+function mapAiUsageBody(body: {
+  tokensUsed?: number | null;
+  tokensInput?: number | null;
+  tokensOutput?: number | null;
+  tokensCache?: number | null;
+  modelId?: string | null;
+  pricingTier?: string | null;
+  usageOccurredAt?: string | null;
+  billingPeriod?: string | null;
+}) {
+  return {
+    tokensUsed: body.tokensUsed,
+    tokensInput: body.tokensInput,
+    tokensOutput: body.tokensOutput,
+    tokensCache: body.tokensCache,
+    modelId:
+      body.modelId === undefined ? undefined : parseAiModelId(body.modelId),
+    pricingTier:
+      body.pricingTier === undefined
+        ? undefined
+        : parseAiPricingTier(body.pricingTier),
+    usageOccurredAt:
+      body.usageOccurredAt === undefined
+        ? undefined
+        : parseUsageOccurredAt(body.usageOccurredAt),
+    billingPeriod:
+      body.billingPeriod === undefined
+        ? undefined
+        : parseBillingPeriod(body.billingPeriod),
+  };
+}
 
 const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
@@ -91,7 +142,7 @@ const createTaskSchema = z.object({
   dueDate: dateStringSchema.optional(),
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
-  tokensUsed: z.number().int().min(0).nullable().optional(),
+  ...aiUsageBodyFields,
   aiSystemId: z.string().uuid().nullable().optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
@@ -109,7 +160,7 @@ const updateTaskSchema = z.object({
   dueDate: dateStringSchema.optional(),
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
-  tokensUsed: z.number().int().min(0).nullable().optional(),
+  ...aiUsageBodyFields,
   aiSystemId: z.string().uuid().nullable().optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
@@ -121,7 +172,14 @@ const updateTaskSchema = z.object({
 });
 
 const reportAiUsageSchema = z.object({
-  tokensUsed: z.number().int().min(0),
+  tokensUsed: tokenCountSchema.optional(),
+  tokensInput: tokenCountSchema.nullable().optional(),
+  tokensOutput: tokenCountSchema.nullable().optional(),
+  tokensCache: tokenCountSchema.nullable().optional(),
+  modelId: z.string().max(80).nullable().optional(),
+  pricingTier: z.string().max(32).nullable().optional(),
+  usageOccurredAt: z.string().max(40).nullable().optional(),
+  billingPeriod: z.string().max(7).nullable().optional(),
   aiSystemId: z.string().uuid().nullable().optional(),
 });
 
@@ -276,7 +334,7 @@ export async function registerProjectDeliveryRoutes(
         body.actualHours === undefined
           ? undefined
           : parseHours(body.actualHours) ?? null,
-      tokensUsed: body.tokensUsed,
+      ...mapAiUsageBody(body),
       aiSystemId: body.aiSystemId,
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
@@ -287,12 +345,7 @@ export async function registerProjectDeliveryRoutes(
       raci: body.raci,
     });
 
-    if (
-      body.forecastHours !== undefined ||
-      body.actualHours !== undefined ||
-      body.tokensUsed !== undefined ||
-      body.aiSystemId !== undefined
-    ) {
+    if (taskTouchesCost(body)) {
       await upsertProjectCostSnapshot(app.database, project.id);
     }
 
@@ -345,7 +398,7 @@ export async function registerProjectDeliveryRoutes(
         body.actualHours === undefined
           ? undefined
           : parseHours(body.actualHours) ?? null,
-      tokensUsed: body.tokensUsed,
+      ...mapAiUsageBody(body),
       aiSystemId: body.aiSystemId,
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
@@ -358,12 +411,7 @@ export async function registerProjectDeliveryRoutes(
       workspaceId: project.workspaceId,
     });
 
-    if (
-      body.forecastHours !== undefined ||
-      body.actualHours !== undefined ||
-      body.tokensUsed !== undefined ||
-      body.aiSystemId !== undefined
-    ) {
+    if (taskTouchesCost(body)) {
       await upsertProjectCostSnapshot(app.database, project.id);
     }
 
@@ -392,8 +440,9 @@ export async function registerProjectDeliveryRoutes(
     requireWorkspaceMaintainer(principal, project.workspaceId);
     assertProjectNotArchived(project);
 
+    assertReportedAiUsage(body);
     const task = await updateTask(app.database, params.taskId, {
-      tokensUsed: body.tokensUsed,
+      ...mapAiUsageBody(body),
       aiSystemId: body.aiSystemId,
       actorUserId: principal.userId,
       workspaceId: project.workspaceId,
@@ -409,7 +458,14 @@ export async function registerProjectDeliveryRoutes(
       entityId: task.id,
       metadata: {
         projectId: project.id,
-        tokensUsed: body.tokensUsed,
+        tokensUsed: task.tokensUsed,
+        tokensInput: task.tokensInput,
+        tokensOutput: task.tokensOutput,
+        tokensCache: task.tokensCache,
+        modelId: task.modelId,
+        pricingTier: task.pricingTier,
+        usageOccurredAt: task.usageOccurredAt,
+        billingPeriod: task.billingPeriod,
         aiSystemId: body.aiSystemId ?? null,
       },
       ipAddress: request.ip,

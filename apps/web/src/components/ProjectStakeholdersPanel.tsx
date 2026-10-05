@@ -53,6 +53,10 @@ export type Stakeholder = {
   aiCostMode: 'flat' | 'api' | 'mixed' | 'note_only' | null;
   aiFlatMonthlyFee: string | null;
   aiTokenRatePer1k: string | null;
+  aiTokenRateInputPer1k?: string | number | null;
+  aiTokenRateOutputPer1k?: string | number | null;
+  aiTokenRateCachePer1k?: string | number | null;
+  aiCostNotes?: string | null;
   aiBudgetAllocation: string | null;
   avatarUrl: string | null;
   assistantBrand: string | null;
@@ -184,6 +188,10 @@ export function ProjectStakeholdersPanel({
   const [editAiCostMode, setEditAiCostMode] = useState('');
   const [editAiFlatMonthlyFee, setEditAiFlatMonthlyFee] = useState('');
   const [editAiTokenRatePer1k, setEditAiTokenRatePer1k] = useState('');
+  const [editAiTokenRateInputPer1k, setEditAiTokenRateInputPer1k] = useState('');
+  const [editAiTokenRateOutputPer1k, setEditAiTokenRateOutputPer1k] = useState('');
+  const [editAiTokenRateCachePer1k, setEditAiTokenRateCachePer1k] = useState('');
+  const [editAiCostNotes, setEditAiCostNotes] = useState('');
   const [editAiBudgetAllocation, setEditAiBudgetAllocation] = useState('');
 
   const nameById = useMemo(() => {
@@ -323,6 +331,18 @@ export function ProjectStakeholdersPanel({
     setEditAiTokenRatePer1k(
       row.aiTokenRatePer1k != null ? String(row.aiTokenRatePer1k) : '',
     );
+    setEditAiTokenRateInputPer1k(
+      row.aiTokenRateInputPer1k != null ? String(row.aiTokenRateInputPer1k) : '',
+    );
+    setEditAiTokenRateOutputPer1k(
+      row.aiTokenRateOutputPer1k != null
+        ? String(row.aiTokenRateOutputPer1k)
+        : '',
+    );
+    setEditAiTokenRateCachePer1k(
+      row.aiTokenRateCachePer1k != null ? String(row.aiTokenRateCachePer1k) : '',
+    );
+    setEditAiCostNotes(row.aiCostNotes ?? '');
     setEditAiBudgetAllocation(
       row.aiBudgetAllocation != null ? String(row.aiBudgetAllocation) : '',
     );
@@ -589,6 +609,13 @@ export function ProjectStakeholdersPanel({
             aiCostMode: parsedMode,
             aiFlatMonthlyFee: parseOptionalNumber(editAiFlatMonthlyFee) ?? null,
             aiTokenRatePer1k: parseOptionalNumber(editAiTokenRatePer1k) ?? null,
+            aiTokenRateInputPer1k:
+              parseOptionalNumber(editAiTokenRateInputPer1k) ?? null,
+            aiTokenRateOutputPer1k:
+              parseOptionalNumber(editAiTokenRateOutputPer1k) ?? null,
+            aiTokenRateCachePer1k:
+              parseOptionalNumber(editAiTokenRateCachePer1k) ?? null,
+            aiCostNotes: editAiCostNotes.trim() || null,
             aiBudgetAllocation:
               parseOptionalNumber(editAiBudgetAllocation) ?? null,
           }),
@@ -1373,6 +1400,56 @@ export function ProjectStakeholdersPanel({
               onChange={(event) => setEditAiTokenRatePer1k(event.target.value)}
               disabled={pending}
               placeholder={t('aiTokenRatePer1kPlaceholder', { currency })}
+            />
+          </Field>
+          <p className="m-0 text-xs text-ink-muted">{t('aiTokenRateSplitHint')}</p>
+          <Field label={t('aiTokenRateInputPer1k')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.0001"
+              value={editAiTokenRateInputPer1k}
+              onChange={(event) =>
+                setEditAiTokenRateInputPer1k(event.target.value)
+              }
+              disabled={pending}
+              placeholder={t('aiTokenRatePer1kPlaceholder', { currency })}
+            />
+          </Field>
+          <Field label={t('aiTokenRateOutputPer1k')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.0001"
+              value={editAiTokenRateOutputPer1k}
+              onChange={(event) =>
+                setEditAiTokenRateOutputPer1k(event.target.value)
+              }
+              disabled={pending}
+              placeholder={t('aiTokenRatePer1kPlaceholder', { currency })}
+            />
+          </Field>
+          <Field label={t('aiTokenRateCachePer1k')}>
+            <Input
+              type="number"
+              min="0"
+              step="0.0001"
+              value={editAiTokenRateCachePer1k}
+              onChange={(event) =>
+                setEditAiTokenRateCachePer1k(event.target.value)
+              }
+              disabled={pending}
+              placeholder={t('aiTokenRatePer1kPlaceholder', { currency })}
+            />
+          </Field>
+          <Field label={t('aiCostNotes')}>
+            <Textarea
+              value={editAiCostNotes}
+              onChange={(event) => setEditAiCostNotes(event.target.value)}
+              disabled={pending}
+              rows={2}
+              maxLength={500}
+              placeholder={t('aiCostNotesPlaceholder')}
             />
           </Field>
           <Field label={t('aiBudgetAllocation')}>

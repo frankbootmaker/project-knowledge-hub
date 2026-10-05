@@ -9,6 +9,7 @@ import {
 import {
   AppError,
   aiCostModeSchema,
+  parseAiCostNotes,
   normalizeSystemCriticality,
   systemCriticalitySchema,
   systemItCostModeSchema,
@@ -53,6 +54,10 @@ export type PublicSystem = {
   aiCostMode: string | null;
   aiFlatMonthlyFee: number | null;
   aiTokenRatePer1k: number | null;
+  aiTokenRateInputPer1k: number | null;
+  aiTokenRateOutputPer1k: number | null;
+  aiTokenRateCachePer1k: number | null;
+  aiCostNotes: string | null;
   aiBudgetAllocation: number | null;
   metadata: Record<string, unknown> | null;
   tags: PublicSystemTag[];
@@ -103,6 +108,10 @@ export function toPublicSystem(
     aiCostMode: system.aiCostMode,
     aiFlatMonthlyFee: system.aiFlatMonthlyFee,
     aiTokenRatePer1k: system.aiTokenRatePer1k,
+    aiTokenRateInputPer1k: system.aiTokenRateInputPer1k,
+    aiTokenRateOutputPer1k: system.aiTokenRateOutputPer1k,
+    aiTokenRateCachePer1k: system.aiTokenRateCachePer1k,
+    aiCostNotes: system.aiCostNotes,
     aiBudgetAllocation: system.aiBudgetAllocation,
     metadata: system.metadataJson,
     tags: tagList,
@@ -342,6 +351,10 @@ export type UpdateSystemInput = {
   aiCostMode?: AiCostMode | null;
   aiFlatMonthlyFee?: number | string | null;
   aiTokenRatePer1k?: number | string | null;
+  aiTokenRateInputPer1k?: number | string | null;
+  aiTokenRateOutputPer1k?: number | string | null;
+  aiTokenRateCachePer1k?: number | string | null;
+  aiCostNotes?: string | null;
   aiBudgetAllocation?: number | string | null;
 };
 
@@ -375,6 +388,22 @@ export async function updateSystem(
     input.aiTokenRatePer1k === undefined
       ? undefined
       : parseTokenRate(input.aiTokenRatePer1k) ?? null;
+  const nextInputRate =
+    input.aiTokenRateInputPer1k === undefined
+      ? undefined
+      : parseTokenRate(input.aiTokenRateInputPer1k) ?? null;
+  const nextOutputRate =
+    input.aiTokenRateOutputPer1k === undefined
+      ? undefined
+      : parseTokenRate(input.aiTokenRateOutputPer1k) ?? null;
+  const nextCacheRate =
+    input.aiTokenRateCachePer1k === undefined
+      ? undefined
+      : parseTokenRate(input.aiTokenRateCachePer1k) ?? null;
+  const nextCostNotes =
+    input.aiCostNotes === undefined
+      ? undefined
+      : parseAiCostNotes(input.aiCostNotes) ?? null;
   const nextAllocation =
     input.aiBudgetAllocation === undefined
       ? undefined
@@ -458,6 +487,20 @@ export async function updateSystem(
         nextFlat === undefined ? system.aiFlatMonthlyFee : nextFlat,
       aiTokenRatePer1k:
         nextTokenRate === undefined ? system.aiTokenRatePer1k : nextTokenRate,
+      aiTokenRateInputPer1k:
+        nextInputRate === undefined
+          ? system.aiTokenRateInputPer1k
+          : nextInputRate,
+      aiTokenRateOutputPer1k:
+        nextOutputRate === undefined
+          ? system.aiTokenRateOutputPer1k
+          : nextOutputRate,
+      aiTokenRateCachePer1k:
+        nextCacheRate === undefined
+          ? system.aiTokenRateCachePer1k
+          : nextCacheRate,
+      aiCostNotes:
+        nextCostNotes === undefined ? system.aiCostNotes : nextCostNotes,
       aiBudgetAllocation:
         nextAllocation === undefined
           ? system.aiBudgetAllocation
@@ -499,6 +542,10 @@ export async function updateSystem(
     input.aiCostMode !== undefined ||
     input.aiFlatMonthlyFee !== undefined ||
     input.aiTokenRatePer1k !== undefined ||
+    input.aiTokenRateInputPer1k !== undefined ||
+    input.aiTokenRateOutputPer1k !== undefined ||
+    input.aiTokenRateCachePer1k !== undefined ||
+    input.aiCostNotes !== undefined ||
     input.aiBudgetAllocation !== undefined ||
     input.itCostMode !== undefined ||
     input.itFlatMonthlyFee !== undefined ||

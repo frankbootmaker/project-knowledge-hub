@@ -243,6 +243,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-05
+
+* **AI cost and task usage fields** — The stakeholder AI cost dialog adds input, output, and cache rates plus a short note, using the existing `Field`, `Input`, and `Textarea`. Task manage adds the token breakdown, model, tier, usage date, and billing month with the same controls. Budget AC split shows the AI flat vs token totals in the existing muted line.
+
 ### 2026-10-04
 
 * **Section highlight sync** — Header shortcuts and the Control rail share one active anchor. A click keeps that section until the user scrolls. At the bottom of the page, the last section whose top is still in the viewport is chosen, so a short section is not left on an earlier taller one.

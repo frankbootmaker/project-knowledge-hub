@@ -81,6 +81,10 @@ export type PublicStakeholder = {
   aiCostMode: AiCostMode | null;
   aiFlatMonthlyFee: number | null;
   aiTokenRatePer1k: number | null;
+  aiTokenRateInputPer1k: number | null;
+  aiTokenRateOutputPer1k: number | null;
+  aiTokenRateCachePer1k: number | null;
+  aiCostNotes: string | null;
   aiBudgetAllocation: number | null;
   raciRoles: RaciRole[];
   taskCount: number;
@@ -117,6 +121,10 @@ function emptyPersonFields(): Pick<
   | 'aiCostMode'
   | 'aiFlatMonthlyFee'
   | 'aiTokenRatePer1k'
+  | 'aiTokenRateInputPer1k'
+  | 'aiTokenRateOutputPer1k'
+  | 'aiTokenRateCachePer1k'
+  | 'aiCostNotes'
   | 'aiBudgetAllocation'
   | 'raciRoles'
   | 'taskCount'
@@ -144,6 +152,10 @@ function emptyPersonFields(): Pick<
     aiCostMode: null,
     aiFlatMonthlyFee: null,
     aiTokenRatePer1k: null,
+    aiTokenRateInputPer1k: null,
+    aiTokenRateOutputPer1k: null,
+    aiTokenRateCachePer1k: null,
+    aiCostNotes: null,
     aiBudgetAllocation: null,
     raciRoles: [],
     taskCount: 0,
@@ -375,6 +387,10 @@ export async function listProjectStakeholders(
       aiCostMode: systems.aiCostMode,
       aiFlatMonthlyFee: systems.aiFlatMonthlyFee,
       aiTokenRatePer1k: systems.aiTokenRatePer1k,
+      aiTokenRateInputPer1k: systems.aiTokenRateInputPer1k,
+      aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
+      aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
+      aiCostNotes: systems.aiCostNotes,
       aiBudgetAllocation: systems.aiBudgetAllocation,
     })
     .from(systems)
@@ -486,6 +502,10 @@ export async function listProjectStakeholders(
         aiCostMode: null,
         aiFlatMonthlyFee: null,
         aiTokenRatePer1k: null,
+        aiTokenRateInputPer1k: null,
+        aiTokenRateOutputPer1k: null,
+        aiTokenRateCachePer1k: null,
+        aiCostNotes: null,
         aiBudgetAllocation: null,
         raciRoles: [],
         taskCount: 0,
@@ -568,6 +588,10 @@ export async function listProjectStakeholders(
       aiCostMode: parseAiCostMode(assistant.aiCostMode),
       aiFlatMonthlyFee: assistant.aiFlatMonthlyFee,
       aiTokenRatePer1k: assistant.aiTokenRatePer1k,
+      aiTokenRateInputPer1k: assistant.aiTokenRateInputPer1k,
+      aiTokenRateOutputPer1k: assistant.aiTokenRateOutputPer1k,
+      aiTokenRateCachePer1k: assistant.aiTokenRateCachePer1k,
+      aiCostNotes: assistant.aiCostNotes,
       aiBudgetAllocation: assistant.aiBudgetAllocation,
       raciRoles: [],
       taskCount: 0,
@@ -1193,6 +1217,10 @@ export async function updateAiAssistantCost(
     aiCostMode?: AiCostMode | null;
     aiFlatMonthlyFee?: number | null;
     aiTokenRatePer1k?: number | null;
+    aiTokenRateInputPer1k?: number | null;
+    aiTokenRateOutputPer1k?: number | null;
+    aiTokenRateCachePer1k?: number | null;
+    aiCostNotes?: string | null;
     aiBudgetAllocation?: number | null;
   },
 ): Promise<PublicStakeholder> {
@@ -1239,6 +1267,22 @@ export async function updateAiAssistantCost(
         input.aiTokenRatePer1k === undefined
           ? system.aiTokenRatePer1k
           : input.aiTokenRatePer1k,
+      aiTokenRateInputPer1k:
+        input.aiTokenRateInputPer1k === undefined
+          ? system.aiTokenRateInputPer1k
+          : input.aiTokenRateInputPer1k,
+      aiTokenRateOutputPer1k:
+        input.aiTokenRateOutputPer1k === undefined
+          ? system.aiTokenRateOutputPer1k
+          : input.aiTokenRateOutputPer1k,
+      aiTokenRateCachePer1k:
+        input.aiTokenRateCachePer1k === undefined
+          ? system.aiTokenRateCachePer1k
+          : input.aiTokenRateCachePer1k,
+      aiCostNotes:
+        input.aiCostNotes === undefined
+          ? system.aiCostNotes
+          : input.aiCostNotes,
       aiBudgetAllocation:
         input.aiBudgetAllocation === undefined
           ? system.aiBudgetAllocation

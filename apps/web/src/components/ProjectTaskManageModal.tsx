@@ -57,6 +57,13 @@ type TaskDetail = {
   currentOwnerUserId: string | null;
   currentOwner: TaskOwner | null;
   tokensUsed: number | null;
+  tokensInput?: number | null;
+  tokensOutput?: number | null;
+  tokensCache?: number | null;
+  modelId?: string | null;
+  pricingTier?: string | null;
+  usageOccurredAt?: string | null;
+  billingPeriod?: string | null;
   aiSystemId: string | null;
   humanKey?: string | null;
   raci: RaciEntry[];
@@ -156,6 +163,13 @@ export function ProjectTaskManageModal({
   const [milestoneId, setMilestoneId] = useState('');
   const [userStoryId, setUserStoryId] = useState('');
   const [tokensUsed, setTokensUsed] = useState('');
+  const [tokensInput, setTokensInput] = useState('');
+  const [tokensOutput, setTokensOutput] = useState('');
+  const [tokensCache, setTokensCache] = useState('');
+  const [modelId, setModelId] = useState('');
+  const [pricingTier, setPricingTier] = useState('');
+  const [usageOccurredAt, setUsageOccurredAt] = useState('');
+  const [billingPeriod, setBillingPeriod] = useState('');
   const [aiSystemId, setAiSystemId] = useState('');
   const [linkedRaid, setLinkedRaid] = useState<LinkedRaid[]>([]);
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
@@ -204,6 +218,21 @@ export function ProjectTaskManageModal({
       setTokensUsed(
         loaded.tokensUsed != null ? String(loaded.tokensUsed) : '',
       );
+      setTokensInput(
+        loaded.tokensInput != null ? String(loaded.tokensInput) : '',
+      );
+      setTokensOutput(
+        loaded.tokensOutput != null ? String(loaded.tokensOutput) : '',
+      );
+      setTokensCache(
+        loaded.tokensCache != null ? String(loaded.tokensCache) : '',
+      );
+      setModelId(loaded.modelId ?? '');
+      setPricingTier(loaded.pricingTier ?? '');
+      setUsageOccurredAt(
+        loaded.usageOccurredAt ? loaded.usageOccurredAt.slice(0, 10) : '',
+      );
+      setBillingPeriod(loaded.billingPeriod ?? '');
       setAiSystemId(loaded.aiSystemId ?? '');
 
       const actPayload = (await actRes.json().catch(() => ({}))) as {
@@ -307,10 +336,70 @@ export function ProjectTaskManageModal({
     ? epics.find((epic) => epic.id === selectedStory.epicId)?.title
     : task?.epicTitle;
 
+  function parseTokenInput(raw: string): number | null | 'invalid' {
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    if (!/^\d+$/.test(trimmed)) return 'invalid';
+    const value = Number(trimmed);
+    if (!Number.isSafeInteger(value) || value > 2147483647) return 'invalid';
+    return value;
+  }
+
+  function aiUsagePayload(): {
+    tokensUsed: number | null;
+    tokensInput: number | null;
+    tokensOutput: number | null;
+    tokensCache: number | null;
+    modelId: string | null;
+    pricingTier: string | null;
+    usageOccurredAt: string | null;
+    billingPeriod: string | null;
+  } | null {
+    const input = parseTokenInput(tokensInput);
+    const output = parseTokenInput(tokensOutput);
+    const cache = parseTokenInput(tokensCache);
+    const total = parseTokenInput(tokensUsed);
+    if (
+      input === 'invalid' ||
+      output === 'invalid' ||
+      cache === 'invalid' ||
+      total === 'invalid'
+    ) {
+      setError(t('tokensInvalid'));
+      return null;
+    }
+    const breakdown = input != null || output != null || cache != null;
+    const sum = (input ?? 0) + (output ?? 0) + (cache ?? 0);
+    if (breakdown && total != null && total !== sum) {
+      setError(t('tokensBreakdownMismatch'));
+      return null;
+    }
+    const period = billingPeriod.trim();
+    if (period && !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+      setError(t('billingPeriodInvalid'));
+      return null;
+    }
+    return {
+      tokensInput: input,
+      tokensOutput: output,
+      tokensCache: cache,
+      tokensUsed: total,
+      modelId: modelId.trim() || null,
+      pricingTier: pricingTier.trim() || null,
+      usageOccurredAt: usageOccurredAt || null,
+      billingPeriod: period || null,
+    };
+  }
+
   async function saveFields() {
     if (!taskId || !canMutate) return;
     setPending(true);
     setError(null);
+    const usage = aiUsagePayload();
+    if (!usage) {
+      setPending(false);
+      return;
+    }
     try {
       const response = await fetch(`/api/v1/project-tasks/${taskId}`, {
         method: 'PATCH',
@@ -324,10 +413,7 @@ export function ProjectTaskManageModal({
           description: description.trim() || null,
           milestoneId: milestoneId || null,
           userStoryId: userStoryId || null,
-          tokensUsed:
-            tokensUsed.trim() === ''
-              ? null
-              : Math.max(0, Math.floor(Number(tokensUsed))),
+          ...usage,
           aiSystemId: aiSystemId.trim() || null,
         }),
       });
@@ -660,9 +746,45 @@ export function ProjectTaskManageModal({
               {(canMutate ||
                 tokensUsed.trim() !== '' ||
                 task.tokensUsed != null ||
+                tokensInput.trim() !== '' ||
+                tokensOutput.trim() !== '' ||
+                tokensCache.trim() !== '' ||
                 aiSystemId.trim() !== '' ||
                 task.aiSystemId) ? (
                 <>
+                  <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+                    {t('tokensBreakdownHint')}
+                  </p>
+                  <Field label={t('tokensInput')}>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={tokensInput}
+                      onChange={(e) => setTokensInput(e.target.value)}
+                      disabled={pending || !canMutate}
+                    />
+                  </Field>
+                  <Field label={t('tokensOutput')}>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={tokensOutput}
+                      onChange={(e) => setTokensOutput(e.target.value)}
+                      disabled={pending || !canMutate}
+                    />
+                  </Field>
+                  <Field label={t('tokensCache')}>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={tokensCache}
+                      onChange={(e) => setTokensCache(e.target.value)}
+                      disabled={pending || !canMutate}
+                    />
+                  </Field>
                   <Field label={t('tokensUsed')}>
                     <Input
                       type="number"
@@ -672,6 +794,40 @@ export function ProjectTaskManageModal({
                       onChange={(e) => setTokensUsed(e.target.value)}
                       disabled={pending || !canMutate}
                       placeholder={t('tokensUsedPlaceholder')}
+                    />
+                  </Field>
+                  <Field label={t('aiModelId')}>
+                    <Input
+                      value={modelId}
+                      onChange={(e) => setModelId(e.target.value)}
+                      disabled={pending || !canMutate}
+                      maxLength={80}
+                      placeholder={t('aiModelIdPlaceholder')}
+                    />
+                  </Field>
+                  <Field label={t('aiPricingTier')}>
+                    <Input
+                      value={pricingTier}
+                      onChange={(e) => setPricingTier(e.target.value)}
+                      disabled={pending || !canMutate}
+                      maxLength={32}
+                      placeholder={t('aiPricingTierPlaceholder')}
+                    />
+                  </Field>
+                  <Field label={t('usageOccurredAt')}>
+                    <Input
+                      type="date"
+                      value={usageOccurredAt}
+                      onChange={(e) => setUsageOccurredAt(e.target.value)}
+                      disabled={pending || !canMutate}
+                    />
+                  </Field>
+                  <Field label={t('billingPeriod')}>
+                    <Input
+                      type="month"
+                      value={billingPeriod}
+                      onChange={(e) => setBillingPeriod(e.target.value)}
+                      disabled={pending || !canMutate}
                     />
                   </Field>
                   <Field label={t('aiSystemId')}>

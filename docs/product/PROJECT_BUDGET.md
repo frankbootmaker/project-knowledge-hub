@@ -23,7 +23,7 @@ Track **project currency and BAC**, **stakeholder hourly rates and capacity**, *
 | System OpEx modes | On other catalogue systems linked to the project: `flat` \| `one_time` \| `note_only` (`note_only` / unset → **$0**) |
 | Flat fee | Monthly amount accrued over project start→end (calendar-day fraction); shared by AI and IT flat modes |
 | One-time fee | Full `it_one_time_cost` counted in AC when mode is `one_time` |
-| Token fee | `(tokens_used / 1000) × ai_token_rate_per_1k` on tasks (AI only) |
+| Token fee | Tasks with only `tokens_used`: `(tokens_used / 1000) × ai_token_rate_per_1k`. Tasks with `tokens_input` / `tokens_output` / `tokens_cache`: each part × its per-1k rate. A null split rate uses the blended `ai_token_rate_per_1k`. `tokens_used` is the sum of the breakdown. |
 | Budget allocation | Optional soft caps (`ai_budget_allocation` / `it_budget_allocation`); warn in UI; do not block writes in v1 |
 | Capacity | Employee assignment / contractor contract window × Mon–Fri × `allocated_daily_hours` |
 | Utilization | Views planned / burn / combined; badges under &lt;70%, on_track 70–110%, over &gt;110% |
@@ -48,7 +48,11 @@ project_stakeholders
 systems (ai_assistant)
   ├── ai_cost_mode
   ├── ai_flat_monthly_fee
-  ├── ai_token_rate_per_1k
+  ├── ai_token_rate_per_1k            (blended fallback)
+  ├── ai_token_rate_input_per_1k
+  ├── ai_token_rate_output_per_1k
+  ├── ai_token_rate_cache_per_1k
+  ├── ai_cost_notes
   └── ai_budget_allocation
 
 systems (non-AI, project-linked)
@@ -60,6 +64,9 @@ systems (non-AI, project-linked)
 project_tasks
   ├── forecast_hours / actual_hours
   ├── tokens_used
+  ├── tokens_input / tokens_output / tokens_cache
+  ├── ai_model_id / ai_pricing_tier
+  ├── usage_occurred_at / billing_period   (audit only)
   └── ai_system_id
 
 project_cost_snapshots

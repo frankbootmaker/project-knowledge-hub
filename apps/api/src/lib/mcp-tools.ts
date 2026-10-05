@@ -27,6 +27,12 @@ import {
   isUuid,
   milestoneStatusSchema,
   aiCostModeSchema,
+  assertReportedAiUsage,
+  parseAiCostNotes,
+  parseAiModelId,
+  parseAiPricingTier,
+  parseBillingPeriod,
+  parseUsageOccurredAt,
   normalizeKeyPrefix,
   parseHumanKey,
   projectCurrencySchema,
@@ -90,6 +96,7 @@ import {
   listTasks,
   replaceTaskRaci,
   requireProjectContext,
+  taskTouchesCost,
   updateMilestone,
   updateTask,
 } from './project-delivery.js';
@@ -237,6 +244,38 @@ async function assertActingWorkspaceMaintainer(
       statusCode: 403,
     });
   }
+}
+
+function mapMcpAiUsage(input: {
+  tokensUsed?: number | null;
+  tokensInput?: number | null;
+  tokensOutput?: number | null;
+  tokensCache?: number | null;
+  modelId?: string | null;
+  pricingTier?: string | null;
+  usageOccurredAt?: string | null;
+  billingPeriod?: string | null;
+}) {
+  return {
+    tokensUsed: input.tokensUsed,
+    tokensInput: input.tokensInput,
+    tokensOutput: input.tokensOutput,
+    tokensCache: input.tokensCache,
+    modelId:
+      input.modelId === undefined ? undefined : parseAiModelId(input.modelId),
+    pricingTier:
+      input.pricingTier === undefined
+        ? undefined
+        : parseAiPricingTier(input.pricingTier),
+    usageOccurredAt:
+      input.usageOccurredAt === undefined
+        ? undefined
+        : parseUsageOccurredAt(input.usageOccurredAt),
+    billingPeriod:
+      input.billingPeriod === undefined
+        ? undefined
+        : parseBillingPeriod(input.billingPeriod),
+  };
 }
 
 function requireActingUserId(client: McpClientContext): string {
@@ -2471,7 +2510,7 @@ export function createMcpToolHandlers(
           input.actualHours === undefined
             ? undefined
             : parseHours(input.actualHours) ?? null,
-        tokensUsed: input.tokensUsed,
+        ...mapMcpAiUsage(input),
         aiSystemId: input.aiSystemId,
         milestoneId,
         userStoryId,
@@ -2485,12 +2524,7 @@ export function createMcpToolHandlers(
           role: raciRoleSchema.parse(entry.role),
         })),
       });
-      if (
-        input.forecastHours !== undefined ||
-        input.actualHours !== undefined ||
-        input.tokensUsed !== undefined ||
-        input.aiSystemId !== undefined
-      ) {
+      if (taskTouchesCost(input)) {
         await upsertProjectCostSnapshot(app.database, project.id);
       }
       await writeAuditEvent(app.database, {
@@ -2562,7 +2596,7 @@ export function createMcpToolHandlers(
           input.actualHours === undefined
             ? undefined
             : parseHours(input.actualHours) ?? null,
-        tokensUsed: input.tokensUsed,
+        ...mapMcpAiUsage(input),
         aiSystemId: input.aiSystemId,
         milestoneId,
         userStoryId,
@@ -2574,12 +2608,7 @@ export function createMcpToolHandlers(
         actorUserId: actingUserId,
         workspaceId: project.workspaceId,
       });
-      if (
-        input.forecastHours !== undefined ||
-        input.actualHours !== undefined ||
-        input.tokensUsed !== undefined ||
-        input.aiSystemId !== undefined
-      ) {
+      if (taskTouchesCost(input)) {
         await upsertProjectCostSnapshot(app.database, project.id);
       }
       await writeAuditEvent(app.database, {
@@ -2609,8 +2638,9 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
+      assertReportedAiUsage(input);
       const task = await updateTask(app.database, taskId, {
-        tokensUsed: input.tokensUsed,
+        ...mapMcpAiUsage(input),
         aiSystemId: input.aiSystemId,
         actorUserId: actingUserId,
         workspaceId: project.workspaceId,
@@ -2625,7 +2655,13 @@ export function createMcpToolHandlers(
         entityId: task.id,
         metadata: {
           projectId: project.id,
-          tokensUsed: input.tokensUsed,
+          tokensUsed: task.tokensUsed,
+          tokensInput: task.tokensInput,
+          tokensOutput: task.tokensOutput,
+          tokensCache: task.tokensCache,
+          modelId: task.modelId,
+          pricingTier: task.pricingTier,
+          billingPeriod: task.billingPeriod,
           aiSystemId: input.aiSystemId ?? null,
           via: 'mcp',
           actingUserId,
@@ -3243,6 +3279,22 @@ export function createMcpToolHandlers(
             input.aiTokenRatePer1k === undefined
               ? undefined
               : parseTokenRate(input.aiTokenRatePer1k) ?? null,
+          aiTokenRateInputPer1k:
+            input.aiTokenRateInputPer1k === undefined
+              ? undefined
+              : parseTokenRate(input.aiTokenRateInputPer1k) ?? null,
+          aiTokenRateOutputPer1k:
+            input.aiTokenRateOutputPer1k === undefined
+              ? undefined
+              : parseTokenRate(input.aiTokenRateOutputPer1k) ?? null,
+          aiTokenRateCachePer1k:
+            input.aiTokenRateCachePer1k === undefined
+              ? undefined
+              : parseTokenRate(input.aiTokenRateCachePer1k) ?? null,
+          aiCostNotes:
+            input.aiCostNotes === undefined
+              ? undefined
+              : parseAiCostNotes(input.aiCostNotes) ?? null,
           aiBudgetAllocation:
             input.aiBudgetAllocation === undefined
               ? undefined

@@ -86,7 +86,8 @@ import { upsertProjectCostSnapshot } from './project-budget.js';
  * set, or a system-created import in the target project attaches it.
  * Unattached system media is skipped with reason `unattached_media`.
  *
- * AI usage is `tokens_used` / `ai_system_id` on a task plus every user's
+ * AI usage is token counters, model/tier/period tags, and `ai_system_id` on a
+ * task plus every user's
  * `fields_updated` activity, in time order. If the last write of a field
  * was not the system user, the value stays. Otherwise the purge restores
  * the previous value of the first system write after the last human write
@@ -164,13 +165,29 @@ export type PurgeSkippedItem = {
 export type PurgeUnrecoverable = {
   entityType: 'task';
   entityId: string;
-  field: 'tokensUsed' | 'aiSystemId';
+  field:
+    | 'tokensUsed'
+    | 'tokensInput'
+    | 'tokensOutput'
+    | 'tokensCache'
+    | 'modelId'
+    | 'pricingTier'
+    | 'usageOccurredAt'
+    | 'billingPeriod'
+    | 'aiSystemId';
   reason: string;
 };
 
 export type PurgeAiRestore = {
   taskId: string;
   tokensUsed?: number | null;
+  tokensInput?: number | null;
+  tokensOutput?: number | null;
+  tokensCache?: number | null;
+  modelId?: string | null;
+  pricingTier?: string | null;
+  usageOccurredAt?: string | null;
+  billingPeriod?: string | null;
   aiSystemId?: string | null;
 };
 
@@ -218,6 +235,20 @@ export type SystemUserPurgeSnapshot = {
     fields: string[];
     recordedTokensUsed?: boolean;
     previousTokensUsed?: number | null;
+    recordedTokensInput?: boolean;
+    previousTokensInput?: number | null;
+    recordedTokensOutput?: boolean;
+    previousTokensOutput?: number | null;
+    recordedTokensCache?: boolean;
+    previousTokensCache?: number | null;
+    recordedModelId?: boolean;
+    previousModelId?: string | null;
+    recordedPricingTier?: boolean;
+    previousPricingTier?: string | null;
+    recordedUsageOccurredAt?: boolean;
+    previousUsageOccurredAt?: string | null;
+    recordedBillingPeriod?: boolean;
+    previousBillingPeriod?: string | null;
     recordedAiSystemId?: boolean;
     previousAiSystemId?: string | null;
     createdAt?: string;
@@ -410,6 +441,78 @@ export function purgeCommitDecision(input: {
   return 'commit';
 }
 
+type PurgeActivity = SystemUserPurgeSnapshot['activities'][number];
+
+const AI_COUNT_FIELDS = [
+  'tokensUsed',
+  'tokensInput',
+  'tokensOutput',
+  'tokensCache',
+] as const;
+
+const AI_TEXT_FIELDS = [
+  'modelId',
+  'pricingTier',
+  'usageOccurredAt',
+  'billingPeriod',
+] as const;
+
+function recordedCount(
+  activity: PurgeActivity,
+  field: (typeof AI_COUNT_FIELDS)[number],
+): { recorded: boolean; value: number | null } {
+  if (field === 'tokensUsed') {
+    return {
+      recorded: activity.recordedTokensUsed === true,
+      value: activity.previousTokensUsed ?? null,
+    };
+  }
+  if (field === 'tokensInput') {
+    return {
+      recorded: activity.recordedTokensInput === true,
+      value: activity.previousTokensInput ?? null,
+    };
+  }
+  if (field === 'tokensOutput') {
+    return {
+      recorded: activity.recordedTokensOutput === true,
+      value: activity.previousTokensOutput ?? null,
+    };
+  }
+  return {
+    recorded: activity.recordedTokensCache === true,
+    value: activity.previousTokensCache ?? null,
+  };
+}
+
+function recordedText(
+  activity: PurgeActivity,
+  field: (typeof AI_TEXT_FIELDS)[number],
+): { recorded: boolean; value: string | null } {
+  if (field === 'modelId') {
+    return {
+      recorded: activity.recordedModelId === true,
+      value: activity.previousModelId ?? null,
+    };
+  }
+  if (field === 'pricingTier') {
+    return {
+      recorded: activity.recordedPricingTier === true,
+      value: activity.previousPricingTier ?? null,
+    };
+  }
+  if (field === 'usageOccurredAt') {
+    return {
+      recorded: activity.recordedUsageOccurredAt === true,
+      value: activity.previousUsageOccurredAt ?? null,
+    };
+  }
+  return {
+    recorded: activity.recordedBillingPeriod === true,
+    value: activity.previousBillingPeriod ?? null,
+  };
+}
+
 function isAiUsageActivity(activity: {
   type: string;
   fields: string[];
@@ -417,6 +520,13 @@ function isAiUsageActivity(activity: {
   if (activity.type !== 'fields_updated') return false;
   return (
     activity.fields.includes('tokensUsed') ||
+    activity.fields.includes('tokensInput') ||
+    activity.fields.includes('tokensOutput') ||
+    activity.fields.includes('tokensCache') ||
+    activity.fields.includes('modelId') ||
+    activity.fields.includes('pricingTier') ||
+    activity.fields.includes('usageOccurredAt') ||
+    activity.fields.includes('billingPeriod') ||
     activity.fields.includes('aiSystemId')
   );
 }
@@ -759,7 +869,12 @@ export function planSystemUserPurge(
     const acts = (aiUsageByTask.get(taskId) ?? []).map((row) => row.activity);
     const restore: PurgeAiRestore = { taskId };
     let restoreAny = false;
-    for (const field of ['tokensUsed', 'aiSystemId'] as const) {
+    const usageFields = [
+      ...AI_COUNT_FIELDS,
+      ...AI_TEXT_FIELDS,
+      'aiSystemId',
+    ] as const;
+    for (const field of usageFields) {
       const writes = acts.filter((activity) => activity.fields.includes(field));
       if (writes.length === 0) continue;
       const last = writes[writes.length - 1];
@@ -772,17 +887,37 @@ export function planSystemUserPurge(
         .slice(lastHuman + 1)
         .find((activity) => activity.actorUserId === systemUserId);
       if (!firstSystem) continue;
-      if (field === 'tokensUsed') {
-        if (firstSystem.recordedTokensUsed) {
-          restore.tokensUsed = firstSystem.previousTokensUsed ?? null;
+      if (field !== 'aiSystemId' && (AI_COUNT_FIELDS as readonly string[]).includes(field)) {
+        const countField = field as (typeof AI_COUNT_FIELDS)[number];
+        const prior = recordedCount(firstSystem, countField);
+        if (prior.recorded) {
+          restore[countField] = prior.value;
           restoreAny = true;
         } else {
           unrecoverable.push({
             entityType: 'task',
             entityId: taskId,
-            field: 'tokensUsed',
+            field: countField,
             reason:
-              'System user overwrote tokensUsed and the activity did not record the previous value.',
+              field === 'tokensUsed'
+                ? 'System user overwrote tokensUsed and the activity did not record the previous value.'
+                : `System user overwrote ${field} and the activity did not record the previous value.`,
+          });
+        }
+        continue;
+      }
+      if ((AI_TEXT_FIELDS as readonly string[]).includes(field)) {
+        const textField = field as (typeof AI_TEXT_FIELDS)[number];
+        const prior = recordedText(firstSystem, textField);
+        if (prior.recorded) {
+          restore[textField] = prior.value;
+          restoreAny = true;
+        } else {
+          unrecoverable.push({
+            entityType: 'task',
+            entityId: taskId,
+            field: textField,
+            reason: `System user overwrote ${field} and the activity did not record the previous value.`,
           });
         }
         continue;
@@ -1331,35 +1466,105 @@ function activityFields(metadata: unknown): string[] {
   return fields.filter((item): item is string => typeof item === 'string');
 }
 
+function readStoredCount(
+  prev: object,
+  key: string,
+): { recorded: boolean; value: number | null } {
+  if (!Object.prototype.hasOwnProperty.call(prev, key)) {
+    return { recorded: false, value: null };
+  }
+  const value = (prev as Record<string, unknown>)[key];
+  if (typeof value === 'number' || value === null) {
+    return { recorded: true, value };
+  }
+  return { recorded: false, value: null };
+}
+
+function readStoredText(
+  prev: object,
+  key: string,
+): { recorded: boolean; value: string | null } {
+  if (!Object.prototype.hasOwnProperty.call(prev, key)) {
+    return { recorded: false, value: null };
+  }
+  const value = (prev as Record<string, unknown>)[key];
+  if (typeof value === 'string' || value === null) {
+    return { recorded: true, value };
+  }
+  return { recorded: false, value: null };
+}
+
 function activityPrevious(metadata: unknown): {
   recordedTokensUsed: boolean;
   previousTokensUsed: number | null;
+  recordedTokensInput: boolean;
+  previousTokensInput: number | null;
+  recordedTokensOutput: boolean;
+  previousTokensOutput: number | null;
+  recordedTokensCache: boolean;
+  previousTokensCache: number | null;
+  recordedModelId: boolean;
+  previousModelId: string | null;
+  recordedPricingTier: boolean;
+  previousPricingTier: string | null;
+  recordedUsageOccurredAt: boolean;
+  previousUsageOccurredAt: string | null;
+  recordedBillingPeriod: boolean;
+  previousBillingPeriod: string | null;
   recordedAiSystemId: boolean;
   previousAiSystemId: string | null;
 } {
   const empty = {
     recordedTokensUsed: false,
     previousTokensUsed: null,
+    recordedTokensInput: false,
+    previousTokensInput: null,
+    recordedTokensOutput: false,
+    previousTokensOutput: null,
+    recordedTokensCache: false,
+    previousTokensCache: null,
+    recordedModelId: false,
+    previousModelId: null,
+    recordedPricingTier: false,
+    previousPricingTier: null,
+    recordedUsageOccurredAt: false,
+    previousUsageOccurredAt: null,
+    recordedBillingPeriod: false,
+    previousBillingPeriod: null,
     recordedAiSystemId: false,
     previousAiSystemId: null,
   };
   if (!metadata || typeof metadata !== 'object') return empty;
   const previous = (metadata as { previous?: unknown }).previous;
   if (!previous || typeof previous !== 'object') return empty;
-  const prev = previous as { tokensUsed?: unknown; aiSystemId?: unknown };
-  const recordedTokensUsed =
-    Object.prototype.hasOwnProperty.call(prev, 'tokensUsed') &&
-    (typeof prev.tokensUsed === 'number' || prev.tokensUsed === null);
-  const recordedAiSystemId =
-    Object.prototype.hasOwnProperty.call(prev, 'aiSystemId') &&
-    (typeof prev.aiSystemId === 'string' || prev.aiSystemId === null);
+  const tokensUsed = readStoredCount(previous, 'tokensUsed');
+  const tokensInput = readStoredCount(previous, 'tokensInput');
+  const tokensOutput = readStoredCount(previous, 'tokensOutput');
+  const tokensCache = readStoredCount(previous, 'tokensCache');
+  const modelId = readStoredText(previous, 'modelId');
+  const pricingTier = readStoredText(previous, 'pricingTier');
+  const usageOccurredAt = readStoredText(previous, 'usageOccurredAt');
+  const billingPeriod = readStoredText(previous, 'billingPeriod');
+  const aiSystemId = readStoredText(previous, 'aiSystemId');
   return {
-    recordedTokensUsed,
-    previousTokensUsed: recordedTokensUsed ? (prev.tokensUsed as number | null) : null,
-    recordedAiSystemId,
-    previousAiSystemId: recordedAiSystemId
-      ? (prev.aiSystemId as string | null)
-      : null,
+    recordedTokensUsed: tokensUsed.recorded,
+    previousTokensUsed: tokensUsed.value,
+    recordedTokensInput: tokensInput.recorded,
+    previousTokensInput: tokensInput.value,
+    recordedTokensOutput: tokensOutput.recorded,
+    previousTokensOutput: tokensOutput.value,
+    recordedTokensCache: tokensCache.recorded,
+    previousTokensCache: tokensCache.value,
+    recordedModelId: modelId.recorded,
+    previousModelId: modelId.value,
+    recordedPricingTier: pricingTier.recorded,
+    previousPricingTier: pricingTier.value,
+    recordedUsageOccurredAt: usageOccurredAt.recorded,
+    previousUsageOccurredAt: usageOccurredAt.value,
+    recordedBillingPeriod: billingPeriod.recorded,
+    previousBillingPeriod: billingPeriod.value,
+    recordedAiSystemId: aiSystemId.recorded,
+    previousAiSystemId: aiSystemId.value,
   };
 }
 
@@ -2004,10 +2209,30 @@ export async function applySystemUserPurge(
   for (const restore of plan.aiRestores) {
     const values: {
       tokensUsed?: number | null;
+      tokensInput?: number | null;
+      tokensOutput?: number | null;
+      tokensCache?: number | null;
+      aiModelId?: string | null;
+      aiPricingTier?: string | null;
+      usageOccurredAt?: Date | null;
+      billingPeriod?: string | null;
       aiSystemId?: string | null;
       updatedAt: Date;
     } = { updatedAt: now };
     if ('tokensUsed' in restore) values.tokensUsed = restore.tokensUsed ?? null;
+    if ('tokensInput' in restore) values.tokensInput = restore.tokensInput ?? null;
+    if ('tokensOutput' in restore) values.tokensOutput = restore.tokensOutput ?? null;
+    if ('tokensCache' in restore) values.tokensCache = restore.tokensCache ?? null;
+    if ('modelId' in restore) values.aiModelId = restore.modelId ?? null;
+    if ('pricingTier' in restore) values.aiPricingTier = restore.pricingTier ?? null;
+    if ('usageOccurredAt' in restore) {
+      values.usageOccurredAt = restore.usageOccurredAt
+        ? new Date(restore.usageOccurredAt)
+        : null;
+    }
+    if ('billingPeriod' in restore) {
+      values.billingPeriod = restore.billingPeriod ?? null;
+    }
     if ('aiSystemId' in restore) values.aiSystemId = restore.aiSystemId ?? null;
     await db
       .update(projectTasks)

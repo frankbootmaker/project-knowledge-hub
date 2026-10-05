@@ -234,7 +234,25 @@ export const systems = pgTable(
     /** AI assistant cost mode: flat | api | mixed | note_only. */
     aiCostMode: text('ai_cost_mode'),
     aiFlatMonthlyFee: numeric('ai_flat_monthly_fee', { precision: 14, scale: 2, mode: 'number' }),
+    /** Blended per-1k rate. Fallback when a split rate is null or usage has no breakdown. */
     aiTokenRatePer1k: numeric('ai_token_rate_per_1k', { precision: 14, scale: 4, mode: 'number' }),
+    aiTokenRateInputPer1k: numeric('ai_token_rate_input_per_1k', {
+      precision: 14,
+      scale: 4,
+      mode: 'number',
+    }),
+    aiTokenRateOutputPer1k: numeric('ai_token_rate_output_per_1k', {
+      precision: 14,
+      scale: 4,
+      mode: 'number',
+    }),
+    aiTokenRateCachePer1k: numeric('ai_token_rate_cache_per_1k', {
+      precision: 14,
+      scale: 4,
+      mode: 'number',
+    }),
+    /** Short note, e.g. Cursor Pro+ flat plus on-demand. */
+    aiCostNotes: text('ai_cost_notes'),
     aiBudgetAllocation: numeric('ai_budget_allocation', { precision: 14, scale: 2, mode: 'number' }),
     metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>(),
     lastValidatedAt: timestamp('last_validated_at', {
@@ -1202,8 +1220,22 @@ export const projectTasks = pgTable(
     currentOwnerUserId: uuid('current_owner_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
-    /** Tokens consumed by an AI assistant on this task (actuals). */
+    /** Tokens consumed by an AI assistant on this task (actuals). Sum of the breakdown when set. */
     tokensUsed: integer('tokens_used'),
+    tokensInput: integer('tokens_input'),
+    tokensOutput: integer('tokens_output'),
+    tokensCache: integer('tokens_cache'),
+    /** Model label for the latest usage report, e.g. grok-4.7. */
+    aiModelId: text('ai_model_id'),
+    /** Pricing tier label, e.g. standard or fast. */
+    aiPricingTier: text('ai_pricing_tier'),
+    /** When the usage occurred. Audit only; does not move the flat-fee window. */
+    usageOccurredAt: timestamp('usage_occurred_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    /** YYYY-MM audit tag. Does not change flat-fee accrual. */
+    billingPeriod: text('billing_period'),
     aiSystemId: uuid('ai_system_id').references(() => systems.id, {
       onDelete: 'set null',
     }),

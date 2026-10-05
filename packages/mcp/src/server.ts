@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
   createKnowledgeRecordInputSchema,
+  tokenCountSchema,
   updateKnowledgeRecordInputSchema,
 } from '@project-knowledge-hub/domain';
 import { hasMcpScope, type McpScope } from './scopes.js';
@@ -284,6 +285,13 @@ export type McpToolHandlers = {
     forecastHours?: number | string | null;
     actualHours?: number | string | null;
     tokensUsed?: number | null;
+    tokensInput?: number | null;
+    tokensOutput?: number | null;
+    tokensCache?: number | null;
+    modelId?: string | null;
+    pricingTier?: string | null;
+    usageOccurredAt?: string | null;
+    billingPeriod?: string | null;
     aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
@@ -302,6 +310,13 @@ export type McpToolHandlers = {
     forecastHours?: number | string | null;
     actualHours?: number | string | null;
     tokensUsed?: number | null;
+    tokensInput?: number | null;
+    tokensOutput?: number | null;
+    tokensCache?: number | null;
+    modelId?: string | null;
+    pricingTier?: string | null;
+    usageOccurredAt?: string | null;
+    billingPeriod?: string | null;
     aiSystemId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
@@ -313,7 +328,14 @@ export type McpToolHandlers = {
   }) => Promise<unknown>;
   reportProjectTaskAiUsage: (input: {
     taskId: string;
-    tokensUsed: number;
+    tokensUsed?: number;
+    tokensInput?: number | null;
+    tokensOutput?: number | null;
+    tokensCache?: number | null;
+    modelId?: string | null;
+    pricingTier?: string | null;
+    usageOccurredAt?: string | null;
+    billingPeriod?: string | null;
     aiSystemId?: string | null;
   }) => Promise<unknown>;
   setProjectTaskRaci: (input: {
@@ -439,6 +461,10 @@ export type McpToolHandlers = {
     aiCostMode?: 'flat' | 'api' | 'mixed' | 'note_only' | null;
     aiFlatMonthlyFee?: number | string | null;
     aiTokenRatePer1k?: number | string | null;
+    aiTokenRateInputPer1k?: number | string | null;
+    aiTokenRateOutputPer1k?: number | string | null;
+    aiTokenRateCachePer1k?: number | string | null;
+    aiCostNotes?: string | null;
     aiBudgetAllocation?: number | string | null;
   }) => Promise<unknown>;
   deleteProjectStakeholder: (input: {
@@ -1063,7 +1089,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Includes person vs AI vs IT-system OpEx AC breakdown. All money/budget fields returned as JSON numbers. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Includes person vs AI vs IT-system OpEx, plus aiFlatAc and aiTokenAc. Mixed AI AC is the flat fee accrued over the project dates plus token cost. All money/budget fields returned as JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -1140,7 +1166,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_system',
-    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Money/rate fields (itFlatMonthlyFee, itBudgetAllocation, aiFlatMonthlyFee, aiTokenRatePer1k, aiBudgetAllocation) returned as JSON numbers. Requires systems:read.',
+    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Money/rate fields (itFlatMonthlyFee, itBudgetAllocation, aiFlatMonthlyFee, aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, aiBudgetAllocation) returned as JSON numbers. aiCostNotes is a short string. Requires systems:read.',
     { systemId: z.string().uuid() },
     async (args) =>
       wrap('get_system', 'systems:read', () => handlers.getSystem(args), {
@@ -1645,7 +1671,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1656,7 +1682,14 @@ export function createKnowledgeHubMcpServer(
       dueDate: isoDateNullableSchema.optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
-      tokensUsed: z.number().int().min(0).nullable().optional(),
+      tokensUsed: tokenCountSchema.nullable().optional(),
+      tokensInput: tokenCountSchema.nullable().optional(),
+      tokensOutput: tokenCountSchema.nullable().optional(),
+      tokensCache: tokenCountSchema.nullable().optional(),
+      modelId: z.string().max(80).nullable().optional(),
+      pricingTier: z.string().max(32).nullable().optional(),
+      usageOccurredAt: z.string().max(40).nullable().optional(),
+      billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
@@ -1685,7 +1718,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. When an AI assistant completed work, set tokensUsed (+ optional aiSystemId) or use report_project_task_ai_usage. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1696,7 +1729,14 @@ export function createKnowledgeHubMcpServer(
       dueDate: isoDateNullableSchema.optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
-      tokensUsed: z.number().int().min(0).nullable().optional(),
+      tokensUsed: tokenCountSchema.nullable().optional(),
+      tokensInput: tokenCountSchema.nullable().optional(),
+      tokensOutput: tokenCountSchema.nullable().optional(),
+      tokensCache: tokenCountSchema.nullable().optional(),
+      modelId: z.string().max(80).nullable().optional(),
+      pricingTier: z.string().max(32).nullable().optional(),
+      usageOccurredAt: z.string().max(40).nullable().optional(),
+      billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
@@ -1712,10 +1752,17 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'report_project_task_ai_usage',
-    'Record AI token usage on a task (prefer when marking done). Stores tokensUsed and optional aiSystemId, then refreshes the cost snapshot. Billable when the AI system cost mode is flat/api/mixed; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. tokensUsed alone bills the blended aiTokenRatePer1k and clears any stored breakdown (legacy). tokensInput, tokensOutput, and tokensCache bill split rates; a null split rate falls back to the blended rate. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. Optional modelId (e.g. grok-4.7), pricingTier (e.g. standard or fast), usageOccurredAt (ISO datetime or YYYY-MM-DD), and billingPeriod (YYYY-MM) are audit tags and do not change flat-fee accrual. Billable for api/mixed; flat ignores tokens; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
-      tokensUsed: z.number().int().min(0),
+      tokensUsed: tokenCountSchema.optional(),
+      tokensInput: tokenCountSchema.nullable().optional(),
+      tokensOutput: tokenCountSchema.nullable().optional(),
+      tokensCache: tokenCountSchema.nullable().optional(),
+      modelId: z.string().max(80).nullable().optional(),
+      pricingTier: z.string().max(32).nullable().optional(),
+      usageOccurredAt: z.string().max(40).nullable().optional(),
+      billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
     },
     async (args) =>
@@ -1908,7 +1955,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_stakeholders',
-    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Money/rate/hour fields (hourlyRate, allocatedDailyHours, contractedBudget, aiFlatMonthlyFee, aiTokenRatePer1k, aiBudgetAllocation) returned as JSON numbers. Requires pm:read.',
+    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Money/rate/hour fields (hourlyRate, allocatedDailyHours, contractedBudget, aiFlatMonthlyFee, aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, aiBudgetAllocation) returned as JSON numbers. AI rows include aiCostNotes. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -2033,7 +2080,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_ai_assistant_cost',
-    'Set AI assistant cost mode (flat|api|mixed|note_only), fees, and soft budget allocation on a project AI system. Requires pm:write.',
+    'Set AI assistant cost mode (flat|api|mixed|note_only) on a project AI system. aiTokenRatePer1k is the blended per-1k fallback. Optional aiTokenRateInputPer1k, aiTokenRateOutputPer1k, and aiTokenRateCachePer1k bill a usage breakdown; null falls back to the blended rate. Mixed AC is the flat monthly fee accrued over the project dates plus token cost. aiCostNotes is a short note (max 500). Money fields accept number or string. Requires pm:write.',
     {
       systemId: z.string().uuid(),
       aiCostMode: z
@@ -2042,6 +2089,10 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       aiFlatMonthlyFee: moneyInput.optional(),
       aiTokenRatePer1k: moneyInput.optional(),
+      aiTokenRateInputPer1k: moneyInput.optional(),
+      aiTokenRateOutputPer1k: moneyInput.optional(),
+      aiTokenRateCachePer1k: moneyInput.optional(),
+      aiCostNotes: z.string().max(500).nullable().optional(),
       aiBudgetAllocation: moneyInput.optional(),
     },
     async (args) =>
