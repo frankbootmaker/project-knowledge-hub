@@ -136,7 +136,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-delivery-list` / `.kh-ops-delivery-tree-*` / `.kh-ops-tree-*` | Delivery list density (no fixed 1040px min-width) and work-breakdown tree |
 | `.kh-ops-sprint-head` / `.kh-ops-scrum-board` | Scrum sprint metrics + board density |
 | `.kh-ops-calendar-layout` / `.kh-ops-month` / `.kh-ops-day` / `.kh-ops-event-dot` | Delivery calendar month + day list |
-| `.kh-ops-timeline-scroll` / `.kh-ops-time-bar` | Timeline chart chrome and epic/story bars |
+| `.kh-ops-timeline-scroll` / `.kh-ops-timeline-chart` / `.kh-ops-time-bar` | Timeline chart chrome and epic/story bars. The scrollport is `max-height: min(70vh, 48rem)` so the horizontal scrollbar stays in view. Chart width is `max(100%, days × px-per-day)` via `--kh-timeline-days` and `--kh-timeline-px` (month 8, week 28, day 72). Time Period filters which items and which date span are drawn; zoom only changes the scale |
 | `.kh-ops-empty-state` / `.kh-ops-empty-mark` | Empty delivery panes |
 | `.kh-ops-capacity-row` / `.kh-ops-capacity-track` | Utilization planned (ink) + burn (accent) bars |
 | `.kh-ops-budget-layout` / `.kh-ops-cost-split` / `.kh-ops-cost-part` | Budget burndown + people/AI/systems split |
@@ -242,6 +242,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-10-07
+
+* **Timeline zoom and time period** — Zoom is a month / week / day scale. The chart grows wider than the panel and scrolls the full filtered range: scrollbar inside the `min(70vh, 48rem)` panel, drag on empty chart area, and shift+wheel or a horizontal trackpad gesture. Reset restores the month scale and scrolls to today, or to the range start when today is outside the range. Time Period only filters items and the scroll range. Marker and story tags pack into lanes; a manual drag offset still applies on top.
 
 ### 2026-10-05
 

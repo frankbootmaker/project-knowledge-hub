@@ -761,7 +761,9 @@ a.kh-section-shortcut[aria-current='location'] {
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-rail {
   width: 64px;
   padding-inline: 10px;
-  transition: width 0.16s ease, box-shadow 0.16s ease;
+  transition:
+    width 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .kh-ops-shell[data-rail-compact='true'] .kh-ops-brand-name,
@@ -2394,12 +2396,21 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 }
 
 .kh-ops-timeline-scroll {
-  overflow-x: auto;
+  max-height: min(70vh, 48rem);
+  overflow: auto;
+  overscroll-behavior-x: contain;
 }
 
 .kh-ops-timeline-chart {
+  width: max(100%, calc(var(--kh-timeline-days, 1) * var(--kh-timeline-px, 8) * 1px));
   min-width: 48rem;
   padding: 14px;
+  cursor: grab;
+  user-select: none;
+}
+
+.kh-ops-timeline-chart.is-panning {
+  cursor: grabbing;
 }
 
 .kh-ops-time-scale {

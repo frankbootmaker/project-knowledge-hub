@@ -2517,7 +2517,7 @@
     "timelineStatusColors": "Status colors",
     "timelineIssueIds": "ID",
     "timelineWindowLabel": "Time period",
-    "timelineWindowHint": "Zoom the axis to a date range so busy stretches stay readable. Bars that cross the edges are clipped; markers outside the range are hidden.",
+    "timelineWindowHint": "Shows only items that overlap this period. The chart scrolls across that period, or the full range when cleared. Zoom changes the scale only and does not change these dates.",
     "timelineWindowFrom": "From",
     "timelineWindowTo": "To",
     "timelineWindowClear": "Full range",
