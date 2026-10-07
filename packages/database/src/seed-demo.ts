@@ -60,6 +60,11 @@ function ymdAt(offsetDays: number): Date {
   return date;
 }
 
+/** Wall-clock offset for last-24h report fixtures (not a calendar day). */
+function hoursAgo(hours: number): Date {
+  return new Date(Date.now() - hours * 60 * 60 * 1000);
+}
+
 const DEMO_WORKSPACE_SLUG = 'home-infrastructure';
 const DEMO_PASSWORD = 'change-me-demo-pass';
 
@@ -797,6 +802,23 @@ Prefer a tool-capable model; tiny local models often skip tools.
     if (!mNetwork || !mObservability || !mDelivery || !mDocsDay) {
       throw new Error('Failed to create lab delivery milestones');
     }
+    const [mReadability] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Checkpoint: "readability" (HU) – áttekintés',
+        description: 'Tomorrow checkpoint used by the report next-24h window.',
+        status: 'planned',
+        startDate: ymd(0),
+        targetDate: ymd(1),
+        sortOrder: 25,
+        issueKeyType: 'M',
+        issueNumber: 5,
+      })
+      .returning();
+    if (!mReadability) {
+      throw new Error('Failed to create readability milestone');
+    }
 
     const [labEpic] = await database.db
       .insert(projectEpics)
@@ -895,7 +917,22 @@ Prefer a tool-capable model; tiny local models often skip tools.
         issueNumber: 3,
       })
       .returning();
-    if (!sprintCompleted || !sprintActive || !sprintPlanned) {
+    const [sprintReadability] = await database.db
+      .insert(projectSprints)
+      .values({
+        projectId: labProject.id,
+        name: 'Report readability spike',
+        goal: 'Grouped status and a 24-hour window for the delivery report.',
+        status: 'planned',
+        startDate: ymd(1),
+        endDate: ymd(2),
+        capacityPoints: 8,
+        sortOrder: 25,
+        issueKeyType: 'SP',
+        issueNumber: 4,
+      })
+      .returning();
+    if (!sprintCompleted || !sprintActive || !sprintPlanned || !sprintReadability) {
       throw new Error('Failed to create lab sprints');
     }
 
@@ -906,6 +943,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       storyPoints?: number | null;
       /** Offset used for status_changed→done activity (burndown). */
       doneOnOffset?: number;
+      /** Hours before now for status_changed→done (last-24h window). */
+      doneHoursAgo?: number;
       title: string;
       description?: string;
       status: string;
@@ -1113,6 +1152,89 @@ Prefer a tool-capable model; tiny local models often skip tools.
           { userId: blair.id, role: 'I' },
         ],
       },
+      {
+        milestoneId: mDelivery.id,
+        sprintId: sprintActive.id,
+        storyPoints: 2,
+        doneHoursAgo: 2,
+        title: 'Admin pages layout polish: wrapping and inner padding (Verwaltung)',
+        status: 'done',
+        dueDate: ymd(0),
+        sortOrder: 10,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mDelivery.id,
+        sprintId: sprintCompleted.id,
+        storyPoints: 1,
+        doneHoursAgo: 30,
+        title: 'Queue flush; retry policy',
+        status: 'done',
+        dueDate: ymd(-2),
+        sortOrder: 11,
+        raci: [{ userId: admin.id, role: 'A' }],
+      },
+      {
+        milestoneId: mDelivery.id,
+        sprintId: sprintActive.id,
+        storyPoints: 5,
+        title:
+          'MCP / API tokens hardening: write scopes admin-only, self-service read tokens',
+        status: 'in_progress',
+        dueDate: ymd(0),
+        sortOrder: 12,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mReadability.id,
+        sprintId: sprintReadability.id,
+        storyPoints: 3,
+        title: 'UX1-B: guided flow – 5 phases, footer Weiter/Zurück, header back-nav',
+        status: 'todo',
+        dueDate: ymd(1),
+        sortOrder: 13,
+        raci: [
+          { userId: blair.id, role: 'A' },
+          { userId: admin.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mDelivery.id,
+        storyPoints: 2,
+        title: 'Batch export #2, quotes "draft" & commas',
+        status: 'todo',
+        dueDate: ymd(3),
+        sortOrder: 14,
+        raci: [{ userId: admin.id, role: 'A' }],
+      },
+      {
+        milestoneId: null,
+        storyPoints: 1,
+        title: 'Stakeholder sign-off (Übernahme) — őűárvíztűrő',
+        status: 'todo',
+        dueDate: ymd(-4),
+        sortOrder: 15,
+        raci: [{ userId: dana.id, role: 'A' }],
+      },
+      {
+        milestoneId: mDelivery.id,
+        sprintId: sprintActive.id,
+        storyPoints: 2,
+        title: 'Blocked: vendor API (sandbox) & quota',
+        status: 'blocked',
+        dueDate: ymd(1),
+        sortOrder: 16,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'C' },
+        ],
+      },
     ];
 
     let handoffDemoTaskId: string | null = null;
@@ -1165,13 +1287,20 @@ Prefer a tool-capable model; tiny local models often skip tools.
           taskSpec.doneOnOffset != null ? taskSpec.doneOnOffset - 3 : -10,
         ),
       });
-      if (taskSpec.status === 'done' && taskSpec.doneOnOffset != null) {
+      if (
+        taskSpec.status === 'done' &&
+        (taskSpec.doneOnOffset != null || taskSpec.doneHoursAgo != null)
+      ) {
+        const completedAt =
+          taskSpec.doneHoursAgo != null
+            ? hoursAgo(taskSpec.doneHoursAgo)
+            : ymdAt(taskSpec.doneOnOffset ?? 0);
         await database.db.insert(projectTaskActivities).values({
           taskId: task.id,
           actorUserId: admin.id,
           type: 'status_changed',
           metadataJson: { from: 'in_progress', to: 'done' },
-          createdAt: ymdAt(taskSpec.doneOnOffset),
+          createdAt: completedAt,
         });
       }
       if (taskSpec.title === 'Validate list / board / calendar views') {
@@ -1230,6 +1359,22 @@ Prefer a tool-capable model; tiny local models often skip tools.
         issueNumber: 1,
       })
       .returning();
+    const [labelRisk] = await database.db
+      .insert(projectRaidItems)
+      .values({
+        projectId: labProject.id,
+        kind: 'risk',
+        title: 'Timeline labels with ":" can hide the chart',
+        description: 'Colons in task titles used to break the delivery gantt.',
+        status: 'open',
+        severity: 'critical',
+        ownerUserId: admin.id,
+        dueDate: ymd(2),
+        sortOrder: 15,
+        issueKeyType: 'RR',
+        issueNumber: 2,
+      })
+      .returning();
     const [assumptionRaid] = await database.db
       .insert(projectRaidItems)
       .values({
@@ -1278,7 +1423,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       })
       .returning();
 
-    if (!riskRaid || !assumptionRaid || !issueRaid || !dependencyRaid) {
+    if (!riskRaid || !labelRisk || !assumptionRaid || !issueRaid || !dependencyRaid) {
       throw new Error('Failed to create lab RAID items');
     }
 
@@ -1514,12 +1659,12 @@ Keep public MCP behind Authentik + Tailscale ACL review.
         charterRecordId: charterRecord.id,
         initialPlanRecordId: planRecord.id,
         issueCounters: {
-          M: 4,
+          M: 5,
           E: 1,
           S: 2,
           T: labTaskNumber,
-          SP: 3,
-          RR: 1,
+          SP: 4,
+          RR: 2,
           RA: 1,
           RI: 1,
           RD: 1,

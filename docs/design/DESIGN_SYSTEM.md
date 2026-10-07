@@ -246,6 +246,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-07
 
 * **Report diagrams** — A Mermaid block that cannot be drawn shows a localised “Diagram could not be rendered” summary and the source in a disclosure. The error icon is not used. An empty diagram section shows a localised “no data” line instead of a diagram block.
+* **Report readability** — Delivery and project status reports open with an “At a glance” count line, then completed work from the last 24 hours and (when anything falls in the window) what is planned for the next 24 hours. Tasks are grouped by status with a count; empty groups are omitted, and long Done and Cancelled lists end with “+N more”. The same markdown is shown, downloaded, and exported.
 * **Delivery item dialogs** — Task, epic, story, and milestone edit dialogs, and the shared Add item dialog, use one size: `DELIVERY_ITEM_MODAL_SIZE` (`xl`). Epic and story forms keep the two-column `.kh-ops-form-grid`; title, description, effort rollup, and linked documents use `.kh-ops-field-span`. Start and end dates are grid cells (`.kh-ops-field-row-start` on the start date) instead of a nested grid in one half-width cell. The description uses the same `Textarea` (`rows={4}`, `resize-y`) as the task dialog. Milestone field placement is otherwise unchanged. An `xl` sheet narrower than 760px (phone, and a 768px viewport whose panel is 90vw) stacks `.kh-ops-form-grid` to one column via `@container kh-modal-xl`, so the footer stays on screen without horizontal scrolling.
 
 ### 2026-10-05
