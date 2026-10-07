@@ -486,6 +486,27 @@ export function parseAppPath(pathname: string): {
   return { workspaceSlug, projectSlug };
 }
 
+/** Nested knowledge record opened from inside a project. */
+export function isProjectRecordPath(pathname: string): boolean {
+  return /^\/workspaces\/[^/]+\/projects\/[^/]+\/records(?:\/|$)/.test(pathname);
+}
+
+function projectRecordSlug(pathname: string): string | null {
+  const match = pathname.match(/^\/workspaces\/[^/]+\/projects\/[^/]+\/records\/([^/]+)/);
+  return match?.[1] ?? null;
+}
+
+function navItemById(id: NavItemId, ctx: NavContext): NavItemDef | null {
+  for (const section of NAV_SECTIONS) {
+    for (const item of section.items) {
+      if (item.id === id && isNavItemAvailable(item, ctx)) {
+        return item;
+      }
+    }
+  }
+  return null;
+}
+
 /** Scrum, Timeline, and Calendar are the only delivery views with a rail item. */
 const RAIL_DELIVERY_VIEWS = new Set(['scrum', 'timeline', 'calendar']);
 
@@ -522,10 +543,11 @@ export function inferNavSection(pathname: string, hash = '', search = ''): NavSe
   }
 
   const { projectSlug } = parseAppPath(pathname);
+  if (projectSlug && isProjectRecordPath(pathname)) {
+    return 'control';
+  }
   if (
-    /^\/workspaces\/[^/]+\/(?:archived|imports|document-imports|media|records)(\/|$)/.test(
-      pathname,
-    )
+    /^\/workspaces\/[^/]+\/(?:archived|imports|document-imports|media|records)(\/|$)/.test(pathname)
   ) {
     return 'knowledge';
   }
@@ -559,6 +581,9 @@ export function matchNavItem(
   hash = '',
   search = '',
 ): boolean {
+  if (isProjectRecordPath(pathname)) {
+    return item.id === 'project-knowledge';
+  }
   const href = item.href(ctx);
   const [pathAndQuery = '', hrefHash = ''] = href.split('#');
   const [hrefPath = '', hrefQuery = ''] = pathAndQuery.split('?');
@@ -624,16 +649,12 @@ export function matchNavItem(
   }
   if (hrefParams.get('stakeholders') === 'org') {
     return (
-      pathMatches &&
-      params.get('stakeholders') === 'org' &&
-      hashId(hash) === 'project-stakeholders'
+      pathMatches && params.get('stakeholders') === 'org' && hashId(hash) === 'project-stakeholders'
     );
   }
   if (hrefParams.get('utilization') === '1') {
     return (
-      pathMatches &&
-      params.get('utilization') === '1' &&
-      hashId(hash) === 'project-stakeholders'
+      pathMatches && params.get('utilization') === '1' && hashId(hash) === 'project-stakeholders'
     );
   }
   if (hrefHash) {
@@ -715,6 +736,9 @@ export function isRailItemActive(
   search: string,
   activeAnchor: string | null,
 ): boolean {
+  if (isProjectRecordPath(pathname)) {
+    return item.id === 'project-knowledge';
+  }
   if (activeAnchor) {
     if (item.id !== navItemIdForActiveAnchor(activeAnchor, search)) {
       return false;
@@ -751,7 +775,11 @@ export function resolveActiveNavItem(
   search: string,
   activeAnchor: string | null,
 ): NavItemDef | null {
-  const anchor = activeAnchor || projectAnchorFromHash(hash.startsWith('#') ? hash : hash ? `#${hash}` : '');
+  if (isProjectRecordPath(pathname)) {
+    return navItemById('project-knowledge', ctx);
+  }
+  const anchor =
+    activeAnchor || projectAnchorFromHash(hash.startsWith('#') ? hash : hash ? `#${hash}` : '');
   if (anchor) {
     const id = navItemIdForActiveAnchor(anchor, search);
     if (!id) {
@@ -779,7 +807,11 @@ export type HeaderCrumb = {
 
 export function headerCrumbs(
   pathname: string,
-  names: { workspaceName?: string | null; projectName?: string | null },
+  names: {
+    workspaceName?: string | null;
+    projectName?: string | null;
+    recordTitle?: string | null;
+  },
 ): HeaderCrumb[] {
   const { workspaceSlug, projectSlug } = parseAppPath(pathname);
   const crumbs: HeaderCrumb[] = [];
@@ -809,6 +841,13 @@ export function headerCrumbs(
     crumbs.push({
       href: `/workspaces/${workspaceSlug}/projects/${projectSlug}`,
       label: names.projectName || projectSlug,
+    });
+  }
+  const recordSlug = projectSlug ? projectRecordSlug(pathname) : null;
+  if (workspaceSlug && projectSlug && recordSlug) {
+    crumbs.push({
+      href: `/workspaces/${workspaceSlug}/projects/${projectSlug}/records/${recordSlug}`,
+      label: names.recordTitle || recordSlug,
     });
   }
   if (crumbs.length === 0) {

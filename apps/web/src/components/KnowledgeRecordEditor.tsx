@@ -12,6 +12,7 @@ import {
 } from '@project-knowledge-hub/domain';
 import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import { localeLabels, locales, type AppLocale } from '../i18n/config';
+import { recordBaseWithSlug } from '../lib/record-href';
 import { KnowledgeRecordDeliveryLinksField } from './KnowledgeRecordDeliveryLinksField';
 import { MarkdownDocument } from './MarkdownDocument';
 import {
@@ -65,6 +66,8 @@ export type KnowledgeRecordEditorProps = {
   mode: 'create' | 'edit';
   workspaceSlug: string;
   workspaceId: string;
+  /** `.../records/<slug>`. Save and cancel stay on this path when set. */
+  recordBasePath?: string;
   projects: Option[];
   systems: Option[];
   initial?: KnowledgeRecordEditorInitial;
@@ -353,7 +356,10 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
         props.onSaved(slug);
         router.refresh();
       } else {
-        router.push(`/workspaces/${props.workspaceSlug}/records/${slug}`);
+        const destination = props.recordBasePath
+          ? recordBaseWithSlug(props.recordBasePath, slug)
+          : `/workspaces/${props.workspaceSlug}/records/${slug}`;
+        router.push(destination);
         router.refresh();
       }
     } catch (err) {
@@ -373,7 +379,7 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
       props.onCancel();
       return;
     }
-    router.push(`/workspaces/${props.workspaceSlug}`);
+    router.push(props.recordBasePath ?? `/workspaces/${props.workspaceSlug}`);
   }
 
   const gitManaged = props.initial?.sourceOfTruthMode === 'git_managed';
@@ -803,10 +809,10 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
         title={isEdit ? t('editTitle') : t('createTitle')}
         description={
           <Link
-            href={`/workspaces/${props.workspaceSlug}`}
+            href={props.recordBasePath ?? `/workspaces/${props.workspaceSlug}`}
             className="text-ink-muted no-underline hover:text-ink"
           >
-            {t('backToWorkspace')}
+            {props.recordBasePath ? tCommon('back') : t('backToWorkspace')}
           </Link>
         }
       />

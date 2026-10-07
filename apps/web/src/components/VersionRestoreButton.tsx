@@ -10,11 +10,14 @@ export function VersionRestoreButton({
   versionNumber,
   workspaceSlug,
   recordSlug,
+  recordBasePath,
 }: {
   recordId: string;
   versionNumber: number;
   workspaceSlug: string;
   recordSlug: string;
+  /** `.../records/<slug>`. Falls back to the workspace record path. */
+  recordBasePath?: string;
 }) {
   const router = useRouter();
   const t = useTranslations('records');
@@ -40,7 +43,7 @@ export function VersionRestoreButton({
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t('failedRestore'));
       }
-      router.push(`/workspaces/${workspaceSlug}/records/${recordSlug}`);
+      router.push(recordBasePath ?? `/workspaces/${workspaceSlug}/records/${recordSlug}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedRestore'));
@@ -51,12 +54,7 @@ export function VersionRestoreButton({
 
   return (
     <div className="grid gap-1">
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={pending}
-        onClick={() => void onRestore()}
-      >
+      <Button type="button" variant="secondary" disabled={pending} onClick={() => void onRestore()}>
         {pending ? t('restoring') : t('restore')}
       </Button>
       {error ? <ErrorText>{error}</ErrorText> : null}

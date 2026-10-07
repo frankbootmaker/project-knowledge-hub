@@ -18,6 +18,7 @@ import { LandingThemeSegment } from '../landing/LandingThemeSegment';
 import type { ShellWorkspace } from './AppRail';
 import { MenuGlyphIcon, SearchGlyphIcon } from './NavIcons';
 import { useProjectRail } from './ProjectRailContext';
+import { useShellCrumbLabels } from './ShellCrumbContext';
 
 export function AppTopBar({
   workspaces,
@@ -35,6 +36,7 @@ export function AppTopBar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { activeAnchor } = useProjectRail();
+  const crumbLabels = useShellCrumbLabels();
   const [hash, setHash] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
@@ -114,6 +116,8 @@ export function AppTopBar({
   const workspace = workspaces.find((row) => row.slug === ctx.workspaceSlug);
   const crumbs = headerCrumbs(pathname, {
     workspaceName: workspace?.name,
+    projectName: crumbLabels.projectName,
+    recordTitle: crumbLabels.recordTitle,
   });
   const title = activeItem ? t(activeItem.labelKey) : tCommon('appName');
 

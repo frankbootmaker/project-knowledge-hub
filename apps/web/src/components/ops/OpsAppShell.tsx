@@ -6,6 +6,7 @@ import type { SessionPayload } from '../../lib/session';
 import { AppRail, useRailChromeState, type ShellWorkspace } from './AppRail';
 import { AppTopBar } from './AppTopBar';
 import { ProjectRailProvider } from './ProjectRailContext';
+import { ShellCrumbProvider } from './ShellCrumbContext';
 
 export function OpsAppShell({
   session,
@@ -22,29 +23,31 @@ export function OpsAppShell({
 
   return (
     <ProjectRailProvider>
-      <div
-        className="kh-ops-shell"
-        data-rail-compact={compact ? 'true' : 'false'}
-        data-rail-open={open ? 'true' : 'false'}
-      >
-        <AppRail
-          session={session}
-          workspaces={workspaces}
-          compact={compact}
-          onCompactChange={setCompact}
-          open={open}
-          onOpenChange={setOpen}
-        />
-        <div className="kh-ops-content">
-          <AppTopBar
+      <ShellCrumbProvider>
+        <div
+          className="kh-ops-shell"
+          data-rail-compact={compact ? 'true' : 'false'}
+          data-rail-open={open ? 'true' : 'false'}
+        >
+          <AppRail
+            session={session}
             workspaces={workspaces}
-            isAdmin={session.user.isSystemAdmin}
-            themePreference={themePreference}
-            onOpenRail={() => setOpen(true)}
+            compact={compact}
+            onCompactChange={setCompact}
+            open={open}
+            onOpenChange={setOpen}
           />
-          <div className="kh-ops-view">{children}</div>
+          <div className="kh-ops-content">
+            <AppTopBar
+              workspaces={workspaces}
+              isAdmin={session.user.isSystemAdmin}
+              themePreference={themePreference}
+              onOpenRail={() => setOpen(true)}
+            />
+            <div className="kh-ops-view">{children}</div>
+          </div>
         </div>
-      </div>
+      </ShellCrumbProvider>
     </ProjectRailProvider>
   );
 }

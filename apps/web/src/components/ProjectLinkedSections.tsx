@@ -12,6 +12,7 @@ import {
   compareText,
 } from '../lib/data-table';
 import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
+import { recordHref } from '../lib/record-href';
 import {
   groupRecordsByTranslationFamily,
   normalizeContentLanguage,
@@ -60,12 +61,14 @@ function formatUpdated(value: string | null | undefined, locale: string): string
 
 export function ProjectLinkedSections({
   workspaceSlug,
+  projectSlug,
   projectId,
   systems,
   records,
   canMutate,
 }: {
   workspaceSlug: string;
+  projectSlug: string;
   projectId: string;
   systems: ProjectLinkedSystem[];
   records: ProjectLinkedRecord[];
@@ -218,7 +221,11 @@ export function ProjectLinkedSections({
       sort: { type: 'text', getValue: (row) => row.preferred.title },
       cell: (row) => (
         <Link
-          href={`/workspaces/${workspaceSlug}/records/${row.preferred.slug}`}
+          href={recordHref({
+            workspaceSlug,
+            projectSlug,
+            recordSlug: row.preferred.slug,
+          })}
           className="no-underline"
         >
           {row.preferred.title}
@@ -287,6 +294,7 @@ export function ProjectLinkedSections({
     locale,
     tRecords,
     tWorkspaces,
+    projectSlug,
     typeOptions,
     workspaceSlug,
   ]);
