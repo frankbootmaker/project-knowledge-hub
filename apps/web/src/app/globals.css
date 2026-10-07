@@ -443,6 +443,10 @@
   .kh-modal-panel-xl {
     @apply max-w-none;
     max-height: min(96dvh, 100%);
+    /* Stack form columns from the sheet width, so a ~768px viewport
+       (90vw panel) is one column even though the page breakpoint is 760px. */
+    container-type: inline-size;
+    container-name: kh-modal-xl;
   }
 
   @media (min-width: 640px) {

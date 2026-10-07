@@ -29,6 +29,7 @@ import {
   Button,
   ErrorText,
   Field,
+  DELIVERY_ITEM_MODAL_SIZE,
   Input,
   Modal,
   Select,
@@ -1126,7 +1127,7 @@ export function ProjectDeliveryPanel({
         onClose={closeCreateModal}
         title={t('addItem')}
         description={t('modalDescription')}
-        size="md"
+        size={DELIVERY_ITEM_MODAL_SIZE}
         footer={
           <>
             <Button

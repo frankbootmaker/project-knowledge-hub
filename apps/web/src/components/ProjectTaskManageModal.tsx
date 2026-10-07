@@ -7,6 +7,7 @@ import {
   Button,
   ErrorText,
   Field,
+  DELIVERY_ITEM_MODAL_SIZE,
   Input,
   Modal,
   Select,
@@ -570,7 +571,7 @@ export function ProjectTaskManageModal({
           : (task?.title ?? t('manageTask'))
       }
       description={t('manageTaskDescription')}
-      size="xl"
+      size={DELIVERY_ITEM_MODAL_SIZE}
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">

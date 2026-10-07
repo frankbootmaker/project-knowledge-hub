@@ -143,7 +143,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-baseline-grid` / `.kh-ops-field-cell` / `.kh-ops-pinned` | Baseline field cells and pinned records |
 | `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack / dashboard workspace / account brand cards; `button.kh-ops-project-card` for report launchers and brand schemes. Workspace colour is a 3px inset stripe (`kh-workspace-tile`), not a wash. Selected brand uses `.selected` (ink border + 3px accent inset). |
 | `.kh-ops-media-grid` / `.kh-ops-media-card` / `.kh-ops-media-preview` / `.kh-ops-media-info` | Workspace media catalogue (4 / 3 / 1 columns) |
-| `.kh-ops-form-grid` / `.kh-ops-field-span` | Dense two-column modal and admin forms |
+| `.kh-ops-form-grid` / `.kh-ops-field-span` / `.kh-ops-field-row-start` | Dense two-column modal and admin forms. `field-span` takes the whole row; `field-row-start` begins the next row so a date pair stays side by side |
 | `.kh-ops-card-body` / `.kh-ops-card-foot` / `.kh-ops-action-line` | Panel interior padding, card footer, save/test action row |
 | `.kh-ops-setup-grid` / `.kh-ops-setup-card` / `.kh-ops-setup-step` | MCP / AI client setup cards |
 | `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card` | Admin overview setup shortcuts and dashboard search/admin jump tiles (`a.kh-ops-admin-link-card`) |
@@ -189,7 +189,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `LinkButton` | Navigation that should look like a button |
 | `NavLink` | Header or admin sidebar links (active state included) |
 | `MobileNav` | Primary nav below `sm` (sheet + backdrop; Esc / route change closes) |
-| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer`; `size` `md`/`lg`/`xl`/`full`. Mobile bottom sheet / desktop card via `.kh-modal*` (sticky 13px/11px header, 3px radii) |
+| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer`; `size` `md`/`lg`/`xl`/`full`. Mobile bottom sheet / desktop card via `.kh-modal*` (sticky 13px/11px header, 3px radii). Delivery task, epic, story, and milestone dialogs share `DELIVERY_ITEM_MODAL_SIZE` (`xl`) |
 | `Panel` | `default` / `solid` / `inset` surfaces |
 | `Field`, `Input`, `PasswordInput`, `PasswordStrengthHint`, `Select`, `Textarea`, `ErrorText` | Forms (`PasswordInput` show/hide; strength meter for new passwords) |
 | `FilePicker` | File choose control — secondary **Browse** / **Tallózás** button + filename (hides native file chrome) |
@@ -242,6 +242,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-10-07
+
+* **Delivery item dialogs** — Task, epic, story, and milestone edit dialogs, and the shared Add item dialog, use one size: `DELIVERY_ITEM_MODAL_SIZE` (`xl`). Epic and story forms keep the two-column `.kh-ops-form-grid`; title, description, effort rollup, and linked documents use `.kh-ops-field-span`. Start and end dates are grid cells (`.kh-ops-field-row-start` on the start date) instead of a nested grid in one half-width cell. The description uses the same `Textarea` (`rows={4}`, `resize-y`) as the task dialog. Milestone field placement is otherwise unchanged. An `xl` sheet narrower than 760px (phone, and a 768px viewport whose panel is 90vw) stacks `.kh-ops-form-grid` to one column via `@container kh-modal-xl`, so the footer stays on screen without horizontal scrolling.
 
 ### 2026-10-05
 
