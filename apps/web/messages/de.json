@@ -819,6 +819,7 @@
     "reportDiagramRaid": "RAID nach Art",
     "reportDiagramDelivery": "Lieferzeitplan",
     "reportDiagramBudget": "Budget- / EVM-Diagramm",
+    "reportDiagramEmpty": "Keine Daten für dieses Diagramm.",
     "ragOverall": "Gesamt",
     "sectionNav": "Zum Abschnitt springen",
     "navOverview": "Übersicht"
@@ -1039,6 +1040,7 @@
     "failedAction": "Aktion fehlgeschlagen: {action}",
     "restoredFromVersion": "Aus Version {version} wiederhergestellt",
     "tocLabel": "Inhaltsverzeichnis",
+    "diagramRenderFailed": "Diagramm konnte nicht dargestellt werden",
     "lifecycleLabels": {
       "draft": "Entwurf",
       "review_required": "Prüfung erforderlich",

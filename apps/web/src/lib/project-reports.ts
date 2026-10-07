@@ -175,13 +175,57 @@ function nameByUserId(stakeholders: ReportStakeholder[]): Map<string, string> {
   return map;
 }
 
+/** Visible mermaid text cap. Longer labels keep an ellipsis so the line stays valid. */
+export const MERMAID_TEXT_MAX = 80;
+
 function mermaidId(value: string, prefix: string): string {
   const cleaned = value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
   return `${prefix}${cleaned || 'x'}`;
 }
 
-function mermaidLabel(value: string): string {
-  return value.replace(/[[\]"#]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 48);
+function collapseMermaidWhitespace(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function truncateMermaid(value: string, max = MERMAID_TEXT_MAX): string {
+  if (value.length <= max) return value;
+  const ellipsis = '…';
+  const cut = Math.max(1, max - ellipsis.length);
+  return `${value.slice(0, cut).trimEnd()}${ellipsis}`;
+}
+
+/**
+ * Gantt task and section text. The name ends at the first colon, `#` starts a
+ * comment, and `;` can split the statement, so those characters are removed.
+ */
+export function mermaidGanttText(value: string): string {
+  const cleaned = collapseMermaidWhitespace(value)
+    .replace(/[:;#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return truncateMermaid(cleaned) || '…';
+}
+
+/**
+ * Text placed inside mermaid double quotes (pie, flowchart, xychart).
+ * Escapes characters that terminate the quoted token. Truncates first so an
+ * entity such as `#quot;` is never cut in half.
+ */
+export function mermaidQuotedLabel(value: string): string {
+  const cleaned = truncateMermaid(collapseMermaidWhitespace(value)) || '…';
+  let out = '';
+  for (const ch of cleaned) {
+    if (ch === '"') out += '#quot;';
+    else if (ch === '#') out += '#35;';
+    else if (ch === ';') out += '#59;';
+    else if (ch === '&') out += '#amp;';
+    else if (ch === '<') out += '#lt;';
+    else if (ch === '>') out += '#gt;';
+    else if (ch === '[') out += '#91;';
+    else if (ch === ']') out += '#93;';
+    else out += ch;
+  }
+  return out;
 }
 
 function fenceMermaid(source: string): string {
@@ -215,7 +259,7 @@ export function buildOrgHierarchyMermaid(
   for (const row of people) {
     if (!row.userId || !ids.has(row.userId)) continue;
     lines.push(
-      `  ${mermaidId(row.userId, 'u')}["${mermaidLabel(row.displayName)}"]`,
+      `  ${mermaidId(row.userId, 'u')}["${mermaidQuotedLabel(row.displayName)}"]`,
     );
   }
   for (const edge of edges) {
@@ -237,7 +281,7 @@ export function buildRaidBreakdownMermaid(
   }
   const lines = ['pie showData'];
   for (const [kind, count] of counts) {
-    lines.push(`  "${mermaidLabel(kindLabel(kind))}" : ${count}`);
+    lines.push(`  "${mermaidQuotedLabel(kindLabel(kind))}" : ${count}`);
   }
   return fenceMermaid(lines.join('\n'));
 }
@@ -255,20 +299,20 @@ export function buildDeliveryTimelineMermaid(input: {
   const lines = ['gantt', '  dateFormat YYYY-MM-DD'];
 
   if (datedMilestones.length > 0) {
-    lines.push(`  section ${mermaidLabel(input.milestonesSection)}`);
+    lines.push(`  section ${mermaidGanttText(input.milestonesSection)}`);
     datedMilestones.forEach((row, index) => {
       lines.push(
-        `  ${mermaidLabel(row.title)} :milestone, m${index}, ${row.targetDate}, 0d`,
+        `  ${mermaidGanttText(row.title)} :milestone, m${index}, ${row.targetDate}, 0d`,
       );
     });
   }
 
   if (datedTasks.length > 0) {
-    lines.push(`  section ${mermaidLabel(input.tasksSection)}`);
+    lines.push(`  section ${mermaidGanttText(input.tasksSection)}`);
     datedTasks.forEach((row, index) => {
       const done = row.status === 'done' ? 'done, ' : '';
       lines.push(
-        `  ${mermaidLabel(row.title)} :${done}t${index}, ${row.dueDate}, 1d`,
+        `  ${mermaidGanttText(row.title)} :${done}t${index}, ${row.dueDate}, 1d`,
       );
     });
   }
@@ -290,8 +334,8 @@ export function buildBudgetBurndownMermaid(
     return fenceMermaid(
       [
         'xychart-beta',
-        '  title Remaining budget',
-        `  x-axis [${labels.map((label) => `"${label}"`).join(', ')}]`,
+        `  title "${mermaidQuotedLabel('Remaining budget')}"`,
+        `  x-axis [${labels.map((label) => `"${mermaidQuotedLabel(label)}"`).join(', ')}]`,
         `  y-axis "Amount" 0 --> ${maxY}`,
         `  line [${remaining.join(', ')}]`,
       ].join('\n'),
@@ -312,16 +356,22 @@ export function buildBudgetBurndownMermaid(
   return fenceMermaid(
     [
       'xychart-beta',
-      '  title EVM snapshot',
-      `  x-axis [${values.map((entry) => entry[0]).join(', ')}]`,
+      `  title "${mermaidQuotedLabel('EVM snapshot')}"`,
+      `  x-axis [${values.map((entry) => `"${mermaidQuotedLabel(entry[0])}"`).join(', ')}]`,
       `  y-axis "Amount" 0 --> ${Math.ceil(maxY)}`,
       `  bar [${values.map((entry) => Math.round(entry[1])).join(', ')}]`,
     ].join('\n'),
   );
 }
 
-function diagramSection(title: string, mermaid: string | null): string {
-  if (!mermaid) return '';
+function diagramSection(
+  title: string,
+  mermaid: string | null,
+  emptyLabel: string,
+): string {
+  if (!mermaid) {
+    return [`### ${title}`, '', emptyLabel, ''].join('\n');
+  }
   return [`### ${title}`, '', mermaid].join('\n');
 }
 
@@ -374,6 +424,7 @@ export function buildDeliveryStatusReport(input: {
     none: string;
     forecastHours: string;
     actualHours: string;
+    diagramEmpty: string;
   };
 }): string {
   const today = todayYmd();
@@ -402,6 +453,7 @@ export function buildDeliveryStatusReport(input: {
           milestonesSection: input.diagramLabels.milestonesSection,
           tasksSection: input.diagramLabels.tasksSection,
         }),
+        input.labels.diagramEmpty,
       ),
     );
   }
@@ -473,6 +525,7 @@ export function buildStakeholdersReport(input: {
     none: string;
     reportsTo: string;
     hourlyRate: string;
+    diagramEmpty: string;
   };
 }): string {
   const names = nameByUserId(input.stakeholders);
@@ -500,6 +553,7 @@ export function buildStakeholdersReport(input: {
       diagramSection(
         input.diagramLabels.orgHierarchy,
         buildOrgHierarchyMermaid(input.stakeholders),
+        input.labels.diagramEmpty,
       ),
     );
   }
@@ -574,6 +628,7 @@ export function buildBudgetReportSection(input: {
     financialRag: string;
     financialRagValue: string;
     none: string;
+    diagramEmpty: string;
   };
 }): string {
   const locale = input.locale ?? 'en';
@@ -593,6 +648,7 @@ export function buildBudgetReportSection(input: {
       diagramSection(
         input.diagramLabels.budgetBurndown,
         buildBudgetBurndownMermaid(input.budget),
+        input.labels.diagramEmpty,
       ),
     );
   }
@@ -624,6 +680,7 @@ export function buildRaidReportSection(input: {
     title: string;
     riskRag: string;
     none: string;
+    diagramEmpty: string;
   };
   kindLabel: (kind: string) => string;
   statusLabel: (status: string) => string;
@@ -645,6 +702,7 @@ export function buildRaidReportSection(input: {
       diagramSection(
         input.diagramLabels.raidBreakdown,
         buildRaidBreakdownMermaid(input.raidItems, input.kindLabel),
+        input.labels.diagramEmpty,
       ),
     );
   }
@@ -708,6 +766,7 @@ export function buildProjectStatusReport(input: {
     pv: string;
     cpi: string;
     spi: string;
+    diagramEmpty: string;
   };
   kindLabel: (kind: string) => string;
   statusLabel: (status: string) => string;
@@ -738,6 +797,7 @@ export function buildProjectStatusReport(input: {
       none: input.labels.none,
       forecastHours: input.labels.forecastHours,
       actualHours: input.labels.actualHours,
+      diagramEmpty: input.labels.diagramEmpty,
     },
   });
 
@@ -757,6 +817,7 @@ export function buildProjectStatusReport(input: {
       none: input.labels.none,
       reportsTo: input.labels.reportsTo,
       hourlyRate: input.labels.hourlyRate,
+      diagramEmpty: input.labels.diagramEmpty,
     },
   });
 
@@ -779,6 +840,7 @@ export function buildProjectStatusReport(input: {
       financialRag: input.labels.financialRag,
       financialRagValue: input.labels.financialRagValue,
       none: input.labels.none,
+      diagramEmpty: input.labels.diagramEmpty,
     },
   });
 
@@ -791,6 +853,7 @@ export function buildProjectStatusReport(input: {
       title: input.labels.raidTitle,
       riskRag: input.labels.riskRag,
       none: input.labels.none,
+      diagramEmpty: input.labels.diagramEmpty,
     },
     kindLabel: input.kindLabel,
     statusLabel: input.statusLabel,

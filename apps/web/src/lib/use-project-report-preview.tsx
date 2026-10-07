@@ -108,6 +108,7 @@ export function useProjectReportPreview(
             none: tCommon('none'),
             forecastHours: tDelivery('forecastHours'),
             actualHours: tDelivery('actualHours'),
+            diagramEmpty: t('reportDiagramEmpty'),
           },
         });
       } else if (kind === 'stakeholders') {
@@ -127,6 +128,7 @@ export function useProjectReportPreview(
             none: tCommon('none'),
             reportsTo: tStakeholders('reportsTo'),
             hourlyRate: tStakeholders('hourlyRate'),
+            diagramEmpty: t('reportDiagramEmpty'),
           },
         });
       } else {
@@ -175,6 +177,7 @@ export function useProjectReportPreview(
             pv: t('reportPv'),
             cpi: tBudget('kpi.cpi'),
             spi: tBudget('kpi.spi'),
+            diagramEmpty: t('reportDiagramEmpty'),
           },
           kindLabel: (kindValue) => tRaid(`kind.${kindValue}`),
           statusLabel: (statusValue) => tRaid(`status.${statusValue}`),

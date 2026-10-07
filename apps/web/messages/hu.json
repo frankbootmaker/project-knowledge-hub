@@ -821,7 +821,8 @@
     "reportDiagramOrg": "Jelentési hierarchia",
     "reportDiagramRaid": "RAID típus szerint",
     "reportDiagramDelivery": "Teljesítési ütemterv",
-    "reportDiagramBudget": "Költségvetés / EVM diagram"
+    "reportDiagramBudget": "Költségvetés / EVM diagram",
+    "reportDiagramEmpty": "Nincs adat ehhez a diagramhoz."
   },
   "systems": {
     "createTitle": "Rendszer létrehozása",
@@ -1040,6 +1041,7 @@
     "failedAction": "Sikertelen művelet: {action}",
     "restoredFromVersion": "Visszaállítva a(z) {version}. verzióból",
     "tocLabel": "Tartalomjegyzék",
+    "diagramRenderFailed": "A diagramot nem sikerült megjeleníteni",
     "lifecycleLabels": {
       "draft": "Piszkozat",
       "review_required": "Ellenőrzés szükséges",

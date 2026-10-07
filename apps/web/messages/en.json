@@ -821,7 +821,8 @@
     "reportDiagramOrg": "Reporting hierarchy",
     "reportDiagramRaid": "RAID by kind",
     "reportDiagramDelivery": "Delivery timeline",
-    "reportDiagramBudget": "Budget / EVM chart"
+    "reportDiagramBudget": "Budget / EVM chart",
+    "reportDiagramEmpty": "No data for this diagram."
   },
   "systems": {
     "createTitle": "Create system",
@@ -1040,6 +1041,7 @@
     "failedAction": "Failed to {action}",
     "restoredFromVersion": "Restored from version {version}",
     "tocLabel": "Table of contents",
+    "diagramRenderFailed": "Diagram could not be rendered",
     "lifecycleLabels": {
       "draft": "Draft",
       "review_required": "Review required",

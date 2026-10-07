@@ -16,7 +16,7 @@
     "@project-knowledge-hub/markdown": "workspace:*",
     "@project-knowledge-hub/mcp": "workspace:*",
     "highlight.js": "^11.11.1",
-    "mermaid": "^11.7.0",
+    "mermaid": "11.17.2",
     "next": "^16.3.2",
     "next-intl": "^4.13.2",
     "react": "^19.2.8",
