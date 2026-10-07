@@ -13,7 +13,11 @@ export { PasswordInput } from './PasswordInput';
 export { PasswordStrengthHint } from './PasswordStrengthHint';
 export { LinkButton } from './LinkButton';
 export { MobileNav, type MobileNavItem } from './MobileNav';
-export { Modal } from './Modal';
+export {
+  DELIVERY_ITEM_MODAL_SIZE,
+  Modal,
+  type ModalSize,
+} from './Modal';
 export { NavLink } from './NavLink';
 export { ListCard, Page, PageHeader, SectionHeader } from './Page';
 export { Panel } from './Panel';

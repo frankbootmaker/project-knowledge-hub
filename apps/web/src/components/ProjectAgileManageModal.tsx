@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   ErrorText,
+  DELIVERY_ITEM_MODAL_SIZE,
   Field,
   Input,
   Modal,
@@ -400,7 +401,7 @@ export function ProjectAgileManageModal({
           : title.trim() || modalTitle
       }
       description={modalDescription}
-      size="md"
+      size={DELIVERY_ITEM_MODAL_SIZE}
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -503,7 +504,7 @@ export function ProjectAgileManageModal({
       ) : null}
       <div className="kh-ops-form-grid">
         {effortRollup ? (
-          <div className="kh-ops-inset text-sm">
+          <div className="kh-ops-inset kh-ops-field-span text-sm">
             <p className="mt-0 mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
               {tBudget('effortRollup')}
             </p>
@@ -526,6 +527,7 @@ export function ProjectAgileManageModal({
           </div>
         ) : null}
         <Field
+          className={kind === 'milestone' ? undefined : 'kh-ops-field-span'}
           label={
             kind === 'epic'
               ? t('epicTitle')
@@ -590,8 +592,8 @@ export function ProjectAgileManageModal({
             </Field>
           </div>
         ) : (
-          <div className="kh-ops-form-grid">
-            <Field label={t('startDate')}>
+          <>
+            <Field className="kh-ops-field-row-start" label={t('startDate')}>
               <Input
                 type="date"
                 value={startDate}
@@ -607,9 +609,12 @@ export function ProjectAgileManageModal({
                 disabled={pending || !canMutate || confirmDelete}
               />
             </Field>
-          </div>
+          </>
         )}
-        <Field label={t('description')}>
+        <Field
+          className={kind === 'milestone' ? undefined : 'kh-ops-field-span'}
+          label={t('description')}
+        >
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -617,7 +622,13 @@ export function ProjectAgileManageModal({
             rows={4}
           />
         </Field>
-        <div className="kh-ops-inset">
+        <div
+          className={
+            kind === 'milestone'
+              ? 'kh-ops-inset'
+              : 'kh-ops-inset kh-ops-field-span'
+          }
+        >
           <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
           {linkedDocuments.length === 0 ? (
             <p className="m-0 text-sm text-ink-muted">{t('linkedDocumentsEmpty')}</p>

@@ -13,6 +13,14 @@ import { cn } from '../../lib/cn';
 import { headerControlSquareClassName } from '../header-control';
 import { Button } from './Button';
 
+export type ModalSize = 'md' | 'lg' | 'xl' | 'full';
+
+/**
+ * Width shared by delivery item dialogs (task, epic, story, milestone,
+ * and the shared Add item dialog) so they stay the same size.
+ */
+export const DELIVERY_ITEM_MODAL_SIZE = 'xl' satisfies ModalSize;
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -24,7 +32,7 @@ type Props = {
    * Wider sheet for denser forms (e.g. API client scopes).
    * `xl` ≈ 90vw; `full` ≈ viewport for wide markdown / spreadsheet viewers.
    */
-  size?: 'md' | 'lg' | 'xl' | 'full';
+  size?: ModalSize;
   /** When false, backdrop click does not close (Esc still does). Default true. */
   closeOnBackdrop?: boolean;
   /** Extra class for the scrollable body (e.g. both-axis overflow for wide tables). */

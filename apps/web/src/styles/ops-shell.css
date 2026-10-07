@@ -3266,6 +3266,17 @@ button.kh-ops-project-card:disabled {
   grid-column: 1 / -1;
 }
 
+/* Start a new row so a following pair (start/end dates) stays side by side. */
+.kh-ops-field-row-start {
+  grid-column-start: 1;
+}
+
+@container kh-modal-xl (max-width: 760px) {
+  .kh-ops-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .kh-ops-audit-layout {
   display: grid;
   gap: 24px;
