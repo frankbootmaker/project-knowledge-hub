@@ -143,6 +143,12 @@ const CHROME_COPY: Record<AppLocale, { exported: string }> = {
   hu: { exported: "Exportálva" },
 };
 
+const DIAGRAM_COPY: Record<AppLocale, { failed: string }> = {
+  en: { failed: "Diagram could not be rendered" },
+  de: { failed: "Diagramm konnte nicht dargestellt werden" },
+  hu: { failed: "A diagramot nem sikerült megjeleníteni" },
+};
+
 export function normalizeExportLocale(value: string | null | undefined): AppLocale {
   const key = value?.trim().toLowerCase().slice(0, 2);
   return normalizeAppLocale(key);
@@ -170,4 +176,10 @@ export function labelRecordType(
 
 export function exportChromeCopy(locale: string | null | undefined): { exported: string } {
   return CHROME_COPY[normalizeExportLocale(locale)];
+}
+
+export function diagramExportCopy(
+  locale: string | null | undefined,
+): { failed: string } {
+  return DIAGRAM_COPY[normalizeExportLocale(locale)];
 }

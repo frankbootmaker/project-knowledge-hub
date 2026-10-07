@@ -685,9 +685,16 @@ export function mermaidImageHtml(image: DocxImage): string {
 }
 
 /** `source` arrives HTML-escaped from the markdown renderer, so it is kept as-is. */
-export function mermaidFallbackHtml(source: string): string {
+export function mermaidFallbackHtml(
+  source: string,
+  message = 'Diagram could not be rendered',
+): string {
   const text = source.replace(/<\/?[^>]+>/g, '').trim();
-  return `<pre style="background-color:${VIEWER.codeFill};font-family:${VIEWER.monoFont};font-size:9pt"><code style="font-family:${VIEWER.monoFont}">${text}</code></pre>`;
+  const summary = message
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `<details><summary>${summary}</summary><pre style="background-color:${VIEWER.codeFill};font-family:${VIEWER.monoFont};font-size:9pt"><code style="font-family:${VIEWER.monoFont}">${text}</code></pre></details>`;
 }
 
 export function decodeHtmlEntities(value: string): string {

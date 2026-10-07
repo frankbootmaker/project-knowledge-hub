@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   memberships,
@@ -108,6 +108,11 @@ export type PublicTask = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Latest `status_changed` activity whose metadata `to` is `done`.
+   * Derived, read-only, and independent of `updatedAt`.
+   */
+  completedAt: string | null;
   raci: PublicRaciEntry[];
 };
 
@@ -158,6 +163,7 @@ function toPublicTask(
     epicId?: string | null;
     epicTitle?: string | null;
     keyPrefix?: string | null;
+    completedAt?: string | null;
   },
 ): PublicTask {
   const keys = toHumanKeyFields(
@@ -200,8 +206,47 @@ function toPublicTask(
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    completedAt: extras?.completedAt ?? null,
     raci,
   };
+}
+
+/** One query for the latest transition to done. Not per task. */
+export async function loadCompletedAtByTask(
+  database: Database,
+  taskIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (taskIds.length === 0) {
+    return map;
+  }
+  const activities = await database.db
+    .select({
+      taskId: projectTaskActivities.taskId,
+      metadataJson: projectTaskActivities.metadataJson,
+      createdAt: projectTaskActivities.createdAt,
+    })
+    .from(projectTaskActivities)
+    .where(
+      and(
+        inArray(projectTaskActivities.taskId, taskIds),
+        eq(projectTaskActivities.type, 'status_changed'),
+      ),
+    )
+    .orderBy(desc(projectTaskActivities.createdAt));
+
+  for (const activity of activities) {
+    if (map.has(activity.taskId)) continue;
+    const meta = activity.metadataJson;
+    const to =
+      meta && typeof meta === 'object' && 'to' in meta
+        ? String((meta as { to?: unknown }).to)
+        : null;
+    if (to === 'done') {
+      map.set(activity.taskId, activity.createdAt.toISOString());
+    }
+  }
+  return map;
 }
 
 async function loadTaskContext(
@@ -290,6 +335,7 @@ function mapTasksWithContext(
   owners: Map<string, PublicTaskOwner>,
   stories: Map<string, { title: string; epicId: string; epicTitle: string | null }>,
   keyPrefixByProject: Map<string, string | null>,
+  completedAtByTask: Map<string, string>,
 ): PublicTask[] {
   return rows.map((row) => {
     const story = row.userStoryId ? stories.get(row.userStoryId) : undefined;
@@ -301,8 +347,30 @@ function mapTasksWithContext(
       epicId: story?.epicId ?? null,
       epicTitle: story?.epicTitle ?? null,
       keyPrefix: keyPrefixByProject.get(row.projectId) ?? null,
+      completedAt: completedAtByTask.get(row.id) ?? null,
     });
   });
+}
+
+async function withTaskContext(
+  database: Database,
+  rows: Array<typeof projectTasks.$inferSelect>,
+  keyPrefixByProject: Map<string, string | null>,
+): Promise<PublicTask[]> {
+  const ids = rows.map((row) => row.id);
+  const [raciMap, context, completedAtByTask] = await Promise.all([
+    loadRaciForTasks(database, ids),
+    loadTaskContext(database, rows),
+    loadCompletedAtByTask(database, ids),
+  ]);
+  return mapTasksWithContext(
+    rows,
+    raciMap,
+    context.owners,
+    context.stories,
+    keyPrefixByProject,
+    completedAtByTask,
+  );
 }
 
 function defaultOwnerFromRaci(
@@ -617,19 +685,8 @@ export async function listTasks(
     .from(projectTasks)
     .where(and(...conditions))
     .orderBy(asc(projectTasks.sortOrder), asc(projectTasks.dueDate));
-  const raciMap = await loadRaciForTasks(
-    database,
-    rows.map((row) => row.id),
-  );
-  const { owners, stories } = await loadTaskContext(database, rows);
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
-  return mapTasksWithContext(
-    rows,
-    raciMap,
-    owners,
-    stories,
-    new Map([[projectId, keyPrefix]]),
-  );
+  return withTaskContext(database, rows, new Map([[projectId, keyPrefix]]));
 }
 
 export async function listAssignedTasksForUser(
@@ -693,24 +750,12 @@ export async function listAssignedTasksForUser(
         )
         .where(and(...conditions));
 
-  const raciMap = await loadRaciForTasks(
-    database,
-    rows.map((row) => row.task.id),
-  );
-
   const taskRows = rows.map((row) => row.task);
-  const { owners, stories } = await loadTaskContext(database, taskRows);
   const keyPrefixByProject = new Map<string, string | null>();
   for (const row of rows) {
     keyPrefixByProject.set(row.task.projectId, row.projectKeyPrefix);
   }
-  const mapped = mapTasksWithContext(
-    taskRows,
-    raciMap,
-    owners,
-    stories,
-    keyPrefixByProject,
-  );
+  const mapped = await withTaskContext(database, taskRows, keyPrefixByProject);
   const byId = new Map(mapped.map((task) => [task.id, task]));
 
   const tasks: PublicAssignedTask[] = rows.map((row) => ({
@@ -755,15 +800,9 @@ export async function getTask(
       statusCode: 404,
     });
   }
-  const raciMap = await loadRaciForTasks(database, [row.id]);
-  const { owners, stories } = await loadTaskContext(database, [row]);
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return mapTasksWithContext(
-    [row],
-    raciMap,
-    owners,
-    stories,
-    new Map([[row.projectId, keyPrefix]]),
+  return (
+    await withTaskContext(database, [row], new Map([[row.projectId, keyPrefix]]))
   )[0]!;
 }
 

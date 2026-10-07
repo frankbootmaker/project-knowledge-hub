@@ -52,6 +52,26 @@ function wrapTablesForScroll(root: HTMLElement) {
   }
 }
 
+function isMermaidErrorSvg(svg: string): boolean {
+  // Theme CSS mentions `.error-icon` in every diagram. Only the failed render
+  // sets the error role or paints the "Syntax error in text" label.
+  return /aria-roledescription="error"|>Syntax error in text</.test(svg);
+}
+
+function diagramFallbackElement(source: string, failedLabel: string): HTMLElement {
+  const details = document.createElement('details');
+  details.className = 'knowledge-mermaid-fallback';
+  const summary = document.createElement('summary');
+  summary.textContent = failedLabel;
+  const pre = document.createElement('pre');
+  const code = document.createElement('code');
+  code.textContent = source;
+  pre.appendChild(code);
+  details.appendChild(summary);
+  details.appendChild(pre);
+  return details;
+}
+
 function MarkdownBody({
   html,
   className,
@@ -63,6 +83,7 @@ function MarkdownBody({
 }) {
   const localRef = useRef<HTMLDivElement>(null);
   const ref = containerRef ?? localRef;
+  const t = useTranslations('records');
 
   useEffect(() => {
     const root = ref.current;
@@ -80,7 +101,7 @@ function MarkdownBody({
       if (!root) {
         return;
       }
-      const blocks = root.querySelectorAll('pre.mermaid');
+      const blocks = Array.from(root.querySelectorAll('pre.mermaid'));
       if (blocks.length === 0) {
         return;
       }
@@ -90,11 +111,31 @@ function MarkdownBody({
         startOnLoad: false,
         securityLevel: 'strict',
         theme: dark ? 'dark' : 'neutral',
+        suppressErrorRendering: true,
       });
-      if (!cancelled) {
-        await mermaid.run({
-          nodes: Array.from(blocks) as HTMLElement[],
-        });
+      const failedLabel = t('diagramRenderFailed');
+      for (const block of blocks) {
+        if (cancelled) {
+          return;
+        }
+        const source = block.textContent ?? '';
+        const id = `khMermaid${Math.random().toString(36).slice(2, 10)}`;
+        try {
+          const rendered = await mermaid.render(id, source);
+          const svg = rendered.svg ?? '';
+          if (!svg || isMermaidErrorSvg(svg)) {
+            throw new Error('mermaid');
+          }
+          if (cancelled) {
+            return;
+          }
+          block.innerHTML = svg;
+        } catch {
+          if (!cancelled) {
+            block.replaceWith(diagramFallbackElement(source, failedLabel));
+          }
+          document.getElementById(id)?.remove();
+        }
       }
     }
 
@@ -102,7 +143,7 @@ function MarkdownBody({
     return () => {
       cancelled = true;
     };
-  }, [html, ref]);
+  }, [html, ref, t]);
 
   // React 19 re-applies dangerouslySetInnerHTML when the `{ __html }` object
   // identity changes, which wipes Mermaid SVGs (and table wrappers) on TOC toggle.
