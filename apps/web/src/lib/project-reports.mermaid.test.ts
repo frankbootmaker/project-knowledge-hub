@@ -1,5 +1,6 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
+import { accessSync, constants } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -102,6 +103,42 @@ function assertGanttLine(line: string, kind: 'task' | 'milestone') {
 
 type CdpResult = { result?: { value?: string } };
 
+const CHROME_CANDIDATES = [
+  process.env.CHROME_PATH,
+  '/usr/local/bin/google-chrome',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+].filter((path): path is string => Boolean(path));
+
+/** First runnable Chrome or Chromium, or null when CI has neither. */
+function chromeExecutable(): string | null {
+  for (const candidate of CHROME_CANDIDATES) {
+    try {
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Try the next well-known path.
+    }
+  }
+  for (const name of [
+    'google-chrome',
+    'google-chrome-stable',
+    'chromium',
+    'chromium-browser',
+  ]) {
+    const found = spawnSync('which', [name], { encoding: 'utf8' });
+    const path = found.stdout?.trim() ?? '';
+    if (found.status === 0 && path) return path;
+  }
+  return null;
+}
+
+const chromeBin = chromeExecutable();
+/** Set MERMAID_RENDER_TEST=1 to fail instead of skip when Chrome is missing. */
+const requireMermaidRender = process.env.MERMAID_RENDER_TEST === '1';
+
 function waitForStderr(
   chrome: ChildProcess,
   pattern: RegExp,
@@ -121,11 +158,17 @@ function waitForStderr(
         resolve(match);
       }
     }
+    function onError(error: Error) {
+      cleanup();
+      reject(new Error(`Chrome did not start: ${error.message}`));
+    }
     function cleanup() {
       clearTimeout(timer);
       chrome.stderr?.off('data', onData);
+      chrome.off('error', onError);
     }
     chrome.stderr?.on('data', onData);
+    chrome.once('error', onError);
   });
 }
 
@@ -144,6 +187,7 @@ function listen(server: Server): Promise<number> {
 }
 
 async function renderMermaidInChrome(
+  executable: string,
   sources: string[],
 ): Promise<Array<{ ok: boolean; error: string | null }>> {
   const require = createRequire(import.meta.url);
@@ -224,7 +268,7 @@ async function renderMermaidInChrome(
 
   const dir = await mkdtemp(join(tmpdir(), 'kh-mermaid-'));
   const chrome = spawn(
-    process.env.CHROME_PATH || '/usr/local/bin/google-chrome',
+    executable,
     [
       '--headless=new',
       '--disable-gpu',
@@ -520,8 +564,15 @@ describe('mermaid label sanitising', () => {
   });
 });
 
-describe('mermaid render validation', () => {
-  it('renders every builder and rejects the old gantt label', async () => {
+describe.skipIf(!chromeBin && !requireMermaidRender)(
+  'mermaid render validation (skipped without Chrome; set MERMAID_RENDER_TEST=1 to require it)',
+  () => {
+  it('renders every builder and rejects the old gantt label', async (ctx) => {
+    if (!chromeBin) {
+      throw new Error(
+        'MERMAID_RENDER_TEST=1 but no Chrome or Chromium executable was found. Set CHROME_PATH.',
+      );
+    }
     const milestones: ReportMilestone[] = [
       {
         title: REGRESSION_TITLES[2],
@@ -594,13 +645,24 @@ describe('mermaid render validation', () => {
       `  ${legacyMermaidLabel(REGRESSION_TITLES[2])} :t2, 2026-10-03, 1d`,
     ].join('\n');
 
-    const results = await renderMermaidInChrome([
-      gantt,
-      flowchart,
-      pie,
-      xychart,
-      legacy,
-    ]);
+    let results: Array<{ ok: boolean; error: string | null }>;
+    try {
+      results = await renderMermaidInChrome(chromeBin, [
+        gantt,
+        flowchart,
+        pie,
+        xychart,
+        legacy,
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!requireMermaidRender && message.startsWith('Chrome did not start')) {
+        ctx.skip(
+          `Chrome failed to launch (${chromeBin}). ${message} Set MERMAID_RENDER_TEST=1 to fail instead of skip.`,
+        );
+      }
+      throw error;
+    }
     expect(results, JSON.stringify(results)).toHaveLength(5);
     expect(results[0]).toEqual({ ok: true, error: null });
     expect(results[1]).toEqual({ ok: true, error: null });
@@ -609,4 +671,5 @@ describe('mermaid render validation', () => {
     expect(results[4]?.ok).toBe(false);
     expect(results[4]?.error ?? '').toMatch(/reading 'type'/);
   }, 60_000);
-});
+  },
+);
