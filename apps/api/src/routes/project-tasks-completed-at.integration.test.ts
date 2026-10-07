@@ -90,7 +90,7 @@ describe.skipIf(!hasIntegrationEnv)('task completedAt', () => {
     await database.db.insert(memberships).values({
       userId: admin.id,
       workspaceId: workspace.id,
-      role: 'admin',
+      role: 'workspace_admin',
     });
 
     app = await buildApp({ env, database, redis });
