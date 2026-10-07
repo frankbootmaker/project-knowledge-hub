@@ -23,6 +23,10 @@ export { ListCard, Page, PageHeader, SectionHeader } from './Page';
 export { Panel } from './Panel';
 export { Switch } from './Switch';
 export {
+  TableFilterControl,
+  type TableFilterField,
+} from './TableFilterControl';
+export {
   ToastProvider,
   useToast,
   TOAST_DURATION_MS,

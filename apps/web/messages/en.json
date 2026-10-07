@@ -2456,6 +2456,8 @@
     "emptyFiltered": "No work items match this search.",
     "treeBreakdown": "Work breakdown",
     "treeMetaHead": "Status / Owner / Sprint / Hours / Points",
+    "treeOnlyOpen": "Only open (hide done)",
+    "treeFilterDimmed": "Shown because a nested item matches the filter",
     "scrumRemainingPoints": "Remaining",
     "scrumDaysLeft": "Days left",
     "calendarSelectedEmpty": "No items on this date.",

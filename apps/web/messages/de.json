@@ -2437,6 +2437,8 @@
     "emptyFiltered": "Keine Arbeitseinträge passen zu dieser Suche.",
     "treeBreakdown": "Arbeitspaketstruktur",
     "treeMetaHead": "Status / Owner / Sprint / Stunden / Punkte",
+    "treeOnlyOpen": "Nur offene (Erledigte ausblenden)",
+    "treeFilterDimmed": "Sichtbar, weil ein untergeordnetes Element dem Filter entspricht",
     "scrumRemainingPoints": "Verbleibend",
     "scrumDaysLeft": "Tage übrig",
     "calendarSelectedEmpty": "Keine Einträge an diesem Datum.",

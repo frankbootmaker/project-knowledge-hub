@@ -207,6 +207,7 @@ export function ProjectDeliveryPanel({
   const [sprintLabels, setSprintLabels] = useState<
     Array<{ id: string; name: string; humanKey?: string | null }>
   >([]);
+  const [sprintsLoaded, setSprintsLoaded] = useState(false);
 
   useEffect(() => {
     const next = searchParams.get('delivery');
@@ -219,14 +220,20 @@ export function ProjectDeliveryPanel({
     let cancelled = false;
     void fetch(`/api/v1/projects/${projectId}/sprints`)
       .then(async (response) => {
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (!cancelled) setSprintsLoaded(true);
+          return;
+        }
         const payload = (await response.json()) as {
           sprints: Array<{ id: string; name: string; humanKey?: string | null }>;
         };
-        if (!cancelled) setSprintLabels(payload.sprints);
+        if (!cancelled) {
+          setSprintLabels(payload.sprints);
+          setSprintsLoaded(true);
+        }
       })
       .catch(() => {
-        /* list/tree sprint labels stay empty */
+        if (!cancelled) setSprintsLoaded(true);
       });
     return () => {
       cancelled = true;
@@ -1000,6 +1007,7 @@ export function ProjectDeliveryPanel({
           onManageStory={(storyId) =>
             setManageAgile({ kind: 'story', id: storyId })
           }
+          sprintsLoaded={sprintsLoaded}
         />
       ) : null}
 
