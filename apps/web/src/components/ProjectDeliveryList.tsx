@@ -10,6 +10,12 @@ import {
   compareText,
 } from '../lib/data-table';
 import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
+import {
+  DELIVERY_STATUS_RANK,
+  MILESTONE_STATUSES,
+  TASK_STATUSES,
+  isTaskDeliveryStatus,
+} from '../lib/delivery-status';
 import { toHours } from '../lib/task-costing';
 
 export type DeliveryListKind = 'epic' | 'story' | 'milestone' | 'task';
@@ -30,17 +36,6 @@ export type DeliveryListRow = {
   searchText: string;
 };
 
-const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
-const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
-const DELIVERY_STATUS_RANK: Record<string, number> = {
-  planned: 0,
-  todo: 1,
-  active: 2,
-  in_progress: 3,
-  blocked: 4,
-  done: 5,
-  cancelled: 6,
-};
 const KIND_LABEL = {
   epic: 'kindEpic',
   story: 'kindStory',
@@ -82,7 +77,7 @@ export function ProjectDeliveryList({
     () =>
       Object.keys(DELIVERY_STATUS_RANK).map((value) => ({
         value,
-        label: (TASK_STATUSES as readonly string[]).includes(value)
+        label: isTaskDeliveryStatus(value)
           ? t(`taskStatus.${value}`)
           : t(`milestoneStatus.${value}`),
       })),
