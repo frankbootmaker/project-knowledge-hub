@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDeliveryStatusReport,
   buildProjectStatusReport,
+  buildStakeholdersReport,
   calendarYmd,
+  formatReportTimestamp,
   groupReportTasks,
   isTodayOrTomorrow,
   isWithinLast24Hours,
@@ -84,6 +86,153 @@ const labels = {
   actualHours: 'Actual hours',
   diagramEmpty: 'No data for this diagram.',
 };
+
+describe('report timestamps', () => {
+  const instant = new Date('2026-10-07T21:53:09.212Z');
+  const zone = 'Europe/Budapest';
+
+  it('formats the generated clock time in the UI locale and viewer zone', () => {
+    expect(formatReportTimestamp(instant, 'en', zone)).toBe(
+      '7 Oct 2026, 23:53 (CEST)',
+    );
+    expect(formatReportTimestamp(instant, 'hu', zone)).toBe(
+      '2026. 10. 07. 23:53 (CEST)',
+    );
+    expect(formatReportTimestamp(instant, 'de', zone)).toBe(
+      '07.10.2026, 23:53 (MESZ)',
+    );
+  });
+
+  it('keeps date-only due dates unchanged and does not emit a raw ISO clock', () => {
+    const markdown = buildDeliveryStatusReport({
+      projectName: 'Lab',
+      projectSlug: 'lab',
+      projectStatus: 'active',
+      milestones: [],
+      tasks: [
+        task({
+          title: 'Due tomorrow',
+          status: 'todo',
+          dueDate: '2026-10-08',
+          completedAt: instant.toISOString(),
+        }),
+      ],
+      now: instant,
+      timeZone: zone,
+      locale: 'hu',
+      diagrams: {
+        orgHierarchy: false,
+        raidBreakdown: false,
+        deliveryTimeline: false,
+        budgetBurndown: false,
+      },
+      labels,
+    });
+    expect(markdown).toContain('Generated: 2026. 10. 07. 23:53 (CEST)');
+    expect(markdown).toContain('due 2026-10-08');
+    expect(markdown).not.toContain('2026-10-07T21:53:09.212Z');
+    expect(markdown).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
+  });
+
+  it('uses the same formatted stamp on the status report and the stakeholder section', () => {
+    const stamp = formatReportTimestamp(instant, 'en', zone);
+    const markdown = buildProjectStatusReport({
+      projectName: 'Lab',
+      projectSlug: 'lab',
+      projectStatus: 'active',
+      summary: null,
+      milestones: [],
+      tasks: [],
+      stakeholders: [],
+      raidItems: [],
+      budget: null,
+      now: instant,
+      timeZone: zone,
+      locale: 'en',
+      diagrams: {
+        orgHierarchy: false,
+        raidBreakdown: false,
+        deliveryTimeline: false,
+        budgetBurndown: false,
+      },
+      diagramLabels: {
+        orgHierarchy: 'Org',
+        raidBreakdown: 'RAID',
+        deliveryTimeline: 'Timeline',
+        budgetBurndown: 'Budget',
+        milestonesSection: 'Milestones',
+        tasksSection: 'Tasks',
+      },
+      labels: {
+        statusTitle: 'Status',
+        deliveryTitle: 'Delivery',
+        stakeholdersTitle: 'People',
+        budgetTitle: 'Budget',
+        raidTitle: 'RAID',
+        generated: 'Generated',
+        timelineRag: 'Timeline',
+        timelineRagValue: 'On track',
+        riskRag: 'Risks',
+        riskRagValue: 'On track',
+        financialRag: 'Financials',
+        financialRagValue: 'On track',
+        milestones: 'Milestones',
+        tasks: 'Tasks',
+        people: 'People',
+        aiAssistants: 'Assistants',
+        none: 'None',
+        reportsTo: 'Reports to',
+        hourlyRate: 'Rate',
+        summary: 'Summary',
+        forecastHours: 'Forecast',
+        actualHours: 'Actual',
+        currency: 'Currency',
+        initialBudget: 'Initial',
+        approvedBudget: 'Approved',
+        bac: 'BAC',
+        ev: 'EV',
+        ac: 'AC',
+        pv: 'PV',
+        cpi: 'CPI',
+        spi: 'SPI',
+        diagramEmpty: 'No data for this diagram.',
+      },
+      kindLabel: (kind) => kind,
+      statusLabel: (status) => status,
+      severityLabel: (severity) => severity,
+    });
+    const hits = markdown.match(/Generated: 7 Oct 2026, 23:53 \(CEST\)/g) ?? [];
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    expect(markdown).toContain(stamp);
+    expect(markdown).not.toContain(instant.toISOString());
+
+    const people = buildStakeholdersReport({
+      projectName: 'Lab',
+      projectSlug: 'lab',
+      stakeholders: [],
+      locale: 'en',
+      now: instant,
+      timeZone: zone,
+      diagrams: {
+        orgHierarchy: false,
+        raidBreakdown: false,
+        deliveryTimeline: false,
+        budgetBurndown: false,
+      },
+      labels: {
+        title: 'People',
+        generated: 'Generated',
+        people: 'People',
+        aiAssistants: 'Assistants',
+        none: 'None',
+        reportsTo: 'Reports to',
+        hourlyRate: 'Rate',
+        diagramEmpty: 'No data for this diagram.',
+      },
+    });
+    expect(people).toContain('Generated: 7 Oct 2026, 23:53 (CEST)');
+  });
+});
 
 describe('report time windows', () => {
   it('includes the last 24 hours on both edges and drops 30h', () => {

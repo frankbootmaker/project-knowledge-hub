@@ -150,6 +150,7 @@ export function useProjectReportPreview(
           raidItems: data.raidItems,
           budget: data.budget,
           timeZone,
+          locale,
           overview,
           diagrams,
           diagramLabels,
@@ -173,6 +174,7 @@ export function useProjectReportPreview(
           stakeholders: data.stakeholders,
           currency,
           locale,
+          timeZone,
           diagrams,
           diagramLabels,
           labels: {

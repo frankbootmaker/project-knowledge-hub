@@ -491,6 +491,43 @@ export type ReportOverviewCopy = {
   sprintKind: string;
 };
 
+/**
+ * Clock time for report headers. Uses the UI locale and the viewer's zone,
+ * with a short zone name. Date-only fields (due dates, milestone targets)
+ * stay `YYYY-MM-DD` and do not go through this.
+ */
+export function formatReportTimestamp(
+  value: Date | string,
+  locale: string,
+  timeZone: string,
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === 'string' ? value : '';
+  }
+  const intlLocale = locale === 'en' ? 'en-GB' : locale;
+  const dateStyle = intlLocale === 'hu' ? 'short' : 'medium';
+  const zone = timeZone || 'UTC';
+  try {
+    const when = new Intl.DateTimeFormat(intlLocale, {
+      dateStyle,
+      timeStyle: 'short',
+      hourCycle: 'h23',
+      timeZone: zone,
+    }).format(date);
+    const zoneName =
+      new Intl.DateTimeFormat(intlLocale, {
+        timeZone: zone,
+        timeZoneName: 'short',
+      })
+        .formatToParts(date)
+        .find((part) => part.type === 'timeZoneName')?.value ?? zone;
+    return `${when} (${zoneName})`;
+  } catch {
+    return `${date.toISOString().slice(0, 16).replace('T', ' ')} (UTC)`;
+  }
+}
+
 /** Calendar date in the viewer's zone. Date-only fields are not shifted through UTC. */
 export function calendarYmd(now: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -900,6 +937,7 @@ export function buildDeliveryStatusReport(input: {
   budget?: ReportBudgetSummary | null;
   now?: Date;
   timeZone?: string;
+  locale?: string;
   overview?: ReportOverviewCopy;
   diagrams?: Partial<ReportDiagramPrefs>;
   diagramLabels?: Pick<
@@ -922,6 +960,7 @@ export function buildDeliveryStatusReport(input: {
   const now = input.now ?? new Date();
   const timeZone =
     input.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+  const locale = input.locale ?? 'en';
   const today = calendarYmd(now, timeZone);
   const diagrams = {
     ...DEFAULT_REPORT_DIAGRAM_PREFS,
@@ -934,7 +973,7 @@ export function buildDeliveryStatusReport(input: {
     `- Slug: \`${input.projectSlug}\``,
     `- Status: ${input.projectStatus}`,
     `- ${input.labels.timelineRag}: **${input.labels.timelineRagValue}**`,
-    `- ${input.labels.generated}: ${now.toISOString()}`,
+    `- ${input.labels.generated}: ${formatReportTimestamp(now, locale, timeZone)}`,
     '',
   ];
 
@@ -1054,6 +1093,8 @@ export function buildStakeholdersReport(input: {
   stakeholders: ReportStakeholder[];
   currency?: string;
   locale?: string;
+  now?: Date;
+  timeZone?: string;
   diagrams?: Partial<ReportDiagramPrefs>;
   diagramLabels?: Pick<ReportDiagramLabels, 'orgHierarchy'>;
   labels: {
@@ -1074,6 +1115,9 @@ export function buildStakeholdersReport(input: {
   );
   const currency = input.currency ?? 'EUR';
   const locale = input.locale ?? 'en';
+  const now = input.now ?? new Date();
+  const timeZone =
+    input.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
   const diagrams = {
     ...DEFAULT_REPORT_DIAGRAM_PREFS,
     ...(input.diagrams ?? {}),
@@ -1083,7 +1127,7 @@ export function buildStakeholdersReport(input: {
     `# ${input.labels.title}: ${input.projectName}`,
     '',
     `- Slug: \`${input.projectSlug}\``,
-    `- ${input.labels.generated}: ${new Date().toISOString()}`,
+    `- ${input.labels.generated}: ${formatReportTimestamp(now, locale, timeZone)}`,
     '',
   ];
 
@@ -1317,6 +1361,8 @@ export function buildProjectStatusReport(input: {
 }): string {
   const locale = input.locale ?? 'en';
   const now = input.now ?? new Date();
+  const timeZone =
+    input.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
   const currency = input.budget?.currency ?? 'EUR';
   const diagrams = {
     ...DEFAULT_REPORT_DIAGRAM_PREFS,
@@ -1333,7 +1379,8 @@ export function buildProjectStatusReport(input: {
     raidItems: input.raidItems,
     budget: input.budget,
     now,
-    timeZone: input.timeZone,
+    timeZone,
+    locale,
     overview: input.overview,
     diagrams,
     diagramLabels: input.diagramLabels,
@@ -1357,6 +1404,8 @@ export function buildProjectStatusReport(input: {
     stakeholders: input.stakeholders,
     currency,
     locale,
+    now,
+    timeZone,
     diagrams,
     diagramLabels: input.diagramLabels,
     labels: {
@@ -1418,7 +1467,7 @@ export function buildProjectStatusReport(input: {
     `- ${input.labels.timelineRag}: **${input.labels.timelineRagValue}**`,
     `- ${input.labels.riskRag}: **${input.labels.riskRagValue}**`,
     `- ${input.labels.financialRag}: **${input.labels.financialRagValue}**`,
-    `- ${input.labels.generated}: ${now.toISOString()}`,
+    `- ${input.labels.generated}: ${formatReportTimestamp(now, locale, timeZone)}`,
     '',
   ];
 
