@@ -13,6 +13,7 @@ import {
   computeReportRags,
   fetchProjectReportData,
   fetchReportDiagramPrefs,
+  type ReportOverviewCopy,
 } from './project-reports';
 
 export type ProjectReportSource = {
@@ -22,6 +23,46 @@ export type ProjectReportSource = {
   status: string;
   summary: string | null;
 };
+
+function reportOverview(
+  t: (
+    key: string,
+    values?: Record<string, string | number>,
+  ) => string,
+  none: string,
+): ReportOverviewCopy {
+  return {
+    atAGlance: t('reportAtAGlance'),
+    keyNumbers: (input) => t('reportKeyNumbers', input),
+    completedLast24h: t('reportCompletedLast24h'),
+    plannedNext24h: t('reportPlannedNext24h'),
+    whereWeStand: t('reportWhereWeStand'),
+    groupBlocked: t('reportGroupBlocked'),
+    groupInProgress: t('reportGroupInProgress'),
+    groupTodo: t('reportGroupTodo'),
+    groupDone: t('reportGroupDone'),
+    groupCancelled: t('reportGroupCancelled'),
+    more: (count) => t('reportMore', { count }),
+    none,
+    overdueLine: (count, titles) => t('reportOverdueLine', { count, titles }),
+    blockedRisksLine: (input) => t('reportBlockedRisksLine', input),
+    activeSprintLine: (input) => t('reportActiveSprintLine', input),
+    noActiveSprint: t('reportNoActiveSprint'),
+    nextMilestoneLine: (input) => t('reportNextMilestoneLine', input),
+    noNextMilestone: t('reportNoNextMilestone'),
+    cpiSpiLine: (input) => t('reportCpiSpiLine', input),
+    ownerWorkloadLine: (owners) => t('reportOwnerWorkloadLine', { owners }),
+    due: (date) => t('reportDue', { date }),
+    points: (count) => t('reportPointsShort', { count }),
+    target: (date) => t('reportTarget', { date }),
+    sprintStarts: (date) => t('reportSprintStarts', { date }),
+    sprintEnds: (date) => t('reportSprintEnds', { date }),
+    sprintWindow: (start, end) => t('reportSprintWindow', { start, end }),
+    taskKind: t('reportKindTask'),
+    milestoneKind: t('reportKindMilestone'),
+    sprintKind: t('reportKindSprint'),
+  };
+}
 
 export function useProjectReportPreview(
   project: ProjectReportSource,
@@ -39,6 +80,13 @@ export function useProjectReportPreview(
   const tStakeholders = useTranslations('stakeholders');
   const tDelivery = useTranslations('delivery');
   const locale = useLocale();
+  const overview = reportOverview(
+    t as (
+      key: string,
+      values?: Record<string, string | number>,
+    ) => string,
+    tCommon('none'),
+  );
   const [reportOpen, setReportOpen] = useState(false);
   const [reportKind, setReportKind] = useState<ProjectReportKind | null>(null);
   const [reportTitle, setReportTitle] = useState('');
@@ -79,6 +127,8 @@ export function useProjectReportPreview(
       const riskRagValue = t(`rag.${rags.riskRag}`);
       const financialRagValue = t(`rag.${rags.financialRag}`);
       const currency = data.budget?.currency ?? 'EUR';
+      const timeZone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       const diagramLabels = {
         orgHierarchy: t('reportDiagramOrg'),
         raidBreakdown: t('reportDiagramRaid'),
@@ -96,6 +146,12 @@ export function useProjectReportPreview(
           projectStatus: project.status,
           milestones: data.milestones,
           tasks: data.tasks,
+          sprints: data.sprints,
+          raidItems: data.raidItems,
+          budget: data.budget,
+          timeZone,
+          locale,
+          overview,
           diagrams,
           diagramLabels,
           labels: {
@@ -108,6 +164,7 @@ export function useProjectReportPreview(
             none: tCommon('none'),
             forecastHours: tDelivery('forecastHours'),
             actualHours: tDelivery('actualHours'),
+            diagramEmpty: t('reportDiagramEmpty'),
           },
         });
       } else if (kind === 'stakeholders') {
@@ -117,6 +174,7 @@ export function useProjectReportPreview(
           stakeholders: data.stakeholders,
           currency,
           locale,
+          timeZone,
           diagrams,
           diagramLabels,
           labels: {
@@ -127,6 +185,7 @@ export function useProjectReportPreview(
             none: tCommon('none'),
             reportsTo: tStakeholders('reportsTo'),
             hourlyRate: tStakeholders('hourlyRate'),
+            diagramEmpty: t('reportDiagramEmpty'),
           },
         });
       } else {
@@ -140,6 +199,9 @@ export function useProjectReportPreview(
           stakeholders: data.stakeholders,
           raidItems: data.raidItems,
           budget: data.budget,
+          sprints: data.sprints,
+          timeZone,
+          overview,
           locale,
           diagrams,
           diagramLabels,
@@ -175,6 +237,7 @@ export function useProjectReportPreview(
             pv: t('reportPv'),
             cpi: tBudget('kpi.cpi'),
             spi: tBudget('kpi.spi'),
+            diagramEmpty: t('reportDiagramEmpty'),
           },
           kindLabel: (kindValue) => tRaid(`kind.${kindValue}`),
           statusLabel: (statusValue) => tRaid(`status.${statusValue}`),
