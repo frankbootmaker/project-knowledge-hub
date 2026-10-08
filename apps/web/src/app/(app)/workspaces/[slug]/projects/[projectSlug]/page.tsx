@@ -19,6 +19,7 @@ import { ProjectManageMenu } from '../../../../../../components/ProjectManageMen
 import { ProjectReportsPanel } from '../../../../../../components/ProjectReportsPanel';
 import { ProjectShortcutNav } from '../../../../../../components/ProjectShortcutNav';
 import { ProjectSectionSpy } from '../../../../../../components/ops/ProjectSectionSpy';
+import { RegisterShellCrumbs } from '../../../../../../components/ops/ShellCrumbContext';
 import {
   ProjectRaidPanel,
   type RaidItem,
@@ -383,6 +384,7 @@ export default async function ProjectDetailPage({
 
   return (
     <Page wide>
+      <RegisterShellCrumbs projectName={project.name} />
       <ProjectSectionSpy statuses={sectionStatuses} />
       <div id="project-top" className="kh-ops-project-top">
       <PageHeader
@@ -565,6 +567,7 @@ export default async function ProjectDetailPage({
 
       <ProjectLinkedSections
         workspaceSlug={workspace.slug}
+        projectSlug={project.slug}
         projectId={project.id}
         systems={systems}
         records={knowledgeRecords}

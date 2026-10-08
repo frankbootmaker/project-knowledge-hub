@@ -21,6 +21,8 @@ export type PublicDeliveryLink = {
   entityType: DeliveryLinkEntityType;
   entityId: string;
   entityTitle: string | null;
+  /** Project that owns the linked delivery entity. */
+  projectId: string | null;
   createdAt: string;
 };
 
@@ -162,6 +164,7 @@ export async function listDeliveryLinksForRecord(
       entityType,
       entityId: row.entityId,
       entityTitle: entity?.title ?? null,
+      projectId: entity?.projectId ?? null,
       createdAt: row.createdAt.toISOString(),
     });
   }

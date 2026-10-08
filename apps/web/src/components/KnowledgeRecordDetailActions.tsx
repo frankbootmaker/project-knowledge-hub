@@ -3,14 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import {
-  KnowledgeRecordEditor,
-  type KnowledgeRecordEditorInitial,
-} from './KnowledgeRecordEditor';
-import {
-  KnowledgeRecordManageMenu,
-  type RecordManageDetails,
-} from './KnowledgeRecordManageMenu';
+import { KnowledgeRecordEditor, type KnowledgeRecordEditorInitial } from './KnowledgeRecordEditor';
+import { KnowledgeRecordManageMenu, type RecordManageDetails } from './KnowledgeRecordManageMenu';
+import { recordBaseWithSlug } from '../lib/record-href';
 import { Modal } from './ui';
 
 type Option = { id: string; name: string; slug: string };
@@ -18,6 +13,7 @@ type Option = { id: string; name: string; slug: string };
 export function KnowledgeRecordDetailActions({
   workspaceSlug,
   workspaceId,
+  recordBasePath,
   record,
   editorInitial,
   projects,
@@ -28,6 +24,7 @@ export function KnowledgeRecordDetailActions({
 }: {
   workspaceSlug: string;
   workspaceId: string;
+  recordBasePath?: string;
   record: RecordManageDetails;
   editorInitial: KnowledgeRecordEditorInitial;
   projects: Option[];
@@ -49,6 +46,7 @@ export function KnowledgeRecordDetailActions({
       <KnowledgeRecordManageMenu
         workspaceSlug={workspaceSlug}
         workspaceId={workspaceId}
+        recordBasePath={recordBasePath}
         record={record}
         canMutate={canMutate}
         canPurge={canPurge}
@@ -69,6 +67,7 @@ export function KnowledgeRecordDetailActions({
             layout="modal"
             workspaceSlug={workspaceSlug}
             workspaceId={workspaceId}
+            recordBasePath={recordBasePath}
             projects={projects}
             systems={systems}
             initial={editorInitial}
@@ -76,7 +75,9 @@ export function KnowledgeRecordDetailActions({
             onSaved={(slug) => {
               setEditOpen(false);
               if (slug && slug !== record.slug) {
-                router.push(`/workspaces/${workspaceSlug}/records/${slug}`);
+                const base =
+                  recordBasePath ?? `/workspaces/${workspaceSlug}/records/${record.slug}`;
+                router.push(recordBaseWithSlug(base, slug));
               }
               router.refresh();
             }}

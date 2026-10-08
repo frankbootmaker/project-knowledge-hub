@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { suggestKeyPrefix } from '@project-knowledge-hub/domain';
 import { CollapsibleSection } from './CollapsibleSection';
+import { recordHref } from '../lib/record-href';
 import {
   PROJECT_CURRENCIES,
   formatMoney,
@@ -268,8 +269,12 @@ export function ProjectBaselinePanel({
     }
   }
 
-  function recordHref(record: PinnedRecord) {
-    return `/workspaces/${workspaceSlug}/records/${record.slug}`;
+  function pinnedRecordHref(record: PinnedRecord) {
+    return recordHref({
+      workspaceSlug,
+      projectSlug: project.slug,
+      recordSlug: record.slug,
+    });
   }
 
   return (
@@ -347,7 +352,7 @@ export function ProjectBaselinePanel({
                 <div>
                   <h3>
                     <Link
-                      href={recordHref(project.charterRecord)}
+                      href={pinnedRecordHref(project.charterRecord)}
                       className="text-inherit no-underline hover:underline"
                     >
                       {project.charterRecord.title}
@@ -372,7 +377,7 @@ export function ProjectBaselinePanel({
                 <div>
                   <h3>
                     <Link
-                      href={recordHref(project.initialPlanRecord)}
+                      href={pinnedRecordHref(project.initialPlanRecord)}
                       className="text-inherit no-underline hover:underline"
                     >
                       {project.initialPlanRecord.title}

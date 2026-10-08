@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { downloadAuthenticatedExport } from '../lib/download-export';
+import { recordBaseWithSlug } from '../lib/record-href';
 import {
   consumeTranslationSse,
   type TranslationStreamStage,
@@ -82,6 +83,8 @@ type TranslationSibling = {
 export function KnowledgeRecordManageMenu(props: {
   workspaceSlug: string;
   workspaceId: string;
+  /** `.../records/<slug>`, workspace or project nested. */
+  recordBasePath?: string;
   record: RecordManageDetails;
   canMutate: boolean;
   canPurge: boolean;
@@ -127,8 +130,11 @@ export function KnowledgeRecordManageMenu(props: {
   const archived = Boolean(props.record.archivedAt);
   const gitManaged = props.record.sourceOfTruthMode === 'git_managed';
   const redirectParent = `/workspaces/${props.workspaceSlug}`;
-  const editHref = `/workspaces/${props.workspaceSlug}/records/${props.record.slug}/edit`;
-  const historyHref = `/workspaces/${props.workspaceSlug}/records/${props.record.slug}/history`;
+  const recordBasePath =
+    props.recordBasePath ??
+    `/workspaces/${props.workspaceSlug}/records/${props.record.slug}`;
+  const editHref = `${recordBasePath}/edit`;
+  const historyHref = `${recordBasePath}/history`;
   const canTranslate = props.canMutate && !archived && !gitManaged;
   const availableTranslationLocales = locales.filter(
     (code) =>
@@ -277,9 +283,7 @@ export function KnowledgeRecordManageMenu(props: {
       if (deleteSelectedIds.includes(props.record.id)) {
         const next = remaining[0];
         if (next) {
-          router.push(
-            `/workspaces/${props.workspaceSlug}/records/${next.slug}`,
-          );
+          router.push(recordBaseWithSlug(recordBasePath, next.slug));
         } else {
           router.push(redirectParent);
         }
@@ -393,9 +397,7 @@ export function KnowledgeRecordManageMenu(props: {
         translateWithAi ? t('translateAiCreated') : t('translateCreated'),
       );
       close();
-      router.push(
-        `/workspaces/${props.workspaceSlug}/records/${completedSlug}`,
-      );
+      router.push(recordBaseWithSlug(recordBasePath, completedSlug));
       router.refresh();
     } catch (err) {
       setTranslateError(err instanceof Error ? err.message : t('translateFailed'));
