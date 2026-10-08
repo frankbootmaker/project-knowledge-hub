@@ -2428,12 +2428,21 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 }
 
 .kh-ops-timeline-scroll {
-  overflow-x: auto;
+  max-height: min(70vh, 48rem);
+  overflow: auto;
+  overscroll-behavior-x: contain;
 }
 
 .kh-ops-timeline-chart {
+  width: max(100%, calc(var(--kh-timeline-days, 1) * var(--kh-timeline-px, 8) * 1px));
   min-width: 48rem;
   padding: 14px;
+  cursor: grab;
+  user-select: none;
+}
+
+.kh-ops-timeline-chart.is-panning {
+  cursor: grabbing;
 }
 
 .kh-ops-time-scale {

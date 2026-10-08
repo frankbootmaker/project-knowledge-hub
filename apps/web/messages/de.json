@@ -2452,7 +2452,7 @@
     "timelineStatusColors": "Statusfarben",
     "timelineIssueIds": "ID",
     "timelineWindowLabel": "Zeitraum",
-    "timelineWindowHint": "Zoome die Achse auf einen Datumsbereich, damit dichte Phasen lesbar bleiben. Balken an den Rändern werden abgeschnitten; Marker außerhalb des Bereichs bleiben ausgeblendet.",
+    "timelineWindowHint": "Zeigt nur Elemente, die diesen Zeitraum überlappen. Das Diagramm scrollt über diesen Zeitraum, oder über den gesamten Bereich nach dem Leeren. Der Zoom ändert nur den Maßstab, nicht diese Daten.",
     "timelineWindowFrom": "Von",
     "timelineWindowTo": "Bis",
     "timelineWindowClear": "Gesamter Zeitraum",

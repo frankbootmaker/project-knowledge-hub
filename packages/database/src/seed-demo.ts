@@ -210,17 +210,13 @@ async function main(): Promise<void> {
     const testUsers = await database.db
       .select({ id: users.id, email: users.email })
       .from(users)
-      .where(
-        sql`${users.email} LIKE '%@example.com' OR ${users.email} LIKE '%@demo.local'`,
-      );
+      .where(sql`${users.email} LIKE '%@example.com' OR ${users.email} LIKE '%@demo.local'`);
 
     for (const user of testUsers) {
       await database.db
         .delete(knowledgeRecordVersions)
         .where(eq(knowledgeRecordVersions.createdBy, user.id));
-      await database.db
-        .delete(knowledgeRecords)
-        .where(eq(knowledgeRecords.createdBy, user.id));
+      await database.db.delete(knowledgeRecords).where(eq(knowledgeRecords.createdBy, user.id));
       await database.db
         .delete(gitRepositoryConnections)
         .where(eq(gitRepositoryConnections.createdBy, user.id));
@@ -261,12 +257,7 @@ async function main(): Promise<void> {
     const [membership] = await database.db
       .select()
       .from(memberships)
-      .where(
-        and(
-          eq(memberships.userId, admin.id),
-          eq(memberships.workspaceId, workspace.id),
-        ),
-      )
+      .where(and(eq(memberships.userId, admin.id), eq(memberships.workspaceId, workspace.id)))
       .limit(1);
     if (!membership) {
       await database.db.insert(memberships).values({
@@ -559,8 +550,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
     const aiDocCounters: Record<string, number> = {};
 
     for (const record of records) {
-      const counters =
-        record.projectId === labProject.id ? labDocCounters : aiDocCounters;
+      const counters = record.projectId === labProject.id ? labDocCounters : aiDocCounters;
       await database.db.insert(knowledgeRecords).values({
         workspaceId: workspace.id,
         projectId: record.projectId,
@@ -624,9 +614,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       const [adminOnWs] = await database.db
         .select()
         .from(memberships)
-        .where(
-          and(eq(memberships.userId, admin.id), eq(memberships.workspaceId, wsId)),
-        )
+        .where(and(eq(memberships.userId, admin.id), eq(memberships.workspaceId, wsId)))
         .limit(1);
       if (!adminOnWs) {
         await database.db.insert(memberships).values({
@@ -774,8 +762,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
       .values({
         projectId: labProject.id,
         title: 'Project Delivery MVP',
-        description:
-          'Milestones, tasks, RACI, list/board/calendar for humans + MCP agents.',
+        description: 'Milestones, tasks, RACI, list/board/calendar for humans + MCP agents.',
         status: 'active',
         startDate: ymd(0),
         targetDate: ymd(21),
@@ -869,6 +856,128 @@ Prefer a tool-capable model; tiny local models often skip tools.
       .returning();
     if (!storyEdge || !storyDelivery) {
       throw new Error('Failed to create lab user stories');
+    }
+
+    const [epicHorizon] = await database.db
+      .insert(projectEpics)
+      .values({
+        projectId: labProject.id,
+        title: 'Half-year capacity and restore',
+        description: 'Follow-through epic spread across the next several months.',
+        status: 'planned',
+        startDate: ymd(40),
+        endDate: ymd(155),
+        sortOrder: 20,
+        issueKeyType: 'E',
+        issueNumber: 2,
+      })
+      .returning();
+    if (!epicHorizon) {
+      throw new Error('Failed to create horizon epic');
+    }
+    const [storyCapacity] = await database.db
+      .insert(projectUserStories)
+      .values({
+        projectId: labProject.id,
+        epicId: epicHorizon.id,
+        title: 'As a PM I can see capacity across the next quarter',
+        description: 'Clustered with the cost story so timeline tags overlap until zoomed.',
+        status: 'planned',
+        startDate: ymd(45),
+        endDate: ymd(70),
+        sortOrder: 10,
+        issueKeyType: 'S',
+        issueNumber: 3,
+      })
+      .returning();
+    const [storyCost] = await database.db
+      .insert(projectUserStories)
+      .values({
+        projectId: labProject.id,
+        epicId: epicHorizon.id,
+        title: 'As finance I can review the cost workshop',
+        description: 'Starts a few days after the capacity story.',
+        status: 'planned',
+        startDate: ymd(52),
+        endDate: ymd(66),
+        sortOrder: 20,
+        issueKeyType: 'S',
+        issueNumber: 4,
+      })
+      .returning();
+    const [storyDrill] = await database.db
+      .insert(projectUserStories)
+      .values({
+        projectId: labProject.id,
+        epicId: epicHorizon.id,
+        title: 'As an operator I can rehearse a half-year restore',
+        status: 'planned',
+        startDate: ymd(120),
+        endDate: ymd(150),
+        sortOrder: 30,
+        issueKeyType: 'S',
+        issueNumber: 5,
+      })
+      .returning();
+    if (!storyCapacity || !storyCost || !storyDrill) {
+      throw new Error('Failed to create horizon stories');
+    }
+
+    const [mCapacity] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Capacity checkpoint',
+        description: 'Clustered with the sign-off milestone.',
+        status: 'planned',
+        startDate: ymd(55),
+        targetDate: ymd(60),
+        sortOrder: 50,
+        issueKeyType: 'M',
+        issueNumber: 6,
+      })
+      .returning();
+    const [mSignoff] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Capacity sign-off',
+        status: 'planned',
+        startDate: ymd(60),
+        targetDate: ymd(62),
+        sortOrder: 60,
+        issueKeyType: 'M',
+        issueNumber: 7,
+      })
+      .returning();
+    const [mMid] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Mid-horizon review',
+        status: 'planned',
+        startDate: ymd(90),
+        targetDate: ymd(100),
+        sortOrder: 70,
+        issueKeyType: 'M',
+        issueNumber: 8,
+      })
+      .returning();
+    const [mClose] = await database.db
+      .insert(projectMilestones)
+      .values({
+        projectId: labProject.id,
+        title: 'Half-year close',
+        status: 'planned',
+        startDate: ymd(145),
+        targetDate: ymd(155),
+        sortOrder: 80,
+        issueKeyType: 'M',
+        issueNumber: 9,
+      })
+      .returning();
+    if (!mCapacity || !mSignoff || !mMid || !mClose) {
+      throw new Error('Failed to create horizon milestones');
     }
 
     console.log('Seeding Homelab Scrum sprints…');
@@ -1235,6 +1344,74 @@ Prefer a tool-capable model; tiny local models often skip tools.
           { userId: blair.id, role: 'C' },
         ],
       },
+      {
+        milestoneId: mCapacity.id,
+        userStoryId: storyCapacity.id,
+        storyPoints: 3,
+        title: 'Draft the quarter capacity sheet',
+        status: 'todo',
+        dueDate: ymd(60),
+        forecastHours: '6',
+        sortOrder: 1,
+        raci: [
+          { userId: dana.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mCapacity.id,
+        userStoryId: storyCost.id,
+        storyPoints: 2,
+        title: 'Collect cost-workshop inputs',
+        status: 'todo',
+        dueDate: ymd(61),
+        forecastHours: '4',
+        sortOrder: 2,
+        raci: [
+          { userId: alex.id, role: 'A' },
+          { userId: dana.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mSignoff.id,
+        userStoryId: storyCapacity.id,
+        storyPoints: 2,
+        title: 'Confirm capacity sign-off attendees',
+        status: 'todo',
+        dueDate: ymd(62),
+        forecastHours: '2',
+        sortOrder: 1,
+        raci: [{ userId: dana.id, role: 'A' }],
+      },
+      {
+        milestoneId: mMid.id,
+        userStoryId: storyDrill.id,
+        storyPoints: 5,
+        title: 'Schedule the mid-horizon review',
+        status: 'todo',
+        dueDate: ymd(100),
+        forecastHours: '5',
+        sortOrder: 1,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+        ],
+      },
+      {
+        milestoneId: mClose.id,
+        userStoryId: storyDrill.id,
+        storyPoints: 8,
+        title: 'Run the half-year restore rehearsal',
+        status: 'todo',
+        dueDate: ymd(150),
+        forecastHours: '16',
+        sortOrder: 1,
+        raci: [
+          { userId: admin.id, role: 'A' },
+          { userId: blair.id, role: 'R' },
+          { userId: dana.id, role: 'C' },
+        ],
+      },
     ];
 
     let handoffDemoTaskId: string | null = null;
@@ -1283,9 +1460,7 @@ Prefer a tool-capable model; tiny local models often skip tools.
         actorUserId: admin.id,
         type: 'created',
         metadataJson: { title: task.title },
-        createdAt: ymdAt(
-          taskSpec.doneOnOffset != null ? taskSpec.doneOnOffset - 3 : -10,
-        ),
+        createdAt: ymdAt(taskSpec.doneOnOffset != null ? taskSpec.doneOnOffset - 3 : -10),
       });
       if (
         taskSpec.status === 'done' &&
@@ -1335,12 +1510,8 @@ Prefer a tool-capable model; tiny local models often skip tools.
       .from(projectTasks)
       .where(eq(projectTasks.projectId, labProject.id));
     const taskIdByTitle = new Map(labTaskRows.map((row) => [row.title, row.id]));
-    const diskAlertTaskId = taskIdByTitle.get(
-      'Add disk-space alert for Postgres volume',
-    );
-    const monitoringTaskId = taskIdByTitle.get(
-      'Review Monitoring Mon-2 search telemetry',
-    );
+    const diskAlertTaskId = taskIdByTitle.get('Add disk-space alert for Postgres volume');
+    const monitoringTaskId = taskIdByTitle.get('Review Monitoring Mon-2 search telemetry');
 
     const [riskRaid] = await database.db
       .insert(projectRaidItems)
@@ -1652,16 +1823,16 @@ Keep public MCP behind Authentik + Tailscale ACL review.
       .update(projects)
       .set({
         startDate: ymd(-30),
-        endDate: ymd(45),
+        endDate: ymd(160),
         currency: 'EUR',
         initialBudget: '48000.00',
         approvedBudget: '52000.00',
         charterRecordId: charterRecord.id,
         initialPlanRecordId: planRecord.id,
         issueCounters: {
-          M: 5,
-          E: 1,
-          S: 2,
+          M: 9,
+          E: 2,
+          S: 5,
           T: labTaskNumber,
           SP: 4,
           RR: 2,
@@ -2000,12 +2171,8 @@ Keep public MCP behind Authentik + Tailscale ACL review.
       .from(projectStakeholders);
 
     // Final counts
-    const [usersCount] = await database.db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(users);
-    const [wsCount] = await database.db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(workspaces);
+    const [usersCount] = await database.db.select({ n: sql<number>`count(*)::int` }).from(users);
+    const [wsCount] = await database.db.select({ n: sql<number>`count(*)::int` }).from(workspaces);
     const [recCount] = await database.db
       .select({ n: sql<number>`count(*)::int` })
       .from(knowledgeRecords);
@@ -2033,7 +2200,6 @@ Keep public MCP behind Authentik + Tailscale ACL review.
     console.log(
       '  Try: Homelab Platform → Delivery (Scrum view: HL1-SP-1..3, burndown, DoD, retro/review) + Stakeholders; AI Assistants has its own board + OpenWebUI/Cursor/ChatGPT.',
     );
-
   } finally {
     await database.close();
   }

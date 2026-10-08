@@ -4,9 +4,11 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
@@ -21,6 +23,33 @@ import {
   todayYmd,
   type DeliveryScheduleTone,
 } from '../lib/delivery-schedule';
+import {
+  DAY_MS,
+  DEFAULT_TIMELINE_ZOOM_INDEX,
+  addDays,
+  MARKER_TAG_GAP_PX,
+  MARKER_TAG_WIDTH_PX,
+  STORY_TAG_GAP_PX,
+  STORY_TAG_WIDTH_PX,
+  TIMELINE_ZOOM_LEVELS,
+  buildTimelineTicks,
+  canZoomTimeline,
+  clamp,
+  formatYmd,
+  markerBaseY,
+  markerTrackHeightPx,
+  nextZoomIndex,
+  packMarkerLanes,
+  packStoryLanes,
+  parseYmd,
+  rangeOverlaps,
+  scrollLeftForDate,
+  scrollLeftForFraction,
+  storyBaseY,
+  storyLaneSpacerPx,
+  viewportCenterFraction,
+  type MarkerLane,
+} from '../lib/timeline-scale';
 
 type Epic = {
   id: string;
@@ -88,20 +117,13 @@ function ItemMetaRow({
   if (!id && !due) return null;
   if (id && due) {
     return (
-      <span
-        className={cn(
-          'flex w-full min-w-0 items-center justify-between gap-1',
-          className,
-        )}
-      >
+      <span className={cn('flex w-full min-w-0 items-center justify-between gap-1', className)}>
         <span className="min-w-0 truncate">{id}</span>
         <span className="shrink-0 tabular-nums">{due}</span>
       </span>
     );
   }
-  return (
-    <span className={cn('block truncate', className)}>{id ?? due}</span>
-  );
+  return <span className={cn('block truncate', className)}>{id ?? due}</span>;
 }
 
 type TimelineFilters = {
@@ -116,7 +138,6 @@ type TimelineWindow = {
   to: string;
 };
 
-const DEFAULT_RIB_Y = 96;
 const DRAG_CLICK_THRESHOLD = 4;
 const DEFAULT_FILTERS: TimelineFilters = {
   epics: true,
@@ -243,10 +264,7 @@ function writeIssueIds(storageKey: string, enabled: boolean): void {
   }
 }
 
-function scheduleMarkerDotClass(
-  tone: DeliveryScheduleTone,
-  kind: 'milestone' | 'task',
-): string {
+function scheduleMarkerDotClass(tone: DeliveryScheduleTone, kind: 'milestone' | 'task'): string {
   const fill =
     tone === 'completed'
       ? 'border-brand bg-brand'
@@ -262,62 +280,10 @@ function scheduleMarkerDotClass(
     : cn('size-2.5 rounded-full border', fill);
 }
 
-const ZOOM_FACTOR = 0.7;
-const MIN_ZOOM_SPAN_MS = 3 * 86_400_000;
-
-function buildTimelineTicks(
-  startMs: number,
-  endMs: number,
-): { labelTicks: string[]; gridTicks: string[] } {
-  const spanDays = Math.max(1, Math.round((endMs - startMs) / 86_400_000));
-
-  let gridStepDays: number;
-  if (spanDays <= 16) gridStepDays = 1;
-  else if (spanDays <= 45) gridStepDays = 2;
-  else if (spanDays <= 90) gridStepDays = 7;
-  else if (spanDays <= 180) gridStepDays = 14;
-  else gridStepDays = Math.max(14, Math.ceil(spanDays / 10));
-
-  const gridTicks: string[] = [];
-  for (
-    let ms = startMs;
-    ms <= endMs && gridTicks.length < 62;
-    ms = addDays(ms, gridStepDays)
-  ) {
-    gridTicks.push(formatYmd(ms));
-  }
-  const endLabel = formatYmd(endMs);
-  if (gridTicks[gridTicks.length - 1] !== endLabel) {
-    gridTicks.push(endLabel);
-  }
-
-  const targetLabels = Math.min(12, Math.max(4, gridTicks.length));
-  const labelStride = Math.max(1, Math.ceil(gridTicks.length / targetLabels));
-  const labelTicks = gridTicks.filter(
-    (_, index) =>
-      index === 0 ||
-      index === gridTicks.length - 1 ||
-      index % labelStride === 0,
-  );
-
-  return { labelTicks, gridTicks };
-}
-
 function ZoomInIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className="size-4 shrink-0"
-      fill="none"
-    >
-      <circle
-        cx="11"
-        cy="11"
-        r="6.25"
-        stroke="currentColor"
-        strokeWidth="1.75"
-      />
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <circle cx="11" cy="11" r="6.25" stroke="currentColor" strokeWidth="1.75" />
       <path
         d="M15.5 15.5 20 20M11 8.25v5.5M8.25 11h5.5"
         stroke="currentColor"
@@ -330,19 +296,8 @@ function ZoomInIcon() {
 
 function ZoomOutIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className="size-4 shrink-0"
-      fill="none"
-    >
-      <circle
-        cx="11"
-        cy="11"
-        r="6.25"
-        stroke="currentColor"
-        strokeWidth="1.75"
-      />
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <circle cx="11" cy="11" r="6.25" stroke="currentColor" strokeWidth="1.75" />
       <path
         d="M15.5 15.5 20 20M8.25 11h5.5"
         stroke="currentColor"
@@ -355,21 +310,8 @@ function ZoomOutIcon() {
 
 function GridIcon({ active }: { active: boolean }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className="size-4 shrink-0"
-      fill="none"
-    >
-      <rect
-        x="4"
-        y="4"
-        width="16"
-        height="16"
-        rx="1.5"
-        stroke="currentColor"
-        strokeWidth="1.75"
-      />
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <rect x="4" y="4" width="16" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.75" />
       <path
         d="M4 9.5h16M4 14.5h16M9.5 4v16M14.5 4v16"
         stroke="currentColor"
@@ -382,12 +324,7 @@ function GridIcon({ active }: { active: boolean }) {
 
 function ResetViewIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className="size-4 shrink-0"
-      fill="none"
-    >
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
       <path
         d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15"
         stroke="currentColor"
@@ -395,52 +332,12 @@ function ResetViewIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <rect
-        x="8"
-        y="8"
-        width="8"
-        height="8"
-        rx="1"
-        stroke="currentColor"
-        strokeWidth="1.75"
-      />
+      <rect x="8" y="8" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.75" />
     </svg>
   );
 }
 
-/** Inclusive overlap of [start,end] with [winStart, winEnd] in ms. */
-function rangeOverlaps(
-  startMs: number,
-  endMs: number,
-  winStart: number,
-  winEnd: number,
-): boolean {
-  return startMs <= winEnd && endMs >= winStart;
-}
-
-function parseYmd(value: string): number {
-  const parts = value.split('-').map(Number);
-  const y = parts[0] ?? 1970;
-  const m = parts[1] ?? 1;
-  const d = parts[2] ?? 1;
-  return Date.UTC(y, m - 1, d);
-}
-
-function formatYmd(ms: number): string {
-  const date = new Date(ms);
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(date.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function addDays(ms: number, days: number): number {
-  return ms + days * 86_400_000;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+type ScrollAnchor = { kind: 'fraction'; fraction: number } | { kind: 'date'; dateMs: number };
 
 function readOffsets(storageKey: string): Record<string, TagOffset> {
   try {
@@ -454,10 +351,7 @@ function readOffsets(storageKey: string): Record<string, TagOffset> {
   }
 }
 
-function writeOffsets(
-  storageKey: string,
-  offsets: Record<string, TagOffset>,
-): void {
+function writeOffsets(storageKey: string, offsets: Record<string, TagOffset>): void {
   try {
     window.sessionStorage.setItem(storageKey, JSON.stringify(offsets));
   } catch {
@@ -516,19 +410,12 @@ function TimelineHintHelp({
         ?
       </button>
       {open ? (
-        <div
-          id={panelId}
-          role="note"
-          className="kh-ops-popover max-w-xl"
-        >
+        <div id={panelId} role="note" className="kh-ops-popover max-w-xl">
           <p className="m-0">{t('timelineHint')}</p>
           <p className="m-0">{t('timelineDragHint')}</p>
           <ul className="m-0 flex list-none flex-wrap items-center gap-3 p-0">
             <li className="inline-flex items-center gap-1.5">
-              <span
-                className="size-2.5 rotate-45 border border-warn bg-warn/80"
-                aria-hidden
-              />
+              <span className="size-2.5 rotate-45 border border-warn bg-warn/80" aria-hidden />
               <span>{t('kindMilestone')}</span>
             </li>
             <li className="inline-flex items-center gap-1.5">
@@ -538,11 +425,7 @@ function TimelineHintHelp({
           </ul>
           {canReset ? (
             <div>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={onResetPositions}
-              >
+              <Button type="button" variant="secondary" onClick={onResetPositions}>
                 {t('timelineResetTags')}
               </Button>
             </div>
@@ -603,8 +486,7 @@ function DraggableTag({
     const dy = drag.origin.dy + (event.clientY - drag.startY);
     if (
       !drag.moved &&
-      Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >=
-        DRAG_CLICK_THRESHOLD
+      Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= DRAG_CLICK_THRESHOLD
     ) {
       drag.moved = true;
     }
@@ -629,10 +511,7 @@ function DraggableTag({
   return (
     <button
       type="button"
-      className={cn(
-        'cursor-grab touch-none active:cursor-grabbing',
-        className,
-      )}
+      className={cn('cursor-grab touch-none active:cursor-grabbing', className)}
       style={style}
       title={title ?? t('timelineDragHint')}
       onPointerDown={onPointerDown}
@@ -678,9 +557,7 @@ export function ProjectDeliveryTimeline({
   onManageMilestone: (id: string) => void;
   onManageTask: (id: string) => void;
   exportHandleRef?: RefObject<TimelineExportHandle | null>;
-  onExportStateChange?: (
-    state: { pending: boolean; canExport: boolean } | null,
-  ) => void;
+  onExportStateChange?: (state: { pending: boolean; canExport: boolean } | null) => void;
 }) {
   const t = useTranslations('delivery');
   const tProjects = useTranslations('projects');
@@ -703,7 +580,24 @@ export function ProjectDeliveryTimeline({
   const [showDueDates, setShowDueDates] = useState(false);
   const [showIssueIds, setShowIssueIds] = useState(true);
   const [exportPending, setExportPending] = useState(false);
+  const [zoomIndex, setZoomIndex] = useState(DEFAULT_TIMELINE_ZOOM_INDEX);
+  const [scrollGen, setScrollGen] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
+  const [chartPx, setChartPx] = useState(0);
+  const [panning, setPanning] = useState(false);
   const todayDate = todayYmd();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<ScrollAnchor>({
+    kind: 'date',
+    dateMs: parseYmd(todayDate),
+  });
+  const appliedScrollGen = useRef(-1);
+  const panRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startScroll: number;
+  } | null>(null);
 
   useEffect(() => {
     setFilters(readFilters(filterKey));
@@ -712,6 +606,10 @@ export function ProjectDeliveryTimeline({
     setColorByStatus(readStatusColors(statusColorKey));
     setShowDueDates(readDueDates(dueDatesKey));
     setShowIssueIds(readIssueIds(issueIdsKey));
+    setZoomIndex(DEFAULT_TIMELINE_ZOOM_INDEX);
+    anchorRef.current = { kind: 'date', dateMs: parseYmd(todayYmd()) };
+    setScrollGen((current) => current + 1);
+    setHydrated(true);
   }, [filterKey, windowKey, gridKey, statusColorKey, dueDatesKey, issueIdsKey]);
 
   function toggleFilter(key: keyof TimelineFilters) {
@@ -746,18 +644,25 @@ export function ProjectDeliveryTimeline({
     });
   }
 
+  function queueDateScroll() {
+    anchorRef.current = { kind: 'date', dateMs: parseYmd(todayDate) };
+    setScrollGen((current) => current + 1);
+  }
+
   function setWindowField(field: keyof TimelineWindow, value: string) {
     setWindowRange((current) => {
       const next = { ...current, [field]: value };
       writeWindow(windowKey, next);
       return next;
     });
+    queueDateScroll();
   }
 
   function clearWindow() {
     const next = { from: '', to: '' };
     setWindowRange(next);
     writeWindow(windowKey, next);
+    queueDateScroll();
   }
 
   function applyPreset(kind: 'month' | 'next30' | 'project') {
@@ -768,16 +673,8 @@ export function ProjectDeliveryTimeline({
     );
     let next: TimelineWindow;
     if (kind === 'month') {
-      const start = Date.UTC(
-        new Date().getUTCFullYear(),
-        new Date().getUTCMonth(),
-        1,
-      );
-      const end = Date.UTC(
-        new Date().getUTCFullYear(),
-        new Date().getUTCMonth() + 1,
-        0,
-      );
+      const start = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1);
+      const end = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 0);
       next = { from: formatYmd(start), to: formatYmd(end) };
     } else if (kind === 'next30') {
       next = { from: formatYmd(today), to: formatYmd(addDays(today, 30)) };
@@ -789,6 +686,7 @@ export function ProjectDeliveryTimeline({
     }
     setWindowRange(next);
     writeWindow(windowKey, next);
+    queueDateScroll();
   }
 
   function toggleGrid() {
@@ -799,27 +697,23 @@ export function ProjectDeliveryTimeline({
     });
   }
 
-  function zoomWindow(direction: 'in' | 'out') {
-    if (windowInvalid) return;
-    const factor = direction === 'in' ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-    const center = (rangeStart + rangeEnd) / 2;
-    const currentSpan = Math.max(MIN_ZOOM_SPAN_MS, rangeEnd - rangeStart);
-    const autoSpan = Math.max(
-      MIN_ZOOM_SPAN_MS,
-      autoRange.endMs - autoRange.startMs,
-    );
-    const maxSpan = Math.max(autoSpan * 4, currentSpan);
-    const nextSpan = clamp(currentSpan * factor, MIN_ZOOM_SPAN_MS, maxSpan);
-    let nextStart = center - nextSpan / 2;
-    let nextEnd = center + nextSpan / 2;
-    nextStart = parseYmd(formatYmd(nextStart));
-    nextEnd = parseYmd(formatYmd(nextEnd));
-    if (nextEnd - nextStart < MIN_ZOOM_SPAN_MS) {
-      nextEnd = addDays(nextStart, 3);
-    }
-    const next = { from: formatYmd(nextStart), to: formatYmd(nextEnd) };
-    setWindowRange(next);
-    writeWindow(windowKey, next);
+  function zoomBy(direction: 'in' | 'out') {
+    const next = nextZoomIndex(zoomIndex, direction);
+    if (next === null) return;
+    const el = scrollRef.current;
+    const fraction =
+      el && el.scrollWidth > 0
+        ? viewportCenterFraction(el.scrollLeft, el.clientWidth, el.scrollWidth)
+        : 0.5;
+    anchorRef.current = { kind: 'fraction', fraction };
+    setZoomIndex(next);
+    setScrollGen((current) => current + 1);
+  }
+
+  function resetView() {
+    anchorRef.current = { kind: 'date', dateMs: parseYmd(todayDate) };
+    setZoomIndex(DEFAULT_TIMELINE_ZOOM_INDEX);
+    setScrollGen((current) => current + 1);
   }
 
   const autoRange = useMemo(() => {
@@ -857,61 +751,143 @@ export function ProjectDeliveryTimeline({
     return { startMs, endMs };
   }, [projectStartDate, projectEndDate, epics, stories, milestones, tasks]);
 
-  const {
-    rangeStart,
-    rangeEnd,
-    labelTicks,
-    gridTicks,
-    windowActive,
-    windowInvalid,
-  } = useMemo(() => {
-    const fromOk = Boolean(windowRange.from);
-    const toOk = Boolean(windowRange.to);
-    let startMs = autoRange.startMs;
-    let endMs = autoRange.endMs;
-    let active = false;
-    let invalid = false;
+  const timelineZoomPx =
+    TIMELINE_ZOOM_LEVELS[zoomIndex]?.pxPerDay ?? TIMELINE_ZOOM_LEVELS[0].pxPerDay;
 
-    if (fromOk || toOk) {
-      const fromMs = fromOk ? parseYmd(windowRange.from) : autoRange.startMs;
-      const toMs = toOk ? parseYmd(windowRange.to) : autoRange.endMs;
-      if (fromMs > toMs) {
-        invalid = true;
-      } else {
-        startMs = fromMs;
-        endMs = toMs;
-        active = true;
-        if (endMs <= startMs) endMs = addDays(startMs, 1);
+  const { rangeStart, rangeEnd, labelTicks, gridTicks, windowActive, windowInvalid } =
+    useMemo(() => {
+      const fromOk = Boolean(windowRange.from);
+      const toOk = Boolean(windowRange.to);
+      let startMs = autoRange.startMs;
+      let endMs = autoRange.endMs;
+      let active = false;
+      let invalid = false;
+
+      if (fromOk || toOk) {
+        const fromMs = fromOk ? parseYmd(windowRange.from) : autoRange.startMs;
+        const toMs = toOk ? parseYmd(windowRange.to) : autoRange.endMs;
+        if (fromMs > toMs) {
+          invalid = true;
+        } else {
+          startMs = fromMs;
+          endMs = toMs;
+          active = true;
+          if (endMs <= startMs) endMs = addDays(startMs, 1);
+        }
       }
-    }
 
-    const { labelTicks: nextLabels, gridTicks: nextGrid } = buildTimelineTicks(
-      startMs,
-      endMs,
-    );
+      const { labelTicks: nextLabels, gridTicks: nextGrid } = buildTimelineTicks(
+        startMs,
+        endMs,
+        timelineZoomPx,
+      );
 
-    return {
-      rangeStart: startMs,
-      rangeEnd: endMs,
-      labelTicks: nextLabels,
-      gridTicks: nextGrid,
-      windowActive: active,
-      windowInvalid: invalid,
-    };
-  }, [autoRange, windowRange.from, windowRange.to]);
+      return {
+        rangeStart: startMs,
+        rangeEnd: endMs,
+        labelTicks: nextLabels,
+        gridTicks: nextGrid,
+        windowActive: active,
+        windowInvalid: invalid,
+      };
+    }, [autoRange, windowRange.from, windowRange.to, timelineZoomPx]);
 
   const span = Math.max(1, rangeEnd - rangeStart);
-  const currentSpan = rangeEnd - rangeStart;
-  const autoSpan = Math.max(
-    MIN_ZOOM_SPAN_MS,
-    autoRange.endMs - autoRange.startMs,
-  );
-  const maxZoomSpan = Math.max(autoSpan * 4, currentSpan);
-  const canZoomIn =
-    !windowInvalid && currentSpan > MIN_ZOOM_SPAN_MS + 86_400_000;
-  const canZoomOut = !windowInvalid && currentSpan < maxZoomSpan - 86_400_000;
-  const todayInRange =
-    parseYmd(todayDate) >= rangeStart && parseYmd(todayDate) <= rangeEnd;
+  const rangeDays = Math.max(1, (rangeEnd - rangeStart) / DAY_MS);
+  const estimatedWidth = Math.max(rangeDays * timelineZoomPx, 768);
+  const layoutWidth = chartPx > 0 ? chartPx : estimatedWidth;
+  const canZoomIn = canZoomTimeline(zoomIndex, 'in');
+  const canZoomOut = canZoomTimeline(zoomIndex, 'out');
+  const todayInRange = parseYmd(todayDate) >= rangeStart && parseYmd(todayDate) <= rangeEnd;
+
+  useLayoutEffect(() => {
+    if (!hydrated) return;
+    const el = scrollRef.current;
+    if (!el || el.clientWidth <= 0) return;
+    if (appliedScrollGen.current === scrollGen) return;
+    appliedScrollGen.current = scrollGen;
+    const anchor = anchorRef.current;
+    if (anchor.kind === 'fraction') {
+      el.scrollLeft = scrollLeftForFraction(anchor.fraction, el.clientWidth, el.scrollWidth);
+      return;
+    }
+    const dateMs =
+      anchor.dateMs >= rangeStart && anchor.dateMs <= rangeEnd ? anchor.dateMs : rangeStart;
+    el.scrollLeft = scrollLeftForDate(dateMs, rangeStart, rangeEnd, el.clientWidth, el.scrollWidth);
+    // chartPx retries the first scroll if the chart had no width yet.
+    // Later resizes keep the same scrollGen, so they do not jump the view.
+  }, [hydrated, scrollGen, chartPx, rangeStart, rangeEnd]);
+
+  useLayoutEffect(() => {
+    const el = chartRef.current;
+    if (!el) return;
+    const measure = () => {
+      const next = Math.round(el.clientWidth);
+      setChartPx((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [zoomIndex, rangeStart, rangeEnd]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      if (!(event.target instanceof Node) || !scroller.contains(event.target)) return;
+      const mostlyHorizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY);
+      if (!event.shiftKey && !mostlyHorizontal) return;
+      const delta = event.shiftKey
+        ? mostlyHorizontal && event.deltaX !== 0
+          ? event.deltaX
+          : event.deltaY || event.deltaX
+        : event.deltaX;
+      if (delta === 0 || scroller.scrollWidth <= scroller.clientWidth + 1) return;
+      event.preventDefault();
+      scroller.scrollLeft += delta;
+    };
+    // Capture on document so Shift+wheel pans the chart before the page scrolls.
+    document.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    return () => document.removeEventListener('wheel', onWheel, { capture: true });
+  }, []);
+
+  function onPanPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || event.pointerType === 'touch') return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('button, a, input, textarea, select, label')) return;
+    const el = scrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth + 1) return;
+    panRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScroll: el.scrollLeft,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setPanning(true);
+  }
+
+  function onPanPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = panRef.current;
+    const el = scrollRef.current;
+    if (!pan || !el || pan.pointerId !== event.pointerId) return;
+    el.scrollLeft = pan.startScroll - (event.clientX - pan.startX);
+  }
+
+  function onPanPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = panRef.current;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+    panRef.current = null;
+    setPanning(false);
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
 
   function barStyle(start: string | null, end: string | null) {
     if (!start && !end) return null;
@@ -921,10 +897,7 @@ export function ProjectDeliveryTimeline({
     const clippedStart = Math.max(itemStart, rangeStart);
     const clippedEnd = Math.min(itemEnd, rangeEnd);
     const left = ((clippedStart - rangeStart) / span) * 100;
-    const width = Math.max(
-      1.2,
-      ((Math.max(clippedStart, clippedEnd) - clippedStart) / span) * 100,
-    );
+    const width = Math.max(1.2, ((Math.max(clippedStart, clippedEnd) - clippedStart) / span) * 100);
     return {
       left: `${clamp(left, 0, 100)}%`,
       width: `${clamp(width, 1.2, 100 - clamp(left, 0, 100))}%`,
@@ -937,6 +910,13 @@ export function ProjectDeliveryTimeline({
 
   function markerStyle(date: string) {
     return { left: `${markerLeftPct(date)}%` };
+  }
+
+  function tickLabelStyle(date: string): CSSProperties {
+    const left = markerLeftPct(date);
+    if (left <= 0) return { left: 0 };
+    if (left >= 100) return { right: 0 };
+    return { left: `${left}%`, transform: 'translateX(-50%)' };
   }
 
   function dateInWindow(date: string): boolean {
@@ -980,9 +960,7 @@ export function ProjectDeliveryTimeline({
         });
       }
     }
-    items.sort(
-      (a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title),
-    );
+    items.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
     return items;
   }, [
     filters.milestones,
@@ -994,6 +972,17 @@ export function ProjectDeliveryTimeline({
     onManageMilestone,
     onManageTask,
   ]);
+
+  const markerLanes = useMemo(() => {
+    return packMarkerLanes(
+      axisMarkers.map((marker) => ({
+        id: marker.id,
+        xPx: ((parseYmd(marker.date) - rangeStart) / span) * layoutWidth,
+      })),
+      { tagWidthPx: MARKER_TAG_WIDTH_PX, gapPx: MARKER_TAG_GAP_PX },
+    );
+  }, [axisMarkers, layoutWidth, rangeStart, span]);
+  const markerTrackHeight = markerTrackHeightPx(markerLanes.values());
 
   const scheduledEpics = filters.epics
     ? epics.filter((epic) => {
@@ -1019,16 +1008,13 @@ export function ProjectDeliveryTimeline({
     ? stories.filter((story) => !story.startDate && !story.endDate)
     : [];
   const unscheduledMilestones = filters.milestones
-    ? milestones.filter(
-        (milestone) => !milestone.startDate && !milestone.targetDate,
-      )
+    ? milestones.filter((milestone) => !milestone.startDate && !milestone.targetDate)
     : [];
 
   const above = scheduledEpics.filter((_, index) => index % 2 === 0);
   const below = scheduledEpics.filter((_, index) => index % 2 === 1);
   const hasCustomOffsets = Object.keys(offsets).length > 0;
-  const anyTypeVisible =
-    filters.epics || filters.stories || filters.milestones || filters.tasks;
+  const anyTypeVisible = filters.epics || filters.stories || filters.milestones || filters.tasks;
 
   const exportTimelinePdf = useCallback(async () => {
     if (exportPending || !anyTypeVisible) return;
@@ -1078,10 +1064,7 @@ export function ProjectDeliveryTimeline({
       );
       pushToast(t('timelineExported'));
     } catch (err) {
-      pushToast(
-        err instanceof Error ? err.message : t('timelineExportFailed'),
-        'danger',
-      );
+      pushToast(err instanceof Error ? err.message : t('timelineExportFailed'), 'danger');
     } finally {
       setExportPending(false);
     }
@@ -1124,13 +1107,20 @@ export function ProjectDeliveryTimeline({
       if (exportHandleRef) exportHandleRef.current = null;
       onExportStateChange?.(null);
     };
-  }, [
-    anyTypeVisible,
-    exportHandleRef,
-    exportPending,
-    exportTimelinePdf,
-    onExportStateChange,
-  ]);
+  }, [anyTypeVisible, exportHandleRef, exportPending, exportTimelinePdf, onExportStateChange]);
+
+  function storyAnchorLeft(story: Story): number | null {
+    const storyStyle = barStyle(story.startDate, story.endDate);
+    if (!storyStyle) return null;
+    const midDate = formatYmd(
+      (parseYmd(story.startDate ?? story.endDate!) + parseYmd(story.endDate ?? story.startDate!)) /
+        2,
+    );
+    const midLeft = markerLeftPct(midDate);
+    const barLeft = Number.parseFloat(storyStyle.left);
+    const barWidth = Number.parseFloat(storyStyle.width);
+    return clamp(midLeft, barLeft, barLeft + barWidth);
+  }
 
   function epicLane(epic: Epic, side: 'above' | 'below') {
     const style = barStyle(epic.startDate, epic.endDate);
@@ -1152,13 +1142,21 @@ export function ProjectDeliveryTimeline({
         })
       : null;
     const epicHasMeta =
-      (showIssueIds && Boolean(epic.humanKey)) ||
-      (showDueDates && Boolean(epic.endDate));
+      (showIssueIds && Boolean(epic.humanKey)) || (showDueDates && Boolean(epic.endDate));
+    const storyLanes = packStoryLanes(
+      epicStories.flatMap((story) => {
+        const anchorLeft = storyAnchorLeft(story);
+        if (anchorLeft === null) return [];
+        return [{ id: story.id, xPx: (anchorLeft / 100) * layoutWidth }];
+      }),
+      { tagWidthPx: STORY_TAG_WIDTH_PX, gapPx: STORY_TAG_GAP_PX },
+    );
+    let maxStoryLane = -1;
+    for (const lane of storyLanes.values()) {
+      maxStoryLane = Math.max(maxStoryLane, lane);
+    }
     return (
-      <div
-        key={epic.id}
-        className={cn('relative mb-4 min-h-12', side === 'below' && 'mt-4')}
-      >
+      <div key={epic.id} className={cn('relative mb-4 min-h-12', side === 'below' && 'mt-4')}>
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -1204,8 +1202,10 @@ export function ProjectDeliveryTimeline({
             const barLeft = Number.parseFloat(storyStyle.left);
             const barWidth = Number.parseFloat(storyStyle.width);
             const anchorLeft = clamp(midLeft, barLeft, barLeft + barWidth);
+            const lane = storyLanes.get(story.id) ?? 0;
+            const baseY = storyBaseY(lane);
             const ribX = offset.dx;
-            const ribY = 36 + offset.dy;
+            const ribY = baseY + offset.dy;
             const ribLen = Math.max(1, Math.hypot(ribX, ribY));
             const ribAngle = (Math.atan2(ribY, ribX) * 180) / Math.PI;
             const storyTone = colorByStatus
@@ -1217,8 +1217,7 @@ export function ProjectDeliveryTimeline({
               : null;
             const storyDue = story.endDate ?? story.startDate;
             const storyHasMeta =
-              (showIssueIds && Boolean(story.humanKey)) ||
-              (showDueDates && Boolean(storyDue));
+              (showIssueIds && Boolean(story.humanKey)) || (showDueDates && Boolean(storyDue));
 
             return (
               <div
@@ -1247,7 +1246,7 @@ export function ProjectDeliveryTimeline({
                       : 'border-line bg-panel-solid text-ink hover:border-brand/50',
                   )}
                   style={{
-                    transform: `translate(calc(-50% + ${offset.dx}px), ${36 + offset.dy}px)`,
+                    transform: `translate(calc(-50% + ${offset.dx}px), ${baseY + offset.dy}px)`,
                   }}
                   title={
                     colorByStatus
@@ -1270,7 +1269,7 @@ export function ProjectDeliveryTimeline({
             );
           })}
         </div>
-        {epicStories.length > 0 ? <div className="h-6" /> : null}
+        {maxStoryLane >= 0 ? <div style={{ height: storyLaneSpacerPx(maxStoryLane) }} /> : null}
       </div>
     );
   }
@@ -1287,8 +1286,7 @@ export function ProjectDeliveryTimeline({
       : null;
     const storyDue = story.endDate ?? story.startDate;
     const storyHasMeta =
-      (showIssueIds && Boolean(story.humanKey)) ||
-      (showDueDates && Boolean(storyDue));
+      (showIssueIds && Boolean(story.humanKey)) || (showDueDates && Boolean(storyDue));
     return (
       <div key={story.id} className="relative mb-4 min-h-12">
         <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -1310,9 +1308,7 @@ export function ProjectDeliveryTimeline({
             )}
             data-tone={storyTone ?? undefined}
             style={style}
-            title={
-              storyDue ? `${story.title} (${storyDue})` : story.title
-            }
+            title={storyDue ? `${story.title} (${storyDue})` : story.title}
             onClick={() => onManageStory(story.id)}
           >
             <span className="block truncate">{story.title}</span>
@@ -1332,9 +1328,7 @@ export function ProjectDeliveryTimeline({
   return (
     <div className="grid gap-4">
       <fieldset className="kh-ops-panel m-0 grid gap-2 p-3">
-        <legend className="px-1 text-sm font-semibold">
-          {t('timelineFilterLabel')}
-        </legend>
+        <legend className="px-1 text-sm font-semibold">{t('timelineFilterLabel')}</legend>
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
           {(
             [
@@ -1345,45 +1339,27 @@ export function ProjectDeliveryTimeline({
             ] as const
           ).map(([key, labelKey]) => (
             <label key={key} className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={filters[key]}
-                onChange={() => toggleFilter(key)}
-              />
+              <input type="checkbox" checked={filters[key]} onChange={() => toggleFilter(key)} />
               <span>{t(labelKey)}</span>
             </label>
           ))}
           <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={colorByStatus}
-              onChange={toggleStatusColors}
-            />
+            <input type="checkbox" checked={colorByStatus} onChange={toggleStatusColors} />
             <span>{t('timelineStatusColors')}</span>
           </label>
           <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showDueDates}
-              onChange={toggleDueDates}
-            />
+            <input type="checkbox" checked={showDueDates} onChange={toggleDueDates} />
             <span>{t('dueDate')}</span>
           </label>
           <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showIssueIds}
-              onChange={toggleIssueIds}
-            />
+            <input type="checkbox" checked={showIssueIds} onChange={toggleIssueIds} />
             <span>{t('timelineIssueIds')}</span>
           </label>
         </div>
       </fieldset>
 
       <fieldset className="kh-ops-panel m-0 grid gap-3 p-3">
-        <legend className="px-1 text-sm font-semibold">
-          {t('timelineWindowLabel')}
-        </legend>
+        <legend className="px-1 text-sm font-semibold">{t('timelineWindowLabel')}</legend>
         <p className="m-0 text-xs text-ink-muted">{t('timelineWindowHint')}</p>
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <Field label={t('timelineWindowFrom')}>
@@ -1410,18 +1386,10 @@ export function ProjectDeliveryTimeline({
           </Button>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => applyPreset('month')}
-          >
+          <Button type="button" variant="ghost" onClick={() => applyPreset('month')}>
             {t('timelineWindowPresetMonth')}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => applyPreset('next30')}
-          >
+          <Button type="button" variant="ghost" onClick={() => applyPreset('next30')}>
             {t('timelineWindowPresetNext30')}
           </Button>
           <Button
@@ -1456,7 +1424,7 @@ export function ProjectDeliveryTimeline({
           variant="secondary"
           className="!px-2.5"
           disabled={!canZoomOut}
-          onClick={() => zoomWindow('out')}
+          onClick={() => zoomBy('out')}
           title={t('timelineZoomOut')}
           aria-label={t('timelineZoomOut')}
         >
@@ -1467,7 +1435,7 @@ export function ProjectDeliveryTimeline({
           variant="secondary"
           className="!px-2.5"
           disabled={!canZoomIn}
-          onClick={() => zoomWindow('in')}
+          onClick={() => zoomBy('in')}
           title={t('timelineZoomIn')}
           aria-label={t('timelineZoomIn')}
         >
@@ -1477,8 +1445,7 @@ export function ProjectDeliveryTimeline({
           type="button"
           variant="secondary"
           className="!px-2.5"
-          disabled={!windowRange.from && !windowRange.to}
-          onClick={clearWindow}
+          onClick={resetView}
           title={t('timelineResetView')}
           aria-label={t('timelineResetView')}
         >
@@ -1495,28 +1462,39 @@ export function ProjectDeliveryTimeline({
         >
           <GridIcon active={showGrid} />
         </Button>
-        <TimelineHintHelp
-          onResetPositions={resetOffsets}
-          canReset={hasCustomOffsets}
-        />
+        <TimelineHintHelp onResetPositions={resetOffsets} canReset={hasCustomOffsets} />
       </div>
 
-      <div className="kh-ops-panel kh-ops-timeline-scroll">
-        <div className="kh-ops-timeline-chart">
+      <div ref={scrollRef} className="kh-ops-panel kh-ops-timeline-scroll">
+        <div
+          ref={chartRef}
+          className={cn('kh-ops-timeline-chart', panning && 'is-panning')}
+          data-zoom-level={TIMELINE_ZOOM_LEVELS[zoomIndex]?.id ?? 'month'}
+          style={
+            {
+              '--kh-timeline-days': rangeDays,
+              '--kh-timeline-px': timelineZoomPx,
+            } as CSSProperties
+          }
+          onPointerDown={onPanPointerDown}
+          onPointerMove={onPanPointerMove}
+          onPointerUp={onPanPointerUp}
+          onPointerCancel={onPanPointerUp}
+        >
           <div className="relative mb-2 h-6">
             {labelTicks.map((tick) => (
               <div
                 key={tick}
-                className="absolute top-0 -translate-x-1/2 text-[11px] text-ink-muted"
-                style={markerStyle(tick)}
+                className="absolute top-0 whitespace-nowrap text-[11px] text-ink-muted"
+                style={tickLabelStyle(tick)}
               >
                 {tick}
               </div>
             ))}
             {showGrid && todayInRange ? (
               <div
-                className="absolute bottom-0 -translate-x-1/2 text-[10px] font-semibold leading-none text-danger"
-                style={markerStyle(todayDate)}
+                className="absolute bottom-0 whitespace-nowrap text-[10px] font-semibold leading-none text-danger"
+                style={tickLabelStyle(todayDate)}
               >
                 {t('timelineToday')}
               </div>
@@ -1525,10 +1503,7 @@ export function ProjectDeliveryTimeline({
 
           <div className="relative">
             {showGrid ? (
-              <div
-                className="pointer-events-none absolute inset-0 z-0"
-                aria-hidden
-              >
+              <div className="pointer-events-none absolute inset-0 z-0" aria-hidden>
                 {gridTicks.map((tick) => (
                   <div
                     key={`grid:${tick}`}
@@ -1550,10 +1525,10 @@ export function ProjectDeliveryTimeline({
             {standaloneStories.map((story) => storyLane(story))}
 
             <div
-              className={cn(
-                'relative z-[1] my-2 overflow-visible',
-                filters.milestones || filters.tasks ? 'h-80 min-h-[20rem]' : 'h-8',
-              )}
+              className="relative z-[1] my-2 overflow-visible"
+              style={{
+                height: filters.milestones || filters.tasks ? markerTrackHeight : 32,
+              }}
             >
               <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-line" />
               {projectStartDate && dateInWindow(projectStartDate) ? (
@@ -1571,12 +1546,12 @@ export function ProjectDeliveryTimeline({
                 />
               ) : null}
 
-              {axisMarkers.map((marker, index) => {
-                const aboveSpine = index % 2 === 0;
-                const kindLabel =
-                  marker.kind === 'milestone'
-                    ? t('kindMilestone')
-                    : t('kindTask');
+              {axisMarkers.map((marker) => {
+                const placement: MarkerLane = markerLanes.get(marker.id) ?? {
+                  lane: 0,
+                  side: 'above',
+                };
+                const kindLabel = marker.kind === 'milestone' ? t('kindMilestone') : t('kindTask');
                 const statusLabel =
                   marker.kind === 'milestone'
                     ? t(`milestoneStatus.${marker.status}`)
@@ -1589,7 +1564,7 @@ export function ProjectDeliveryTimeline({
                     })
                   : null;
                 const offset = offsets[marker.id] ?? { dx: 0, dy: 0 };
-                const baseY = aboveSpine ? -DEFAULT_RIB_Y : DEFAULT_RIB_Y;
+                const baseY = markerBaseY(placement.side, placement.lane);
                 const ribX = offset.dx;
                 const ribY = baseY + offset.dy;
                 const ribLen = Math.max(1, Math.hypot(ribX, ribY));
@@ -1640,9 +1615,7 @@ export function ProjectDeliveryTimeline({
                           tone ? 'opacity-80' : 'text-ink-muted',
                         )}
                       >
-                        {colorByStatus
-                          ? `${kindLabel} · ${statusLabel}`
-                          : kindLabel}
+                        {colorByStatus ? `${kindLabel} · ${statusLabel}` : kindLabel}
                       </span>
                       <span className="block truncate">{marker.title}</span>
                       <ItemMetaRow
@@ -1650,10 +1623,7 @@ export function ProjectDeliveryTimeline({
                         date={marker.date}
                         showIssueIds={showIssueIds}
                         showDueDates={showDueDates}
-                        className={cn(
-                          'mt-0.5 text-[10px]',
-                          tone ? 'opacity-80' : 'text-ink-muted',
-                        )}
+                        className={cn('mt-0.5 text-[10px]', tone ? 'opacity-80' : 'text-ink-muted')}
                       />
                     </DraggableTag>
                     <button
@@ -1681,9 +1651,7 @@ export function ProjectDeliveryTimeline({
             scheduledEpics.length === 0 &&
             standaloneStories.length === 0 &&
             axisMarkers.length === 0 ? (
-              <p className="m-0 py-4 text-center text-sm text-ink-muted">
-                {t('timelineNoBars')}
-              </p>
+              <p className="m-0 py-4 text-center text-sm text-ink-muted">{t('timelineNoBars')}</p>
             ) : null}
           </div>
         </div>
@@ -1693,55 +1661,32 @@ export function ProjectDeliveryTimeline({
       unscheduledStories.length > 0 ||
       unscheduledMilestones.length > 0 ? (
         <div className="kh-ops-panel p-3">
-          <p className="mt-0 mb-2 text-sm font-semibold">
-            {t('timelineUnscheduled')}
-          </p>
+          <p className="mt-0 mb-2 text-sm font-semibold">{t('timelineUnscheduled')}</p>
           <ul className="m-0 grid list-none gap-2 p-0">
             {unscheduledEpics.map((epic) => (
-              <li
-                key={epic.id}
-                className="flex flex-wrap items-center justify-between gap-2"
-              >
+              <li key={epic.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm">
-                  <Badge tone="brand">{epic.humanKey ?? t('kindEpic')}</Badge>{' '}
-                  {epic.title}
+                  <Badge tone="brand">{epic.humanKey ?? t('kindEpic')}</Badge> {epic.title}
                 </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => onManageEpic(epic.id)}
-                >
+                <Button type="button" variant="secondary" onClick={() => onManageEpic(epic.id)}>
                   {t('manage')}
                 </Button>
               </li>
             ))}
             {unscheduledStories.map((story) => (
-              <li
-                key={story.id}
-                className="flex flex-wrap items-center justify-between gap-2"
-              >
+              <li key={story.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm">
-                  <Badge tone="brand">{story.humanKey ?? t('kindStory')}</Badge>{' '}
-                  {story.title}
+                  <Badge tone="brand">{story.humanKey ?? t('kindStory')}</Badge> {story.title}
                 </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => onManageStory(story.id)}
-                >
+                <Button type="button" variant="secondary" onClick={() => onManageStory(story.id)}>
                   {t('manage')}
                 </Button>
               </li>
             ))}
             {unscheduledMilestones.map((milestone) => (
-              <li
-                key={milestone.id}
-                className="flex flex-wrap items-center justify-between gap-2"
-              >
+              <li key={milestone.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm">
-                  <Badge tone="brand">
-                    {milestone.humanKey ?? t('kindMilestone')}
-                  </Badge>{' '}
+                  <Badge tone="brand">{milestone.humanKey ?? t('kindMilestone')}</Badge>{' '}
                   {milestone.title}
                 </span>
                 <Button

@@ -2530,7 +2530,7 @@
     "timelineStatusColors": "Státuszszínek",
     "timelineIssueIds": "ID",
     "timelineWindowLabel": "Időszak",
-    "timelineWindowHint": "Nagyítsd az időtengelyt egy dátumtartományra, hogy a sűrű szakaszok is átláthatóak legyenek. A széleken átnyúló sávok levágva jelennek meg; a tartományon kívüli jelölők el vannak rejtve.",
+    "timelineWindowHint": "Csak az időszakkal átfedő elemek látszanak. A diagram ezen az időszakon görgethető, törléskor a teljes tartományon. A nagyítás csak a léptéket változtatja, a dátumokat nem.",
     "timelineWindowFrom": "Ettől",
     "timelineWindowTo": "Eddig",
     "timelineWindowClear": "Teljes tartomány",
