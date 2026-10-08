@@ -24,6 +24,7 @@ import {
 } from './markdown-blocks.js';
 import { renderStructuredPdf } from './pdf-document.js';
 import {
+  diagramExportCopy,
   exportChromeCopy,
   labelLifecycleStatus,
   labelRecordType,
@@ -243,6 +244,8 @@ const EXPORT_CSS = `
     padding: 8px 0;
   }
   .knowledge-markdown pre.mermaid svg { max-width: 100%; height: auto; }
+  .knowledge-markdown details.mermaid-fallback { margin: 0.9em 0; }
+  .knowledge-markdown details.mermaid-fallback summary { font-weight: 650; }
   /* Fixed layout keeps wide spreadsheet tables inside the printed page box. */
   .knowledge-markdown table {
     width: 100%;
@@ -286,6 +289,67 @@ function absolutizeMediaUrls(html: string, webUrl: string): string {
     .replace(/(src|href)=(["'])(\/media\/[^"']+)\2/g, (_m, attr, q, path) => {
       return `${attr}=${q}${base}${path}${q}`;
     });
+}
+
+/**
+ * Per-diagram mermaid render. A failure becomes a localised disclosure with the
+ * source, never the mermaid error icon. Top-level await: embed in a module script.
+ */
+function mermaidRuntimeScript(failedLabel: string): string {
+  const label = JSON.stringify(failedLabel);
+  return `
+    const failedLabel = ${label};
+    function isMermaidErrorSvg(svg) {
+      return /aria-roledescription="error"|>Syntax error in text</.test(svg);
+    }
+    function mermaidFallback(source) {
+      const details = document.createElement('details');
+      details.className = 'mermaid-fallback';
+      const summary = document.createElement('summary');
+      summary.textContent = failedLabel;
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+      code.textContent = source;
+      pre.appendChild(code);
+      details.appendChild(summary);
+      details.appendChild(pre);
+      return details;
+    }
+    const blocks = Array.from(document.querySelectorAll('pre.mermaid'));
+    try {
+      if (blocks.length > 0) {
+        const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme: 'neutral',
+          suppressErrorRendering: true,
+        });
+        for (const block of blocks) {
+          const source = block.textContent || '';
+          const id = 'khMermaid' + Math.random().toString(36).slice(2);
+          try {
+            const rendered = await mermaid.render(id, source);
+            const svg = rendered && rendered.svg ? rendered.svg : '';
+            if (!svg || isMermaidErrorSvg(svg)) {
+              throw new Error('mermaid-render');
+            }
+            block.innerHTML = svg;
+          } catch (error) {
+            block.replaceWith(mermaidFallback(source));
+            const orphan = document.getElementById(id);
+            if (orphan) orphan.remove();
+          }
+        }
+      }
+    } catch (error) {
+      for (const block of Array.from(document.querySelectorAll('pre.mermaid'))) {
+        const source = block.textContent || '';
+        block.replaceWith(mermaidFallback(source));
+      }
+    }
+    document.documentElement.dataset.exportReady = '1';
+  `;
 }
 
 export async function buildExportHtmlDocument(
@@ -380,13 +444,7 @@ export async function buildExportHtmlDocument(
     </article>
   </div>
   <script type="module">
-    const blocks = document.querySelectorAll('pre.mermaid');
-    if (blocks.length > 0) {
-      const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'neutral' });
-      await mermaid.run({ nodes: Array.from(blocks) });
-    }
-    document.documentElement.dataset.exportReady = '1';
+    ${mermaidRuntimeScript(diagramExportCopy(input.locale).failed)}
   </script>
 </body>
 </html>`;
@@ -690,6 +748,7 @@ export async function renderHtmlDocumentToPdf(input: {
 async function renderMermaidImages(
   sources: string[],
   maxWidthPx: number,
+  failedLabel: string,
 ): Promise<Array<DocxImage | null>> {
   const browser = await getBrowser();
   const page = await browser.newPage();
@@ -707,11 +766,7 @@ async function renderMermaidImages(
         pre.mermaid { display: inline-block; margin: 0 0 24px; padding: 8px; background: #fff; }
       </style></head><body>${blocks}
       <script type="module">
-        const nodes = Array.from(document.querySelectorAll('pre.mermaid'));
-        const mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')).default;
-        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'neutral' });
-        await mermaid.run({ nodes });
-        document.documentElement.dataset.exportReady = '1';
+        ${mermaidRuntimeScript(failedLabel)}
       </script></body></html>`,
       { waitUntil: 'load', timeout: 45_000 },
     );
@@ -744,6 +799,7 @@ async function renderMermaidImages(
 async function embedMermaidDiagrams(
   bodyHtml: string,
   maxWidthPx: number,
+  locale?: string | null,
 ): Promise<string> {
   const sources: string[] = [];
   replaceMermaidBlocks(bodyHtml, (source) => {
@@ -754,16 +810,17 @@ async function embedMermaidDiagrams(
     return bodyHtml;
   }
 
+  const failedLabel = diagramExportCopy(locale).failed;
   let images: Array<DocxImage | null> = [];
   try {
-    images = await renderMermaidImages(sources, maxWidthPx);
+    images = await renderMermaidImages(sources, maxWidthPx, failedLabel);
   } catch {
-    // No Chromium here; the diagram source stays readable as a code block.
+    // No Chromium here; the diagram source stays readable as a disclosure.
   }
 
   return replaceMermaidBlocks(bodyHtml, (source, index) => {
     const image = images[index];
-    return image ? mermaidImageHtml(image) : mermaidFallbackHtml(source);
+    return image ? mermaidImageHtml(image) : mermaidFallbackHtml(source, failedLabel);
   });
 }
 
@@ -781,7 +838,7 @@ export async function buildKnowledgeRecordDocx(
   if (input.webUrl) {
     bodyHtml = absolutizeMediaUrls(bodyHtml, input.webUrl);
   }
-  bodyHtml = await embedMermaidDiagrams(bodyHtml, contentWidthPx);
+  bodyHtml = await embedMermaidDiagrams(bodyHtml, contentWidthPx, input.locale);
   bodyHtml = await inlineImageDataUris(bodyHtml, { cookieHeader: input.cookieHeader });
 
   // Word shell owns letterhead/headers/footers; inject Markdown body only.

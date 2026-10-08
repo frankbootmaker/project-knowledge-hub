@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  diagramExportCopy,
   exportChromeCopy,
   labelLifecycleStatus,
   labelRecordType,
@@ -26,5 +27,15 @@ describe('export-labels', () => {
     expect(exportChromeCopy('en').exported).toBe('Exported');
     expect(exportChromeCopy('de').exported).toBe('Exportiert');
     expect(exportChromeCopy('hu').exported).toBe('Exportálva');
+  });
+
+  it('localizes the mermaid render fallback', () => {
+    expect(diagramExportCopy('en').failed).toBe('Diagram could not be rendered');
+    expect(diagramExportCopy('de').failed).toBe(
+      'Diagramm konnte nicht dargestellt werden',
+    );
+    expect(diagramExportCopy('hu').failed).toBe(
+      'A diagramot nem sikerült megjeleníteni',
+    );
   });
 });
