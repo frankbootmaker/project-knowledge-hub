@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { localeLabels, locales, type AppLocale } from '../i18n/config';
+import { recordBaseWithSlug } from '../lib/record-href';
 
 export type TranslationSibling = {
   id: string;
@@ -21,10 +22,13 @@ function languageLabel(code: string | null | undefined): string {
 /** Server-rendered language chips for translation siblings (2+ members). */
 export async function RecordTranslationSwitcher({
   workspaceSlug,
+  recordBasePath,
   currentRecordId,
   translations,
 }: {
   workspaceSlug: string;
+  /** `.../records/<current slug>`. Sibling chips stay on this base. */
+  recordBasePath?: string;
   currentRecordId: string;
   translations: TranslationSibling[];
 }) {
@@ -45,11 +49,7 @@ export async function RecordTranslationSwitcher({
           const label = languageLabel(code);
           if (active) {
             return (
-              <span
-                key={item.id}
-                className="kh-ops-lang-chip"
-                aria-current="page"
-              >
+              <span key={item.id} className="kh-ops-lang-chip" aria-current="page">
                 {label} ({code})
               </span>
             );
@@ -57,7 +57,11 @@ export async function RecordTranslationSwitcher({
           return (
             <Link
               key={item.id}
-              href={`/workspaces/${workspaceSlug}/records/${item.slug}`}
+              href={
+                recordBasePath
+                  ? recordBaseWithSlug(recordBasePath, item.slug)
+                  : `/workspaces/${workspaceSlug}/records/${item.slug}`
+              }
               className="kh-ops-lang-chip"
               title={item.title}
             >

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { isHeaderShortcutActive, planProjectAnchorClick, PROJECT_SECTIONS } from './project-sections';
 import {
   findActiveNavItem,
+  headerCrumbs,
   inferNavSection,
   isNavItemAvailable,
+  isProjectRecordPath,
   isRailItemActive,
   navItemIdForActiveAnchor,
   resolveActiveNavItem,
@@ -39,6 +41,10 @@ describe('ops nav', () => {
     expect(parseAppPath('/workspaces/platform/projects/new')).toEqual({
       workspaceSlug: 'platform',
       projectSlug: null,
+    });
+    expect(parseAppPath('/workspaces/platform/projects/renewal/records/charter/edit')).toEqual({
+      workspaceSlug: 'platform',
+      projectSlug: 'renewal',
     });
   });
 
@@ -120,6 +126,16 @@ describe('ops nav', () => {
     expect(inferNavSection('/workspaces/platform/projects/imports-team')).toBe('control');
     expect(inferNavSection('/workspaces/platform/projects/archived-sites')).toBe('control');
     expect(inferNavSection('/workspaces/platform/records/note')).toBe('knowledge');
+    expect(
+      inferNavSection(
+        '/workspaces/platform/projects/renewal/records/charter',
+        'project-delivery',
+        '?delivery=scrum',
+      ),
+    ).toBe('control');
+    expect(
+      inferNavSection('/workspaces/platform/projects/renewal/records/charter/history/2'),
+    ).toBe('control');
     expect(inferNavSection('/workspaces/platform/imports')).toBe('knowledge');
     expect(inferNavSection('/workspaces/platform/document-imports/job')).toBe('knowledge');
     expect(inferNavSection('/workspaces/platform/archived')).toBe('knowledge');
@@ -520,5 +536,74 @@ describe('ops nav', () => {
     expect(
       visibleNavSections(navAvailabilityContext('/dashboard', false)).map((section) => section.id),
     ).toEqual(['personal']);
+  });
+
+  it('keeps a nested project record on Linked knowledge, ignoring a stale anchor', () => {
+    const path = '/workspaces/platform/projects/renewal/records/charter';
+    const items = NAV_SECTIONS.flatMap((section) => section.items);
+    const linked = items.find((item) => item.id === 'project-knowledge')!;
+    const baseline = items.find((item) => item.id === 'baseline')!;
+    const library = items.find((item) => item.id === 'knowledge')!;
+    const overview = items.find((item) => item.id === 'overview')!;
+    expect(isProjectRecordPath(path)).toBe(true);
+    expect(isProjectRecordPath(`${path}/edit`)).toBe(true);
+    expect(isProjectRecordPath(`${path}/history/3`)).toBe(true);
+    expect(isProjectRecordPath('/workspaces/platform/records/charter')).toBe(false);
+    expect(matchNavItem(linked, ctx, path, 'project-baseline', '')).toBe(true);
+    expect(matchNavItem(baseline, ctx, path, 'project-baseline', '')).toBe(false);
+    expect(matchNavItem(library, ctx, path)).toBe(false);
+    expect(matchNavItem(overview, ctx, path, '', '')).toBe(false);
+    expect(matchNavItem(linked, ctx, '/workspaces/platform/records/charter')).toBe(false);
+    const active = items.filter((item) =>
+      isRailItemActive(item, ctx, path, 'project-baseline', '', 'project-baseline'),
+    );
+    expect(active.map((item) => item.id)).toEqual(['project-knowledge']);
+    expect(resolveActiveNavItem(ctx, path, 'project-raid', '', 'project-raid')?.id).toBe(
+      'project-knowledge',
+    );
+    expect(findActiveNavItem(ctx, path)?.id).toBe('project-knowledge');
+    expect(navAvailabilityContext(path, false)).toEqual({
+      workspaceSlug: 'platform',
+      projectSlug: 'renewal',
+      isAdmin: false,
+    });
+  });
+
+  it('adds a record crumb on nested project records and falls back to slugs', () => {
+    const path = '/workspaces/platform/projects/renewal/records/charter/history';
+    expect(
+      headerCrumbs(path, {
+        workspaceName: 'Platform',
+        projectName: 'Renewal',
+        recordTitle: 'Project charter',
+      }),
+    ).toEqual([
+      { href: '/workspaces/platform', label: 'Platform' },
+      { href: '/workspaces/platform/projects/renewal', label: 'Renewal' },
+      {
+        href: '/workspaces/platform/projects/renewal/records/charter',
+        label: 'Project charter',
+      },
+    ]);
+    expect(headerCrumbs(path, {})).toEqual([
+      { href: '/workspaces/platform', label: 'platform' },
+      { href: '/workspaces/platform/projects/renewal', label: 'renewal' },
+      {
+        href: '/workspaces/platform/projects/renewal/records/charter',
+        label: 'charter',
+      },
+    ]);
+    expect(
+      headerCrumbs('/workspaces/platform/records/charter', {
+        workspaceName: 'Platform',
+        recordTitle: 'Project charter',
+      }),
+    ).toEqual([{ href: '/workspaces/platform', label: 'Platform' }]);
+    expect(
+      headerCrumbs('/workspaces/platform/projects/renewal', { projectName: 'Renewal' }),
+    ).toEqual([
+      { href: '/workspaces/platform', label: 'platform' },
+      { href: '/workspaces/platform/projects/renewal', label: 'Renewal' },
+    ]);
   });
 });
