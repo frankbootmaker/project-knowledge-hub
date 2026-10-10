@@ -83,9 +83,16 @@ function mockApp(initial: ProjectRow) {
   const db = {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          limit: vi.fn(async () => [stored]),
-        })),
+        where: vi.fn(() => {
+          const rows = () => [stored];
+          return {
+            limit: vi.fn(async () => rows()),
+            then: (
+              resolve: (value: ProjectRow[]) => void,
+              reject?: (reason: unknown) => void,
+            ) => Promise.resolve(rows()).then(resolve, reject),
+          };
+        }),
       })),
     })),
     update: vi.fn(() => ({
