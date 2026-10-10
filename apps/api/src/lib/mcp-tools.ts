@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import {
   knowledgeRecords,
@@ -725,6 +725,183 @@ async function resolveWorkspaceFilter(
   return rows.map((row) => row.id);
 }
 
+type WorkspaceLabel = { id: string; name: string; slug: string };
+
+async function loadWorkspaceLabels(
+  app: FastifyInstance,
+  workspaceIds: Array<string | null>,
+): Promise<Map<string, WorkspaceLabel>> {
+  const ids = [...new Set(workspaceIds.filter((id): id is string => Boolean(id)))];
+  const labels = new Map<string, WorkspaceLabel>();
+  if (ids.length === 0) {
+    return labels;
+  }
+  const rows = await app.database.db
+    .select({
+      id: workspaces.id,
+      name: workspaces.name,
+      slug: workspaces.slug,
+    })
+    .from(workspaces)
+    .where(inArray(workspaces.id, ids));
+  for (const row of rows) {
+    labels.set(row.id, row);
+  }
+  return labels;
+}
+
+function workspacePathFields(
+  labels: Map<string, WorkspaceLabel>,
+  workspaceId: string | null,
+): { workspaceName: string | null; workspaceSlug: string | null } {
+  const label = workspaceId ? labels.get(workspaceId) : undefined;
+  return {
+    workspaceName: label?.name ?? null,
+    workspaceSlug: label?.slug ?? null,
+  };
+}
+
+async function resolveWorkspaceId(
+  app: FastifyInstance,
+  client: McpClientContext,
+  input: { workspaceId?: string; workspaceSlug?: string },
+): Promise<string | undefined> {
+  if (!input.workspaceId && !input.workspaceSlug) {
+    return undefined;
+  }
+  if (input.workspaceSlug) {
+    const [row] = await app.database.db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(
+        and(
+          eq(workspaces.organizationId, client.organizationId),
+          eq(workspaces.slug, input.workspaceSlug),
+          isNull(workspaces.archivedAt),
+        ),
+      )
+      .limit(1);
+    if (!row) {
+      throw new AppError({
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'Workspace not found',
+        statusCode: 404,
+      });
+    }
+    if (input.workspaceId && input.workspaceId !== row.id) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'workspaceId and workspaceSlug refer to different workspaces',
+        statusCode: 400,
+      });
+    }
+    assertWorkspaceAllowed(client, row.id);
+    return row.id;
+  }
+  assertWorkspaceAllowed(client, input.workspaceId!);
+  return input.workspaceId;
+}
+
+async function resolveMcpProject(
+  app: FastifyInstance,
+  client: McpClientContext,
+  input: {
+    projectId?: string;
+    projectSlug?: string;
+    workspaceId?: string;
+    workspaceSlug?: string;
+  },
+): Promise<typeof projects.$inferSelect> {
+  const workspaceId = await resolveWorkspaceId(app, client, input);
+  const projectId = input.projectId?.trim();
+  const projectSlug = input.projectSlug?.trim() || (
+    projectId && !isUuid(projectId) ? projectId : undefined
+  );
+
+  if (projectId && isUuid(projectId)) {
+    const [project] = await app.database.db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, projectId), isNull(projects.archivedAt)))
+      .limit(1);
+    if (!project) {
+      throw new AppError({
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found',
+        statusCode: 404,
+      });
+    }
+    if (workspaceId && project.workspaceId !== workspaceId) {
+      throw new AppError({
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found in that workspace',
+        statusCode: 404,
+      });
+    }
+    assertWorkspaceAllowed(client, project.workspaceId);
+    assertProjectAllowed(client, project.id);
+    return project;
+  }
+
+  if (!projectSlug) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'projectId or projectSlug is required',
+      statusCode: 400,
+    });
+  }
+
+  const allowedIds = workspaceId
+    ? [workspaceId]
+    : await resolveWorkspaceFilter(app, client);
+  const rows = allowedIds.length === 0
+    ? []
+    : await app.database.db
+      .select()
+      .from(projects)
+      .where(
+        and(
+          eq(projects.slug, projectSlug),
+          inArray(projects.workspaceId, allowedIds),
+          isNull(projects.archivedAt),
+        ),
+      );
+  const matches = rows.filter((row) => {
+    try {
+      assertProjectAllowed(client, row.id);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (matches.length === 0) {
+    throw new AppError({
+      code: 'PROJECT_NOT_FOUND',
+      message: 'Project not found',
+      statusCode: 404,
+    });
+  }
+  if (matches.length > 1) {
+    const labels = await loadWorkspaceLabels(
+      app,
+      matches.map((row) => row.workspaceId),
+    );
+    throw new AppError({
+      code: 'PROJECT_SLUG_AMBIGUOUS',
+      message: 'Project slug matches more than one workspace. Pass workspaceSlug.',
+      statusCode: 409,
+      details: {
+        projects: matches.map((row) => ({
+          id: row.id,
+          slug: row.slug,
+          ...workspacePathFields(labels, row.workspaceId),
+        })),
+      },
+    });
+  }
+  return matches[0]!;
+}
+
 /** Tag names in the same shape as search_knowledge (`tags: string[]`). */
 function knowledgeRecordTagNames(
   tagMap: Map<string, Array<{ name: string }>>,
@@ -738,10 +915,13 @@ function knowledgeRecordTagNames(
 function toMcpProject(
   project: typeof projects.$inferSelect,
   pinned: Awaited<ReturnType<typeof loadPinnedRecords>>,
+  workspace: WorkspaceLabel | null,
 ) {
   return {
     id: project.id,
     workspaceId: project.workspaceId,
+    workspaceName: workspace?.name ?? null,
+    workspaceSlug: workspace?.slug ?? null,
     name: project.name,
     slug: project.slug,
     status: project.status,
@@ -792,8 +972,33 @@ export function createMcpToolHandlers(
   ipAddress?: string | null,
 ): McpToolHandlers {
   return {
-    async listProjects({ workspaceId, limit }) {
-      const workspaceIds = await resolveWorkspaceFilter(app, client, workspaceId);
+    async listWorkspaces() {
+      const workspaceIds = await resolveWorkspaceFilter(app, client);
+      if (workspaceIds.length === 0) {
+        return { workspaces: [] };
+      }
+      const rows = await app.database.db
+        .select({
+          id: workspaces.id,
+          name: workspaces.name,
+          slug: workspaces.slug,
+        })
+        .from(workspaces)
+        .where(and(inArray(workspaces.id, workspaceIds), isNull(workspaces.archivedAt)))
+        .orderBy(asc(workspaces.name));
+      return { workspaces: rows };
+    },
+
+    async listProjects({ workspaceId, workspaceSlug, limit }) {
+      const selectedWorkspaceId = await resolveWorkspaceId(app, client, {
+        workspaceId,
+        workspaceSlug,
+      });
+      const workspaceIds = await resolveWorkspaceFilter(
+        app,
+        client,
+        selectedWorkspaceId,
+      );
       if (workspaceIds.length === 0) {
         return { projects: [] };
       }
@@ -810,10 +1015,15 @@ export function createMcpToolHandlers(
           return false;
         }
       });
+      const labels = await loadWorkspaceLabels(
+        app,
+        filtered.map((row) => row.workspaceId),
+      );
       return {
         projects: filtered.map((row) => ({
           id: row.id,
           workspaceId: row.workspaceId,
+          ...workspacePathFields(labels, row.workspaceId),
           name: row.name,
           slug: row.slug,
           status: row.status,
@@ -991,26 +1201,21 @@ export function createMcpToolHandlers(
       return { system };
     },
 
-    async getProject({ projectId }) {
-      const [project] = await app.database.db
-        .select()
-        .from(projects)
-        .where(and(eq(projects.id, projectId), isNull(projects.archivedAt)))
-        .limit(1);
-      if (!project) {
-        throw new AppError({
-          code: 'PROJECT_NOT_FOUND',
-          message: 'Project not found',
-          statusCode: 404,
-        });
-      }
-      assertWorkspaceAllowed(client, project.workspaceId);
-      assertProjectAllowed(client, project.id);
+    async getProject(input: {
+      projectId?: string;
+      projectSlug?: string;
+      workspaceId?: string;
+      workspaceSlug?: string;
+    }) {
+      const project = await resolveMcpProject(app, client, input);
       const pinned = await loadPinnedRecords(app.database, [
         project.charterRecordId,
         project.initialPlanRecordId,
       ]);
-      return { project: toMcpProject(project, pinned) };
+      const labels = await loadWorkspaceLabels(app, [project.workspaceId]);
+      return {
+        project: toMcpProject(project, pinned, labels.get(project.workspaceId) ?? null),
+      };
     },
 
     async updateProjectBaseline(input: {
@@ -1124,7 +1329,14 @@ export function createMcpToolHandlers(
         updated.charterRecordId,
         updated.initialPlanRecordId,
       ]);
-      return { project: toMcpProject(updated, pinned) };
+      const labels = await loadWorkspaceLabels(app, [updated.workspaceId]);
+      return {
+        project: toMcpProject(
+          updated,
+          pinned,
+          labels.get(updated.workspaceId) ?? null,
+        ),
+      };
     },
 
     async moveProject(input: {

@@ -4,7 +4,8 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 
 ## Tools (read)
 
-* `list_projects` / `get_project`
+* `list_workspaces` — id, name, and slug for allowlisted workspaces (ChatGPT: `call_hub_tool`, not a first-class Action)
+* `list_projects` / `get_project` — include `workspaceName` and `workspaceSlug`; accept a workspace or project slug as well as a UUID
 * `list_systems` / `get_system`
 * `list_knowledge_records` / `search_knowledge` / `get_knowledge_record`
 * `get_record_provenance`

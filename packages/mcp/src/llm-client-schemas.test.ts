@@ -42,6 +42,8 @@ describe('llm-client-schemas', () => {
     expect(Object.keys(writePaths).length).toBeLessThanOrEqual(30);
     expect(writePaths['/api/v1/llm/tools/create_project_task']).toBeTruthy();
     expect(writePaths['/api/v1/llm/tools/call_hub_tool']).toBeTruthy();
+    expect(writePaths['/api/v1/llm/tools/list_workspaces']).toBeUndefined();
+    expect(writePaths['/api/v1/llm/tools/list_projects']).toBeTruthy();
     expect(withWrite.info).toMatchObject({ version: '0.2.0' });
     const createPath = writePaths['/api/v1/llm/tools/create_knowledge_record'] as {
       post: {

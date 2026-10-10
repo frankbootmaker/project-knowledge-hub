@@ -756,6 +756,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
 
   // —— Extended tools (Gemini + call_hub_tool; not first-class OpenAPI) ——
   {
+    name: 'list_workspaces',
+    description:
+      'List workspaces this client can access (id, name, slug). Via call_hub_tool on ChatGPT. Requires projects:read.',
+    scope: 'projects:read',
+    body: { type: 'object', properties: {} },
+  },
+  {
     name: 'create_system',
     description:
       'Create a catalogue system (IT resource). Fill itDetails when known. Requires catalogue:write. Via call_hub_tool on ChatGPT.',

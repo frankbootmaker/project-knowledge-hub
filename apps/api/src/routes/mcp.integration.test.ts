@@ -59,6 +59,8 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   let adminCookie = '';
   let organizationId = '';
   let workspaceId = '';
+  let workspaceName = '';
+  let workspaceSlug = '';
   let otherWorkspaceId = '';
   let adminUserId = '';
   let readToken = '';
@@ -114,6 +116,8 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
       throw new Error('workspace missing');
     }
     workspaceId = workspace.id;
+    workspaceName = workspace.name;
+    workspaceSlug = workspace.slug;
 
     const [otherWorkspace] = await database.db
       .insert(workspaces)
@@ -245,6 +249,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     const names = (toolsBody.result?.tools ?? []).map((tool) => tool.name);
     expect(names).toContain('search_knowledge');
     expect(names).toContain('list_projects');
+    expect(names).toContain('list_workspaces');
     expect(names).toContain('list_record_metadata');
     expect(names).toContain('create_knowledge_record');
     expect(names).toContain('update_knowledge_record');
@@ -269,6 +274,81 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(searchBody.result?.isError).toBeFalsy();
     const text = searchBody.result?.content?.[0]?.text ?? '';
     expect(text.toLowerCase()).toContain('bridge');
+  });
+
+  it('returns workspace names and resolves a project by slug', async () => {
+    const created = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        workspaceId,
+        name: 'Path Project',
+        slug: 'path-project',
+      },
+    });
+    expect(created.statusCode).toBe(200);
+
+    const workspacesCall = await mcpCall(app!, readToken, 4, 'tools/call', {
+      name: 'list_workspaces',
+      arguments: {},
+    });
+    const workspacesBody = workspacesCall.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(workspacesBody.result?.isError).toBeFalsy();
+    const workspaceList = JSON.parse(
+      workspacesBody.result?.content?.[0]?.text ?? '{}',
+    ) as { workspaces?: Array<{ id: string; name: string; slug: string }> };
+    expect(workspaceList.workspaces).toEqual([
+      { id: workspaceId, name: workspaceName, slug: workspaceSlug },
+    ]);
+
+    const projectsCall = await mcpCall(app!, readToken, 5, 'tools/call', {
+      name: 'list_projects',
+      arguments: { workspaceSlug, limit: 25 },
+    });
+    const projectsBody = projectsCall.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(projectsBody.result?.isError).toBeFalsy();
+    const projectList = JSON.parse(
+      projectsBody.result?.content?.[0]?.text ?? '{}',
+    ) as {
+      projects?: Array<{
+        slug: string;
+        workspaceName: string | null;
+        workspaceSlug: string | null;
+      }>;
+    };
+    expect(projectList.projects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: 'path-project',
+          workspaceName,
+          workspaceSlug,
+        }),
+      ]),
+    );
+
+    const projectCall = await mcpCall(app!, readToken, 6, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectSlug: 'path-project', workspaceSlug },
+    });
+    const projectBody = projectCall.json() as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    expect(projectBody.result?.isError).toBeFalsy();
+    const detail = JSON.parse(projectBody.result?.content?.[0]?.text ?? '{}') as {
+      project?: { slug: string; workspaceName: string | null; workspaceSlug: string | null };
+    };
+    expect(detail.project).toEqual(
+      expect.objectContaining({
+        slug: 'path-project',
+        workspaceName,
+        workspaceSlug,
+      }),
+    );
   });
 
   it('denies create without knowledge:write scope', async () => {

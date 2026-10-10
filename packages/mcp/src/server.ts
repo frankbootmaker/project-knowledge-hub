@@ -20,7 +20,12 @@ export type McpClientContext = {
 };
 
 export type McpToolHandlers = {
-  listProjects: (input: { workspaceId?: string; limit: number }) => Promise<unknown>;
+  listWorkspaces: () => Promise<unknown>;
+  listProjects: (input: {
+    workspaceId?: string;
+    workspaceSlug?: string;
+    limit: number;
+  }) => Promise<unknown>;
   listSystems: (input: {
     workspaceId?: string;
     projectId?: string;
@@ -67,7 +72,12 @@ export type McpToolHandlers = {
     tags?: string[];
     metadata?: Record<string, unknown> | null;
   }) => Promise<unknown>;
-  getProject: (input: { projectId: string }) => Promise<unknown>;
+  getProject: (input: {
+    projectId?: string;
+    projectSlug?: string;
+    workspaceId?: string;
+    workspaceSlug?: string;
+  }) => Promise<unknown>;
   updateProjectBaseline: (input: {
     projectId: string;
     startDate?: string | null;
@@ -742,16 +752,26 @@ export function createKnowledgeHubMcpServer(
     };
 
   server.tool(
+    'list_workspaces',
+    'List workspaces this client can access (id, name, slug). Not a ChatGPT Action; use call_hub_tool there. Requires projects:read.',
+    {},
+    async () =>
+      wrap('list_workspaces', 'projects:read', () => handlers.listWorkspaces())(),
+  );
+
+  server.tool(
     'list_projects',
-    'List accessible projects in allowed workspaces',
+    'List accessible projects in allowed workspaces. Each project includes workspaceName and workspaceSlug.',
     {
       workspaceId: z.string().uuid().optional(),
+      workspaceSlug: z.string().min(1).max(64).optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
     },
     async (args) =>
       wrap('list_projects', 'projects:read', () =>
         handlers.listProjects({
           workspaceId: args.workspaceId,
+          workspaceSlug: args.workspaceSlug,
           limit: args.limit ?? MCP_MAX_LIST_LIMIT,
         }),
       )(),
@@ -994,6 +1014,8 @@ export function createKnowledgeHubMcpServer(
     project: z.object({
       id: z.string(),
       workspaceId: z.string(),
+      workspaceName: z.string().nullable().optional(),
+      workspaceSlug: z.string().nullable().optional(),
       name: z.string(),
       slug: z.string(),
       status: z.string(),
@@ -1019,8 +1041,13 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id. Returns baseline dates, pinned charter/plan, keyPrefix, budgets, and definitionOfDone (string or null). Money fields (initialBudget, approvedBudget) are JSON numbers.',
-      inputSchema: { projectId: z.string().uuid() },
+        'Get a project by id, or by projectSlug plus workspaceSlug when the slug is shared. Returns workspaceName, workspaceSlug, baseline dates, pinned charter/plan, keyPrefix, budgets, and definitionOfDone (string or null). Money fields (initialBudget, approvedBudget) are JSON numbers.',
+      inputSchema: {
+        projectId: z.string().uuid().optional(),
+        projectSlug: z.string().min(1).max(80).optional(),
+        workspaceId: z.string().uuid().optional(),
+        workspaceSlug: z.string().min(1).max(64).optional(),
+      },
       outputSchema: projectBaselineOutput,
     },
     async (args) =>
