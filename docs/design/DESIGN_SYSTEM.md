@@ -146,7 +146,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-form-grid` / `.kh-ops-field-span` / `.kh-ops-field-row-start` | Dense two-column modal and admin forms. `field-span` takes the whole row; `field-row-start` begins the next row so a date pair stays side by side |
 | `.kh-ops-card-body` / `.kh-ops-card-foot` / `.kh-ops-action-line` | Panel interior padding, card footer, save/test action row |
 | `.kh-ops-setup-grid` / `.kh-ops-setup-card` / `.kh-ops-setup-step` | MCP / AI client setup cards |
-| `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card` | Admin overview setup shortcuts and dashboard search/admin jump tiles (`a.kh-ops-admin-link-card`) |
+| `.kh-ops-admin-link-grid` / `.kh-ops-admin-link-card` | Dashboard search and admin jump tiles (`a.kh-ops-admin-link-card`) |
 | `.kh-ops-danger-zone` / `.kh-ops-danger-copy` | Close-account irreversible panel |
 | `.kh-ops-dropzone` / `.kh-ops-paste-area` / `.kh-ops-narrow-form` | Document dropzone, conversation paste, 840px create forms |
 | `.kh-ops-scope-list` / `.kh-ops-scope-checks` / `.kh-ops-scope-check` | Scope tags and checkbox chips |
@@ -246,6 +246,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-10
 
+* **Admin overview** — Admin → Dashboard shows the 24-hour health strip (API, Postgres, Redis, sessions, backup age), agent usage, and attention badges, then the organization, user, client, and workspace counts. The MCP, email, and SSO setup shortcuts are gone; those screens stay in the admin menu. Full charts stay on Monitoring.
+* **Admin menu order** — The admin rail runs overview, monitoring, audit, Identity, MCP setup, backups, email, brand, templates, then archive.
 * **Identity admin tabs** — Admin → Identity uses `.kh-ops-page-tabs` for Organizations, Users, and SSO. `/admin/organizations`, `/admin/users`, and `/admin/sso` redirect to those tabs. Membership grants stay on MCP setup.
 * **Backups admin tabs** — Admin → Backups & restore uses `.kh-ops-page-tabs` for Backups and Storage. `/admin/storage` redirects to the Storage tab. The admin rail no longer lists Storage separately.
 * **MCP admin tabs** — Admin → MCP setup uses `.kh-ops-page-tabs` (bold body sans, 15px) for Bearer tokens, OAuth, API clients, membership grants, and AI providers. Bearer is the existing wizard and says it issues `kh_` tokens. OAuth holds the resource card and grant list. `/admin/api-clients`, `/admin/ai-providers`, and `/admin/memberships` redirect to those tabs. The admin rail no longer lists those three separately.

@@ -1,17 +1,19 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { AdminOverviewSetupCards } from '../../../components/admin/AdminOverviewSetupCards';
+import { AdminOverviewHealth } from '../../../components/admin/AdminOverviewHealth';
+import type { MonitoringPayload } from '../../../components/admin/monitoring-types';
 import { PageHeader } from '../../../components/ui';
 import { apiFetch } from '../../../lib/session';
 
 export default async function AdminOverviewPage() {
   const t = await getTranslations('admin');
 
-  const [usersRes, clientsRes, workspacesRes, orgsRes] = await Promise.all([
+  const [usersRes, clientsRes, workspacesRes, orgsRes, monitoringRes] = await Promise.all([
     apiFetch('/api/v1/users'),
     apiFetch('/api/v1/api-clients'),
     apiFetch('/api/v1/workspaces'),
     apiFetch('/api/v1/organizations'),
+    apiFetch('/api/v1/admin/monitoring?range=24h'),
   ]);
 
   const userCount = usersRes.ok
@@ -26,6 +28,9 @@ export default async function AdminOverviewPage() {
   const organizationCount = orgsRes.ok
     ? ((await orgsRes.json()) as { organizations: unknown[] }).organizations.length
     : 0;
+  const monitoring = monitoringRes.ok
+    ? ((await monitoringRes.json()) as MonitoringPayload)
+    : null;
 
   const cards = [
     { href: '/admin/identity', label: t('organizationsCard'), count: organizationCount },
@@ -41,6 +46,7 @@ export default async function AdminOverviewPage() {
         title={t('title')}
         description={t('overviewBlurb')}
       />
+      <AdminOverviewHealth monitoring={monitoring} />
       <div className="kh-ops-health-grid" data-cols="4">
         {cards.map((card) => (
           <Link key={card.href} href={card.href} className="kh-ops-health-card">
@@ -49,7 +55,7 @@ export default async function AdminOverviewPage() {
           </Link>
         ))}
       </div>
-      <AdminOverviewSetupCards />
     </div>
   );
 }
+
