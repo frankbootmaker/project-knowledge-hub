@@ -94,7 +94,6 @@ export type NavItemId =
   | 'reports'
   | 'admin-overview'
   | 'admin-monitoring'
-  | 'admin-storage'
   | 'admin-backups'
   | 'admin-mcp'
   | 'admin-brand'
@@ -325,13 +324,6 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         labelKey: 'adminMcp',
         adminOnly: true,
         href: () => '/admin/mcp-setup',
-      },
-      {
-        id: 'admin-storage',
-        icon: 'storage',
-        labelKey: 'adminStorage',
-        adminOnly: true,
-        href: () => '/admin/storage',
       },
       {
         id: 'admin-backups',
@@ -604,7 +596,7 @@ export function matchNavItem(
     return pathname === '/admin';
   }
   if (item.id === 'admin-backups') {
-    return pathname.startsWith('/admin/backups');
+    return pathname.startsWith('/admin/backups') || pathname.startsWith('/admin/storage');
   }
   if (item.id === 'admin-monitoring') {
     return pathname.startsWith('/admin/monitoring');

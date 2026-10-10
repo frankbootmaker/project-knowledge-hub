@@ -1,6 +1,16 @@
 import { getTranslations } from 'next-intl/server';
+import {
+  BackupAdminTabs,
+  parseBackupAdminTab,
+} from '../../../../components/admin/BackupAdminTabs';
 import { BackupsAdmin } from '../../../../components/admin/BackupsAdmin';
+import {
+  StorageSettingsAdmin,
+  type BlobUsageSummary,
+  type PublicBlobSettings,
+} from '../../../../components/admin/StorageSettingsAdmin';
 import { type MonitoringPayload } from '../../../../components/admin/monitoring-types';
+import { PageHeader } from '../../../../components/ui';
 import { apiFetch } from '../../../../lib/session';
 
 const emptyPayload = (loadError: string): MonitoringPayload => ({
@@ -77,8 +87,42 @@ const emptyPayload = (loadError: string): MonitoringPayload => ({
   },
 });
 
-export default async function AdminBackupsPage() {
+export default async function AdminBackupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const t = await getTranslations('admin');
+  const params = await searchParams;
+  const tab = parseBackupAdminTab(params.tab);
+
+  return (
+    <div>
+      <PageHeader title={t('backupsPageTitle')} description={t('backupsHubBlurb')} />
+      <BackupAdminTabs
+        active={tab}
+        label={t('backupsTabsLabel')}
+        labels={{
+          backups: t('backupsTabBackups'),
+          storage: t('storage'),
+        }}
+      />
+      {tab === 'storage' ? (
+        <StoragePane />
+      ) : (
+        <BackupsPane title={t('backupsPageTitle')} description={t('backupsPageBlurb')} />
+      )}
+    </div>
+  );
+}
+
+async function BackupsPane({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   const response = await apiFetch('/api/v1/admin/monitoring?range=24h');
   let payload: MonitoringPayload;
   if (response.ok) {
@@ -97,9 +141,46 @@ export default async function AdminBackupsPage() {
 
   return (
     <BackupsAdmin
-      title={t('backupsPageTitle')}
-      description={t('backupsPageBlurb')}
+      showHeader={false}
+      title={title}
+      description={description}
       initial={payload}
     />
+  );
+}
+
+const emptyStorageSettings: PublicBlobSettings = {
+  provider: 'disabled',
+  backupOffsite: true,
+  s3Bucket: '',
+  s3Region: 'auto',
+  s3Endpoint: '',
+  s3ForcePathStyle: false,
+  keyPrefix: 'development',
+  hasAccessKeyId: false,
+  hasSecretAccessKey: false,
+  source: 'env',
+  effectiveProvider: 'disabled',
+  envProvider: 'disabled',
+};
+
+async function StoragePane() {
+  const t = await getTranslations('admin');
+  const response = await apiFetch('/api/v1/admin/storage-settings');
+  const payload = response.ok
+    ? ((await response.json()) as {
+        settings: PublicBlobSettings;
+        usage?: BlobUsageSummary;
+      })
+    : null;
+
+  return (
+    <div className="grid gap-4">
+      <p className="m-0 text-sm text-ink-muted">{t('storageSettingsPageBlurb')}</p>
+      <StorageSettingsAdmin
+        initialSettings={payload?.settings ?? emptyStorageSettings}
+        initialUsage={payload?.usage ?? null}
+      />
+    </div>
   );
 }

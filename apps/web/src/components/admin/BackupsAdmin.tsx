@@ -123,10 +123,12 @@ export function BackupsAdmin({
   title,
   description,
   initial,
+  showHeader = true,
 }: {
   title: string;
   description: string;
   initial: MonitoringPayload;
+  showHeader?: boolean;
 }) {
   const t = useTranslations('admin');
   const tCommon = useTranslations('common');
@@ -457,40 +459,42 @@ export function BackupsAdmin({
     604800: t('monitoringSchedule7d'),
   } as const;
 
+  const backupActions = (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={pending}
+        onClick={() => void refresh()}
+      >
+        {t('monitoringRefresh')}
+      </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={pending}
+        onClick={() => void runExport()}
+      >
+        {t('monitoringExportNow')}
+      </Button>
+      <Button type="button" disabled={pending} onClick={() => setImportOpen(true)}>
+        {t('monitoringImportOpen')}
+      </Button>
+    </>
+  );
+
   return (
     <div className="grid gap-3">
-      <PageHeader
-        eyebrow={t('backupsEyebrow')}
-        title={title}
-        description={description}
-        actions={
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={() => void refresh()}
-            >
-              {t('monitoringRefresh')}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={() => void runExport()}
-            >
-              {t('monitoringExportNow')}
-            </Button>
-            <Button
-              type="button"
-              disabled={pending}
-              onClick={() => setImportOpen(true)}
-            >
-              {t('monitoringImportOpen')}
-            </Button>
-          </>
-        }
-      />
+      {showHeader ? (
+        <PageHeader
+          eyebrow={t('backupsEyebrow')}
+          title={title}
+          description={description}
+          actions={backupActions}
+        />
+      ) : (
+        <div className="flex flex-wrap justify-end gap-2">{backupActions}</div>
+      )}
 
       {data.loadError ? (
         <div className="kh-ops-status-row" role="alert">
