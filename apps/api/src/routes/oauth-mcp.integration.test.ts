@@ -383,6 +383,30 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
     expect(blocked.statusCode).toBe(401);
   });
 
+  it('lets a system admin consent to a workspace they do not belong to', async () => {
+    const [extra] = await database!.db
+      .insert(workspaces)
+      .values({
+        organizationId,
+        name: 'Admin visible',
+        slug: `oauth-admin-${randomUUID()}`,
+      })
+      .returning();
+    const { txn } = await authorize('knowledge:read');
+    const consent = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/oauth/consent',
+      headers: { cookie, origin: 'http://localhost:3100' },
+      payload: {
+        txn,
+        scopes: ['knowledge:read'],
+        allowedWorkspaceIds: [extra!.id],
+      },
+    });
+    expect(consent.statusCode).toBe(200);
+    expect((consent.json() as { redirectTo: string }).redirectTo).toContain('code=');
+  });
+
   it('disabling OAuth leaves bearer /mcp usable, and closing the user stops a grant', async () => {
     const client = await app!.inject({
       method: 'POST',

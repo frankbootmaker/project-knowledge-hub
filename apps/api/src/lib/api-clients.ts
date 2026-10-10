@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, gt } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, gt } from 'drizzle-orm';
 import { createSessionToken, hashSessionToken } from '@project-knowledge-hub/auth';
 import {
   apiClients,
@@ -127,8 +127,10 @@ export function assertWriteClientConfig(input: {
 }
 
 /**
- * Ensure every workspace id is an active membership of the user and return
- * the organization id (all workspaces must share one org).
+ * Ensure the user can grant every workspace and return the organization id.
+ * System administrators may include any active workspace they can open, the
+ * same as bearer API clients. Other users must be members. All workspaces
+ * must belong to one organization.
  */
 export async function assertUserMemberOfWorkspaces(
   database: Database,
@@ -144,26 +146,43 @@ export async function assertUserMemberOfWorkspaces(
   }
 
   const uniqueIds = [...new Set(workspaceIds)];
-  const rows = await database.db
-    .select({
-      workspaceId: workspaces.id,
-      organizationId: workspaces.organizationId,
-    })
-    .from(memberships)
-    .innerJoin(workspaces, eq(memberships.workspaceId, workspaces.id))
-    .where(
-      and(
-        eq(memberships.userId, userId),
-        isNull(workspaces.archivedAt),
-      ),
-    );
+  const [user] = await database.db
+    .select({ isSystemAdmin: users.isSystemAdmin })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  const rows = user?.isSystemAdmin
+    ? await database.db
+        .select({
+          workspaceId: workspaces.id,
+          organizationId: workspaces.organizationId,
+        })
+        .from(workspaces)
+        .where(and(inArray(workspaces.id, uniqueIds), isNull(workspaces.archivedAt)))
+    : await database.db
+        .select({
+          workspaceId: workspaces.id,
+          organizationId: workspaces.organizationId,
+        })
+        .from(memberships)
+        .innerJoin(workspaces, eq(memberships.workspaceId, workspaces.id))
+        .where(
+          and(
+            eq(memberships.userId, userId),
+            inArray(workspaces.id, uniqueIds),
+            isNull(workspaces.archivedAt),
+          ),
+        );
 
   const byId = new Map(rows.map((row) => [row.workspaceId, row.organizationId]));
   const missing = uniqueIds.filter((id) => !byId.has(id));
   if (missing.length > 0) {
     throw new AppError({
       code: 'WORKSPACE_ACCESS_DENIED',
-      message: 'You must be a member of every workspace in the allowlist',
+      message: user?.isSystemAdmin
+        ? 'One or more workspaces are missing or archived'
+        : 'You must be a member of every workspace in the allowlist',
       statusCode: 403,
     });
   }

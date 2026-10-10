@@ -97,7 +97,7 @@ The badge says **Live** only when the key parses and the switch is on. Copy the 
 
 In the ChatGPT plugin or Codex connector, paste the resource URL. There is no API key.
 
-The person approving access signs in with their normal KnowHub account. They land on `/oauth/consent`, choose workspaces and scopes, and the grant is stored. Read scopes start checked. Write scopes start unchecked and require at least one workspace. System users cannot consent.
+The person approving access signs in with their normal KnowHub account. They land on `/oauth/consent`, choose workspaces and scopes, and the grant is stored. Read scopes start checked. Write scopes start unchecked and require at least one workspace. A system administrator can include any active workspace in one organization, including workspaces where they have no membership. The grant stays limited to the workspaces and scopes they select. System users cannot consent.
 
 After consent:
 
