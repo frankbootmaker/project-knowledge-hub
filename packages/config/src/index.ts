@@ -106,6 +106,20 @@ export const envSchema = z.object({
   SESSION_SECRET: z.string().min(32),
   SESSION_COOKIE_NAME: z.string().min(1).default('kh_session'),
   SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24),
+  /**
+   * PKCS#8 PEM used to sign /mcp/oauth access tokens.
+   * Absent or empty leaves the OAuth resource disabled until an admin also enables it.
+   */
+  OAUTH_JWT_PRIVATE_KEY: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  OAUTH_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
+  OAUTH_REFRESH_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(30 * 24 * 60 * 60),
   BOOTSTRAP_ADMIN_EMAIL: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().email().optional(),

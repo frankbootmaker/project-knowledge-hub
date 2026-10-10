@@ -35,6 +35,7 @@ import { registerMailSettingsRoutes } from './routes/mail-settings.js';
 import { registerOidcSettingsRoutes } from './routes/oidc-settings.js';
 import { registerBrandSettingsRoutes } from './routes/brand-settings.js';
 import { registerMcpRoutes } from './routes/mcp.js';
+import { registerOauthMcpRoutes } from './routes/oauth-mcp.js';
 import { registerMcpSetupRoutes } from './routes/mcp-setup.js';
 import { registerMembershipRoutes } from './routes/memberships.js';
 import { registerMonitoringRoutes } from './routes/monitoring.js';
@@ -251,6 +252,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerAuditRoutes(app);
   await registerMcpSetupRoutes(app);
   await registerLlmOpenApiRoutes(app);
+  await registerOauthMcpRoutes(app);
   await registerMcpRoutes(app);
 
   return app;

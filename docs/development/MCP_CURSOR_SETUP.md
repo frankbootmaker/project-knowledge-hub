@@ -95,7 +95,7 @@ Tool names match MCP (`search_knowledge`, `get_knowledge_record`, …). The Open
 ChatGPT’s normal client does **not** use MCP. Wire Knowledge Hub as a **Custom GPT → Action** (Plus / Team / Enterprise). Verified on the Dokploy Dev host with both read and write (`knowledge:write`) creating draft knowledge records.
 
 **User FAQ (setup, how to work, moving older chats into the hub):**  
-[`docs/product/CHATGPT_CUSTOM_GPT_FAQ.md`](product/CHATGPT_CUSTOM_GPT_FAQ.md) — keep the Custom GPT path for now; normal-chat `@` / MCP App is backlog NF-004.
+[`docs/product/CHATGPT_CUSTOM_GPT_FAQ.md`](product/CHATGPT_CUSTOM_GPT_FAQ.md) — Custom GPT Actions stay on OpenAPI + Bearer. ChatGPT plugins and Codex use `/mcp/oauth`.
 
 1. **Token** — Account → **AI connections** (`/account/ai-connections`): setup wizard → ChatGPT → create client (include `knowledge:write` if the GPT should create/update drafts). Copy the bearer token once.  
    System admins may instead use Admin → **LLM / MCP setup** (`/admin/mcp-setup`). Pairing under AI connections remains optional for agents that speak `/ai-discover`.

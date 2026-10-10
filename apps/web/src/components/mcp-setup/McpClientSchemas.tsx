@@ -6,6 +6,7 @@ import {
   buildAntigravityMcpConfig,
   buildAntigravitySetupSteps,
   buildChatGptActionsMeta,
+  buildChatGptOauthMeta,
   buildClaudeAiConnectorMeta,
   buildClaudeMcpConfig,
   buildClaudeSetupSteps,
@@ -136,6 +137,11 @@ function panesForClient(
             openApiUrl: meta.openApiUrl,
             authorizationHeader: meta.authHeader,
           }),
+        },
+        {
+          id: 'chatgpt-oauth',
+          labelKey: 'mcpWizardSchema_chatgptOauth',
+          value: stringifySchema(buildChatGptOauthMeta(options)),
         },
       ];
     }

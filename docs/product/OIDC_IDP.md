@@ -17,7 +17,7 @@
 * Multiple simultaneous OIDC issuers in one UI.
 * Authentik group → workspace role mapping.
 * Azure Blob / AWS IAM cloud credentials (NF-007) — human SSO is separate from storage auth.
-* ChatGPT MCP OAuth (NF-004).
+* ChatGPT / Codex MCP OAuth. That is a separate authorization server (`/mcp/oauth`, `oauth_mcp_config`), not this human OIDC client. Admin → SSO does not issue MCP tokens.
 
 ## Provisioning
 

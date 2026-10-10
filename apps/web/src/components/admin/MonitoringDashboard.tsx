@@ -328,6 +328,11 @@ export function MonitoringDashboard({
               <Badge tone={data.attention.pendingApiClients > 0 ? 'warn' : 'neutral'}>
                 {t('monitoringPendingClients', { count: data.attention.pendingApiClients })}
               </Badge>
+              <Badge tone="neutral">
+                {t('monitoringActiveOauthGrants', {
+                  count: data.attention.activeOauthGrants ?? 0,
+                })}
+              </Badge>
               <Badge tone={data.attention.staleBackup ? 'warn' : 'success'}>
                 {data.attention.staleBackup
                   ? t('monitoringStaleBackup', {

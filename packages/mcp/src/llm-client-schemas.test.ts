@@ -12,6 +12,8 @@ import {
   buildLlmOpenApiDocument,
   findLlmTool,
   llmOpenApiUrlFromMcpUrl,
+  oauthProtectedResourceMetadataUrl,
+  oauthResourceUrlFromMcpUrl,
 } from './llm-client-schemas.js';
 
 const opts = {
@@ -20,6 +22,15 @@ const opts = {
 };
 
 describe('llm-client-schemas', () => {
+  it('derives the OAuth resource beside the bearer MCP URL', () => {
+    expect(oauthResourceUrlFromMcpUrl(opts.mcpUrl)).toBe(
+      'https://knowledge.example.com/mcp/oauth',
+    );
+    expect(oauthProtectedResourceMetadataUrl(oauthResourceUrlFromMcpUrl(opts.mcpUrl))).toBe(
+      'https://knowledge.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+    );
+  });
+
   it('derives API base and OpenAPI URL from MCP URL', () => {
     expect(apiBaseFromMcpUrl(opts.mcpUrl)).toBe('https://knowledge.example.com');
     expect(llmOpenApiUrlFromMcpUrl(opts.mcpUrl)).toBe(

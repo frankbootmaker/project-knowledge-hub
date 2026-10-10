@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { defaultLocale, isAppLocale, localeCookieName } from './i18n/config';
+import { oauthProxyAction } from './lib/oauth-discovery';
 
 const publicPaths = [
   '/login',
@@ -8,21 +9,27 @@ const publicPaths = [
   '/forgot-password',
   '/set-password',
   '/ai-discover',
+  '/oauth/consent',
 ];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // OAuth discovery probes (mcp-remote, Claude, etc.) must not get a login HTML
-  // redirect — that yields "Unexpected token '<'" during initialize.
-  if (pathname.startsWith('/.well-known/')) {
+  const discovery = oauthProxyAction(pathname);
+  if (discovery === 'json-404') {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
   // API and MCP are proxied to Fastify; never treat them as page routes.
   // Without this, unauthenticated POST /mcp gets a 307 to /login and MCP clients
   // (Cursor, Antigravity, etc.) fail with "initialize" EOF.
-  if (pathname.startsWith('/api/') || pathname === '/mcp' || pathname.startsWith('/mcp/')) {
+  if (
+    discovery === 'discovery'
+    || discovery === 'oauth-api'
+    || pathname.startsWith('/api/')
+    || pathname === '/mcp'
+    || pathname.startsWith('/mcp/')
+  ) {
     const headers = new Headers(request.headers);
     // Next's HTTP rewrite to nd-api overwrites x-forwarded-proto to http.
     // Stamp the public browser origin so CSRF can match preview domains.

@@ -245,6 +245,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-10
 
+* **MCP OAuth** — Admin → MCP setup shows an OAuth resource card (plugin URL, enable switch, redirect and client allowlists, scope ceiling). Admin → API clients and Account → AI connections list OAuth grants with revoke. The consent page at `/oauth/consent` uses the same form controls. Bearer MCP setup is unchanged.
+
 * **MCP setup** — Configure step adds an unchecked **Include platform status** checkbox (`monitoring:read`) on the account and admin wizards. Read, write, delivery, and catalogue bundles stay unchanged.
 
 ### 2026-10-07

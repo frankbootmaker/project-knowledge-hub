@@ -351,6 +351,13 @@
       "when": 1790812800000,
       "tag": "0049_ai_token_rate_breakdown",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0050_oauth_mcp_grants",
+      "breakpoints": true
     }
   ]
 }

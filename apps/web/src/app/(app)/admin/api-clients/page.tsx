@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { OauthGrantsList, type OauthGrantRow } from '../../../../components/admin/OauthGrantsList';
 import {
   ApiClientsAdmin,
   type PublicApiClient,
@@ -9,11 +10,12 @@ import { apiFetch } from '../../../../lib/session';
 export default async function AdminApiClientsPage() {
   const t = await getTranslations('admin');
 
-  const [clientsRes, orgsRes, workspacesRes, usersRes] = await Promise.all([
+  const [clientsRes, orgsRes, workspacesRes, usersRes, grantsRes] = await Promise.all([
     apiFetch('/api/v1/api-clients'),
     apiFetch('/api/v1/organizations'),
     apiFetch('/api/v1/workspaces'),
     apiFetch('/api/v1/users'),
+    apiFetch('/api/v1/oauth/grants'),
   ]);
 
   const clients = clientsRes.ok
@@ -39,6 +41,12 @@ export default async function AdminApiClientsPage() {
         users: Array<{ id: string; email: string; displayName: string }>;
       }).users
     : [];
+  const grants = grantsRes.ok
+    ? ((await grantsRes.json()) as { grants: OauthGrantRow[] }).grants
+    : [];
+  const workspaceNames = Object.fromEntries(
+    workspaces.map((workspace) => [workspace.id, workspace.name]),
+  );
 
   return (
     <div>
@@ -49,6 +57,16 @@ export default async function AdminApiClientsPage() {
         workspaces={workspaces}
         users={users}
       />
+      <div className="mt-8">
+        <OauthGrantsList
+          grants={grants}
+          workspaceNames={workspaceNames}
+          showUser
+          title={t('oauthGrantsTitle')}
+          blurb={t('oauthGrantsBlurb')}
+          revokeBase="/api/v1/oauth/grants"
+        />
+      </div>
     </div>
   );
 }

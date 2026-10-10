@@ -414,6 +414,90 @@ export const apiClients = pgTable(
   ],
 );
 
+/** One-time OAuth authorization codes for the /mcp/oauth resource. */
+export const oauthAuthorizationCodes = pgTable(
+  'oauth_authorization_codes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    codeHash: text('code_hash').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    clientId: text('client_id').notNull(),
+    redirectUri: text('redirect_uri').notNull(),
+    resource: text('resource').notNull(),
+    scopes: jsonb('scopes').$type<string[]>().notNull(),
+    allowedWorkspaceIds: jsonb('allowed_workspace_ids').$type<string[]>().notNull(),
+    allowedProjectIds: jsonb('allowed_project_ids').$type<string[]>().notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('oauth_authorization_codes_code_hash_uidx').on(table.codeHash),
+    index('oauth_authorization_codes_user_id_idx').on(table.userId),
+  ],
+);
+
+/** Per-user consent for ChatGPT/Codex. Not an api_clients bearer token. */
+export const oauthGrants = pgTable(
+  'oauth_grants',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    clientId: text('client_id').notNull(),
+    resource: text('resource').notNull(),
+    scopes: jsonb('scopes').$type<string[]>().notNull(),
+    allowedWorkspaceIds: jsonb('allowed_workspace_ids').$type<string[]>().notNull(),
+    allowedProjectIds: jsonb('allowed_project_ids').$type<string[]>().notNull(),
+    status: text('status').notNull().default('active'),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }),
+    refreshExpiresAt: timestamp('refresh_expires_at', { withTimezone: true, mode: 'date' }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('oauth_grants_user_id_idx').on(table.userId),
+    index('oauth_grants_organization_id_idx').on(table.organizationId),
+    index('oauth_grants_status_idx').on(table.status),
+  ],
+);
+
+export const oauthRefreshTokens = pgTable(
+  'oauth_refresh_tokens',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    grantId: uuid('grant_id')
+      .notNull()
+      .references(() => oauthGrants.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: text('token_prefix').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+    rotatedFromId: uuid('rotated_from_id'),
+    revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('oauth_refresh_tokens_token_hash_uidx').on(table.tokenHash),
+    index('oauth_refresh_tokens_grant_id_idx').on(table.grantId),
+  ],
+);
+
 export const tags = pgTable(
   'tags',
   {

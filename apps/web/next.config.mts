@@ -89,6 +89,30 @@ const nextConfig: NextConfig = {
         source: '/mcp/:path*',
         destination: `${apiUrl}/mcp/:path*`,
       },
+      {
+        source: '/.well-known/oauth-authorization-server',
+        destination: `${apiUrl}/.well-known/oauth-authorization-server`,
+      },
+      {
+        source: '/.well-known/oauth-protected-resource/mcp/oauth',
+        destination: `${apiUrl}/.well-known/oauth-protected-resource/mcp/oauth`,
+      },
+      {
+        source: '/oauth/authorize',
+        destination: `${apiUrl}/oauth/authorize`,
+      },
+      {
+        source: '/oauth/token',
+        destination: `${apiUrl}/oauth/token`,
+      },
+      {
+        source: '/oauth/userinfo',
+        destination: `${apiUrl}/oauth/userinfo`,
+      },
+      {
+        source: '/oauth/jwks',
+        destination: `${apiUrl}/oauth/jwks`,
+      },
     ];
   },
 };

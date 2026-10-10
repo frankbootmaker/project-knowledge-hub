@@ -227,6 +227,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
       },
     });
     expect(response.statusCode).toBe(401);
+    expect(response.headers['www-authenticate']).toBeUndefined();
   });
 
   it('lists tools and searches knowledge via MCP', async () => {

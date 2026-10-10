@@ -13,6 +13,16 @@
 * Scopes + optional workspace/project allowlists
 * Optional `acting_user_id` (required for `knowledge:write`)
 
+## OAuth resource (`/mcp/oauth`)
+
+ChatGPT plugins and Codex use a second MCP URL. `/mcp` stays bearer-only for Cursor, Claude, Antigravity, Copilot, and OpenWebUI.
+
+* KnowHub is the OAuth 2.1 authorization server (authorization code, PKCE S256, CIMD, refresh tokens). Human Authentik login only establishes the `kh_session` used on the consent page.
+* Grants live in `oauth_grants`, not `api_clients`. Access tokens are short-lived JWTs whose `aud` is `https://<host>/mcp/oauth`.
+* Discovery is path-scoped: `/.well-known/oauth-protected-resource/mcp/oauth`. The root `/.well-known/oauth-protected-resource` stays a JSON 404.
+* The resource is off until `OAUTH_JWT_PRIVATE_KEY` is set and an admin enables it on **Admin → MCP setup**. Revoke grants from **Admin → API clients** or **Account → AI connections**.
+* Audit actor type is `oauth_grant`. Closing a user revokes that user's grants.
+
 ## User setup wizard
 
 Signed-in members use **Account → AI connections** (`/account/ai-connections`):
@@ -40,7 +50,7 @@ Pending rows use `api_clients.status = pending_approval` with null token until a
 
 This pairing protocol is **optional / advanced** — mainstream clients (Cursor, ChatGPT, OpenWebUI, …) should use the Account or Admin setup wizard and paste Bearer configs.
 
-**ChatGPT note:** Custom GPT **Actions** (OpenAPI + Bearer) work only inside that GPT. Normal-chat / `@` tool use needs a separate **ChatGPT MCP App** (see backlog **NF-004**). ChatGPT does not implement `/ai-discover` pairing; teaching it via GPT instructions or a Custom GPT Action wrapper is brittle and is not a substitute for NF-004.
+**ChatGPT note:** Custom GPT **Actions** (OpenAPI + Bearer) still work inside that GPT. ChatGPT plugins and Codex use `/mcp/oauth` (OAuth 2.1). They do not accept a pasted `kh_` token. ChatGPT does not implement `/ai-discover` pairing.
 
 ## Scopes
 

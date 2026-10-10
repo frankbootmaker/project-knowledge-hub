@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import {
   apiClients,
   conversationImports,
@@ -7,6 +7,8 @@ import {
   knowledgeRecordDeliveryLinks,
   knowledgeRecordVersions,
   knowledgeRecords,
+  oauthGrants,
+  oauthRefreshTokens,
   projectChangeDeliveryLinks,
   projectChangeItems,
   projectEpics,
@@ -111,6 +113,27 @@ export async function closeUserAccount(
     .update(sessions)
     .set({ revokedAt: new Date() })
     .where(and(eq(sessions.userId, existing.id), isNull(sessions.revokedAt)));
+
+  const grantRows = await database.db
+    .select({ id: oauthGrants.id })
+    .from(oauthGrants)
+    .where(eq(oauthGrants.userId, existing.id));
+  const grantIds = grantRows.map((row) => row.id);
+  if (grantIds.length > 0) {
+    await database.db
+      .update(oauthRefreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          inArray(oauthRefreshTokens.grantId, grantIds),
+          isNull(oauthRefreshTokens.revokedAt),
+        ),
+      );
+  }
+  await database.db
+    .update(oauthGrants)
+    .set({ status: 'revoked', revokedAt: new Date() })
+    .where(and(eq(oauthGrants.userId, existing.id), isNull(oauthGrants.revokedAt)));
 
   await deleteAvatarFile(input.avatarUploadDir, existing.id, {
     blobStore: input.blobStore,

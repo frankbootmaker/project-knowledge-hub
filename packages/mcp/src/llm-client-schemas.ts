@@ -27,6 +27,38 @@ export function llmOpenApiUrlFromMcpUrl(mcpUrl: string): string {
   return `${apiBaseFromMcpUrl(mcpUrl)}/api/v1/llm/openapi.json`;
 }
 
+/** Bearer MCP URL `…/mcp` becomes the OAuth resource `…/mcp/oauth`. */
+export function oauthResourceUrlFromMcpUrl(mcpUrl: string): string {
+  const url = new URL(mcpUrl);
+  const path = url.pathname.replace(/\/$/, '');
+  if (path.endsWith('/mcp/oauth')) {
+    url.pathname = path;
+  } else if (path.endsWith('/mcp')) {
+    url.pathname = `${path}/oauth`;
+  } else if (!path || path === '/') {
+    url.pathname = '/mcp/oauth';
+  } else {
+    url.pathname = `${path}/oauth`;
+  }
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/, '');
+}
+
+export function oauthIssuerFromResourceUrl(resourceUrl: string): string {
+  return new URL(resourceUrl).origin;
+}
+
+/** RFC 9728 path-scoped metadata for the OAuth MCP resource. */
+export function oauthProtectedResourceMetadataUrl(resourceUrl: string): string {
+  const url = new URL(resourceUrl);
+  const suffix = url.pathname.replace(/^\//, '');
+  url.pathname = `/.well-known/oauth-protected-resource/${suffix}`;
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/, '');
+}
+
 export {
   LLM_TOOL_CATALOG,
   findLlmTool,
@@ -392,6 +424,19 @@ export function buildGeminiFunctionDeclarations(
  */
 export function buildGeminiMcpConfig(options: LlmSchemaOptions): Record<string, unknown> {
   return buildCursorMcpConfig(options);
+}
+
+/** ChatGPT / Codex plugin URL. No bearer token is pasted into this config. */
+export function buildChatGptOauthMeta(options: LlmSchemaOptions): {
+  pluginUrl: string;
+  authType: string;
+  note: string;
+} {
+  return {
+    pluginUrl: oauthResourceUrlFromMcpUrl(options.mcpUrl),
+    authType: 'OAuth 2.1 (authorization code + PKCE)',
+    note: 'Each person consents in ChatGPT. There is no API key to paste.',
+  };
 }
 
 /** ChatGPT Custom GPT Actions auth hint (not pasted into schema; shown in UI). */

@@ -25,7 +25,7 @@ After a successful SSO:
 | Topic | Why |
 | --- | --- |
 | Azure Blob / AWS storage credentials | Cloud object auth is NF-007 / existing S3 keys — not human SSO |
-| ChatGPT MCP App OAuth | Separate backlog NF-004 |
+| ChatGPT / Codex MCP OAuth | Separate authorization server at `/mcp/oauth` (NF-004). Not this human OIDC app. |
 | Auto-create users on first SSO | Optional via Admin → SSO JIT toggle or `OIDC_JIT_PROVISIONING=true` (default off = invite/link) |
 | Multiple OIDC issuers in one UI | Single configured issuer per deployment |
 

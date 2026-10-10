@@ -15,6 +15,7 @@ import {
   apiClients,
   auditEvents,
   knowledgeRecords,
+  oauthGrants,
   projects,
   sessions,
   systems,
@@ -46,6 +47,7 @@ export async function getActiveSessionCount(database: Database): Promise<number>
 export async function getPendingAttention(database: Database): Promise<{
   pendingUsers: number;
   pendingApiClients: number;
+  activeOauthGrants: number;
 }> {
   const [userRow] = await database.db
     .select({ value: count() })
@@ -55,9 +57,14 @@ export async function getPendingAttention(database: Database): Promise<{
     .select({ value: count() })
     .from(apiClients)
     .where(eq(apiClients.status, 'pending_approval'));
+  const [grantRow] = await database.db
+    .select({ value: count() })
+    .from(oauthGrants)
+    .where(and(eq(oauthGrants.status, 'active'), isNull(oauthGrants.revokedAt)));
   return {
     pendingUsers: Number(userRow?.value ?? 0),
     pendingApiClients: Number(clientRow?.value ?? 0),
+    activeOauthGrants: Number(grantRow?.value ?? 0),
   };
 }
 
@@ -253,7 +260,7 @@ export async function getClientLeaderboard(
         )::int AS "toolErrorCount"
       FROM audit_events
       WHERE created_at >= ${since.toISOString()}
-        AND actor_type = 'api_client'
+        AND actor_type IN ('api_client', 'oauth_grant')
         AND (action LIKE 'mcp.%' OR action LIKE 'llm.%')
         AND actor_id IS NOT NULL
       GROUP BY actor_id
@@ -275,10 +282,18 @@ export async function getClientLeaderboard(
         .where(inArray(apiClients.id, ids))
     : [];
   const nameById = new Map(clients.map((c) => [c.id, c.name]));
+  const grantRows = ids.length
+    ? await database.db
+        .select({ id: oauthGrants.id, displayName: users.displayName })
+        .from(oauthGrants)
+        .innerJoin(users, eq(oauthGrants.userId, users.id))
+        .where(inArray(oauthGrants.id, ids))
+    : [];
+  const grantNameById = new Map(grantRows.map((row) => [row.id, row.displayName]));
 
   return rows.map((row) => ({
     actorId: row.actorId,
-    clientName: nameById.get(row.actorId) ?? null,
+    clientName: nameById.get(row.actorId) ?? grantNameById.get(row.actorId) ?? null,
     requestCount: Number(row.requestCount),
     toolCallCount: Number(row.toolCallCount),
     toolErrorCount: Number(row.toolErrorCount),

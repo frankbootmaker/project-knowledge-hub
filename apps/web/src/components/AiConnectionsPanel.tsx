@@ -12,6 +12,7 @@ import {
 } from './ui';
 import { UserMcpSetupWizard } from './mcp-setup';
 import { MCP_READ_SCOPES } from './mcp-setup/scopes';
+import { OauthGrantsList, type OauthGrantRow } from './admin/OauthGrantsList';
 
 export type MyApiClient = {
   id: string;
@@ -31,11 +32,14 @@ type WorkspaceOption = { id: string; name: string; slug: string };
 export function AiConnectionsPanel({
   initialClients,
   workspaces,
+  grants,
 }: {
   initialClients: MyApiClient[];
   workspaces: WorkspaceOption[];
+  grants: OauthGrantRow[];
 }) {
   const t = useTranslations('aiConnections');
+  const tAdmin = useTranslations('admin');
   const tCommon = useTranslations('common');
   const router = useRouter();
   const { pushToast } = useToast();
@@ -232,6 +236,17 @@ export function AiConnectionsPanel({
           setIssuedToken(null);
           setIssuedClientName(null);
         }}
+      />
+
+      <OauthGrantsList
+        grants={grants}
+        workspaceNames={Object.fromEntries(
+          workspaces.map((workspace) => [workspace.id, workspace.name]),
+        )}
+        showUser={false}
+        title={tAdmin('oauthGrantsTitle')}
+        blurb={t('oauthGrantsBlurb')}
+        revokeBase="/api/v1/me/oauth/grants"
       />
 
       <div className="grid gap-6">

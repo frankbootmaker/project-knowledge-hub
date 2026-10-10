@@ -1,8 +1,11 @@
-# ChatGPT + Knowledge Hub FAQ (Custom GPT)
+# ChatGPT + Knowledge Hub FAQ
 
-**Recommended path today:** use a **dedicated Custom GPT** with KnowAPI **Actions** (OpenAPI + Bearer).  
-Do **not** rely on `@KnowHub` in a normal ChatGPT chat — that does not run Custom GPT Actions.  
-A future ChatGPT MCP App for normal chats is backlog **NF-004**.
+**Two paths:**
+
+* **ChatGPT plugin / Codex:** connect `https://<host>/mcp/oauth`. Each person signs in and consents. There is no API key. An admin must set `OAUTH_JWT_PRIVATE_KEY` and enable the resource on **Admin → MCP setup**.
+* **Custom GPT Actions:** still OpenAPI + Bearer, and only inside that GPT. Keep this until Custom GPTs shut down.
+
+Do **not** point Cursor, Claude, or Antigravity at `/mcp/oauth`. They stay on `/mcp` with a bearer token.
 
 Audience: members who want to search the hub and save summaries/drafts from ChatGPT.
 
@@ -148,4 +151,4 @@ More connection tips: Account/Admin wizard **Connection troubleshooting** panel.
 
 * Setup reference: [`../development/MCP_CURSOR_SETUP.md`](../development/MCP_CURSOR_SETUP.md)
 * Architecture: [`../architecture/MCP_ARCHITECTURE.md`](../architecture/MCP_ARCHITECTURE.md)
-* Future normal-chat MCP App: backlog **NF-004** in [`NEXT_FEATURES.md`](NEXT_FEATURES.md)
+* Custom GPT Actions remain the bearer OpenAPI path. Plugin / Codex access is `/mcp/oauth`.

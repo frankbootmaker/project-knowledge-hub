@@ -22,6 +22,7 @@ export type MonitoringPayload = {
   attention: {
     pendingUsers: number;
     pendingApiClients: number;
+    activeOauthGrants?: number;
     staleBackup: boolean;
     staleBackupAfterHours: number;
     onDutyAdmins: Array<{ id: string; displayName: string; email: string }>;

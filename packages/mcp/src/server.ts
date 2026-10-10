@@ -718,6 +718,12 @@ function extractToolContext(data: unknown): McpToolCallContext {
 export function createKnowledgeHubMcpServer(
   client: McpClientContext,
   handlers: McpToolHandlers,
+  options?: {
+    oauth?: {
+      resourceMetadataUrl: string;
+      profile?: { id: string; name?: string; email?: string };
+    };
+  },
 ): McpServer {
   const server = new McpServer({
     name: 'project-knowledge-hub',
@@ -747,7 +753,19 @@ export function createKnowledgeHubMcpServer(
         return present(data);
       } catch (error) {
         await handlers.onToolCall?.(toolName, false, argContext);
-        return toMcpErrorResult(error, handlers.logger);
+        const result = toMcpErrorResult(error, handlers.logger);
+        if (!options?.oauth) {
+          return result;
+        }
+        const description = result.content[0]?.text ?? 'Authentication required';
+        return {
+          ...result,
+          _meta: {
+            'mcp/www_authenticate': [
+              `Bearer resource_metadata="${options.oauth.resourceMetadataUrl}", error="insufficient_scope", error_description="${description.replaceAll('"', "'")}"`,
+            ],
+          },
+        };
       }
     };
 
@@ -2384,5 +2402,68 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  if (options?.oauth) {
+    const profile = options.oauth.profile;
+    server.registerTool(
+      'get_profile',
+      {
+        description:
+          'Return the profile represented by this request credentials. The id is the KnowHub user id and stays the same across token refresh.',
+        inputSchema: {},
+        outputSchema: {
+          id: z.string(),
+          name: z.string().optional(),
+          email: z.string().optional(),
+        },
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
+        _meta: {
+          'openai/profile': true,
+        },
+      },
+      async () => {
+        if (!profile?.id.trim()) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: 'Profile identity unavailable.' }],
+          };
+        }
+        const body: { id: string; name?: string; email?: string } = { id: profile.id };
+        if (profile.name) {
+          body.name = profile.name;
+        }
+        if (profile.email) {
+          body.email = profile.email;
+        }
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(body) }],
+          structuredContent: body,
+        };
+      },
+    );
+    stampOauthSecuritySchemes(server, client.scopes);
+  }
+
   return server;
+}
+
+function stampOauthSecuritySchemes(server: McpServer, scopes: string[]): void {
+  const tools = (
+    server as unknown as {
+      _registeredTools?: Record<string, { _meta?: Record<string, unknown> }>;
+    }
+  )._registeredTools;
+  if (!tools) {
+    return;
+  }
+  const securitySchemes = [{ type: 'oauth2', scopes }];
+  for (const tool of Object.values(tools)) {
+    tool._meta = {
+      ...tool._meta,
+      securitySchemes,
+    };
+  }
 }
