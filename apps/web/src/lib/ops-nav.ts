@@ -97,11 +97,9 @@ export type NavItemId =
   | 'admin-backups'
   | 'admin-mcp'
   | 'admin-brand'
-  | 'admin-users'
-  | 'admin-organizations'
+  | 'admin-identity'
   | 'admin-audit'
   | 'admin-email'
-  | 'admin-sso'
   | 'admin-templates'
   | 'admin-archive';
 
@@ -340,18 +338,11 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         href: () => '/admin/brand',
       },
       {
-        id: 'admin-users',
+        id: 'admin-identity',
         icon: 'users',
-        labelKey: 'adminUsers',
+        labelKey: 'adminIdentity',
         adminOnly: true,
-        href: () => '/admin/users',
-      },
-      {
-        id: 'admin-organizations',
-        icon: 'organizations',
-        labelKey: 'adminOrganizations',
-        adminOnly: true,
-        href: () => '/admin/organizations',
+        href: () => '/admin/identity',
       },
       {
         id: 'admin-audit',
@@ -366,13 +357,6 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         labelKey: 'adminEmail',
         adminOnly: true,
         href: () => '/admin/email',
-      },
-      {
-        id: 'admin-sso',
-        icon: 'sso',
-        labelKey: 'adminSso',
-        adminOnly: true,
-        href: () => '/admin/sso',
       },
       {
         id: 'admin-templates',
@@ -600,6 +584,14 @@ export function matchNavItem(
   }
   if (item.id === 'admin-monitoring') {
     return pathname.startsWith('/admin/monitoring');
+  }
+  if (item.id === 'admin-identity') {
+    return (
+      pathname.startsWith('/admin/identity')
+      || pathname.startsWith('/admin/users')
+      || pathname.startsWith('/admin/organizations')
+      || pathname.startsWith('/admin/sso')
+    );
   }
   if (item.id === 'admin-brand') {
     return pathname.startsWith('/admin/brand');

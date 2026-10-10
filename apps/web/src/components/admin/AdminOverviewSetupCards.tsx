@@ -122,7 +122,7 @@ export function AdminOverviewSetupCards() {
                 <small>{t('ssoOverviewBlurb')}</small>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-3">
-                <LinkButton href="/admin/sso">{t('ssoConfigure')}</LinkButton>
+                <LinkButton href="/admin/identity?tab=sso">{t('ssoConfigure')}</LinkButton>
                 <HideToggle
                   id="admin-overview-hide-sso"
                   label={hideLabel}

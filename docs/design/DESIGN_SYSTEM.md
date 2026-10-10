@@ -246,6 +246,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-10
 
+* **Identity admin tabs** — Admin → Identity uses `.kh-ops-page-tabs` for Organizations, Users, and SSO. `/admin/organizations`, `/admin/users`, and `/admin/sso` redirect to those tabs. Membership grants stay on MCP setup.
 * **Backups admin tabs** — Admin → Backups & restore uses `.kh-ops-page-tabs` for Backups and Storage. `/admin/storage` redirects to the Storage tab. The admin rail no longer lists Storage separately.
 * **MCP admin tabs** — Admin → MCP setup uses `.kh-ops-page-tabs` (bold body sans, 15px) for Bearer tokens, OAuth, API clients, membership grants, and AI providers. Bearer is the existing wizard and says it issues `kh_` tokens. OAuth holds the resource card and grant list. `/admin/api-clients`, `/admin/ai-providers`, and `/admin/memberships` redirect to those tabs. The admin rail no longer lists those three separately.
 * **MCP OAuth** — Admin → MCP setup shows an OAuth resource card (plugin URL, enable switch, redirect and client allowlists, scope ceiling). Account → AI connections lists that person's OAuth grants with revoke. The consent page at `/oauth/consent` uses the same form controls. Bearer MCP setup is unchanged.

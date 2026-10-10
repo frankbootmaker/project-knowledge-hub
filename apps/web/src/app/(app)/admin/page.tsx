@@ -28,8 +28,8 @@ export default async function AdminOverviewPage() {
     : 0;
 
   const cards = [
-    { href: '/admin/organizations', label: t('organizationsCard'), count: organizationCount },
-    { href: '/admin/users', label: t('usersCard'), count: userCount },
+    { href: '/admin/identity', label: t('organizationsCard'), count: organizationCount },
+    { href: '/admin/identity?tab=users', label: t('usersCard'), count: userCount },
     { href: '/admin/mcp-setup?tab=clients', label: t('clientsCard'), count: clientCount },
     { href: '/workspaces', label: t('workspacesCard'), count: workspaceCount },
   ];
