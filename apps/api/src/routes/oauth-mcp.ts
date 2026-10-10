@@ -43,6 +43,7 @@ import {
   type PublicOauthMcpSettings,
   type StoredOauthMcpSettings,
 } from '../lib/oauth-mcp-settings.js';
+import { publishedRedirectMatches, redirectAllowed } from '../lib/oauth-redirect.js';
 
 const TXN_TTL_SECONDS = 10 * 60;
 const scopeSchema = z.enum(
@@ -69,12 +70,6 @@ function txnKey(id: string): string {
 
 function cimdKey(clientId: string): string {
   return `oauth:cimd:${createHash('sha256').update(clientId).digest('hex')}`;
-}
-
-function redirectAllowed(redirectUri: string, allow: string[]): boolean {
-  return allow.some((entry) =>
-    entry.endsWith('/') ? redirectUri.startsWith(entry) : redirectUri === entry,
-  );
 }
 
 function clientAllowed(clientId: string, prefixes: string[]): boolean {
@@ -280,7 +275,7 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
       return fail('invalid_client', 'client_id is not allowed');
     }
     const document = await loadCimd(app, query.client_id).catch(() => null);
-    if (!document?.redirect_uris?.includes(query.redirect_uri)) {
+    if (!publishedRedirectMatches(query.redirect_uri, document?.redirect_uris)) {
       return fail('invalid_client', 'redirect_uri is not published by the client metadata');
     }
     const requested = (query.scope ?? stored.scopeCeiling.join(' ')).split(/\s+/).filter(Boolean);

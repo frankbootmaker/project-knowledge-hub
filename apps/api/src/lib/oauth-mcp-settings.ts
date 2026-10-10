@@ -4,11 +4,17 @@ import { platformSettings, type Database } from '@project-knowledge-hub/database
 import { AppError } from '@project-knowledge-hub/domain';
 import { DEFAULT_MCP_SCOPES, MCP_SCOPES, type McpScope } from '@project-knowledge-hub/mcp';
 import { readOauthSigningKey } from './oauth-jwt.js';
+import {
+  isLoopbackRedirectUri,
+  NATIVE_LOOPBACK_REDIRECT,
+  withNativeLoopbackRedirect,
+} from './oauth-redirect.js';
 
 export const OAUTH_MCP_SETTINGS_KEY = 'oauth_mcp_config';
 
 export const DEFAULT_OAUTH_REDIRECT_URIS = [
   'https://chatgpt.com/connector_platform_oauth_redirect',
+  NATIVE_LOOPBACK_REDIRECT,
 ];
 
 export const DEFAULT_OAUTH_CLIENT_PREFIXES = ['https://chatgpt.com/oauth/'];
@@ -37,6 +43,37 @@ export type PublicOauthMcpSettings = StoredOauthMcpSettings & {
   authorizationEndpoint: string;
   tokenEndpoint: string;
 };
+
+function uniqueRedirectUris(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    let url: URL;
+    try {
+      url = new URL(trimmed);
+    } catch {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'OAuth redirect URI is not a valid URL',
+        statusCode: 400,
+      });
+    }
+    if (url.protocol !== 'https:' && !isLoopbackRedirectUri(trimmed)) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'OAuth redirect URIs must use https, or http on a loopback host',
+        statusCode: 400,
+      });
+    }
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
 
 function uniqueHttps(values: string[]): string[] {
   const seen = new Set<string>();
@@ -83,9 +120,11 @@ function parseStored(value: string): StoredOauthMcpSettings | null {
       : [];
     return {
       enabled: parsed.enabled === true,
-      redirectUris: Array.isArray(parsed.redirectUris)
-        ? parsed.redirectUris.filter((item): item is string => typeof item === 'string')
-        : [...DEFAULT_OAUTH_REDIRECT_URIS],
+      redirectUris: withNativeLoopbackRedirect(
+        Array.isArray(parsed.redirectUris)
+          ? parsed.redirectUris.filter((item): item is string => typeof item === 'string')
+          : [...DEFAULT_OAUTH_REDIRECT_URIS],
+      ),
       clientIdPrefixes: Array.isArray(parsed.clientIdPrefixes)
         ? parsed.clientIdPrefixes.filter((item): item is string => typeof item === 'string')
         : [...DEFAULT_OAUTH_CLIENT_PREFIXES],
@@ -133,7 +172,7 @@ export async function saveOauthMcpSettings(
   input: StoredOauthMcpSettings,
   updatedBy: string,
 ): Promise<StoredOauthMcpSettings> {
-  const redirectUris = uniqueHttps(input.redirectUris);
+  const redirectUris = withNativeLoopbackRedirect(uniqueRedirectUris(input.redirectUris));
   const clientIdPrefixes = uniqueHttps(input.clientIdPrefixes);
   const scopeCeiling = input.scopeCeiling.filter((scope) =>
     (MCP_SCOPES as readonly string[]).includes(scope),

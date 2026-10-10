@@ -1751,7 +1751,7 @@
     "oauthResourceSaved": "OAuth beállítások mentve.",
     "oauthResourceSaveFailed": "Az OAuth beállítások nem menthetők",
     "oauthRedirects": "Engedélyezett redirect URI-k",
-    "oauthRedirectsHint": "Soronként egy https URL. A záró perjel előtagot jelent.",
+    "oauthRedirectsHint": "Soronként egy URL. https, vagy http a 127.0.0.1, localhost vagy [::1] címen. A záró perjel egy https URL-en előtagot jelent. A loopback URL bármely portra illeszkedik.",
     "oauthClientPrefixes": "Engedélyezett kliens-metaadat előtagok",
     "oauthClientPrefixesHint": "Soronként egy https előtag. A ChatGPT client id-nek ezzel kell kezdődnie.",
     "oauthScopeCeiling": "Scope felső határ",

@@ -1727,7 +1727,7 @@
     "oauthResourceSaved": "OAuth settings saved.",
     "oauthResourceSaveFailed": "Could not save OAuth settings",
     "oauthRedirects": "Allowed redirect URIs",
-    "oauthRedirectsHint": "One https URL per line. A trailing slash matches that prefix.",
+    "oauthRedirectsHint": "One URL per line. Use https, or http on 127.0.0.1, localhost, or [::1]. A trailing slash on an https URL matches that prefix. A loopback URL matches any port.",
     "oauthClientPrefixes": "Allowed client metadata prefixes",
     "oauthClientPrefixesHint": "One https prefix per line. ChatGPT client ids must start with one of these.",
     "oauthScopeCeiling": "Scope ceiling",

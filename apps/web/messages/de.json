@@ -1751,7 +1751,7 @@
     "oauthResourceSaved": "OAuth-Einstellungen gespeichert.",
     "oauthResourceSaveFailed": "OAuth-Einstellungen konnten nicht gespeichert werden",
     "oauthRedirects": "Erlaubte Redirect-URIs",
-    "oauthRedirectsHint": "Eine https-URL pro Zeile. Ein Schrägstrich am Ende gilt als Präfix.",
+    "oauthRedirectsHint": "Eine URL pro Zeile. https, oder http auf 127.0.0.1, localhost oder [::1]. Ein Schrägstrich am Ende einer https-URL gilt als Präfix. Eine Loopback-URL gilt für jeden Port.",
     "oauthClientPrefixes": "Erlaubte Client-Metadaten-Präfixe",
     "oauthClientPrefixesHint": "Ein https-Präfix pro Zeile. ChatGPT-Client-IDs müssen damit beginnen.",
     "oauthScopeCeiling": "Scope-Obergrenze",

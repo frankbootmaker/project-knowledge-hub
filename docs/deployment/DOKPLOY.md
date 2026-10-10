@@ -97,7 +97,8 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 1. Create a **Project**, then **Create Service → Compose** (one service for the whole stack).
 2. Set Compose file path to `compose.dokploy.yaml`.
 3. Put required env vars on the **Compose service Environment** tab (`KEY=value`).  
-   **Project-level Environment alone is not enough** — Compose interpolates from the `.env` Dokploy writes next to the compose file, which is fed by the service Environment. Missing `WEB_URL` / `POSTGRES_PASSWORD` fails before containers start.
+   **Project-level Environment alone is not enough** — Compose interpolates from the `.env` Dokploy writes next to the compose file, which is fed by the service Environment. Missing `WEB_URL` / `POSTGRES_PASSWORD` fails before containers start.  
+   ChatGPT / Codex OAuth needs `OAUTH_JWT_PRIVATE_KEY` as one PEM line. See [`OAUTH_MCP_SETUP.md`](OAUTH_MCP_SETUP.md).
 4. Point a domain at the **nd-web** service (port **3100**); enable HTTPS.
 5. Set `WEB_URL` to that HTTPS origin. Do not expose Postgres or Redis.
 
