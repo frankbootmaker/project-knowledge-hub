@@ -35,6 +35,8 @@ x-app-env: &app-env
   WEB_URL: ${WEB_URL:?WEB_URL is required}
   API_URL: http://nd-api:3101
   SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  # PKCS#8 PEM, one line with literal \n. Empty keeps /mcp/oauth disabled.
+  OAUTH_JWT_PRIVATE_KEY: ${OAUTH_JWT_PRIVATE_KEY:-}
   # OIDC SSO (Authentik). All three empty = button hidden; all three set = enabled.
   OIDC_ISSUER: ${OIDC_ISSUER:-}
   OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
