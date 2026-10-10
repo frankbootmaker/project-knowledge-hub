@@ -1989,7 +1989,9 @@
     "storageMigratePartial": "Migrate finished with errors: {uploaded} uploaded, {skipped} skipped, {failed} failed. {detail}",
     "storageResetToEnv": "Reset to .env",
     "mcpWizardIncludeCatalogue": "Include catalogue write (systems)",
-    "mcpWizardIncludeCatalogueHint": "Adds catalogue:write so the agent can create and update systems (IT resources) in allowlisted workspaces."
+    "mcpWizardIncludeCatalogueHint": "Adds catalogue:write so the agent can create and update systems (IT resources) in allowlisted workspaces.",
+    "mcpWizardIncludeMonitoring": "Include platform status",
+    "mcpWizardIncludeMonitoringHint": "Adds monitoring:read for the redacted operator snapshot (health, backup age, pending approvals). Off unless checked. Not a personal workspace check."
   },
   "imports": {
     "title": "Imports",

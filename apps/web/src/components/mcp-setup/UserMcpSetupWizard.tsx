@@ -83,6 +83,7 @@ export function UserMcpSetupWizard({
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const [includePm, setIncludePm] = useState(false);
   const [includeCatalogue, setIncludeCatalogue] = useState(false);
+  const [includeMonitoring, setIncludeMonitoring] = useState(false);
   const [name, setName] = useState(defaultClientName('cursor'));
   const [workspaceIds, setWorkspaceIds] = useState<string[]>(
     workspaces[0] ? [workspaces[0].id] : [],
@@ -164,7 +165,12 @@ export function UserMcpSetupWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          scopes: buildMcpSetupScopes({ mode, includePm, includeCatalogue }),
+          scopes: buildMcpSetupScopes({
+            mode,
+            includePm,
+            includeCatalogue,
+            includeMonitoring,
+          }),
           allowedWorkspaceIds: workspaceIds,
         }),
       });
@@ -399,6 +405,19 @@ export function UserMcpSetupWizard({
                   </span>
                 </label>
               ) : null}
+              <label className="kh-ops-scope-check kh-ops-field-span">
+                <input
+                  type="checkbox"
+                  checked={includeMonitoring}
+                  onChange={(e) => setIncludeMonitoring(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">{t('mcpWizardIncludeMonitoring')}</span>
+                  <span className="mt-0.5 block text-xs text-ink-muted">
+                    {t('mcpWizardIncludeMonitoringHint')}
+                  </span>
+                </span>
+              </label>
               <fieldset className="kh-ops-field-span m-0 grid gap-2 border-0 p-0">
                 <legend className="mb-1 text-sm font-medium">{tAi('workspaces')}</legend>
                 <p className="m-0 text-xs text-ink-muted">{tAi('workspacesAllowlistHint')}</p>

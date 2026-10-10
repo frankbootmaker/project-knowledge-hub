@@ -1989,7 +1989,9 @@
     "storageMigratePartial": "Migráció hibákkal: {uploaded} feltöltve, {skipped} kihagyva, {failed} sikertelen. {detail}",
     "storageResetToEnv": "Visszaállítás .env-re",
     "mcpWizardIncludeCatalogue": "Katalógus írás (rendszerek)",
-    "mcpWizardIncludeCatalogueHint": "Hozzáadja a catalogue:write jogosultságot, így az ügynök rendszereket (IT erőforrásokat) hozhat létre és frissíthet a megengedett workspaces-ekben."
+    "mcpWizardIncludeCatalogueHint": "Hozzáadja a catalogue:write jogosultságot, így az ügynök rendszereket (IT erőforrásokat) hozhat létre és frissíthet a megengedett workspaces-ekben.",
+    "mcpWizardIncludeMonitoring": "Platformállapot",
+    "mcpWizardIncludeMonitoringHint": "Hozzáadja a monitoring:read jogosultságot a szerkesztett üzemeltetői állapothoz (állapot, mentés kora, függő jóváhagyások). Alapból ki. Nem személyes munkaterület-ellenőrzés."
   },
   "imports": {
     "title": "Importok",

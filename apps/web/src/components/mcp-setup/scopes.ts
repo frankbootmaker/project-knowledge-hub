@@ -15,10 +15,14 @@ export const MCP_PM_WRITE_SCOPES = ['pm:read', 'pm:write'] as const;
 /** Opt-in catalogue mutations (systems create/update). */
 export const MCP_CATALOGUE_WRITE_SCOPES = ['catalogue:write'] as const;
 
+/** Opt-in operator snapshot (NF-014). Not part of the read or write bundles. */
+export const MCP_MONITORING_READ_SCOPES = ['monitoring:read'] as const;
+
 export function buildMcpSetupScopes(input: {
   mode: 'read' | 'write';
   includePm: boolean;
   includeCatalogue?: boolean;
+  includeMonitoring?: boolean;
 }): string[] {
   const base = input.mode === 'write' ? [...MCP_WRITE_SCOPES] : [...MCP_READ_SCOPES];
   const withPm = input.includePm
@@ -26,10 +30,14 @@ export function buildMcpSetupScopes(input: {
       ? [...base, ...MCP_PM_WRITE_SCOPES]
       : [...base, ...MCP_PM_READ_SCOPES]
     : base;
-  if (input.mode === 'write' && input.includeCatalogue) {
-    return [...withPm, ...MCP_CATALOGUE_WRITE_SCOPES];
+  const withCatalogue =
+    input.mode === 'write' && input.includeCatalogue
+      ? [...withPm, ...MCP_CATALOGUE_WRITE_SCOPES]
+      : withPm;
+  if (!input.includeMonitoring) {
+    return withCatalogue;
   }
-  return withPm;
+  return [...withCatalogue, ...MCP_MONITORING_READ_SCOPES];
 }
 
 export const MCP_SETUP_STEPS = [

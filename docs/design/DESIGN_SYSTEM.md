@@ -243,6 +243,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-10
+
+* **MCP setup** — Configure step adds an unchecked **Include platform status** checkbox (`monitoring:read`) on the account and admin wizards. Read, write, delivery, and catalogue bundles stay unchanged.
+
 ### 2026-10-07
 
 * **Report diagrams** — A Mermaid block that cannot be drawn shows a localised “Diagram could not be rendered” summary and the source in a disclosure. The error icon is not used. An empty diagram section shows a localised “no data” line instead of a diagram block.

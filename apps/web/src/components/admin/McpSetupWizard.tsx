@@ -79,6 +79,7 @@ export function McpSetupWizard({
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const [includePm, setIncludePm] = useState(false);
   const [includeCatalogue, setIncludeCatalogue] = useState(false);
+  const [includeMonitoring, setIncludeMonitoring] = useState(false);
   const [name, setName] = useState(defaultClientName('cursor'));
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
   const [allowedWorkspaceIds, setAllowedWorkspaceIds] = useState<string[]>([]);
@@ -196,7 +197,12 @@ export function McpSetupWizard({
         throw new Error(t('mcpWizardActingUserRequired'));
       }
 
-      const scopes = buildMcpSetupScopes({ mode, includePm, includeCatalogue });
+      const scopes = buildMcpSetupScopes({
+        mode,
+        includePm,
+        includeCatalogue,
+        includeMonitoring,
+      });
       const response = await fetch('/api/v1/api-clients', {
         method: 'POST',
         credentials: 'include',
@@ -485,6 +491,19 @@ export function McpSetupWizard({
                   </span>
                 </label>
               ) : null}
+              <label className="kh-ops-scope-check kh-ops-field-span">
+                <input
+                  type="checkbox"
+                  checked={includeMonitoring}
+                  onChange={(e) => setIncludeMonitoring(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">{t('mcpWizardIncludeMonitoring')}</span>
+                  <span className="mt-0.5 block text-xs text-ink-muted">
+                    {t('mcpWizardIncludeMonitoringHint')}
+                  </span>
+                </span>
+              </label>
               <Field label={t('organization')}>
                 <Select
                   value={organizationId}

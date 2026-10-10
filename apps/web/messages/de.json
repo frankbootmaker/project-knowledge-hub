@@ -1989,7 +1989,9 @@
     "storageMigratePartial": "Migration mit Fehlern: {uploaded} hochgeladen, {skipped} übersprungen, {failed} fehlgeschlagen. {detail}",
     "storageResetToEnv": "Auf .env zurücksetzen",
     "mcpWizardIncludeCatalogue": "Katalog-Schreiben einschließen (Systeme)",
-    "mcpWizardIncludeCatalogueHint": "Fügt catalogue:write hinzu, damit der Agent Systeme (IT-Ressourcen) in freigegebenen Workspaces anlegen und aktualisieren kann."
+    "mcpWizardIncludeCatalogueHint": "Fügt catalogue:write hinzu, damit der Agent Systeme (IT-Ressourcen) in freigegebenen Workspaces anlegen und aktualisieren kann.",
+    "mcpWizardIncludeMonitoring": "Plattformstatus einschließen",
+    "mcpWizardIncludeMonitoringHint": "Fügt monitoring:read für den geschwärzten Betreiber-Status hinzu (Gesundheit, Backup-Alter, offene Freigaben). Standard aus. Keine persönliche Workspace-Prüfung."
   },
   "imports": {
     "title": "Importe",
