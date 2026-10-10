@@ -129,7 +129,7 @@ Custom GPT Actions only see what you give them **in that GPT’s thread** (plus 
 
 - Prefer one record per topic over dumping a whole chat log.
 - Use conversation **import** in the workspace UI if you have a long paste and want hub-side splitting (`Imports`) — then optionally ask the GPT to refine the draft.
-- If the token was lost, **rotate** the client under Account → AI connections (or Admin → API clients) and update the GPT’s Action auth.
+- If the token was lost, **rotate** the client under Account → AI connections (or Admin → MCP setup → API clients) and update the GPT’s Action auth.
 
 ---
 

@@ -20,7 +20,7 @@ ChatGPT plugins and Codex use a second MCP URL. `/mcp` stays bearer-only for Cur
 * KnowHub is the OAuth 2.1 authorization server (authorization code, PKCE S256, CIMD, refresh tokens). Human Authentik login only establishes the `kh_session` used on the consent page.
 * Grants live in `oauth_grants`, not `api_clients`. Access tokens are short-lived JWTs whose `aud` is `https://<host>/mcp/oauth`.
 * Discovery is path-scoped: `/.well-known/oauth-protected-resource/mcp/oauth`. The root `/.well-known/oauth-protected-resource` stays a JSON 404.
-* The resource is off until `OAUTH_JWT_PRIVATE_KEY` is set and an admin enables it on **Admin → MCP setup**. Revoke grants from **Admin → API clients** or **Account → AI connections**.
+* The resource is off until `OAUTH_JWT_PRIVATE_KEY` is set and an admin enables it on **Admin → MCP setup → OAuth**. Revoke grants there or on **Account → AI connections**. Bearer clients stay on the Bearer tokens tab.
 * Audit actor type is `oauth_grant`. Closing a user revokes that user's grants.
 
 ## User setup wizard

@@ -151,6 +151,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-dropzone` / `.kh-ops-paste-area` / `.kh-ops-narrow-form` | Document dropzone, conversation paste, 840px create forms |
 | `.kh-ops-scope-list` / `.kh-ops-scope-checks` / `.kh-ops-scope-check` | Scope tags and checkbox chips |
 | `.kh-ops-code` / `.kh-ops-status-row` | Token/schema blocks and MCP preflight rows |
+| `.kh-ops-page-tabs` | Admin page tab strip. Bold body sans at 15px, not the 11px mono used by modal tabs. Links, not buttons; the active tab uses `.active` |
 | `.kh-ops-modal-tabs` / `.kh-ops-modal-pane` | Manage-dialog tab strip (existing product tabs only) |
 | `.kh-ops-activity-item` / `.kh-ops-linked-row` / `.kh-ops-text-btn` | Task activity thread, linked rows, quiet actions |
 | `.kh-ops-storage-choice` / `.kh-ops-provider` | Admin storage provider picker |
@@ -245,7 +246,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-10
 
-* **MCP OAuth** — Admin → MCP setup shows an OAuth resource card (plugin URL, enable switch, redirect and client allowlists, scope ceiling). Admin → API clients and Account → AI connections list OAuth grants with revoke. The consent page at `/oauth/consent` uses the same form controls. Bearer MCP setup is unchanged.
+* **MCP admin tabs** — Admin → MCP setup uses `.kh-ops-page-tabs` (bold body sans, 15px) for Bearer tokens, OAuth, API clients, membership grants, and AI providers. Bearer is the existing wizard and says it issues `kh_` tokens. OAuth holds the resource card and grant list. `/admin/api-clients`, `/admin/ai-providers`, and `/admin/memberships` redirect to those tabs. The admin rail no longer lists those three separately.
+* **MCP OAuth** — Admin → MCP setup shows an OAuth resource card (plugin URL, enable switch, redirect and client allowlists, scope ceiling). Account → AI connections lists that person's OAuth grants with revoke. The consent page at `/oauth/consent` uses the same form controls. Bearer MCP setup is unchanged.
 
 * **MCP setup** — Configure step adds an unchecked **Include platform status** checkbox (`monitoring:read`) on the account and admin wizards. Read, write, delivery, and catalogue bundles stay unchanged.
 

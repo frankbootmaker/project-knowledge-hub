@@ -3336,6 +3336,39 @@ button.kh-ops-project-card:disabled {
   text-transform: uppercase;
 }
 
+.kh-ops-page-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  border: 1px solid var(--kh-line);
+}
+
+.kh-ops-page-tabs a {
+  flex: 1 0 auto;
+  min-height: 42px;
+  padding: 10px 14px;
+  border-right: 1px solid var(--kh-line);
+  background: var(--kh-surface);
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-align: center;
+  text-decoration: none;
+}
+
+.kh-ops-page-tabs a:last-child {
+  border-right: 0;
+}
+
+.kh-ops-page-tabs a.active {
+  background: var(--kh-ink);
+  color: var(--kh-surface);
+}
+
 .kh-ops-modal-tabs {
   display: flex;
   gap: 0;

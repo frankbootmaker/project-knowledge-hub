@@ -94,15 +94,12 @@ export type NavItemId =
   | 'reports'
   | 'admin-overview'
   | 'admin-monitoring'
-  | 'admin-clients'
   | 'admin-storage'
-  | 'admin-ai'
   | 'admin-backups'
   | 'admin-mcp'
   | 'admin-brand'
   | 'admin-users'
   | 'admin-organizations'
-  | 'admin-memberships'
   | 'admin-audit'
   | 'admin-email'
   | 'admin-sso'
@@ -323,11 +320,11 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         href: () => '/admin/monitoring',
       },
       {
-        id: 'admin-clients',
-        icon: 'apiClients',
-        labelKey: 'adminClients',
+        id: 'admin-mcp',
+        icon: 'mcpSetup',
+        labelKey: 'adminMcp',
         adminOnly: true,
-        href: () => '/admin/api-clients',
+        href: () => '/admin/mcp-setup',
       },
       {
         id: 'admin-storage',
@@ -337,25 +334,11 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         href: () => '/admin/storage',
       },
       {
-        id: 'admin-ai',
-        icon: 'aiProviders',
-        labelKey: 'adminAi',
-        adminOnly: true,
-        href: () => '/admin/ai-providers',
-      },
-      {
         id: 'admin-backups',
         icon: 'backups',
         labelKey: 'adminBackups',
         adminOnly: true,
         href: () => '/admin/backups',
-      },
-      {
-        id: 'admin-mcp',
-        icon: 'mcpSetup',
-        labelKey: 'adminMcp',
-        adminOnly: true,
-        href: () => '/admin/mcp-setup',
       },
       {
         id: 'admin-brand',
@@ -377,13 +360,6 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         labelKey: 'adminOrganizations',
         adminOnly: true,
         href: () => '/admin/organizations',
-      },
-      {
-        id: 'admin-memberships',
-        icon: 'memberships',
-        labelKey: 'adminMemberships',
-        adminOnly: true,
-        href: () => '/admin/memberships',
       },
       {
         id: 'admin-audit',

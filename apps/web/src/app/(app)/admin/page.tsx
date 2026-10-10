@@ -30,7 +30,7 @@ export default async function AdminOverviewPage() {
   const cards = [
     { href: '/admin/organizations', label: t('organizationsCard'), count: organizationCount },
     { href: '/admin/users', label: t('usersCard'), count: userCount },
-    { href: '/admin/api-clients', label: t('clientsCard'), count: clientCount },
+    { href: '/admin/mcp-setup?tab=clients', label: t('clientsCard'), count: clientCount },
     { href: '/workspaces', label: t('workspacesCard'), count: workspaceCount },
   ];
 
