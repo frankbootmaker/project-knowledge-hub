@@ -4,8 +4,8 @@
  * and expose the rest via call_hub_tool.
  */
 
-import { RECORD_TYPES } from '@project-knowledge-hub/domain';
-import type { McpScope } from './scopes.js';
+import { AppError, RECORD_TYPES } from '@project-knowledge-hub/domain';
+import { hasMcpScope, type McpScope } from './scopes.js';
 
 export type LlmToolDef = {
   name: string;
@@ -1641,7 +1641,131 @@ export function listHubToolSummaries(includeWriteTools: boolean): Array<{
     scope: tool.scope,
     write: Boolean(tool.write),
     openApiFirstClass: Boolean(tool.openApi),
-  }));
+  })).concat(
+    includeWriteTools
+      ? EXTRA_HUB_TOOLS.map((tool) => ({ ...tool, openApiFirstClass: false }))
+      : [],
+  );
+}
+
+const EXTRA_HUB_TOOLS: Array<{
+  name: string;
+  description: string;
+  scope: McpScope;
+  write: boolean;
+}> = [
+  {
+    name: 'update_project_change_item',
+    description:
+      'Update a change-management item. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+  },
+  {
+    name: 'update_project_ai_assistant_cost',
+    description:
+      'Set AI assistant cost mode on a project AI system. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+  },
+];
+
+function asToolArgs(body: unknown): Record<string, unknown> {
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    return { ...(body as Record<string, unknown>) };
+  }
+  return {};
+}
+
+/** Invoke a catalog tool by name. Used by OpenAPI and the ChatGPT OAuth dispatcher. */
+export async function invokeNamedHubTool(
+  handlers: object,
+  scopes: string[],
+  toolName: string,
+  body: unknown,
+  depth = 0,
+): Promise<unknown> {
+  if (depth > 1) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'call_hub_tool cannot nest another call_hub_tool',
+      statusCode: 400,
+    });
+  }
+
+  if (toolName === 'list_hub_tools') {
+    if (!hasMcpScope(scopes, 'projects:read')) {
+      throw new AppError({
+        code: 'FORBIDDEN',
+        message: 'Missing required scope: projects:read',
+        statusCode: 403,
+      });
+    }
+    const includeWrite =
+      hasMcpScope(scopes, 'knowledge:write')
+      || hasMcpScope(scopes, 'pm:write')
+      || hasMcpScope(scopes, 'catalogue:write');
+    return { tools: listHubToolSummaries(includeWrite) };
+  }
+
+  if (toolName === 'call_hub_tool') {
+    const raw = asToolArgs(body);
+    if (typeof raw.toolName !== 'string' || raw.toolName.trim().length === 0) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'toolName is required',
+        statusCode: 400,
+      });
+    }
+    const innerName = raw.toolName.trim();
+    if (innerName === 'call_hub_tool') {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'call_hub_tool cannot invoke itself',
+        statusCode: 400,
+      });
+    }
+    const innerArgs =
+      raw.arguments && typeof raw.arguments === 'object' && !Array.isArray(raw.arguments)
+        ? raw.arguments
+        : {};
+    return invokeNamedHubTool(handlers, scopes, innerName, innerArgs, depth + 1);
+  }
+
+  const catalog = findLlmTool(toolName);
+  const extra = EXTRA_HUB_TOOLS.find((tool) => tool.name === toolName);
+  const requiredScope = catalog?.scope ?? extra?.scope
+    ?? (toolName === 'upload_workspace_media' ? 'knowledge:write' : undefined);
+  if (!requiredScope) {
+    throw new AppError({
+      code: 'NOT_FOUND',
+      message: `Unknown tool: ${toolName}`,
+      statusCode: 404,
+    });
+  }
+  if (!hasMcpScope(scopes, requiredScope)) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: `Missing required scope: ${requiredScope}`,
+      statusCode: 403,
+    });
+  }
+
+  const methodName = toolNameToHandlerMethod(toolName);
+  const fn = (handlers as Record<string, unknown>)[methodName];
+  if (typeof fn !== 'function') {
+    throw new AppError({
+      code: 'NOT_FOUND',
+      message: `Tool handler not available: ${toolName}`,
+      statusCode: 404,
+    });
+  }
+
+  const args = {
+    ...(catalog?.defaults ?? {}),
+    ...asToolArgs(body),
+  };
+  return (fn as (input: Record<string, unknown>) => Promise<unknown>).call(handlers, args);
 }
 
 /** snake_case tool name → camelCase McpToolHandlers method. */

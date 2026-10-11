@@ -3,12 +3,9 @@ import { z } from 'zod';
 import { AppError } from '@project-knowledge-hub/domain';
 import {
   buildLlmOpenApiDocument,
-  findLlmTool,
-  hasMcpScope,
-  listHubToolSummaries,
+  invokeNamedHubTool,
   LLM_TOOL_CATALOG,
   MCP_RATE_LIMIT_PER_MINUTE,
-  toolNameToHandlerMethod,
   type McpClientContext,
   type McpToolHandlers,
 } from '@project-knowledge-hub/mcp';
@@ -74,92 +71,7 @@ async function invokeNamedTool(
   body: unknown,
   depth = 0,
 ): Promise<unknown> {
-  if (depth > 1) {
-    throw new AppError({
-      code: 'VALIDATION_ERROR',
-      message: 'call_hub_tool cannot nest another call_hub_tool',
-      statusCode: 400,
-    });
-  }
-
-  if (toolName === 'list_hub_tools') {
-    if (!hasMcpScope(client.scopes, 'projects:read')) {
-      throw new AppError({
-        code: 'FORBIDDEN',
-        message: 'Missing required scope: projects:read',
-        statusCode: 403,
-      });
-    }
-    const includeWrite =
-      hasMcpScope(client.scopes, 'knowledge:write') ||
-      hasMcpScope(client.scopes, 'pm:write') ||
-      hasMcpScope(client.scopes, 'catalogue:write');
-    return { tools: listHubToolSummaries(includeWrite) };
-  }
-
-  if (toolName === 'call_hub_tool') {
-    const raw = asArgs(body);
-    if (typeof raw.toolName !== 'string' || raw.toolName.trim().length === 0) {
-      throw new AppError({
-        code: 'VALIDATION_ERROR',
-        message: 'toolName is required',
-        statusCode: 400,
-      });
-    }
-    const innerName = raw.toolName.trim();
-    if (innerName === 'call_hub_tool') {
-      throw new AppError({
-        code: 'VALIDATION_ERROR',
-        message: 'call_hub_tool cannot invoke itself',
-        statusCode: 400,
-      });
-    }
-    const innerArgs =
-      raw.arguments && typeof raw.arguments === 'object' && !Array.isArray(raw.arguments)
-        ? raw.arguments
-        : {};
-    return invokeNamedTool(handlers, client, innerName, innerArgs, depth + 1);
-  }
-
-  const catalog = findLlmTool(toolName);
-  const scope = catalog?.scope;
-  if (!scope && toolName !== 'upload_workspace_media') {
-    throw new AppError({
-      code: 'NOT_FOUND',
-      message: `Unknown tool: ${toolName}`,
-      statusCode: 404,
-    });
-  }
-  const requiredScope =
-    toolName === 'upload_workspace_media' ? 'knowledge:write' : scope!;
-  if (!hasMcpScope(client.scopes, requiredScope)) {
-    throw new AppError({
-      code: 'FORBIDDEN',
-      message: `Missing required scope: ${requiredScope}`,
-      statusCode: 403,
-    });
-  }
-
-  const methodName = toolNameToHandlerMethod(toolName);
-  const fn = (handlers as Record<string, unknown>)[methodName];
-  if (typeof fn !== 'function') {
-    throw new AppError({
-      code: 'NOT_FOUND',
-      message: `Tool handler not available: ${toolName}`,
-      statusCode: 404,
-    });
-  }
-
-  const raw = asArgs(body);
-  const args = {
-    ...(catalog?.defaults ?? {}),
-    ...raw,
-  };
-
-  return (fn as (this: McpToolHandlers, input: Record<string, unknown>) => Promise<unknown>).call(
-    handlers,
-    args,
-  );
+  return invokeNamedHubTool(handlers, client.scopes, toolName, body, depth);
 }
 
 export async function registerLlmOpenApiRoutes(app: FastifyInstance): Promise<void> {

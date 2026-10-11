@@ -5,6 +5,7 @@ import {
   tokenCountSchema,
   updateKnowledgeRecordInputSchema,
 } from '@project-knowledge-hub/domain';
+import { invokeNamedHubTool } from './llm-tool-catalog.js';
 import { hasMcpScope, type McpScope } from './scopes.js';
 import { enforceResponseSize, MCP_MAX_LIST_LIMIT } from './limits.js';
 import { isoDateNullableSchema, sanitizeError, AppError } from '@project-knowledge-hub/domain';
@@ -725,10 +726,18 @@ export function createKnowledgeHubMcpServer(
     };
   },
 ): McpServer {
-  const server = new McpServer({
-    name: 'project-knowledge-hub',
-    version: '0.1.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'project-knowledge-hub',
+      version: '0.1.0',
+    },
+    options?.oauth
+      ? {
+          instructions:
+            'Call list_workspaces, then list_projects or get_project, to find a project. Use search_knowledge to find records. For a tool that is not in this list, call list_hub_tools, then call_hub_tool with that toolName and arguments.',
+        }
+      : undefined,
+  );
 
   const wrap =
     (
@@ -771,7 +780,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspaces',
-    'List workspaces this client can access (id, name, slug). Not a ChatGPT Action; use call_hub_tool there. Requires projects:read.',
+    'List workspaces this client can access (id, name, slug). Requires projects:read.',
     {},
     async () =>
       wrap('list_workspaces', 'projects:read', () => handlers.listWorkspaces())(),
@@ -2444,10 +2453,71 @@ export function createKnowledgeHubMcpServer(
         };
       },
     );
+    server.tool(
+      'list_hub_tools',
+      'List hub tools by name, scope, and a short description, including omitted tools. Requires projects:read.',
+      {},
+      async () =>
+        wrap('list_hub_tools', 'projects:read', () =>
+          invokeNamedHubTool(handlers, client.scopes, 'list_hub_tools', {}),
+        )(),
+    );
+    server.tool(
+      'call_hub_tool',
+      'Invoke a hub tool by name from list_hub_tools, including omitted tools. Requires that tool scope.',
+      {
+        toolName: z.string().min(1).max(80),
+        arguments: z.record(z.string(), z.unknown()).optional(),
+      },
+      async (args) =>
+        wrap('call_hub_tool', 'projects:read', () =>
+          invokeNamedHubTool(handlers, client.scopes, 'call_hub_tool', {
+            toolName: args.toolName,
+            arguments: args.arguments ?? {},
+          }),
+        )(),
+    );
+    limitOauthToolSurface(server);
     stampOauthSecuritySchemes(server, client.scopes);
   }
 
   return server;
+}
+
+/**
+ * ChatGPT rejects a tools/list payload above about 16,000 tokens. These are the
+ * largest schemas. Bearer /mcp still exposes them.
+ */
+const CHATGPT_OAUTH_HIDDEN_TOOLS = new Set([
+  'update_system',
+  'create_system',
+  'update_project_baseline',
+  'create_project_task',
+  'update_project_task',
+  'update_project_stakeholder',
+  'create_project_stakeholder',
+  'update_project_change_item',
+  'create_project_change_item',
+  'report_project_task_ai_usage',
+  'update_project_ai_assistant_cost',
+  'begin_workspace_media_upload',
+  'update_project_sprint',
+]);
+
+function limitOauthToolSurface(server: McpServer): void {
+  const tools = (
+    server as unknown as {
+      _registeredTools?: Record<string, { disable?: () => void }>;
+    }
+  )._registeredTools;
+  if (!tools) {
+    return;
+  }
+  for (const [name, tool] of Object.entries(tools)) {
+    if (CHATGPT_OAUTH_HIDDEN_TOOLS.has(name)) {
+      tool.disable?.();
+    }
+  }
 }
 
 function stampOauthSecuritySchemes(server: McpServer, scopes: string[]): void {

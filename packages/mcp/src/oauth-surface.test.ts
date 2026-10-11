@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   createKnowledgeHubMcpServer,
   type McpClientContext,
@@ -38,5 +40,71 @@ describe('oauth tool surface', () => {
     expect(oauthTools.list_workspaces?._meta?.securitySchemes).toEqual([
       { type: 'oauth2', scopes: ['knowledge:read'] },
     ]);
+    expect(bearerTools.update_system).toBeDefined();
+  });
+
+  it('keeps the ChatGPT tool list under the scan limit', async () => {
+    const handlers = {} as McpToolHandlers;
+    const oauth = createKnowledgeHubMcpServer(client, handlers, {
+      oauth: {
+        resourceMetadataUrl:
+          'https://knowledge.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+        profile: { id: 'user-1', name: 'Ada', email: 'ada@example.com' },
+      },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await oauth.connect(serverTransport);
+    const mcp = new Client({ name: 'size', version: '0' });
+    await mcp.connect(clientTransport);
+    const listed = await mcp.listTools();
+    const names = listed.tools.map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining([
+      'list_workspaces',
+      'list_projects',
+      'get_project',
+      'search_knowledge',
+      'list_hub_tools',
+      'call_hub_tool',
+    ]));
+    expect(names).not.toContain('update_system');
+    expect(JSON.stringify(listed.tools).length).toBeLessThan(48_000);
+    await mcp.close();
+  });
+
+  it('invokes a hidden tool through call_hub_tool', async () => {
+    const calls: unknown[] = [];
+    const handlers = {
+      createProjectTask: async (input: unknown) => {
+        calls.push(input);
+        return { id: 'task-1' };
+      },
+    } as McpToolHandlers;
+    const oauth = createKnowledgeHubMcpServer(
+      { ...client, scopes: ['projects:read', 'pm:write'] },
+      handlers,
+      {
+        oauth: {
+          resourceMetadataUrl:
+            'https://knowledge.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+          profile: { id: 'user-1', name: 'Ada', email: 'ada@example.com' },
+        },
+      },
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await oauth.connect(serverTransport);
+    const mcp = new Client({ name: 'dispatch', version: '0' });
+    await mcp.connect(clientTransport);
+    const result = await mcp.callTool({
+      name: 'call_hub_tool',
+      arguments: {
+        toolName: 'create_project_task',
+        arguments: { projectId: '11111111-1111-4111-8111-111111111111', title: 'Write the brief' },
+      },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(calls).toEqual([
+      { projectId: '11111111-1111-4111-8111-111111111111', title: 'Write the brief' },
+    ]);
+    await mcp.close();
   });
 });

@@ -99,6 +99,8 @@ In the ChatGPT plugin or Codex connector, paste the resource URL. There is no AP
 
 The person approving access signs in with their normal KnowHub account. They land on `/oauth/consent`, choose workspaces and scopes, and the grant is stored. Read scopes start checked. Write scopes start unchecked and require at least one workspace. A system administrator can include any active workspace in one organization, including workspaces where they have no membership. The grant stays limited to the workspaces and scopes they select. System users cannot consent.
 
+ChatGPT only keeps an MCP tool list of about 16,000 tokens. `/mcp/oauth` therefore omits the largest write schemas (systems, task create/update, baseline, stakeholder edit, change items, sprint update, and the chunked media upload). `list_workspaces`, `list_projects`, `get_project`, and `search_knowledge` stay. Call `list_hub_tools`, then `call_hub_tool` with that tool name and its arguments, to use an omitted tool. Bearer `/mcp` still has the full tool list. After this server changes, refresh the plugin's tools in ChatGPT or create the plugin again. A saved scan does not pick up new tools by itself.
+
 After consent:
 
 * **Admin → MCP setup → OAuth** lists grants. Revoke is the only action there.

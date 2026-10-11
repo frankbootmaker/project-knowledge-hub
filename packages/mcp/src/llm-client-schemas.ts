@@ -63,6 +63,7 @@ export {
   LLM_TOOL_CATALOG,
   findLlmTool,
   listHubToolSummaries,
+  invokeNamedHubTool,
   toolDefinitionsForGemini,
   toolDefinitionsForOpenApi,
   toolNameToHandlerMethod,
