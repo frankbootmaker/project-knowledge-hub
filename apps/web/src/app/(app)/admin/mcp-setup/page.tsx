@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { redirect } from 'next/navigation';
 import {
   AiProvidersAdmin,
   type PublicLlmBinding,
@@ -8,10 +9,6 @@ import {
   ApiClientsAdmin,
   type PublicApiClient,
 } from '../../../../components/admin/ApiClientsAdmin';
-import {
-  MembershipsAdmin,
-  type PublicMembership,
-} from '../../../../components/admin/MembershipsAdmin';
 import {
   McpAdminTabs,
   parseMcpAdminTab,
@@ -71,6 +68,10 @@ export default async function AdminMcpSetupPage({
 }) {
   const t = await getTranslations('admin');
   const params = await searchParams;
+  const rawTab = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+  if (rawTab === 'memberships') {
+    redirect('/admin/identity?tab=memberships');
+  }
   const tab = parseMcpAdminTab(params.tab);
 
   return (
@@ -83,7 +84,6 @@ export default async function AdminMcpSetupPage({
           bearer: t('mcpTabBearer'),
           oauth: t('mcpTabOauth'),
           clients: t('apiClients'),
-          memberships: t('memberships'),
           providers: t('aiProviders'),
         }}
       />
@@ -149,33 +149,6 @@ async function McpAdminPane({ tab }: { tab: McpAdminTab }) {
           organizations={directory.organizations}
           workspaces={directory.workspaces}
           users={directory.users}
-        />
-      </div>
-    );
-  }
-
-  if (tab === 'memberships') {
-    const [membershipsRes, usersRes, workspacesRes] = await Promise.all([
-      apiFetch('/api/v1/memberships'),
-      apiFetch('/api/v1/users'),
-      apiFetch('/api/v1/workspaces'),
-    ]);
-    const memberships = membershipsRes.ok
-      ? ((await membershipsRes.json()) as { memberships: PublicMembership[] }).memberships
-      : [];
-    const users = usersRes.ok
-      ? ((await usersRes.json()) as { users: UserRow[] }).users
-      : [];
-    const workspaces = workspacesRes.ok
-      ? ((await workspacesRes.json()) as { workspaces: WorkspaceRow[] }).workspaces
-      : [];
-    return (
-      <div className="grid gap-4">
-        <p className="m-0 text-sm text-ink-muted">{t('mcpMembershipsBlurb')}</p>
-        <MembershipsAdmin
-          initialMemberships={memberships}
-          users={users}
-          workspaces={workspaces}
         />
       </div>
     );

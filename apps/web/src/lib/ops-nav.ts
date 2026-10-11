@@ -590,6 +590,7 @@ export function matchNavItem(
       pathname.startsWith('/admin/identity')
       || pathname.startsWith('/admin/users')
       || pathname.startsWith('/admin/organizations')
+      || pathname.startsWith('/admin/memberships')
       || pathname.startsWith('/admin/sso')
     );
   }

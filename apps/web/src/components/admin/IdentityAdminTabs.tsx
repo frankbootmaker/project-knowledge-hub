@@ -1,12 +1,12 @@
 import Link from 'next/link';
 
-export const IDENTITY_ADMIN_TABS = ['organizations', 'users', 'sso'] as const;
+export const IDENTITY_ADMIN_TABS = ['organizations', 'users', 'memberships', 'sso'] as const;
 
 export type IdentityAdminTab = (typeof IDENTITY_ADMIN_TABS)[number];
 
 export function parseIdentityAdminTab(value: string | string[] | undefined): IdentityAdminTab {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === 'users' || raw === 'sso') return raw;
+  if (raw === 'users' || raw === 'memberships' || raw === 'sso') return raw;
   return 'organizations';
 }
 

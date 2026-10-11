@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function AdminMembershipsPage() {
-  redirect('/admin/mcp-setup?tab=memberships');
+  redirect('/admin/identity?tab=memberships');
 }

@@ -4,6 +4,10 @@ import {
   parseIdentityAdminTab,
 } from '../../../../components/admin/IdentityAdminTabs';
 import {
+  MembershipsAdmin,
+  type PublicMembership,
+} from '../../../../components/admin/MembershipsAdmin';
+import {
   OidcSettingsAdmin,
   type PublicOidcSettings,
 } from '../../../../components/admin/OidcSettingsAdmin';
@@ -48,10 +52,12 @@ export default async function AdminIdentityPage({
         labels={{
           organizations: t('organizations'),
           users: t('users'),
+          memberships: t('memberships'),
           sso: t('sso'),
         }}
       />
       {tab === 'users' ? <UsersPane /> : null}
+      {tab === 'memberships' ? <MembershipsPane /> : null}
       {tab === 'sso' ? <SsoPane /> : null}
       {tab === 'organizations' ? <OrganizationsPane /> : null}
     </div>
@@ -99,6 +105,39 @@ async function UsersPane() {
         allowHardDelete={
           process.env.APP_ENV === 'development' || process.env.APP_ENV === 'test'
         }
+      />
+    </div>
+  );
+}
+
+async function MembershipsPane() {
+  const t = await getTranslations('admin');
+  const [membershipsRes, usersRes, workspacesRes] = await Promise.all([
+    apiFetch('/api/v1/memberships'),
+    apiFetch('/api/v1/users'),
+    apiFetch('/api/v1/workspaces'),
+  ]);
+  const memberships = membershipsRes.ok
+    ? ((await membershipsRes.json()) as { memberships: PublicMembership[] }).memberships
+    : [];
+  const users = usersRes.ok
+    ? ((await usersRes.json()) as {
+        users: Array<{ id: string; email: string; displayName: string }>;
+      }).users
+    : [];
+  const workspaces = workspacesRes.ok
+    ? ((await workspacesRes.json()) as {
+        workspaces: Array<{ id: string; name: string; slug: string }>;
+      }).workspaces
+    : [];
+
+  return (
+    <div className="grid gap-4">
+      <p className="m-0 text-sm text-ink-muted">{t('mcpMembershipsBlurb')}</p>
+      <MembershipsAdmin
+        initialMemberships={memberships}
+        users={users}
+        workspaces={workspaces}
       />
     </div>
   );

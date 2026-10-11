@@ -4,7 +4,6 @@ export const MCP_ADMIN_TABS = [
   'bearer',
   'oauth',
   'clients',
-  'memberships',
   'providers',
 ] as const;
 
@@ -12,7 +11,7 @@ export type McpAdminTab = (typeof MCP_ADMIN_TABS)[number];
 
 export function parseMcpAdminTab(value: string | string[] | undefined): McpAdminTab {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === 'oauth' || raw === 'clients' || raw === 'memberships' || raw === 'providers') {
+  if (raw === 'oauth' || raw === 'clients' || raw === 'providers') {
     return raw;
   }
   return 'bearer';
