@@ -2797,6 +2797,10 @@
     "wideModalDescription": "Az org chart teljes szélességű nézetben nyílik. A Lista visszavisz az oldalra.",
     "closeWideView": "Vissza a listához",
     "orgChartHint": "Az emberek a jelentési vonalat használják; az AI asszisztensek a tulajdonosuk alá kerülnek. A többiek a Csoportosítatlan alatt.",
+    "orgChartZoomIn": "Nagyítás",
+    "orgChartZoomOut": "Kicsinyítés",
+    "orgChartZoomReset": "Alaphelyzet",
+    "orgChartZoomPercent": "{percent}%",
     "orgChartNoHierarchy": "Még nincs jelentési vonal. Állíts be „Jelentési vonalat” a projektcsapat tagjainál.",
     "orgChartUngrouped": "Csoportosítatlan",
     "projectRole": {

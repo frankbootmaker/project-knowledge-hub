@@ -2809,6 +2809,10 @@
     "wideModalDescription": "Org chart opens in a full-width view. Choose List to return to the page.",
     "closeWideView": "Back to list",
     "orgChartHint": "Humans use reports-to; AI assistants hang under their owner. Others appear under Ungrouped.",
+    "orgChartZoomIn": "Zoom in",
+    "orgChartZoomOut": "Zoom out",
+    "orgChartZoomReset": "Reset zoom",
+    "orgChartZoomPercent": "{percent}%",
     "orgChartNoHierarchy": "No reporting lines yet. Set “Reports to” on project-team members to build the chart.",
     "orgChartUngrouped": "Ungrouped",
     "projectRole": {

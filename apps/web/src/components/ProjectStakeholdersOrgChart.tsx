@@ -1,10 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AssistantBrandMark } from './AssistantBrandMark';
 import { UserAvatar } from './UserAvatar';
-import { Badge } from './ui';
+import { Badge, Button } from './ui';
+
+const ORG_CHART_ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 1.75] as const;
+const ORG_CHART_ZOOM_DEFAULT = ORG_CHART_ZOOMS.indexOf(1);
 
 export type OrgChartStakeholder = {
   id: string;
@@ -231,6 +234,8 @@ export function ProjectStakeholdersOrgChart({
   onOpen?: (row: OrgChartStakeholder) => void;
 }) {
   const t = useTranslations('stakeholders');
+  const [zoomIndex, setZoomIndex] = useState(ORG_CHART_ZOOM_DEFAULT);
+  const zoom = ORG_CHART_ZOOMS[zoomIndex] ?? 1;
   const { roots, ungrouped } = useMemo(
     () => buildForest(stakeholders),
     [stakeholders],
@@ -260,7 +265,50 @@ export function ProjectStakeholdersOrgChart({
 
   return (
     <div>
-      <p className="kh-ops-org-hint">{t('orgChartHint')}</p>
+      <div className="kh-ops-org-zoombar">
+        <p className="kh-ops-org-hint">{t('orgChartHint')}</p>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            className="!px-2.5"
+            disabled={zoomIndex <= 0}
+            onClick={() => setZoomIndex((index) => Math.max(0, index - 1))}
+            title={t('orgChartZoomOut')}
+            aria-label={t('orgChartZoomOut')}
+          >
+            <ZoomOutIcon />
+          </Button>
+          <span className="min-w-10 text-center text-xs tabular-nums text-ink-muted">
+            {t('orgChartZoomPercent', { percent: Math.round(zoom * 100) })}
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            className="!px-2.5"
+            disabled={zoomIndex >= ORG_CHART_ZOOMS.length - 1}
+            onClick={() =>
+              setZoomIndex((index) => Math.min(ORG_CHART_ZOOMS.length - 1, index + 1))
+            }
+            title={t('orgChartZoomIn')}
+            aria-label={t('orgChartZoomIn')}
+          >
+            <ZoomInIcon />
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="!px-2.5"
+            disabled={zoom === 1}
+            onClick={() => setZoomIndex(ORG_CHART_ZOOM_DEFAULT)}
+            title={t('orgChartZoomReset')}
+            aria-label={t('orgChartZoomReset')}
+          >
+            <ResetViewIcon />
+          </Button>
+        </div>
+      </div>
+      <div className="kh-ops-org-zoom" style={{ zoom }}>
 
       {roots.length > 0 ? (
         <div className="kh-ops-org-tree-wrap">
@@ -295,6 +343,50 @@ export function ProjectStakeholdersOrgChart({
           </ul>
         </div>
       ) : null}
+      </div>
     </div>
+  );
+}
+
+function ZoomInIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <circle cx="11" cy="11" r="6.25" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        d="M15.5 15.5 20 20M11 8.25v5.5M8.25 11h5.5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ZoomOutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <circle cx="11" cy="11" r="6.25" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        d="M15.5 15.5 20 20M8.25 11h5.5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ResetViewIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <path
+        d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="8" y="8" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
   );
 }

@@ -2797,6 +2797,10 @@
     "wideModalDescription": "Das Org-Chart öffnet in der Vollansicht. Mit Liste kehren Sie zur Seite zurück.",
     "closeWideView": "Zurück zur Liste",
     "orgChartHint": "Menschen nutzen „Berichtet an“; KI-Assistenten hängen unter ihrem Owner. Andere unter Ungruppiert.",
+    "orgChartZoomIn": "Vergrößern",
+    "orgChartZoomOut": "Verkleinern",
+    "orgChartZoomReset": "Zoom zurücksetzen",
+    "orgChartZoomPercent": "{percent} %",
     "orgChartNoHierarchy": "Noch keine Berichtslinien. Setzen Sie „Berichtet an“ bei Mitgliedern des Projektteams.",
     "orgChartUngrouped": "Ungruppiert",
     "projectRole": {
