@@ -299,8 +299,10 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
         resource: 'http://localhost:3100/mcp/oauth',
       }).toString(),
     });
-    expect(reused.statusCode).toBe(400);
-    expect((reused.json() as { error: string }).error).toBe('invalid_grant');
+    expect(reused.statusCode).toBe(200);
+    const reusedBody = reused.json() as { access_token: string; refresh_token: string };
+    expect(reusedBody.access_token).toBeTruthy();
+    expect(reusedBody.refresh_token).not.toBe(issued.refresh_token);
   });
 
   it('rejects write consent without a workspace and revoke stops the next call', async () => {

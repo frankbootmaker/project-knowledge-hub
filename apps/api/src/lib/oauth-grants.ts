@@ -252,6 +252,38 @@ export async function consumeAuthorizationCode(
   return { grant: consumed, refreshToken: refresh.token };
 }
 
+const REFRESH_REUSE_GRACE_MS = 60_000;
+
+function refreshReuseWithinGrace(revokedAt: Date | null, now: Date): boolean {
+  if (!revokedAt) {
+    return false;
+  }
+  return now.getTime() - revokedAt.getTime() <= REFRESH_REUSE_GRACE_MS;
+}
+
+async function insertRefreshToken(
+  database: Database,
+  grantId: string,
+  refreshTtlSeconds: number,
+  now: Date,
+  rotatedFromId?: string,
+): Promise<string> {
+  const next = issueOpaqueToken('or');
+  const refreshExpiresAt = new Date(now.getTime() + refreshTtlSeconds * 1000);
+  await database.db.insert(oauthRefreshTokens).values({
+    grantId,
+    tokenHash: next.tokenHash,
+    tokenPrefix: next.tokenPrefix,
+    expiresAt: refreshExpiresAt,
+    rotatedFromId,
+  });
+  await database.db
+    .update(oauthGrants)
+    .set({ refreshExpiresAt, lastUsedAt: now })
+    .where(eq(oauthGrants.id, grantId));
+  return next.token;
+}
+
 export async function rotateRefreshToken(
   database: Database,
   input: { refreshToken: string; clientId: string; resource: string; refreshTtlSeconds: number },
@@ -263,7 +295,10 @@ export async function rotateRefreshToken(
     .from(oauthRefreshTokens)
     .where(eq(oauthRefreshTokens.tokenHash, tokenHash))
     .limit(1);
-  if (!existing || existing.revokedAt || existing.expiresAt <= now) {
+  if (!existing || existing.expiresAt <= now) {
+    return null;
+  }
+  if (existing.revokedAt && !refreshReuseWithinGrace(existing.revokedAt, now)) {
     return null;
   }
   const [grant] = await database.db
@@ -280,6 +315,17 @@ export async function rotateRefreshToken(
   ) {
     return null;
   }
+  if (existing.revokedAt) {
+    const refreshToken = await insertRefreshToken(
+      database,
+      grant.id,
+      input.refreshTtlSeconds,
+      now,
+      existing.id,
+    );
+    return { grant, refreshToken };
+  }
+
   const next = issueOpaqueToken('or');
   const refreshExpiresAt = new Date(now.getTime() + input.refreshTtlSeconds * 1000);
   const rotated = await database.db.transaction(async (tx) => {
@@ -304,10 +350,26 @@ export async function rotateRefreshToken(
       .where(eq(oauthGrants.id, grant.id));
     return grant;
   });
-  if (!rotated) {
+  if (rotated) {
+    return { grant: { ...rotated, refreshExpiresAt }, refreshToken: next.token };
+  }
+
+  const [again] = await database.db
+    .select()
+    .from(oauthRefreshTokens)
+    .where(eq(oauthRefreshTokens.id, existing.id))
+    .limit(1);
+  if (!again?.revokedAt || !refreshReuseWithinGrace(again.revokedAt, now)) {
     return null;
   }
-  return { grant: { ...rotated, refreshExpiresAt }, refreshToken: next.token };
+  const refreshToken = await insertRefreshToken(
+    database,
+    grant.id,
+    input.refreshTtlSeconds,
+    now,
+    existing.id,
+  );
+  return { grant, refreshToken };
 }
 
 export async function loadActiveGrantForAccessToken(

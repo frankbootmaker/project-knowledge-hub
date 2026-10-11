@@ -602,6 +602,11 @@ function requireScope(client: McpClientContext, scope: McpScope): void {
   }
 }
 
+/** ChatGPT treats this hint as a login prompt. Send it only for real auth failures. */
+function oauthReauthError(error: unknown): boolean {
+  return error instanceof AppError && (error.statusCode === 401 || error.statusCode === 403);
+}
+
 /**
  * Convert an error to an MCP error result, sanitizing sensitive information.
  * Only AppError messages are returned verbatim; all other errors are sanitized.
@@ -763,7 +768,7 @@ export function createKnowledgeHubMcpServer(
       } catch (error) {
         await handlers.onToolCall?.(toolName, false, argContext);
         const result = toMcpErrorResult(error, handlers.logger);
-        if (!options?.oauth) {
+        if (!options?.oauth || !oauthReauthError(error)) {
           return result;
         }
         const description = result.content[0]?.text ?? 'Authentication required';

@@ -108,4 +108,40 @@ describe('oauth tool surface', () => {
     ]);
     await mcp.close();
   });
+
+  it('asks ChatGPT to reauthenticate only when the grant lacks the scope', async () => {
+    const oauthOptions = {
+      oauth: {
+        resourceMetadataUrl:
+          'https://knowledge.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+        profile: { id: 'user-1', name: 'Ada', email: 'ada@example.com' },
+      },
+    };
+    const deniedServer = createKnowledgeHubMcpServer(client, {} as McpToolHandlers, oauthOptions);
+    const [deniedClientTransport, deniedServerTransport] = InMemoryTransport.createLinkedPair();
+    await deniedServer.connect(deniedServerTransport);
+    const deniedClient = new Client({ name: 'auth-hint', version: '0' });
+    await deniedClient.connect(deniedClientTransport);
+    const denied = await deniedClient.callTool({ name: 'list_workspaces', arguments: {} });
+    expect(denied.isError).toBe(true);
+    expect(JSON.stringify(denied._meta ?? {})).toContain('mcp/www_authenticate');
+    await deniedClient.close();
+
+    const missingServer = createKnowledgeHubMcpServer(
+      { ...client, scopes: ['projects:read'] },
+      {} as McpToolHandlers,
+      oauthOptions,
+    );
+    const [missingClientTransport, missingServerTransport] = InMemoryTransport.createLinkedPair();
+    await missingServer.connect(missingServerTransport);
+    const missingClient = new Client({ name: 'auth-hint', version: '0' });
+    await missingClient.connect(missingClientTransport);
+    const missing = await missingClient.callTool({
+      name: 'call_hub_tool',
+      arguments: { toolName: 'not_a_tool', arguments: {} },
+    });
+    expect(missing.isError).toBe(true);
+    expect(JSON.stringify(missing._meta ?? {})).not.toContain('mcp/www_authenticate');
+    await missingClient.close();
+  });
 });
