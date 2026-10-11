@@ -16,8 +16,8 @@ import { Button } from './Button';
 export type ModalSize = 'md' | 'lg' | 'xl' | 'full';
 
 /**
- * Width shared by delivery item dialogs (task, epic, story, milestone,
- * and the shared Add item dialog) so they stay the same size.
+ * Width shared by delivery, RAID, and change item dialogs so they stay
+ * the same size.
  */
 export const DELIVERY_ITEM_MODAL_SIZE = 'xl' satisfies ModalSize;
 

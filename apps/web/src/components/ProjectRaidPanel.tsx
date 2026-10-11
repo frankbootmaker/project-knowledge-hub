@@ -7,6 +7,7 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectRaidList } from './ProjectRaidList';
 import {
   Button,
+  DELIVERY_ITEM_MODAL_SIZE,
   ErrorText,
   Field,
   Input,
@@ -482,7 +483,7 @@ export function ProjectRaidPanel({
         onClose={() => setCreateOpen(false)}
         title={t('addItem')}
         description={t('modalDescription')}
-        size="md"
+        size={DELIVERY_ITEM_MODAL_SIZE}
         footer={
           <>
             <Button
@@ -511,7 +512,7 @@ export function ProjectRaidPanel({
         onClose={() => setManageId(null)}
         title={title.trim() || t('manageItem')}
         description={t('manageDescription')}
-        size="md"
+        size={DELIVERY_ITEM_MODAL_SIZE}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">

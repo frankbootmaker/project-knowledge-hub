@@ -8,6 +8,7 @@ import { ProjectChangeList } from './ProjectChangeList';
 import {
   Badge,
   Button,
+  DELIVERY_ITEM_MODAL_SIZE,
   ErrorText,
   Field,
   Input,
@@ -519,7 +520,7 @@ export function ProjectChangePanel({
         onClose={() => setCreateOpen(false)}
         title={t('addItem')}
         description={t('modalDescription')}
-        size="lg"
+        size={DELIVERY_ITEM_MODAL_SIZE}
         footer={
           <>
             <Button
@@ -548,7 +549,7 @@ export function ProjectChangePanel({
         onClose={() => setManageId(null)}
         title={title.trim() || t('manageItem')}
         description={t('manageDescription')}
-        size="lg"
+        size={DELIVERY_ITEM_MODAL_SIZE}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <div>
