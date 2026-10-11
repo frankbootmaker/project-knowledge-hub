@@ -11,10 +11,11 @@ export default async function AiConnectionsPage() {
   await requireSession();
   const t = await getTranslations('aiConnections');
 
-  const [clientsRes, workspacesRes, grantsRes] = await Promise.all([
+  const [clientsRes, workspacesRes, grantsRes, preflightRes] = await Promise.all([
     apiFetch('/api/v1/me/api-clients'),
     apiFetch('/api/v1/workspaces'),
     apiFetch('/api/v1/me/oauth/grants'),
+    apiFetch('/api/v1/me/mcp/setup/preflight'),
   ]);
 
   const clients = clientsRes.ok
@@ -28,6 +29,12 @@ export default async function AiConnectionsPage() {
   const grants = grantsRes.ok
     ? ((await grantsRes.json()) as { grants: OauthGrantRow[] }).grants
     : [];
+  const preflight = preflightRes.ok
+    ? ((await preflightRes.json()) as {
+        oauthResourceUrl?: string;
+        oauthEnabled?: boolean;
+      })
+    : null;
 
   return (
     <div>
@@ -36,6 +43,8 @@ export default async function AiConnectionsPage() {
         initialClients={clients}
         workspaces={workspaces}
         grants={grants}
+        oauthResourceUrl={preflight?.oauthResourceUrl ?? ''}
+        oauthEnabled={preflight?.oauthEnabled === true}
       />
     </div>
   );

@@ -228,8 +228,14 @@ describe.skipIf(!hasIntegrationEnv)('User MCP setup (/me api-clients)', () => {
       headers: { cookie: memberCookie },
     });
     expect(response.statusCode).toBe(200);
-    const body = response.json() as { endpoints?: { mcpUrl?: string } };
+    const body = response.json() as {
+      endpoints?: { mcpUrl?: string };
+      oauthResourceUrl?: string;
+      oauthEnabled?: boolean;
+    };
     expect(body.endpoints?.mcpUrl).toBeTruthy();
+    expect(body.oauthResourceUrl?.endsWith('/mcp/oauth')).toBe(true);
+    expect(typeof body.oauthEnabled).toBe('boolean');
   });
 
   it('does not allow outsider to rotate a member client', async () => {

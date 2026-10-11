@@ -2,8 +2,8 @@
 
 **Two paths:**
 
-* **ChatGPT plugin / Codex:** connect `https://<host>/mcp/oauth`. Each person signs in and consents. There is no API key. An admin must set `OAUTH_JWT_PRIVATE_KEY` and enable the resource on **Admin → MCP setup**. Setup: [`docs/deployment/OAUTH_MCP_SETUP.md`](../deployment/OAUTH_MCP_SETUP.md).
-* **Custom GPT Actions:** still OpenAPI + Bearer, and only inside that GPT. Keep this until Custom GPTs shut down.
+* **ChatGPT plugin / Codex:** connect `https://<host>/mcp/oauth`. Each person signs in and consents. There is no API key. Steps: [`docs/deployment/OAUTH_MCP_SETUP.md`](../deployment/OAUTH_MCP_SETUP.md) §5. Another OAuth MCP client uses that same URL after an admin allowlists its client-id prefix and redirect (§6).
+* **Custom GPT Actions:** still OpenAPI + Bearer, and the path that works on ChatGPT Plus. Keep this until Custom GPTs shut down.
 
 Do **not** point Cursor, Claude, or Antigravity at `/mcp/oauth`. They stay on `/mcp` with a bearer token.
 

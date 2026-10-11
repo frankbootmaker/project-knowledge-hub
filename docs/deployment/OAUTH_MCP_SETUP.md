@@ -93,24 +93,54 @@ The badge says **Live** only when the key parses and the switch is on. Copy the 
 
 ---
 
-## 5. Connect ChatGPT or Codex
+## 5. Connect ChatGPT
 
-In the ChatGPT plugin or Codex connector, paste the resource URL. There is no API key.
+OpenAI offers this custom MCP connection on ChatGPT **Business, Enterprise, and Edu**. **Pro** can connect for read and fetch. **Plus** stays on Custom GPT Actions ([`CHATGPT_CUSTOM_GPT_FAQ.md`](../product/CHATGPT_CUSTOM_GPT_FAQ.md)).
 
-The person approving access signs in with their normal KnowHub account. They land on `/oauth/consent`, choose workspaces and scopes, and the grant is stored. Read scopes start checked. Write scopes start unchecked and require at least one workspace. A system administrator can include any active workspace in one organization, including workspaces where they have no membership. The grant stays limited to the workspaces and scopes they select. System users cannot consent.
+One ChatGPT app points at the KnowHub resource. Each person signs in with their own KnowHub account. A separate app per person also works. Leave the client id and client secret empty. There is no `kh_` token on this URL.
 
-ChatGPT only keeps an MCP tool list of about 16,000 tokens, and it drops the whole list when that scan is too large. `/mcp/oauth` therefore advertises only `list_workspaces`, `list_projects`, `get_project`, `search_knowledge`, `get_knowledge_record`, `list_hub_tools`, and `call_hub_tool`. Call `list_hub_tools`, then `call_hub_tool` with that tool name and its arguments, for every other operation. Bearer `/mcp` still has the full tool list. After this server is deployed, remove the plugin and add it again, then start a new ChatGPT conversation. A saved scan does not pick up a new tool list.
+1. Sign in at [chatgpt.com](https://chatgpt.com).
+2. Open **Plugins** (the menu may say **Apps**). Choose **Add**, then **Create MCP app**. The label may read “Create an MCP application”.
+3. Name the app, for example `KnowHub`. The `@` name in chat is whatever you type here.
+4. Set the MCP server URL to the resource URL on **Admin → MCP setup → OAuth**. On the current dev host that is `https://knowhub-dev.in3.technology/mcp/oauth`.
+5. Choose OAuth when the form asks for an authentication method. Leave the client id and client secret empty.
+6. Create the app. ChatGPT opens the KnowHub consent page.
+   * Sign in with that person’s KnowHub account. A system user cannot consent.
+   * Workspaces start unchecked. Tick only the workspaces this connection may open.
+   * Read scopes start checked. Write scopes start unchecked and need at least one workspace.
+   * A system administrator may include any active workspace in one organization. The grant stores only the workspaces and scopes they select.
+7. Start a **new** chat, select `@KnowHub` (or the name from step 3), and ask: “List my workspaces.”
+
+Ask in plain language for projects, records, tasks, and milestones. ChatGPT sees eight tools directly: `list_workspaces`, `list_projects`, `get_project`, `search_knowledge`, `get_knowledge_record`, `get_profile`, `list_hub_tools`, and `call_hub_tool`. For anything else it calls `list_hub_tools`, then `call_hub_tool`. Bearer `/mcp` still lists every tool by name.
+
+Access tokens last about 15 minutes. ChatGPT renews them with a refresh token that lasts about 30 days. A login window means the grant was revoked or refresh failed. Do not paste a bearer token to get past it.
+
+After the server’s tool list changes, remove the app, add it again, and open a new chat. An existing chat keeps the previous scan.
 
 After consent:
 
-* **Admin → MCP setup → OAuth** lists grants. Revoke is the only action there.
-* **Account → AI connections** lists that person's own grants.
+* **Admin → MCP setup → OAuth** lists grants. Revoke drops the refresh token. **Remove** clears a revoked row.
+* **Account → AI connections** lists that person’s own grants, with the same revoke and remove actions.
 * Closing the user revokes their grants and refresh tokens.
 * Audit events use actor type `oauth_grant`.
 
 ---
 
-## 6. Checks when it does not connect
+## 6. Other OAuth MCP clients
+
+The same resource and the same consent page work for another OAuth MCP client when an admin allowlists it under **Admin → MCP setup → OAuth**.
+
+* The client id must be an HTTPS URL on an allowlisted prefix. The default prefix is `https://chatgpt.com/oauth/`.
+* The redirect must be allowlisted. The defaults are `https://chatgpt.com/connector_platform_oauth_redirect` and `http://127.0.0.1/callback`. A loopback URL (`127.0.0.1`, `localhost`, or `[::1]`) matches any port, which is how Codex connects. Every other redirect matches exactly. A trailing slash on an https entry matches that prefix.
+* The grant is authorization code with PKCE S256. There is no client secret and no dynamic client registration.
+
+Codex is already covered. Paste the same resource URL into Codex and finish the consent page.
+
+Cursor, Claude, Antigravity, Copilot, and OpenWebUI do not use this OAuth resource. They stay on `/mcp` with a `kh_` token.
+
+---
+
+## 7. Checks when it does not connect
 
 | What you see | What to do |
 | --- | --- |
@@ -121,3 +151,5 @@ After consent:
 | A `kh_` token is rejected on `/mcp/oauth` | Expected. That URL accepts only OAuth access tokens. |
 | A JWT is rejected on `/mcp` | Expected. `/mcp` stays bearer-only and does not send `WWW-Authenticate`. |
 | Consent says the user must belong to a workspace | Write scopes need a non-empty workspace allowlist. Add a membership, or consent to read scopes only. |
+| ChatGPT says the plugin has no tools | The plan cannot scan a custom MCP server, or the saved scan is empty. Use Business, Enterprise, Edu, or Pro read/fetch. Then remove the app, add it again, and open a new chat. |
+| Login appears again during a normal question | Revoke is not required for a 15-minute access token. ChatGPT should refresh it. If the prompt persists, revoke that grant and connect once more. |

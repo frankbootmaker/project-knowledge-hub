@@ -1,8 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '@project-knowledge-hub/domain';
+import { oauthResourceUrlFromMcpUrl } from '@project-knowledge-hub/mcp';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import { runMcpConnectionTest } from '../lib/mcp-connection-test.js';
+import {
+  getStoredOauthMcpSettings,
+  isOauthMcpEffectivelyEnabled,
+} from '../lib/oauth-mcp-settings.js';
 import {
   resolveMcpPublicUrl,
   setMcpPublicUrlOverride,
@@ -26,6 +31,7 @@ async function buildPreflightPayload(app: FastifyInstance) {
   };
 
   const urls = await resolveMcpPublicUrl(app.database, app.env);
+  const oauthSettings = await getStoredOauthMcpSettings(app.database);
 
   return {
     health: {
@@ -48,6 +54,8 @@ async function buildPreflightPayload(app: FastifyInstance) {
       mcpUrlEnv: urls.mcpUrlEnv,
       mcpUrlSource: urls.source,
     },
+    oauthResourceUrl: oauthResourceUrlFromMcpUrl(urls.mcpUrl),
+    oauthEnabled: isOauthMcpEffectivelyEnabled(oauthSettings, app.env),
   };
 }
 

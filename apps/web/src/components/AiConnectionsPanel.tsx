@@ -10,7 +10,7 @@ import {
   Modal,
   useToast,
 } from './ui';
-import { UserMcpSetupWizard } from './mcp-setup';
+import { OauthConnectGuide, UserMcpSetupWizard } from './mcp-setup';
 import { MCP_READ_SCOPES } from './mcp-setup/scopes';
 import { OauthGrantsList, type OauthGrantRow } from './admin/OauthGrantsList';
 
@@ -33,10 +33,14 @@ export function AiConnectionsPanel({
   initialClients,
   workspaces,
   grants,
+  oauthResourceUrl,
+  oauthEnabled,
 }: {
   initialClients: MyApiClient[];
   workspaces: WorkspaceOption[];
   grants: OauthGrantRow[];
+  oauthResourceUrl: string;
+  oauthEnabled: boolean;
 }) {
   const t = useTranslations('aiConnections');
   const tAdmin = useTranslations('admin');
@@ -236,6 +240,12 @@ export function AiConnectionsPanel({
           setIssuedToken(null);
           setIssuedClientName(null);
         }}
+      />
+
+      <OauthConnectGuide
+        audience="user"
+        resourceUrl={oauthResourceUrl}
+        enabled={oauthEnabled}
       />
 
       <OauthGrantsList

@@ -26,6 +26,7 @@ import {
   OauthResourceCard,
   type OauthMcpSettings,
 } from '../../../../components/admin/OauthResourceCard';
+import { OauthConnectGuide } from '../../../../components/mcp-setup';
 import { PageHeader } from '../../../../components/ui';
 import { apiFetch } from '../../../../lib/session';
 
@@ -113,6 +114,13 @@ async function McpAdminPane({ tab }: { tab: McpAdminTab }) {
     return (
       <div className="grid gap-8">
         <OauthResourceCard initial={oauthSettings} />
+        {oauthSettings ? (
+          <OauthConnectGuide
+            audience="admin"
+            resourceUrl={oauthSettings.resourceUrl}
+            enabled={oauthSettings.effectiveEnabled}
+          />
+        ) : null}
         <OauthGrantsList
           grants={grants}
           workspaceNames={workspaceNames}

@@ -16,3 +16,4 @@ export { McpSetupStatusRow } from './McpSetupStatusRow';
 export { McpConnectionTroubleshoot } from './McpConnectionTroubleshoot';
 export { McpSetupDonePanel } from './McpSetupDonePanel';
 export { UserMcpSetupWizard } from './UserMcpSetupWizard';
+export { OauthConnectGuide } from './OauthConnectGuide';
