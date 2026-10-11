@@ -21,7 +21,7 @@ ChatGPT plugins and Codex use a second MCP URL. `/mcp` stays bearer-only for Cur
 * Grants live in `oauth_grants`, not `api_clients`. Access tokens are short-lived JWTs whose `aud` is `https://<host>/mcp/oauth`.
 * Discovery is path-scoped: `/.well-known/oauth-protected-resource/mcp/oauth`. The root `/.well-known/oauth-protected-resource` stays a JSON 404.
 * The resource is off until `OAUTH_JWT_PRIVATE_KEY` is set and an admin enables it on **Admin → MCP setup → OAuth**. Revoke grants there or on **Account → AI connections**. Bearer clients stay on the Bearer tokens tab. Operator steps: [`docs/deployment/OAUTH_MCP_SETUP.md`](../deployment/OAUTH_MCP_SETUP.md).
-* ChatGPT's tool scan stays small. The largest write schemas are left off `tools/list` and stay callable through `list_hub_tools` and `call_hub_tool`.
+* ChatGPT's tool scan stays small. `/mcp/oauth` lists only the navigation tools. Every other operation stays callable through `list_hub_tools` and `call_hub_tool`.
 * Audit actor type is `oauth_grant`. Closing a user revokes that user's grants.
 
 ## User setup wizard

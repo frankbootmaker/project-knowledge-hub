@@ -57,17 +57,18 @@ describe('oauth tool surface', () => {
     const mcp = new Client({ name: 'size', version: '0' });
     await mcp.connect(clientTransport);
     const listed = await mcp.listTools();
-    const names = listed.tools.map((tool) => tool.name);
-    expect(names).toEqual(expect.arrayContaining([
-      'list_workspaces',
-      'list_projects',
-      'get_project',
-      'search_knowledge',
-      'list_hub_tools',
+    const names = listed.tools.map((tool) => tool.name).sort();
+    expect(names).toEqual([
       'call_hub_tool',
-    ]));
-    expect(names).not.toContain('update_system');
-    expect(JSON.stringify(listed.tools).length).toBeLessThan(48_000);
+      'get_knowledge_record',
+      'get_profile',
+      'get_project',
+      'list_hub_tools',
+      'list_projects',
+      'list_workspaces',
+      'search_knowledge',
+    ]);
+    expect(JSON.stringify(listed.tools).length).toBeLessThan(12_000);
     await mcp.close();
   });
 

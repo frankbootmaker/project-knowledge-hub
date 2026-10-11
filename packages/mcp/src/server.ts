@@ -2485,23 +2485,19 @@ export function createKnowledgeHubMcpServer(
 }
 
 /**
- * ChatGPT rejects a tools/list payload above about 16,000 tokens. These are the
- * largest schemas. Bearer /mcp still exposes them.
+ * ChatGPT rejects the whole tools/list when the combined definitions exceed
+ * about 16,000 tokens. Keep only navigation tools here. The handlers stay
+ * registered, so call_hub_tool can still run the rest. Bearer /mcp is unchanged.
  */
-const CHATGPT_OAUTH_HIDDEN_TOOLS = new Set([
-  'update_system',
-  'create_system',
-  'update_project_baseline',
-  'create_project_task',
-  'update_project_task',
-  'update_project_stakeholder',
-  'create_project_stakeholder',
-  'update_project_change_item',
-  'create_project_change_item',
-  'report_project_task_ai_usage',
-  'update_project_ai_assistant_cost',
-  'begin_workspace_media_upload',
-  'update_project_sprint',
+const CHATGPT_OAUTH_LISTED_TOOLS = new Set([
+  'get_profile',
+  'list_workspaces',
+  'list_projects',
+  'get_project',
+  'search_knowledge',
+  'get_knowledge_record',
+  'list_hub_tools',
+  'call_hub_tool',
 ]);
 
 function limitOauthToolSurface(server: McpServer): void {
@@ -2514,7 +2510,7 @@ function limitOauthToolSurface(server: McpServer): void {
     return;
   }
   for (const [name, tool] of Object.entries(tools)) {
-    if (CHATGPT_OAUTH_HIDDEN_TOOLS.has(name)) {
+    if (!CHATGPT_OAUTH_LISTED_TOOLS.has(name)) {
       tool.disable?.();
     }
   }
