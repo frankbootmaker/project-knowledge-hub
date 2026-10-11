@@ -798,13 +798,14 @@ export function headerCrumbs(
       label: names.workspaceName || workspaceSlug,
     });
   }
+  const recordSlug = projectSlug ? projectRecordSlug(pathname) : null;
   if (projectSlug) {
+    const projectHref = `/workspaces/${workspaceSlug}/projects/${projectSlug}`;
     crumbs.push({
-      href: `/workspaces/${workspaceSlug}/projects/${projectSlug}`,
+      href: recordSlug ? `${projectHref}#project-knowledge` : projectHref,
       label: names.projectName || projectSlug,
     });
   }
-  const recordSlug = projectSlug ? projectRecordSlug(pathname) : null;
   if (workspaceSlug && projectSlug && recordSlug) {
     crumbs.push({
       href: `/workspaces/${workspaceSlug}/projects/${projectSlug}/records/${recordSlug}`,

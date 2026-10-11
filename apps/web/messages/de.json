@@ -959,6 +959,7 @@
     "eyebrow": "Wissensinfrastruktur",
     "editTitle": "Wissenseintrag bearbeiten",
     "backToWorkspace": "Zurück zum Workspace",
+    "backToList": "Zurück zu den Wissenseinträgen",
     "failedSave": "Wissenseintrag konnte nicht gespeichert werden",
     "recordType": "Eintragstyp",
     "contentLanguage": "Inhaltssprache",

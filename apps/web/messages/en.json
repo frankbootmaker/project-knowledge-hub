@@ -959,6 +959,7 @@
     "eyebrow": "Knowledge infrastructure",
     "editTitle": "Edit knowledge record",
     "backToWorkspace": "Back to workspace",
+    "backToList": "Back to knowledge records",
     "failedSave": "Failed to save knowledge record",
     "recordType": "Record type",
     "contentLanguage": "Content language",

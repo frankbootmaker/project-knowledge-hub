@@ -579,7 +579,7 @@ describe('ops nav', () => {
       }),
     ).toEqual([
       { href: '/workspaces/platform', label: 'Platform' },
-      { href: '/workspaces/platform/projects/renewal', label: 'Renewal' },
+      { href: '/workspaces/platform/projects/renewal#project-knowledge', label: 'Renewal' },
       {
         href: '/workspaces/platform/projects/renewal/records/charter',
         label: 'Project charter',
@@ -587,7 +587,7 @@ describe('ops nav', () => {
     ]);
     expect(headerCrumbs(path, {})).toEqual([
       { href: '/workspaces/platform', label: 'platform' },
-      { href: '/workspaces/platform/projects/renewal', label: 'renewal' },
+      { href: '/workspaces/platform/projects/renewal#project-knowledge', label: 'renewal' },
       {
         href: '/workspaces/platform/projects/renewal/records/charter',
         label: 'charter',

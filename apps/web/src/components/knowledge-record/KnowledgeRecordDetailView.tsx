@@ -139,6 +139,11 @@ export async function KnowledgeRecordDetailView({
     projectSlug: routeProject?.slug,
     recordSlug: record.slug,
   });
+  const knowledgeProject = routeProject ?? project;
+  const knowledgeListHref = knowledgeProject
+    ? `/workspaces/${workspace.slug}/projects/${knowledgeProject.slug}#project-knowledge`
+    : `/workspaces/${workspace.slug}`;
+  const knowledgeListLabel = knowledgeProject?.name ?? t('eyebrow');
 
   const translationsResponse = await apiFetch(
     `/api/v1/knowledge-records/${record.id}/translations`,
@@ -174,7 +179,12 @@ export async function KnowledgeRecordDetailView({
               {workspace.name}
             </Link>
             {' / '}
-            {t('eyebrow')}
+            <Link
+              href={knowledgeListHref}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {knowledgeListLabel}
+            </Link>
           </>
         }
         title={record.humanKey ? `${record.humanKey} · ${record.title}` : record.title}
@@ -281,6 +291,27 @@ export async function KnowledgeRecordDetailView({
             toc={record.toc ?? []}
             title={record.title}
           />
+          <div className="border-t border-line px-5 py-4">
+            <Link
+              href={knowledgeListHref}
+              className="kh-ops-text-btn inline-flex items-center gap-2 no-underline"
+            >
+              <svg
+                viewBox="0 0 16 16"
+                width="16"
+                height="16"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M10 3L5 8l5 5" />
+              </svg>
+              {t('backToList')}
+            </Link>
+          </div>
         </article>
 
         <aside className="kh-ops-editor-stack">
