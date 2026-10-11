@@ -325,12 +325,34 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
     const grantId = (grants.json() as { grants: Array<{ id: string; status: string }> }).grants
       .find((grant) => grant.status === 'active')?.id;
     expect(grantId).toBeTruthy();
+    const blockedDelete = await app!.inject({
+      method: 'DELETE',
+      url: `/api/v1/oauth/grants/${grantId}`,
+      headers: { cookie, origin: 'http://localhost:3100' },
+    });
+    expect(blockedDelete.statusCode).toBe(409);
     const revoke = await app!.inject({
       method: 'POST',
       url: `/api/v1/oauth/grants/${grantId}/revoke`,
       headers: { cookie, origin: 'http://localhost:3100' },
     });
     expect(revoke.statusCode).toBe(200);
+    const removed = await app!.inject({
+      method: 'DELETE',
+      url: `/api/v1/oauth/grants/${grantId}`,
+      headers: { cookie, origin: 'http://localhost:3100' },
+    });
+    expect(removed.statusCode).toBe(200);
+    const remaining = await app!.inject({
+      method: 'GET',
+      url: '/api/v1/oauth/grants',
+      headers: { cookie },
+    });
+    expect(
+      (remaining.json() as { grants: Array<{ id: string }> }).grants.some(
+        (grant) => grant.id === grantId,
+      ),
+    ).toBe(false);
 
     const { verifier, txn: nextTxn } = await authorize('knowledge:read');
     const consent = await app!.inject({
@@ -370,6 +392,12 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
       url: `/api/v1/me/oauth/grants/${mine!.id}/revoke`,
       headers: { cookie, origin: 'http://localhost:3100' },
     });
+    const removedMine = await app!.inject({
+      method: 'DELETE',
+      url: `/api/v1/me/oauth/grants/${mine!.id}`,
+      headers: { cookie, origin: 'http://localhost:3100' },
+    });
+    expect(removedMine.statusCode).toBe(200);
     const blocked = await app!.inject({
       method: 'POST',
       url: '/mcp/oauth',

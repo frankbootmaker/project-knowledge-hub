@@ -65,23 +65,28 @@ export function OauthGrantsList({
     );
   }, [grants, query]);
 
-  async function revoke(grantId: string) {
+  async function mutateGrant(grantId: string, action: 'revoke' | 'remove') {
     setPending(true);
     setError(null);
+    const failed =
+      action === 'revoke' ? tConnections('revokeFailed') : t('oauthGrantRemoveFailed');
     try {
-      const response = await fetch(`${revokeBase}/${grantId}/revoke`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { Origin: window.location.origin },
-      });
+      const response = await fetch(
+        action === 'revoke' ? `${revokeBase}/${grantId}/revoke` : `${revokeBase}/${grantId}`,
+        {
+          method: action === 'revoke' ? 'POST' : 'DELETE',
+          credentials: 'include',
+          headers: { Origin: window.location.origin },
+        },
+      );
       if (!response.ok) {
         const payload = (await response.json()) as { error?: { message?: string } };
-        throw new Error(payload.error?.message ?? tConnections('revokeFailed'));
+        throw new Error(payload.error?.message ?? failed);
       }
-      pushToast(t('oauthGrantRevoked'));
+      pushToast(action === 'revoke' ? t('oauthGrantRevoked') : t('oauthGrantRemoved'));
       router.refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : tConnections('revokeFailed');
+      const message = err instanceof Error ? err.message : failed;
       setError(message);
       pushToast(message, 'danger');
     } finally {
@@ -136,18 +141,27 @@ export function OauthGrantsList({
                 {' · '}
                 {t('oauthGrantLastUsed')}: {formatWhen(grant.lastUsedAt, t('oauthGrantNever'))}
               </p>
-              {grant.status === 'active' ? (
-                <div>
+              <div>
+                {grant.status === 'active' ? (
                   <Button
                     type="button"
                     variant="secondary"
                     disabled={pending}
-                    onClick={() => void revoke(grant.id)}
+                    onClick={() => void mutateGrant(grant.id, 'revoke')}
                   >
                     {t('oauthGrantRevoke')}
                   </Button>
-                </div>
-              ) : null}
+                ) : (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={pending}
+                    onClick={() => void mutateGrant(grant.id, 'remove')}
+                  >
+                    {t('oauthGrantRemove')}
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -125,6 +125,27 @@ export async function revokeOauthGrant(
   return updated ?? null;
 }
 
+/** Drop a revoked grant and its refresh tokens. Active grants stay until they are revoked. */
+export async function deleteRevokedOauthGrant(
+  database: Database,
+  grantId: string,
+  userId?: string,
+): Promise<'deleted' | 'missing' | 'active'> {
+  const [existing] = await database.db
+    .select()
+    .from(oauthGrants)
+    .where(eq(oauthGrants.id, grantId))
+    .limit(1);
+  if (!existing || (userId && existing.userId !== userId)) {
+    return 'missing';
+  }
+  if (!existing.revokedAt && existing.status !== 'revoked') {
+    return 'active';
+  }
+  await database.db.delete(oauthGrants).where(eq(oauthGrants.id, grantId));
+  return 'deleted';
+}
+
 export async function insertAuthorizationCode(
   database: Database,
   input: {

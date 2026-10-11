@@ -24,6 +24,7 @@ import {
 import { resolveMcpPublicUrl } from '../lib/mcp-public-url.js';
 import {
   consumeAuthorizationCode,
+  deleteRevokedOauthGrant,
   insertAuthorizationCode,
   listOauthGrants,
   loadActiveGrantForAccessToken,
@@ -532,6 +533,29 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
     return { ok: true };
   });
 
+  app.delete('/api/v1/oauth/grants/:grantId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ grantId: z.string().uuid() }).parse(request.params);
+    const result = await deleteRevokedOauthGrant(app.database, params.grantId);
+    if (result === 'missing') {
+      throw new AppError({
+        code: 'OAUTH_GRANT_NOT_FOUND',
+        message: 'OAuth grant not found',
+        statusCode: 404,
+      });
+    }
+    if (result === 'active') {
+      throw new AppError({
+        code: 'OAUTH_GRANT_STILL_ACTIVE',
+        message: 'Revoke the grant before removing it',
+        statusCode: 409,
+      });
+    }
+    return { ok: true };
+  });
+
   app.get('/api/v1/me/oauth/grants', async (request) => {
     const principal = requireAuthenticated(request);
     return { grants: await listOauthGrants(app.database, { userId: principal.userId }) };
@@ -547,6 +571,28 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
         code: 'OAUTH_GRANT_NOT_FOUND',
         message: 'OAuth grant not found',
         statusCode: 404,
+      });
+    }
+    return { ok: true };
+  });
+
+  app.delete('/api/v1/me/oauth/grants/:grantId', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ grantId: z.string().uuid() }).parse(request.params);
+    const result = await deleteRevokedOauthGrant(app.database, params.grantId, principal.userId);
+    if (result === 'missing') {
+      throw new AppError({
+        code: 'OAUTH_GRANT_NOT_FOUND',
+        message: 'OAuth grant not found',
+        statusCode: 404,
+      });
+    }
+    if (result === 'active') {
+      throw new AppError({
+        code: 'OAUTH_GRANT_STILL_ACTIVE',
+        message: 'Revoke the grant before removing it',
+        statusCode: 409,
       });
     }
     return { ok: true };
