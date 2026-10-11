@@ -161,7 +161,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-manage-strip` / `.kh-ops-keyvals` / `.kh-ops-tag-list` / `.kh-ops-tag` | Record action strip, definition lists, tag chips |
 | `.kh-ops-markdown-view` / `.kh-ops-toc` / `.kh-ops-preview-pane` | Markdown document density, TOC panel, live preview |
 | `.kh-ops-roster-person` | Stakeholder roster avatar + name cell |
-| `.kh-ops-org-tree` / `.kh-ops-org-card` / `.kh-ops-org-ungrouped-grid` | Stakeholder org chart (tree connectors, 200px cards, ungrouped grid) |
+| `.kh-ops-org-tree` / `.kh-ops-org-card` / `.kh-ops-org-ungrouped-grid` | Stakeholder org chart (tree connectors, 200px cards, including ungrouped) |
 | `.kh-ops-help-btn` / `.kh-ops-popover` | Compact `?` help control and square legend/tooltip panel |
 | `.kh-ops-choice` / `.kh-ops-check-list` / `.kh-ops-plan-row` | Manage/import/git pickers, attendee check lists, scrum plan rows |
 | `.kh-ops-health-grid` / `.kh-ops-health-card` | Admin / monitoring health cards |

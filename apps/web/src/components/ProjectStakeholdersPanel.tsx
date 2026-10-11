@@ -914,7 +914,20 @@ export function ProjectStakeholdersPanel({
             <span className="kh-ops-panel-meta">{t('orgChartHint')}</span>
           </div>
           <div className="p-3">
-            <ProjectStakeholdersOrgChart stakeholders={stakeholders} />
+            <ProjectStakeholdersOrgChart
+              stakeholders={stakeholders}
+              canMutate={canMutate}
+              onOpen={(row) => {
+                const full = stakeholders.find((item) => item.id === row.id);
+                if (!full) return;
+                if (full.kind === 'ai_assistant') {
+                  if (full.systemId) openManageAi(full);
+                  return;
+                }
+                if (full.rosterId) openManage(full);
+                else void addDerivedToRoster(full);
+              }}
+            />
           </div>
         </section>
       ) : null}

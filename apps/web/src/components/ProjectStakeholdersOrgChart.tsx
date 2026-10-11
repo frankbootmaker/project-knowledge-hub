@@ -19,6 +19,8 @@ export type OrgChartStakeholder = {
   reportsToUserId: string | null;
   avatarUrl?: string | null;
   assistantBrand?: string | null;
+  systemId?: string | null;
+  rosterId?: string | null;
   raciRoles: string[];
   sources: string[];
   systemSlug?: string | null;
@@ -86,15 +88,36 @@ function buildForest(stakeholders: OrgChartStakeholder[]): {
 
 function StakeholderCard({
   stakeholder,
+  onOpen,
+  openLabel,
 }: {
   stakeholder: OrgChartStakeholder;
+  onOpen?: () => void;
+  openLabel?: string;
 }) {
   const t = useTranslations('stakeholders');
   const isAi = stakeholder.kind === 'ai_assistant';
   const isOpen = stakeholder.kind === 'open_role';
 
   return (
-    <article className="kh-ops-org-card" data-kind={stakeholder.kind}>
+    <article
+      className={onOpen ? 'kh-ops-org-card kh-ops-org-card-action' : 'kh-ops-org-card'}
+      data-kind={stakeholder.kind}
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? openLabel : undefined}
+      onClick={onOpen}
+      onKeyDown={
+        onOpen
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
+    >
       <div className="kh-ops-org-card-head">
         <span className="kh-ops-org-photo">
           {isAi ? (
@@ -125,6 +148,7 @@ function StakeholderCard({
             <a
               href={`mailto:${stakeholder.email}`}
               className="kh-org-email"
+              onClick={(event) => event.stopPropagation()}
             >
               {stakeholder.email.split(/([.@])/).map((part, index) => (
                 <span
@@ -160,12 +184,26 @@ function StakeholderCard({
   );
 }
 
-function TreeBranch({ node }: { node: TreeNode }) {
+function TreeBranch({
+  node,
+  onOpen,
+  openLabel,
+}: {
+  node: TreeNode;
+  onOpen?: (row: OrgChartStakeholder) => void;
+  openLabel: (row: OrgChartStakeholder) => string | undefined;
+}) {
   const hasChildren = node.children.length > 0;
+  const label = openLabel(node.stakeholder);
+  const open = onOpen && label ? () => onOpen(node.stakeholder) : undefined;
 
   return (
     <div className="kh-ops-org-branch">
-      <StakeholderCard stakeholder={node.stakeholder} />
+      <StakeholderCard
+        stakeholder={node.stakeholder}
+        onOpen={open}
+        openLabel={label}
+      />
       {hasChildren ? (
         <>
           <div className="kh-ops-org-stem" aria-hidden />
@@ -173,7 +211,7 @@ function TreeBranch({ node }: { node: TreeNode }) {
             {node.children.map((child) => (
               <li key={child.stakeholder.id} className="kh-ops-org-child">
                 <div className="kh-ops-org-stem" aria-hidden />
-                <TreeBranch node={child} />
+                <TreeBranch node={child} onOpen={onOpen} openLabel={openLabel} />
               </li>
             ))}
           </ul>
@@ -185,14 +223,36 @@ function TreeBranch({ node }: { node: TreeNode }) {
 
 export function ProjectStakeholdersOrgChart({
   stakeholders,
+  canMutate = false,
+  onOpen,
 }: {
   stakeholders: OrgChartStakeholder[];
+  canMutate?: boolean;
+  onOpen?: (row: OrgChartStakeholder) => void;
 }) {
   const t = useTranslations('stakeholders');
   const { roots, ungrouped } = useMemo(
     () => buildForest(stakeholders),
     [stakeholders],
   );
+
+  function actionable(row: OrgChartStakeholder): boolean {
+    if (!canMutate || !onOpen) return false;
+    if (row.kind === 'ai_assistant') return Boolean(row.systemId);
+    return true;
+  }
+
+  function openLabel(row: OrgChartStakeholder): string | undefined {
+    if (!actionable(row)) return undefined;
+    if (row.kind === 'ai_assistant') return t('manageAiCost');
+    if (row.kind === 'open_role') return t('manageOpenRole');
+    if (row.rosterId) return t('manage');
+    return t('addToRoster');
+  }
+
+  function openRow(row: OrgChartStakeholder) {
+    if (actionable(row)) onOpen?.(row);
+  }
 
   if (stakeholders.length === 0) {
     return <p className="kh-ops-empty">{t('empty')}</p>;
@@ -206,7 +266,12 @@ export function ProjectStakeholdersOrgChart({
         <div className="kh-ops-org-tree-wrap">
           <div className="kh-ops-org-tree">
             {roots.map((root) => (
-              <TreeBranch key={root.stakeholder.id} node={root} />
+              <TreeBranch
+                key={root.stakeholder.id}
+                node={root}
+                onOpen={canMutate ? openRow : undefined}
+                openLabel={openLabel}
+              />
             ))}
           </div>
         </div>
@@ -220,7 +285,11 @@ export function ProjectStakeholdersOrgChart({
           <ul className="kh-ops-org-ungrouped-grid">
             {ungrouped.map((row) => (
               <li key={row.id}>
-                <StakeholderCard stakeholder={row} />
+                <StakeholderCard
+                  stakeholder={row}
+                  onOpen={canMutate && actionable(row) ? () => openRow(row) : undefined}
+                  openLabel={openLabel(row)}
+                />
               </li>
             ))}
           </ul>

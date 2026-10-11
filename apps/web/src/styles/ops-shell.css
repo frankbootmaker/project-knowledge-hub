@@ -2668,6 +2668,16 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   border-style: dashed;
 }
 
+.kh-ops-org-card-action {
+  cursor: pointer;
+}
+
+.kh-ops-org-card-action:hover,
+.kh-ops-org-card-action:focus-visible {
+  border-color: var(--kh-brand);
+  outline: none;
+}
+
 .kh-ops-org-card-head {
   display: flex;
   align-items: flex-start;
@@ -2758,9 +2768,11 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 .kh-ops-org-child {
   position: relative;
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
-  padding: 0 10px;
+  min-width: max-content;
+  padding: 0 14px;
 }
 
 .kh-ops-org-child::before,
@@ -2799,16 +2811,12 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 }
 
 .kh-ops-org-ungrouped-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(200px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.kh-ops-org-ungrouped-grid .kh-ops-org-card {
-  width: auto;
 }
 
 .kh-ops-help-btn {
@@ -4159,10 +4167,6 @@ button.kh-ops-stage-card:disabled {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .kh-ops-org-ungrouped-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
   .kh-ops-baseline-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -4275,7 +4279,6 @@ button.kh-ops-stage-card:disabled {
   .kh-ops-budget-layout,
   .kh-ops-project-grid,
   .kh-ops-media-grid,
-  .kh-ops-org-ungrouped-grid,
   .kh-ops-baseline-grid,
   .kh-ops-cost-split,
   .kh-ops-form-grid,
