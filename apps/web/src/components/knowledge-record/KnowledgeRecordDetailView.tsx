@@ -180,9 +180,12 @@ export async function KnowledgeRecordDetailView({
         title={record.humanKey ? `${record.humanKey} · ${record.title}` : record.title}
         description={`${record.slug} · ${record.recordType} · ${record.language ?? 'en'}`}
         actions={
-          <Badge tone={lifecycleTone(record.lifecycleStatus)}>
-            {lifecycleLabel(record.lifecycleStatus, t)}
-          </Badge>
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <Badge tone={lifecycleTone(record.lifecycleStatus)}>
+              {lifecycleLabel(record.lifecycleStatus, t)}
+            </Badge>
+            {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
+          </span>
         }
       />
       {record.lifecycleStatus === 'superseded' ? (
@@ -200,9 +203,12 @@ export async function KnowledgeRecordDetailView({
               <span>{record.language ?? 'en'}</span>
             </div>
             <h1>{record.title}</h1>
-            <Badge tone={lifecycleTone(record.lifecycleStatus)}>
-              {lifecycleLabel(record.lifecycleStatus, t)}
-            </Badge>
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <Badge tone={lifecycleTone(record.lifecycleStatus)}>
+                {lifecycleLabel(record.lifecycleStatus, t)}
+              </Badge>
+              {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
+            </span>
           </div>
           <div className="kh-ops-manage-strip">
             {canMutate && !isArchived && !gitManaged ? (

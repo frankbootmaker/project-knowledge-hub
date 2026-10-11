@@ -1969,6 +1969,7 @@ export function createMcpToolHandlers(
           recordType: result.knowledgeRecord.recordType,
           lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
           sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
+          archivedAt: result.knowledgeRecord.archivedAt,
           currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
           projectId: result.knowledgeRecord.projectId,
           systemId: result.knowledgeRecord.systemId,

@@ -346,7 +346,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_knowledge_record',
     description:
-      'Update a knowledge record as draft, or soft-archive with archived=true (+ changeMessage). Requires knowledge:write.',
+      'Update a knowledge record. Content edits stay draft. archived=true sets archivedAt and leaves lifecycleStatus unchanged. Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     openApi: true,

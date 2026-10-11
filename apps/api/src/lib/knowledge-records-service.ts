@@ -805,6 +805,12 @@ export async function updateKnowledgeRecord(
           currentVersionNumber: nextVersionNumber,
           reviewedBy,
           verifiedAt,
+          archivedAt:
+            body.archived === undefined
+              ? record.archivedAt
+              : body.archived
+                ? now
+                : null,
           updatedAt: now,
         })
         .where(eq(knowledgeRecords.id, recordId))
