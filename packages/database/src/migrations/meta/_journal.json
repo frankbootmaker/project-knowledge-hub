@@ -372,6 +372,13 @@
       "when": 1791849600000,
       "tag": "0052_raid_ratings_and_record_links",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791936000000,
+      "tag": "0053_raid_delivery_item_links",
+      "breakpoints": true
     }
   ]
 }

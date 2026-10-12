@@ -3,10 +3,14 @@ import type { Database } from '@project-knowledge-hub/database';
 import {
   knowledgeRecords,
   memberships,
+  projectEpics,
+  projectMilestones,
+  projectRaidDeliveryLinks,
   projectRaidItems,
   projectRaidRecordLinks,
   projectRaidTaskLinks,
   projectTasks,
+  projectUserStories,
   projects,
   users,
 } from '@project-knowledge-hub/database';
@@ -34,6 +38,17 @@ import {
 } from './project-issue-keys.js';
 
 export type PublicRaidTaskLink = {
+  id: string;
+  title: string;
+  status: string;
+  humanKey: string | null;
+  itemType: 'task' | 'bug';
+};
+
+export type RaidDeliveryEntityType = 'epic' | 'user_story' | 'milestone';
+
+export type PublicRaidDeliveryLink = {
+  entityType: RaidDeliveryEntityType;
   id: string;
   title: string;
   status: string;
@@ -89,6 +104,7 @@ export type PublicRaidItem = {
   createdAt: string;
   updatedAt: string;
   tasks: PublicRaidTaskLink[];
+  deliveryItems: PublicRaidDeliveryLink[];
   records: PublicRaidRecordLink[];
 };
 
@@ -97,9 +113,16 @@ function storedRating(value: string | null): RaidSeverity | null {
   return raidSeveritySchema.parse(value);
 }
 
+const DELIVERY_ENTITY_TYPES = ['epic', 'user_story', 'milestone'] as const;
+
+function isDeliveryEntityType(value: string): value is RaidDeliveryEntityType {
+  return (DELIVERY_ENTITY_TYPES as readonly string[]).includes(value);
+}
+
 function toPublicRaidItem(
   row: typeof projectRaidItems.$inferSelect,
   tasks: PublicRaidTaskLink[],
+  deliveryItems: PublicRaidDeliveryLink[],
   records: PublicRaidRecordLink[],
   owner: PublicRaidOwner | null,
   keyPrefix: string | null,
@@ -134,6 +157,7 @@ function toPublicRaidItem(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     tasks,
+    deliveryItems,
     records,
   };
 }
@@ -205,6 +229,7 @@ async function loadTaskLinksByRaidIds(
       status: projectTasks.status,
       issueKeyType: projectTasks.issueKeyType,
       issueNumber: projectTasks.issueNumber,
+      itemType: projectTasks.itemType,
     })
     .from(projectRaidTaskLinks)
     .innerJoin(projectTasks, eq(projectRaidTaskLinks.taskId, projectTasks.id))
@@ -217,8 +242,89 @@ async function loadTaskLinksByRaidIds(
       title: row.title,
       status: row.status,
       humanKey: formatHumanKey(keyPrefix, row.issueKeyType, row.issueNumber),
+      itemType: row.itemType === 'bug' ? 'bug' : 'task',
     });
     map.set(row.raidItemId, list);
+  }
+  return map;
+}
+
+async function loadDeliveryLinksByRaidIds(
+  database: Database,
+  raidIds: string[],
+  keyPrefix: string | null,
+): Promise<Map<string, PublicRaidDeliveryLink[]>> {
+  const map = new Map<string, PublicRaidDeliveryLink[]>();
+  if (raidIds.length === 0) return map;
+  const links = await database.db
+    .select({
+      raidItemId: projectRaidDeliveryLinks.raidItemId,
+      entityType: projectRaidDeliveryLinks.entityType,
+      entityId: projectRaidDeliveryLinks.entityId,
+    })
+    .from(projectRaidDeliveryLinks)
+    .where(inArray(projectRaidDeliveryLinks.raidItemId, raidIds));
+  const idsFor = (entityType: RaidDeliveryEntityType) =>
+    links.filter((link) => link.entityType === entityType).map((link) => link.entityId);
+  const [epics, stories, milestones] = await Promise.all([
+    idsFor('epic').length === 0
+      ? Promise.resolve([])
+      : database.db
+          .select({
+            id: projectEpics.id,
+            title: projectEpics.title,
+            status: projectEpics.status,
+            issueKeyType: projectEpics.issueKeyType,
+            issueNumber: projectEpics.issueNumber,
+          })
+          .from(projectEpics)
+          .where(inArray(projectEpics.id, idsFor('epic'))),
+    idsFor('user_story').length === 0
+      ? Promise.resolve([])
+      : database.db
+          .select({
+            id: projectUserStories.id,
+            title: projectUserStories.title,
+            status: projectUserStories.status,
+            issueKeyType: projectUserStories.issueKeyType,
+            issueNumber: projectUserStories.issueNumber,
+          })
+          .from(projectUserStories)
+          .where(inArray(projectUserStories.id, idsFor('user_story'))),
+    idsFor('milestone').length === 0
+      ? Promise.resolve([])
+      : database.db
+          .select({
+            id: projectMilestones.id,
+            title: projectMilestones.title,
+            status: projectMilestones.status,
+            issueKeyType: projectMilestones.issueKeyType,
+            issueNumber: projectMilestones.issueNumber,
+          })
+          .from(projectMilestones)
+          .where(inArray(projectMilestones.id, idsFor('milestone'))),
+  ]);
+  const byType = {
+    epic: new Map(epics.map((row) => [row.id, row])),
+    user_story: new Map(stories.map((row) => [row.id, row])),
+    milestone: new Map(milestones.map((row) => [row.id, row])),
+  };
+  for (const link of links) {
+    if (!isDeliveryEntityType(link.entityType)) continue;
+    const entity = byType[link.entityType].get(link.entityId);
+    if (!entity) continue;
+    const list = map.get(link.raidItemId) ?? [];
+    list.push({
+      entityType: link.entityType,
+      id: link.entityId,
+      title: entity.title,
+      status: entity.status,
+      humanKey: formatHumanKey(keyPrefix, entity.issueKeyType, entity.issueNumber),
+    });
+    map.set(link.raidItemId, list);
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => a.title.localeCompare(b.title));
   }
   return map;
 }
@@ -324,11 +430,9 @@ export async function listRaidItems(
       asc(projectRaidItems.title),
     );
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
-  const taskMap = await loadTaskLinksByRaidIds(
-    database,
-    rows.map((row) => row.id),
-    keyPrefix,
-  );
+  const raidIds = rows.map((row) => row.id);
+  const taskMap = await loadTaskLinksByRaidIds(database, raidIds, keyPrefix);
+  const deliveryMap = await loadDeliveryLinksByRaidIds(database, raidIds, keyPrefix);
   const recordMap = await loadRecordLinksByRaidIds(
     database,
     rows.map((row) => row.id),
@@ -345,6 +449,7 @@ export async function listRaidItems(
     toPublicRaidItem(
       row,
       taskMap.get(row.id) ?? [],
+      deliveryMap.get(row.id) ?? [],
       recordMap.get(row.id) ?? [],
       row.ownerUserId ? ownerMap.get(row.ownerUserId) ?? null : null,
       keyPrefix,
@@ -374,6 +479,7 @@ export async function getRaidItem(
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const taskMap = await loadTaskLinksByRaidIds(database, [row.id], keyPrefix);
+  const deliveryMap = await loadDeliveryLinksByRaidIds(database, [row.id], keyPrefix);
   const recordMap = await loadRecordLinksByRaidIds(database, [row.id], keyPrefix);
   const ownerMap = await loadOwners(
     database,
@@ -383,6 +489,7 @@ export async function getRaidItem(
   return toPublicRaidItem(
     row,
     taskMap.get(row.id) ?? [],
+    deliveryMap.get(row.id) ?? [],
     recordMap.get(row.id) ?? [],
     row.ownerUserId ? ownerMap.get(row.ownerUserId) ?? null : null,
     keyPrefix,
@@ -409,6 +516,7 @@ export async function createRaidItem(
     dueDate?: string | null;
     sortOrder?: number;
     taskIds?: string[];
+    deliveryItems?: Array<{ entityType: RaidDeliveryEntityType; entityId: string }>;
     recordIds?: string[];
     createdBy?: string | null;
   },
@@ -461,6 +569,14 @@ export async function createRaidItem(
       raidItemId: created.id,
       projectId: input.projectId,
       taskIds: input.taskIds,
+      createdBy: input.createdBy,
+    });
+  }
+  if (input.deliveryItems && input.deliveryItems.length > 0) {
+    await setRaidDeliveryLinks(database, {
+      raidItemId: created.id,
+      projectId: input.projectId,
+      items: input.deliveryItems,
       createdBy: input.createdBy,
     });
   }
@@ -634,6 +750,19 @@ export async function transferRaidItem(
     });
   }
 
+  const deliveryItems = source.deliveryItems.map((item) => ({
+    entityType: item.entityType,
+    entityId: item.id,
+  }));
+  if (deliveryItems.length > 0) {
+    await setRaidDeliveryLinks(database, {
+      raidItemId: created.id,
+      projectId: source.projectId,
+      items: deliveryItems,
+      createdBy,
+    });
+  }
+
   const recordIds = source.records.map((record) => record.id);
   if (recordIds.length > 0) {
     await setRaidRecordLinks(database, {
@@ -735,6 +864,111 @@ export async function setRaidTaskLinks(
         diff.insert.map((row) => ({
           raidItemId: input.raidItemId,
           taskId: row.taskId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
+
+  return getRaidItem(database, input.raidItemId);
+}
+
+export async function setRaidDeliveryLinks(
+  database: Database,
+  input: {
+    raidItemId: string;
+    projectId: string;
+    items: Array<{ entityType: RaidDeliveryEntityType; entityId: string }>;
+    createdBy?: string | null;
+  },
+): Promise<PublicRaidItem> {
+  const unique = new Map<string, { entityType: RaidDeliveryEntityType; entityId: string }>();
+  for (const item of input.items) {
+    if (!isDeliveryEntityType(item.entityType)) continue;
+    unique.set(`${item.entityType}:${item.entityId}`, item);
+  }
+  const items = [...unique.values()];
+  const idsFor = (entityType: RaidDeliveryEntityType) =>
+    items.filter((item) => item.entityType === entityType).map((item) => item.entityId);
+  const checks: Array<[RaidDeliveryEntityType, { id: string; projectId: string }[]]> = [];
+  if (idsFor('epic').length > 0) {
+    checks.push([
+      'epic',
+      await database.db
+        .select({ id: projectEpics.id, projectId: projectEpics.projectId })
+        .from(projectEpics)
+        .where(inArray(projectEpics.id, idsFor('epic'))),
+    ]);
+  }
+  if (idsFor('user_story').length > 0) {
+    checks.push([
+      'user_story',
+      await database.db
+        .select({ id: projectUserStories.id, projectId: projectUserStories.projectId })
+        .from(projectUserStories)
+        .where(inArray(projectUserStories.id, idsFor('user_story'))),
+    ]);
+  }
+  if (idsFor('milestone').length > 0) {
+    checks.push([
+      'milestone',
+      await database.db
+        .select({ id: projectMilestones.id, projectId: projectMilestones.projectId })
+        .from(projectMilestones)
+        .where(inArray(projectMilestones.id, idsFor('milestone'))),
+    ]);
+  }
+  for (const [entityType, rows] of checks) {
+    const wanted = idsFor(entityType);
+    if (rows.length !== wanted.length) {
+      throw new AppError({
+        code: 'RAID_DELIVERY_NOT_FOUND',
+        message: 'One or more linked delivery items were not found',
+        statusCode: 400,
+      });
+    }
+    if (rows.some((row) => row.projectId !== input.projectId)) {
+      throw new AppError({
+        code: 'RAID_DELIVERY_PROJECT_MISMATCH',
+        message: 'Linked delivery items must belong to the same project as the RAID item',
+        statusCode: 400,
+      });
+    }
+  }
+
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: projectRaidDeliveryLinks.id,
+        entityType: projectRaidDeliveryLinks.entityType,
+        entityId: projectRaidDeliveryLinks.entityId,
+      })
+      .from(projectRaidDeliveryLinks)
+      .where(eq(projectRaidDeliveryLinks.raidItemId, input.raidItemId));
+    const diff = diffReplacement(
+      existing,
+      items,
+      (row) => `${row.entityType}:${row.entityId}`,
+      (row) => `${row.entityType}:${row.entityId}`,
+      () => true,
+    );
+    if (diff.remove.length > 0) {
+      await db
+        .delete(projectRaidDeliveryLinks)
+        .where(
+          inArray(
+            projectRaidDeliveryLinks.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(projectRaidDeliveryLinks).values(
+        diff.insert.map((row) => ({
+          raidItemId: input.raidItemId,
+          entityType: row.entityType,
+          entityId: row.entityId,
           createdBy: input.createdBy ?? null,
         })),
       );

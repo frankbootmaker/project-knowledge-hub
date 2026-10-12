@@ -28,6 +28,7 @@ import {
   listRaidItems,
   listRaidItemsForRecord,
   listRaidItemsForTask,
+  setRaidDeliveryLinks,
   setRaidRecordLinks,
   setRaidTaskLinks,
   setRecordRaidLinks,
@@ -64,6 +65,15 @@ const createSchema = z.object({
     .optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   taskIds: z.array(z.string().uuid()).max(100).optional(),
+  deliveryItems: z
+    .array(
+      z.object({
+        entityType: z.enum(['epic', 'user_story', 'milestone']),
+        entityId: z.string().uuid(),
+      }),
+    )
+    .max(100)
+    .optional(),
   recordIds: z.array(z.string().uuid()).max(100).optional(),
 });
 
@@ -87,6 +97,17 @@ const updateSchema = z.object({
 
 const taskLinksSchema = z.object({
   taskIds: z.array(z.string().uuid()).max(100),
+});
+
+const deliveryLinksSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        entityType: z.enum(['epic', 'user_story', 'milestone']),
+        entityId: z.string().uuid(),
+      }),
+    )
+    .max(100),
 });
 
 const recordLinksSchema = z.object({
@@ -314,6 +335,43 @@ export async function registerProjectRaidRoutes(
       metadata: {
         projectId: project.id,
         taskIds: body.taskIds,
+      },
+      ipAddress: request.ip,
+    });
+
+    return { raidItem };
+  });
+
+  app.put('/api/v1/project-raid-items/:raidItemId/delivery-items', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z
+      .object({ raidItemId: z.string().uuid() })
+      .parse(request.params);
+    const body = deliveryLinksSchema.parse(request.body);
+
+    const existing = await getRaidItem(app.database, params.raidItemId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    const raidItem = await setRaidDeliveryLinks(app.database, {
+      raidItemId: params.raidItemId,
+      projectId: project.id,
+      items: body.items,
+      createdBy: principal.userId,
+    });
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.raid_delivery_links_set',
+      entityType: 'project_raid_item',
+      entityId: raidItem.id,
+      metadata: {
+        projectId: project.id,
+        items: body.items,
       },
       ipAddress: request.ip,
     });

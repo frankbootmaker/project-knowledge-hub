@@ -13,7 +13,7 @@ import { cn } from '../../lib/cn';
 import { headerControlSquareClassName } from '../header-control';
 import { Button } from './Button';
 
-export type ModalSize = 'md' | 'lg' | 'xl' | 'full';
+export type ModalSize = 'md' | 'wide' | 'lg' | 'xl' | 'full';
 
 /**
  * Width shared by delivery, RAID, and change item dialogs so they stay
@@ -151,6 +151,7 @@ export function Modal({
         aria-describedby={description ? descriptionId : undefined}
         className={cn(
           'kh-modal-panel',
+          size === 'wide' && 'kh-modal-panel-wide',
           size === 'lg' && 'kh-modal-panel-lg',
           size === 'xl' && 'kh-modal-panel-xl',
           size === 'full' && 'kh-modal-panel-full',

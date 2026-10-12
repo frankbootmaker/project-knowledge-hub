@@ -430,6 +430,11 @@
     }
   }
 
+  /* About 1.5× the default card (max-w-lg is 32rem). Phone sheet stays full width. */
+  .kh-modal-panel-wide {
+    @apply sm:max-w-3xl;
+  }
+
   .kh-modal-panel-lg {
     @apply sm:max-w-2xl;
   }

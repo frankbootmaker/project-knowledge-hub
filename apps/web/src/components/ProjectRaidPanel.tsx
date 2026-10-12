@@ -44,6 +44,14 @@ export type RaidItem = {
     title: string;
     status: string;
     humanKey?: string | null;
+    itemType?: 'task' | 'bug' | null;
+  }>;
+  deliveryItems?: Array<{
+    entityType: 'epic' | 'user_story' | 'milestone';
+    id: string;
+    title: string;
+    status: string;
+    humanKey: string | null;
   }>;
   records?: Array<{
     id: string;
@@ -54,12 +62,68 @@ export type RaidItem = {
   }>;
 };
 
-type TaskOption = { id: string; title: string; status: string };
+type TaskOption = {
+  id: string;
+  title: string;
+  status: string;
+  humanKey?: string | null;
+  itemType?: string | null;
+};
+type DeliveryOption = {
+  id: string;
+  title: string;
+  status: string;
+  humanKey?: string | null;
+};
+type ItemEntityType = 'epic' | 'user_story' | 'milestone' | 'task';
+type ItemTypeFilter = 'all' | ItemEntityType | 'bug';
+type LinkRow = {
+  id: string;
+  title: string;
+  humanKey?: string | null;
+  status?: string | null;
+  slug?: string | null;
+  entityType?: ItemEntityType;
+  itemType?: string | null;
+  recordType?: string | null;
+};
+
+function itemKey(entityType: ItemEntityType, id: string): string {
+  return `${entityType}:${id}`;
+}
+
+function splitItemKeys(keys: string[]): {
+  taskIds: string[];
+  deliveryItems: Array<{ entityType: 'epic' | 'user_story' | 'milestone'; entityId: string }>;
+} {
+  const taskIds: string[] = [];
+  const deliveryItems: Array<{
+    entityType: 'epic' | 'user_story' | 'milestone';
+    entityId: string;
+  }> = [];
+  for (const key of keys) {
+    const splitAt = key.indexOf(':');
+    if (splitAt < 0) continue;
+    const entityType = key.slice(0, splitAt);
+    const entityId = key.slice(splitAt + 1);
+    if (entityType === 'task') taskIds.push(entityId);
+    else if (
+      entityType === 'epic' ||
+      entityType === 'user_story' ||
+      entityType === 'milestone'
+    ) {
+      deliveryItems.push({ entityType, entityId });
+    }
+  }
+  return { taskIds, deliveryItems };
+}
+type PickerKind = 'tasks' | 'documents';
 type RecordOption = {
   id: string;
   title: string;
   slug: string;
   humanKey?: string | null;
+  recordType?: string | null;
 };
 type Member = { userId: string; displayName: string; email: string };
 
@@ -86,6 +150,9 @@ export function ProjectRaidPanel({
   canMutate,
   initialRaidItems,
   tasks,
+  epics,
+  stories,
+  milestones,
   records,
   members,
   initialOpenRaidId = null,
@@ -94,13 +161,18 @@ export function ProjectRaidPanel({
   canMutate: boolean;
   initialRaidItems: RaidItem[];
   tasks: TaskOption[];
+  epics: DeliveryOption[];
+  stories: DeliveryOption[];
+  milestones: DeliveryOption[];
   records: RecordOption[];
   members: Member[];
   initialOpenRaidId?: string | null;
 }) {
   const t = useTranslations('raid');
+  const tRecords = useTranslations('records');
   const tCommon = useTranslations('common');
   const tArchive = useTranslations('archive');
+  const tDelivery = useTranslations('delivery');
   const router = useRouter();
   const { pushToast } = useToast();
 
@@ -128,17 +200,20 @@ export function ProjectRaidPanel({
   const [impact, setImpact] = useState('');
   const [ownerUserId, setOwnerUserId] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [taskIds, setTaskIds] = useState<string[]>([]);
+  const [itemKeys, setItemKeys] = useState<string[]>([]);
+  const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>('all');
+  const [documentTypeFilter, setDocumentTypeFilter] = useState('all');
   const [recordIds, setRecordIds] = useState<string[]>([]);
   const [removeIds, setRemoveIds] = useState<string[]>([]);
-  const [addOpen, setAddOpen] = useState(false);
+  const [taskRemoveIds, setTaskRemoveIds] = useState<string[]>([]);
+  const [picker, setPicker] = useState<PickerKind | null>(null);
   const [addIds, setAddIds] = useState<string[]>([]);
-  const [recordQuery, setRecordQuery] = useState('');
+  const [pickerQuery, setPickerQuery] = useState('');
   const [addPage, setAddPage] = useState(1);
   const [addPageSize, setAddPageSize] = useState<DocumentPageSize>(
     DEFAULT_DOCUMENT_PAGE_SIZE,
   );
-  const [raidTab, setRaidTab] = useState<'details' | 'documents'>('details');
+  const [raidTab, setRaidTab] = useState<'details' | 'tasks' | 'documents'>('details');
 
   const refresh = useCallback(() => {
     router.refresh();
@@ -158,12 +233,18 @@ export function ProjectRaidPanel({
     setImpact(seed?.impact ?? '');
     setOwnerUserId(seed?.ownerUserId ?? '');
     setDueDate(seed?.dueDate ?? '');
-    setTaskIds(seed?.tasks.map((task) => task.id) ?? []);
+    setItemKeys([
+      ...(seed?.tasks.map((task) => itemKey('task', task.id)) ?? []),
+      ...(seed?.deliveryItems?.map((item) => itemKey(item.entityType, item.id)) ?? []),
+    ]);
+    setItemTypeFilter('all');
+    setDocumentTypeFilter('all');
     setRecordIds(seed?.records?.map((record) => record.id) ?? []);
     setRemoveIds([]);
-    setAddOpen(false);
+    setTaskRemoveIds([]);
+    setPicker(null);
     setAddIds([]);
-    setRecordQuery('');
+    setPickerQuery('');
     setAddPage(1);
     setAddPageSize(DEFAULT_DOCUMENT_PAGE_SIZE);
     setRaidTab('details');
@@ -185,12 +266,28 @@ export function ProjectRaidPanel({
     setManageId(initialOpenRaidId);
   }, [initialOpenRaidId, initialRaidItems]);
 
-  function toggleTask(taskId: string) {
-    setTaskIds((prev) =>
-      prev.includes(taskId)
-        ? prev.filter((id) => id !== taskId)
-        : [...prev, taskId],
-    );
+  function taskStatusLabel(status: string, entityType?: string): string {
+    if (entityType && entityType !== 'task') {
+      if (
+        status === 'planned' ||
+        status === 'active' ||
+        status === 'done' ||
+        status === 'cancelled'
+      ) {
+        return tDelivery(`milestoneStatus.${status}`);
+      }
+      return status;
+    }
+    if (
+      status === 'todo' ||
+      status === 'in_progress' ||
+      status === 'blocked' ||
+      status === 'done' ||
+      status === 'cancelled'
+    ) {
+      return tDelivery(`taskStatus.${status}`);
+    }
+    return status;
   }
 
   function toggleRemove(recordId: string) {
@@ -206,6 +303,19 @@ export function ProjectRaidPanel({
     setRemoveIds([]);
   }
 
+  function toggleTaskRemove(taskId: string) {
+    setTaskRemoveIds((prev) =>
+      prev.includes(taskId)
+        ? prev.filter((id) => id !== taskId)
+        : [...prev, taskId],
+    );
+  }
+
+  function deleteSelectedTasks() {
+    setItemKeys((prev) => prev.filter((id) => !taskRemoveIds.includes(id)));
+    setTaskRemoveIds([]);
+  }
+
   function toggleAdd(recordId: string) {
     setAddIds((prev) =>
       prev.includes(recordId)
@@ -214,16 +324,29 @@ export function ProjectRaidPanel({
     );
   }
 
-  function closeAddPicker() {
-    setAddOpen(false);
+  function openPicker(kind: PickerKind) {
     setAddIds([]);
-    setRecordQuery('');
+    setPickerQuery('');
+    setAddPage(1);
+    setItemTypeFilter('all');
+    setDocumentTypeFilter('all');
+    setPicker(kind);
+  }
+
+  function closePicker() {
+    setPicker(null);
+    setAddIds([]);
+    setPickerQuery('');
     setAddPage(1);
   }
 
-  function confirmAddDocuments() {
-    setRecordIds((prev) => [...new Set([...prev, ...addIds])]);
-    closeAddPicker();
+  function confirmPicker() {
+    if (picker === 'tasks') {
+      setItemKeys((prev) => [...new Set([...prev, ...addIds])]);
+    } else {
+      setRecordIds((prev) => [...new Set([...prev, ...addIds])]);
+    }
+    closePicker();
   }
 
   async function submitCreate() {
@@ -244,7 +367,7 @@ export function ProjectRaidPanel({
           impact: impact || null,
           ownerUserId: ownerUserId || null,
           dueDate: dueDate || null,
-          taskIds,
+          ...splitItemKeys(itemKeys),
           recordIds,
         }),
       });
@@ -303,7 +426,7 @@ export function ProjectRaidPanel({
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskIds }),
+          body: JSON.stringify({ taskIds: splitItemKeys(itemKeys).taskIds }),
         },
       );
       const linksPayload = (await linksResponse.json().catch(() => ({}))) as {
@@ -312,6 +435,22 @@ export function ProjectRaidPanel({
       };
       if (!linksResponse.ok || !linksPayload.raidItem) {
         throw new Error(linksPayload.error?.message || t('failedUpdate'));
+      }
+
+      const deliveryResponse = await fetch(
+        `/api/v1/project-raid-items/${manageId}/delivery-items`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: splitItemKeys(itemKeys).deliveryItems }),
+        },
+      );
+      const deliveryPayload = (await deliveryResponse.json().catch(() => ({}))) as {
+        raidItem?: RaidItem;
+        error?: { message?: string };
+      };
+      if (!deliveryResponse.ok || !deliveryPayload.raidItem) {
+        throw new Error(deliveryPayload.error?.message || t('failedUpdate'));
       }
 
       const recordsResponse = await fetch(
@@ -557,52 +696,104 @@ export function ProjectRaidPanel({
             rows={4}
           />
         </Field>
-        <Field label={t('linkedTasks')}>
-          <div className="kh-ops-scope-checks max-h-48 overflow-auto">
-            {tasks.length === 0 ? (
-              <p className="m-0 text-sm text-ink-muted">{t('noTasks')}</p>
-            ) : (
-              <ul className="m-0 grid list-none gap-1 p-0">
-                {tasks.map((task) => (
-                  <li key={task.id}>
-                    <label className="flex items-start gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5"
-                        checked={taskIds.includes(task.id)}
-                        disabled={disabled}
-                        onChange={() => toggleTask(task.id)}
-                      />
-                      <span>
-                        {task.title}{' '}
-                        <span className="text-ink-muted">({task.status})</span>
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </Field>
       </div>
     );
   }
 
-  function recordCatalog(): RecordOption[] {
-    const catalog = new Map<string, RecordOption>();
-    for (const record of records) catalog.set(record.id, record);
+  function recordRows(): LinkRow[] {
+    const catalog = new Map<string, LinkRow>();
+    for (const record of records) {
+      catalog.set(record.id, {
+        id: record.id,
+        title: record.title,
+        humanKey: record.humanKey,
+        slug: record.slug,
+        recordType: record.recordType,
+      });
+    }
     for (const record of managing?.records ?? []) {
-      if (!catalog.has(record.id)) catalog.set(record.id, record);
+      if (!catalog.has(record.id)) {
+        catalog.set(record.id, {
+          id: record.id,
+          title: record.title,
+          humanKey: record.humanKey,
+          slug: record.slug,
+          recordType: record.recordType,
+        });
+      }
     }
     return [...catalog.values()];
   }
 
-  function addDocumentsPicker() {
-    const needle = recordQuery.trim().toLowerCase();
-    const available = recordCatalog().filter((record) => {
-      if (recordIds.includes(record.id)) return false;
+  function taskRows(): LinkRow[] {
+    const catalog = new Map<string, LinkRow>();
+    const add = (
+      entityType: ItemEntityType,
+      row: {
+        id: string;
+        title: string;
+        status?: string | null;
+        humanKey?: string | null;
+        itemType?: string | null;
+      },
+    ) => {
+      const key = itemKey(entityType, row.id);
+      if (catalog.has(key)) return;
+      catalog.set(key, {
+        id: key,
+        title: row.title,
+        humanKey: row.humanKey,
+        status: row.status,
+        entityType,
+        itemType: row.itemType,
+      });
+    };
+    for (const epic of epics) add('epic', epic);
+    for (const story of stories) add('user_story', story);
+    for (const milestone of milestones) add('milestone', milestone);
+    for (const task of tasks) add('task', task);
+    for (const item of managing?.deliveryItems ?? []) add(item.entityType, item);
+    for (const task of managing?.tasks ?? []) add('task', task);
+    return [...catalog.values()];
+  }
+
+  function itemFilterKind(row: LinkRow): ItemTypeFilter {
+    if (row.entityType === 'task') return row.itemType === 'bug' ? 'bug' : 'task';
+    return row.entityType ?? 'task';
+  }
+
+  function itemKindLabel(row: LinkRow): string | null {
+    const kind = itemFilterKind(row);
+    if (kind === 'all') return null;
+    if (kind === 'epic') return t('itemsTypeEpic');
+    if (kind === 'user_story') return t('itemsTypeStory');
+    if (kind === 'bug') return t('itemsTypeBug');
+    if (kind === 'milestone') return t('itemsTypeMilestone');
+    return t('itemsTypeTask');
+  }
+
+  function recordTypeLabel(recordType: string): string {
+    const key = `typeLabels.${recordType}` as 'typeLabels.note';
+    return tRecords.has(key) ? tRecords(key) : recordType;
+  }
+
+  function linkPicker() {
+    const tasksMode = picker === 'tasks';
+    const catalog = tasksMode ? taskRows() : recordRows();
+    const linkedIds = tasksMode ? itemKeys : recordIds;
+    const needle = pickerQuery.trim().toLowerCase();
+    const available = catalog.filter((row) => {
+      if (linkedIds.includes(row.id)) return false;
+      if (tasksMode && itemTypeFilter !== 'all' && itemFilterKind(row) !== itemTypeFilter) {
+        return false;
+      }
+      if (!tasksMode && documentTypeFilter !== 'all' && row.recordType !== documentTypeFilter) {
+        return false;
+      }
       if (!needle) return true;
-      const haystack = `${record.humanKey ?? ''} ${record.title}`.toLowerCase();
+      const statusLabel = row.status ? taskStatusLabel(row.status, row.entityType) : '';
+      const typeLabel = row.recordType ? recordTypeLabel(row.recordType) : '';
+      const haystack = `${row.humanKey ?? ''} ${row.title} ${statusLabel} ${typeLabel}`.toLowerCase();
       return haystack.includes(needle);
     });
     const totalPages = Math.max(1, Math.ceil(available.length / addPageSize) || 1);
@@ -611,45 +802,104 @@ export function ProjectRaidPanel({
     const pageItems = available.slice(pageStart, pageStart + addPageSize);
     const rangeFrom = available.length === 0 ? 0 : pageStart + 1;
     const rangeTo = Math.min(pageStart + addPageSize, available.length);
+    const documentTypes = [...new Set(
+      catalog.map((row) => row.recordType).filter((type): type is string => Boolean(type)),
+    )].sort((left, right) => recordTypeLabel(left).localeCompare(recordTypeLabel(right)));
 
     return (
       <div className="grid gap-3">
-        <Input
-          value={recordQuery}
-          onChange={(event) => {
-            setRecordQuery(event.target.value);
-            setAddPage(1);
-          }}
-          placeholder={t('documentSearch')}
-          data-modal-initial-focus
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={pickerQuery}
+            onChange={(event) => {
+              setPickerQuery(event.target.value);
+              setAddPage(1);
+            }}
+            placeholder={t(tasksMode ? 'taskSearch' : 'documentSearch')}
+            data-modal-initial-focus
+            className="min-w-[12rem] flex-1"
+          />
+          {tasksMode ? (
+            <Select
+              value={itemTypeFilter}
+              onChange={(event) => {
+                setItemTypeFilter(event.target.value as ItemTypeFilter);
+                setAddPage(1);
+              }}
+              aria-label={t('itemsTypeFilter')}
+              className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
+            >
+              <option value="all">{t('itemsTypeAll')}</option>
+              <option value="epic">{t('itemsTypeEpic')}</option>
+              <option value="user_story">{t('itemsTypeStory')}</option>
+              <option value="task">{t('itemsTypeTask')}</option>
+              <option value="bug">{t('itemsTypeBug')}</option>
+              <option value="milestone">{t('itemsTypeMilestone')}</option>
+            </Select>
+          ) : (
+            <Select
+              value={documentTypeFilter}
+              onChange={(event) => {
+                setDocumentTypeFilter(event.target.value);
+                setAddPage(1);
+              }}
+              aria-label={t('itemsTypeFilter')}
+              className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
+            >
+              <option value="all">{t('itemsTypeAll')}</option>
+              {documentTypes.map((type) => (
+                <option key={type} value={type}>
+                  {recordTypeLabel(type)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </div>
         {available.length === 0 ? (
           <p className="m-0 text-sm text-ink-muted">
             {t(
               needle
-                ? 'documentsNoneToAdd'
-                : recordCatalog().length === 0
-                  ? 'documentsEmpty'
-                  : 'documentsAllLinked',
+                ? tasksMode
+                  ? 'tasksNoneToAdd'
+                  : 'documentsNoneToAdd'
+                : catalog.length === 0
+                  ? tasksMode
+                    ? 'noTasks'
+                    : 'documentsEmpty'
+                  : tasksMode && itemTypeFilter !== 'all'
+                    ? 'tasksNoneToAdd'
+                    : !tasksMode && documentTypeFilter !== 'all'
+                      ? 'documentsNoneToAdd'
+                      : tasksMode
+                        ? 'tasksAllLinked'
+                        : 'documentsAllLinked',
             )}
           </p>
         ) : (
           <>
             <ul className="m-0 grid list-none gap-2 p-0">
-              {pageItems.map((record) => (
-                <li key={record.id}>
+              {pageItems.map((row) => (
+                <li key={row.id}>
                   <label className="flex items-start gap-2 text-sm">
                     <input
                       type="checkbox"
                       className="mt-0.5"
-                      checked={addIds.includes(record.id)}
-                      onChange={() => toggleAdd(record.id)}
+                      checked={addIds.includes(row.id)}
+                      onChange={() => toggleAdd(row.id)}
                     />
                     <span>
-                      {record.humanKey ? (
-                        <span className="text-ink-muted">{record.humanKey} · </span>
+                      {row.humanKey ? (
+                        <span className="text-ink-muted">{row.humanKey} · </span>
                       ) : null}
-                      {record.title}
+                      {row.title}
+                      {tasksMode ? (
+                        <span className="text-ink-muted"> · {itemKindLabel(row)}</span>
+                      ) : row.recordType ? (
+                        <span className="text-ink-muted"> · {recordTypeLabel(row.recordType)}</span>
+                      ) : null}
+                      {row.status ? (
+                        <span className="text-ink-muted"> ({taskStatusLabel(row.status, row.entityType)})</span>
+                      ) : null}
                     </span>
                   </label>
                 </li>
@@ -684,7 +934,7 @@ export function ProjectRaidPanel({
                 </Select>
                 <nav
                   className="flex flex-wrap items-center gap-2"
-                  aria-label={t('documentsAddTitle')}
+                  aria-label={t(tasksMode ? 'tasksAddTitle' : 'documentsAddTitle')}
                 >
                   <Button
                     type="button"
@@ -714,53 +964,69 @@ export function ProjectRaidPanel({
     );
   }
 
-  function documentsPane(disabled: boolean) {
-    const catalog = recordCatalog();
-    const linked = catalog.filter((record) => recordIds.includes(record.id));
+  function linkedPane(
+    kind: PickerKind,
+    disabled: boolean,
+  ) {
+    const tasksMode = kind === 'tasks';
+    const catalog = tasksMode ? taskRows() : recordRows();
+    const linkedIds = tasksMode ? itemKeys : recordIds;
+    const selectedRemoveIds = tasksMode ? taskRemoveIds : removeIds;
+    const linked = catalog.filter((row) => linkedIds.includes(row.id));
     const editable = canMutate && !disabled;
     return (
       <div className="grid gap-3">
         {editable ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="secondary" onClick={() => {
-              setAddIds([]);
-              setRecordQuery('');
-              setAddPage(1);
-              setAddOpen(true);
-            }}
-            >
+            <Button type="button" variant="secondary" onClick={() => openPicker(kind)}>
               {t('documentsAdd')}
             </Button>
             <Button
               type="button"
               variant="secondary"
-              disabled={removeIds.length === 0}
-              onClick={deleteSelectedDocuments}
+              disabled={selectedRemoveIds.length === 0}
+              onClick={tasksMode ? deleteSelectedTasks : deleteSelectedDocuments}
             >
               {t('documentsRemove')}
             </Button>
           </div>
         ) : null}
         {linked.length === 0 ? (
-          <p className="m-0 text-sm text-ink-muted">{t('documentsReadOnlyEmpty')}</p>
+          <p className="m-0 text-sm text-ink-muted">
+            {t(tasksMode ? 'tasksReadOnlyEmpty' : 'documentsReadOnlyEmpty')}
+          </p>
         ) : (
           <ul className="m-0 grid list-none gap-2 p-0">
-            {linked.map((record) => (
-              <li key={record.id} className="kh-ops-linked-row kh-ops-linked-row-start">
+            {linked.map((row) => (
+              <li key={row.id} className="kh-ops-linked-row kh-ops-linked-row-start">
                 {editable ? (
                   <input
                     type="checkbox"
                     className="mt-0.5"
-                    checked={removeIds.includes(record.id)}
-                    onChange={() => toggleRemove(record.id)}
-                    aria-label={t('documentsSelect', { title: record.title })}
+                    checked={selectedRemoveIds.includes(row.id)}
+                    onChange={() =>
+                      tasksMode ? toggleTaskRemove(row.id) : toggleRemove(row.id)
+                    }
+                    aria-label={t('documentsSelect', { title: row.title })}
                   />
                 ) : null}
                 <span>
-                  {record.humanKey ? (
-                    <span className="text-ink-muted">{record.humanKey} · </span>
+                  {row.humanKey ? (
+                    <span className="text-ink-muted">{row.humanKey} · </span>
                   ) : null}
-                  <LinkedKnowledgeRecord slug={record.slug} title={record.title} />
+                  {row.slug ? (
+                    <LinkedKnowledgeRecord slug={row.slug} title={row.title} />
+                  ) : (
+                    row.title
+                  )}
+                  {tasksMode ? (
+                    <span className="text-ink-muted"> · {itemKindLabel(row)}</span>
+                  ) : row.recordType ? (
+                    <span className="text-ink-muted"> · {recordTypeLabel(row.recordType)}</span>
+                  ) : null}
+                  {row.status ? (
+                    <span className="text-ink-muted"> ({taskStatusLabel(row.status, row.entityType)})</span>
+                  ) : null}
                 </span>
               </li>
             ))}
@@ -771,10 +1037,11 @@ export function ProjectRaidPanel({
   }
 
   function tabbedForm(disabled: boolean, options?: { managing?: boolean }) {
+    const tabs = ['details', 'tasks', 'documents'] as const;
     return (
       <div>
         <div className="kh-ops-modal-tabs" role="tablist">
-          {(['details', 'documents'] as const).map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -783,7 +1050,11 @@ export function ProjectRaidPanel({
               className={raidTab === tab ? 'active' : undefined}
               onClick={() => setRaidTab(tab)}
             >
-              {tab === 'details' ? t('tabDetails') : t('tabDocuments')}
+              {tab === 'details'
+                ? t('tabDetails')
+                : tab === 'tasks'
+                  ? t('tabItems')
+                  : t('tabDocuments')}
             </button>
           ))}
         </div>
@@ -793,9 +1064,14 @@ export function ProjectRaidPanel({
           {formFields(disabled, options)}
         </section>
         <section
+          className={`kh-ops-modal-pane${raidTab === 'tasks' ? ' active' : ''}`}
+        >
+          {linkedPane('tasks', disabled)}
+        </section>
+        <section
           className={`kh-ops-modal-pane${raidTab === 'documents' ? ' active' : ''}`}
         >
-          {documentsPane(disabled)}
+          {linkedPane('documents', disabled)}
         </section>
       </div>
     );
@@ -835,7 +1111,7 @@ export function ProjectRaidPanel({
         title={t('addItem')}
         description={t('modalDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
-        closeOnEscape={!addOpen}
+        closeOnEscape={!picker}
         footer={
           <>
             <Button
@@ -865,7 +1141,7 @@ export function ProjectRaidPanel({
         title={title.trim() || t('manageItem')}
         description={t('manageDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
-        closeOnEscape={!addOpen}
+        closeOnEscape={!picker}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -1008,26 +1284,29 @@ export function ProjectRaidPanel({
       </Modal>
 
       <Modal
-        open={addOpen}
-        onClose={closeAddPicker}
-        title={t('documentsAddTitle')}
-        description={t('documentsAddDescription')}
+        open={picker !== null}
+        onClose={closePicker}
+        size="wide"
+        title={t(picker === 'tasks' ? 'tasksAddTitle' : 'documentsAddTitle')}
+        description={t(
+          picker === 'tasks' ? 'tasksAddDescription' : 'documentsAddDescription',
+        )}
         footer={
           <>
-            <Button type="button" variant="secondary" onClick={closeAddPicker}>
+            <Button type="button" variant="secondary" onClick={closePicker}>
               {tCommon('cancel')}
             </Button>
             <Button
               type="button"
               disabled={addIds.length === 0}
-              onClick={confirmAddDocuments}
+              onClick={confirmPicker}
             >
               {t('documentsAddConfirm')}
             </Button>
           </>
         }
       >
-        {addDocumentsPicker()}
+        {picker ? linkPicker() : null}
       </Modal>
     </>
   );

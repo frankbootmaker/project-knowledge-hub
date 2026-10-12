@@ -51,7 +51,7 @@ knowledge_records
 | In v1 | Out of v1 |
 | --- | --- |
 | RAID panel after Delivery | RAID board/calendar |
-| Task links from RAID manage UI | RAID → epic/story links |
+| Delivery-item links from RAID manage UI (epic, story, task, bug, milestone) | RAID → sprint links |
 | Documents tab on the RAID dialog (add/remove record links) | Delivery-item Documents tabs (epic, story, task, bug, milestone, sprint) |
 | Linked RAID chips on task manage | Auto-create RAID from schedule “at risk” |
 | Doc delivery links in record editor | Doc → milestone links |
@@ -73,7 +73,7 @@ Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID R
 ## UI
 
 * Project page: Stakeholders → Delivery → **RAID** → Linked systems/knowledge
-* RAID manage: Details (ratings, tasks) and Documents (add/remove same-project records)
+* RAID manage: Details (ratings), Items, and Documents. Items covers epics, stories, tasks, bugs, and milestones. Items and Documents list only what is linked; Add opens a searchable paged picker with a type filter, and Remove drops the checked rows. Links are stored when the RAID item is saved.
 * Task manage: read-only linked RAID + linked documents
 * Epic/story manage: read-only linked documents
 * Knowledge editor (edit + project selected): delivery-link multi-select

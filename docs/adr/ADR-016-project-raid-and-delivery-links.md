@@ -12,7 +12,7 @@ Delivery (ADR-015) covers work hierarchy and RACI. Operators also need a live **
 ## Decision
 
 1. **RAID is first-class operational state** (`project_raid_items` + `project_raid_task_links`), mutated via REST and MCP `pm:read` / `pm:write`, same auth/audit pattern as delivery.
-2. **RAID links target tasks** in v1; epics and stories remain the delivery hierarchy. Knowledge records link to RAID items through `project_raid_record_links`, not through delivery links.
+2. **RAID links delivery work**: tasks (including bugs) through `project_raid_task_links`, and epics, user stories, and milestones through `project_raid_delivery_links`. Sprints stay out. Knowledge records link to RAID items through `project_raid_record_links`, not through delivery links.
 3. **Knowledge document types** extend the domain catalog with `project-charter` and `meeting-minutes`; existing `decision` covers decision-making.
 4. **Queryable delivery links** live in `knowledge_record_delivery_links` (`entity_type` ∈ epic \| user_story \| task \| sprint). App layer ensures the record’s `projectId` matches the entity’s project. RAID is not a delivery-link type.
 5. **Knowledge lifecycle unchanged** (ADR-013): link mutations use `knowledge:write`; content drafts remain draft-only.

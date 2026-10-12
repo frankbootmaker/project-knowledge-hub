@@ -1562,6 +1562,37 @@ export const projectRaidTaskLinks = pgTable(
   ],
 );
 
+/** Links a RAID item to an epic, user story, or milestone in the same project. Tasks stay on project_raid_task_links. */
+export const projectRaidDeliveryLinks = pgTable(
+  'project_raid_delivery_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    raidItemId: uuid('raid_item_id')
+      .notNull()
+      .references(() => projectRaidItems.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_raid_delivery_links_uidx').on(
+      table.raidItemId,
+      table.entityType,
+      table.entityId,
+    ),
+    index('project_raid_delivery_links_entity_idx').on(
+      table.entityType,
+      table.entityId,
+    ),
+    index('project_raid_delivery_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
 /** Links a RAID item to knowledge records in the same project. */
 export const projectRaidRecordLinks = pgTable(
   'project_raid_record_links',

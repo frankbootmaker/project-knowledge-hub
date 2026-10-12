@@ -15,6 +15,7 @@ import {
   projectEpics,
   projectInitialStakeholders,
   projectMilestones,
+  projectRaidDeliveryLinks,
   projectRaidItems,
   projectRaidRecordLinks,
   projectRaidTaskLinks,
@@ -291,6 +292,13 @@ export type SystemUserPurgeSnapshot = {
     raidItemId: string;
     knowledgeRecordId: string;
   }>;
+  raidDeliveryLinks?: Array<{
+    id: string;
+    createdBy: string | null;
+    raidItemId: string;
+    entityType: string;
+    entityId: string;
+  }>;
   knowledgeRecords: Array<{
     id: string;
     createdBy: string | null;
@@ -368,6 +376,7 @@ export type SystemUserPurgePlan = {
     changeDeliveryLinks: string[];
     raidTaskLinks: string[];
     raidRecordLinks: string[];
+    raidDeliveryLinks: string[];
     knowledgeRecords: string[];
     knowledgeRecordVersions: string[];
     media: string[];
@@ -1145,6 +1154,38 @@ export function planSystemUserPurge(
     }
   }
 
+  const epicById = new Map(snapshot.epics.map((row) => [row.id, row]));
+  const storyById = new Map(snapshot.userStories.map((row) => [row.id, row]));
+  const milestoneById = new Map(snapshot.milestones.map((row) => [row.id, row]));
+  const raidDeliveryLinks: string[] = [];
+  for (const link of snapshot.raidDeliveryLinks ?? []) {
+    const raidInProject = raidById.get(link.raidItemId)?.projectId === projectId;
+    const entity =
+      link.entityType === 'epic'
+        ? epicById.get(link.entityId)
+        : link.entityType === 'user_story'
+          ? storyById.get(link.entityId)
+          : link.entityType === 'milestone'
+            ? milestoneById.get(link.entityId)
+            : undefined;
+    const entityInProject = entity?.projectId === projectId;
+    if (!raidInProject && !entityInProject) continue;
+    const parentDeleted =
+      raidIds.has(link.raidItemId) || entityInDeleteSet(link.entityType, link.entityId);
+    if (owned(link.createdBy)) {
+      if (parentDeleted || raidInProject) raidDeliveryLinks.push(link.id);
+      continue;
+    }
+    if (parentDeleted) {
+      conflicts.push({
+        entityType: 'raid_delivery_link',
+        entityId: link.id,
+        reason:
+          'RAID delivery link was not created by the system user, but one of its endpoints will be deleted.',
+      });
+    }
+  }
+
   const mediaRows: Array<(typeof snapshot.media)[number]> = [];
   for (const row of snapshot.media) {
     if (row.workspaceId !== snapshot.workspaceId || !owned(row.createdBy)) continue;
@@ -1448,7 +1489,8 @@ export function planSystemUserPurge(
     knowledgeDeliveryLinks.length +
     changeDeliveryLinks.length +
     raidTaskLinks.length +
-    raidRecordLinks.length;
+    raidRecordLinks.length +
+    raidDeliveryLinks.length;
   counts.translations = translationIds.size;
   counts.knowledgeRecords = records.length - translationIds.size;
   counts.knowledgeRecordVersions = versions.length;
@@ -1476,6 +1518,7 @@ export function planSystemUserPurge(
       changeDeliveryLinks,
       raidTaskLinks,
       raidRecordLinks,
+      raidDeliveryLinks,
       knowledgeRecords: records.map((row) => row.id),
       knowledgeRecordVersions: versions,
       media: mediaRows.map((row) => row.id),
@@ -1838,6 +1881,32 @@ export async function loadSystemUserPurgeSnapshot(
         inArray(projectRaidTaskLinks.taskId, projectTaskIds),
       ),
     );
+  const raidDeliveryLinkRows = await db
+    .select({
+      id: projectRaidDeliveryLinks.id,
+      createdBy: projectRaidDeliveryLinks.createdBy,
+      raidItemId: projectRaidDeliveryLinks.raidItemId,
+      entityType: projectRaidDeliveryLinks.entityType,
+      entityId: projectRaidDeliveryLinks.entityId,
+    })
+    .from(projectRaidDeliveryLinks)
+    .where(
+      or(
+        inArray(projectRaidDeliveryLinks.raidItemId, projectRaidIds),
+        and(
+          eq(projectRaidDeliveryLinks.entityType, 'epic'),
+          inArray(projectRaidDeliveryLinks.entityId, projectEpicIds),
+        ),
+        and(
+          eq(projectRaidDeliveryLinks.entityType, 'user_story'),
+          inArray(projectRaidDeliveryLinks.entityId, projectStoryIds),
+        ),
+        and(
+          eq(projectRaidDeliveryLinks.entityType, 'milestone'),
+          inArray(projectRaidDeliveryLinks.entityId, projectMilestoneIds),
+        ),
+      ),
+    );
   const raidRecordLinkRows = await db
     .select({
       id: projectRaidRecordLinks.id,
@@ -2155,6 +2224,7 @@ export async function loadSystemUserPurgeSnapshot(
     changeDeliveryLinks: changeLinks,
     raidTaskLinks: raidLinks,
     raidRecordLinks: raidRecordLinkRows,
+    raidDeliveryLinks: raidDeliveryLinkRows,
     knowledgeRecords: dedupeById([...inScopeRecords, ...foreignRecords]),
     knowledgeRecordVersions: versionRows,
     media: mediaRows,
@@ -2446,6 +2516,11 @@ export async function applySystemUserPurge(
     await db
       .delete(projectRaidRecordLinks)
       .where(inArray(projectRaidRecordLinks.id, idList));
+  });
+  await runIfIds(del.raidDeliveryLinks, async (idList) => {
+    await db
+      .delete(projectRaidDeliveryLinks)
+      .where(inArray(projectRaidDeliveryLinks.id, idList));
   });
 
   await runIfIds(del.tasks, async (idList) => {

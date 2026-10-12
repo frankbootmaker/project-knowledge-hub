@@ -242,6 +242,7 @@ export default async function ProjectDetailPage({
         milestones: Array<{
           id: string;
           title: string;
+          humanKey?: string | null;
           description: string | null;
           status: string;
           startDate: string | null;
@@ -257,6 +258,8 @@ export default async function ProjectDetailPage({
         tasks: Array<{
           id: string;
           title: string;
+          humanKey?: string | null;
+          itemType?: 'task' | 'bug';
           description: string | null;
           status: string;
           dueDate: string | null;
@@ -289,6 +292,7 @@ export default async function ProjectDetailPage({
         epics: Array<{
           id: string;
           title: string;
+          humanKey?: string | null;
           description: string | null;
           status: string;
           startDate: string | null;
@@ -305,6 +309,7 @@ export default async function ProjectDetailPage({
           id: string;
           epicId: string;
           title: string;
+          humanKey?: string | null;
           description: string | null;
           status: string;
           startDate: string | null;
@@ -540,12 +545,33 @@ export default async function ProjectDetailPage({
           id: task.id,
           title: task.title,
           status: task.status,
+          humanKey: task.humanKey ?? null,
+          itemType: task.itemType === 'bug' ? 'bug' : 'task',
+        }))}
+        epics={epics.map((epic) => ({
+          id: epic.id,
+          title: epic.title,
+          status: epic.status,
+          humanKey: epic.humanKey ?? null,
+        }))}
+        stories={stories.map((story) => ({
+          id: story.id,
+          title: story.title,
+          status: story.status,
+          humanKey: story.humanKey ?? null,
+        }))}
+        milestones={milestones.map((milestone) => ({
+          id: milestone.id,
+          title: milestone.title,
+          status: milestone.status,
+          humanKey: milestone.humanKey ?? null,
         }))}
         records={knowledgeRecords.map((record) => ({
           id: record.id,
           title: record.title,
           slug: record.slug,
           humanKey: record.humanKey ?? null,
+          recordType: record.recordType,
         }))}
         members={members}
       />

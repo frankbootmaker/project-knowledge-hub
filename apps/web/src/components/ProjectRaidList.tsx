@@ -241,8 +241,14 @@ export function ProjectRaidList({
       header: t('colLinked'),
       kind: 'text',
       cell: (item) =>
-        item.tasks.length > 0
-          ? item.tasks.map((task) => task.humanKey ?? task.title).join(', ')
+        [
+          ...item.tasks.map((task) => task.humanKey ?? task.title),
+          ...(item.deliveryItems ?? []).map((itemLink) => itemLink.humanKey ?? itemLink.title),
+        ].length > 0
+          ? [
+              ...item.tasks.map((task) => task.humanKey ?? task.title),
+              ...(item.deliveryItems ?? []).map((itemLink) => itemLink.humanKey ?? itemLink.title),
+            ].join(', ')
           : '—',
     },
     {
@@ -286,6 +292,7 @@ export function ProjectRaidList({
         item.impact ?? '',
         item.owner?.displayName ?? '',
         ...item.tasks.map((task) => task.humanKey ?? task.title),
+        ...(item.deliveryItems ?? []).map((link) => link.humanKey ?? link.title),
       ]
         .join(' ')
         .toLowerCase()
