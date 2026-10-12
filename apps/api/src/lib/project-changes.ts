@@ -5,6 +5,7 @@ import {
   memberships,
   projectChangeDeliveryLinks,
   projectChangeItems,
+  projectChangeRecordLinks,
   projectEpics,
   projectMilestones,
   projectTasks,
@@ -16,6 +17,7 @@ import {
   changeDeliveryEntityTypeSchema,
   changeKindSchema,
   changeStatusSchema,
+  formatHumanKey,
   type ChangeDeliveryEntityType,
   type ChangeKind,
   type ChangeStatus,
@@ -36,6 +38,14 @@ export type PublicChangeDeliveryLink = {
   entityType: ChangeDeliveryEntityType;
   entityId: string;
   entityTitle: string | null;
+};
+
+export type PublicChangeRecordLink = {
+  id: string;
+  title: string;
+  slug: string;
+  recordType: string | null;
+  humanKey: string | null;
 };
 
 export type PublicChangePerson = {
@@ -66,6 +76,7 @@ export type PublicChangeItem = {
   baselineEndAfter: string | null;
   knowledgeRecordId: string | null;
   knowledgeRecordTitle: string | null;
+  records: PublicChangeRecordLink[];
   sortOrder: number;
   issueKeyType: string | null;
   issueNumber: number | null;
@@ -195,9 +206,59 @@ async function loadDeliveryLinks(
   return map;
 }
 
+async function loadRecordLinksByChangeIds(
+  database: Database,
+  changeIds: string[],
+  keyPrefix: string | null,
+): Promise<Map<string, PublicChangeRecordLink[]>> {
+  const map = new Map<string, PublicChangeRecordLink[]>();
+  if (changeIds.length === 0) return map;
+  const rows = await database.db
+    .select({
+      changeId: projectChangeRecordLinks.changeId,
+      recordId: knowledgeRecords.id,
+      title: knowledgeRecords.title,
+      slug: knowledgeRecords.slug,
+      recordType: knowledgeRecords.recordType,
+      documentKeyType: knowledgeRecords.documentKeyType,
+      documentNumber: knowledgeRecords.documentNumber,
+    })
+    .from(projectChangeRecordLinks)
+    .innerJoin(
+      knowledgeRecords,
+      eq(projectChangeRecordLinks.knowledgeRecordId, knowledgeRecords.id),
+    )
+    .where(inArray(projectChangeRecordLinks.changeId, changeIds))
+    .orderBy(asc(knowledgeRecords.title));
+  for (const row of rows) {
+    const list = map.get(row.changeId) ?? [];
+    list.push({
+      id: row.recordId,
+      title: row.title,
+      slug: row.slug,
+      recordType: row.recordType,
+      humanKey: formatHumanKey(keyPrefix, row.documentKeyType, row.documentNumber),
+    });
+    map.set(row.changeId, list);
+  }
+  return map;
+}
+
+function linkedRecordIds(input: {
+  recordIds?: string[];
+  knowledgeRecordId?: string | null;
+}): string[] | undefined {
+  if (input.recordIds !== undefined) return [...new Set(input.recordIds)];
+  if (input.knowledgeRecordId !== undefined) {
+    return input.knowledgeRecordId ? [input.knowledgeRecordId] : [];
+  }
+  return undefined;
+}
+
 function toPublicChangeItem(
   row: typeof projectChangeItems.$inferSelect,
   links: PublicChangeDeliveryLink[],
+  records: PublicChangeRecordLink[],
   people: Map<string, PublicChangePerson>,
   knowledgeTitle: string | null,
   keyPrefix?: string | null,
@@ -228,6 +289,7 @@ function toPublicChangeItem(
     baselineEndAfter: row.baselineEndAfter,
     knowledgeRecordId: row.knowledgeRecordId,
     knowledgeRecordTitle: knowledgeTitle,
+    records,
     sortOrder: row.sortOrder,
     issueKeyType: keys.issueKeyType,
     issueNumber: keys.issueNumber,
@@ -254,10 +316,10 @@ export async function listChangeItems(
     .where(and(...conditions))
     .orderBy(asc(projectChangeItems.sortOrder), asc(projectChangeItems.title));
 
-  const linkMap = await loadDeliveryLinks(
-    database,
-    rows.map((row) => row.id),
-  );
+  const changeIds = rows.map((row) => row.id);
+  const keyPrefix = await getProjectKeyPrefix(database, projectId);
+  const linkMap = await loadDeliveryLinks(database, changeIds);
+  const recordMap = await loadRecordLinksByChangeIds(database, changeIds, keyPrefix);
   const people = await loadPeople(
     database,
     rows.flatMap((row) =>
@@ -280,11 +342,11 @@ export async function listChangeItems(
     }
   }
 
-  const keyPrefix = await getProjectKeyPrefix(database, projectId);
   return rows.map((row) =>
     toPublicChangeItem(
       row,
       linkMap.get(row.id) ?? [],
+      recordMap.get(row.id) ?? [],
       people,
       row.knowledgeRecordId
         ? knowledgeTitles.get(row.knowledgeRecordId) ?? null
@@ -400,6 +462,83 @@ export async function setChangeDeliveryLinks(
   });
 }
 
+export async function setChangeRecordLinks(
+  database: Database,
+  input: {
+    changeId: string;
+    projectId: string;
+    recordIds: string[];
+    createdBy?: string | null;
+  },
+): Promise<void> {
+  const recordIds = [...new Set(input.recordIds)];
+  if (recordIds.length > 0) {
+    const rows = await database.db
+      .select({
+        id: knowledgeRecords.id,
+        projectId: knowledgeRecords.projectId,
+      })
+      .from(knowledgeRecords)
+      .where(inArray(knowledgeRecords.id, recordIds));
+    const found = new Map(rows.map((row) => [row.id, row.projectId]));
+    for (const recordId of recordIds) {
+      const ownerProjectId = found.get(recordId);
+      if (!ownerProjectId) {
+        throw new AppError({
+          code: 'CHANGE_KNOWLEDGE_NOT_FOUND',
+          message: 'Linked knowledge record was not found',
+          statusCode: 400,
+        });
+      }
+      if (ownerProjectId !== input.projectId) {
+        throw new AppError({
+          code: 'CHANGE_KNOWLEDGE_PROJECT_MISMATCH',
+          message: 'Linked knowledge record must belong to this project',
+          statusCode: 400,
+        });
+      }
+    }
+  }
+
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: projectChangeRecordLinks.id,
+        knowledgeRecordId: projectChangeRecordLinks.knowledgeRecordId,
+      })
+      .from(projectChangeRecordLinks)
+      .where(eq(projectChangeRecordLinks.changeId, input.changeId));
+    const next = recordIds.map((knowledgeRecordId) => ({ knowledgeRecordId }));
+    const diff = diffReplacement(
+      existing,
+      next,
+      (row) => row.knowledgeRecordId,
+      (row) => row.knowledgeRecordId,
+      () => true,
+    );
+    if (diff.remove.length > 0) {
+      await db
+        .delete(projectChangeRecordLinks)
+        .where(
+          inArray(
+            projectChangeRecordLinks.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(projectChangeRecordLinks).values(
+        diff.insert.map((link) => ({
+          changeId: input.changeId,
+          knowledgeRecordId: link.knowledgeRecordId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
+}
+
 export async function createChangeItem(
   database: Database,
   input: {
@@ -418,6 +557,7 @@ export async function createChangeItem(
     baselineEndBefore?: string | null;
     baselineEndAfter?: string | null;
     knowledgeRecordId?: string | null;
+    recordIds?: string[];
     sortOrder?: number;
     deliveryLinks?: Array<{
       entityType: ChangeDeliveryEntityType;
@@ -442,21 +582,7 @@ export async function createChangeItem(
       input.approvedByUserId,
     );
   }
-  if (input.knowledgeRecordId) {
-    const [record] = await database.db
-      .select({ projectId: knowledgeRecords.projectId })
-      .from(knowledgeRecords)
-      .where(eq(knowledgeRecords.id, input.knowledgeRecordId))
-      .limit(1);
-    if (!record || record.projectId !== input.projectId) {
-      throw new AppError({
-        code: 'CHANGE_KNOWLEDGE_PROJECT_MISMATCH',
-        message: 'Linked knowledge record must belong to this project',
-        statusCode: 400,
-      });
-    }
-  }
-
+  const recordIds = linkedRecordIds(input);
   const status = input.status ?? 'proposed';
   
   const created = await database.db.transaction(async (tx) => {
@@ -481,7 +607,7 @@ export async function createChangeItem(
         baselineStartAfter: input.baselineStartAfter ?? null,
         baselineEndBefore: input.baselineEndBefore ?? null,
         baselineEndAfter: input.baselineEndAfter ?? null,
-        knowledgeRecordId: input.knowledgeRecordId ?? null,
+        knowledgeRecordId: recordIds?.[0] ?? null,
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
@@ -497,6 +623,15 @@ export async function createChangeItem(
     }
     return row;
   });
+
+  if (recordIds && recordIds.length > 0) {
+    await setChangeRecordLinks(database, {
+      changeId: created.id,
+      projectId: input.projectId,
+      recordIds,
+      createdBy: input.createdBy,
+    });
+  }
 
   if (input.deliveryLinks && input.deliveryLinks.length > 0) {
     await setChangeDeliveryLinks(database, {
@@ -528,6 +663,7 @@ export async function updateChangeItem(
     baselineEndBefore?: string | null;
     baselineEndAfter?: string | null;
     knowledgeRecordId?: string | null;
+    recordIds?: string[];
     sortOrder?: number;
     archived?: boolean;
     deliveryLinks?: Array<{
@@ -556,6 +692,7 @@ export async function updateChangeItem(
     );
   }
 
+  const recordIds = linkedRecordIds(input);
   const nextStatus = input.status ?? existing.status;
   const patch: Partial<typeof projectChangeItems.$inferInsert> = {
     updatedAt: new Date(),
@@ -590,8 +727,8 @@ export async function updateChangeItem(
   if (input.baselineEndAfter !== undefined) {
     patch.baselineEndAfter = input.baselineEndAfter;
   }
-  if (input.knowledgeRecordId !== undefined) {
-    patch.knowledgeRecordId = input.knowledgeRecordId;
+  if (recordIds !== undefined) {
+    patch.knowledgeRecordId = recordIds[0] ?? null;
   }
   if (input.sortOrder !== undefined) patch.sortOrder = input.sortOrder;
   if (input.archived === true) patch.archivedAt = new Date();
@@ -611,6 +748,15 @@ export async function updateChangeItem(
     .update(projectChangeItems)
     .set(patch)
     .where(eq(projectChangeItems.id, changeId));
+
+  if (recordIds !== undefined) {
+    await setChangeRecordLinks(database, {
+      changeId,
+      projectId: existing.projectId,
+      recordIds,
+      createdBy: input.createdBy,
+    });
+  }
 
   if (input.deliveryLinks) {
     await setChangeDeliveryLinks(database, {

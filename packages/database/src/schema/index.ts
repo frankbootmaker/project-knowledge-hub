@@ -1768,6 +1768,34 @@ export const projectChangeDeliveryLinks = pgTable(
   ],
 );
 
+/** Many documents linked to one change item. The legacy knowledge_record_id column stays the first link. */
+export const projectChangeRecordLinks = pgTable(
+  'project_change_record_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    changeId: uuid('change_id')
+      .notNull()
+      .references(() => projectChangeItems.id, { onDelete: 'cascade' }),
+    knowledgeRecordId: uuid('knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_change_record_links_uidx').on(
+      table.changeId,
+      table.knowledgeRecordId,
+    ),
+    index('project_change_record_links_record_id_idx').on(table.knowledgeRecordId),
+    index('project_change_record_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
 /** Daily EVM snapshot for burndown charts (upserted on budget/effort mutations). */
 export const projectCostSnapshots = pgTable(
   'project_cost_snapshots',

@@ -1544,6 +1544,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: ['proposed', 'approved', 'rejected', 'implemented', 'cancelled'],
         },
         knowledgeRecordId: { ...entityRefProp('Linked knowledge record'), nullable: true },
+        recordIds: {
+          type: 'array',
+          maxItems: 100,
+          items: entityRefProp('Knowledge record id'),
+        },
         deliveryLinks: {
           type: 'array',
           maxItems: 200,

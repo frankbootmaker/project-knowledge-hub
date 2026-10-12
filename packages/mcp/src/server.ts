@@ -2455,7 +2455,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_change_item',
-    'Create a change-management item with optional delivery links. Requires pm:write.',
+    'Create a change-management item. Optional delivery links cover epics, stories, milestones, and tasks (bugs use task). Optional recordIds link documents; knowledgeRecordId still sets a single document. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       kind: changeKindEnum,
@@ -2471,6 +2471,7 @@ export function createKnowledgeHubMcpServer(
       baselineEndBefore: ymdDate.optional(),
       baselineEndAfter: ymdDate.optional(),
       knowledgeRecordId: entityRef.nullable().optional(),
+      recordIds: z.array(entityRef).max(100).optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       deliveryLinks: z
         .array(
@@ -2509,6 +2510,7 @@ export function createKnowledgeHubMcpServer(
       baselineEndBefore: ymdDate.optional(),
       baselineEndAfter: ymdDate.optional(),
       knowledgeRecordId: entityRef.nullable().optional(),
+      recordIds: z.array(entityRef).max(100).optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
       deliveryLinks: z

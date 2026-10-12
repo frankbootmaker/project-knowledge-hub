@@ -180,6 +180,7 @@ export function ProjectChangeList({
         item.status,
         item.requestedBy?.displayName ?? '',
         item.knowledgeRecordTitle ?? '',
+        ...(item.records ?? []).flatMap((record) => [record.title, record.humanKey ?? '']),
         ...item.deliveryLinks.map((link) => link.entityTitle ?? ''),
       ]
         .join(' ')

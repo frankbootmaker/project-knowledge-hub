@@ -581,29 +581,38 @@ export default async function ProjectDetailPage({
         canMutate={canMutate && !isArchived}
         initialChangeItems={changeItems}
         members={members}
-        deliveryOptions={[
-          ...epics.map((epic) => ({
-            entityType: 'epic' as const,
-            entityId: epic.id,
-            title: epic.title,
-          })),
-          ...stories.map((story) => ({
-            entityType: 'user_story' as const,
-            entityId: story.id,
-            title: story.title,
-          })),
-          ...milestones.map((milestone) => ({
-            entityType: 'milestone' as const,
-            entityId: milestone.id,
-            title: milestone.title,
-          })),
-          ...tasks.map((task) => ({
-            entityType: 'task' as const,
-            entityId: task.id,
-            title: task.title,
-          })),
-        ]}
-        knowledgeRecords={knowledgeRecords}
+        epics={epics.map((epic) => ({
+          id: epic.id,
+          title: epic.title,
+          status: epic.status,
+          humanKey: epic.humanKey ?? null,
+        }))}
+        stories={stories.map((story) => ({
+          id: story.id,
+          title: story.title,
+          status: story.status,
+          humanKey: story.humanKey ?? null,
+        }))}
+        milestones={milestones.map((milestone) => ({
+          id: milestone.id,
+          title: milestone.title,
+          status: milestone.status,
+          humanKey: milestone.humanKey ?? null,
+        }))}
+        tasks={tasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          humanKey: task.humanKey ?? null,
+          itemType: task.itemType === 'bug' ? 'bug' : 'task',
+        }))}
+        records={knowledgeRecords.map((record) => ({
+          id: record.id,
+          title: record.title,
+          slug: record.slug,
+          humanKey: record.humanKey ?? null,
+          recordType: record.recordType,
+        }))}
       />
 
       <ProjectLinkedSections

@@ -4025,6 +4025,7 @@ export function createMcpToolHandlers(
       baselineEndBefore?: string | null;
       baselineEndAfter?: string | null;
       knowledgeRecordId?: string | null;
+      recordIds?: string[];
       sortOrder?: number;
       deliveryLinks?: Array<{ entityType: string; entityId: string }>;
     }) {
@@ -4040,6 +4041,16 @@ export function createMcpToolHandlers(
         input.knowledgeRecordId,
         workspaceIds,
       );
+      const recordIds = input.recordIds
+        ? await Promise.all(
+            input.recordIds.map((recordId) =>
+              resolveKnowledgeRecordId(app.database, {
+                idOrKey: recordId,
+                workspaceIds,
+              }),
+            ),
+          )
+        : undefined;
       const deliveryLinks = input.deliveryLinks
         ? await Promise.all(
             input.deliveryLinks.map(async (link) => {
@@ -4076,6 +4087,7 @@ export function createMcpToolHandlers(
         baselineEndBefore: input.baselineEndBefore,
         baselineEndAfter: input.baselineEndAfter,
         knowledgeRecordId: knowledgeRecordId ?? null,
+        recordIds,
         sortOrder: input.sortOrder,
         deliveryLinks,
         createdBy: actingUserId,
@@ -4113,6 +4125,7 @@ export function createMcpToolHandlers(
       baselineEndBefore?: string | null;
       baselineEndAfter?: string | null;
       knowledgeRecordId?: string | null;
+      recordIds?: string[];
       sortOrder?: number;
       archived?: boolean;
       deliveryLinks?: Array<{ entityType: string; entityId: string }>;
@@ -4135,6 +4148,16 @@ export function createMcpToolHandlers(
         input.knowledgeRecordId,
         workspaceIds,
       );
+      const recordIds = input.recordIds
+        ? await Promise.all(
+            input.recordIds.map((recordId) =>
+              resolveKnowledgeRecordId(app.database, {
+                idOrKey: recordId,
+                workspaceIds,
+              }),
+            ),
+          )
+        : undefined;
       const deliveryLinks = input.deliveryLinks
         ? await Promise.all(
             input.deliveryLinks.map(async (link) => {
@@ -4173,6 +4196,7 @@ export function createMcpToolHandlers(
           input.knowledgeRecordId === undefined
             ? undefined
             : knowledgeRecordId ?? null,
+        recordIds,
         sortOrder: input.sortOrder,
         archived: input.archived,
         deliveryLinks,

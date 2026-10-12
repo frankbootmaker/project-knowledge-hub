@@ -64,6 +64,7 @@ const createSchema = z.object({
   baselineEndBefore: dateStringSchema.optional(),
   baselineEndAfter: dateStringSchema.optional(),
   knowledgeRecordId: z.string().uuid().nullable().optional(),
+  recordIds: z.array(z.string().uuid()).max(100).optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   deliveryLinks: z.array(deliveryLinkSchema).max(200).optional(),
 });
