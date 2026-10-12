@@ -2851,6 +2851,8 @@
     "projectRole": {
       "sponsor": "Sponsor",
       "owner": "Owner",
+      "project_manager": "Project manager",
+      "scrum_master": "Scrum master",
       "product_owner": "Product owner",
       "tech_lead": "Tech lead",
       "contributor": "Contributor",

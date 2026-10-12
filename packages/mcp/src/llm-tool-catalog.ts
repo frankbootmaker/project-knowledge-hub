@@ -1208,6 +1208,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: [
             'sponsor',
             'owner',
+            'project_manager',
+            'scrum_master',
             'product_owner',
             'tech_lead',
             'contributor',
@@ -1270,6 +1272,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: [
             'sponsor',
             'owner',
+            'project_manager',
+            'scrum_master',
             'product_owner',
             'tech_lead',
             'contributor',

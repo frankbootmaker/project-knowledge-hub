@@ -33,6 +33,8 @@ describe('domain foundations', () => {
 
   it('validates project stakeholder roles', () => {
     expect(projectStakeholderRoleSchema.parse('sponsor')).toBe('sponsor');
+    expect(projectStakeholderRoleSchema.parse('project_manager')).toBe('project_manager');
+    expect(projectStakeholderRoleSchema.parse('scrum_master')).toBe('scrum_master');
     expect(projectStakeholderRoleSchema.parse('tech_lead')).toBe('tech_lead');
   });
 

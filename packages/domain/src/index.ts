@@ -138,6 +138,8 @@ export const taskActivityTypeSchema = z.enum([
 export const projectStakeholderRoleSchema = z.enum([
   'sponsor',
   'owner',
+  'project_manager',
+  'scrum_master',
   'product_owner',
   'tech_lead',
   'contributor',

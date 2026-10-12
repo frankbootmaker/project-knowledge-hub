@@ -1237,6 +1237,8 @@ export function createKnowledgeHubMcpServer(
               .enum([
                 'sponsor',
                 'owner',
+                'project_manager',
+                'scrum_master',
                 'product_owner',
                 'tech_lead',
                 'contributor',
@@ -2087,6 +2089,8 @@ export function createKnowledgeHubMcpServer(
   const stakeholderRoleEnum = z.enum([
     'sponsor',
     'owner',
+    'project_manager',
+    'scrum_master',
     'product_owner',
     'tech_lead',
     'contributor',

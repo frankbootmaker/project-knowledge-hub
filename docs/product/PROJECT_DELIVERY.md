@@ -84,7 +84,7 @@ Writes that send bug fields on a task are rejected. Knowledge and RAID links kee
 
 ### Stakeholders (hybrid)
 
-* Durable **roster** rows: project role (`sponsor` / `owner` / `product_owner` / `tech_lead` / `contributor` / `stakeholder` / `other`), optional job title, notes, and `reports_to_user_id` (cycle-checked).
+* Durable **roster** rows: project role (`sponsor` / `owner` / `project_manager` / `scrum_master` / `product_owner` / `tech_lead` / `contributor` / `stakeholder` / `other`), optional job title, notes, and `reports_to_user_id` (cycle-checked).
 * **Open job roles:** omit `user_id` to create a fill-in-place seat (`kind: open_role`); job title required; optional `roleDescription` + competency tags (`{ name, skillId }` — `skillId` null until a shared catalog exists). Assign a workspace member later on the same row; unassign reopens the seat. Future advertise/hire layer: [`PROJECT_JOB_PORTAL.md`](PROJECT_JOB_PORTAL.md) (NF-022).
 * **Derived** people: project `owner_user_id` and anyone on task RACI appear in the unified list with contact fields even without a roster row.
 * **AI assistants**: catalogue systems with `system_type = ai_assistant` linked to the project appear as `kind: ai_assistant` (not general Systems like Proxmox). Org-chart edge to `owner_user_id` when that person is in the set.

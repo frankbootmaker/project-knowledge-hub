@@ -676,6 +676,8 @@ export function ProjectScrumView({
     switch (role) {
       case 'sponsor':
       case 'owner':
+      case 'project_manager':
+      case 'scrum_master':
       case 'product_owner':
       case 'tech_lead':
       case 'contributor':

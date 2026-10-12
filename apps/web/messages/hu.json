@@ -2839,6 +2839,8 @@
     "projectRole": {
       "sponsor": "Szponzor",
       "owner": "Tulajdonos",
+      "project_manager": "Projektmenedzser",
+      "scrum_master": "Scrum master",
       "product_owner": "Product owner",
       "tech_lead": "Tech lead",
       "contributor": "Közreműködő",
