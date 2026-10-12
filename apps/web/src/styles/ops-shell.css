@@ -3461,6 +3461,10 @@ button.kh-ops-project-card:disabled {
   border-bottom: 1px solid var(--kh-line);
 }
 
+.kh-ops-linked-row.kh-ops-linked-row-start {
+  justify-content: flex-start;
+}
+
 .kh-ops-linked-row:last-child {
   border-bottom: 0;
 }

@@ -1392,6 +1392,16 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: ['open', 'mitigating', 'accepted', 'closed', 'cancelled'],
         },
         severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+        probability: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
+        impact: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
         ownerUserId: { type: 'string', format: 'uuid', nullable: true },
         dueDate: { ...ymd, nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
@@ -1420,6 +1430,16 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: ['open', 'mitigating', 'accepted', 'closed', 'cancelled'],
         },
         severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+        probability: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
+        impact: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
         ownerUserId: { type: 'string', format: 'uuid', nullable: true },
         dueDate: { ...ymd, nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
@@ -1438,6 +1458,54 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         raidItemId: entityRefProp('Source RAID item'),
         targetKind: { type: 'string', enum: ['issue', 'risk'] },
+      },
+    },
+  },
+  {
+    name: 'set_project_raid_record_links',
+    description:
+      'Replace knowledge records linked to a RAID item. Same project only. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['raidItemId', 'recordIds'],
+      properties: {
+        raidItemId: entityRefProp('RAID item id'),
+        recordIds: {
+          type: 'array',
+          maxItems: 100,
+          items: entityRefProp('Knowledge record id'),
+        },
+      },
+    },
+  },
+  {
+    name: 'get_knowledge_record_raid_links',
+    description: 'List RAID items linked to a knowledge record. Requires knowledge:read.',
+    scope: 'knowledge:read',
+    body: {
+      type: 'object',
+      required: ['recordId'],
+      properties: { recordId: entityRefProp('Knowledge record id') },
+    },
+  },
+  {
+    name: 'set_knowledge_record_raid_links',
+    description:
+      'Replace RAID items linked to a project-scoped knowledge record. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['recordId', 'raidItemIds'],
+      properties: {
+        recordId: entityRefProp('Knowledge record id'),
+        raidItemIds: {
+          type: 'array',
+          maxItems: 100,
+          items: entityRefProp('RAID item id'),
+        },
       },
     },
   },

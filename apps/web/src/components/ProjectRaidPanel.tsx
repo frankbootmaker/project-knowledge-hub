@@ -16,6 +16,7 @@ import {
   Textarea,
   useToast,
 } from './ui';
+import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
 
 export type RaidItem = {
   id: string;
@@ -24,6 +25,8 @@ export type RaidItem = {
   description: string | null;
   status: string;
   severity: string;
+  probability?: string | null;
+  impact?: string | null;
   ownerUserId: string | null;
   owner: { userId: string; displayName: string; email: string } | null;
   dueDate: string | null;
@@ -42,10 +45,31 @@ export type RaidItem = {
     status: string;
     humanKey?: string | null;
   }>;
+  records?: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    recordType: string;
+    humanKey?: string | null;
+  }>;
 };
 
 type TaskOption = { id: string; title: string; status: string };
+type RecordOption = {
+  id: string;
+  title: string;
+  slug: string;
+  humanKey?: string | null;
+};
 type Member = { userId: string; displayName: string; email: string };
+
+const DOCUMENT_PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
+const DEFAULT_DOCUMENT_PAGE_SIZE = 5;
+type DocumentPageSize = (typeof DOCUMENT_PAGE_SIZE_OPTIONS)[number];
+
+function isDocumentPageSize(value: number): value is DocumentPageSize {
+  return (DOCUMENT_PAGE_SIZE_OPTIONS as readonly number[]).includes(value);
+}
 
 const KINDS = ['risk', 'assumption', 'issue', 'dependency'] as const;
 const STATUSES = [
@@ -62,13 +86,17 @@ export function ProjectRaidPanel({
   canMutate,
   initialRaidItems,
   tasks,
+  records,
   members,
+  initialOpenRaidId = null,
 }: {
   projectId: string;
   canMutate: boolean;
   initialRaidItems: RaidItem[];
   tasks: TaskOption[];
+  records: RecordOption[];
   members: Member[];
+  initialOpenRaidId?: string | null;
 }) {
   const t = useTranslations('raid');
   const tCommon = useTranslations('common');
@@ -96,9 +124,21 @@ export function ProjectRaidPanel({
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('open');
   const [severity, setSeverity] = useState('medium');
+  const [probability, setProbability] = useState('');
+  const [impact, setImpact] = useState('');
   const [ownerUserId, setOwnerUserId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [taskIds, setTaskIds] = useState<string[]>([]);
+  const [recordIds, setRecordIds] = useState<string[]>([]);
+  const [removeIds, setRemoveIds] = useState<string[]>([]);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addIds, setAddIds] = useState<string[]>([]);
+  const [recordQuery, setRecordQuery] = useState('');
+  const [addPage, setAddPage] = useState(1);
+  const [addPageSize, setAddPageSize] = useState<DocumentPageSize>(
+    DEFAULT_DOCUMENT_PAGE_SIZE,
+  );
+  const [raidTab, setRaidTab] = useState<'details' | 'documents'>('details');
 
   const refresh = useCallback(() => {
     router.refresh();
@@ -114,9 +154,19 @@ export function ProjectRaidPanel({
     setDescription(seed?.description ?? '');
     setStatus(seed?.status ?? 'open');
     setSeverity(seed?.severity ?? 'medium');
+    setProbability(seed?.probability ?? '');
+    setImpact(seed?.impact ?? '');
     setOwnerUserId(seed?.ownerUserId ?? '');
     setDueDate(seed?.dueDate ?? '');
     setTaskIds(seed?.tasks.map((task) => task.id) ?? []);
+    setRecordIds(seed?.records?.map((record) => record.id) ?? []);
+    setRemoveIds([]);
+    setAddOpen(false);
+    setAddIds([]);
+    setRecordQuery('');
+    setAddPage(1);
+    setAddPageSize(DEFAULT_DOCUMENT_PAGE_SIZE);
+    setRaidTab('details');
     setConfirmDelete(false);
     setDeleteAcknowledged(false);
     setConfirmTransfer(null);
@@ -129,12 +179,51 @@ export function ProjectRaidPanel({
     }
   }, [manageId, managing?.id]);
 
+  useEffect(() => {
+    if (!initialOpenRaidId) return;
+    if (!initialRaidItems.some((item) => item.id === initialOpenRaidId)) return;
+    setManageId(initialOpenRaidId);
+  }, [initialOpenRaidId, initialRaidItems]);
+
   function toggleTask(taskId: string) {
     setTaskIds((prev) =>
       prev.includes(taskId)
         ? prev.filter((id) => id !== taskId)
         : [...prev, taskId],
     );
+  }
+
+  function toggleRemove(recordId: string) {
+    setRemoveIds((prev) =>
+      prev.includes(recordId)
+        ? prev.filter((id) => id !== recordId)
+        : [...prev, recordId],
+    );
+  }
+
+  function deleteSelectedDocuments() {
+    setRecordIds((prev) => prev.filter((id) => !removeIds.includes(id)));
+    setRemoveIds([]);
+  }
+
+  function toggleAdd(recordId: string) {
+    setAddIds((prev) =>
+      prev.includes(recordId)
+        ? prev.filter((id) => id !== recordId)
+        : [...prev, recordId],
+    );
+  }
+
+  function closeAddPicker() {
+    setAddOpen(false);
+    setAddIds([]);
+    setRecordQuery('');
+    setAddPage(1);
+  }
+
+  function confirmAddDocuments() {
+    setRecordIds((prev) => [...new Set([...prev, ...addIds])]);
+    closeAddPicker();
   }
 
   async function submitCreate() {
@@ -151,9 +240,12 @@ export function ProjectRaidPanel({
           description: description.trim() || null,
           status,
           severity,
+          probability: probability || null,
+          impact: impact || null,
           ownerUserId: ownerUserId || null,
           dueDate: dueDate || null,
           taskIds,
+          recordIds,
         }),
       });
       const payload = (await response.json().catch(() => ({}))) as {
@@ -191,6 +283,8 @@ export function ProjectRaidPanel({
             description: description.trim() || null,
             status,
             severity,
+            probability: probability || null,
+            impact: impact || null,
             ownerUserId: ownerUserId || null,
             dueDate: dueDate || null,
           }),
@@ -220,9 +314,25 @@ export function ProjectRaidPanel({
         throw new Error(linksPayload.error?.message || t('failedUpdate'));
       }
 
+      const recordsResponse = await fetch(
+        `/api/v1/project-raid-items/${manageId}/records`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordIds }),
+        },
+      );
+      const recordsPayload = (await recordsResponse.json().catch(() => ({}))) as {
+        raidItem?: RaidItem;
+        error?: { message?: string };
+      };
+      if (!recordsResponse.ok || !recordsPayload.raidItem) {
+        throw new Error(recordsPayload.error?.message || t('failedUpdate'));
+      }
+
       setItems((prev) =>
         prev.map((item) =>
-          item.id === manageId ? linksPayload.raidItem! : item,
+          item.id === manageId ? recordsPayload.raidItem! : item,
         ),
       );
       setManageId(null);
@@ -388,6 +498,34 @@ export function ProjectRaidPanel({
               ))}
             </Select>
           </Field>
+          <Field label={t('probabilityLabel')}>
+            <Select
+              value={probability}
+              onChange={(e) => setProbability(e.target.value)}
+              disabled={disabled}
+            >
+              <option value="">{t('ratingNone')}</option>
+              {SEVERITIES.map((value) => (
+                <option key={value} value={value}>
+                  {t(`severity.${value}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('impactLabel')}>
+            <Select
+              value={impact}
+              onChange={(e) => setImpact(e.target.value)}
+              disabled={disabled}
+            >
+              <option value="">{t('ratingNone')}</option>
+              {SEVERITIES.map((value) => (
+                <option key={value} value={value}>
+                  {t(`severity.${value}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
           <Field label={t('dueDate')}>
             <Input
               type="date"
@@ -450,6 +588,219 @@ export function ProjectRaidPanel({
     );
   }
 
+  function recordCatalog(): RecordOption[] {
+    const catalog = new Map<string, RecordOption>();
+    for (const record of records) catalog.set(record.id, record);
+    for (const record of managing?.records ?? []) {
+      if (!catalog.has(record.id)) catalog.set(record.id, record);
+    }
+    return [...catalog.values()];
+  }
+
+  function addDocumentsPicker() {
+    const needle = recordQuery.trim().toLowerCase();
+    const available = recordCatalog().filter((record) => {
+      if (recordIds.includes(record.id)) return false;
+      if (!needle) return true;
+      const haystack = `${record.humanKey ?? ''} ${record.title}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+    const totalPages = Math.max(1, Math.ceil(available.length / addPageSize) || 1);
+    const currentPage = Math.min(Math.max(1, addPage), totalPages);
+    const pageStart = (currentPage - 1) * addPageSize;
+    const pageItems = available.slice(pageStart, pageStart + addPageSize);
+    const rangeFrom = available.length === 0 ? 0 : pageStart + 1;
+    const rangeTo = Math.min(pageStart + addPageSize, available.length);
+
+    return (
+      <div className="grid gap-3">
+        <Input
+          value={recordQuery}
+          onChange={(event) => {
+            setRecordQuery(event.target.value);
+            setAddPage(1);
+          }}
+          placeholder={t('documentSearch')}
+          data-modal-initial-focus
+        />
+        {available.length === 0 ? (
+          <p className="m-0 text-sm text-ink-muted">
+            {t(
+              needle
+                ? 'documentsNoneToAdd'
+                : recordCatalog().length === 0
+                  ? 'documentsEmpty'
+                  : 'documentsAllLinked',
+            )}
+          </p>
+        ) : (
+          <>
+            <ul className="m-0 grid list-none gap-2 p-0">
+              {pageItems.map((record) => (
+                <li key={record.id}>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={addIds.includes(record.id)}
+                      onChange={() => toggleAdd(record.id)}
+                    />
+                    <span>
+                      {record.humanKey ? (
+                        <span className="text-ink-muted">{record.humanKey} · </span>
+                      ) : null}
+                      {record.title}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+              <p className="m-0 text-xs text-ink-muted">
+                {t('documentsShowing', {
+                  from: rangeFrom,
+                  to: rangeTo,
+                  total: available.length,
+                })}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={String(addPageSize)}
+                  onChange={(event) => {
+                    const parsed = Number(event.target.value);
+                    setAddPageSize(
+                      isDocumentPageSize(parsed) ? parsed : DEFAULT_DOCUMENT_PAGE_SIZE,
+                    );
+                    setAddPage(1);
+                  }}
+                  aria-label={t('documentsPageSize')}
+                  className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
+                >
+                  {DOCUMENT_PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={String(size)}>
+                      {t('documentsPageSizeOption', { count: size })}
+                    </option>
+                  ))}
+                </Select>
+                <nav
+                  className="flex flex-wrap items-center gap-2"
+                  aria-label={t('documentsAddTitle')}
+                >
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={currentPage <= 1}
+                    onClick={() => setAddPage(Math.max(1, currentPage - 1))}
+                  >
+                    {t('documentsPrevPage')}
+                  </Button>
+                  <span className="text-xs text-ink-muted" aria-current="page">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setAddPage(Math.min(totalPages, currentPage + 1))}
+                  >
+                    {t('documentsNextPage')}
+                  </Button>
+                </nav>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function documentsPane(disabled: boolean) {
+    const catalog = recordCatalog();
+    const linked = catalog.filter((record) => recordIds.includes(record.id));
+    const editable = canMutate && !disabled;
+    return (
+      <div className="grid gap-3">
+        {editable ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="secondary" onClick={() => {
+              setAddIds([]);
+              setRecordQuery('');
+              setAddPage(1);
+              setAddOpen(true);
+            }}
+            >
+              {t('documentsAdd')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={removeIds.length === 0}
+              onClick={deleteSelectedDocuments}
+            >
+              {t('documentsRemove')}
+            </Button>
+          </div>
+        ) : null}
+        {linked.length === 0 ? (
+          <p className="m-0 text-sm text-ink-muted">{t('documentsReadOnlyEmpty')}</p>
+        ) : (
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {linked.map((record) => (
+              <li key={record.id} className="kh-ops-linked-row kh-ops-linked-row-start">
+                {editable ? (
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={removeIds.includes(record.id)}
+                    onChange={() => toggleRemove(record.id)}
+                    aria-label={t('documentsSelect', { title: record.title })}
+                  />
+                ) : null}
+                <span>
+                  {record.humanKey ? (
+                    <span className="text-ink-muted">{record.humanKey} · </span>
+                  ) : null}
+                  <LinkedKnowledgeRecord slug={record.slug} title={record.title} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  function tabbedForm(disabled: boolean, options?: { managing?: boolean }) {
+    return (
+      <div>
+        <div className="kh-ops-modal-tabs" role="tablist">
+          {(['details', 'documents'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={raidTab === tab}
+              className={raidTab === tab ? 'active' : undefined}
+              onClick={() => setRaidTab(tab)}
+            >
+              {tab === 'details' ? t('tabDetails') : t('tabDocuments')}
+            </button>
+          ))}
+        </div>
+        <section
+          className={`kh-ops-modal-pane${raidTab === 'details' ? ' active' : ''}`}
+        >
+          {formFields(disabled, options)}
+        </section>
+        <section
+          className={`kh-ops-modal-pane${raidTab === 'documents' ? ' active' : ''}`}
+        >
+          {documentsPane(disabled)}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <>
       <CollapsibleSection
@@ -484,6 +835,7 @@ export function ProjectRaidPanel({
         title={t('addItem')}
         description={t('modalDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
+        closeOnEscape={!addOpen}
         footer={
           <>
             <Button
@@ -504,7 +856,7 @@ export function ProjectRaidPanel({
           </>
         }
       >
-        {formFields(pending)}
+        {tabbedForm(pending)}
       </Modal>
 
       <Modal
@@ -513,6 +865,7 @@ export function ProjectRaidPanel({
         title={title.trim() || t('manageItem')}
         description={t('manageDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
+        closeOnEscape={!addOpen}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -535,17 +888,20 @@ export function ProjectRaidPanel({
               ) : null}
               {canMutate ? (
                 !confirmDelete ? (
-                  <Button
-                    type="button"
-                    variant="danger"
-                    disabled={pending || Boolean(confirmTransfer)}
-                    onClick={() => {
-                      setConfirmDelete(true);
-                      setDeleteAcknowledged(false);
-                    }}
-                  >
-                    {t('deleteItem')}
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      disabled={pending || Boolean(confirmTransfer)}
+                      onClick={() => {
+                        setConfirmDelete(true);
+                        setDeleteAcknowledged(false);
+                      }}
+                    >
+                      {t('deleteItem')}
+                    </Button>
+                    <p className="m-0 text-xs text-ink-muted">{t('deleteItemNote')}</p>
+                  </>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -646,9 +1002,32 @@ export function ProjectRaidPanel({
             </label>
           </div>
         ) : null}
-        {formFields(pending || confirmDelete || Boolean(confirmTransfer) || !canMutate, {
+        {tabbedForm(pending || confirmDelete || Boolean(confirmTransfer) || !canMutate, {
           managing: true,
         })}
+      </Modal>
+
+      <Modal
+        open={addOpen}
+        onClose={closeAddPicker}
+        title={t('documentsAddTitle')}
+        description={t('documentsAddDescription')}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeAddPicker}>
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={addIds.length === 0}
+              onClick={confirmAddDocuments}
+            >
+              {t('documentsAddConfirm')}
+            </Button>
+          </>
+        }
+      >
+        {addDocumentsPicker()}
       </Modal>
     </>
   );

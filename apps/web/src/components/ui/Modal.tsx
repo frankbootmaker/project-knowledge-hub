@@ -35,6 +35,8 @@ type Props = {
   size?: ModalSize;
   /** When false, backdrop click does not close (Esc still does). Default true. */
   closeOnBackdrop?: boolean;
+  /** When false, Escape does not close. Default true. */
+  closeOnEscape?: boolean;
   /** Extra class for the scrollable body (e.g. both-axis overflow for wide tables). */
   bodyClassName?: string;
 };
@@ -48,6 +50,7 @@ export function Modal({
   footer,
   size = 'md',
   closeOnBackdrop = true,
+  closeOnEscape = true,
   bodyClassName,
 }: Props) {
   const t = useTranslations('common');
@@ -57,6 +60,8 @@ export function Modal({
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const closeOnEscapeRef = useRef(closeOnEscape);
+  closeOnEscapeRef.current = closeOnEscape;
   // Portals need a mounted document; avoid SSR mismatch.
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -87,6 +92,7 @@ export function Modal({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
+        if (!closeOnEscapeRef.current) return;
         event.preventDefault();
         onCloseRef.current();
         return;

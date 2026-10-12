@@ -16,6 +16,7 @@ import {
   projectInitialStakeholders,
   projectMilestones,
   projectRaidItems,
+  projectRaidRecordLinks,
   projectRaidTaskLinks,
   projectSprints,
   projectStakeholders,
@@ -284,6 +285,12 @@ export type SystemUserPurgeSnapshot = {
     raidItemId: string;
     taskId: string;
   }>;
+  raidRecordLinks?: Array<{
+    id: string;
+    createdBy: string | null;
+    raidItemId: string;
+    knowledgeRecordId: string;
+  }>;
   knowledgeRecords: Array<{
     id: string;
     createdBy: string | null;
@@ -360,6 +367,7 @@ export type SystemUserPurgePlan = {
     knowledgeDeliveryLinks: string[];
     changeDeliveryLinks: string[];
     raidTaskLinks: string[];
+    raidRecordLinks: string[];
     knowledgeRecords: string[];
     knowledgeRecordVersions: string[];
     media: string[];
@@ -1114,6 +1122,29 @@ export function planSystemUserPurge(
     }
   }
 
+  const recordById = new Map(snapshot.knowledgeRecords.map((row) => [row.id, row]));
+  const raidRecordLinks: string[] = [];
+  for (const link of snapshot.raidRecordLinks ?? []) {
+    const raidInProject = raidById.get(link.raidItemId)?.projectId === projectId;
+    const recordInProject =
+      recordById.get(link.knowledgeRecordId)?.projectId === projectId;
+    if (!raidInProject && !recordInProject) continue;
+    const parentDeleted =
+      raidIds.has(link.raidItemId) || recordIds.has(link.knowledgeRecordId);
+    if (owned(link.createdBy)) {
+      if (parentDeleted || raidInProject) raidRecordLinks.push(link.id);
+      continue;
+    }
+    if (parentDeleted) {
+      conflicts.push({
+        entityType: 'raid_record_link',
+        entityId: link.id,
+        reason:
+          'RAID record link was not created by the system user, but one of its endpoints will be deleted.',
+      });
+    }
+  }
+
   const mediaRows: Array<(typeof snapshot.media)[number]> = [];
   for (const row of snapshot.media) {
     if (row.workspaceId !== snapshot.workspaceId || !owned(row.createdBy)) continue;
@@ -1416,7 +1447,8 @@ export function planSystemUserPurge(
   counts.deliveryLinks =
     knowledgeDeliveryLinks.length +
     changeDeliveryLinks.length +
-    raidTaskLinks.length;
+    raidTaskLinks.length +
+    raidRecordLinks.length;
   counts.translations = translationIds.size;
   counts.knowledgeRecords = records.length - translationIds.size;
   counts.knowledgeRecordVersions = versions.length;
@@ -1443,6 +1475,7 @@ export function planSystemUserPurge(
       knowledgeDeliveryLinks,
       changeDeliveryLinks,
       raidTaskLinks,
+      raidRecordLinks,
       knowledgeRecords: records.map((row) => row.id),
       knowledgeRecordVersions: versions,
       media: mediaRows.map((row) => row.id),
@@ -1805,6 +1838,20 @@ export async function loadSystemUserPurgeSnapshot(
         inArray(projectRaidTaskLinks.taskId, projectTaskIds),
       ),
     );
+  const raidRecordLinkRows = await db
+    .select({
+      id: projectRaidRecordLinks.id,
+      createdBy: projectRaidRecordLinks.createdBy,
+      raidItemId: projectRaidRecordLinks.raidItemId,
+      knowledgeRecordId: projectRaidRecordLinks.knowledgeRecordId,
+    })
+    .from(projectRaidRecordLinks)
+    .where(
+      or(
+        inArray(projectRaidRecordLinks.raidItemId, projectRaidIds),
+        inArray(projectRaidRecordLinks.knowledgeRecordId, inScopeRecordIds),
+      ),
+    );
 
   const changeColumns = {
     id: projectChangeItems.id,
@@ -2107,6 +2154,7 @@ export async function loadSystemUserPurgeSnapshot(
     knowledgeDeliveryLinks: knowledgeLinks,
     changeDeliveryLinks: changeLinks,
     raidTaskLinks: raidLinks,
+    raidRecordLinks: raidRecordLinkRows,
     knowledgeRecords: dedupeById([...inScopeRecords, ...foreignRecords]),
     knowledgeRecordVersions: versionRows,
     media: mediaRows,
@@ -2393,6 +2441,11 @@ export async function applySystemUserPurge(
     await db
       .delete(projectRaidTaskLinks)
       .where(inArray(projectRaidTaskLinks.id, idList));
+  });
+  await runIfIds(del.raidRecordLinks, async (idList) => {
+    await db
+      .delete(projectRaidRecordLinks)
+      .where(inArray(projectRaidRecordLinks.id, idList));
   });
 
   await runIfIds(del.tasks, async (idList) => {

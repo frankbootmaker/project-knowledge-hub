@@ -154,6 +154,51 @@ export function ProjectRaidList({
       ),
     },
     {
+      id: 'probability',
+      header: t('colProbability'),
+      kind: 'status',
+      sort: {
+        type: 'number',
+        getValue: (item) =>
+          item.probability ? SEVERITY_RANK[item.probability] ?? 99 : 99,
+      },
+      filter: {
+        type: 'enum',
+        getValue: (item) => item.probability ?? '',
+        options: severityOptions,
+      },
+      cell: (item) =>
+        item.probability ? (
+          <Badge tone={raidSeverityTone(item.probability)}>
+            {t(`severity.${item.probability}`)}
+          </Badge>
+        ) : (
+          '—'
+        ),
+    },
+    {
+      id: 'impact',
+      header: t('colImpact'),
+      kind: 'status',
+      sort: {
+        type: 'number',
+        getValue: (item) => (item.impact ? SEVERITY_RANK[item.impact] ?? 99 : 99),
+      },
+      filter: {
+        type: 'enum',
+        getValue: (item) => item.impact ?? '',
+        options: severityOptions,
+      },
+      cell: (item) =>
+        item.impact ? (
+          <Badge tone={raidSeverityTone(item.impact)}>
+            {t(`severity.${item.impact}`)}
+          </Badge>
+        ) : (
+          '—'
+        ),
+    },
+    {
       id: 'status',
       header: t('colStatus'),
       kind: 'status',
@@ -237,6 +282,8 @@ export function ProjectRaidList({
         item.kind,
         item.status,
         item.severity,
+        item.probability ?? '',
+        item.impact ?? '',
         item.owner?.displayName ?? '',
         ...item.tasks.map((task) => task.humanKey ?? task.title),
       ]

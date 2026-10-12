@@ -50,7 +50,8 @@ projects
   ├── project_milestones          ← optional timeboxes (+ start + target_date)
   ├── project_cost_snapshots      ← daily EVM burndown (see PROJECT_BUDGET.md)
   ├── project_raid_items          ← RAID register (see PROJECT_RAID.md)
-  │     └── project_raid_task_links
+  │     ├── project_raid_task_links
+  │     └── project_raid_record_links → knowledge_records
   ├── project_change_items        ← change register (see PROJECT_BASELINE.md)
   └── project_tasks
         ├── milestone_id (optional)

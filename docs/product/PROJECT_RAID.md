@@ -13,6 +13,8 @@ Give each KnowHub **Project** an operational **RAID** register (Risks, Assumptio
 | --- | --- |
 | RAID model | First-class tables (not markdown-only record types) |
 | RAID ↔ work | Link RAID items to **tasks** only (v1) |
+| RAID ↔ documents | `project_raid_record_links` to same-project knowledge records. Not a delivery link |
+| Ratings | `severity` required. Optional `probability` and `impact` on the same scale, stored independently |
 | Document types | Add `project-charter`, `meeting-minutes`; reuse `decision` for decision-making |
 | Doc ↔ work | Junction `knowledge_record_delivery_links` (epic / user_story / task) |
 | Agents | MCP: RAID under `pm:read` / `pm:write`; delivery links under `knowledge:read` / `knowledge:write` |
@@ -24,22 +26,25 @@ Give each KnowHub **Project** an operational **RAID** register (Risks, Assumptio
 ```text
 projects
   └── project_raid_items
-        └── project_raid_task_links → project_tasks
+        ├── project_raid_task_links → project_tasks
+        └── project_raid_record_links → knowledge_records
 
 knowledge_records
-  └── knowledge_record_delivery_links → epic | user_story | task
+  └── knowledge_record_delivery_links → epic | user_story | task | sprint
 ```
 
 ### RAID fields
 
 * `kind`: `risk` \| `assumption` \| `issue` \| `dependency`
 * `status`: `open` \| `mitigating` \| `accepted` \| `closed` \| `cancelled`
-* `severity`: `low` \| `medium` \| `high` \| `critical`
+* `severity`: `low` \| `medium` \| `high` \| `critical` (required, default `medium`)
+* `probability` and `impact`: same scale, optional, independent of severity
 * Optional owner (workspace member), due date, description
 * `humanKey` / `issueNumber` / `issueKeyType` (type from kind at create)
 * Transfer links: `transferredToRaidItemId` / `transferredFromRaidItemId` (+ human keys on DTOs)
 * Task links replaced via `PUT .../tasks`
-* Transfer: `POST /api/v1/project-raid-items/:id/transfer` `{ targetKind: "issue" | "risk" }` (MCP: `transfer_project_raid_item`)
+* Record links replaced via `PUT .../records` and `PUT /api/v1/knowledge-records/:id/raid-items`
+* Transfer copies ratings, task links, and record links: `POST /api/v1/project-raid-items/:id/transfer` `{ targetKind: "issue" | "risk" }` (MCP: `transfer_project_raid_item`)
 
 ### Boundaries
 
@@ -47,6 +52,7 @@ knowledge_records
 | --- | --- |
 | RAID panel after Delivery | RAID board/calendar |
 | Task links from RAID manage UI | RAID → epic/story links |
+| Documents tab on the RAID dialog (add/remove record links) | Delivery-item Documents tabs (epic, story, task, bug, milestone, sprint) |
 | Linked RAID chips on task manage | Auto-create RAID from schedule “at risk” |
 | Doc delivery links in record editor | Doc → milestone links |
 | RAID Dependencies as register rows | Gantt / critical path (still out of Delivery v1) |
@@ -58,13 +64,16 @@ Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID R
 * `GET/POST /api/v1/projects/:projectId/raid-items`
 * `GET/PATCH/DELETE /api/v1/project-raid-items/:id`
 * `PUT /api/v1/project-raid-items/:id/tasks`
+* `PUT /api/v1/project-raid-items/:id/records`
 * `GET /api/v1/project-tasks/:taskId/raid-items`
+* `GET/PUT /api/v1/knowledge-records/:id/raid-items`
 * `GET/PUT /api/v1/knowledge-records/:id/delivery-links`
 * `GET /api/v1/projects/:projectId/delivery-document-links`
 
 ## UI
 
 * Project page: Stakeholders → Delivery → **RAID** → Linked systems/knowledge
+* RAID manage: Details (ratings, tasks) and Documents (add/remove same-project records)
 * Task manage: read-only linked RAID + linked documents
 * Epic/story manage: read-only linked documents
 * Knowledge editor (edit + project selected): delivery-link multi-select

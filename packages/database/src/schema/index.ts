@@ -1496,6 +1496,10 @@ export const projectRaidItems = pgTable(
     description: text('description'),
     status: text('status').notNull().default('open'),
     severity: text('severity').notNull().default('medium'),
+    /** Optional likelihood. Independent of severity. Null on existing rows. */
+    probability: text('probability'),
+    /** Optional consequence. Independent of severity. Null on existing rows. */
+    impact: text('impact'),
     ownerUserId: uuid('owner_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
@@ -1555,6 +1559,34 @@ export const projectRaidTaskLinks = pgTable(
     ),
     index('project_raid_task_links_task_id_idx').on(table.taskId),
     index('project_raid_task_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/** Links a RAID item to knowledge records in the same project. */
+export const projectRaidRecordLinks = pgTable(
+  'project_raid_record_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    raidItemId: uuid('raid_item_id')
+      .notNull()
+      .references(() => projectRaidItems.id, { onDelete: 'cascade' }),
+    knowledgeRecordId: uuid('knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_raid_record_links_raid_record_uidx').on(
+      table.raidItemId,
+      table.knowledgeRecordId,
+    ),
+    index('project_raid_record_links_record_id_idx').on(table.knowledgeRecordId),
+    index('project_raid_record_links_created_by_idx').on(table.createdBy),
   ],
 );
 

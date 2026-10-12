@@ -137,7 +137,10 @@ import {
   createRaidItem,
   getRaidItem,
   listRaidItems,
+  listRaidItemsForRecord,
+  setRaidRecordLinks,
   setRaidTaskLinks,
+  setRecordRaidLinks,
   transferRaidItem,
   updateRaidItem,
 } from './project-raid.js';
@@ -3671,6 +3674,18 @@ export function createMcpToolHandlers(
         severity: input.severity
           ? raidSeveritySchema.parse(input.severity)
           : undefined,
+        probability:
+          input.probability === undefined
+            ? undefined
+            : input.probability === null
+              ? null
+              : raidSeveritySchema.parse(input.probability),
+        impact:
+          input.impact === undefined
+            ? undefined
+            : input.impact === null
+              ? null
+              : raidSeveritySchema.parse(input.impact),
         ownerUserId: input.ownerUserId,
         dueDate: input.dueDate,
         sortOrder: input.sortOrder,
@@ -3720,6 +3735,18 @@ export function createMcpToolHandlers(
         severity: input.severity
           ? raidSeveritySchema.parse(input.severity)
           : undefined,
+        probability:
+          input.probability === undefined
+            ? undefined
+            : input.probability === null
+              ? null
+              : raidSeveritySchema.parse(input.probability),
+        impact:
+          input.impact === undefined
+            ? undefined
+            : input.impact === null
+              ? null
+              : raidSeveritySchema.parse(input.impact),
         ownerUserId: input.ownerUserId,
         dueDate: input.dueDate,
         sortOrder: input.sortOrder,
@@ -3829,6 +3856,125 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { raidItem };
+    },
+
+    async setProjectRaidRecordLinks(input) {
+      const actingUserId = requireActingUserId(client);
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const raidItemId = await resolveEntityId(app.database, {
+        entityType: 'raid',
+        idOrKey: input.raidItemId,
+        workspaceIds,
+      });
+      const existing = await getRaidItem(app.database, raidItemId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const recordIds = await Promise.all(
+        input.recordIds.map((idOrKey) =>
+          resolveKnowledgeRecordId(app.database, {
+            idOrKey,
+            workspaceIds,
+            projectId: project.id,
+          }),
+        ),
+      );
+      const raidItem = await setRaidRecordLinks(app.database, {
+        raidItemId,
+        projectId: project.id,
+        recordIds,
+        createdBy: actingUserId,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.raid_record_links_set',
+        entityType: 'project_raid_item',
+        entityId: raidItem.id,
+        metadata: {
+          projectId: project.id,
+          recordIds: input.recordIds,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { raidItem };
+    },
+
+    async getKnowledgeRecordRaidLinks(input: { recordId: string }) {
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+      });
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        recordId,
+      );
+      assertWorkspaceAllowed(client, record.workspaceId);
+      return {
+        raidItems: await listRaidItemsForRecord(app.database, recordId),
+      };
+    },
+
+    async setKnowledgeRecordRaidLinks(input: {
+      recordId: string;
+      raidItemIds: string[];
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+      });
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        recordId,
+      );
+      assertWriteWorkspaceAllowed(client, record.workspaceId);
+      if (record.projectId) {
+        const { project } = await requireProjectContext(app.database, record.projectId);
+        assertProjectNotArchived(project);
+      }
+      const raidItemIds = await Promise.all(
+        input.raidItemIds.map((idOrKey) =>
+          resolveEntityId(app.database, {
+            entityType: 'raid',
+            idOrKey,
+            projectId: record.projectId ?? undefined,
+            workspaceIds,
+          }),
+        ),
+      );
+      const raidItems = await setRecordRaidLinks(app.database, {
+        recordId,
+        raidItemIds,
+        createdBy: actingUserId,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'knowledge.raid_links_set',
+        entityType: 'knowledge_record',
+        entityId: recordId,
+        metadata: {
+          projectId: record.projectId,
+          raidItemIds: input.raidItemIds,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { raidItems };
     },
 
     async getKnowledgeRecordDeliveryLinks(input) {

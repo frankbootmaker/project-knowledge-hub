@@ -528,6 +528,8 @@ export type McpToolHandlers = {
     description?: string | null;
     status?: string;
     severity?: string;
+    probability?: string | null;
+    impact?: string | null;
     ownerUserId?: string | null;
     dueDate?: string | null;
     sortOrder?: number;
@@ -540,6 +542,8 @@ export type McpToolHandlers = {
     description?: string | null;
     status?: string;
     severity?: string;
+    probability?: string | null;
+    impact?: string | null;
     ownerUserId?: string | null;
     dueDate?: string | null;
     sortOrder?: number;
@@ -552,6 +556,17 @@ export type McpToolHandlers = {
   setProjectRaidTaskLinks: (input: {
     raidItemId: string;
     taskIds: string[];
+  }) => Promise<unknown>;
+  setProjectRaidRecordLinks: (input: {
+    raidItemId: string;
+    recordIds: string[];
+  }) => Promise<unknown>;
+  getKnowledgeRecordRaidLinks: (input: {
+    recordId: string;
+  }) => Promise<unknown>;
+  setKnowledgeRecordRaidLinks: (input: {
+    recordId: string;
+    raidItemIds: string[];
   }) => Promise<unknown>;
   listProjectChangeItems: (input: {
     projectId: string;
@@ -2292,6 +2307,8 @@ export function createKnowledgeHubMcpServer(
       description: z.string().max(10000).nullable().optional(),
       status: raidStatusEnum.optional(),
       severity: raidSeverityEnum.optional(),
+      probability: raidSeverityEnum.nullable().optional(),
+      impact: raidSeverityEnum.nullable().optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
       dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
@@ -2316,6 +2333,8 @@ export function createKnowledgeHubMcpServer(
       description: z.string().max(10000).nullable().optional(),
       status: raidStatusEnum.optional(),
       severity: raidSeverityEnum.optional(),
+      probability: raidSeverityEnum.nullable().optional(),
+      impact: raidSeverityEnum.nullable().optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
       dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
@@ -2350,6 +2369,50 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('set_project_raid_task_links', 'pm:write', () =>
         handlers.setProjectRaidTaskLinks(args),
+      )(),
+  );
+
+  server.tool(
+    'set_project_raid_record_links',
+    'Replace the knowledge records linked to a RAID item. record ids may be UUID or human keys and must belong to the same project. Requires pm:write.',
+    {
+      raidItemId: entityRef,
+      recordIds: z.array(entityRef).max(100),
+    },
+    async (args) =>
+      wrap('set_project_raid_record_links', 'pm:write', () =>
+        handlers.setProjectRaidRecordLinks(args),
+      )(),
+  );
+
+  server.tool(
+    'get_knowledge_record_raid_links',
+    'List RAID items linked to a knowledge record. Requires knowledge:read.',
+    {
+      recordId: entityRef,
+    },
+    async (args) =>
+      wrap(
+        'get_knowledge_record_raid_links',
+        'knowledge:read',
+        () => handlers.getKnowledgeRecordRaidLinks(args),
+        { recordId: args.recordId },
+      )(),
+  );
+
+  server.tool(
+    'set_knowledge_record_raid_links',
+    'Replace the RAID items linked to a project-scoped knowledge record. raid item ids may be UUID or human keys. Requires knowledge:write.',
+    {
+      recordId: entityRef,
+      raidItemIds: z.array(entityRef).max(100),
+    },
+    async (args) =>
+      wrap(
+        'set_knowledge_record_raid_links',
+        'knowledge:write',
+        () => handlers.setKnowledgeRecordRaidLinks(args),
+        { recordId: args.recordId },
       )(),
   );
 

@@ -123,7 +123,7 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: Promise<{ slug: string; projectSlug: string }>;
-  searchParams: Promise<{ task?: string | string[] }>;
+  searchParams: Promise<{ task?: string | string[]; raid?: string | string[] }>;
 }) {
   const session = await requireSession();
   const t = await getTranslations('projects');
@@ -132,11 +132,18 @@ export default async function ProjectDetailPage({
   const { slug, projectSlug } = await params;
   const query = await searchParams;
   const openTaskRaw = query.task;
+  const openRaidRaw = query.raid;
   const initialOpenTaskId =
     typeof openTaskRaw === 'string'
       ? openTaskRaw
       : Array.isArray(openTaskRaw)
         ? (openTaskRaw[0] ?? null)
+        : null;
+  const initialOpenRaidId =
+    typeof openRaidRaw === 'string'
+      ? openRaidRaw
+      : Array.isArray(openRaidRaw)
+        ? (openRaidRaw[0] ?? null)
         : null;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -528,10 +535,17 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         canMutate={canMutate && !isArchived}
         initialRaidItems={raidItems}
+        initialOpenRaidId={initialOpenRaidId}
         tasks={tasks.map((task) => ({
           id: task.id,
           title: task.title,
           status: task.status,
+        }))}
+        records={knowledgeRecords.map((record) => ({
+          id: record.id,
+          title: record.title,
+          slug: record.slug,
+          humanKey: record.humanKey ?? null,
         }))}
         members={members}
       />
