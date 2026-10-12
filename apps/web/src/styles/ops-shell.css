@@ -3395,14 +3395,18 @@ button.kh-ops-project-card:disabled {
 
 .kh-ops-modal-tabs button {
   flex: 1 0 auto;
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: 42px;
+  padding: 10px 14px;
   border: 0;
   border-right: 1px solid var(--kh-line);
   background: var(--kh-surface);
   color: var(--kh-ink);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-align: center;
   cursor: pointer;
 }
 
