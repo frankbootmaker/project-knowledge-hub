@@ -1291,6 +1291,24 @@ export const projectTasks = pgTable(
     }),
     title: text('title').notNull(),
     description: text('description'),
+    /** task (default) or bug. Set at create; human key letter follows it (T or B). */
+    itemType: text('item_type').notNull().default('task'),
+    /** Bug impact. Null on tasks. Defaults to medium when a bug is created. */
+    severity: text('severity'),
+    foundIn: text('found_in'),
+    foundInNote: text('found_in_note'),
+    stepsToReproduce: text('steps_to_reproduce'),
+    expectedBehavior: text('expected_behavior'),
+    actualBehavior: text('actual_behavior'),
+    resolution: text('resolution'),
+    regression: boolean('regression').notNull().default(false),
+    affectedSystemId: uuid('affected_system_id').references(() => systems.id, {
+      onDelete: 'set null',
+    }),
+    duplicateOfTaskId: uuid('duplicate_of_task_id').references(
+      (): AnyPgColumn => projectTasks.id,
+      { onDelete: 'set null' },
+    ),
     status: text('status').notNull().default('todo'),
     dueDate: date('due_date', { mode: 'string' }),
     forecastHours: numeric('forecast_hours', { precision: 10, scale: 2, mode: 'number' }),
@@ -1337,6 +1355,9 @@ export const projectTasks = pgTable(
     index('project_tasks_current_owner_user_id_idx').on(table.currentOwnerUserId),
     index('project_tasks_ai_system_id_idx').on(table.aiSystemId),
     index('project_tasks_project_status_idx').on(table.projectId, table.status),
+    index('project_tasks_project_item_type_idx').on(table.projectId, table.itemType),
+    index('project_tasks_affected_system_id_idx').on(table.affectedSystemId),
+    index('project_tasks_duplicate_of_task_id_idx').on(table.duplicateOfTaskId),
     uniqueIndex('project_tasks_project_key_uidx').on(
       table.projectId,
       table.issueKeyType,

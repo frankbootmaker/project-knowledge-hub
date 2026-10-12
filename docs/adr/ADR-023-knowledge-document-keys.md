@@ -13,7 +13,7 @@ Delivery and RAID items already expose `{prefix}-{type}-{n}` keys (ADR-019). Kno
 
 1. **Project-scoped only** — allocate `document_key_type` + `document_number` when create has `projectId`; workspace-only records stay without a human key.
 2. **Format** `{prefix}-{DOCCODE}-{n}` using the project `key_prefix` and a per-`recordType` `docKeyCode` (2–4 letters) from `RECORD_TYPE_CATALOG`.
-3. **Counters** share `projects.issue_counters` with delivery types; codes must not collide with `E|S|M|T|C|RR|RI|RA|RD|SP`.
+3. **Counters** share `projects.issue_counters` with delivery types; codes must not collide with `E|S|M|T|B|C|RR|RI|RA|RD|SP`.
 4. **Immutability** — keys do not change when `recordType` is edited; re-key is out of v1.
 5. **Resolve** — knowledge get/update MCP/REST accept UUID or human key; parse uses a generalized human-key pattern (`[A-Z]{1,4}` type segment).
 6. **Backfill** — migration assigns keys to existing project-scoped records by `created_at`.

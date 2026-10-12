@@ -10,8 +10,12 @@ import {
   parseAiPricingTier,
   parseBillingPeriod,
   parseUsageOccurredAt,
+  bugFoundInSchema,
+  bugResolutionSchema,
   milestoneStatusSchema,
   raciRoleSchema,
+  raidSeveritySchema,
+  taskItemTypeSchema,
   taskStatusSchema,
 } from '@project-knowledge-hub/domain';
 import {
@@ -103,6 +107,40 @@ const aiUsageBodyFields = {
   billingPeriod: z.string().max(7).nullable().optional(),
 };
 
+function mapBugBody(body: {
+  itemType?: 'task' | 'bug';
+  severity?: 'low' | 'medium' | 'high' | 'critical' | null;
+  foundIn?: 'development' | 'test' | 'staging' | 'production' | null;
+  foundInNote?: string | null;
+  stepsToReproduce?: string | null;
+  expectedBehavior?: string | null;
+  actualBehavior?: string | null;
+  resolution?:
+    | 'fixed'
+    | 'duplicate'
+    | 'wont_fix'
+    | 'cannot_reproduce'
+    | 'works_as_designed'
+    | null;
+  regression?: boolean | null;
+  affectedSystemId?: string | null;
+  duplicateOfTaskId?: string | null;
+}) {
+  return {
+    itemType: body.itemType,
+    severity: body.severity,
+    foundIn: body.foundIn,
+    foundInNote: body.foundInNote,
+    stepsToReproduce: body.stepsToReproduce,
+    expectedBehavior: body.expectedBehavior,
+    actualBehavior: body.actualBehavior,
+    resolution: body.resolution,
+    regression: body.regression,
+    affectedSystemId: body.affectedSystemId,
+    duplicateOfTaskId: body.duplicateOfTaskId,
+  };
+}
+
 function mapAiUsageBody(body: {
   tokensUsed?: number | null;
   tokensInput?: number | null;
@@ -135,9 +173,24 @@ function mapAiUsageBody(body: {
   };
 }
 
+const bugFieldBody = {
+  severity: raidSeveritySchema.nullable().optional(),
+  foundIn: bugFoundInSchema.nullable().optional(),
+  foundInNote: z.string().max(200).nullable().optional(),
+  stepsToReproduce: z.string().max(10000).nullable().optional(),
+  expectedBehavior: z.string().max(10000).nullable().optional(),
+  actualBehavior: z.string().max(10000).nullable().optional(),
+  resolution: bugResolutionSchema.nullable().optional(),
+  regression: z.boolean().nullable().optional(),
+  affectedSystemId: z.string().uuid().nullable().optional(),
+  duplicateOfTaskId: z.string().uuid().nullable().optional(),
+};
+
 const createTaskSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(10000).nullable().optional(),
+  itemType: taskItemTypeSchema.optional(),
+  ...bugFieldBody,
   status: taskStatusSchema.optional(),
   dueDate: dateStringSchema.optional(),
   forecastHours: hoursSchema.optional(),
@@ -156,6 +209,8 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(10000).nullable().optional(),
+  itemType: taskItemTypeSchema.optional(),
+  ...bugFieldBody,
   status: taskStatusSchema.optional(),
   dueDate: dateStringSchema.optional(),
   forecastHours: hoursSchema.optional(),
@@ -284,6 +339,7 @@ export async function registerProjectDeliveryRoutes(
           .enum(['true', 'false'])
           .optional()
           .transform((value) => value === 'true'),
+        itemType: taskItemTypeSchema.optional(),
         includeArchived: z
           .enum(['true', 'false'])
           .optional()
@@ -303,6 +359,7 @@ export async function registerProjectDeliveryRoutes(
       tasks: await listTasks(app.database, project.id, {
         milestoneId,
         sprintId,
+        itemType: query.itemType,
         includeArchived: query.includeArchived,
       }),
     };
@@ -324,6 +381,7 @@ export async function registerProjectDeliveryRoutes(
       createdBy: principal.userId,
       title: body.title,
       description: body.description,
+      ...mapBugBody(body),
       status: body.status,
       dueDate: body.dueDate,
       forecastHours:
@@ -388,6 +446,7 @@ export async function registerProjectDeliveryRoutes(
     const task = await updateTask(app.database, params.taskId, {
       title: body.title,
       description: body.description,
+      ...mapBugBody(body),
       status: body.status,
       dueDate: body.dueDate,
       forecastHours:

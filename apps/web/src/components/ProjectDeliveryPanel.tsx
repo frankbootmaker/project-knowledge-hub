@@ -33,6 +33,8 @@ import {
   Input,
   Modal,
   Select,
+  Switch,
+  Textarea,
   useToast,
 } from './ui';
 import { formatMoney } from '../lib/project-currency';
@@ -118,6 +120,7 @@ type Task = {
   currentOwner: TaskOwner | null;
   raci: RaciEntry[];
   humanKey?: string | null;
+  itemType?: 'task' | 'bug';
   createdAt?: string;
   updatedAt?: string;
 };
@@ -132,7 +135,13 @@ const VIEW_MODES = ['board', 'list', 'tree', 'calendar', 'timeline', 'scrum'] as
 type ViewMode = (typeof VIEW_MODES)[number];
 
 type DeliveryKind = 'epic' | 'story' | 'milestone' | 'task';
-type CreateKind = 'task' | 'milestone' | 'epic' | 'story';
+type CreateKind = 'task' | 'bug' | 'milestone' | 'epic' | 'story';
+
+type LinkedSystem = { id: string; name: string };
+
+function workItemType(value: string | null | undefined): 'task' | 'bug' {
+  return value === 'bug' ? 'bug' : 'task';
+}
 
 function parseItemId(id: string): { kind: DeliveryKind; entityId: string } | null {
   if (id.startsWith('epic:')) {
@@ -166,6 +175,7 @@ export function ProjectDeliveryPanel({
   members,
   currency = 'EUR',
   ratePeople = [],
+  systems = [],
 }: {
   projectId: string;
   projectName: string;
@@ -183,8 +193,10 @@ export function ProjectDeliveryPanel({
   members: Member[];
   currency?: string;
   ratePeople?: RatePerson[];
+  systems?: LinkedSystem[];
 }) {
   const t = useTranslations('delivery');
+  const tRaid = useTranslations('raid');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const router = useRouter();
@@ -271,6 +283,14 @@ export function ProjectDeliveryPanel({
   const [taskResponsible, setTaskResponsible] = useState('');
   const [taskForecastHours, setTaskForecastHours] = useState('');
   const [taskActualHours, setTaskActualHours] = useState('');
+  const [bugSeverity, setBugSeverity] = useState('medium');
+  const [bugFoundIn, setBugFoundIn] = useState('');
+  const [bugFoundInNote, setBugFoundInNote] = useState('');
+  const [bugSteps, setBugSteps] = useState('');
+  const [bugExpected, setBugExpected] = useState('');
+  const [bugActual, setBugActual] = useState('');
+  const [bugRegression, setBugRegression] = useState(false);
+  const [bugSystemId, setBugSystemId] = useState('');
   const timelineExportRef = useRef<TimelineExportHandle | null>(null);
   const [timelineExportState, setTimelineExportState] = useState<{
     pending: boolean;
@@ -451,6 +471,7 @@ export function ProjectDeliveryPanel({
         kind: 'task',
         entityId: task.id,
         humanKey: task.humanKey ?? null,
+        itemType: workItemType(task.itemType),
         title: task.title,
         status: task.status,
         owner: ownerLabel,
@@ -464,7 +485,7 @@ export function ProjectDeliveryPanel({
           task.humanKey ?? '',
           task.description ?? '',
           task.status,
-          'task',
+          task.itemType === 'bug' ? 'bug' : 'task',
           ownerLabel ?? '',
           sprintLabel ?? '',
           task.epicTitle ?? '',
@@ -499,6 +520,7 @@ export function ProjectDeliveryPanel({
           date: task.dueDate!,
           status: task.status,
           humanKey: task.humanKey ?? null,
+          itemType: workItemType(task.itemType),
           owner: task.currentOwner
             ? {
                 displayName: task.currentOwner.displayName,
@@ -523,6 +545,7 @@ export function ProjectDeliveryPanel({
         sprintId: task.sprintId ?? null,
         storyPoints: task.storyPoints ?? null,
         humanKey: task.humanKey ?? null,
+        itemType: workItemType(task.itemType),
         userStoryTitle: task.userStoryTitle,
         currentOwnerUserId: task.currentOwnerUserId,
         currentOwner: task.currentOwner
@@ -592,6 +615,14 @@ export function ProjectDeliveryPanel({
     setTaskResponsible('');
     setTaskForecastHours('');
     setTaskActualHours('');
+    setBugSeverity('medium');
+    setBugFoundIn('');
+    setBugFoundInNote('');
+    setBugSteps('');
+    setBugExpected('');
+    setBugActual('');
+    setBugRegression(false);
+    setBugSystemId('');
     setError(null);
   }
 
@@ -692,6 +723,19 @@ export function ProjectDeliveryPanel({
             milestoneId: taskMilestoneId || null,
             userStoryId: taskStoryId || null,
             raci: raci.length > 0 ? raci : undefined,
+            itemType: createKind === 'bug' ? 'bug' : 'task',
+            ...(createKind === 'bug'
+              ? {
+                  severity: bugSeverity || 'medium',
+                  foundIn: bugFoundIn || null,
+                  foundInNote: bugFoundInNote.trim() || null,
+                  stepsToReproduce: bugSteps.trim() || null,
+                  expectedBehavior: bugExpected.trim() || null,
+                  actualBehavior: bugActual.trim() || null,
+                  regression: bugRegression,
+                  affectedSystemId: bugSystemId || null,
+                }
+              : {}),
           }),
         });
         const payload = (await response.json().catch(() => ({}))) as {
@@ -702,7 +746,10 @@ export function ProjectDeliveryPanel({
           throw new Error(payload.error?.message || t('failedCreateTask'));
         }
         setTasks((prev) => [...prev, payload.task!]);
-        pushToast(t('taskCreated'), 'success');
+        pushToast(
+          createKind === 'bug' ? t('bugCreated') : t('taskCreated'),
+          'success',
+        );
       }
 
       setCreateOpen(false);
@@ -716,7 +763,9 @@ export function ProjectDeliveryPanel({
             ? t('failedCreateStory')
             : createKind === 'milestone'
               ? t('failedCreateMilestone')
-              : t('failedCreateTask');
+              : createKind === 'bug'
+                ? t('failedCreateBug')
+                : t('failedCreateTask');
       setError(err instanceof Error ? err.message : fallback);
     } finally {
       setPending(false);
@@ -822,6 +871,7 @@ export function ProjectDeliveryPanel({
     if (createKind === 'epic') return t('addEpic');
     if (createKind === 'story') return t('addStory');
     if (createKind === 'milestone') return t('addMilestone');
+    if (createKind === 'bug') return t('addBug');
     return t('addTask');
   }
 
@@ -1166,6 +1216,7 @@ export function ProjectDeliveryPanel({
               data-modal-initial-focus
             >
               <option value="task">{t('createKindTask')}</option>
+              <option value="bug">{t('createKindBug')}</option>
               <option value="milestone">{t('createKindMilestone')}</option>
               <option value="epic">{t('createKindEpic')}</option>
               <option value="story">{t('createKindStory')}</option>
@@ -1254,7 +1305,7 @@ export function ProjectDeliveryPanel({
               </div>
             </>
           ) : null}
-          {createKind === 'task' ? (
+          {createKind === 'task' || createKind === 'bug' ? (
             <>
               <Field label={t('dueDate')}>
                 <Input
@@ -1346,6 +1397,92 @@ export function ProjectDeliveryPanel({
                   ))}
                 </Select>
               </Field>
+              {createKind === 'bug' ? (
+                <>
+                  <Field label={t('severity')}>
+                    <Select
+                      value={bugSeverity}
+                      onChange={(e) => setBugSeverity(e.target.value)}
+                      disabled={pending}
+                    >
+                      {(['low', 'medium', 'high', 'critical'] as const).map((value) => (
+                        <option key={value} value={value}>
+                          {tRaid(`severity.${value}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t('foundIn')}>
+                    <Select
+                      value={bugFoundIn}
+                      onChange={(e) => setBugFoundIn(e.target.value)}
+                      disabled={pending}
+                    >
+                      <option value="">{t('noAffectedSystem')}</option>
+                      {(['development', 'test', 'staging', 'production'] as const).map(
+                        (value) => (
+                          <option key={value} value={value}>
+                            {t(`foundInValue.${value}`)}
+                          </option>
+                        ),
+                      )}
+                    </Select>
+                  </Field>
+                  <Field label={t('foundInNote')}>
+                    <Input
+                      value={bugFoundInNote}
+                      maxLength={200}
+                      onChange={(e) => setBugFoundInNote(e.target.value)}
+                      disabled={pending}
+                    />
+                  </Field>
+                  <Field className="kh-ops-field-span" label={t('stepsToReproduce')}>
+                    <Textarea
+                      value={bugSteps}
+                      rows={3}
+                      onChange={(e) => setBugSteps(e.target.value)}
+                      disabled={pending}
+                    />
+                  </Field>
+                  <Field label={t('expectedBehavior')}>
+                    <Textarea
+                      value={bugExpected}
+                      rows={3}
+                      onChange={(e) => setBugExpected(e.target.value)}
+                      disabled={pending}
+                    />
+                  </Field>
+                  <Field label={t('actualBehavior')}>
+                    <Textarea
+                      value={bugActual}
+                      rows={3}
+                      onChange={(e) => setBugActual(e.target.value)}
+                      disabled={pending}
+                    />
+                  </Field>
+                  <Switch
+                    id="bug-regression-create"
+                    checked={bugRegression}
+                    onCheckedChange={setBugRegression}
+                    label={t('regression')}
+                    disabled={pending}
+                  />
+                  <Field label={t('affectedSystem')}>
+                    <Select
+                      value={bugSystemId}
+                      onChange={(e) => setBugSystemId(e.target.value)}
+                      disabled={pending}
+                    >
+                      <option value="">{t('noAffectedSystem')}</option>
+                      {systems.map((system) => (
+                        <option key={system.id} value={system.id}>
+                          {system.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -1362,6 +1499,14 @@ export function ProjectDeliveryPanel({
         milestones={milestones}
         currency={currency}
         ratePeople={ratePeople}
+        systems={systems}
+        bugOptions={tasks
+          .filter((item) => item.itemType === 'bug')
+          .map((item) => ({
+            id: item.id,
+            title: item.title,
+            humanKey: item.humanKey ?? null,
+          }))}
         onUpdated={(updated) => {
           setTasks((prev) =>
             prev.map((item) =>

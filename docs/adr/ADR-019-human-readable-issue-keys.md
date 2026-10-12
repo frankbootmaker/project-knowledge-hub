@@ -11,7 +11,7 @@ Operators and agents need short, stable labels for delivery and RAID items (e.g.
 
 ## Decision
 
-1. **Human key format** `{prefix}-{type}-{n}` where prefix is workspace-unique `AAA` or `AA0`, type is `E|S|M|T|C|RR|RI|RA|RD`, and `n` is a per-type counter on the project.
+1. **Human key format** `{prefix}-{type}-{n}` where prefix is workspace-unique `AAA` or `AA0`, type is `E|S|M|T|B|C|RR|RI|RA|RD`, and `n` is a per-type counter on the project. `B` is a delivery bug (a task row with `item_type = bug`). The letter is chosen at create and is not converted in place.
 2. **Persist** `issue_key_type` + `issue_number` at create; compute `humanKey` at read from the project `key_prefix` so prefix renames update display.
 3. **Baseline** owns `key_prefix` (REST project PATCH and MCP `update_project_baseline`).
 4. **Risk ↔ issue** uses a **transfer** workflow: create a new RAID row with the target kind/key, copy fields and task links, set transfer FKs, archive the source. In-place `risk`↔`issue` kind edits are rejected.

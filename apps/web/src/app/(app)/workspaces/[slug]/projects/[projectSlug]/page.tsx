@@ -515,6 +515,7 @@ export default async function ProjectDetailPage({
         members={members}
         currency={project.currency ?? 'EUR'}
         ratePeople={ratePeople}
+        systems={systems.map((system) => ({ id: system.id, name: system.name }))}
       />
 
       <ProjectBudgetPanel

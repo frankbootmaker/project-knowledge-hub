@@ -59,6 +59,7 @@ function reportOverview(
     sprintEnds: (date) => t('reportSprintEnds', { date }),
     sprintWindow: (start, end) => t('reportSprintWindow', { start, end }),
     taskKind: t('reportKindTask'),
+    bugKind: t('reportKindBug'),
     milestoneKind: t('reportKindMilestone'),
     sprintKind: t('reportKindSprint'),
   };

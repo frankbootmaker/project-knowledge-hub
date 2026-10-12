@@ -224,6 +224,7 @@ export type McpToolHandlers = {
     unassignedMilestone?: boolean;
     sprintId?: string;
     unassignedSprint?: boolean;
+    itemType?: 'task' | 'bug';
     includeArchived?: boolean;
   }) => Promise<unknown>;
   getProjectTask: (input: { taskId: string }) => Promise<unknown>;
@@ -311,6 +312,23 @@ export type McpToolHandlers = {
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     raci?: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
+    itemType?: 'task' | 'bug';
+    severity?: 'low' | 'medium' | 'high' | 'critical' | null;
+    foundIn?: 'development' | 'test' | 'staging' | 'production' | null;
+    foundInNote?: string | null;
+    stepsToReproduce?: string | null;
+    expectedBehavior?: string | null;
+    actualBehavior?: string | null;
+    resolution?:
+      | 'fixed'
+      | 'duplicate'
+      | 'wont_fix'
+      | 'cannot_reproduce'
+      | 'works_as_designed'
+      | null;
+    regression?: boolean | null;
+    affectedSystemId?: string | null;
+    duplicateOfTaskId?: string | null;
   }) => Promise<unknown>;
   updateProjectTask: (input: {
     taskId: string;
@@ -336,6 +354,23 @@ export type McpToolHandlers = {
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
+    itemType?: 'task' | 'bug';
+    severity?: 'low' | 'medium' | 'high' | 'critical' | null;
+    foundIn?: 'development' | 'test' | 'staging' | 'production' | null;
+    foundInNote?: string | null;
+    stepsToReproduce?: string | null;
+    expectedBehavior?: string | null;
+    actualBehavior?: string | null;
+    resolution?:
+      | 'fixed'
+      | 'duplicate'
+      | 'wont_fix'
+      | 'cannot_reproduce'
+      | 'works_as_designed'
+      | null;
+    regression?: boolean | null;
+    affectedSystemId?: string | null;
+    duplicateOfTaskId?: string | null;
   }) => Promise<unknown>;
   reportProjectTaskAiUsage: (input: {
     taskId: string;
@@ -1526,13 +1561,14 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_tasks',
-    'List tasks for a project (optional milestone/sprint filter). milestoneId and sprintId must belong to the given project. Includes RACI. Requires pm:read.',
+    'List tasks for a project (optional milestone/sprint/itemType filter). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       milestoneId: entityRef.optional(),
       unassignedMilestone: z.boolean().optional(),
       sprintId: entityRef.optional(),
       unassignedSprint: z.boolean().optional(),
+      itemType: z.enum(['task', 'bug']).optional(),
       includeArchived: z.boolean().optional(),
     },
     async (args) =>
@@ -1730,7 +1766,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1756,6 +1792,29 @@ export function createKnowledgeHubMcpServer(
       storyPoints: z.number().int().min(0).max(1000).nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
+      itemType: z.enum(['task', 'bug']).optional(),
+      severity: z.enum(['low', 'medium', 'high', 'critical']).nullable().optional(),
+      foundIn: z
+        .enum(['development', 'test', 'staging', 'production'])
+        .nullable()
+        .optional(),
+      foundInNote: z.string().max(200).nullable().optional(),
+      stepsToReproduce: z.string().max(10000).nullable().optional(),
+      expectedBehavior: z.string().max(10000).nullable().optional(),
+      actualBehavior: z.string().max(10000).nullable().optional(),
+      resolution: z
+        .enum([
+          'fixed',
+          'duplicate',
+          'wont_fix',
+          'cannot_reproduce',
+          'works_as_designed',
+        ])
+        .nullable()
+        .optional(),
+      regression: z.boolean().nullable().optional(),
+      affectedSystemId: z.string().uuid().nullable().optional(),
+      duplicateOfTaskId: entityRef.nullable().optional(),
       raci: z
         .array(
           z.object({
@@ -1777,7 +1836,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Update a project task or bug. itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1804,6 +1863,29 @@ export function createKnowledgeHubMcpServer(
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
+      itemType: z.enum(['task', 'bug']).optional(),
+      severity: z.enum(['low', 'medium', 'high', 'critical']).nullable().optional(),
+      foundIn: z
+        .enum(['development', 'test', 'staging', 'production'])
+        .nullable()
+        .optional(),
+      foundInNote: z.string().max(200).nullable().optional(),
+      stepsToReproduce: z.string().max(10000).nullable().optional(),
+      expectedBehavior: z.string().max(10000).nullable().optional(),
+      actualBehavior: z.string().max(10000).nullable().optional(),
+      resolution: z
+        .enum([
+          'fixed',
+          'duplicate',
+          'wont_fix',
+          'cannot_reproduce',
+          'works_as_designed',
+        ])
+        .nullable()
+        .optional(),
+      regression: z.boolean().nullable().optional(),
+      affectedSystemId: z.string().uuid().nullable().optional(),
+      duplicateOfTaskId: entityRef.nullable().optional(),
     },
     async (args) =>
       wrap('update_project_task', 'pm:write', () => handlers.updateProjectTask(args))(),

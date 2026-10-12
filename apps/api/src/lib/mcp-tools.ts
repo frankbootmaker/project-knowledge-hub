@@ -246,6 +246,53 @@ async function assertActingWorkspaceMaintainer(
   }
 }
 
+async function mapMcpBugFields(
+  database: Parameters<typeof resolveEntityId>[0],
+  input: {
+    itemType?: 'task' | 'bug';
+    severity?: 'low' | 'medium' | 'high' | 'critical' | null;
+    foundIn?: 'development' | 'test' | 'staging' | 'production' | null;
+    foundInNote?: string | null;
+    stepsToReproduce?: string | null;
+    expectedBehavior?: string | null;
+    actualBehavior?: string | null;
+    resolution?:
+      | 'fixed'
+      | 'duplicate'
+      | 'wont_fix'
+      | 'cannot_reproduce'
+      | 'works_as_designed'
+      | null;
+    regression?: boolean | null;
+    affectedSystemId?: string | null;
+    duplicateOfTaskId?: string | null;
+  },
+  scope: { projectId: string; workspaceIds?: string[] },
+) {
+  const duplicateOfTaskId =
+    input.duplicateOfTaskId === undefined || input.duplicateOfTaskId === null
+      ? input.duplicateOfTaskId
+      : await resolveEntityId(database, {
+          entityType: 'task',
+          idOrKey: input.duplicateOfTaskId,
+          projectId: scope.projectId,
+          workspaceIds: scope.workspaceIds,
+        });
+  return {
+    itemType: input.itemType,
+    severity: input.severity,
+    foundIn: input.foundIn,
+    foundInNote: input.foundInNote,
+    stepsToReproduce: input.stepsToReproduce,
+    expectedBehavior: input.expectedBehavior,
+    actualBehavior: input.actualBehavior,
+    resolution: input.resolution,
+    regression: input.regression,
+    affectedSystemId: input.affectedSystemId,
+    duplicateOfTaskId,
+  };
+}
+
 function mapMcpAiUsage(input: {
   tokensUsed?: number | null;
   tokensInput?: number | null;
@@ -2313,6 +2360,7 @@ export function createMcpToolHandlers(
         tasks: await listTasks(app.database, input.projectId, {
           milestoneId,
           sprintId,
+          itemType: input.itemType,
           includeArchived: input.includeArchived,
         }),
       };
@@ -2684,6 +2732,10 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
+      const workspaceIds =
+        client.allowedWorkspaceIds.length > 0
+          ? client.allowedWorkspaceIds
+          : undefined;
       const milestoneId =
         input.milestoneId == null
           ? input.milestoneId
@@ -2731,6 +2783,10 @@ export function createMcpToolHandlers(
         storyPoints: input.storyPoints,
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
+        ...(await mapMcpBugFields(app.database, input, {
+          projectId: project.id,
+          workspaceIds,
+        })),
         createdBy: actingUserId,
         raci: input.raci?.map((entry) => ({
           userId: entry.userId,
@@ -2818,6 +2874,10 @@ export function createMcpToolHandlers(
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         archived: input.archived,
+        ...(await mapMcpBugFields(app.database, input, {
+          projectId: project.id,
+          workspaceIds,
+        })),
         actorUserId: actingUserId,
         workspaceId: project.workspaceId,
       });

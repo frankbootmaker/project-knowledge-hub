@@ -26,6 +26,7 @@ export type ReportTask = {
   forecastHours: string | number | null;
   actualHours: string | number | null;
   humanKey?: string | null;
+  itemType?: 'task' | 'bug';
   currentOwner?: { displayName: string } | null;
   sprintId?: string | null;
   storyPoints?: number | null;
@@ -487,6 +488,7 @@ export type ReportOverviewCopy = {
   sprintEnds: (date: string) => string;
   sprintWindow: (start: string, end: string) => string;
   taskKind: string;
+  bugKind: string;
   milestoneKind: string;
   sprintKind: string;
 };
@@ -591,6 +593,7 @@ export type PlannedWindowItem = {
   date: string | null;
   endDate: string | null;
   sprintEdge: 'start' | 'end' | 'both' | null;
+  itemType?: 'task' | 'bug';
 };
 
 export function selectPlannedNext24h(input: {
@@ -610,6 +613,7 @@ export function selectPlannedNext24h(input: {
   for (const task of tasks) {
     items.push({
       kind: 'task',
+      itemType: task.itemType === 'bug' ? 'bug' : 'task',
       title: task.humanKey ? `${task.humanKey} ${task.title}` : task.title,
       date: task.dueDate,
       endDate: null,
@@ -801,8 +805,9 @@ function appendReadability(
     lines.push(copy.none, '');
   } else {
     for (const task of completed) {
+      const kind = task.itemType === 'bug' ? `**${copy.bugKind}** ` : '';
       const key = task.humanKey ? `**${task.humanKey}** ` : '';
-      lines.push(`- ${key}**${task.title}**`);
+      lines.push(`- ${kind}${key}**${task.title}**`);
     }
     lines.push('');
   }
@@ -812,7 +817,9 @@ function appendReadability(
     for (const item of planned) {
       const kind =
         item.kind === 'task'
-          ? copy.taskKind
+          ? item.itemType === 'bug'
+            ? copy.bugKind
+            : copy.taskKind
           : item.kind === 'milestone'
             ? copy.milestoneKind
             : copy.sprintKind;
@@ -1082,9 +1089,11 @@ function formatGroupedTask(
     forecast != null ? `${input.labels.forecastHours}: ${forecast}` : null,
     actual != null ? `${input.labels.actualHours}: ${actual}` : null,
   ].filter((bit): bit is string => Boolean(bit));
+  const bugWord = input.overview?.bugKind ?? 'Bug';
+  const kind = row.itemType === 'bug' ? `**${bugWord}** ` : '';
   const key = row.humanKey ? `**${row.humanKey}** ` : '';
   const detail = bits.length > 0 ? ` — ${bits.join(' · ')}` : '';
-  return `- ${key}**${row.title}**${detail} (${tone})`;
+  return `- ${kind}${key}**${row.title}**${detail} (${tone})`;
 }
 
 export function buildStakeholdersReport(input: {

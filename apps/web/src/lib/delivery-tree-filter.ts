@@ -22,12 +22,15 @@ export type DeliveryTreeFilterNode = {
   owner: string | null;
   /** Tasks only. Null or blank is no sprint. */
   sprint: string | null;
+  /** Work-item rows. Absent means task. Epics and stories ignore the type filter. */
+  itemType?: 'task' | 'bug';
 };
 
 export type DeliveryTreeFilterState = {
   statuses: readonly string[];
   owners: readonly string[];
   sprints: readonly string[];
+  itemTypes: readonly string[];
   title: string;
   onlyOpen: boolean;
 };
@@ -46,6 +49,7 @@ const EMPTY_FILTERS: DeliveryTreeFilterState = {
   statuses: [],
   owners: [],
   sprints: [],
+  itemTypes: [],
   title: '',
   onlyOpen: false,
 };
@@ -57,6 +61,7 @@ export function deliveryTreeFiltersActive(
     filters.statuses.length > 0 ||
     filters.owners.length > 0 ||
     filters.sprints.length > 0 ||
+    filters.itemTypes.length > 0 ||
     filters.title.trim() !== '' ||
     filters.onlyOpen
   );
@@ -78,13 +83,21 @@ function itemMatches(node: DeliveryTreeFilterNode, filters: DeliveryTreeFilterSt
 
   const ownerActive = filters.owners.length > 0;
   const sprintActive = filters.sprints.length > 0;
-  if ((ownerActive || sprintActive) && node.kind !== 'task') return false;
+  const itemTypeActive = filters.itemTypes.length > 0;
+  if ((ownerActive || sprintActive || itemTypeActive) && node.kind !== 'task') {
+    return false;
+  }
 
   if (ownerActive && !filters.owners.includes(enumToken(node.owner))) {
     return false;
   }
   if (sprintActive && !filters.sprints.includes(enumToken(node.sprint))) {
     return false;
+  }
+
+  if (itemTypeActive) {
+    const itemType = node.itemType ?? 'task';
+    if (!filters.itemTypes.includes(itemType)) return false;
   }
 
   const title = filters.title.trim().toLowerCase();

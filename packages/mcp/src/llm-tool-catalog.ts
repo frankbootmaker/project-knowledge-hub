@@ -64,6 +64,58 @@ const taskStatus = {
   enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
 };
 
+const taskItemType = {
+  type: 'string',
+  enum: ['task', 'bug'],
+  description: 'Work item type. Set at create. task uses a T key, bug uses a B key.',
+};
+
+const bugFields = {
+  itemType: taskItemType,
+  severity: {
+    type: 'string',
+    enum: ['low', 'medium', 'high', 'critical'],
+    nullable: true,
+    description: 'Bug severity. Defaults to medium. Rejected on a task.',
+  },
+  foundIn: {
+    type: 'string',
+    enum: ['development', 'test', 'staging', 'production'],
+    nullable: true,
+  },
+  foundInNote: {
+    type: 'string',
+    maxLength: 200,
+    nullable: true,
+    description: 'Build or version where the bug was found.',
+  },
+  stepsToReproduce: { type: 'string', maxLength: 10000, nullable: true },
+  expectedBehavior: { type: 'string', maxLength: 10000, nullable: true },
+  actualBehavior: { type: 'string', maxLength: 10000, nullable: true },
+  resolution: {
+    type: 'string',
+    enum: [
+      'fixed',
+      'duplicate',
+      'wont_fix',
+      'cannot_reproduce',
+      'works_as_designed',
+    ],
+    nullable: true,
+  },
+  regression: { type: 'boolean', nullable: true },
+  affectedSystemId: {
+    type: 'string',
+    format: 'uuid',
+    nullable: true,
+    description: 'Catalogue system linked to the project.',
+  },
+  duplicateOfTaskId: {
+    ...entityRefProp('Bug this duplicates. UUID or human key. Only when resolution is duplicate.'),
+    nullable: true,
+  },
+};
+
 const milestoneStatus = {
   type: 'string',
   enum: ['planned', 'in_progress', 'done', 'cancelled'],
@@ -435,7 +487,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   // —— Project Delivery first-class (OpenAPI) ——
   {
     name: 'list_project_tasks',
-    description: 'List delivery tasks for a project (optional milestone/sprint filter). Requires pm:read.',
+    description:
+      'List delivery tasks for a project. Optional milestone, sprint, and itemType (task or bug) filters. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -447,6 +500,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         unassignedMilestone: { type: 'boolean' },
         sprintId: entityRefProp('Optional sprint filter'),
         unassignedSprint: { type: 'boolean' },
+        itemType: taskItemType,
         includeArchived: { type: 'boolean' },
       },
     },
@@ -465,7 +519,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task (not a knowledge note). Optional RACI, story, sprint, points. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). Bug fields are rejected on a task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -495,6 +549,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         storyPoints: { type: 'integer', minimum: 0, maximum: 1000, nullable: true },
         currentOwnerUserId: { type: 'string', format: 'uuid', nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
+        ...bugFields,
         raci: {
           type: 'array',
           maxItems: 50,
@@ -513,7 +568,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a delivery task (status, dates, sprint, points, archive, AI token usage). tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
+      'Update a delivery task or bug. itemType cannot change. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -544,6 +599,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         currentOwnerUserId: { type: 'string', format: 'uuid', nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
         archived: { type: 'boolean' },
+        ...bugFields,
       },
     },
   },

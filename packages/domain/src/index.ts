@@ -692,6 +692,23 @@ export type UserStatus = z.infer<typeof userStatusSchema>;
 export type UserType = z.infer<typeof userTypeSchema>;
 export type MilestoneStatus = z.infer<typeof milestoneStatusSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
+
+export {
+  taskItemTypeSchema,
+  bugFoundInSchema,
+  bugResolutionSchema,
+  emptyBugFields,
+  bugPatchTouches,
+  resolveBugCreate,
+  resolveBugUpdate,
+  type TaskItemType,
+  type BugFoundIn,
+  type BugResolution,
+  type StoredBugFields,
+  type BugFieldPatch,
+  type BugWriteErrorCode,
+  type BugWriteResult,
+} from './delivery-bug.js';
 export type SprintStatus = z.infer<typeof sprintStatusSchema>;
 export type RaciRole = z.infer<typeof raciRoleSchema>;
 export type EpicStatus = z.infer<typeof epicStatusSchema>;

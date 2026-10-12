@@ -10,23 +10,37 @@ import {
   projectTasks,
   projectUserStories,
   projects,
+  systems,
   users,
   workspaces,
 } from '@project-knowledge-hub/database';
 import {
   AppError,
   assertDateRange,
+  bugFoundInSchema,
+  bugResolutionSchema,
   effectiveDateRange,
   mergeAiUsage,
   milestoneStatusSchema,
   raciRoleSchema,
+  raidSeveritySchema,
+  resolveBugCreate,
+  resolveBugUpdate,
   taskActivityTypeSchema,
+  taskItemTypeSchema,
   taskStatusSchema,
   type AiUsageCounts,
   type AiUsagePatch,
+  type BugFieldPatch,
+  type BugFoundIn,
+  type BugResolution,
+  type BugWriteResult,
   type MilestoneStatus,
   type RaciRole,
+  type RaidSeverity,
+  type StoredBugFields,
   type TaskActivityType,
+  type TaskItemType,
   type TaskStatus,
 } from '@project-knowledge-hub/domain';
 import {
@@ -81,6 +95,17 @@ export type PublicTask = {
   sprintId: string | null;
   title: string;
   description: string | null;
+  itemType: TaskItemType;
+  severity: RaidSeverity | null;
+  foundIn: BugFoundIn | null;
+  foundInNote: string | null;
+  stepsToReproduce: string | null;
+  expectedBehavior: string | null;
+  actualBehavior: string | null;
+  resolution: BugResolution | null;
+  regression: boolean;
+  affectedSystemId: string | null;
+  duplicateOfTaskId: string | null;
   status: TaskStatus;
   dueDate: string | null;
   forecastHours: number | null;
@@ -179,6 +204,17 @@ function toPublicTask(
     sprintId: row.sprintId,
     title: row.title,
     description: row.description,
+    itemType: taskItemTypeSchema.parse(row.itemType ?? 'task'),
+    severity: row.severity ? raidSeveritySchema.parse(row.severity) : null,
+    foundIn: row.foundIn ? bugFoundInSchema.parse(row.foundIn) : null,
+    foundInNote: row.foundInNote,
+    stepsToReproduce: row.stepsToReproduce,
+    expectedBehavior: row.expectedBehavior,
+    actualBehavior: row.actualBehavior,
+    resolution: row.resolution ? bugResolutionSchema.parse(row.resolution) : null,
+    regression: row.regression,
+    affectedSystemId: row.affectedSystemId,
+    duplicateOfTaskId: row.duplicateOfTaskId,
     status: taskStatusSchema.parse(row.status),
     dueDate: row.dueDate,
     forecastHours: row.forecastHours,
@@ -658,12 +694,16 @@ export async function listTasks(
   options?: {
     milestoneId?: string | null;
     sprintId?: string | null;
+    itemType?: TaskItemType;
     includeArchived?: boolean;
   },
 ): Promise<PublicTask[]> {
   const conditions = [eq(projectTasks.projectId, projectId)];
   if (!options?.includeArchived) {
     conditions.push(isNull(projectTasks.archivedAt));
+  }
+  if (options?.itemType) {
+    conditions.push(eq(projectTasks.itemType, options.itemType));
   }
   if (options?.milestoneId !== undefined) {
     if (options.milestoneId === null) {
@@ -1174,6 +1214,200 @@ export function taskTouchesCost(input: {
   );
 }
 
+function requireBugWrite(
+  result: BugWriteResult,
+): { itemType: TaskItemType; fields: StoredBugFields } {
+  if (!result.ok) {
+    throw new AppError({
+      code: result.code,
+      message: result.message,
+      statusCode: 400,
+    });
+  }
+  return { itemType: result.itemType, fields: result.fields };
+}
+
+function bugPatchFrom(input: BugFieldPatch): BugFieldPatch {
+  return {
+    severity: input.severity,
+    foundIn: input.foundIn,
+    foundInNote: input.foundInNote,
+    stepsToReproduce: input.stepsToReproduce,
+    expectedBehavior: input.expectedBehavior,
+    actualBehavior: input.actualBehavior,
+    resolution: input.resolution,
+    regression: input.regression,
+    affectedSystemId: input.affectedSystemId,
+    duplicateOfTaskId: input.duplicateOfTaskId,
+  };
+}
+
+function bugColumns(write: { itemType: TaskItemType; fields: StoredBugFields }) {
+  return {
+    itemType: write.itemType,
+    severity: write.fields.severity,
+    foundIn: write.fields.foundIn,
+    foundInNote: write.fields.foundInNote,
+    stepsToReproduce: write.fields.stepsToReproduce,
+    expectedBehavior: write.fields.expectedBehavior,
+    actualBehavior: write.fields.actualBehavior,
+    resolution: write.fields.resolution,
+    regression: write.fields.regression,
+    affectedSystemId: write.fields.affectedSystemId,
+    duplicateOfTaskId: write.fields.duplicateOfTaskId,
+  };
+}
+
+function storedBugFromRow(
+  row: typeof projectTasks.$inferSelect,
+): StoredBugFields {
+  return {
+    severity: row.severity ? raidSeveritySchema.parse(row.severity) : null,
+    foundIn: row.foundIn ? bugFoundInSchema.parse(row.foundIn) : null,
+    foundInNote: row.foundInNote,
+    stepsToReproduce: row.stepsToReproduce,
+    expectedBehavior: row.expectedBehavior,
+    actualBehavior: row.actualBehavior,
+    resolution: row.resolution ? bugResolutionSchema.parse(row.resolution) : null,
+    regression: row.regression ?? false,
+    affectedSystemId: row.affectedSystemId ?? null,
+    duplicateOfTaskId: row.duplicateOfTaskId ?? null,
+  };
+}
+
+function changedBugFields(
+  before: StoredBugFields,
+  after: StoredBugFields,
+): string[] {
+  const keys = [
+    'severity',
+    'foundIn',
+    'foundInNote',
+    'stepsToReproduce',
+    'expectedBehavior',
+    'actualBehavior',
+    'resolution',
+    'regression',
+    'affectedSystemId',
+    'duplicateOfTaskId',
+  ] as const;
+  return keys.filter((key) => before[key] !== after[key]);
+}
+
+async function projectWorkspaceId(
+  database: Database,
+  projectId: string,
+): Promise<string | null> {
+  const [project] = await database.db
+    .select({ workspaceId: projects.workspaceId })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  return project?.workspaceId ?? null;
+}
+
+async function assertAffectedSystem(
+  database: Database,
+  projectId: string,
+  workspaceId: string,
+  systemId: string | null,
+): Promise<void> {
+  if (!systemId) return;
+  const [system] = await database.db
+    .select({
+      id: systems.id,
+      projectId: systems.projectId,
+      workspaceId: systems.workspaceId,
+      archivedAt: systems.archivedAt,
+    })
+    .from(systems)
+    .where(eq(systems.id, systemId))
+    .limit(1);
+  if (!system || system.archivedAt || system.workspaceId !== workspaceId) {
+    throw new AppError({
+      code: 'SYSTEM_NOT_FOUND',
+      message: 'Affected system not found',
+      statusCode: 404,
+    });
+  }
+  if (system.projectId !== projectId) {
+    throw new AppError({
+      code: 'SYSTEM_NOT_IN_PROJECT',
+      message: 'Affected system is not linked to this project',
+      statusCode: 400,
+    });
+  }
+}
+
+async function assertDuplicateTarget(
+  database: Database,
+  input: {
+    projectId: string;
+    taskId: string | null;
+    duplicateOfTaskId: string | null;
+  },
+): Promise<void> {
+  if (!input.duplicateOfTaskId) return;
+  if (input.taskId && input.duplicateOfTaskId === input.taskId) {
+    throw new AppError({
+      code: 'BUG_DUPLICATE_SELF',
+      message: 'A bug cannot be a duplicate of itself',
+      statusCode: 400,
+    });
+  }
+
+  const seen = new Set<string>();
+  if (input.taskId) seen.add(input.taskId);
+  let cursor: string | null = input.duplicateOfTaskId;
+  let first = true;
+  while (cursor) {
+    if (seen.has(cursor)) {
+      throw new AppError({
+        code: 'BUG_DUPLICATE_CYCLE',
+        message: 'Duplicate links cannot form a cycle',
+        statusCode: 400,
+      });
+    }
+    seen.add(cursor);
+    const [row] = await database.db
+      .select({
+        id: projectTasks.id,
+        projectId: projectTasks.projectId,
+        itemType: projectTasks.itemType,
+        duplicateOfTaskId: projectTasks.duplicateOfTaskId,
+        archivedAt: projectTasks.archivedAt,
+      })
+      .from(projectTasks)
+      .where(eq(projectTasks.id, cursor))
+      .limit(1);
+    if (!row || row.projectId !== input.projectId) {
+      throw new AppError({
+        code: 'BUG_DUPLICATE_NOT_FOUND',
+        message: 'Duplicate target was not found in this project',
+        statusCode: 400,
+      });
+    }
+    if (first) {
+      if (row.itemType !== 'bug') {
+        throw new AppError({
+          code: 'BUG_DUPLICATE_NOT_BUG',
+          message: 'Duplicate target must be a bug',
+          statusCode: 400,
+        });
+      }
+      if (row.archivedAt) {
+        throw new AppError({
+          code: 'BUG_DUPLICATE_ARCHIVED',
+          message: 'Duplicate target is archived',
+          statusCode: 400,
+        });
+      }
+      first = false;
+    }
+    cursor = row.duplicateOfTaskId;
+  }
+}
+
 export async function createTask(
   database: Database,
   input: {
@@ -1202,8 +1436,32 @@ export async function createTask(
     sortOrder?: number;
     createdBy?: string | null;
     raci?: Array<{ userId: string; role: RaciRole }>;
+    itemType?: TaskItemType;
+    severity?: RaidSeverity | null;
+    foundIn?: BugFoundIn | null;
+    foundInNote?: string | null;
+    stepsToReproduce?: string | null;
+    expectedBehavior?: string | null;
+    actualBehavior?: string | null;
+    resolution?: BugResolution | null;
+    regression?: boolean | null;
+    affectedSystemId?: string | null;
+    duplicateOfTaskId?: string | null;
   },
 ): Promise<PublicTask> {
+  const itemType = input.itemType ?? 'task';
+  const bugWrite = requireBugWrite(resolveBugCreate(itemType, bugPatchFrom(input)));
+  await assertAffectedSystem(
+    database,
+    input.projectId,
+    input.workspaceId,
+    bugWrite.fields.affectedSystemId,
+  );
+  await assertDuplicateTarget(database, {
+    projectId: input.projectId,
+    taskId: null,
+    duplicateOfTaskId: bugWrite.fields.duplicateOfTaskId,
+  });
   await assertMilestoneInProject(database, input.projectId, input.milestoneId);
   await assertUserStoryInProject(database, input.projectId, input.userStoryId);
   await assertSprintInProject(database, input.projectId, input.sprintId);
@@ -1235,7 +1493,12 @@ export async function createTask(
   const usage = resolveAiUsageWrite(EMPTY_AI_USAGE, input);
 
   const createdTask = await database.db.transaction(async (tx) => {
-    const allocated = await allocateIssueNumber(database, input.projectId, 'T', tx);
+    const allocated = await allocateIssueNumber(
+      database,
+      input.projectId,
+      bugWrite.itemType === 'bug' ? 'B' : 'T',
+      tx,
+    );
     const [row] = await tx
       .insert(projectTasks)
       .values({
@@ -1245,6 +1508,7 @@ export async function createTask(
         sprintId: input.sprintId ?? null,
         title: input.title,
         description: input.description ?? null,
+        ...bugColumns(bugWrite),
         status: input.status ?? 'todo',
         dueDate: input.dueDate ?? null,
         forecastHours: input.forecastHours ?? null,
@@ -1340,6 +1604,17 @@ export async function updateTask(
     archived?: boolean;
     actorUserId?: string | null;
     workspaceId?: string;
+    itemType?: TaskItemType;
+    severity?: RaidSeverity | null;
+    foundIn?: BugFoundIn | null;
+    foundInNote?: string | null;
+    stepsToReproduce?: string | null;
+    expectedBehavior?: string | null;
+    actualBehavior?: string | null;
+    resolution?: BugResolution | null;
+    regression?: boolean | null;
+    affectedSystemId?: string | null;
+    duplicateOfTaskId?: string | null;
   },
 ): Promise<PublicTask> {
   const [existing] = await database.db
@@ -1354,6 +1629,40 @@ export async function updateTask(
       statusCode: 404,
     });
   }
+
+  const bugWrite = requireBugWrite(
+    resolveBugUpdate({
+      existingItemType: taskItemTypeSchema.parse(existing.itemType ?? 'task'),
+      existing: storedBugFromRow(existing),
+      itemType: input.itemType,
+      patch: bugPatchFrom(input),
+    }),
+  );
+  const workspaceId =
+    input.workspaceId ??
+    (bugWrite.fields.affectedSystemId
+      ? await projectWorkspaceId(database, existing.projectId)
+      : null);
+  if (bugWrite.fields.affectedSystemId) {
+    if (!workspaceId) {
+      throw new AppError({
+        code: 'PROJECT_NOT_FOUND',
+        message: 'Project not found',
+        statusCode: 404,
+      });
+    }
+    await assertAffectedSystem(
+      database,
+      existing.projectId,
+      workspaceId,
+      bugWrite.fields.affectedSystemId,
+    );
+  }
+  await assertDuplicateTarget(database, {
+    projectId: existing.projectId,
+    taskId: existing.id,
+    duplicateOfTaskId: bugWrite.fields.duplicateOfTaskId,
+  });
 
   if (input.milestoneId !== undefined) {
     await assertMilestoneInProject(database, existing.projectId, input.milestoneId);
@@ -1406,6 +1715,7 @@ export async function updateTask(
       title: input.title ?? existing.title,
       description:
         input.description !== undefined ? input.description : existing.description,
+      ...bugColumns(bugWrite),
       status: nextStatus,
       dueDate: input.dueDate !== undefined ? input.dueDate : existing.dueDate,
       forecastHours:
@@ -1477,7 +1787,10 @@ export async function updateTask(
     'sortOrder',
     'archived',
   ] as const;
-  const changedFields = fieldKeys.filter((key) => input[key] !== undefined);
+  const changedFields = [
+    ...fieldKeys.filter((key) => input[key] !== undefined),
+    ...changedBugFields(storedBugFromRow(existing), bugWrite.fields),
+  ];
   const usageDelta = usageActivityDelta(beforeUsage, usage, input, {
     before: existing.aiSystemId,
     after: nextAiSystemId,

@@ -28,6 +28,7 @@ import {
 import { todayYmd } from '../lib/delivery-schedule';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import type { RatePerson } from '../lib/task-costing';
+import { workItemIdLabel } from '../lib/work-item-label';
 import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
 import {
   BurndownLegendHelp,
@@ -503,7 +504,17 @@ export function ProjectScrumView({
   }
 
   function formatTaskBullet(task: BoardTask) {
-    const key = task.humanKey ? `${task.humanKey} · ` : '';
+    const key =
+      task.itemType === 'bug'
+        ? `${workItemIdLabel({
+            itemType: 'bug',
+            humanKey: task.humanKey,
+            taskLabel: t('kindTask'),
+            bugLabel: t('kindBug'),
+          })} · `
+        : task.humanKey
+          ? `${task.humanKey} · `
+          : '';
     const points =
       task.storyPoints != null && Number.isFinite(task.storyPoints)
         ? ` (${task.storyPoints} pts)`
@@ -1498,7 +1509,13 @@ export function ProjectScrumView({
                       }
                     />
                     <span>
-                      {task.humanKey ? `${task.humanKey} · ` : ''}
+                      {workItemIdLabel({
+                        itemType: task.itemType,
+                        humanKey: task.humanKey,
+                        taskLabel: '',
+                        bugLabel: t('kindBug'),
+                      })}
+                      {task.itemType === 'bug' || task.humanKey ? ' · ' : ''}
                       {task.title}
                     </span>
                     <Input

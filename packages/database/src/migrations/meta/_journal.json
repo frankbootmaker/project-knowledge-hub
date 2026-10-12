@@ -358,6 +358,13 @@
       "when": 1791590400000,
       "tag": "0050_oauth_mcp_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1791763200000,
+      "tag": "0051_project_task_bugs",
+      "breakpoints": true
     }
   ]
 }
