@@ -25,6 +25,7 @@ import { ProjectDeliveryTree } from './ProjectDeliveryTree';
 import { ProjectScrumView, type ScrumExportHandle } from './ProjectScrumView';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
+import type { DeliveryDocumentRecord } from './DeliveryDocumentsEditor';
 import {
   Button,
   ErrorText,
@@ -176,6 +177,7 @@ export function ProjectDeliveryPanel({
   currency = 'EUR',
   ratePeople = [],
   systems = [],
+  records = [],
 }: {
   projectId: string;
   projectName: string;
@@ -194,6 +196,7 @@ export function ProjectDeliveryPanel({
   currency?: string;
   ratePeople?: RatePerson[];
   systems?: LinkedSystem[];
+  records?: DeliveryDocumentRecord[];
 }) {
   const t = useTranslations('delivery');
   const tRaid = useTranslations('raid');
@@ -1098,6 +1101,7 @@ export function ProjectDeliveryPanel({
           milestoneTitles={milestoneTitleById}
           currency={currency}
           ratePeople={ratePeople}
+          records={records}
           exportHandleRef={scrumExportRef}
           onExportStateChange={onScrumExportStateChange}
           onTaskStatusChange={(taskId, status) =>
@@ -1500,6 +1504,7 @@ export function ProjectDeliveryPanel({
         currency={currency}
         ratePeople={ratePeople}
         systems={systems}
+        records={records}
         bugOptions={tasks
           .filter((item) => item.itemType === 'bug')
           .map((item) => ({
@@ -1537,6 +1542,7 @@ export function ProjectDeliveryPanel({
         stories={stories}
         milestones={milestones}
         tasks={tasks}
+        records={records}
         currency={currency}
         ratePeople={ratePeople}
         canMutate={canMutate}

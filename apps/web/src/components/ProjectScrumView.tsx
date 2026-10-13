@@ -29,7 +29,11 @@ import { todayYmd } from '../lib/delivery-schedule';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import type { RatePerson } from '../lib/task-costing';
 import { workItemIdLabel } from '../lib/work-item-label';
-import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
+import {
+  DeliveryDocumentsEditor,
+  saveDeliveryDocumentLinks,
+  type DeliveryDocumentRecord,
+} from './DeliveryDocumentsEditor';
 import {
   BurndownLegendHelp,
   SprintPointBurndownChart,
@@ -90,6 +94,7 @@ type Props = {
   ) => void;
   currency?: string;
   ratePeople?: RatePerson[];
+  records?: DeliveryDocumentRecord[];
 };
 
 const TASK_STATUSES = [
@@ -123,10 +128,10 @@ export function ProjectScrumView({
   onExportStateChange,
   currency = 'EUR',
   ratePeople = [],
+  records = [],
 }: Props) {
   const t = useTranslations('delivery');
   const tCommon = useTranslations('common');
-  const tRecords = useTranslations('records');
   const tStakeholders = useTranslations('stakeholders');
   const tProjects = useTranslations('projects');
   const { pushToast } = useToast();
@@ -991,17 +996,50 @@ export function ProjectScrumView({
         </div>
       ) : null}
 
-      {selected && linkedDocuments.length > 0 ? (
+      {selected ? (
         <div className="kh-ops-inset mb-3">
           <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
-          <ul className="m-0 grid list-none gap-1 p-0">
-            {linkedDocuments.map((doc) => (
-              <li key={doc.knowledgeRecordId} className="text-sm">
-                <Badge>{tRecords(`typeLabels.${doc.recordType}`)}</Badge>{' '}
-                <LinkedKnowledgeRecord slug={doc.slug} title={doc.title} />
-              </li>
-            ))}
-          </ul>
+          <DeliveryDocumentsEditor
+            records={records}
+            linkedRecords={linkedDocuments.map((doc) => ({
+              id: doc.knowledgeRecordId,
+              title: doc.title,
+              slug: doc.slug,
+              recordType: doc.recordType,
+            }))}
+            linkedIds={linkedDocuments.map((doc) => doc.knowledgeRecordId)}
+            canEdit={canMutate}
+            onChange={(recordIds) => {
+              void saveDeliveryDocumentLinks({
+                projectId,
+                entityType: 'sprint',
+                entityId: selected.id,
+                recordIds,
+              }).then(() => {
+                setLinkedDocuments((prev) => {
+                  const byId = new Map(prev.map((doc) => [doc.knowledgeRecordId, doc]));
+                  for (const record of records) {
+                    if (!byId.has(record.id)) {
+                      byId.set(record.id, {
+                        knowledgeRecordId: record.id,
+                        title: record.title,
+                        recordType: record.recordType ?? 'note',
+                        slug: record.slug,
+                      });
+                    }
+                  }
+                  return recordIds
+                    .map((id) => byId.get(id))
+                    .filter((doc): doc is SprintLinkedDocument => Boolean(doc));
+                });
+              }).catch((err: unknown) => {
+                pushToast(
+                  err instanceof Error ? err.message : t('linkedDocumentsEmpty'),
+                  'danger',
+                );
+              });
+            }}
+          />
         </div>
       ) : null}
 

@@ -63,7 +63,7 @@ projects
         └── project_task_activities
 ```
 
-Knowledge documents may link to epics / stories / tasks via `knowledge_record_delivery_links` (charter, meeting minutes, decisions, etc.).
+Knowledge documents may link to epics, stories, milestones, tasks, and sprints via `knowledge_record_delivery_links` (charter, meeting minutes, decisions, etc.). Each of those items has a Documents tab that adds and removes its own links. Bugs use the task tab.
 
 Milestones remain **timeboxes**. Agile structure is **Epic → User story → Task**. A task may link to a story and/or a milestone. A **bug** sits in the same places as a task (under a story, or ungrouped) and uses the same hours, RACI, owner, sprint, and budget totals.
 

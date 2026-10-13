@@ -1873,6 +1873,10 @@ export async function loadSystemUserPurgeSnapshot(
           eq(knowledgeRecordDeliveryLinks.entityType, 'sprint'),
           inArray(knowledgeRecordDeliveryLinks.entityId, projectSprintIds),
         ),
+        and(
+          eq(knowledgeRecordDeliveryLinks.entityType, 'milestone'),
+          inArray(knowledgeRecordDeliveryLinks.entityId, projectMilestoneIds),
+        ),
       ),
     );
 

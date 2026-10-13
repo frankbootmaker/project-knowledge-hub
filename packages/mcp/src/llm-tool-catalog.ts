@@ -1626,7 +1626,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record_delivery_links',
     description:
-      'List epic/story/task/sprint links for a knowledge record. Requires knowledge:read.',
+      'List epic/story/milestone/task/sprint links for a knowledge record. Bugs use task. Requires knowledge:read.',
     scope: 'knowledge:read',
     body: {
       type: 'object',
@@ -1637,7 +1637,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_knowledge_record_delivery_links',
     description:
-      'Replace delivery links (epic/story/task/sprint) for a project-scoped knowledge record. Requires knowledge:write.',
+      'Replace delivery links (epic/story/milestone/task/sprint) for a project-scoped knowledge record. Bugs use task. Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     body: {
@@ -1654,7 +1654,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
             properties: {
               entityType: {
                 type: 'string',
-                enum: ['epic', 'user_story', 'task', 'sprint'],
+                enum: ['epic', 'user_story', 'milestone', 'task', 'sprint'],
               },
               entityId: entityRefProp('Delivery entity id'),
             },
@@ -1675,7 +1675,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         projectId: uuidProp('Project id'),
         entityType: {
           type: 'string',
-          enum: ['epic', 'user_story', 'task', 'sprint'],
+          enum: ['epic', 'user_story', 'milestone', 'task', 'sprint'],
         },
         entityId: entityRefProp('Optional entity filter'),
       },

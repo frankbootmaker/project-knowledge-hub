@@ -295,10 +295,11 @@ export const raidSeveritySchema = z.enum([
   'critical',
 ]);
 
-/** Knowledge record → delivery entity link target. */
+/** Knowledge record → delivery entity link target. Bugs stay entity type task. */
 export const deliveryLinkEntityTypeSchema = z.enum([
   'epic',
   'user_story',
+  'milestone',
   'task',
   'sprint',
 ]);

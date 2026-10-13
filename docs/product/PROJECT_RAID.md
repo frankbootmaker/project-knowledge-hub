@@ -16,7 +16,7 @@ Give each KnowHub **Project** an operational **RAID** register (Risks, Assumptio
 | RAID ↔ documents | `project_raid_record_links` to same-project knowledge records. Not a delivery link |
 | Ratings | `severity` required. Optional `probability` and `impact` on the same scale, stored independently |
 | Document types | Add `project-charter`, `meeting-minutes`; reuse `decision` for decision-making |
-| Doc ↔ work | Junction `knowledge_record_delivery_links` (epic / user_story / task) |
+| Doc ↔ work | Junction `knowledge_record_delivery_links` (epic / user_story / milestone / task / sprint). Bugs stay `task` |
 | Agents | MCP: RAID under `pm:read` / `pm:write`; delivery links under `knowledge:read` / `knowledge:write` |
 | Human keys | `{prefix}-{RR\|RI\|RA\|RD}-{n}` (see [ADR-019](../adr/ADR-019-human-readable-issue-keys.md)) |
 | Risk ↔ issue | **Transfer** creates a new item with a new key; source is archived and linked — not an in-place kind edit |
@@ -30,7 +30,7 @@ projects
         └── project_raid_record_links → knowledge_records
 
 knowledge_records
-  └── knowledge_record_delivery_links → epic | user_story | task | sprint
+  └── knowledge_record_delivery_links → epic | user_story | milestone | task | sprint
 ```
 
 ### RAID fields
@@ -52,9 +52,9 @@ knowledge_records
 | --- | --- |
 | RAID panel after Delivery | RAID board/calendar |
 | Delivery-item links from RAID manage UI (epic, story, task, bug, milestone) | RAID → sprint links |
-| Documents tab on the RAID dialog (add/remove record links) | Delivery-item Documents tabs (epic, story, task, bug, milestone, sprint) |
-| Linked RAID chips on task manage | Auto-create RAID from schedule “at risk” |
-| Doc delivery links in record editor | Doc → milestone links |
+| Documents tab on the RAID dialog (add/remove record links) | Auto-create RAID from schedule “at risk” |
+| Documents tab on epic, story, task, bug, milestone, and sprint | A separate bug entity type for document links |
+| Linked RAID chips on task manage | Record-editor checkboxes for milestone and sprint (those links still persist) |
 | RAID Dependencies as register rows | Gantt / critical path (still out of Delivery v1) |
 
 Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID Risks.
@@ -68,12 +68,13 @@ Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID R
 * `GET /api/v1/project-tasks/:taskId/raid-items`
 * `GET/PUT /api/v1/knowledge-records/:id/raid-items`
 * `GET/PUT /api/v1/knowledge-records/:id/delivery-links`
-* `GET /api/v1/projects/:projectId/delivery-document-links`
+* `GET/PUT /api/v1/projects/:projectId/delivery-document-links` (replace the records linked to one epic, story, milestone, task, or sprint)
 
 ## UI
 
 * Project page: Stakeholders → Delivery → **RAID** → Linked systems/knowledge
 * RAID manage: Details (ratings), Items, and Documents. Items covers epics, stories, tasks, bugs, and milestones. Items and Documents list only what is linked; Add opens a searchable paged picker with a type filter, and Remove drops the checked rows. Links are stored when the RAID item is saved.
-* Task manage: read-only linked RAID + linked documents
-* Epic/story manage: read-only linked documents
+* Task, epic, story, and milestone manage: Documents tab adds and removes delivery links; they are stored when the item is saved. Bugs use the task tab.
+* Sprint panel: the same Documents editor stores links as soon as Add or Remove is confirmed
+* Task manage: read-only linked RAID chips
 * Knowledge editor (edit + project selected): delivery-link multi-select

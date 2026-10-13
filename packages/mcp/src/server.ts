@@ -1769,7 +1769,7 @@ export function createKnowledgeHubMcpServer(
     'List knowledge records linked to delivery entities in a project (ceremonies, specs, etc.). Optional entityType/entityId filter; entityId may be UUID or human key. Requires pm:read.',
     {
       projectId: z.string().uuid(),
-      entityType: z.enum(['epic', 'user_story', 'task', 'sprint']).optional(),
+      entityType: z.enum(['epic', 'user_story', 'milestone', 'task', 'sprint']).optional(),
       entityId: entityRef.optional(),
     },
     async (args) =>
@@ -2529,11 +2529,17 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  const deliveryEntityEnum = z.enum(['epic', 'user_story', 'task', 'sprint']);
+  const deliveryEntityEnum = z.enum([
+    'epic',
+    'user_story',
+    'milestone',
+    'task',
+    'sprint',
+  ]);
 
   server.tool(
     'get_knowledge_record_delivery_links',
-    'List delivery entity links (epic / user story / task / sprint) for a knowledge record. recordId may be UUID or document key. Requires knowledge:read.',
+    'List delivery entity links (epic / user story / milestone / task / sprint) for a knowledge record. Bugs use task. recordId may be UUID or document key. Requires knowledge:read.',
     { recordId: entityRef },
     async (args) =>
       wrap(
@@ -2546,7 +2552,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'set_knowledge_record_delivery_links',
-    'Replace delivery entity links for a project-scoped knowledge record (epic / user story / task / sprint). recordId and entityId may be UUID or human keys. Requires knowledge:write.',
+    'Replace delivery entity links for a project-scoped knowledge record (epic / user story / milestone / task / sprint). Bugs use task. recordId and entityId may be UUID or human keys. Requires knowledge:write.',
     {
       recordId: entityRef,
       links: z

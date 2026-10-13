@@ -27,7 +27,11 @@ import {
   resolveRatePerson,
   type RatePerson,
 } from '../lib/task-costing';
-import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
+import {
+  DeliveryDocumentsEditor,
+  saveDeliveryDocumentLinks,
+  type DeliveryDocumentRecord,
+} from './DeliveryDocumentsEditor';
 
 type RaciEntry = {
   userId: string;
@@ -141,6 +145,7 @@ export function ProjectTaskManageModal({
   ratePeople = [],
   systems = [],
   bugOptions = [],
+  records = [],
   onUpdated,
   onDeleted,
 }: {
@@ -156,6 +161,7 @@ export function ProjectTaskManageModal({
   ratePeople?: RatePerson[];
   systems?: Array<{ id: string; name: string }>;
   bugOptions?: Array<{ id: string; title: string; humanKey?: string | null }>;
+  records?: DeliveryDocumentRecord[];
   onUpdated?: (task: TaskDetail) => void;
   onDeleted?: (taskId: string) => void;
 }) {
@@ -209,8 +215,9 @@ export function ProjectTaskManageModal({
   const [duplicateOfTaskId, setDuplicateOfTaskId] = useState('');
   const [linkedRaid, setLinkedRaid] = useState<LinkedRaid[]>([]);
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const [documentPickerOpen, setDocumentPickerOpen] = useState(false);
   const tRaid = useTranslations('raid');
-  const tRecords = useTranslations('records');
 
   const rateMap = useMemo(() => {
     const map = new Map<string, RatePerson>();
@@ -300,9 +307,12 @@ export function ProjectTaskManageModal({
         const docsPayload = (await docsRes.json()) as {
           documentLinks?: LinkedDocument[];
         };
-        setLinkedDocuments(docsPayload.documentLinks ?? []);
+        const links = docsPayload.documentLinks ?? [];
+        setLinkedDocuments(links);
+        setDocumentIds(links.map((doc) => doc.knowledgeRecordId));
       } else {
         setLinkedDocuments([]);
+        setDocumentIds([]);
       }
 
       if (!membersProp || !epicsProp || !storiesProp || !milestonesProp) {
@@ -485,6 +495,14 @@ export function ProjectTaskManageModal({
       if (!response.ok || !payload.task) {
         throw new Error(payload.error?.message || t('failedUpdateTask'));
       }
+      if (task?.projectId) {
+        await saveDeliveryDocumentLinks({
+          projectId: task.projectId,
+          entityType: 'task',
+          entityId: taskId,
+          recordIds: documentIds,
+        });
+      }
       setTask(payload.task);
       onUpdated?.(payload.task);
       pushToast(t('taskUpdated'), 'success');
@@ -634,6 +652,7 @@ export function ProjectTaskManageModal({
       }
       description={t('manageTaskDescription')}
       size={DELIVERY_ITEM_MODAL_SIZE}
+      closeOnEscape={!documentPickerOpen}
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -1207,23 +1226,20 @@ export function ProjectTaskManageModal({
           <section
             className={`kh-ops-modal-pane${taskTab === 'documents' ? ' active' : ''}`}
           >
-            {linkedDocuments.length === 0 ? (
-              <p className="m-0 text-sm text-ink-muted">
-                {t('linkedDocumentsEmpty')}
-              </p>
-            ) : (
-              <div>
-                {linkedDocuments.map((doc) => (
-                  <div key={doc.knowledgeRecordId} className="kh-ops-linked-row">
-                    <span>
-                      <strong>{tRecords(`typeLabels.${doc.recordType}`)}</strong>
-                      {' · '}
-                      <LinkedKnowledgeRecord slug={doc.slug} title={doc.title} />
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <DeliveryDocumentsEditor
+              records={records}
+              linkedRecords={linkedDocuments.map((doc) => ({
+                id: doc.knowledgeRecordId,
+                title: doc.title,
+                slug: doc.slug,
+                recordType: doc.recordType,
+              }))}
+              linkedIds={documentIds}
+              onChange={setDocumentIds}
+              canEdit={canMutate}
+              disabled={pending}
+              onPickerOpenChange={setDocumentPickerOpen}
+            />
           </section>
         </div>
       )}
