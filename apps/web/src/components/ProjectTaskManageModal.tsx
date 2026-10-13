@@ -197,7 +197,7 @@ export function ProjectTaskManageModal({
   const [pending, setPending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [taskTab, setTaskTab] = useState<
-    'details' | 'raci' | 'handoff' | 'activity' | 'documents' | 'media'
+    'details' | 'ai' | 'raci' | 'handoff' | 'activity' | 'documents' | 'media'
   >('details');
   const [comment, setComment] = useState('');
   const [handoffTo, setHandoffTo] = useState('');
@@ -796,6 +796,7 @@ export function ProjectTaskManageModal({
             {(
               [
                 ['details', t('tabDetails')],
+                ['ai', t('tabAi')],
                 ['raci', t('tabRaci')],
                 ['handoff', t('tabHandoff')],
                 ['activity', t('tabActivity')],
@@ -922,103 +923,6 @@ export function ProjectTaskManageModal({
                     : tBudget('rateMissing', { name: ratePerson.displayName })
                   : tBudget('rateUnresolved')}
               </p>
-              {(canMutate ||
-                tokensUsed.trim() !== '' ||
-                task.tokensUsed != null ||
-                tokensInput.trim() !== '' ||
-                tokensOutput.trim() !== '' ||
-                tokensCache.trim() !== '' ||
-                aiSystemId.trim() !== '' ||
-                task.aiSystemId) ? (
-                <>
-                  <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
-                    {t('tokensBreakdownHint')}
-                  </p>
-                  <Field label={t('tokensInput')}>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={tokensInput}
-                      onChange={(e) => setTokensInput(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('tokensOutput')}>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={tokensOutput}
-                      onChange={(e) => setTokensOutput(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('tokensCache')}>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={tokensCache}
-                      onChange={(e) => setTokensCache(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('tokensUsed')}>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={tokensUsed}
-                      onChange={(e) => setTokensUsed(e.target.value)}
-                      disabled={pending || !canMutate}
-                      placeholder={t('tokensUsedPlaceholder')}
-                    />
-                  </Field>
-                  <Field label={t('aiModelId')}>
-                    <Input
-                      value={modelId}
-                      onChange={(e) => setModelId(e.target.value)}
-                      disabled={pending || !canMutate}
-                      maxLength={80}
-                      placeholder={t('aiModelIdPlaceholder')}
-                    />
-                  </Field>
-                  <Field label={t('aiPricingTier')}>
-                    <Input
-                      value={pricingTier}
-                      onChange={(e) => setPricingTier(e.target.value)}
-                      disabled={pending || !canMutate}
-                      maxLength={32}
-                      placeholder={t('aiPricingTierPlaceholder')}
-                    />
-                  </Field>
-                  <Field label={t('usageOccurredAt')}>
-                    <Input
-                      type="date"
-                      value={usageOccurredAt}
-                      onChange={(e) => setUsageOccurredAt(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('billingPeriod')}>
-                    <Input
-                      type="month"
-                      value={billingPeriod}
-                      onChange={(e) => setBillingPeriod(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('aiSystemId')}>
-                    <Input
-                      value={aiSystemId}
-                      onChange={(e) => setAiSystemId(e.target.value)}
-                      disabled={pending || !canMutate}
-                      placeholder={t('aiSystemIdPlaceholder')}
-                    />
-                  </Field>
-                </>
-              ) : null}
               <Field label={t('kindStory')}>
                 <Select
                   value={userStoryId}
@@ -1189,6 +1093,112 @@ export function ProjectTaskManageModal({
                 </>
               ) : null}
             </div>
+          </section>
+
+          <section className={`kh-ops-modal-pane${taskTab === 'ai' ? ' active' : ''}`}>
+            {canMutate ||
+            tokensUsed.trim() !== '' ||
+            task.tokensUsed != null ||
+            tokensInput.trim() !== '' ||
+            tokensOutput.trim() !== '' ||
+            tokensCache.trim() !== '' ||
+            modelId.trim() !== '' ||
+            pricingTier.trim() !== '' ||
+            usageOccurredAt.trim() !== '' ||
+            billingPeriod.trim() !== '' ||
+            aiSystemId.trim() !== '' ||
+            task.aiSystemId ? (
+              <div className="kh-ops-form-grid">
+                <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+                  {t('tokensBreakdownHint')}
+                </p>
+                <Field label={t('tokensInput')}>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={tokensInput}
+                    onChange={(e) => setTokensInput(e.target.value)}
+                    disabled={pending || !canMutate}
+                  />
+                </Field>
+                <Field label={t('tokensOutput')}>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={tokensOutput}
+                    onChange={(e) => setTokensOutput(e.target.value)}
+                    disabled={pending || !canMutate}
+                  />
+                </Field>
+                <Field label={t('tokensCache')}>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={tokensCache}
+                    onChange={(e) => setTokensCache(e.target.value)}
+                    disabled={pending || !canMutate}
+                  />
+                </Field>
+                <Field label={t('tokensUsed')}>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={tokensUsed}
+                    onChange={(e) => setTokensUsed(e.target.value)}
+                    disabled={pending || !canMutate}
+                    placeholder={t('tokensUsedPlaceholder')}
+                  />
+                </Field>
+                <Field label={t('aiModelId')}>
+                  <Input
+                    value={modelId}
+                    onChange={(e) => setModelId(e.target.value)}
+                    disabled={pending || !canMutate}
+                    maxLength={80}
+                    placeholder={t('aiModelIdPlaceholder')}
+                  />
+                </Field>
+                <Field label={t('aiPricingTier')}>
+                  <Input
+                    value={pricingTier}
+                    onChange={(e) => setPricingTier(e.target.value)}
+                    disabled={pending || !canMutate}
+                    maxLength={32}
+                    placeholder={t('aiPricingTierPlaceholder')}
+                  />
+                </Field>
+                <Field label={t('usageOccurredAt')}>
+                  <Input
+                    type="date"
+                    value={usageOccurredAt}
+                    onChange={(e) => setUsageOccurredAt(e.target.value)}
+                    disabled={pending || !canMutate}
+                  />
+                </Field>
+                <Field label={t('billingPeriod')}>
+                  <Input
+                    type="month"
+                    value={billingPeriod}
+                    onChange={(e) => setBillingPeriod(e.target.value)}
+                    disabled={pending || !canMutate}
+                  />
+                </Field>
+                <Field className="kh-ops-field-span" label={t('aiSystemId')}>
+                  <Input
+                    value={aiSystemId}
+                    onChange={(e) => setAiSystemId(e.target.value)}
+                    disabled={pending || !canMutate}
+                    placeholder={t('aiSystemIdPlaceholder')}
+                  />
+                </Field>
+              </div>
+            ) : (
+              <p className="m-0 text-sm text-ink-muted">{t('aiEmpty')}</p>
+            )}
           </section>
 
           <section

@@ -30,9 +30,6 @@ export type NavIconName =
   | 'search'
   | 'overview'
   | 'delivery'
-  | 'scrum'
-  | 'timeline'
-  | 'calendar'
   | 'budget'
   | 'systems'
   | 'raid'
@@ -75,9 +72,6 @@ export type NavItemId =
   | 'search'
   | 'overview'
   | 'delivery'
-  | 'scrum'
-  | 'timeline'
-  | 'calendar'
   | 'budget'
   | 'systems'
   | 'raid'
@@ -173,32 +167,32 @@ function projectSectionNavItem(section: ProjectSectionDef): NavItemDef {
 }
 
 /**
- * Header shortcuts, plus Utilization and Org chart (stakeholder views).
- * Those two stay in Control and are not header chips.
+ * Header shortcuts, plus views that are not header chips:
+ * Utilization and Org chart. Scrum, Timeline, and Calendar stay
+ * inside the Delivery section.
  */
 function controlNavItems(): NavItemDef[] {
   const items: NavItemDef[] = [];
   for (const section of PROJECT_SECTIONS) {
     items.push(projectSectionNavItem(section));
-    if (section.navItemId !== 'stakeholders') {
-      continue;
+    if (section.navItemId === 'stakeholders') {
+      items.push(
+        {
+          id: 'utilization',
+          icon: 'utilization',
+          labelKey: 'utilization',
+          requires: 'project',
+          href: (ctx) => projectHref(ctx, '#project-stakeholders', '?utilization=1'),
+        },
+        {
+          id: 'org',
+          icon: 'org',
+          labelKey: 'orgChart',
+          requires: 'project',
+          href: (ctx) => projectHref(ctx, '#project-stakeholders', '?stakeholders=org'),
+        },
+      );
     }
-    items.push(
-      {
-        id: 'utilization',
-        icon: 'utilization',
-        labelKey: 'utilization',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-stakeholders', '?utilization=1'),
-      },
-      {
-        id: 'org',
-        icon: 'org',
-        labelKey: 'orgChart',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-stakeholders', '?stakeholders=org'),
-      },
-    );
   }
   return items;
 }
@@ -220,32 +214,11 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     ],
   },
   {
+    // The group stays in the model so a stored section id still parses, and stays hidden with no items.
     id: 'delivery-finance',
     icon: 'deliveryFinance',
     labelKey: 'sectionDelivery',
-    items: [
-      {
-        id: 'scrum',
-        icon: 'scrum',
-        labelKey: 'scrum',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=scrum'),
-      },
-      {
-        id: 'timeline',
-        icon: 'timeline',
-        labelKey: 'timeline',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=timeline'),
-      },
-      {
-        id: 'calendar',
-        icon: 'calendar',
-        labelKey: 'calendar',
-        requires: 'project',
-        href: (ctx) => projectHref(ctx, '#project-delivery', '?delivery=calendar'),
-      },
-    ],
+    items: [],
   },
   {
     id: 'control',
@@ -459,13 +432,6 @@ function navItemById(id: NavItemId, ctx: NavContext): NavItemDef | null {
   return null;
 }
 
-/** Scrum, Timeline, and Calendar are the only delivery views with a rail item. */
-const RAIL_DELIVERY_VIEWS = new Set(['scrum', 'timeline', 'calendar']);
-
-function isRailDeliveryView(value: string | null): boolean {
-  return value != null && RAIL_DELIVERY_VIEWS.has(value);
-}
-
 function readSearchParams(search: string): URLSearchParams {
   return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
 }
@@ -513,11 +479,6 @@ export function inferNavSection(pathname: string, hash = '', search = ''): NavSe
     return 'control';
   }
   if (projectSlug) {
-    const anchor = hashId(hash);
-    const deliveryView = readSearchParams(search).get('delivery');
-    if (anchor === 'project-delivery' && isRailDeliveryView(deliveryView)) {
-      return 'delivery-finance';
-    }
     return 'control';
   }
   if (pathname.startsWith('/workspaces/')) {
@@ -619,9 +580,6 @@ export function matchNavItem(
     );
   }
   if (hrefHash) {
-    if (item.id === 'delivery' && isRailDeliveryView(params.get('delivery'))) {
-      return false;
-    }
     if (
       item.id === 'stakeholders' &&
       (params.get('stakeholders') === 'org' || params.get('utilization') === '1')
@@ -649,8 +607,7 @@ function hrefParts(href: string): {
 /**
  * One rail id for the pinned or scrolled section.
  * A view query only distinguishes items that share that section
- * (org chart vs stakeholders, scrum vs delivery). It never highlights
- * a different section.
+ * (org chart vs stakeholders). Delivery views stay on Delivery.
  */
 export function navItemIdForActiveAnchor(activeAnchor: string, search: string): string | null {
   const params = readSearchParams(search);
@@ -671,10 +628,6 @@ export function navItemIdForActiveAnchor(activeAnchor: string, search: string): 
     return 'stakeholders';
   }
   if (activeAnchor === 'project-delivery') {
-    const delivery = params.get('delivery');
-    if (isRailDeliveryView(delivery)) {
-      return delivery;
-    }
     return 'delivery';
   }
   return section.navItemId;

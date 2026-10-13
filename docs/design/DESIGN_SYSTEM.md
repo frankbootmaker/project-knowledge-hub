@@ -83,7 +83,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Viewport | Root layout exports `viewport: { width: 'device-width', initialScale: 1, viewportFit: 'cover' }` |
 | Shell padding / width | Authenticated Ops Console: `.kh-ops-view` padding (`24px 28px`, `14px` below `md`). Legacy `.kh-shell` still used on public/auth pages (`max-w-6xl` + `px-4 sm:px-6`) |
 | Shell content | Ops Console `.kh-ops-view`. Legacy `.kh-shell` + `.kh-shell-content` / `shellContentClassName` — adds `py-8` |
-| Primary nav | Left **section-filter rail** (Personal, Delivery & finance, Control, Knowledge, Ops, Admin). Only one section’s items are visible. Compact rail + hover expand from `md`. Below `md`: mobile bar hamburger opens the rail drawer. Account lives in the rail user menu, not the rail list. **Control** is the project section index (same shortcuts as the project header, plus Utilization and Org chart). Its heading links to `#project-top`. Delivery & finance keeps Scrum, Timeline, and Calendar. Ops stays in the model but is hidden while it has no items |
+| Primary nav | Left **section-filter rail** (Personal, Project, Knowledge, Ops, Admin). Only one section’s items are visible. Compact rail + hover expand from `md`. Below `md`: mobile bar hamburger opens the rail drawer. Account lives in the rail user menu, not the rail list. **Project** is the project section index (same shortcuts as the project header, plus Utilization and Org chart). Scrum, Timeline, and Calendar stay inside Delivery. Its heading links to `#project-top`. Delivery & finance and Ops stay in the model but are hidden while they have no items |
 | Admin sidebar | Admin destinations live in the Ops rail Admin section. `admin/layout.tsx` no longer renders a second sidebar |
 | Account sidebar | Same grid pattern in `account/layout.tsx` for signed-in users. Rail user menu also links to the same destinations |
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
@@ -246,6 +246,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-13
 
+* **Project rail** — The project section icon is labeled Project (Projekt in German and Hungarian). Scrum, Timeline, and Calendar are not separate menu items; they stay as Delivery views, and Delivery stays highlighted. The Delivery & finance rail icon stays hidden while that group has no items.
 * **Delivery list sprint** — The sprint column wraps like other text cells (`overflow-wrap: anywhere`, max `28rem`). A long sprint name no longer stays on one line and widens the table past the panel.
 * **Delivery list completion** — A `%` column sits after Status. The sort name and tooltip are “Completed”. Epics and stories average child task and bug steps. Cancelled children are left out. A task shows its stored step. Milestones, and parents with no remaining children, show —. Hover on a parent shows the earned share, such as 1.5 of 4 done.
 * **Delivery target percent** — A Target column sits after `%` on the list. Stories and epics show how far today’s date is through their start and end. The start day is 0% and the end day is 100%. A missing window shows —. The tree shows the same `%` and Target after Status. A story or epic behind that line is amber; one still short after its end date is red. Hover names the gap. Tasks show their own percent and no target. Cancelled items are left uncolored.
@@ -331,7 +332,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-20
 
-* **Ops Console shell** — Authenticated app uses a left section-filter rail + sticky header (`OpsAppShell`, `.kh-ops-*` in `styles/ops-shell.css`). Sections: Personal, Delivery & finance, Control, Knowledge, Ops, Admin. Account is under the user menu. Compact rail and a mobile drawer match the prototype. Theme controls are `data-theme-choice` buttons (light / dark / system); `data-theme` / `data-brand` live on `<html>` only.
+* **Ops Console shell** — Authenticated app uses a left section-filter rail + sticky header (`OpsAppShell`, `.kh-ops-*` in `styles/ops-shell.css`). Sections at the time: Personal, Delivery & finance, Control, Knowledge, Ops, Admin. Account is under the user menu. Compact rail and a mobile drawer match the prototype. Theme controls are `data-theme-choice` buttons (light / dark / system); `data-theme` / `data-brand` live on `<html>` only.
 * **Option A tokens** — `--kh-*` retuned to Ops Console oklch (IBM Plex, green accent, 24px background grid, square `3px` panels). Department palettes (`knowhub`, `bootmaker`, `nethorizon`, `in3`) change accent only via `html[data-brand]`. Primary buttons use ink-on-surface like the prototype.
 * **Brand colours** — Account → Display (`#brand`) maps the prototype Admin brand schemes onto the existing cookie + `data-brand` accent without a new product surface.
 * **Org chart emails** — Stakeholder org-chart addresses wrap only at `.` and `@` so dotted segments stay whole inside the card.

@@ -70,21 +70,21 @@ describe('ops nav', () => {
         'project-delivery',
         '?delivery=scrum',
       ),
-    ).toBe('delivery-finance');
+    ).toBe('control');
     expect(
       inferNavSection(
         '/workspaces/platform/projects/renewal',
         'project-delivery',
         '?delivery=timeline',
       ),
-    ).toBe('delivery-finance');
+    ).toBe('control');
     expect(
       inferNavSection(
         '/workspaces/platform/projects/renewal',
         'project-delivery',
         '?delivery=calendar',
       ),
-    ).toBe('delivery-finance');
+    ).toBe('control');
     expect(
       inferNavSection(
         '/workspaces/platform/projects/renewal',
@@ -161,25 +161,27 @@ describe('ops nav', () => {
 
   it('matches delivery view query params', () => {
     const delivery = NAV_SECTIONS.flatMap((section) => section.items).find(
-      (item) => item.id === 'scrum',
+      (item) => item.id === 'delivery',
     );
     expect(delivery).toBeTruthy();
+    for (const view of ['board', 'list', 'tree', 'scrum', 'timeline', 'calendar']) {
+      expect(
+        matchNavItem(
+          delivery!,
+          ctx,
+          '/workspaces/platform/projects/renewal',
+          'project-delivery',
+          `?delivery=${view}`,
+        ),
+      ).toBe(true);
+    }
     expect(
       matchNavItem(
         delivery!,
         ctx,
         '/workspaces/platform/projects/renewal',
-        'project-delivery',
+        'project-raid',
         '?delivery=scrum',
-      ),
-    ).toBe(true);
-    expect(
-      matchNavItem(
-        delivery!,
-        ctx,
-        '/workspaces/platform/projects/renewal',
-        'project-delivery',
-        '?delivery=board',
       ),
     ).toBe(false);
   });
@@ -268,9 +270,10 @@ describe('ops nav', () => {
     expect(ids).not.toContain('control');
   });
 
-  it('shows delivery and control when a project is set', () => {
+  it('shows the project menu when a project is set, without the delivery rail', () => {
     const ids = visibleNavSections(ctx).map((section) => section.id);
-    expect(ids).toEqual(['personal', 'delivery-finance', 'control', 'knowledge', 'admin']);
+    expect(ids).toEqual(['personal', 'control', 'knowledge', 'admin']);
+    expect(ids).not.toContain('delivery-finance');
   });
 
   it('hides admin for non-admins', () => {
@@ -317,8 +320,9 @@ describe('ops nav', () => {
       'systems',
       'project-knowledge',
     ]);
-    const delivery = NAV_SECTIONS.find((section) => section.id === 'delivery-finance')!;
-    expect(delivery.items.map((item) => item.id)).toEqual(['scrum', 'timeline', 'calendar']);
+    const deliveryRail = NAV_SECTIONS.find((section) => section.id === 'delivery-finance')!;
+    expect(deliveryRail.items).toEqual([]);
+    expect(visibleNavSections(ctx).map((section) => section.id)).not.toContain('delivery-finance');
     const ids = NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.id));
     expect(new Set(ids).size).toBe(ids.length);
     for (const section of PROJECT_SECTIONS) {
@@ -444,54 +448,12 @@ describe('ops nav', () => {
     const delivery = NAV_SECTIONS.flatMap((section) => section.items).find(
       (item) => item.id === 'delivery',
     )!;
-    const scrum = NAV_SECTIONS.flatMap((section) => section.items).find(
-      (item) => item.id === 'scrum',
-    )!;
-    const timeline = NAV_SECTIONS.flatMap((section) => section.items).find(
-      (item) => item.id === 'timeline',
-    )!;
-    const calendar = NAV_SECTIONS.flatMap((section) => section.items).find(
-      (item) => item.id === 'calendar',
-    )!;
-    expect(
-      isRailItemActive(delivery, ctx, path, 'project-delivery', '?delivery=board', 'project-delivery'),
-    ).toBe(true);
-    expect(
-      isRailItemActive(delivery, ctx, path, 'project-delivery', '?delivery=list', 'project-delivery'),
-    ).toBe(true);
-    expect(
-      isRailItemActive(delivery, ctx, path, 'project-delivery', '', 'project-delivery'),
-    ).toBe(true);
-    expect(
-      isRailItemActive(delivery, ctx, path, 'project-delivery', '?delivery=scrum', 'project-delivery'),
-    ).toBe(false);
-    expect(
-      isRailItemActive(scrum, ctx, path, 'project-delivery', '?delivery=scrum', 'project-delivery'),
-    ).toBe(true);
-    expect(
-      isRailItemActive(
-        timeline,
-        ctx,
-        path,
-        'project-delivery',
-        '?delivery=timeline',
-        'project-delivery',
-      ),
-    ).toBe(true);
-    expect(
-      isRailItemActive(
-        calendar,
-        ctx,
-        path,
-        'project-delivery',
-        '?delivery=calendar',
-        'project-delivery',
-      ),
-    ).toBe(true);
-    expect(
-      findActiveNavItem(ctx, path, 'project-delivery', '?delivery=board')?.id,
-    ).toBe('delivery');
-    expect(findActiveNavItem(ctx, path, 'project-delivery', '?delivery=scrum')?.id).toBe('scrum');
+    for (const view of ['', '?delivery=board', '?delivery=list', '?delivery=scrum', '?delivery=timeline', '?delivery=calendar']) {
+      expect(
+        isRailItemActive(delivery, ctx, path, 'project-delivery', view, 'project-delivery'),
+      ).toBe(true);
+      expect(findActiveNavItem(ctx, path, 'project-delivery', view)?.id).toBe('delivery');
+    }
   });
 
   it('falls back when the preferred section is not visible', () => {

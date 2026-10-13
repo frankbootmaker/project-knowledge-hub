@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Task AI tab:** Token, model, pricing, and billing fields on tasks and bugs move from Details to an AI tab. They still save with the item.
+
+* **Project menu:** The project rail section is labeled Project. Scrum, Timeline, and Calendar are no longer separate items. They stay as views inside Delivery, and that menu item stays highlighted.
+
 * **Task dialog tabs:** Tab labels use the same bold sans as the setup menu.
 
 ### Fixed
