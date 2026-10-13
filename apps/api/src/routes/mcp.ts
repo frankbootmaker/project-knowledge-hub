@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { AppError } from '@project-knowledge-hub/domain';
@@ -16,6 +17,27 @@ import { writeAuditEvent } from '../lib/identity.js';
 import { isOauthMcpEffectivelyEnabled, getStoredOauthMcpSettings } from '../lib/oauth-mcp-settings.js';
 import { loadGrantFromAuthorization } from './oauth-mcp.js';
 import { resolveMcpPublicUrl } from '../lib/mcp-public-url.js';
+
+type SocketWithDestroySoon = {
+  destroyed?: boolean;
+  destroySoon?: () => void;
+};
+
+/**
+ * @hono/node-server (via the MCP SDK) drains an unread POST body and, after
+ * 500ms, calls socket.destroySoon(). Fastify inject uses light-my-request's
+ * MockSocket, which is not a net.Socket and has no destroySoon, so that timer
+ * throws an unhandled TypeError. Real sockets already implement the method.
+ */
+function ensureSocketDestroySoon(raw: IncomingMessage): void {
+  const socket = raw.socket as SocketWithDestroySoon | undefined;
+  if (!socket || typeof socket.destroySoon === 'function') {
+    return;
+  }
+  socket.destroySoon = () => {
+    socket.destroyed = true;
+  };
+}
 
 async function enforceRateLimit(
   app: FastifyInstance,
@@ -81,6 +103,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
       });
 
       reply.hijack();
+      ensureSocketDestroySoon(request.raw);
       try {
         await transport.handleRequest(request.raw, reply.raw, request.body);
       } finally {
@@ -149,6 +172,7 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
       });
 
       reply.hijack();
+      ensureSocketDestroySoon(request.raw);
       try {
         await transport.handleRequest(request.raw, reply.raw, request.body);
       } finally {

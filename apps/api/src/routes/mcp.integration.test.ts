@@ -210,6 +210,11 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
   });
 
   afterAll(async () => {
+    // @hono/node-server drains unread POST bodies on a 500ms timer. Let that
+    // timer run while Vitest is still inside this hook.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 600);
+    });
     if (app) {
       await app.close();
     }

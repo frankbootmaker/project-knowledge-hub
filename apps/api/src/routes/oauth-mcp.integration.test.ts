@@ -121,6 +121,11 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
 
   afterAll(async () => {
     globalThis.fetch = originalFetch;
+    // @hono/node-server drains unread POST bodies on a 500ms timer. Let that
+    // timer run while Vitest is still inside this hook.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 600);
+    });
     await app?.close();
     if (redis) {
       try {
