@@ -12,10 +12,13 @@ import {
   knowledgeRecords,
   projectChangeDeliveryLinks,
   projectChangeItems,
+  projectChangeRecordLinks,
   projectEpics,
   projectInitialStakeholders,
   projectMilestones,
+  projectRaidDeliveryLinks,
   projectRaidItems,
+  projectRaidRecordLinks,
   projectRaidTaskLinks,
   projectSprints,
   projectStakeholders,
@@ -278,11 +281,30 @@ export type SystemUserPurgeSnapshot = {
     entityType?: string;
     entityId?: string;
   }>;
+  changeRecordLinks?: Array<{
+    id: string;
+    createdBy: string | null;
+    changeId: string;
+    knowledgeRecordId: string;
+  }>;
   raidTaskLinks: Array<{
     id: string;
     createdBy: string | null;
     raidItemId: string;
     taskId: string;
+  }>;
+  raidRecordLinks?: Array<{
+    id: string;
+    createdBy: string | null;
+    raidItemId: string;
+    knowledgeRecordId: string;
+  }>;
+  raidDeliveryLinks?: Array<{
+    id: string;
+    createdBy: string | null;
+    raidItemId: string;
+    entityType: string;
+    entityId: string;
   }>;
   knowledgeRecords: Array<{
     id: string;
@@ -359,7 +381,10 @@ export type SystemUserPurgePlan = {
     initialStakeholders: string[];
     knowledgeDeliveryLinks: string[];
     changeDeliveryLinks: string[];
+    changeRecordLinks: string[];
     raidTaskLinks: string[];
+    raidRecordLinks: string[];
+    raidDeliveryLinks: string[];
     knowledgeRecords: string[];
     knowledgeRecordVersions: string[];
     media: string[];
@@ -1114,6 +1139,83 @@ export function planSystemUserPurge(
     }
   }
 
+  const recordById = new Map(snapshot.knowledgeRecords.map((row) => [row.id, row]));
+  const raidRecordLinks: string[] = [];
+  for (const link of snapshot.raidRecordLinks ?? []) {
+    const raidInProject = raidById.get(link.raidItemId)?.projectId === projectId;
+    const recordInProject =
+      recordById.get(link.knowledgeRecordId)?.projectId === projectId;
+    if (!raidInProject && !recordInProject) continue;
+    const parentDeleted =
+      raidIds.has(link.raidItemId) || recordIds.has(link.knowledgeRecordId);
+    if (owned(link.createdBy)) {
+      if (parentDeleted || raidInProject) raidRecordLinks.push(link.id);
+      continue;
+    }
+    if (parentDeleted) {
+      conflicts.push({
+        entityType: 'raid_record_link',
+        entityId: link.id,
+        reason:
+          'RAID record link was not created by the system user, but one of its endpoints will be deleted.',
+      });
+    }
+  }
+
+  const changeRecordLinks: string[] = [];
+  for (const link of snapshot.changeRecordLinks ?? []) {
+    const changeInProject = changesById.get(link.changeId)?.projectId === projectId;
+    const recordInProject =
+      recordById.get(link.knowledgeRecordId)?.projectId === projectId;
+    if (!changeInProject && !recordInProject) continue;
+    const parentDeleted =
+      changeIds.has(link.changeId) || recordIds.has(link.knowledgeRecordId);
+    if (owned(link.createdBy)) {
+      if (parentDeleted || changeInProject) changeRecordLinks.push(link.id);
+      continue;
+    }
+    if (parentDeleted) {
+      conflicts.push({
+        entityType: 'change_record_link',
+        entityId: link.id,
+        reason:
+          'Change record link was not created by the system user, but one of its endpoints will be deleted.',
+      });
+    }
+  }
+
+  const epicById = new Map(snapshot.epics.map((row) => [row.id, row]));
+  const storyById = new Map(snapshot.userStories.map((row) => [row.id, row]));
+  const milestoneById = new Map(snapshot.milestones.map((row) => [row.id, row]));
+  const raidDeliveryLinks: string[] = [];
+  for (const link of snapshot.raidDeliveryLinks ?? []) {
+    const raidInProject = raidById.get(link.raidItemId)?.projectId === projectId;
+    const entity =
+      link.entityType === 'epic'
+        ? epicById.get(link.entityId)
+        : link.entityType === 'user_story'
+          ? storyById.get(link.entityId)
+          : link.entityType === 'milestone'
+            ? milestoneById.get(link.entityId)
+            : undefined;
+    const entityInProject = entity?.projectId === projectId;
+    if (!raidInProject && !entityInProject) continue;
+    const parentDeleted =
+      raidIds.has(link.raidItemId) || entityInDeleteSet(link.entityType, link.entityId);
+    if (owned(link.createdBy)) {
+      if (parentDeleted || raidInProject) raidDeliveryLinks.push(link.id);
+      continue;
+    }
+    if (parentDeleted) {
+      conflicts.push({
+        entityType: 'raid_delivery_link',
+        entityId: link.id,
+        reason:
+          'RAID delivery link was not created by the system user, but one of its endpoints will be deleted.',
+      });
+    }
+  }
+
   const mediaRows: Array<(typeof snapshot.media)[number]> = [];
   for (const row of snapshot.media) {
     if (row.workspaceId !== snapshot.workspaceId || !owned(row.createdBy)) continue;
@@ -1416,7 +1518,10 @@ export function planSystemUserPurge(
   counts.deliveryLinks =
     knowledgeDeliveryLinks.length +
     changeDeliveryLinks.length +
-    raidTaskLinks.length;
+    changeRecordLinks.length +
+    raidTaskLinks.length +
+    raidRecordLinks.length +
+    raidDeliveryLinks.length;
   counts.translations = translationIds.size;
   counts.knowledgeRecords = records.length - translationIds.size;
   counts.knowledgeRecordVersions = versions.length;
@@ -1442,7 +1547,10 @@ export function planSystemUserPurge(
       initialStakeholders: initialStakeholders.map((row) => row.id),
       knowledgeDeliveryLinks,
       changeDeliveryLinks,
+      changeRecordLinks,
       raidTaskLinks,
+      raidRecordLinks,
+      raidDeliveryLinks,
       knowledgeRecords: records.map((row) => row.id),
       knowledgeRecordVersions: versions,
       media: mediaRows.map((row) => row.id),
@@ -1765,6 +1873,10 @@ export async function loadSystemUserPurgeSnapshot(
           eq(knowledgeRecordDeliveryLinks.entityType, 'sprint'),
           inArray(knowledgeRecordDeliveryLinks.entityId, projectSprintIds),
         ),
+        and(
+          eq(knowledgeRecordDeliveryLinks.entityType, 'milestone'),
+          inArray(knowledgeRecordDeliveryLinks.entityId, projectMilestoneIds),
+        ),
       ),
     );
 
@@ -1803,6 +1915,46 @@ export async function loadSystemUserPurgeSnapshot(
       or(
         inArray(projectRaidTaskLinks.raidItemId, projectRaidIds),
         inArray(projectRaidTaskLinks.taskId, projectTaskIds),
+      ),
+    );
+  const raidDeliveryLinkRows = await db
+    .select({
+      id: projectRaidDeliveryLinks.id,
+      createdBy: projectRaidDeliveryLinks.createdBy,
+      raidItemId: projectRaidDeliveryLinks.raidItemId,
+      entityType: projectRaidDeliveryLinks.entityType,
+      entityId: projectRaidDeliveryLinks.entityId,
+    })
+    .from(projectRaidDeliveryLinks)
+    .where(
+      or(
+        inArray(projectRaidDeliveryLinks.raidItemId, projectRaidIds),
+        and(
+          eq(projectRaidDeliveryLinks.entityType, 'epic'),
+          inArray(projectRaidDeliveryLinks.entityId, projectEpicIds),
+        ),
+        and(
+          eq(projectRaidDeliveryLinks.entityType, 'user_story'),
+          inArray(projectRaidDeliveryLinks.entityId, projectStoryIds),
+        ),
+        and(
+          eq(projectRaidDeliveryLinks.entityType, 'milestone'),
+          inArray(projectRaidDeliveryLinks.entityId, projectMilestoneIds),
+        ),
+      ),
+    );
+  const raidRecordLinkRows = await db
+    .select({
+      id: projectRaidRecordLinks.id,
+      createdBy: projectRaidRecordLinks.createdBy,
+      raidItemId: projectRaidRecordLinks.raidItemId,
+      knowledgeRecordId: projectRaidRecordLinks.knowledgeRecordId,
+    })
+    .from(projectRaidRecordLinks)
+    .where(
+      or(
+        inArray(projectRaidRecordLinks.raidItemId, projectRaidIds),
+        inArray(projectRaidRecordLinks.knowledgeRecordId, inScopeRecordIds),
       ),
     );
 
@@ -1853,6 +2005,20 @@ export async function loadSystemUserPurgeSnapshot(
           eq(projectChangeDeliveryLinks.entityType, 'task'),
           inArray(projectChangeDeliveryLinks.entityId, projectTaskIds),
         ),
+      ),
+    );
+  const changeRecordLinkRows = await db
+    .select({
+      id: projectChangeRecordLinks.id,
+      createdBy: projectChangeRecordLinks.createdBy,
+      changeId: projectChangeRecordLinks.changeId,
+      knowledgeRecordId: projectChangeRecordLinks.knowledgeRecordId,
+    })
+    .from(projectChangeRecordLinks)
+    .where(
+      or(
+        inArray(projectChangeRecordLinks.changeId, projectChangeIds),
+        inArray(projectChangeRecordLinks.knowledgeRecordId, inScopeRecordIds),
       ),
     );
 
@@ -2106,7 +2272,10 @@ export async function loadSystemUserPurgeSnapshot(
       .where(eq(projectInitialStakeholders.projectId, input.projectId)),
     knowledgeDeliveryLinks: knowledgeLinks,
     changeDeliveryLinks: changeLinks,
+    changeRecordLinks: changeRecordLinkRows,
     raidTaskLinks: raidLinks,
+    raidRecordLinks: raidRecordLinkRows,
+    raidDeliveryLinks: raidDeliveryLinkRows,
     knowledgeRecords: dedupeById([...inScopeRecords, ...foreignRecords]),
     knowledgeRecordVersions: versionRows,
     media: mediaRows,
@@ -2389,10 +2558,25 @@ export async function applySystemUserPurge(
       .delete(projectChangeDeliveryLinks)
       .where(inArray(projectChangeDeliveryLinks.id, idList));
   });
+  await runIfIds(del.changeRecordLinks, async (idList) => {
+    await db
+      .delete(projectChangeRecordLinks)
+      .where(inArray(projectChangeRecordLinks.id, idList));
+  });
   await runIfIds(del.raidTaskLinks, async (idList) => {
     await db
       .delete(projectRaidTaskLinks)
       .where(inArray(projectRaidTaskLinks.id, idList));
+  });
+  await runIfIds(del.raidRecordLinks, async (idList) => {
+    await db
+      .delete(projectRaidRecordLinks)
+      .where(inArray(projectRaidRecordLinks.id, idList));
+  });
+  await runIfIds(del.raidDeliveryLinks, async (idList) => {
+    await db
+      .delete(projectRaidDeliveryLinks)
+      .where(inArray(projectRaidDeliveryLinks.id, idList));
   });
 
   await runIfIds(del.tasks, async (idList) => {

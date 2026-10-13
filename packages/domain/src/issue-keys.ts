@@ -8,6 +8,7 @@ export const ISSUE_KEY_TYPES = [
   'S',
   'M',
   'T',
+  'B',
   'C',
   'RR',
   'RI',

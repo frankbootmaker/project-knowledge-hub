@@ -159,6 +159,7 @@ const idle: DeliveryTreeFilterState = {
   statuses: [],
   owners: [],
   sprints: [],
+  itemTypes: [],
   title: '',
   onlyOpen: false,
 };
@@ -304,6 +305,7 @@ describe('filterDeliveryTree', () => {
       statuses: ['todo'],
       owners: ['Ada'],
       sprints: ['Sprint 2'],
+      itemTypes: [],
       title: 'form',
       onlyOpen: true,
     });
@@ -336,6 +338,25 @@ describe('filterDeliveryTree', () => {
     expect(result.visible.has(epicDone.id)).toBe(false);
     expect(result.visible.has(epicActive.id)).toBe(false);
     expect(result.visible.has(taskGroup.id)).toBe(false);
+  });
+
+  it('keeps bugs and hides tasks when the type filter is bug', () => {
+    const bug = node({
+      id: 'task:bug',
+      kind: 'task',
+      parentId: storyActive.id,
+      title: 'Login fails',
+      status: 'todo',
+      itemType: 'bug',
+    });
+    const result = filterDeliveryTree([...nodes, bug], {
+      ...idle,
+      itemTypes: ['bug'],
+    });
+    expect(result.visible.has(bug.id)).toBe(true);
+    expect(result.visible.has(storyActive.id)).toBe(true);
+    expect(result.visible.has(taskOpen.id)).toBe(false);
+    expect(result.visible.has(taskBlocked.id)).toBe(false);
   });
 
   it('does not mutate nodes or invent rolled-up values', () => {

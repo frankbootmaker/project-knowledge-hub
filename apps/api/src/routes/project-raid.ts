@@ -26,11 +26,16 @@ import {
   deleteRaidItem,
   getRaidItem,
   listRaidItems,
+  listRaidItemsForRecord,
   listRaidItemsForTask,
+  setRaidDeliveryLinks,
+  setRaidRecordLinks,
   setRaidTaskLinks,
+  setRecordRaidLinks,
   transferRaidItem,
   updateRaidItem,
 } from '../lib/project-raid.js';
+import { getKnowledgeRecordProjectContext } from '../lib/knowledge-delivery-links.js';
 
 async function workspaceOrgId(
   app: FastifyInstance,
@@ -50,6 +55,8 @@ const createSchema = z.object({
   description: z.string().max(10000).nullable().optional(),
   status: raidStatusSchema.optional(),
   severity: raidSeveritySchema.optional(),
+  probability: raidSeveritySchema.nullable().optional(),
+  impact: raidSeveritySchema.nullable().optional(),
   ownerUserId: z.string().uuid().nullable().optional(),
   dueDate: z
     .string()
@@ -58,6 +65,16 @@ const createSchema = z.object({
     .optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
   taskIds: z.array(z.string().uuid()).max(100).optional(),
+  deliveryItems: z
+    .array(
+      z.object({
+        entityType: z.enum(['epic', 'user_story', 'milestone']),
+        entityId: z.string().uuid(),
+      }),
+    )
+    .max(100)
+    .optional(),
+  recordIds: z.array(z.string().uuid()).max(100).optional(),
 });
 
 const updateSchema = z.object({
@@ -66,6 +83,8 @@ const updateSchema = z.object({
   description: z.string().max(10000).nullable().optional(),
   status: raidStatusSchema.optional(),
   severity: raidSeveritySchema.optional(),
+  probability: raidSeveritySchema.nullable().optional(),
+  impact: raidSeveritySchema.nullable().optional(),
   ownerUserId: z.string().uuid().nullable().optional(),
   dueDate: z
     .string()
@@ -78,6 +97,25 @@ const updateSchema = z.object({
 
 const taskLinksSchema = z.object({
   taskIds: z.array(z.string().uuid()).max(100),
+});
+
+const deliveryLinksSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        entityType: z.enum(['epic', 'user_story', 'milestone']),
+        entityId: z.string().uuid(),
+      }),
+    )
+    .max(100),
+});
+
+const recordLinksSchema = z.object({
+  recordIds: z.array(z.string().uuid()).max(100),
+});
+
+const recordRaidLinksSchema = z.object({
+  raidItemIds: z.array(z.string().uuid()).max(100),
 });
 
 const transferSchema = z.object({
@@ -302,6 +340,131 @@ export async function registerProjectRaidRoutes(
     });
 
     return { raidItem };
+  });
+
+  app.put('/api/v1/project-raid-items/:raidItemId/delivery-items', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z
+      .object({ raidItemId: z.string().uuid() })
+      .parse(request.params);
+    const body = deliveryLinksSchema.parse(request.body);
+
+    const existing = await getRaidItem(app.database, params.raidItemId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    const raidItem = await setRaidDeliveryLinks(app.database, {
+      raidItemId: params.raidItemId,
+      projectId: project.id,
+      items: body.items,
+      createdBy: principal.userId,
+    });
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.raid_delivery_links_set',
+      entityType: 'project_raid_item',
+      entityId: raidItem.id,
+      metadata: {
+        projectId: project.id,
+        items: body.items,
+      },
+      ipAddress: request.ip,
+    });
+
+    return { raidItem };
+  });
+
+  app.put('/api/v1/project-raid-items/:raidItemId/records', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z
+      .object({ raidItemId: z.string().uuid() })
+      .parse(request.params);
+    const body = recordLinksSchema.parse(request.body);
+
+    const existing = await getRaidItem(app.database, params.raidItemId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    const raidItem = await setRaidRecordLinks(app.database, {
+      raidItemId: params.raidItemId,
+      projectId: project.id,
+      recordIds: body.recordIds,
+      createdBy: principal.userId,
+    });
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.raid_record_links_set',
+      entityType: 'project_raid_item',
+      entityId: raidItem.id,
+      metadata: {
+        projectId: project.id,
+        recordIds: body.recordIds,
+      },
+      ipAddress: request.ip,
+    });
+
+    return { raidItem };
+  });
+
+  app.get('/api/v1/knowledge-records/:recordId/raid-items', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    const record = await getKnowledgeRecordProjectContext(
+      app.database,
+      params.recordId,
+    );
+    requireWorkspaceView(principal, record.workspaceId);
+    return {
+      raidItems: await listRaidItemsForRecord(app.database, params.recordId),
+    };
+  });
+
+  app.put('/api/v1/knowledge-records/:recordId/raid-items', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ recordId: z.string().uuid() }).parse(request.params);
+    const body = recordRaidLinksSchema.parse(request.body);
+    const record = await getKnowledgeRecordProjectContext(
+      app.database,
+      params.recordId,
+    );
+    requireWorkspaceMaintainer(principal, record.workspaceId);
+    if (record.projectId) {
+      const { project } = await requireProjectContext(app.database, record.projectId);
+      assertProjectNotArchived(project);
+    }
+
+    const raidItems = await setRecordRaidLinks(app.database, {
+      recordId: params.recordId,
+      raidItemIds: body.raidItemIds,
+      createdBy: principal.userId,
+    });
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, record.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'knowledge.raid_links_set',
+      entityType: 'knowledge_record',
+      entityId: params.recordId,
+      metadata: {
+        projectId: record.projectId,
+        raidItemIds: body.raidItemIds,
+      },
+      ipAddress: request.ip,
+    });
+
+    return { raidItems };
   });
 
   app.get('/api/v1/project-tasks/:taskId/raid-items', async (request) => {

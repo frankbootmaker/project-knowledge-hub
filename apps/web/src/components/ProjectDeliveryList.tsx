@@ -25,6 +25,7 @@ export type DeliveryListRow = {
   kind: DeliveryListKind;
   entityId: string;
   humanKey: string | null;
+  itemType?: 'task' | 'bug' | null;
   title: string;
   status: string;
   owner: string | null;
@@ -112,9 +113,37 @@ export function ProjectDeliveryList({
       sort: { type: 'text', getValue: (row) => row.humanKey ?? '' },
       cell: (row) => (
         <span className="kh-ops-type-chip">
-          {row.humanKey ?? t(KIND_LABEL[row.kind])}
+          {row.kind === 'task' && row.itemType === 'bug'
+            ? (row.humanKey ?? t('kindBug'))
+            : (row.humanKey ?? t(KIND_LABEL[row.kind]))}
         </span>
       ),
+    },
+    {
+      id: 'type',
+      header: t('colType'),
+      kind: 'data',
+      sort: {
+        type: 'text',
+        getValue: (row) =>
+          row.kind === 'task' && row.itemType === 'bug' ? 'bug' : row.kind,
+      },
+      filter: {
+        type: 'enum',
+        getValue: (row) =>
+          row.kind === 'task' && row.itemType === 'bug' ? 'bug' : row.kind,
+        options: [
+          { value: 'task', label: t('kindTask') },
+          { value: 'bug', label: t('kindBug') },
+          { value: 'epic', label: t('kindEpic') },
+          { value: 'story', label: t('kindStory') },
+          { value: 'milestone', label: t('kindMilestone') },
+        ],
+      },
+      cell: (row) =>
+        row.kind === 'task' && row.itemType === 'bug'
+          ? t('kindBug')
+          : t(KIND_LABEL[row.kind]),
     },
     {
       id: 'title',

@@ -14,6 +14,7 @@ import { renderMarkdown } from '@project-knowledge-hub/markdown';
 import { localeLabels, locales, type AppLocale } from '../i18n/config';
 import { recordBaseWithSlug } from '../lib/record-href';
 import { KnowledgeRecordDeliveryLinksField } from './KnowledgeRecordDeliveryLinksField';
+import { KnowledgeRecordRaidLinks } from './KnowledgeRecordRaidLinks';
 import { MarkdownDocument } from './MarkdownDocument';
 import {
   Button,
@@ -776,11 +777,14 @@ export function KnowledgeRecordEditor(props: KnowledgeRecordEditorProps) {
               </Field>
             ) : null}
             {isEdit && props.initial?.id && projectId ? (
-              <KnowledgeRecordDeliveryLinksField
-                recordId={props.initial.id}
-                projectId={projectId}
-                canMutate={!gitManaged}
-              />
+              <>
+                <KnowledgeRecordDeliveryLinksField
+                  recordId={props.initial.id}
+                  projectId={projectId}
+                  canMutate={!gitManaged}
+                />
+                <KnowledgeRecordRaidLinks recordId={props.initial.id} />
+              </>
             ) : null}
           </div>
         </div>

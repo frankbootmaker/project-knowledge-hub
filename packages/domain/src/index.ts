@@ -138,6 +138,8 @@ export const taskActivityTypeSchema = z.enum([
 export const projectStakeholderRoleSchema = z.enum([
   'sponsor',
   'owner',
+  'project_manager',
+  'scrum_master',
   'product_owner',
   'tech_lead',
   'contributor',
@@ -293,10 +295,11 @@ export const raidSeveritySchema = z.enum([
   'critical',
 ]);
 
-/** Knowledge record → delivery entity link target. */
+/** Knowledge record → delivery entity link target. Bugs stay entity type task. */
 export const deliveryLinkEntityTypeSchema = z.enum([
   'epic',
   'user_story',
+  'milestone',
   'task',
   'sprint',
 ]);
@@ -692,6 +695,23 @@ export type UserStatus = z.infer<typeof userStatusSchema>;
 export type UserType = z.infer<typeof userTypeSchema>;
 export type MilestoneStatus = z.infer<typeof milestoneStatusSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
+
+export {
+  taskItemTypeSchema,
+  bugFoundInSchema,
+  bugResolutionSchema,
+  emptyBugFields,
+  bugPatchTouches,
+  resolveBugCreate,
+  resolveBugUpdate,
+  type TaskItemType,
+  type BugFoundIn,
+  type BugResolution,
+  type StoredBugFields,
+  type BugFieldPatch,
+  type BugWriteErrorCode,
+  type BugWriteResult,
+} from './delivery-bug.js';
 export type SprintStatus = z.infer<typeof sprintStatusSchema>;
 export type RaciRole = z.infer<typeof raciRoleSchema>;
 export type EpicStatus = z.infer<typeof epicStatusSchema>;

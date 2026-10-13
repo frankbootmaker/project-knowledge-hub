@@ -19,7 +19,7 @@ Humans and AI agents work on the **same** project objects so full project contex
 | --- | --- |
 | SoR | KnowHub is the system of record (not a sync mirror of Jira/Linear in v1) |
 | Agents | Active participants: MCP can create/update delivery state (live, not draft-only) |
-| Human keys | `{prefix}-{E\|S\|M\|T}-{n}`; UUID remains PK; MCP accepts UUID or key (ADR-019) |
+| Human keys | `{prefix}-{E\|S\|M\|T\|B}-{n}`; UUID remains PK; MCP accepts UUID or key (ADR-019). `B` is a bug |
 | Identity | RACI parties are **workspace members** only; invite externals first |
 | Accountable | Exactly **one** `A` per task |
 
@@ -28,7 +28,7 @@ Humans and AI agents work on the **same** project objects so full project contex
 | In v1 | Out of v1 |
 | --- | --- |
 | Milestones under a project; **Timeline** fishbone (duration bars) | Full dependency / critical-path Gantt (RAID **Dependencies** stay a register — see [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BASELINE.md](./PROJECT_BASELINE.md)) |
-| Tasks (optional milestone link) | Subtasks / checklists as separate entities |
+| Tasks and bugs (optional milestone link). A bug is a task row with `item_type = bug` | Subtasks / checklists as separate entities |
 | Due / target dates; task forecast/actual **hours** (costing in [PROJECT_BUDGET.md](./PROJECT_BUDGET.md)) | Timesheets, capacity calendars (story points live under [PROJECT_SCRUM.md](./PROJECT_SCRUM.md) / NF-020; not used for EVM AC) |
 | RACI matrix per task (`R`/`A`/`C`/`I`) | External contacts without accounts |
 | REST + UI on project page | Notifications / email digests |
@@ -46,28 +46,46 @@ projects
   ├── project_stakeholders (roster + reports_to + hourly_rate)
   ├── project_epics (+ start/end)
   │     └── project_user_stories (+ start/end)
-  │           └── project_tasks (story optional)
+  │           └── project_tasks (story optional; item_type task or bug)
   ├── project_milestones          ← optional timeboxes (+ start + target_date)
   ├── project_cost_snapshots      ← daily EVM burndown (see PROJECT_BUDGET.md)
   ├── project_raid_items          ← RAID register (see PROJECT_RAID.md)
-  │     └── project_raid_task_links
+  │     ├── project_raid_task_links
+  │     └── project_raid_record_links → knowledge_records
   ├── project_change_items        ← change register (see PROJECT_BASELINE.md)
   └── project_tasks
         ├── milestone_id (optional)
         ├── user_story_id (optional)
+        ├── item_type (task \| bug) + bug fields when bug
         ├── forecast_hours / actual_hours
         ├── current_owner_user_id  ← ball-in-court (≠ RACI)
         ├── project_task_raci
         └── project_task_activities
 ```
 
-Knowledge documents may link to epics / stories / tasks via `knowledge_record_delivery_links` (charter, meeting minutes, decisions, etc.).
+Knowledge documents may link to epics, stories, milestones, tasks, and sprints via `knowledge_record_delivery_links` (charter, meeting minutes, decisions, etc.). Each of those items has a Documents tab that adds and removes its own links. Bugs use the task tab.
 
-Milestones remain **timeboxes**. Agile structure is **Epic → User story → Task**. A task may link to a story and/or a milestone.
+Milestones remain **timeboxes**. Agile structure is **Epic → User story → Task**. A task may link to a story and/or a milestone. A **bug** sits in the same places as a task (under a story, or ungrouped) and uses the same hours, RACI, owner, sprint, and budget totals.
+
+### Bugs
+
+A bug is a `project_tasks` row with `item_type = bug`. The type is chosen at create and cannot change, so the human key stays `{prefix}-B-{n}` (tasks stay `{prefix}-T-{n}`).
+
+Bug-only fields, null on tasks:
+
+* **Severity** — `low` \| `medium` \| `high` \| `critical` (same scale as RAID). Default `medium`.
+* **Found in** — `development` \| `test` \| `staging` \| `production`, plus an optional build or version note.
+* **Repro** — steps, expected behavior, actual behavior (optional text).
+* **Resolution** — `fixed` \| `duplicate` \| `wont_fix` \| `cannot_reproduce` \| `works_as_designed`. Asked when closing; save still succeeds if it is empty.
+* **Regression** — boolean, default false.
+* **Affected system** — optional catalogue system already linked to the project.
+* **Duplicate of** — optional link to another bug on the same project. Stored only when resolution is `duplicate`. No self-link and no cycle.
+
+Writes that send bug fields on a task are rejected. Knowledge and RAID links keep entity type `task`; the row's item type says it is a bug. `create_project_task` / `update_project_task` / `list_project_tasks` take `itemType` and the bug fields. There is no separate bug tool.
 
 ### Stakeholders (hybrid)
 
-* Durable **roster** rows: project role (`sponsor` / `owner` / `product_owner` / `tech_lead` / `contributor` / `stakeholder` / `other`), optional job title, notes, and `reports_to_user_id` (cycle-checked).
+* Durable **roster** rows: project role (`sponsor` / `owner` / `project_manager` / `scrum_master` / `product_owner` / `tech_lead` / `contributor` / `stakeholder` / `other`), optional job title, notes, and `reports_to_user_id` (cycle-checked).
 * **Open job roles:** omit `user_id` to create a fill-in-place seat (`kind: open_role`); job title required; optional `roleDescription` + competency tags (`{ name, skillId }` — `skillId` null until a shared catalog exists). Assign a workspace member later on the same row; unassign reopens the seat. Future advertise/hire layer: [`PROJECT_JOB_PORTAL.md`](PROJECT_JOB_PORTAL.md) (NF-022).
 * **Derived** people: project `owner_user_id` and anyone on task RACI appear in the unified list with contact fields even without a roster row.
 * **AI assistants**: catalogue systems with `system_type = ai_assistant` linked to the project appear as `kind: ai_assistant` (not general Systems like Proxmox). Org-chart edge to `owner_user_id` when that person is in the set.
@@ -77,7 +95,7 @@ Milestones remain **timeboxes**. Agile structure is **Epic → User story → Ta
 ### Status sets
 
 * Milestone / Epic / User story: `planned` \| `active` \| `done` \| `cancelled`
-* Task: `todo` \| `in_progress` \| `blocked` \| `done` \| `cancelled`
+* Task and bug: `todo` \| `in_progress` \| `blocked` \| `done` \| `cancelled`
 
 ### RACI vs current owner
 
@@ -100,8 +118,8 @@ Append-only `project_task_activities`: `created`, `status_changed`, `comment`, `
 | `PATCH` | `/api/v1/project-epics/:epicId` | Update |
 | `GET`/`POST` | `/api/v1/projects/:projectId/user-stories` | List (`?epicId=`) / create |
 | `PATCH` | `/api/v1/project-user-stories/:storyId` | Update |
-| `GET` | `/api/v1/projects/:projectId/tasks` | List (`?milestoneId=`) |
-| `POST` | `/api/v1/projects/:projectId/tasks` | Create; optional `raci`, `userStoryId`, `currentOwnerUserId` |
+| `GET` | `/api/v1/projects/:projectId/tasks` | List (`?milestoneId=`, `?itemType=task\|bug`) |
+| `POST` | `/api/v1/projects/:projectId/tasks` | Create a task or bug (`itemType`); optional `raci`, `userStoryId`, `currentOwnerUserId`, and bug fields |
 | `GET` | `/api/v1/project-tasks/:taskId` | Detail + RACI + owner + story |
 | `PATCH` | `/api/v1/project-tasks/:taskId` | Update fields / milestone / story / owner |
 | `PUT` | `/api/v1/project-tasks/:taskId/raci` | Replace RACI set |

@@ -16,6 +16,7 @@ import {
 import { DeliveryScheduleLegend } from './DeliveryScheduleLegend';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { UserAvatar } from './UserAvatar';
+import { workItemIdLabel } from '../lib/work-item-label';
 
 export type CalendarItem = {
   id: string;
@@ -24,6 +25,7 @@ export type CalendarItem = {
   date: string;
   status: string;
   humanKey?: string | null;
+  itemType?: 'task' | 'bug';
   owner?: {
     displayName: string;
     avatarUrl?: string | null;
@@ -69,13 +71,24 @@ function CalendarItemChip({
     date: item.date,
     today,
   });
+  const idLabel =
+    item.kind === 'task'
+      ? workItemIdLabel({
+          itemType: item.itemType,
+          humanKey: item.humanKey,
+          taskLabel: '',
+          bugLabel: t('kindBug'),
+        })
+      : (item.humanKey ?? '');
+  const badgeLetter =
+    item.kind === 'milestone' ? 'M' : item.itemType === 'bug' ? 'B' : 'T';
 
   if (dense) {
     return (
       <span
         className="kh-ops-event-dot"
         data-tone={tone}
-        title={`${item.humanKey ? `${item.humanKey} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
+        title={`${idLabel ? `${idLabel} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
       >
         {item.title}
       </span>
@@ -85,7 +98,7 @@ function CalendarItemChip({
   return (
     <li
       className="kh-ops-data-item"
-      title={`${item.humanKey ? `${item.humanKey} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
+      title={`${idLabel ? `${idLabel} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
     >
       <div className="flex min-w-0 items-center gap-1.5">
         {item.owner ? (
@@ -99,14 +112,14 @@ function CalendarItemChip({
             tone={item.kind === 'milestone' ? 'brand' : 'neutral'}
             className="shrink-0"
           >
-            {item.kind === 'milestone' ? 'M' : 'T'}
+            {badgeLetter}
           </Badge>
         )}
         <span className="min-w-0 truncate font-medium text-ink">{item.title}</span>
       </div>
-      {item.humanKey ? (
+      {idLabel ? (
         <span className="mt-0.5 block truncate font-mono text-[10px] text-ink-muted">
-          {item.humanKey}
+          {idLabel}
         </span>
       ) : null}
       <span className="mt-1 block text-xs text-ink-muted">

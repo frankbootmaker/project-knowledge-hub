@@ -21,6 +21,7 @@ import {
   listDeliveryDocumentLinksForProject,
   listDeliveryLinksForRecord,
   setDeliveryLinksForRecord,
+  setDocumentLinksForEntity,
 } from '../lib/knowledge-delivery-links.js';
 
 async function workspaceOrgId(
@@ -148,6 +149,54 @@ export async function registerKnowledgeDeliveryLinkRoutes(
           },
         ),
       };
+    },
+  );
+
+  app.put(
+    '/api/v1/projects/:projectId/delivery-document-links',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ projectId: z.string().uuid() })
+        .parse(request.params);
+      const body = z
+        .object({
+          entityType: deliveryLinkEntityTypeSchema,
+          entityId: z.string().uuid(),
+          recordIds: z.array(z.string().uuid()).max(100),
+        })
+        .parse(request.body);
+      const { project } = await requireProjectContext(
+        app.database,
+        params.projectId,
+      );
+      requireWorkspaceMaintainer(principal, project.workspaceId);
+      assertProjectNotArchived(project);
+
+      const documentLinks = await setDocumentLinksForEntity(app.database, {
+        projectId: project.id,
+        entityType: body.entityType,
+        entityId: body.entityId,
+        recordIds: body.recordIds,
+        createdBy: principal.userId,
+      });
+
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'knowledge.delivery_documents_set',
+        entityType: body.entityType,
+        entityId: body.entityId,
+        metadata: {
+          projectId: project.id,
+          recordCount: documentLinks.length,
+        },
+        ipAddress: request.ip,
+      });
+
+      return { documentLinks };
     },
   );
 }

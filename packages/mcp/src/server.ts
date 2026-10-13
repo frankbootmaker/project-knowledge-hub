@@ -7,7 +7,11 @@ import {
 } from '@project-knowledge-hub/domain';
 import { invokeNamedHubTool } from './llm-tool-catalog.js';
 import { hasMcpScope, type McpScope } from './scopes.js';
-import { enforceResponseSize, MCP_MAX_LIST_LIMIT } from './limits.js';
+import {
+  enforceResponseSize,
+  MCP_MAX_CONTENT_CHARS,
+  MCP_MAX_LIST_LIMIT,
+} from './limits.js';
 import { isoDateNullableSchema, sanitizeError, AppError } from '@project-knowledge-hub/domain';
 
 export type McpClientContext = {
@@ -133,7 +137,13 @@ export type McpToolHandlers = {
     limit: number;
     mode?: 'fts' | 'hybrid';
   }) => Promise<unknown>;
-  getKnowledgeRecord: (input: { recordId: string }) => Promise<unknown>;
+  getKnowledgeRecord: (input: {
+    recordId: string;
+    contentOffset?: number;
+    contentLimit?: number;
+    boundary?: 'none' | 'paragraph' | 'line';
+    expectSha256?: string;
+  }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
   listRecordTranslations: (input: { recordId: string }) => Promise<unknown>;
   createRecordTranslation: (input: {
@@ -205,6 +215,17 @@ export type McpToolHandlers = {
     index?: number;
   }) => Promise<unknown>;
   finalizeWorkspaceMediaUpload: (input: { uploadId: string }) => Promise<unknown>;
+  beginRecordContentUpload: (input: { recordId: string }) => Promise<unknown>;
+  appendRecordContent: (input: {
+    uploadId: string;
+    chunk: string;
+    index?: number;
+  }) => Promise<unknown>;
+  finalizeRecordContentUpload: (input: {
+    uploadId: string;
+    changeMessage: string;
+    expectedLength?: number;
+  }) => Promise<unknown>;
   listWorkspaceMedia: (input: {
     workspaceId: string;
     knowledgeRecordId?: string;
@@ -217,6 +238,8 @@ export type McpToolHandlers = {
   listProjectMilestones: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   listProjectTasks: (input: {
     projectId: string;
@@ -224,7 +247,10 @@ export type McpToolHandlers = {
     unassignedMilestone?: boolean;
     sprintId?: string;
     unassignedSprint?: boolean;
+    itemType?: 'task' | 'bug';
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   getProjectTask: (input: { taskId: string }) => Promise<unknown>;
   createProjectMilestone: (input: {
@@ -249,6 +275,8 @@ export type McpToolHandlers = {
   listProjectSprints: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectSprint: (input: {
     projectId: string;
@@ -280,6 +308,8 @@ export type McpToolHandlers = {
   listMyProjectTasks: (input: {
     role?: 'R' | 'A' | 'C' | 'I';
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   getMyDashboardInsights: () => Promise<unknown>;
   listProjectDeliveryDocumentLinks: (input: {
@@ -311,6 +341,23 @@ export type McpToolHandlers = {
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     raci?: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
+    itemType?: 'task' | 'bug';
+    severity?: 'low' | 'medium' | 'high' | 'critical' | null;
+    foundIn?: 'development' | 'test' | 'staging' | 'production' | null;
+    foundInNote?: string | null;
+    stepsToReproduce?: string | null;
+    expectedBehavior?: string | null;
+    actualBehavior?: string | null;
+    resolution?:
+      | 'fixed'
+      | 'duplicate'
+      | 'wont_fix'
+      | 'cannot_reproduce'
+      | 'works_as_designed'
+      | null;
+    regression?: boolean | null;
+    affectedSystemId?: string | null;
+    duplicateOfTaskId?: string | null;
   }) => Promise<unknown>;
   updateProjectTask: (input: {
     taskId: string;
@@ -336,6 +383,23 @@ export type McpToolHandlers = {
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
+    itemType?: 'task' | 'bug';
+    severity?: 'low' | 'medium' | 'high' | 'critical' | null;
+    foundIn?: 'development' | 'test' | 'staging' | 'production' | null;
+    foundInNote?: string | null;
+    stepsToReproduce?: string | null;
+    expectedBehavior?: string | null;
+    actualBehavior?: string | null;
+    resolution?:
+      | 'fixed'
+      | 'duplicate'
+      | 'wont_fix'
+      | 'cannot_reproduce'
+      | 'works_as_designed'
+      | null;
+    regression?: boolean | null;
+    affectedSystemId?: string | null;
+    duplicateOfTaskId?: string | null;
   }) => Promise<unknown>;
   reportProjectTaskAiUsage: (input: {
     taskId: string;
@@ -356,6 +420,8 @@ export type McpToolHandlers = {
   listProjectEpics: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectEpic: (input: {
     projectId: string;
@@ -380,6 +446,8 @@ export type McpToolHandlers = {
     projectId: string;
     epicId?: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectUserStory: (input: {
     projectId: string;
@@ -402,7 +470,11 @@ export type McpToolHandlers = {
     sortOrder?: number;
     archived?: boolean;
   }) => Promise<unknown>;
-  listProjectTaskActivities: (input: { taskId: string }) => Promise<unknown>;
+  listProjectTaskActivities: (input: {
+    taskId: string;
+    limit?: number;
+    cursor?: string;
+  }) => Promise<unknown>;
   addProjectTaskComment: (input: {
     taskId: string;
     body: string;
@@ -485,6 +557,8 @@ export type McpToolHandlers = {
   listProjectRaidItems: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectRaidItem: (input: {
     projectId: string;
@@ -493,6 +567,8 @@ export type McpToolHandlers = {
     description?: string | null;
     status?: string;
     severity?: string;
+    probability?: string | null;
+    impact?: string | null;
     ownerUserId?: string | null;
     dueDate?: string | null;
     sortOrder?: number;
@@ -505,6 +581,8 @@ export type McpToolHandlers = {
     description?: string | null;
     status?: string;
     severity?: string;
+    probability?: string | null;
+    impact?: string | null;
     ownerUserId?: string | null;
     dueDate?: string | null;
     sortOrder?: number;
@@ -518,9 +596,22 @@ export type McpToolHandlers = {
     raidItemId: string;
     taskIds: string[];
   }) => Promise<unknown>;
+  setProjectRaidRecordLinks: (input: {
+    raidItemId: string;
+    recordIds: string[];
+  }) => Promise<unknown>;
+  getKnowledgeRecordRaidLinks: (input: {
+    recordId: string;
+  }) => Promise<unknown>;
+  setKnowledgeRecordRaidLinks: (input: {
+    recordId: string;
+    raidItemIds: string[];
+  }) => Promise<unknown>;
   listProjectChangeItems: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectChangeItem: (input: {
     projectId: string;
@@ -644,13 +735,16 @@ export function toMcpErrorResult(
 }
 
 function textResult(data: unknown) {
+  const sized = enforceResponseSize(data);
+  const text = JSON.stringify(sized, null, 2);
+  if (sized !== data) {
+    return {
+      isError: true as const,
+      content: [{ type: 'text' as const, text }],
+    };
+  }
   return {
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify(enforceResponseSize(data), null, 2),
-      },
-    ],
+    content: [{ type: 'text' as const, text }],
   };
 }
 
@@ -1202,6 +1296,8 @@ export function createKnowledgeHubMcpServer(
               .enum([
                 'sponsor',
                 'owner',
+                'project_manager',
+                'scrum_master',
                 'product_owner',
                 'tech_lead',
                 'contributor',
@@ -1286,8 +1382,14 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including truncated markdown content, tags (string array of tag names, same shape as search_knowledge), and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
-    { recordId: z.string().min(1).max(80) },
+    'Retrieve a knowledge record including markdown content. Tags and linked workspace media are included on the first page only. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex, and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    {
+      recordId: z.string().min(1).max(80),
+      contentOffset: z.number().int().min(0).optional(),
+      contentLimit: z.number().int().min(1).max(MCP_MAX_CONTENT_CHARS).optional(),
+      boundary: z.enum(['none', 'paragraph', 'line']).optional(),
+      expectSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    },
     async (args) =>
       wrap(
         'get_knowledge_record',
@@ -1461,11 +1563,49 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_knowledge_record',
-    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Set archived=true to soft-archive (or false to restore). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Send the full markdown body: a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. Set archived=true to soft-archive (or false to restore). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     updateKnowledgeRecordInputSchema.shape,
     async (args) =>
       wrap('update_knowledge_record', 'knowledge:write', () =>
         handlers.updateKnowledgeRecord(args),
+      )(),
+  );
+
+  server.tool(
+    'begin_record_content_upload',
+    'Start a chunked markdown update for a knowledge record (knowledge:write). Returns uploadId, maxChunkChars (40000), contentSha256, contentLength, and currentVersionNumber. Then append_record_content and finalize_record_content_upload. One version per session. The session expires in 15 minutes. recordId may be a UUID or project document key.',
+    { recordId: z.string().min(1).max(80) },
+    async (args) =>
+      wrap('begin_record_content_upload', 'knowledge:write', () =>
+        handlers.beginRecordContentUpload(args),
+      )(),
+  );
+
+  server.tool(
+    'append_record_content',
+    'Append one markdown chunk (max 40000 characters) to a begin_record_content_upload session. index, when set, must be the next chunk index. The joined body cannot exceed 500000 characters. Requires knowledge:write.',
+    {
+      uploadId: z.string().uuid(),
+      chunk: z.string().min(1).max(40_000),
+      index: z.number().int().min(0).optional(),
+    },
+    async (args) =>
+      wrap('append_record_content', 'knowledge:write', () =>
+        handlers.appendRecordContent(args),
+      )(),
+  );
+
+  server.tool(
+    'finalize_record_content_upload',
+    'Join the appended chunks and save them as one draft version (knowledge:write). Requires changeMessage. expectedLength, when set, must match the joined body. Rejects a body that ends with the truncation marker, and returns 409 CONTENT_CHANGED when the record changed after begin. The session is deleted on success.',
+    {
+      uploadId: z.string().uuid(),
+      changeMessage: z.string().min(1).max(500),
+      expectedLength: z.number().int().min(0).max(500_000).optional(),
+    },
+    async (args) =>
+      wrap('finalize_record_content_upload', 'knowledge:write', () =>
+        handlers.finalizeRecordContentUpload(args),
       )(),
   );
 
@@ -1508,12 +1648,18 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  const listPage = {
+    limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
+    cursor: z.string().min(1).max(200).optional(),
+  };
+
   server.tool(
     'list_project_milestones',
-    'List milestones for a project (Project Delivery). Requires pm:read.',
+    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -1526,14 +1672,17 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_tasks',
-    'List tasks for a project (optional milestone/sprint filter). milestoneId and sprintId must belong to the given project. Includes RACI. Requires pm:read.',
+    'List tasks for a project (optional milestone/sprint/itemType filter). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Pages at 25 items. Descriptions and bug notes are excerpts; use get_project_task for the full text. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       milestoneId: entityRef.optional(),
       unassignedMilestone: z.boolean().optional(),
       sprintId: entityRef.optional(),
       unassignedSprint: z.boolean().optional(),
+      itemType: z.enum(['task', 'bug']).optional(),
       includeArchived: z.boolean().optional(),
+      limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
+      cursor: z.string().min(1).max(200).optional(),
     },
     async (args) =>
       wrap(
@@ -1596,10 +1745,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_sprints',
-    'List Scrum sprints for a project (committed/done points). Requires pm:read.',
+    'List Scrum sprints for a project (committed/done points). Pages at 25. Goals are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -1690,10 +1840,12 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_my_project_tasks',
-    'List tasks where the API client acting user is on RACI (My tasks). Requires pm:read and actingUserId.',
+    'List tasks where the API client acting user is on RACI (My tasks). Pages at 25 items. Descriptions and bug notes are excerpts; use get_project_task for the full text. Pass cursor from nextCursor until hasMore is false. Requires pm:read and actingUserId.',
     {
       role: z.enum(['R', 'A', 'C', 'I']).optional(),
       includeArchived: z.boolean().optional(),
+      limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
+      cursor: z.string().min(1).max(200).optional(),
     },
     async (args) =>
       wrap('list_my_project_tasks', 'pm:read', () =>
@@ -1716,7 +1868,7 @@ export function createKnowledgeHubMcpServer(
     'List knowledge records linked to delivery entities in a project (ceremonies, specs, etc.). Optional entityType/entityId filter; entityId may be UUID or human key. Requires pm:read.',
     {
       projectId: z.string().uuid(),
-      entityType: z.enum(['epic', 'user_story', 'task', 'sprint']).optional(),
+      entityType: z.enum(['epic', 'user_story', 'milestone', 'task', 'sprint']).optional(),
       entityId: entityRef.optional(),
     },
     async (args) =>
@@ -1730,7 +1882,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task with optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1756,6 +1908,29 @@ export function createKnowledgeHubMcpServer(
       storyPoints: z.number().int().min(0).max(1000).nullable().optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
+      itemType: z.enum(['task', 'bug']).optional(),
+      severity: z.enum(['low', 'medium', 'high', 'critical']).nullable().optional(),
+      foundIn: z
+        .enum(['development', 'test', 'staging', 'production'])
+        .nullable()
+        .optional(),
+      foundInNote: z.string().max(200).nullable().optional(),
+      stepsToReproduce: z.string().max(10000).nullable().optional(),
+      expectedBehavior: z.string().max(10000).nullable().optional(),
+      actualBehavior: z.string().max(10000).nullable().optional(),
+      resolution: z
+        .enum([
+          'fixed',
+          'duplicate',
+          'wont_fix',
+          'cannot_reproduce',
+          'works_as_designed',
+        ])
+        .nullable()
+        .optional(),
+      regression: z.boolean().nullable().optional(),
+      affectedSystemId: z.string().uuid().nullable().optional(),
+      duplicateOfTaskId: entityRef.nullable().optional(),
       raci: z
         .array(
           z.object({
@@ -1777,7 +1952,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task fields/status/due date/story/sprint/points/owner/tokens. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Update a project task or bug. itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1804,6 +1979,29 @@ export function createKnowledgeHubMcpServer(
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
+      itemType: z.enum(['task', 'bug']).optional(),
+      severity: z.enum(['low', 'medium', 'high', 'critical']).nullable().optional(),
+      foundIn: z
+        .enum(['development', 'test', 'staging', 'production'])
+        .nullable()
+        .optional(),
+      foundInNote: z.string().max(200).nullable().optional(),
+      stepsToReproduce: z.string().max(10000).nullable().optional(),
+      expectedBehavior: z.string().max(10000).nullable().optional(),
+      actualBehavior: z.string().max(10000).nullable().optional(),
+      resolution: z
+        .enum([
+          'fixed',
+          'duplicate',
+          'wont_fix',
+          'cannot_reproduce',
+          'works_as_designed',
+        ])
+        .nullable()
+        .optional(),
+      regression: z.boolean().nullable().optional(),
+      affectedSystemId: z.string().uuid().nullable().optional(),
+      duplicateOfTaskId: entityRef.nullable().optional(),
     },
     async (args) =>
       wrap('update_project_task', 'pm:write', () => handlers.updateProjectTask(args))(),
@@ -1854,10 +2052,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_epics',
-    'List epics for a project. Requires pm:read.',
+    'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -1908,11 +2107,12 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_user_stories',
-    'List user stories for a project (optional epic filter). epicId must belong to the given project. Requires pm:read.',
+    'List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       epicId: entityRef.optional(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -1967,8 +2167,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_task_activities',
-    'List activity timeline for a task. Requires pm:read.',
-    { taskId: entityRef },
+    'List activity timeline for a task. Pages at 25. Comment bodies are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    {
+      taskId: entityRef,
+      ...listPage,
+    },
     async (args) =>
       wrap('list_project_task_activities', 'pm:read', () =>
         handlers.listProjectTaskActivities(args),
@@ -2005,6 +2208,8 @@ export function createKnowledgeHubMcpServer(
   const stakeholderRoleEnum = z.enum([
     'sponsor',
     'owner',
+    'project_manager',
+    'scrum_master',
     'product_owner',
     'tech_lead',
     'contributor',
@@ -2182,10 +2387,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_raid_items',
-    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Requires pm:read.',
+    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -2206,6 +2412,8 @@ export function createKnowledgeHubMcpServer(
       description: z.string().max(10000).nullable().optional(),
       status: raidStatusEnum.optional(),
       severity: raidSeverityEnum.optional(),
+      probability: raidSeverityEnum.nullable().optional(),
+      impact: raidSeverityEnum.nullable().optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
       dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
@@ -2230,6 +2438,8 @@ export function createKnowledgeHubMcpServer(
       description: z.string().max(10000).nullable().optional(),
       status: raidStatusEnum.optional(),
       severity: raidSeverityEnum.optional(),
+      probability: raidSeverityEnum.nullable().optional(),
+      impact: raidSeverityEnum.nullable().optional(),
       ownerUserId: z.string().uuid().nullable().optional(),
       dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
@@ -2267,6 +2477,50 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  server.tool(
+    'set_project_raid_record_links',
+    'Replace the knowledge records linked to a RAID item. record ids may be UUID or human keys and must belong to the same project. Requires pm:write.',
+    {
+      raidItemId: entityRef,
+      recordIds: z.array(entityRef).max(100),
+    },
+    async (args) =>
+      wrap('set_project_raid_record_links', 'pm:write', () =>
+        handlers.setProjectRaidRecordLinks(args),
+      )(),
+  );
+
+  server.tool(
+    'get_knowledge_record_raid_links',
+    'List RAID items linked to a knowledge record. Requires knowledge:read.',
+    {
+      recordId: entityRef,
+    },
+    async (args) =>
+      wrap(
+        'get_knowledge_record_raid_links',
+        'knowledge:read',
+        () => handlers.getKnowledgeRecordRaidLinks(args),
+        { recordId: args.recordId },
+      )(),
+  );
+
+  server.tool(
+    'set_knowledge_record_raid_links',
+    'Replace the RAID items linked to a project-scoped knowledge record. raid item ids may be UUID or human keys. Requires knowledge:write.',
+    {
+      recordId: entityRef,
+      raidItemIds: z.array(entityRef).max(100),
+    },
+    async (args) =>
+      wrap(
+        'set_knowledge_record_raid_links',
+        'knowledge:write',
+        () => handlers.setKnowledgeRecordRaidLinks(args),
+        { recordId: args.recordId },
+      )(),
+  );
+
   const changeKindEnum = z.enum([
     'scope',
     'timeline',
@@ -2290,10 +2544,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_change_items',
-    'List change-management register items for a project. Requires pm:read.',
+    'List change-management register items for a project. Pages at 25. Descriptions and rationale are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -2306,7 +2561,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_change_item',
-    'Create a change-management item with optional delivery links. Requires pm:write.',
+    'Create a change-management item. Optional delivery links cover epics, stories, milestones, and tasks (bugs use task). Optional recordIds link documents; knowledgeRecordId still sets a single document. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       kind: changeKindEnum,
@@ -2322,6 +2577,7 @@ export function createKnowledgeHubMcpServer(
       baselineEndBefore: ymdDate.optional(),
       baselineEndAfter: ymdDate.optional(),
       knowledgeRecordId: entityRef.nullable().optional(),
+      recordIds: z.array(entityRef).max(100).optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       deliveryLinks: z
         .array(
@@ -2360,6 +2616,7 @@ export function createKnowledgeHubMcpServer(
       baselineEndBefore: ymdDate.optional(),
       baselineEndAfter: ymdDate.optional(),
       knowledgeRecordId: entityRef.nullable().optional(),
+      recordIds: z.array(entityRef).max(100).optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
       deliveryLinks: z
@@ -2378,11 +2635,17 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  const deliveryEntityEnum = z.enum(['epic', 'user_story', 'task', 'sprint']);
+  const deliveryEntityEnum = z.enum([
+    'epic',
+    'user_story',
+    'milestone',
+    'task',
+    'sprint',
+  ]);
 
   server.tool(
     'get_knowledge_record_delivery_links',
-    'List delivery entity links (epic / user story / task / sprint) for a knowledge record. recordId may be UUID or document key. Requires knowledge:read.',
+    'List delivery entity links (epic / user story / milestone / task / sprint) for a knowledge record. Bugs use task. recordId may be UUID or document key. Requires knowledge:read.',
     { recordId: entityRef },
     async (args) =>
       wrap(
@@ -2395,7 +2658,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'set_knowledge_record_delivery_links',
-    'Replace delivery entity links for a project-scoped knowledge record (epic / user story / task / sprint). recordId and entityId may be UUID or human keys. Requires knowledge:write.',
+    'Replace delivery entity links for a project-scoped knowledge record (epic / user story / milestone / task / sprint). Bugs use task. recordId and entityId may be UUID or human keys. Requires knowledge:write.',
     {
       recordId: entityRef,
       links: z

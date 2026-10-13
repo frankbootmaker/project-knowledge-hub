@@ -13,7 +13,7 @@ import { cn } from '../../lib/cn';
 import { headerControlSquareClassName } from '../header-control';
 import { Button } from './Button';
 
-export type ModalSize = 'md' | 'lg' | 'xl' | 'full';
+export type ModalSize = 'md' | 'wide' | 'lg' | 'xl' | 'full';
 
 /**
  * Width shared by delivery, RAID, and change item dialogs so they stay
@@ -35,6 +35,8 @@ type Props = {
   size?: ModalSize;
   /** When false, backdrop click does not close (Esc still does). Default true. */
   closeOnBackdrop?: boolean;
+  /** When false, Escape does not close. Default true. */
+  closeOnEscape?: boolean;
   /** Extra class for the scrollable body (e.g. both-axis overflow for wide tables). */
   bodyClassName?: string;
 };
@@ -48,6 +50,7 @@ export function Modal({
   footer,
   size = 'md',
   closeOnBackdrop = true,
+  closeOnEscape = true,
   bodyClassName,
 }: Props) {
   const t = useTranslations('common');
@@ -57,6 +60,8 @@ export function Modal({
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const closeOnEscapeRef = useRef(closeOnEscape);
+  closeOnEscapeRef.current = closeOnEscape;
   // Portals need a mounted document; avoid SSR mismatch.
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -87,6 +92,7 @@ export function Modal({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
+        if (!closeOnEscapeRef.current) return;
         event.preventDefault();
         onCloseRef.current();
         return;
@@ -145,6 +151,7 @@ export function Modal({
         aria-describedby={description ? descriptionId : undefined}
         className={cn(
           'kh-modal-panel',
+          size === 'wide' && 'kh-modal-panel-wide',
           size === 'lg' && 'kh-modal-panel-lg',
           size === 'xl' && 'kh-modal-panel-xl',
           size === 'full' && 'kh-modal-panel-full',

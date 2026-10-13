@@ -344,7 +344,9 @@ describe('definitionOfDone on project baseline tools', () => {
       expect(read.structuredContent).toBeUndefined();
       expect(JSON.parse(toolText(read))).toEqual({
         error: 'Response exceeds size limit',
-        hint: 'Narrow filters or request a specific record id',
+        hint:
+          'Pass a smaller limit, follow nextCursor, or page get_knowledge_record with contentOffset. suggestedLimit is a smaller list page size.',
+        suggestedLimit: 10,
       });
       expect(toolText(read)).not.toContain('Output validation error');
     });
@@ -367,7 +369,7 @@ describe('tools without an output schema', () => {
     });
   });
 
-  test('an oversized list_projects stays a success without structuredContent', async () => {
+  test('an oversized list_projects is a tool error without structuredContent', async () => {
     const listProjects = vi.fn(async () => ({
       blob: 'x'.repeat(MCP_MAX_RESPONSE_BYTES),
     }));
@@ -377,11 +379,13 @@ describe('tools without an output schema', () => {
         name: 'list_projects',
         arguments: {},
       });
-      expect(result.isError).not.toBe(true);
+      expect(result.isError).toBe(true);
       expect(result.structuredContent).toBeUndefined();
       expect(JSON.parse(toolText(result))).toEqual({
         error: 'Response exceeds size limit',
-        hint: 'Narrow filters or request a specific record id',
+        hint:
+          'Pass a smaller limit, follow nextCursor, or page get_knowledge_record with contentOffset. suggestedLimit is a smaller list page size.',
+        suggestedLimit: 10,
       });
     });
   });

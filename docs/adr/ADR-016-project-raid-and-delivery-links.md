@@ -12,10 +12,13 @@ Delivery (ADR-015) covers work hierarchy and RACI. Operators also need a live **
 ## Decision
 
 1. **RAID is first-class operational state** (`project_raid_items` + `project_raid_task_links`), mutated via REST and MCP `pm:read` / `pm:write`, same auth/audit pattern as delivery.
-2. **RAID links target tasks only** in v1; epics/stories remain the delivery hierarchy.
+2. **RAID links delivery work**: tasks (including bugs) through `project_raid_task_links`, and epics, user stories, and milestones through `project_raid_delivery_links`. Sprints stay out. Knowledge records link to RAID items through `project_raid_record_links`, not through delivery links.
 3. **Knowledge document types** extend the domain catalog with `project-charter` and `meeting-minutes`; existing `decision` covers decision-making.
-4. **Queryable delivery links** live in `knowledge_record_delivery_links` (`entity_type` ∈ epic \| user_story \| task). App layer ensures the record’s `projectId` matches the entity’s project.
+4. **Queryable delivery links** live in `knowledge_record_delivery_links` (`entity_type` ∈ epic \| user_story \| milestone \| task \| sprint). App layer ensures the record’s `projectId` matches the entity’s project. RAID is not a delivery-link type. Bugs stay `task`.
 5. **Knowledge lifecycle unchanged** (ADR-013): link mutations use `knowledge:write`; content drafts remain draft-only.
+6. **Probability and impact** (2026-10-12) are optional `low | medium | high | critical` fields on every RAID kind. Severity stays required and is not derived from them.
+7. **RAID Documents tab** adds and removes `project_raid_record_links` for the same project. Delivery-item document tabs stay on their own delivery-link model.
+8. **Delivery Documents tabs** (2026-10-13) on epic, story, task, bug, milestone, and sprint add and remove `knowledge_record_delivery_links` for that one entity. Replacing an entity’s documents does not replace the record’s other links. Task, epic, story, and milestone store the links with the item save; a sprint stores them when Add or Remove is confirmed.
 
 ## Consequences
 

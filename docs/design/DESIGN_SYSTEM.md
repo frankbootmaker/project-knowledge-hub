@@ -151,8 +151,8 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-dropzone` / `.kh-ops-paste-area` / `.kh-ops-narrow-form` | Document dropzone, conversation paste, 840px create forms |
 | `.kh-ops-scope-list` / `.kh-ops-scope-checks` / `.kh-ops-scope-check` | Scope tags and checkbox chips |
 | `.kh-ops-code` / `.kh-ops-status-row` | Token/schema blocks and MCP preflight rows |
-| `.kh-ops-page-tabs` | Admin page tab strip. Bold body sans at 15px, not the 11px mono used by modal tabs. Links, not buttons; the active tab uses `.active` |
-| `.kh-ops-modal-tabs` / `.kh-ops-modal-pane` | Manage-dialog tab strip (existing product tabs only) |
+| `.kh-ops-page-tabs` | Admin page tab strip. Bold body sans at 15px. Links, not buttons; the active tab uses `.active` |
+| `.kh-ops-modal-tabs` / `.kh-ops-modal-pane` | Manage-dialog tab strip. Bold body sans at 13px, on buttons |
 | `.kh-ops-activity-item` / `.kh-ops-linked-row` / `.kh-ops-text-btn` | Task activity thread, linked rows, quiet actions |
 | `.kh-ops-storage-choice` / `.kh-ops-provider` | Admin storage provider picker |
 | `.kh-ops-stage-strip` / `.kh-ops-stage-card` | Import progress stages and MCP wizard steps |

@@ -1291,6 +1291,24 @@ export const projectTasks = pgTable(
     }),
     title: text('title').notNull(),
     description: text('description'),
+    /** task (default) or bug. Set at create; human key letter follows it (T or B). */
+    itemType: text('item_type').notNull().default('task'),
+    /** Bug impact. Null on tasks. Defaults to medium when a bug is created. */
+    severity: text('severity'),
+    foundIn: text('found_in'),
+    foundInNote: text('found_in_note'),
+    stepsToReproduce: text('steps_to_reproduce'),
+    expectedBehavior: text('expected_behavior'),
+    actualBehavior: text('actual_behavior'),
+    resolution: text('resolution'),
+    regression: boolean('regression').notNull().default(false),
+    affectedSystemId: uuid('affected_system_id').references(() => systems.id, {
+      onDelete: 'set null',
+    }),
+    duplicateOfTaskId: uuid('duplicate_of_task_id').references(
+      (): AnyPgColumn => projectTasks.id,
+      { onDelete: 'set null' },
+    ),
     status: text('status').notNull().default('todo'),
     dueDate: date('due_date', { mode: 'string' }),
     forecastHours: numeric('forecast_hours', { precision: 10, scale: 2, mode: 'number' }),
@@ -1337,6 +1355,9 @@ export const projectTasks = pgTable(
     index('project_tasks_current_owner_user_id_idx').on(table.currentOwnerUserId),
     index('project_tasks_ai_system_id_idx').on(table.aiSystemId),
     index('project_tasks_project_status_idx').on(table.projectId, table.status),
+    index('project_tasks_project_item_type_idx').on(table.projectId, table.itemType),
+    index('project_tasks_affected_system_id_idx').on(table.affectedSystemId),
+    index('project_tasks_duplicate_of_task_id_idx').on(table.duplicateOfTaskId),
     uniqueIndex('project_tasks_project_key_uidx').on(
       table.projectId,
       table.issueKeyType,
@@ -1475,6 +1496,10 @@ export const projectRaidItems = pgTable(
     description: text('description'),
     status: text('status').notNull().default('open'),
     severity: text('severity').notNull().default('medium'),
+    /** Optional likelihood. Independent of severity. Null on existing rows. */
+    probability: text('probability'),
+    /** Optional consequence. Independent of severity. Null on existing rows. */
+    impact: text('impact'),
     ownerUserId: uuid('owner_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
@@ -1534,6 +1559,65 @@ export const projectRaidTaskLinks = pgTable(
     ),
     index('project_raid_task_links_task_id_idx').on(table.taskId),
     index('project_raid_task_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/** Links a RAID item to an epic, user story, or milestone in the same project. Tasks stay on project_raid_task_links. */
+export const projectRaidDeliveryLinks = pgTable(
+  'project_raid_delivery_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    raidItemId: uuid('raid_item_id')
+      .notNull()
+      .references(() => projectRaidItems.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_raid_delivery_links_uidx').on(
+      table.raidItemId,
+      table.entityType,
+      table.entityId,
+    ),
+    index('project_raid_delivery_links_entity_idx').on(
+      table.entityType,
+      table.entityId,
+    ),
+    index('project_raid_delivery_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/** Links a RAID item to knowledge records in the same project. */
+export const projectRaidRecordLinks = pgTable(
+  'project_raid_record_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    raidItemId: uuid('raid_item_id')
+      .notNull()
+      .references(() => projectRaidItems.id, { onDelete: 'cascade' }),
+    knowledgeRecordId: uuid('knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_raid_record_links_raid_record_uidx').on(
+      table.raidItemId,
+      table.knowledgeRecordId,
+    ),
+    index('project_raid_record_links_record_id_idx').on(table.knowledgeRecordId),
+    index('project_raid_record_links_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -1681,6 +1765,34 @@ export const projectChangeDeliveryLinks = pgTable(
       table.entityId,
     ),
     index('project_change_delivery_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/** Many documents linked to one change item. The legacy knowledge_record_id column stays the first link. */
+export const projectChangeRecordLinks = pgTable(
+  'project_change_record_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    changeId: uuid('change_id')
+      .notNull()
+      .references(() => projectChangeItems.id, { onDelete: 'cascade' }),
+    knowledgeRecordId: uuid('knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_change_record_links_uidx').on(
+      table.changeId,
+      table.knowledgeRecordId,
+    ),
+    index('project_change_record_links_record_id_idx').on(table.knowledgeRecordId),
+    index('project_change_record_links_created_by_idx').on(table.createdBy),
   ],
 );
 

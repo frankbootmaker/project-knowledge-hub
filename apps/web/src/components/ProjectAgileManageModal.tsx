@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import {
-  Badge,
   Button,
   ErrorText,
   DELIVERY_ITEM_MODAL_SIZE,
@@ -21,7 +20,11 @@ import {
   sumEffortRollup,
   type RatePerson,
 } from '../lib/task-costing';
-import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
+import {
+  DeliveryDocumentsEditor,
+  saveDeliveryDocumentLinks,
+  type DeliveryDocumentRecord,
+} from './DeliveryDocumentsEditor';
 
 const STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 
@@ -86,6 +89,7 @@ export function ProjectAgileManageModal({
   stories,
   milestones = [],
   tasks = [],
+  records = [],
   currency = 'EUR',
   ratePeople = [],
   canMutate,
@@ -101,6 +105,7 @@ export function ProjectAgileManageModal({
   stories: Story[];
   milestones?: Milestone[];
   tasks?: EffortTask[];
+  records?: DeliveryDocumentRecord[];
   currency?: string;
   ratePeople?: RatePerson[];
   canMutate: boolean;
@@ -114,7 +119,6 @@ export function ProjectAgileManageModal({
   const tBudget = useTranslations('budget');
   const tCommon = useTranslations('common');
   const tArchive = useTranslations('archive');
-  const tRecords = useTranslations('records');
   const locale = useLocale();
   const { pushToast } = useToast();
 
@@ -131,13 +135,18 @@ export function ProjectAgileManageModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const [documentPickerOpen, setDocumentPickerOpen] = useState(false);
+  const [agileTab, setAgileTab] = useState<'details' | 'documents'>('details');
 
   useEffect(() => {
     if (!open || !kind || !itemId) {
       setConfirmDelete(false);
       setDeleteAcknowledged(false);
       setError(null);
+      setAgileTab('details');
       setLinkedDocuments([]);
+      setDocumentIds([]);
       setHumanKey(null);
       return;
     }
@@ -192,9 +201,14 @@ export function ProjectAgileManageModal({
         const payload = (await response.json()) as {
           documentLinks?: LinkedDocument[];
         };
-        setLinkedDocuments(payload.documentLinks ?? []);
+        const links = payload.documentLinks ?? [];
+        setLinkedDocuments(links);
+        setDocumentIds(links.map((doc) => doc.knowledgeRecordId));
       })
-      .catch(() => setLinkedDocuments([]));
+      .catch(() => {
+        setLinkedDocuments([]);
+        setDocumentIds([]);
+      });
   }, [open, kind, itemId, epics, stories, milestones, projectId]);
 
   async function save() {
@@ -270,6 +284,14 @@ export function ProjectAgileManageModal({
               : t('failedUpdateMilestone'),
         );
       }
+      const entityType =
+        kind === 'epic' ? 'epic' : kind === 'story' ? 'user_story' : 'milestone';
+      await saveDeliveryDocumentLinks({
+        projectId,
+        entityType,
+        entityId: itemId,
+        recordIds: documentIds,
+      });
       onSaved(kind, saved);
       pushToast(
         kind === 'epic'
@@ -402,6 +424,7 @@ export function ProjectAgileManageModal({
       }
       description={modalDescription}
       size={DELIVERY_ITEM_MODAL_SIZE}
+      closeOnEscape={!documentPickerOpen}
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -502,6 +525,27 @@ export function ProjectAgileManageModal({
           </label>
         </div>
       ) : null}
+      <div className="kh-ops-modal-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={agileTab === 'details'}
+          className={agileTab === 'details' ? 'active' : undefined}
+          onClick={() => setAgileTab('details')}
+        >
+          {t('tabDetails')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={agileTab === 'documents'}
+          className={agileTab === 'documents' ? 'active' : undefined}
+          onClick={() => setAgileTab('documents')}
+        >
+          {t('tabDocuments')}
+        </button>
+      </div>
+      <section className={`kh-ops-modal-pane${agileTab === 'details' ? ' active' : ''}`}>
       <div className="kh-ops-form-grid">
         {effortRollup ? (
           <div className="kh-ops-inset kh-ops-field-span text-sm">
@@ -622,28 +666,24 @@ export function ProjectAgileManageModal({
             rows={4}
           />
         </Field>
-        <div
-          className={
-            kind === 'milestone'
-              ? 'kh-ops-inset'
-              : 'kh-ops-inset kh-ops-field-span'
-          }
-        >
-          <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
-          {linkedDocuments.length === 0 ? (
-            <p className="m-0 text-sm text-ink-muted">{t('linkedDocumentsEmpty')}</p>
-          ) : (
-            <ul className="m-0 grid list-none gap-1 p-0">
-              {linkedDocuments.map((doc) => (
-                <li key={doc.knowledgeRecordId} className="text-sm">
-                  <Badge>{tRecords(`typeLabels.${doc.recordType}`)}</Badge>{' '}
-                  <LinkedKnowledgeRecord slug={doc.slug} title={doc.title} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       </div>
+      </section>
+      <section className={`kh-ops-modal-pane${agileTab === 'documents' ? ' active' : ''}`}>
+        <DeliveryDocumentsEditor
+          records={records}
+          linkedRecords={linkedDocuments.map((doc) => ({
+            id: doc.knowledgeRecordId,
+            title: doc.title,
+            slug: doc.slug,
+            recordType: doc.recordType,
+          }))}
+          linkedIds={documentIds}
+          onChange={setDocumentIds}
+          canEdit={canMutate}
+          disabled={pending || confirmDelete}
+          onPickerOpenChange={setDocumentPickerOpen}
+        />
+      </section>
     </Modal>
   );
 }

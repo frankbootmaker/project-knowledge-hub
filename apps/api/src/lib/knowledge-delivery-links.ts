@@ -4,6 +4,7 @@ import {
   knowledgeRecordDeliveryLinks,
   knowledgeRecords,
   projectEpics,
+  projectMilestones,
   projectSprints,
   projectTasks,
   projectUserStories,
@@ -59,6 +60,17 @@ async function resolveEntityTitle(
       })
       .from(projectUserStories)
       .where(eq(projectUserStories.id, entityId))
+      .limit(1);
+    return row ?? null;
+  }
+  if (entityType === 'milestone') {
+    const [row] = await database.db
+      .select({
+        projectId: projectMilestones.projectId,
+        title: projectMilestones.title,
+      })
+      .from(projectMilestones)
+      .where(eq(projectMilestones.id, entityId))
       .limit(1);
     return row ?? null;
   }
@@ -291,5 +303,114 @@ export async function listDeliveryDocumentLinksForProject(
       entityType: deliveryLinkEntityTypeSchema.parse(link.entityType),
       entityId: link.entityId,
     };
+  });
+}
+
+export async function setDocumentLinksForEntity(
+  database: Database,
+  input: {
+    projectId: string;
+    entityType: DeliveryLinkEntityType;
+    entityId: string;
+    recordIds: string[];
+    createdBy?: string | null;
+  },
+): Promise<PublicDeliveryDocumentLink[]> {
+  const entity = await resolveEntityTitle(
+    database,
+    input.entityType,
+    input.entityId,
+  );
+  if (!entity) {
+    throw new AppError({
+      code: 'DELIVERY_LINK_ENTITY_NOT_FOUND',
+      message: `Delivery entity not found: ${input.entityType}:${input.entityId}`,
+      statusCode: 400,
+    });
+  }
+  if (entity.projectId !== input.projectId) {
+    throw new AppError({
+      code: 'DELIVERY_LINK_PROJECT_MISMATCH',
+      message: 'Delivery links must target entities in the record’s project',
+      statusCode: 400,
+    });
+  }
+
+  const recordIds = [...new Set(input.recordIds)];
+  if (recordIds.length > 0) {
+    const rows = await database.db
+      .select({
+        id: knowledgeRecords.id,
+        projectId: knowledgeRecords.projectId,
+      })
+      .from(knowledgeRecords)
+      .where(inArray(knowledgeRecords.id, recordIds));
+    const found = new Map(rows.map((row) => [row.id, row.projectId]));
+    for (const recordId of recordIds) {
+      const ownerProjectId = found.get(recordId);
+      if (!ownerProjectId) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Linked knowledge record was not found',
+          statusCode: 400,
+        });
+      }
+      if (ownerProjectId !== input.projectId) {
+        throw new AppError({
+          code: 'DELIVERY_LINK_PROJECT_MISMATCH',
+          message: 'Delivery links must target entities in the record’s project',
+          statusCode: 400,
+        });
+      }
+    }
+  }
+
+  await database.db.transaction(async (tx) => {
+    const db = tx as unknown as Database['db'];
+    const existing = await db
+      .select({
+        id: knowledgeRecordDeliveryLinks.id,
+        knowledgeRecordId: knowledgeRecordDeliveryLinks.knowledgeRecordId,
+      })
+      .from(knowledgeRecordDeliveryLinks)
+      .where(
+        and(
+          eq(knowledgeRecordDeliveryLinks.entityType, input.entityType),
+          eq(knowledgeRecordDeliveryLinks.entityId, input.entityId),
+        ),
+      );
+    const next = recordIds.map((knowledgeRecordId) => ({ knowledgeRecordId }));
+    const diff = diffReplacement(
+      existing,
+      next,
+      (row) => row.knowledgeRecordId,
+      (row) => row.knowledgeRecordId,
+      () => true,
+    );
+    if (diff.remove.length > 0) {
+      await db
+        .delete(knowledgeRecordDeliveryLinks)
+        .where(
+          inArray(
+            knowledgeRecordDeliveryLinks.id,
+            diff.remove.map((row) => row.id),
+          ),
+        );
+    }
+    if (diff.insert.length > 0) {
+      await db.insert(knowledgeRecordDeliveryLinks).values(
+        diff.insert.map((link) => ({
+          knowledgeRecordId: link.knowledgeRecordId,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+  });
+
+  return listDeliveryDocumentLinksForProject(database, input.projectId, {
+    entityType: input.entityType,
+    entityId: input.entityId,
   });
 }

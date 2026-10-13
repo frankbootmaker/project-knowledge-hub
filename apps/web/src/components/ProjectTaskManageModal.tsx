@@ -11,6 +11,7 @@ import {
   Input,
   Modal,
   Select,
+  Switch,
   Textarea,
   raidSeverityTone,
   useToast,
@@ -26,7 +27,11 @@ import {
   resolveRatePerson,
   type RatePerson,
 } from '../lib/task-costing';
-import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
+import {
+  DeliveryDocumentsEditor,
+  saveDeliveryDocumentLinks,
+  type DeliveryDocumentRecord,
+} from './DeliveryDocumentsEditor';
 
 type RaciEntry = {
   userId: string;
@@ -67,6 +72,17 @@ type TaskDetail = {
   billingPeriod?: string | null;
   aiSystemId: string | null;
   humanKey?: string | null;
+  itemType?: 'task' | 'bug';
+  severity?: string | null;
+  foundIn?: string | null;
+  foundInNote?: string | null;
+  stepsToReproduce?: string | null;
+  expectedBehavior?: string | null;
+  actualBehavior?: string | null;
+  resolution?: string | null;
+  regression?: boolean;
+  affectedSystemId?: string | null;
+  duplicateOfTaskId?: string | null;
   raci: RaciEntry[];
 };
 
@@ -106,6 +122,15 @@ type LinkedDocument = {
 };
 
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
+const BUG_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
+const BUG_FOUND_IN = ['development', 'test', 'staging', 'production'] as const;
+const BUG_RESOLUTIONS = [
+  'fixed',
+  'duplicate',
+  'wont_fix',
+  'cannot_reproduce',
+  'works_as_designed',
+] as const;
 
 export function ProjectTaskManageModal({
   open,
@@ -118,6 +143,9 @@ export function ProjectTaskManageModal({
   milestones: milestonesProp,
   currency = 'EUR',
   ratePeople = [],
+  systems = [],
+  bugOptions = [],
+  records = [],
   onUpdated,
   onDeleted,
 }: {
@@ -131,6 +159,9 @@ export function ProjectTaskManageModal({
   milestones?: Milestone[];
   currency?: string;
   ratePeople?: RatePerson[];
+  systems?: Array<{ id: string; name: string }>;
+  bugOptions?: Array<{ id: string; title: string; humanKey?: string | null }>;
+  records?: DeliveryDocumentRecord[];
   onUpdated?: (task: TaskDetail) => void;
   onDeleted?: (taskId: string) => void;
 }) {
@@ -172,10 +203,21 @@ export function ProjectTaskManageModal({
   const [usageOccurredAt, setUsageOccurredAt] = useState('');
   const [billingPeriod, setBillingPeriod] = useState('');
   const [aiSystemId, setAiSystemId] = useState('');
+  const [severity, setSeverity] = useState('medium');
+  const [foundIn, setFoundIn] = useState('');
+  const [foundInNote, setFoundInNote] = useState('');
+  const [stepsToReproduce, setStepsToReproduce] = useState('');
+  const [expectedBehavior, setExpectedBehavior] = useState('');
+  const [actualBehavior, setActualBehavior] = useState('');
+  const [resolution, setResolution] = useState('');
+  const [regression, setRegression] = useState(false);
+  const [affectedSystemId, setAffectedSystemId] = useState('');
+  const [duplicateOfTaskId, setDuplicateOfTaskId] = useState('');
   const [linkedRaid, setLinkedRaid] = useState<LinkedRaid[]>([]);
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const [documentPickerOpen, setDocumentPickerOpen] = useState(false);
   const tRaid = useTranslations('raid');
-  const tRecords = useTranslations('records');
 
   const rateMap = useMemo(() => {
     const map = new Map<string, RatePerson>();
@@ -235,6 +277,16 @@ export function ProjectTaskManageModal({
       );
       setBillingPeriod(loaded.billingPeriod ?? '');
       setAiSystemId(loaded.aiSystemId ?? '');
+      setSeverity(loaded.severity ?? 'medium');
+      setFoundIn(loaded.foundIn ?? '');
+      setFoundInNote(loaded.foundInNote ?? '');
+      setStepsToReproduce(loaded.stepsToReproduce ?? '');
+      setExpectedBehavior(loaded.expectedBehavior ?? '');
+      setActualBehavior(loaded.actualBehavior ?? '');
+      setResolution(loaded.resolution ?? '');
+      setRegression(loaded.regression ?? false);
+      setAffectedSystemId(loaded.affectedSystemId ?? '');
+      setDuplicateOfTaskId(loaded.duplicateOfTaskId ?? '');
 
       const actPayload = (await actRes.json().catch(() => ({}))) as {
         activities?: Activity[];
@@ -255,9 +307,12 @@ export function ProjectTaskManageModal({
         const docsPayload = (await docsRes.json()) as {
           documentLinks?: LinkedDocument[];
         };
-        setLinkedDocuments(docsPayload.documentLinks ?? []);
+        const links = docsPayload.documentLinks ?? [];
+        setLinkedDocuments(links);
+        setDocumentIds(links.map((doc) => doc.knowledgeRecordId));
       } else {
         setLinkedDocuments([]);
+        setDocumentIds([]);
       }
 
       if (!membersProp || !epicsProp || !storiesProp || !milestonesProp) {
@@ -416,6 +471,21 @@ export function ProjectTaskManageModal({
           userStoryId: userStoryId || null,
           ...usage,
           aiSystemId: aiSystemId.trim() || null,
+          ...(task?.itemType === 'bug'
+            ? {
+                severity: severity || 'medium',
+                foundIn: foundIn || null,
+                foundInNote: foundInNote.trim() || null,
+                stepsToReproduce: stepsToReproduce.trim() || null,
+                expectedBehavior: expectedBehavior.trim() || null,
+                actualBehavior: actualBehavior.trim() || null,
+                resolution: resolution || null,
+                regression,
+                affectedSystemId: affectedSystemId || null,
+                duplicateOfTaskId:
+                  resolution === 'duplicate' ? duplicateOfTaskId || null : null,
+              }
+            : {}),
         }),
       });
       const payload = (await response.json().catch(() => ({}))) as {
@@ -424,6 +494,14 @@ export function ProjectTaskManageModal({
       };
       if (!response.ok || !payload.task) {
         throw new Error(payload.error?.message || t('failedUpdateTask'));
+      }
+      if (task?.projectId) {
+        await saveDeliveryDocumentLinks({
+          projectId: task.projectId,
+          entityType: 'task',
+          entityId: taskId,
+          recordIds: documentIds,
+        });
       }
       setTask(payload.task);
       onUpdated?.(payload.task);
@@ -566,12 +644,15 @@ export function ProjectTaskManageModal({
       open={open}
       onClose={onClose}
       title={
-        task?.humanKey
-          ? `${task.humanKey} · ${task.title}`
-          : (task?.title ?? t('manageTask'))
+        task
+          ? [task.itemType === 'bug' ? t('kindBug') : null, task.humanKey, task.title]
+              .filter(Boolean)
+              .join(' · ')
+          : t('manageTask')
       }
       description={t('manageTaskDescription')}
       size={DELIVERY_ITEM_MODAL_SIZE}
+      closeOnEscape={!documentPickerOpen}
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -640,8 +721,14 @@ export function ProjectTaskManageModal({
       ) : (
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center gap-2">
+            {task.itemType === 'bug' ? <Badge>{t('kindBug')}</Badge> : null}
             {task.humanKey ? (
               <Badge tone="brand">{task.humanKey}</Badge>
+            ) : null}
+            {task.itemType === 'bug' && severity ? (
+              <Badge tone={raidSeverityTone(severity)}>
+                {tRaid(`severity.${severity}`)}
+              </Badge>
             ) : null}
             {scheduleTone ? (
               <span className="kh-ops-type-chip" data-tone={scheduleTone}>
@@ -881,6 +968,135 @@ export function ProjectTaskManageModal({
                   rows={4}
                 />
               </Field>
+              {task.itemType === 'bug' ? (
+                <>
+                  <Field label={t('severity')}>
+                    <Select
+                      value={severity}
+                      onChange={(e) => setSeverity(e.target.value)}
+                      disabled={pending || !canMutate}
+                    >
+                      {BUG_SEVERITIES.map((value) => (
+                        <option key={value} value={value}>
+                          {tRaid(`severity.${value}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t('foundIn')}>
+                    <Select
+                      value={foundIn}
+                      onChange={(e) => setFoundIn(e.target.value)}
+                      disabled={pending || !canMutate}
+                    >
+                      <option value="">{t('noAffectedSystem')}</option>
+                      {BUG_FOUND_IN.map((value) => (
+                        <option key={value} value={value}>
+                          {t(`foundInValue.${value}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t('foundInNote')}>
+                    <Input
+                      value={foundInNote}
+                      maxLength={200}
+                      onChange={(e) => setFoundInNote(e.target.value)}
+                      disabled={pending || !canMutate}
+                    />
+                  </Field>
+                  <Field className="kh-ops-field-span" label={t('stepsToReproduce')}>
+                    <Textarea
+                      value={stepsToReproduce}
+                      rows={3}
+                      onChange={(e) => setStepsToReproduce(e.target.value)}
+                      disabled={pending || !canMutate}
+                    />
+                  </Field>
+                  <Field label={t('expectedBehavior')}>
+                    <Textarea
+                      value={expectedBehavior}
+                      rows={3}
+                      onChange={(e) => setExpectedBehavior(e.target.value)}
+                      disabled={pending || !canMutate}
+                    />
+                  </Field>
+                  <Field label={t('actualBehavior')}>
+                    <Textarea
+                      value={actualBehavior}
+                      rows={3}
+                      onChange={(e) => setActualBehavior(e.target.value)}
+                      disabled={pending || !canMutate}
+                    />
+                  </Field>
+                  <Switch
+                    id="bug-regression-edit"
+                    checked={regression}
+                    onCheckedChange={setRegression}
+                    label={t('regression')}
+                    disabled={pending || !canMutate}
+                  />
+                  <Field label={t('affectedSystem')}>
+                    <Select
+                      value={affectedSystemId}
+                      onChange={(e) => setAffectedSystemId(e.target.value)}
+                      disabled={pending || !canMutate}
+                    >
+                      <option value="">{t('noAffectedSystem')}</option>
+                      {systems.map((system) => (
+                        <option key={system.id} value={system.id}>
+                          {system.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t('resolution')}>
+                    <Select
+                      value={resolution}
+                      onChange={(e) => {
+                        setResolution(e.target.value);
+                        if (e.target.value !== 'duplicate') {
+                          setDuplicateOfTaskId('');
+                        }
+                      }}
+                      disabled={pending || !canMutate}
+                    >
+                      <option value="">{t('noDuplicate')}</option>
+                      {BUG_RESOLUTIONS.map((value) => (
+                        <option key={value} value={value}>
+                          {t(`resolutionValue.${value}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  {resolution === 'duplicate' ? (
+                    <Field label={t('duplicateOf')}>
+                      <Select
+                        value={duplicateOfTaskId}
+                        onChange={(e) => setDuplicateOfTaskId(e.target.value)}
+                        disabled={pending || !canMutate}
+                      >
+                        <option value="">{t('noDuplicate')}</option>
+                        {bugOptions
+                          .filter((bug) => bug.id !== task.id)
+                          .map((bug) => (
+                            <option key={bug.id} value={bug.id}>
+                              {bug.humanKey ? `${bug.humanKey} · ` : ''}
+                              {bug.title}
+                            </option>
+                          ))}
+                      </Select>
+                    </Field>
+                  ) : null}
+                  {status === 'done' || status === 'cancelled' ? (
+                    resolution ? null : (
+                      <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+                        {t('resolutionHint')}
+                      </p>
+                    )
+                  ) : null}
+                </>
+              ) : null}
             </div>
           </section>
 
@@ -1010,23 +1226,20 @@ export function ProjectTaskManageModal({
           <section
             className={`kh-ops-modal-pane${taskTab === 'documents' ? ' active' : ''}`}
           >
-            {linkedDocuments.length === 0 ? (
-              <p className="m-0 text-sm text-ink-muted">
-                {t('linkedDocumentsEmpty')}
-              </p>
-            ) : (
-              <div>
-                {linkedDocuments.map((doc) => (
-                  <div key={doc.knowledgeRecordId} className="kh-ops-linked-row">
-                    <span>
-                      <strong>{tRecords(`typeLabels.${doc.recordType}`)}</strong>
-                      {' · '}
-                      <LinkedKnowledgeRecord slug={doc.slug} title={doc.title} />
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <DeliveryDocumentsEditor
+              records={records}
+              linkedRecords={linkedDocuments.map((doc) => ({
+                id: doc.knowledgeRecordId,
+                title: doc.title,
+                slug: doc.slug,
+                recordType: doc.recordType,
+              }))}
+              linkedIds={documentIds}
+              onChange={setDocumentIds}
+              canEdit={canMutate}
+              disabled={pending}
+              onPickerOpenChange={setDocumentPickerOpen}
+            />
           </section>
         </div>
       )}

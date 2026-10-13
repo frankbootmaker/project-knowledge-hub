@@ -69,6 +69,7 @@ function overviewCopy(): ReportOverviewCopy {
     sprintEnds: (date) => `ends ${date}`,
     sprintWindow: (start, end) => `starts ${start}, ends ${end}`,
     taskKind: 'Task',
+    bugKind: 'Bug',
     milestoneKind: 'Milestone',
     sprintKind: 'Sprint',
   };

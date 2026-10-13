@@ -123,7 +123,7 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: Promise<{ slug: string; projectSlug: string }>;
-  searchParams: Promise<{ task?: string | string[] }>;
+  searchParams: Promise<{ task?: string | string[]; raid?: string | string[] }>;
 }) {
   const session = await requireSession();
   const t = await getTranslations('projects');
@@ -132,11 +132,18 @@ export default async function ProjectDetailPage({
   const { slug, projectSlug } = await params;
   const query = await searchParams;
   const openTaskRaw = query.task;
+  const openRaidRaw = query.raid;
   const initialOpenTaskId =
     typeof openTaskRaw === 'string'
       ? openTaskRaw
       : Array.isArray(openTaskRaw)
         ? (openTaskRaw[0] ?? null)
+        : null;
+  const initialOpenRaidId =
+    typeof openRaidRaw === 'string'
+      ? openRaidRaw
+      : Array.isArray(openRaidRaw)
+        ? (openRaidRaw[0] ?? null)
         : null;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -235,6 +242,7 @@ export default async function ProjectDetailPage({
         milestones: Array<{
           id: string;
           title: string;
+          humanKey?: string | null;
           description: string | null;
           status: string;
           startDate: string | null;
@@ -250,6 +258,8 @@ export default async function ProjectDetailPage({
         tasks: Array<{
           id: string;
           title: string;
+          humanKey?: string | null;
+          itemType?: 'task' | 'bug';
           description: string | null;
           status: string;
           dueDate: string | null;
@@ -282,6 +292,7 @@ export default async function ProjectDetailPage({
         epics: Array<{
           id: string;
           title: string;
+          humanKey?: string | null;
           description: string | null;
           status: string;
           startDate: string | null;
@@ -298,6 +309,7 @@ export default async function ProjectDetailPage({
           id: string;
           epicId: string;
           title: string;
+          humanKey?: string | null;
           description: string | null;
           status: string;
           startDate: string | null;
@@ -515,6 +527,14 @@ export default async function ProjectDetailPage({
         members={members}
         currency={project.currency ?? 'EUR'}
         ratePeople={ratePeople}
+        systems={systems.map((system) => ({ id: system.id, name: system.name }))}
+        records={knowledgeRecords.map((record) => ({
+          id: record.id,
+          title: record.title,
+          slug: record.slug,
+          humanKey: record.humanKey ?? null,
+          recordType: record.recordType,
+        }))}
       />
 
       <ProjectBudgetPanel
@@ -527,10 +547,38 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         canMutate={canMutate && !isArchived}
         initialRaidItems={raidItems}
+        initialOpenRaidId={initialOpenRaidId}
         tasks={tasks.map((task) => ({
           id: task.id,
           title: task.title,
           status: task.status,
+          humanKey: task.humanKey ?? null,
+          itemType: task.itemType === 'bug' ? 'bug' : 'task',
+        }))}
+        epics={epics.map((epic) => ({
+          id: epic.id,
+          title: epic.title,
+          status: epic.status,
+          humanKey: epic.humanKey ?? null,
+        }))}
+        stories={stories.map((story) => ({
+          id: story.id,
+          title: story.title,
+          status: story.status,
+          humanKey: story.humanKey ?? null,
+        }))}
+        milestones={milestones.map((milestone) => ({
+          id: milestone.id,
+          title: milestone.title,
+          status: milestone.status,
+          humanKey: milestone.humanKey ?? null,
+        }))}
+        records={knowledgeRecords.map((record) => ({
+          id: record.id,
+          title: record.title,
+          slug: record.slug,
+          humanKey: record.humanKey ?? null,
+          recordType: record.recordType,
         }))}
         members={members}
       />
@@ -540,29 +588,38 @@ export default async function ProjectDetailPage({
         canMutate={canMutate && !isArchived}
         initialChangeItems={changeItems}
         members={members}
-        deliveryOptions={[
-          ...epics.map((epic) => ({
-            entityType: 'epic' as const,
-            entityId: epic.id,
-            title: epic.title,
-          })),
-          ...stories.map((story) => ({
-            entityType: 'user_story' as const,
-            entityId: story.id,
-            title: story.title,
-          })),
-          ...milestones.map((milestone) => ({
-            entityType: 'milestone' as const,
-            entityId: milestone.id,
-            title: milestone.title,
-          })),
-          ...tasks.map((task) => ({
-            entityType: 'task' as const,
-            entityId: task.id,
-            title: task.title,
-          })),
-        ]}
-        knowledgeRecords={knowledgeRecords}
+        epics={epics.map((epic) => ({
+          id: epic.id,
+          title: epic.title,
+          status: epic.status,
+          humanKey: epic.humanKey ?? null,
+        }))}
+        stories={stories.map((story) => ({
+          id: story.id,
+          title: story.title,
+          status: story.status,
+          humanKey: story.humanKey ?? null,
+        }))}
+        milestones={milestones.map((milestone) => ({
+          id: milestone.id,
+          title: milestone.title,
+          status: milestone.status,
+          humanKey: milestone.humanKey ?? null,
+        }))}
+        tasks={tasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          humanKey: task.humanKey ?? null,
+          itemType: task.itemType === 'bug' ? 'bug' : 'task',
+        }))}
+        records={knowledgeRecords.map((record) => ({
+          id: record.id,
+          title: record.title,
+          slug: record.slug,
+          humanKey: record.humanKey ?? null,
+          recordType: record.recordType,
+        }))}
       />
 
       <ProjectLinkedSections

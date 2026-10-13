@@ -64,6 +64,58 @@ const taskStatus = {
   enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
 };
 
+const taskItemType = {
+  type: 'string',
+  enum: ['task', 'bug'],
+  description: 'Work item type. Set at create. task uses a T key, bug uses a B key.',
+};
+
+const bugFields = {
+  itemType: taskItemType,
+  severity: {
+    type: 'string',
+    enum: ['low', 'medium', 'high', 'critical'],
+    nullable: true,
+    description: 'Bug severity. Defaults to medium. Rejected on a task.',
+  },
+  foundIn: {
+    type: 'string',
+    enum: ['development', 'test', 'staging', 'production'],
+    nullable: true,
+  },
+  foundInNote: {
+    type: 'string',
+    maxLength: 200,
+    nullable: true,
+    description: 'Build or version where the bug was found.',
+  },
+  stepsToReproduce: { type: 'string', maxLength: 10000, nullable: true },
+  expectedBehavior: { type: 'string', maxLength: 10000, nullable: true },
+  actualBehavior: { type: 'string', maxLength: 10000, nullable: true },
+  resolution: {
+    type: 'string',
+    enum: [
+      'fixed',
+      'duplicate',
+      'wont_fix',
+      'cannot_reproduce',
+      'works_as_designed',
+    ],
+    nullable: true,
+  },
+  regression: { type: 'boolean', nullable: true },
+  affectedSystemId: {
+    type: 'string',
+    format: 'uuid',
+    nullable: true,
+    description: 'Catalogue system linked to the project.',
+  },
+  duplicateOfTaskId: {
+    ...entityRefProp('Bug this duplicates. UUID or human key. Only when resolution is duplicate.'),
+    nullable: true,
+  },
+};
+
 const milestoneStatus = {
   type: 'string',
   enum: ['planned', 'in_progress', 'done', 'cancelled'],
@@ -260,13 +312,38 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (truncated markdown, tags as tag-name strings, and media). recordId may be UUID or document key.',
+      'Get a knowledge record (paged markdown). Tags and media are on the first page only. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key.',
     scope: 'knowledge:read',
     openApi: true,
     body: {
       type: 'object',
       required: ['recordId'],
-      properties: { recordId: entityRefProp('Knowledge record id') },
+      properties: {
+        recordId: entityRefProp('Knowledge record id'),
+        contentOffset: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Character offset. Omit or use 0 for the first page. Then use nextOffset.',
+        },
+        contentLimit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 50_000,
+          description: 'Max characters in this page. Defaults to 50000.',
+        },
+        boundary: {
+          type: 'string',
+          enum: ['none', 'paragraph', 'line'],
+          description:
+            'Where to end the page. none is a hard cut. paragraph or line snaps to a break in the second half of the window.',
+        },
+        expectSha256: {
+          type: 'string',
+          minLength: 64,
+          maxLength: 64,
+          description: 'SHA-256 hex of the full body. 409 CONTENT_CHANGED when it does not match.',
+        },
+      },
     },
   },
   {
@@ -346,7 +423,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_knowledge_record',
     description:
-      'Update a knowledge record. Content edits stay draft. archived=true sets archivedAt and leaves lifecycleStatus unchanged. Requires knowledge:write.',
+      'Update a knowledge record. Content edits stay draft. Send the full markdown body; a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. archived=true sets archivedAt and leaves lifecycleStatus unchanged. Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     openApi: true,
@@ -377,6 +454,55 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         },
         generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
         sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
+      },
+    },
+  },
+  {
+    name: 'begin_record_content_upload',
+    description:
+      'Start a chunked markdown update. Then append_record_content and finalize_record_content_upload. One draft version per session. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['recordId'],
+      properties: {
+        recordId: entityRefProp('Knowledge record id'),
+      },
+    },
+  },
+  {
+    name: 'append_record_content',
+    description:
+      'Append one markdown chunk (max 40000 characters) to a record content upload. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['uploadId', 'chunk'],
+      properties: {
+        uploadId: uuidProp('Upload session id'),
+        chunk: stringProp('Markdown chunk', { minLength: 1, maxLength: 40_000 }),
+        index: { type: 'integer', minimum: 0 },
+      },
+    },
+  },
+  {
+    name: 'finalize_record_content_upload',
+    description:
+      'Save appended chunks as one draft version. 409 CONTENT_CHANGED when the record changed after begin. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['uploadId', 'changeMessage'],
+      properties: {
+        uploadId: uuidProp('Upload session id'),
+        changeMessage: stringProp('Why this change was made', {
+          minLength: 1,
+          maxLength: 500,
+        }),
+        expectedLength: { type: 'integer', minimum: 0, maximum: 500_000 },
       },
     },
   },
@@ -435,7 +561,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   // —— Project Delivery first-class (OpenAPI) ——
   {
     name: 'list_project_tasks',
-    description: 'List delivery tasks for a project (optional milestone/sprint filter). Requires pm:read.',
+    description:
+      'List delivery tasks for a project. Optional milestone, sprint, and itemType (task or bug) filters. Pages at 25. Descriptions are excerpts; use get_project_task for the full text. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -447,7 +574,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         unassignedMilestone: { type: 'boolean' },
         sprintId: entityRefProp('Optional sprint filter'),
         unassignedSprint: { type: 'boolean' },
+        itemType: taskItemType,
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -465,7 +595,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task (not a knowledge note). Optional RACI, story, sprint, points. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). Bug fields are rejected on a task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -495,6 +625,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         storyPoints: { type: 'integer', minimum: 0, maximum: 1000, nullable: true },
         currentOwnerUserId: { type: 'string', format: 'uuid', nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
+        ...bugFields,
         raci: {
           type: 'array',
           maxItems: 50,
@@ -513,7 +644,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a delivery task (status, dates, sprint, points, archive, AI token usage). tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
+      'Update a delivery task or bug. itemType cannot change. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -544,12 +675,14 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         currentOwnerUserId: { type: 'string', format: 'uuid', nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
         archived: { type: 'boolean' },
+        ...bugFields,
       },
     },
   },
   {
     name: 'list_project_milestones',
-    description: 'List project milestones. Requires pm:read.',
+    description:
+      'List project milestones. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -558,6 +691,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -603,7 +738,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_epics',
-    description: 'List epics for a project. Requires pm:read.',
+    description:
+      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -612,6 +748,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -637,7 +775,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_user_stories',
-    description: 'List user stories (optional epic filter). Requires pm:read.',
+    description:
+      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -647,6 +786,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         projectId: uuidProp('Project id'),
         epicId: entityRefProp('Optional epic filter'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -673,7 +814,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_sprints',
-    description: 'List Scrum sprints (committed/done points). Requires pm:read.',
+    description:
+      'List Scrum sprints (committed/done points). Pages at 25. Goals are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -682,6 +824,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -742,7 +886,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_my_project_tasks',
     description:
-      'List tasks where the API client acting user is on RACI (My tasks). Requires pm:read + actingUserId.',
+      'List tasks where the API client acting user is on RACI (My tasks). Pages at 25. Descriptions are excerpts; use get_project_task for the full text. Pass cursor until hasMore is false. Requires pm:read + actingUserId.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -750,6 +894,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         role: raciRole,
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -1036,12 +1182,17 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_task_activities',
-    description: 'List activity timeline for a task. Requires pm:read.',
+    description:
+      'List activity timeline for a task. Pages at 25. Comment bodies are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
       required: ['taskId'],
-      properties: { taskId: entityRefProp('Task id') },
+      properties: {
+        taskId: entityRefProp('Task id'),
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
+      },
     },
   },
   {
@@ -1152,6 +1303,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: [
             'sponsor',
             'owner',
+            'project_manager',
+            'scrum_master',
             'product_owner',
             'tech_lead',
             'contributor',
@@ -1214,6 +1367,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: [
             'sponsor',
             'owner',
+            'project_manager',
+            'scrum_master',
             'product_owner',
             'tech_lead',
             'contributor',
@@ -1300,7 +1455,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_raid_items',
-    description: 'List RAID register items. Requires pm:read.',
+    description:
+      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1308,6 +1464,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -1332,6 +1490,16 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: ['open', 'mitigating', 'accepted', 'closed', 'cancelled'],
         },
         severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+        probability: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
+        impact: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
         ownerUserId: { type: 'string', format: 'uuid', nullable: true },
         dueDate: { ...ymd, nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
@@ -1360,6 +1528,16 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: ['open', 'mitigating', 'accepted', 'closed', 'cancelled'],
         },
         severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+        probability: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
+        impact: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          nullable: true,
+        },
         ownerUserId: { type: 'string', format: 'uuid', nullable: true },
         dueDate: { ...ymd, nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
@@ -1382,8 +1560,57 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
     },
   },
   {
+    name: 'set_project_raid_record_links',
+    description:
+      'Replace knowledge records linked to a RAID item. Same project only. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['raidItemId', 'recordIds'],
+      properties: {
+        raidItemId: entityRefProp('RAID item id'),
+        recordIds: {
+          type: 'array',
+          maxItems: 100,
+          items: entityRefProp('Knowledge record id'),
+        },
+      },
+    },
+  },
+  {
+    name: 'get_knowledge_record_raid_links',
+    description: 'List RAID items linked to a knowledge record. Requires knowledge:read.',
+    scope: 'knowledge:read',
+    body: {
+      type: 'object',
+      required: ['recordId'],
+      properties: { recordId: entityRefProp('Knowledge record id') },
+    },
+  },
+  {
+    name: 'set_knowledge_record_raid_links',
+    description:
+      'Replace RAID items linked to a project-scoped knowledge record. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['recordId', 'raidItemIds'],
+      properties: {
+        recordId: entityRefProp('Knowledge record id'),
+        raidItemIds: {
+          type: 'array',
+          maxItems: 100,
+          items: entityRefProp('RAID item id'),
+        },
+      },
+    },
+  },
+  {
     name: 'list_project_change_items',
-    description: 'List change-management register items. Requires pm:read.',
+    description:
+      'List change-management register items. Pages at 25. Descriptions and rationale are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1391,6 +1618,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -1416,6 +1645,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           enum: ['proposed', 'approved', 'rejected', 'implemented', 'cancelled'],
         },
         knowledgeRecordId: { ...entityRefProp('Linked knowledge record'), nullable: true },
+        recordIds: {
+          type: 'array',
+          maxItems: 100,
+          items: entityRefProp('Knowledge record id'),
+        },
         deliveryLinks: {
           type: 'array',
           maxItems: 200,
@@ -1493,7 +1727,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record_delivery_links',
     description:
-      'List epic/story/task/sprint links for a knowledge record. Requires knowledge:read.',
+      'List epic/story/milestone/task/sprint links for a knowledge record. Bugs use task. Requires knowledge:read.',
     scope: 'knowledge:read',
     body: {
       type: 'object',
@@ -1504,7 +1738,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_knowledge_record_delivery_links',
     description:
-      'Replace delivery links (epic/story/task/sprint) for a project-scoped knowledge record. Requires knowledge:write.',
+      'Replace delivery links (epic/story/milestone/task/sprint) for a project-scoped knowledge record. Bugs use task. Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     body: {
@@ -1521,7 +1755,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
             properties: {
               entityType: {
                 type: 'string',
-                enum: ['epic', 'user_story', 'task', 'sprint'],
+                enum: ['epic', 'user_story', 'milestone', 'task', 'sprint'],
               },
               entityId: entityRefProp('Delivery entity id'),
             },
@@ -1542,7 +1776,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         projectId: uuidProp('Project id'),
         entityType: {
           type: 'string',
-          enum: ['epic', 'user_story', 'task', 'sprint'],
+          enum: ['epic', 'user_story', 'milestone', 'task', 'sprint'],
         },
         entityId: entityRefProp('Optional entity filter'),
       },

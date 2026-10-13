@@ -45,6 +45,7 @@ type TreeTask = {
     avatarUrl?: string | null;
   } | null;
   humanKey?: string | null;
+  itemType?: 'task' | 'bug';
   forecastHours?: string | number | null;
   actualHours?: string | number | null;
   storyPoints?: number | null;
@@ -120,6 +121,7 @@ function taskNode(task: TreeTask, parentId: string): DeliveryTreeFilterNode {
     status: task.status,
     owner: task.currentOwner?.displayName ?? null,
     sprint: task.sprintLabel ?? null,
+    itemType: task.itemType === 'bug' ? 'bug' : 'task',
   };
 }
 
@@ -219,6 +221,17 @@ export function ProjectDeliveryTree({
         },
       },
       {
+        id: 'itemType',
+        filter: {
+          type: 'enum' as const,
+          getValue: () => '',
+          options: [
+            { value: 'task', label: t('kindTask') },
+            { value: 'bug', label: t('kindBug') },
+          ],
+        },
+      },
+      {
         id: 'owner',
         filter: {
           type: 'enum' as const,
@@ -235,7 +248,7 @@ export function ProjectDeliveryTree({
         },
       },
     ],
-    [ownerOptions, sprintOptions, statusOptions],
+    [ownerOptions, sprintOptions, statusOptions, t],
   );
   useSyncEnumFilters(table.filters, syncColumns, table.setEnumFilter);
 
@@ -260,6 +273,15 @@ export function ProjectDeliveryTree({
         options: sprintOptions,
       });
     }
+    fields.push({
+      id: 'itemType',
+      header: t('colType'),
+      type: 'enum',
+      options: [
+        { value: 'task', label: t('kindTask') },
+        { value: 'bug', label: t('kindBug') },
+      ],
+    });
     fields.push({ id: 'title', header: t('colTitle'), type: 'text' });
     return fields;
   }, [ownerOptions, sprintOptions, statusOptions, t, table.filters.sprint]);
@@ -270,6 +292,7 @@ export function ProjectDeliveryTree({
       statuses: table.filters.status ?? [],
       owners: table.filters.owner ?? [],
       sprints: sprintsLoaded ? (table.filters.sprint ?? []) : [],
+      itemTypes: table.filters.itemType ?? [],
       title: table.textFilters.title ?? '',
       onlyOpen,
     }),
@@ -278,6 +301,7 @@ export function ProjectDeliveryTree({
       sprintsLoaded,
       table.filters.owner,
       table.filters.sprint,
+      table.filters.itemType,
       table.filters.status,
       table.textFilters.title,
     ],
@@ -420,7 +444,11 @@ export function ProjectDeliveryTree({
         open
         depth={depth}
         label={task.title}
-        sub={task.humanKey ?? t('kindTask')}
+        sub={
+          task.itemType === 'bug'
+            ? (task.humanKey ?? t('kindBug'))
+            : (task.humanKey ?? t('kindTask'))
+        }
         {...rowDim(id)}
         meta={metaBits({
           statusLabel: t(`taskStatus.${task.status}`),

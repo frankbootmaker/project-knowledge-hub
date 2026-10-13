@@ -19,6 +19,7 @@ import {
   type RatePerson,
 } from '../lib/task-costing';
 import { formatMoney } from '../lib/project-currency';
+import { workItemIdLabel } from '../lib/work-item-label';
 
 const SCHEDULE_LEGEND: DeliveryScheduleTone[] = [
   'onTrack',
@@ -38,6 +39,7 @@ export type BoardTask = {
   sprintId?: string | null;
   storyPoints?: number | null;
   humanKey?: string | null;
+  itemType?: 'task' | 'bug';
   userStoryTitle?: string | null;
   currentOwnerUserId?: string | null;
   currentOwner?: {
@@ -395,7 +397,12 @@ export function BoardTaskCard({
     >
       <div className="kh-ops-task-top">
         <span className="kh-ops-task-id">
-          {showIssueId ? task.humanKey : t('kindTask')}
+          {workItemIdLabel({
+            itemType: task.itemType,
+            humanKey: showIssueId ? task.humanKey : null,
+            taskLabel: t('kindTask'),
+            bugLabel: t('kindBug'),
+          })}
         </span>
         <span className="kh-ops-type-chip" data-tone={tone}>
           {t(`scheduleToneShort.${tone}`)}

@@ -53,7 +53,13 @@ import {
   userStoryStatusSchema,
 } from '@project-knowledge-hub/domain';
 import {
-  truncateContent,
+  ContentOffsetError,
+  contentSha256,
+  isTruncatedReadback,
+  MCP_MAX_LIST_LIMIT,
+  serializedResponseBytes,
+  sliceContentToFit,
+  type ContentPage,
   type McpClientContext,
   type McpToolHandlers,
 } from '@project-knowledge-hub/mcp';
@@ -72,6 +78,14 @@ import {
   beginMediaUploadSession,
   takeMediaUploadSession,
 } from './media-upload-session.js';
+import {
+  appendRecordContentChunk,
+  assertContentUnchanged,
+  beginRecordContentUploadSession,
+  deleteRecordContentUploadSession,
+  loadRecordContentUploadSession,
+} from './record-content-upload-session.js';
+import { pageItems, pageTaskList } from './task-list-page.js';
 import {
   archiveWorkspaceMedia,
   createWorkspaceMedia,
@@ -137,7 +151,10 @@ import {
   createRaidItem,
   getRaidItem,
   listRaidItems,
+  listRaidItemsForRecord,
+  setRaidRecordLinks,
   setRaidTaskLinks,
+  setRecordRaidLinks,
   transferRaidItem,
   updateRaidItem,
 } from './project-raid.js';
@@ -244,6 +261,53 @@ async function assertActingWorkspaceMaintainer(
       statusCode: 403,
     });
   }
+}
+
+async function mapMcpBugFields(
+  database: Parameters<typeof resolveEntityId>[0],
+  input: {
+    itemType?: 'task' | 'bug';
+    severity?: 'low' | 'medium' | 'high' | 'critical' | null;
+    foundIn?: 'development' | 'test' | 'staging' | 'production' | null;
+    foundInNote?: string | null;
+    stepsToReproduce?: string | null;
+    expectedBehavior?: string | null;
+    actualBehavior?: string | null;
+    resolution?:
+      | 'fixed'
+      | 'duplicate'
+      | 'wont_fix'
+      | 'cannot_reproduce'
+      | 'works_as_designed'
+      | null;
+    regression?: boolean | null;
+    affectedSystemId?: string | null;
+    duplicateOfTaskId?: string | null;
+  },
+  scope: { projectId: string; workspaceIds?: string[] },
+) {
+  const duplicateOfTaskId =
+    input.duplicateOfTaskId === undefined || input.duplicateOfTaskId === null
+      ? input.duplicateOfTaskId
+      : await resolveEntityId(database, {
+          entityType: 'task',
+          idOrKey: input.duplicateOfTaskId,
+          projectId: scope.projectId,
+          workspaceIds: scope.workspaceIds,
+        });
+  return {
+    itemType: input.itemType,
+    severity: input.severity,
+    foundIn: input.foundIn,
+    foundInNote: input.foundInNote,
+    stepsToReproduce: input.stepsToReproduce,
+    expectedBehavior: input.expectedBehavior,
+    actualBehavior: input.actualBehavior,
+    resolution: input.resolution,
+    regression: input.regression,
+    affectedSystemId: input.affectedSystemId,
+    duplicateOfTaskId,
+  };
 }
 
 function mapMcpAiUsage(input: {
@@ -966,6 +1030,21 @@ function mcpSource(
   };
 }
 
+function projectListPage<T extends object>(
+  rows: T[],
+  input: { cursor?: string; limit?: number },
+) {
+  const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
+  const page = pageItems(rows, input.cursor, limit);
+  return {
+    rows: page.items,
+    total: page.total,
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+    hasMore: page.hasMore,
+  };
+}
+
 export function createMcpToolHandlers(
   app: FastifyInstance,
   client: McpClientContext,
@@ -1597,7 +1676,13 @@ export function createMcpToolHandlers(
       };
     },
 
-    async getKnowledgeRecord({ recordId }) {
+    async getKnowledgeRecord({
+      recordId,
+      contentOffset,
+      contentLimit,
+      boundary,
+      expectSha256,
+    }) {
       const workspaceIds = client.allowedWorkspaceIds.length > 0 
         ? client.allowedWorkspaceIds 
         : undefined;
@@ -1619,26 +1704,24 @@ export function createMcpToolHandlers(
       }
       assertWorkspaceAllowed(client, record.workspaceId);
       assertProjectAllowed(client, record.projectId);
-      const truncated = truncateContent(record.contentMarkdown);
-      await auditKnowledgeView({
-        database: app.database,
-        organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
-        recordId: record.id,
-        workspaceId: record.workspaceId,
-        projectId: record.projectId,
-        systemId: record.systemId,
-        slug: record.slug,
-        via: 'mcp',
-        ipAddress,
-      });
+      const hash = contentSha256(record.contentMarkdown);
+      if (expectSha256 !== undefined && expectSha256 !== hash) {
+        throw new AppError({
+          code: 'CONTENT_CHANGED',
+          message: 'Record content changed since contentSha256 was captured',
+          statusCode: 409,
+        });
+      }
+      const requestedOffset = contentOffset ?? 0;
+      const loadSidecars = requestedOffset <= 1;
       const reviewedByUser = await resolveReviewedByUser(app.database, record);
-      const mediaRows = await listWorkspaceMedia(app.database, {
-        workspaceId: record.workspaceId,
-        knowledgeRecordId: record.id,
-        limit: 50,
-      });
+      const mediaRows = loadSidecars
+        ? await listWorkspaceMedia(app.database, {
+            workspaceId: record.workspaceId,
+            knowledgeRecordId: record.id,
+            limit: 50,
+          })
+        : [];
       const keyPrefixMap = await loadProjectKeyPrefixMap(app.database, [
         record.projectId,
       ]);
@@ -1649,34 +1732,84 @@ export function createMcpToolHandlers(
         keyPrefix && record.documentKeyType && record.documentNumber != null
           ? `${keyPrefix}-${record.documentKeyType}-${record.documentNumber}`
           : null;
-      const tagMap = await getKnowledgeRecordTags(app.database, [record.id]);
-      return {
-        knowledgeRecord: {
-          id: record.id,
+      const tagMap = loadSidecars
+        ? await getKnowledgeRecordTags(app.database, [record.id])
+        : new Map<string, Array<{ name: string }>>();
+      const toPayload = (candidate: ContentPage) => {
+        const isFirst = candidate.contentOffset === 0;
+        return {
+          knowledgeRecord: {
+            id: record.id,
+            workspaceId: record.workspaceId,
+            projectId: record.projectId,
+            systemId: record.systemId,
+            title: record.title,
+            slug: record.slug,
+            summary: record.summary,
+            recordType: record.recordType,
+            documentKeyType: record.documentKeyType,
+            documentNumber: record.documentNumber,
+            humanKey,
+            lifecycleStatus: record.lifecycleStatus,
+            sourceOfTruthMode: record.sourceOfTruthMode,
+            contentMarkdown: candidate.content,
+            contentTruncated: candidate.contentTruncated,
+            contentLength: candidate.contentLength,
+            contentOffset: candidate.contentOffset,
+            nextOffset: candidate.nextOffset,
+            returnedChars: candidate.returnedChars,
+            chunkIndex: candidate.chunkIndex,
+            totalChunks: candidate.totalChunks,
+            inCodeFence: candidate.inCodeFence,
+            contentSha256: hash,
+            currentVersionNumber: record.currentVersionNumber,
+            verifiedAt: record.verifiedAt?.toISOString() ?? null,
+            lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
+            reviewedBy: record.reviewedBy,
+            reviewedByUser,
+            updatedAt: record.updatedAt.toISOString(),
+            ...(isFirst
+              ? {
+                  tags: knowledgeRecordTagNames(tagMap, record.id),
+                  media: mediaRows.map(toPublicMedia),
+                }
+              : {}),
+          },
+        };
+      };
+      let fitted;
+      try {
+        fitted = sliceContentToFit(
+          record.contentMarkdown,
+          { offset: contentOffset, limit: contentLimit, boundary },
+          (candidate) => serializedResponseBytes(toPayload(candidate)),
+        );
+      } catch (error) {
+        if (error instanceof ContentOffsetError) {
+          throw new AppError({
+            code: 'KNOWLEDGE_RECORD_CONTENT_OFFSET',
+            message: error.message,
+            statusCode: 400,
+          });
+        }
+        throw error;
+      }
+      if (fitted.contentOffset === 0) {
+        await auditKnowledgeView({
+          database: app.database,
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          recordId: record.id,
           workspaceId: record.workspaceId,
           projectId: record.projectId,
           systemId: record.systemId,
-          title: record.title,
           slug: record.slug,
-          summary: record.summary,
-          recordType: record.recordType,
-          documentKeyType: record.documentKeyType,
-          documentNumber: record.documentNumber,
-          humanKey,
-          lifecycleStatus: record.lifecycleStatus,
-          sourceOfTruthMode: record.sourceOfTruthMode,
-          contentMarkdown: truncated.content,
-          contentTruncated: truncated.truncated,
-          currentVersionNumber: record.currentVersionNumber,
-          verifiedAt: record.verifiedAt?.toISOString() ?? null,
-          lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
-          reviewedBy: record.reviewedBy,
-          reviewedByUser,
-          updatedAt: record.updatedAt.toISOString(),
-          tags: knowledgeRecordTagNames(tagMap, record.id),
-          media: mediaRows.map(toPublicMedia),
-        },
-      };
+          via: 'mcp',
+          ipAddress,
+        });
+      }
+      return toPayload(fitted);
     },
 
     async listRecordMetadata() {
@@ -1905,6 +2038,17 @@ export function createMcpToolHandlers(
       }
 
       assertWriteWorkspaceAllowed(client, existing.workspaceId);
+      if (
+        input.contentMarkdown !== undefined &&
+        isTruncatedReadback(input.contentMarkdown)
+      ) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_TRUNCATED_CONTENT',
+          message:
+            'contentMarkdown ends with the truncated-read marker. Page get_knowledge_record until nextOffset is null, then send the full body.',
+          statusCode: 400,
+        });
+      }
       const nextProjectId =
         input.projectId === undefined ? existing.projectId : input.projectId;
       assertProjectAllowed(client, nextProjectId);
@@ -1970,6 +2114,136 @@ export function createMcpToolHandlers(
           lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
           sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
           archivedAt: result.knowledgeRecord.archivedAt,
+          currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
+          projectId: result.knowledgeRecord.projectId,
+          systemId: result.knowledgeRecord.systemId,
+          versioned: result.shouldVersion,
+        },
+      };
+    },
+
+    async beginRecordContentUpload(input) {
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const resolvedId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+      });
+      const [record] = await app.database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(and(eq(knowledgeRecords.id, resolvedId), isNull(knowledgeRecords.archivedAt)))
+        .limit(1);
+      if (!record) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found',
+          statusCode: 404,
+        });
+      }
+      assertWriteWorkspaceAllowed(client, record.workspaceId);
+      assertProjectAllowed(client, record.projectId);
+      requireActingUserId(client);
+      const hash = contentSha256(record.contentMarkdown);
+      const started = await beginRecordContentUploadSession(app.redis, {
+        clientId: client.id,
+        recordId: record.id,
+        workspaceId: record.workspaceId,
+        contentSha256: hash,
+      });
+      return {
+        ...started,
+        contentLength: record.contentMarkdown.length,
+        contentSha256: hash,
+        currentVersionNumber: record.currentVersionNumber,
+      };
+    },
+
+    async appendRecordContent(input) {
+      requireActingUserId(client);
+      return appendRecordContentChunk(app.redis, {
+        uploadId: input.uploadId,
+        clientId: client.id,
+        chunk: input.chunk,
+        index: input.index,
+      });
+    },
+
+    async finalizeRecordContentUpload(input) {
+      const actingUserId = requireActingUserId(client);
+      const session = await loadRecordContentUploadSession(
+        app.redis,
+        input.uploadId,
+        client.id,
+      );
+      assertWriteWorkspaceAllowed(client, session.workspaceId);
+      if (session.chunks.length === 0) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'No chunks uploaded; call append_record_content first',
+          statusCode: 400,
+        });
+      }
+      const contentMarkdown = session.chunks.join('');
+      if (isTruncatedReadback(contentMarkdown)) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_TRUNCATED_CONTENT',
+          message:
+            'contentMarkdown ends with the truncated-read marker. Page get_knowledge_record until nextOffset is null, then send the full body.',
+          statusCode: 400,
+        });
+      }
+      if (
+        input.expectedLength !== undefined &&
+        contentMarkdown.length !== input.expectedLength
+      ) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: `Joined content length ${contentMarkdown.length} does not match expectedLength ${input.expectedLength}`,
+          statusCode: 400,
+        });
+      }
+      const [record] = await app.database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(and(eq(knowledgeRecords.id, session.recordId), isNull(knowledgeRecords.archivedAt)))
+        .limit(1);
+      if (!record) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found',
+          statusCode: 404,
+        });
+      }
+      assertProjectAllowed(client, record.projectId);
+      assertContentUnchanged(session.contentSha256, contentSha256(record.contentMarkdown));
+      const result = await updateKnowledgeRecord(
+        app,
+        record.id,
+        {
+          contentMarkdown,
+          changeMessage: input.changeMessage,
+          lifecycleStatus: 'draft',
+          sourceOfTruthMode: 'ai_generated_draft',
+        },
+        {
+          actorType: 'api_client',
+          actorId: client.id,
+          userId: actingUserId,
+        },
+        ipAddress,
+      );
+      await deleteRecordContentUploadSession(app.redis, session.uploadId);
+      return {
+        knowledgeRecord: {
+          id: result.knowledgeRecord.id,
+          workspaceId: result.knowledgeRecord.workspaceId,
+          title: result.knowledgeRecord.title,
+          slug: result.knowledgeRecord.slug,
+          recordType: result.knowledgeRecord.recordType,
+          lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
+          sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
           currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
           projectId: result.knowledgeRecord.projectId,
           systemId: result.knowledgeRecord.systemId,
@@ -2280,10 +2554,18 @@ export function createMcpToolHandlers(
 
     async listProjectMilestones(input) {
       await requirePmProject(app, client, input.projectId);
-      return {
-        milestones: await listMilestones(app.database, input.projectId, {
+      const page = projectListPage(
+        await listMilestones(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        milestones: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -2309,13 +2591,14 @@ export function createMcpToolHandlers(
           requestedProjectId: input.projectId,
         });
       }
-      return {
-        tasks: await listTasks(app.database, input.projectId, {
-          milestoneId,
-          sprintId,
-          includeArchived: input.includeArchived,
-        }),
-      };
+      const tasks = await listTasks(app.database, input.projectId, {
+        milestoneId,
+        sprintId,
+        itemType: input.itemType,
+        includeArchived: input.includeArchived,
+      });
+      const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
+      return pageTaskList(tasks, input.cursor, limit);
     },
 
     async getProjectTask(input) {
@@ -2408,10 +2691,18 @@ export function createMcpToolHandlers(
     async listProjectSprints(input) {
       await requirePmProject(app, client, input.projectId);
       const { listSprints } = await import('./project-sprints.js');
-      return {
-        sprints: await listSprints(app.database, input.projectId, {
+      const page = projectListPage(
+        await listSprints(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        sprints: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -2580,17 +2871,17 @@ export function createMcpToolHandlers(
         includeArchived: input.includeArchived,
         role: input.role ? raciRoleSchema.parse(input.role) : undefined,
       });
-      return {
-        tasks: tasks.filter((task) => {
-          try {
-            assertWorkspaceAllowed(client, task.workspaceId);
-            assertProjectAllowed(client, task.projectId);
-            return true;
-          } catch {
-            return false;
-          }
-        }),
-      };
+      const visible = tasks.filter((task) => {
+        try {
+          assertWorkspaceAllowed(client, task.workspaceId);
+          assertProjectAllowed(client, task.projectId);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
+      return pageTaskList(visible, input.cursor, limit);
     },
 
     async getMyDashboardInsights() {
@@ -2684,6 +2975,10 @@ export function createMcpToolHandlers(
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
+      const workspaceIds =
+        client.allowedWorkspaceIds.length > 0
+          ? client.allowedWorkspaceIds
+          : undefined;
       const milestoneId =
         input.milestoneId == null
           ? input.milestoneId
@@ -2731,6 +3026,10 @@ export function createMcpToolHandlers(
         storyPoints: input.storyPoints,
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
+        ...(await mapMcpBugFields(app.database, input, {
+          projectId: project.id,
+          workspaceIds,
+        })),
         createdBy: actingUserId,
         raci: input.raci?.map((entry) => ({
           userId: entry.userId,
@@ -2818,6 +3117,10 @@ export function createMcpToolHandlers(
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         archived: input.archived,
+        ...(await mapMcpBugFields(app.database, input, {
+          projectId: project.id,
+          workspaceIds,
+        })),
         actorUserId: actingUserId,
         workspaceId: project.workspaceId,
       });
@@ -2928,10 +3231,18 @@ export function createMcpToolHandlers(
 
     async listProjectEpics(input) {
       await requirePmProject(app, client, input.projectId);
-      return {
-        epics: await listEpics(app.database, input.projectId, {
+      const page = projectListPage(
+        await listEpics(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        epics: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3008,11 +3319,19 @@ export function createMcpToolHandlers(
             requestedProjectId: input.projectId,
           })
         : undefined;
-      return {
-        userStories: await listUserStories(app.database, input.projectId, {
+      const page = projectListPage(
+        await listUserStories(app.database, input.projectId, {
           epicId,
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        userStories: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3110,8 +3429,13 @@ export function createMcpToolHandlers(
       });
       const task = await getTask(app.database, taskId);
       await requirePmProject(app, client, task.projectId);
+      const page = projectListPage(await listTaskActivities(app.database, taskId), input);
       return {
-        activities: await listTaskActivities(app.database, taskId),
+        activities: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3576,10 +3900,18 @@ export function createMcpToolHandlers(
 
     async listProjectRaidItems(input) {
       await requirePmProject(app, client, input.projectId);
-      return {
-        raidItems: await listRaidItems(app.database, input.projectId, {
+      const page = projectListPage(
+        await listRaidItems(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        raidItems: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3611,6 +3943,18 @@ export function createMcpToolHandlers(
         severity: input.severity
           ? raidSeveritySchema.parse(input.severity)
           : undefined,
+        probability:
+          input.probability === undefined
+            ? undefined
+            : input.probability === null
+              ? null
+              : raidSeveritySchema.parse(input.probability),
+        impact:
+          input.impact === undefined
+            ? undefined
+            : input.impact === null
+              ? null
+              : raidSeveritySchema.parse(input.impact),
         ownerUserId: input.ownerUserId,
         dueDate: input.dueDate,
         sortOrder: input.sortOrder,
@@ -3660,6 +4004,18 @@ export function createMcpToolHandlers(
         severity: input.severity
           ? raidSeveritySchema.parse(input.severity)
           : undefined,
+        probability:
+          input.probability === undefined
+            ? undefined
+            : input.probability === null
+              ? null
+              : raidSeveritySchema.parse(input.probability),
+        impact:
+          input.impact === undefined
+            ? undefined
+            : input.impact === null
+              ? null
+              : raidSeveritySchema.parse(input.impact),
         ownerUserId: input.ownerUserId,
         dueDate: input.dueDate,
         sortOrder: input.sortOrder,
@@ -3771,6 +4127,125 @@ export function createMcpToolHandlers(
       return { raidItem };
     },
 
+    async setProjectRaidRecordLinks(input) {
+      const actingUserId = requireActingUserId(client);
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const raidItemId = await resolveEntityId(app.database, {
+        entityType: 'raid',
+        idOrKey: input.raidItemId,
+        workspaceIds,
+      });
+      const existing = await getRaidItem(app.database, raidItemId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const recordIds = await Promise.all(
+        input.recordIds.map((idOrKey) =>
+          resolveKnowledgeRecordId(app.database, {
+            idOrKey,
+            workspaceIds,
+            projectId: project.id,
+          }),
+        ),
+      );
+      const raidItem = await setRaidRecordLinks(app.database, {
+        raidItemId,
+        projectId: project.id,
+        recordIds,
+        createdBy: actingUserId,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.raid_record_links_set',
+        entityType: 'project_raid_item',
+        entityId: raidItem.id,
+        metadata: {
+          projectId: project.id,
+          recordIds: input.recordIds,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { raidItem };
+    },
+
+    async getKnowledgeRecordRaidLinks(input: { recordId: string }) {
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+      });
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        recordId,
+      );
+      assertWorkspaceAllowed(client, record.workspaceId);
+      return {
+        raidItems: await listRaidItemsForRecord(app.database, recordId),
+      };
+    },
+
+    async setKnowledgeRecordRaidLinks(input: {
+      recordId: string;
+      raidItemIds: string[];
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+      });
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        recordId,
+      );
+      assertWriteWorkspaceAllowed(client, record.workspaceId);
+      if (record.projectId) {
+        const { project } = await requireProjectContext(app.database, record.projectId);
+        assertProjectNotArchived(project);
+      }
+      const raidItemIds = await Promise.all(
+        input.raidItemIds.map((idOrKey) =>
+          resolveEntityId(app.database, {
+            entityType: 'raid',
+            idOrKey,
+            projectId: record.projectId ?? undefined,
+            workspaceIds,
+          }),
+        ),
+      );
+      const raidItems = await setRecordRaidLinks(app.database, {
+        recordId,
+        raidItemIds,
+        createdBy: actingUserId,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'knowledge.raid_links_set',
+        entityType: 'knowledge_record',
+        entityId: recordId,
+        metadata: {
+          projectId: record.projectId,
+          raidItemIds: input.raidItemIds,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { raidItems };
+    },
+
     async getKnowledgeRecordDeliveryLinks(input) {
       const workspaceIds = client.allowedWorkspaceIds.length > 0 
         ? client.allowedWorkspaceIds 
@@ -3795,12 +4270,22 @@ export function createMcpToolHandlers(
     async listProjectChangeItems(input: {
       projectId: string;
       includeArchived?: boolean;
+      limit?: number;
+      cursor?: string;
     }) {
       await requirePmProject(app, client, input.projectId);
-      return {
-        changeItems: await listChangeItems(app.database, input.projectId, {
+      const page = projectListPage(
+        await listChangeItems(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        changeItems: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3819,6 +4304,7 @@ export function createMcpToolHandlers(
       baselineEndBefore?: string | null;
       baselineEndAfter?: string | null;
       knowledgeRecordId?: string | null;
+      recordIds?: string[];
       sortOrder?: number;
       deliveryLinks?: Array<{ entityType: string; entityId: string }>;
     }) {
@@ -3834,6 +4320,16 @@ export function createMcpToolHandlers(
         input.knowledgeRecordId,
         workspaceIds,
       );
+      const recordIds = input.recordIds
+        ? await Promise.all(
+            input.recordIds.map((recordId) =>
+              resolveKnowledgeRecordId(app.database, {
+                idOrKey: recordId,
+                workspaceIds,
+              }),
+            ),
+          )
+        : undefined;
       const deliveryLinks = input.deliveryLinks
         ? await Promise.all(
             input.deliveryLinks.map(async (link) => {
@@ -3870,6 +4366,7 @@ export function createMcpToolHandlers(
         baselineEndBefore: input.baselineEndBefore,
         baselineEndAfter: input.baselineEndAfter,
         knowledgeRecordId: knowledgeRecordId ?? null,
+        recordIds,
         sortOrder: input.sortOrder,
         deliveryLinks,
         createdBy: actingUserId,
@@ -3907,6 +4404,7 @@ export function createMcpToolHandlers(
       baselineEndBefore?: string | null;
       baselineEndAfter?: string | null;
       knowledgeRecordId?: string | null;
+      recordIds?: string[];
       sortOrder?: number;
       archived?: boolean;
       deliveryLinks?: Array<{ entityType: string; entityId: string }>;
@@ -3929,6 +4427,16 @@ export function createMcpToolHandlers(
         input.knowledgeRecordId,
         workspaceIds,
       );
+      const recordIds = input.recordIds
+        ? await Promise.all(
+            input.recordIds.map((recordId) =>
+              resolveKnowledgeRecordId(app.database, {
+                idOrKey: recordId,
+                workspaceIds,
+              }),
+            ),
+          )
+        : undefined;
       const deliveryLinks = input.deliveryLinks
         ? await Promise.all(
             input.deliveryLinks.map(async (link) => {
@@ -3967,6 +4475,7 @@ export function createMcpToolHandlers(
           input.knowledgeRecordId === undefined
             ? undefined
             : knowledgeRecordId ?? null,
+        recordIds,
         sortOrder: input.sortOrder,
         archived: input.archived,
         deliveryLinks,

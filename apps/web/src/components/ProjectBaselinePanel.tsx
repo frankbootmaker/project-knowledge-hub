@@ -73,6 +73,8 @@ type KnowledgeOption = {
 const PROJECT_ROLES = [
   'sponsor',
   'owner',
+  'project_manager',
+  'scrum_master',
   'product_owner',
   'tech_lead',
   'contributor',

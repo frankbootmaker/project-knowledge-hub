@@ -85,11 +85,13 @@ type Task = {
   status: string;
   dueDate: string | null;
   humanKey?: string | null;
+  itemType?: 'task' | 'bug';
 };
 
 type AxisMarker = {
   id: string;
   kind: 'milestone' | 'task';
+  itemType?: 'task' | 'bug';
   title: string;
   date: string;
   status: string;
@@ -952,6 +954,7 @@ export function ProjectDeliveryTimeline({
         items.push({
           id: `task:${task.id}`,
           kind: 'task',
+          itemType: task.itemType === 'bug' ? 'bug' : 'task',
           title: task.title,
           date: task.dueDate,
           status: task.status,
@@ -1551,7 +1554,12 @@ export function ProjectDeliveryTimeline({
                   lane: 0,
                   side: 'above',
                 };
-                const kindLabel = marker.kind === 'milestone' ? t('kindMilestone') : t('kindTask');
+                const kindLabel =
+                  marker.kind === 'milestone'
+                    ? t('kindMilestone')
+                    : marker.itemType === 'bug'
+                      ? t('kindBug')
+                      : t('kindTask');
                 const statusLabel =
                   marker.kind === 'milestone'
                     ? t(`milestoneStatus.${marker.status}`)
