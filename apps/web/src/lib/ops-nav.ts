@@ -440,7 +440,8 @@ function hashId(hash: string): string {
   return hash.startsWith('#') ? hash.slice(1) : hash;
 }
 
-export function inferNavSection(pathname: string, hash = '', search = ''): NavSectionId {
+/** Location args stay so the rail can pass hash and query. Project pages stay in the project menu. */
+export function inferNavSection(pathname: string, _hash = '', _search = ''): NavSectionId {
   if (pathname.startsWith('/admin')) {
     return 'admin';
   }
