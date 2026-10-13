@@ -7,7 +7,11 @@ import {
 } from '@project-knowledge-hub/domain';
 import { invokeNamedHubTool } from './llm-tool-catalog.js';
 import { hasMcpScope, type McpScope } from './scopes.js';
-import { enforceResponseSize, MCP_MAX_LIST_LIMIT } from './limits.js';
+import {
+  enforceResponseSize,
+  MCP_MAX_CONTENT_CHARS,
+  MCP_MAX_LIST_LIMIT,
+} from './limits.js';
 import { isoDateNullableSchema, sanitizeError, AppError } from '@project-knowledge-hub/domain';
 
 export type McpClientContext = {
@@ -133,7 +137,11 @@ export type McpToolHandlers = {
     limit: number;
     mode?: 'fts' | 'hybrid';
   }) => Promise<unknown>;
-  getKnowledgeRecord: (input: { recordId: string }) => Promise<unknown>;
+  getKnowledgeRecord: (input: {
+    recordId: string;
+    contentOffset?: number;
+    contentLimit?: number;
+  }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
   listRecordTranslations: (input: { recordId: string }) => Promise<unknown>;
   createRecordTranslation: (input: {
@@ -1338,8 +1346,12 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including truncated markdown content, tags (string array of tag names, same shape as search_knowledge), and linked workspace media (id, url, markdownSnippet). Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
-    { recordId: z.string().min(1).max(80) },
+    'Retrieve a knowledge record including markdown content, tags (string array of tag names, same shape as search_knowledge), and linked workspace media (id, url, markdownSnippet). Content is paged at 50,000 characters: contentLength is the full length, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    {
+      recordId: z.string().min(1).max(80),
+      contentOffset: z.number().int().min(0).optional(),
+      contentLimit: z.number().int().min(1).max(MCP_MAX_CONTENT_CHARS).optional(),
+    },
     async (args) =>
       wrap(
         'get_knowledge_record',
@@ -1513,7 +1525,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_knowledge_record',
-    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Set archived=true to soft-archive (or false to restore). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Send the full markdown body: a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. Set archived=true to soft-archive (or false to restore). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     updateKnowledgeRecordInputSchema.shape,
     async (args) =>
       wrap('update_knowledge_record', 'knowledge:write', () =>

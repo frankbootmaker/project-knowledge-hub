@@ -170,4 +170,4 @@ Write (requires `knowledge:write`):
 * `create_knowledge_record` — always `draft` / `ai_generated_draft`
 * `update_knowledge_record` — forces `draft`; requires `changeMessage`
 
-Responses are size-limited; markdown may be truncated on read.
+Responses are size-limited. `get_knowledge_record` pages markdown at 50,000 characters: read again with `contentOffset` set to `nextOffset` until `nextOffset` is null before rewriting the record. A body that still ends with the truncation marker is rejected.

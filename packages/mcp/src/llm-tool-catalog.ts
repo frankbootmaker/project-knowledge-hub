@@ -312,13 +312,26 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (truncated markdown, tags as tag-name strings, and media). recordId may be UUID or document key.',
+      'Get a knowledge record (paged markdown, tags as tag-name strings, and media). Each page is at most 50,000 characters. contentLength is the full length. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. recordId may be UUID or document key.',
     scope: 'knowledge:read',
     openApi: true,
     body: {
       type: 'object',
       required: ['recordId'],
-      properties: { recordId: entityRefProp('Knowledge record id') },
+      properties: {
+        recordId: entityRefProp('Knowledge record id'),
+        contentOffset: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Character offset. Omit or use 0 for the first page. Then use nextOffset.',
+        },
+        contentLimit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 50_000,
+          description: 'Max characters in this page. Defaults to 50000.',
+        },
+      },
     },
   },
   {
@@ -398,7 +411,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_knowledge_record',
     description:
-      'Update a knowledge record. Content edits stay draft. archived=true sets archivedAt and leaves lifecycleStatus unchanged. Requires knowledge:write.',
+      'Update a knowledge record. Content edits stay draft. Send the full markdown body; a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. archived=true sets archivedAt and leaves lifecycleStatus unchanged. Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     openApi: true,

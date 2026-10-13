@@ -7,10 +7,16 @@ export {
 export {
   MCP_RATE_LIMIT_PER_MINUTE,
   MCP_MAX_CONTENT_CHARS,
+  MCP_MAX_CONTENT_BYTES,
   MCP_MAX_LIST_LIMIT,
   MCP_MAX_RESPONSE_BYTES,
+  MCP_CONTENT_TRUNCATION_SUFFIX,
+  ContentOffsetError,
   truncateContent,
+  sliceContent,
+  isTruncatedReadback,
   enforceResponseSize,
+  type ContentPage,
 } from './limits.js';
 export {
   createKnowledgeHubMcpServer,

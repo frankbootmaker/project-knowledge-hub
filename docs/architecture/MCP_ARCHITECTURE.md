@@ -65,7 +65,7 @@ Elevated catalogue (planned): `catalogue:write` — propose/confirm create/updat
 
 * 60 requests / minute / client (Redis)
 * List/search capped at 25 items
-* Content truncated at 50_000 characters
+* Content is paged at 50_000 characters (and about 100_000 UTF-8 bytes). `contentLength` is the full length. When `contentTruncated` is true, call `get_knowledge_record` again with `contentOffset` set to `nextOffset` until `nextOffset` is null. The first page still ends with `…[truncated]`; later pages are a clean slice.
 * Soft JSON response size cap ~200 KB
 
 ## Write guardrails
@@ -73,6 +73,7 @@ Elevated catalogue (planned): `catalogue:write` — propose/confirm create/updat
 * MCP create/update always set lifecycle to `draft`
 * Provenance defaults to `ai_generated_draft` / source provider `mcp`
 * Updates require `changeMessage`
+* A content update that ends with the `get_knowledge_record` truncation marker is rejected. Page until `nextOffset` is null and send the full body.
 * Verify / mark-current / archive / restore are not exposed on MCP
 * Elevated catalogue mutations (when shipped) use propose → commit; hard deletes stay off MCP
 

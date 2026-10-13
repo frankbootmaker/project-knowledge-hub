@@ -53,7 +53,9 @@ import {
   userStoryStatusSchema,
 } from '@project-knowledge-hub/domain';
 import {
-  truncateContent,
+  ContentOffsetError,
+  isTruncatedReadback,
+  sliceContent,
   type McpClientContext,
   type McpToolHandlers,
 } from '@project-knowledge-hub/mcp';
@@ -1647,7 +1649,7 @@ export function createMcpToolHandlers(
       };
     },
 
-    async getKnowledgeRecord({ recordId }) {
+    async getKnowledgeRecord({ recordId, contentOffset, contentLimit }) {
       const workspaceIds = client.allowedWorkspaceIds.length > 0 
         ? client.allowedWorkspaceIds 
         : undefined;
@@ -1669,7 +1671,22 @@ export function createMcpToolHandlers(
       }
       assertWorkspaceAllowed(client, record.workspaceId);
       assertProjectAllowed(client, record.projectId);
-      const truncated = truncateContent(record.contentMarkdown);
+      let page;
+      try {
+        page = sliceContent(record.contentMarkdown, {
+          offset: contentOffset,
+          limit: contentLimit,
+        });
+      } catch (error) {
+        if (error instanceof ContentOffsetError) {
+          throw new AppError({
+            code: 'KNOWLEDGE_RECORD_CONTENT_OFFSET',
+            message: error.message,
+            statusCode: 400,
+          });
+        }
+        throw error;
+      }
       await auditKnowledgeView({
         database: app.database,
         organizationId: client.organizationId,
@@ -1715,8 +1732,11 @@ export function createMcpToolHandlers(
           humanKey,
           lifecycleStatus: record.lifecycleStatus,
           sourceOfTruthMode: record.sourceOfTruthMode,
-          contentMarkdown: truncated.content,
-          contentTruncated: truncated.truncated,
+          contentMarkdown: page.content,
+          contentTruncated: page.contentTruncated,
+          contentLength: page.contentLength,
+          contentOffset: page.contentOffset,
+          nextOffset: page.nextOffset,
           currentVersionNumber: record.currentVersionNumber,
           verifiedAt: record.verifiedAt?.toISOString() ?? null,
           lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
@@ -1955,6 +1975,17 @@ export function createMcpToolHandlers(
       }
 
       assertWriteWorkspaceAllowed(client, existing.workspaceId);
+      if (
+        input.contentMarkdown !== undefined &&
+        isTruncatedReadback(input.contentMarkdown)
+      ) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_TRUNCATED_CONTENT',
+          message:
+            'contentMarkdown ends with the truncated-read marker. Page get_knowledge_record until nextOffset is null, then send the full body.',
+          statusCode: 400,
+        });
+      }
       const nextProjectId =
         input.projectId === undefined ? existing.projectId : input.projectId;
       assertProjectAllowed(client, nextProjectId);
