@@ -7,7 +7,9 @@ import {
   MCP_CONTENT_TRUNCATION_SUFFIX,
   MCP_MAX_CONTENT_BYTES,
   MCP_MAX_RESPONSE_BYTES,
+  serializedResponseBytes,
   sliceContent,
+  sliceContentToFit,
   truncateContent,
 } from './limits.js';
 
@@ -180,5 +182,69 @@ describe('mcp scopes and limits', () => {
     const floor = enforceResponseSize({ limit: 1, text }) as { suggestedLimit?: number };
     expect(floor.suggestedLimit).toBe(1);
     expect(enforceResponseSize({ ok: true })).toEqual({ ok: true });
+  });
+
+  it('keeps the unpaged read body and only adds paging fields', () => {
+    const source = `${'a'.repeat(50_000)}TAIL`;
+    const page = sliceContent(source);
+    expect(page.contentTruncated).toBe(true);
+    expect(page.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(true);
+    expect(page.content.startsWith('a'.repeat(50_000))).toBe(true);
+    expect(page.returnedChars).toBe(50_000);
+    expect({
+      contentLength: page.contentLength,
+      contentOffset: page.contentOffset,
+      nextOffset: page.nextOffset,
+      chunkIndex: page.chunkIndex,
+      totalChunks: page.totalChunks,
+      inCodeFence: page.inCodeFence,
+    }).toEqual({
+      contentLength: 50_004,
+      contentOffset: 0,
+      nextOffset: 50_000,
+      chunkIndex: 0,
+      totalChunks: 2,
+      inCodeFence: false,
+    });
+  });
+
+  it('moves a contentOffset off the low half of a surrogate pair', () => {
+    const source = 'a😀b';
+    const emojiAt = source.indexOf('😀');
+    const page = sliceContent(source, { offset: emojiAt + 1, limit: 10 });
+    expect(page.contentOffset).toBe(emojiAt);
+    expect(page.content.codePointAt(0)).toBe('😀'.codePointAt(0));
+    expect(page.content.startsWith('😀')).toBe(true);
+  });
+
+  it('shrinks heavily escaped pages so each one stays under the response cap', () => {
+    const source = `${'\u0001'.repeat(40_000)}${'😀"\\\n'.repeat(2_000)}`;
+    const measure = (page: ReturnType<typeof sliceContent>) =>
+      serializedResponseBytes({
+        knowledgeRecord: {
+          contentMarkdown: page.content,
+          contentTruncated: page.contentTruncated,
+          contentLength: page.contentLength,
+          contentOffset: page.contentOffset,
+          nextOffset: page.nextOffset,
+          returnedChars: page.returnedChars,
+        },
+      });
+
+    let offset = 0;
+    let joined = '';
+    for (let guard = 0; guard < 80; guard += 1) {
+      const page = sliceContentToFit(source, { offset }, measure);
+      expect(measure(page)).toBeLessThanOrEqual(MCP_MAX_RESPONSE_BYTES);
+      expect(page.returnedChars).toBeGreaterThan(0);
+      joined += source.slice(page.contentOffset, page.contentOffset + page.returnedChars);
+      if (page.nextOffset === null) {
+        expect(joined).toBe(source);
+        return;
+      }
+      expect(page.nextOffset).toBeGreaterThan(offset);
+      offset = page.nextOffset;
+    }
+    throw new Error('paging did not finish');
   });
 });

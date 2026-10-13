@@ -7,6 +7,12 @@ export const MCP_RATE_LIMIT_PER_MINUTE = 60;
 export const MCP_MAX_CONTENT_CHARS = 50_000;
 
 /**
+ * Smallest page the server will shrink to when the serialized response would
+ * still exceed MCP_MAX_RESPONSE_BYTES.
+ */
+export const MCP_MIN_CONTENT_CHARS = 1_000;
+
+/**
  * Max UTF-8 bytes of markdown in one page, leaving room for the rest of the
  * tool JSON under MCP_MAX_RESPONSE_BYTES.
  */
@@ -131,12 +137,20 @@ export function sliceContent(
   }
   const limit = Math.min(requestedLimit, MCP_MAX_CONTENT_CHARS);
   const boundary = options?.boundary ?? 'none';
-  const meta = chunkMeta(offset, limit, contentLength);
-  if (offset === contentLength) {
+  let start = offset;
+  if (start > 0 && start < contentLength) {
+    const code = content.charCodeAt(start);
+    const prev = content.charCodeAt(start - 1);
+    if (code >= 0xdc00 && code <= 0xdfff && prev >= 0xd800 && prev <= 0xdbff) {
+      start -= 1;
+    }
+  }
+  const meta = chunkMeta(start, limit, contentLength);
+  if (start === contentLength) {
     return {
       content: '',
       contentLength,
-      contentOffset: offset,
+      contentOffset: start,
       contentTruncated: false,
       nextOffset: null,
       returnedChars: 0,
@@ -145,40 +159,65 @@ export function sliceContent(
     };
   }
 
-  let slice = fitUtf8(content.slice(offset, offset + limit), MCP_MAX_CONTENT_BYTES);
-  if (offset === 0 && offset + slice.length < contentLength) {
+  let slice = fitUtf8(content.slice(start, start + limit), MCP_MAX_CONTENT_BYTES);
+  if (start === 0 && start + slice.length < contentLength) {
     const suffixBytes = Buffer.byteLength(MCP_CONTENT_TRUNCATION_SUFFIX, 'utf8');
     slice = fitUtf8(
-      content.slice(offset, offset + limit),
+      content.slice(start, start + limit),
       MCP_MAX_CONTENT_BYTES - suffixBytes,
     );
   }
   slice = snapToBoundary(slice, boundary);
 
-  let end = offset + slice.length;
+  let end = start + slice.length;
   let inCodeFence = false;
   const opener = openFenceAt(content, end);
   if (opener !== null && opener < end) {
-    if (opener > offset) {
+    if (opener > start) {
       end = opener;
-      slice = content.slice(offset, end);
+      slice = content.slice(start, end);
     } else {
       inCodeFence = true;
     }
   }
 
   const truncated = end < contentLength;
-  const marker = offset === 0 && truncated ? MCP_CONTENT_TRUNCATION_SUFFIX : '';
+  const marker = start === 0 && truncated ? MCP_CONTENT_TRUNCATION_SUFFIX : '';
   return {
     content: `${slice}${marker}`,
     contentLength,
-    contentOffset: offset,
+    contentOffset: start,
     contentTruncated: truncated,
     nextOffset: truncated ? end : null,
     returnedChars: slice.length,
     inCodeFence,
     ...meta,
   };
+}
+
+/** Pretty-printed tool JSON size, matching the MCP text result. */
+export function serializedResponseBytes(payload: unknown): number {
+  return Buffer.byteLength(JSON.stringify(payload, null, 2), 'utf8');
+}
+
+/**
+ * Re-slice with a smaller limit until `measure` fits under the response cap.
+ * Stops at MCP_MIN_CONTENT_CHARS so a page always makes progress.
+ */
+export function sliceContentToFit(
+  content: string,
+  options: { offset?: number; limit?: number; boundary?: ContentBoundary } | undefined,
+  measure: (page: ContentPage) => number,
+): ContentPage {
+  let limit = Math.min(options?.limit ?? MCP_MAX_CONTENT_CHARS, MCP_MAX_CONTENT_CHARS);
+  let page = sliceContent(content, { ...options, limit });
+  while (measure(page) > MCP_MAX_RESPONSE_BYTES && limit > MCP_MIN_CONTENT_CHARS) {
+    const halved = Math.max(MCP_MIN_CONTENT_CHARS, Math.floor(limit / 2));
+    if (halved >= limit) break;
+    limit = halved;
+    page = sliceContent(content, { ...options, limit });
+  }
+  return page;
 }
 
 export function truncateContent(content: string, max = MCP_MAX_CONTENT_CHARS): {
@@ -203,7 +242,8 @@ export function enforceResponseSize<T>(payload: T): T {
   }
   return {
     error: 'Response exceeds size limit',
-    hint: 'Narrow filters or request a specific record id',
+    hint:
+      'Pass a smaller limit, follow nextCursor, or page get_knowledge_record with contentOffset. suggestedLimit is a smaller list page size.',
     suggestedLimit,
   } as T;
 }

@@ -14,6 +14,8 @@ export {
   ContentOffsetError,
   truncateContent,
   sliceContent,
+  sliceContentToFit,
+  serializedResponseBytes,
   isTruncatedReadback,
   contentSha256,
   enforceResponseSize,

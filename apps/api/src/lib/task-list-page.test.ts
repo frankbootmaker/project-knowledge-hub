@@ -3,6 +3,7 @@ import {
   decodeListCursor,
   encodeListCursor,
   excerptTask,
+  pageItems,
   pageTaskList,
   TASK_LIST_EXCERPT_CHARS,
 } from './task-list-page.js';
@@ -53,5 +54,22 @@ describe('task list pages', () => {
     expect(row.description).toBe('short');
     expect(row.stepsToReproduce?.endsWith('…')).toBe(true);
     expect(row.stepsToReproduce).toHaveLength(TASK_LIST_EXCERPT_CHARS + 1);
+  });
+
+  it('pages epics and changes with excerpted description and rationale', () => {
+    const long = 'r'.repeat(TASK_LIST_EXCERPT_CHARS + 8);
+    const rows = [
+      { id: '1', description: long, rationale: long, goal: null, body: 'ok' },
+      { id: '2', description: 'short', rationale: null, goal: long, body: null },
+    ];
+    const page = pageItems(rows, undefined, 1);
+    expect(page.total).toBe(2);
+    expect(page.hasMore).toBe(true);
+    expect(page.items[0]?.description?.endsWith('…')).toBe(true);
+    expect(page.items[0]?.rationale?.endsWith('…')).toBe(true);
+    expect(page.items[0]?.body).toBe('ok');
+    const rest = pageItems(rows, page.nextCursor ?? undefined, 1);
+    expect(rest.items[0]?.goal?.endsWith('…')).toBe(true);
+    expect(rest.hasMore).toBe(false);
   });
 });

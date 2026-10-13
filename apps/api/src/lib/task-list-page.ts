@@ -10,20 +10,33 @@ type TaskListExcerpt = {
   foundInNote: string | null;
 };
 
+const EXCERPT_KEYS = [
+  'description',
+  'stepsToReproduce',
+  'expectedBehavior',
+  'actualBehavior',
+  'foundInNote',
+  'rationale',
+  'goal',
+  'body',
+] as const;
+
 function excerptField(value: string | null): string | null {
   if (value === null || value.length <= TASK_LIST_EXCERPT_CHARS) return value;
   return `${value.slice(0, TASK_LIST_EXCERPT_CHARS)}…`;
 }
 
+export function excerptItem<T extends object>(item: T): T {
+  const copy = { ...item } as Record<string, unknown>;
+  for (const key of EXCERPT_KEYS) {
+    const value = copy[key];
+    if (typeof value === 'string') copy[key] = excerptField(value);
+  }
+  return copy as T;
+}
+
 export function excerptTask<T extends TaskListExcerpt>(task: T): T {
-  return {
-    ...task,
-    description: excerptField(task.description),
-    stepsToReproduce: excerptField(task.stepsToReproduce),
-    expectedBehavior: excerptField(task.expectedBehavior),
-    actualBehavior: excerptField(task.actualBehavior),
-    foundInNote: excerptField(task.foundInNote),
-  };
+  return excerptItem(task);
 }
 
 export function decodeListCursor(cursor: string | undefined): number {
@@ -51,6 +64,30 @@ export function encodeListCursor(offset: number): string {
   return Buffer.from(JSON.stringify({ offset }), 'utf8').toString('base64url');
 }
 
+export function pageItems<T extends object>(
+  items: T[],
+  cursor: string | undefined,
+  limit: number,
+): {
+  items: T[];
+  total: number;
+  limit: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+} {
+  const offset = decodeListCursor(cursor);
+  const page = items.slice(offset, offset + limit).map(excerptItem);
+  const next = offset + page.length;
+  const hasMore = next < items.length;
+  return {
+    items: page,
+    total: items.length,
+    limit,
+    nextCursor: hasMore ? encodeListCursor(next) : null,
+    hasMore,
+  };
+}
+
 export function pageTaskList<T extends TaskListExcerpt>(
   tasks: T[],
   cursor: string | undefined,
@@ -62,15 +99,12 @@ export function pageTaskList<T extends TaskListExcerpt>(
   nextCursor: string | null;
   hasMore: boolean;
 } {
-  const offset = decodeListCursor(cursor);
-  const page = tasks.slice(offset, offset + limit).map(excerptTask);
-  const next = offset + page.length;
-  const hasMore = next < tasks.length;
+  const page = pageItems(tasks, cursor, limit);
   return {
-    tasks: page,
-    total: tasks.length,
-    limit,
-    nextCursor: hasMore ? encodeListCursor(next) : null,
-    hasMore,
+    tasks: page.items,
+    total: page.total,
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+    hasMore: page.hasMore,
   };
 }

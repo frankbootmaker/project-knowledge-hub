@@ -238,6 +238,8 @@ export type McpToolHandlers = {
   listProjectMilestones: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   listProjectTasks: (input: {
     projectId: string;
@@ -273,6 +275,8 @@ export type McpToolHandlers = {
   listProjectSprints: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectSprint: (input: {
     projectId: string;
@@ -416,6 +420,8 @@ export type McpToolHandlers = {
   listProjectEpics: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectEpic: (input: {
     projectId: string;
@@ -440,6 +446,8 @@ export type McpToolHandlers = {
     projectId: string;
     epicId?: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectUserStory: (input: {
     projectId: string;
@@ -462,7 +470,11 @@ export type McpToolHandlers = {
     sortOrder?: number;
     archived?: boolean;
   }) => Promise<unknown>;
-  listProjectTaskActivities: (input: { taskId: string }) => Promise<unknown>;
+  listProjectTaskActivities: (input: {
+    taskId: string;
+    limit?: number;
+    cursor?: string;
+  }) => Promise<unknown>;
   addProjectTaskComment: (input: {
     taskId: string;
     body: string;
@@ -545,6 +557,8 @@ export type McpToolHandlers = {
   listProjectRaidItems: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectRaidItem: (input: {
     projectId: string;
@@ -596,6 +610,8 @@ export type McpToolHandlers = {
   listProjectChangeItems: (input: {
     projectId: string;
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   createProjectChangeItem: (input: {
     projectId: string;
@@ -719,13 +735,16 @@ export function toMcpErrorResult(
 }
 
 function textResult(data: unknown) {
+  const sized = enforceResponseSize(data);
+  const text = JSON.stringify(sized, null, 2);
+  if (sized !== data) {
+    return {
+      isError: true as const,
+      content: [{ type: 'text' as const, text }],
+    };
+  }
   return {
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify(enforceResponseSize(data), null, 2),
-      },
-    ],
+    content: [{ type: 'text' as const, text }],
   };
 }
 
@@ -1629,12 +1648,18 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  const listPage = {
+    limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
+    cursor: z.string().min(1).max(200).optional(),
+  };
+
   server.tool(
     'list_project_milestones',
-    'List milestones for a project (Project Delivery). Requires pm:read.',
+    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -1720,10 +1745,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_sprints',
-    'List Scrum sprints for a project (committed/done points). Requires pm:read.',
+    'List Scrum sprints for a project (committed/done points). Pages at 25. Goals are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -2026,10 +2052,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_epics',
-    'List epics for a project. Requires pm:read.',
+    'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -2080,11 +2107,12 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_user_stories',
-    'List user stories for a project (optional epic filter). epicId must belong to the given project. Requires pm:read.',
+    'List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       epicId: entityRef.optional(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -2139,8 +2167,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_task_activities',
-    'List activity timeline for a task. Requires pm:read.',
-    { taskId: entityRef },
+    'List activity timeline for a task. Pages at 25. Comment bodies are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    {
+      taskId: entityRef,
+      ...listPage,
+    },
     async (args) =>
       wrap('list_project_task_activities', 'pm:read', () =>
         handlers.listProjectTaskActivities(args),
@@ -2356,10 +2387,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_raid_items',
-    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Requires pm:read.',
+    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(
@@ -2512,10 +2544,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_change_items',
-    'List change-management register items for a project. Requires pm:read.',
+    'List change-management register items for a project. Pages at 25. Descriptions and rationale are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
+      ...listPage,
     },
     async (args) =>
       wrap(

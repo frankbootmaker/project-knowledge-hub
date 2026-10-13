@@ -681,7 +681,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_milestones',
-    description: 'List project milestones. Requires pm:read.',
+    description:
+      'List project milestones. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -690,6 +691,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -735,7 +738,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_epics',
-    description: 'List epics for a project. Requires pm:read.',
+    description:
+      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -744,6 +748,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -769,7 +775,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_user_stories',
-    description: 'List user stories (optional epic filter). Requires pm:read.',
+    description:
+      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -779,6 +786,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         projectId: uuidProp('Project id'),
         epicId: entityRefProp('Optional epic filter'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -805,7 +814,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_sprints',
-    description: 'List Scrum sprints (committed/done points). Requires pm:read.',
+    description:
+      'List Scrum sprints (committed/done points). Pages at 25. Goals are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -814,6 +824,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -1170,12 +1182,17 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_task_activities',
-    description: 'List activity timeline for a task. Requires pm:read.',
+    description:
+      'List activity timeline for a task. Pages at 25. Comment bodies are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
       required: ['taskId'],
-      properties: { taskId: entityRefProp('Task id') },
+      properties: {
+        taskId: entityRefProp('Task id'),
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
+      },
     },
   },
   {
@@ -1438,7 +1455,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_raid_items',
-    description: 'List RAID register items. Requires pm:read.',
+    description:
+      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1446,6 +1464,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -1589,7 +1609,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_project_change_items',
-    description: 'List change-management register items. Requires pm:read.',
+    description:
+      'List change-management register items. Pages at 25. Descriptions and rationale are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1597,6 +1618,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },

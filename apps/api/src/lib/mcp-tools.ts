@@ -57,7 +57,9 @@ import {
   contentSha256,
   isTruncatedReadback,
   MCP_MAX_LIST_LIMIT,
-  sliceContent,
+  serializedResponseBytes,
+  sliceContentToFit,
+  type ContentPage,
   type McpClientContext,
   type McpToolHandlers,
 } from '@project-knowledge-hub/mcp';
@@ -83,7 +85,7 @@ import {
   deleteRecordContentUploadSession,
   loadRecordContentUploadSession,
 } from './record-content-upload-session.js';
-import { pageTaskList } from './task-list-page.js';
+import { pageItems, pageTaskList } from './task-list-page.js';
 import {
   archiveWorkspaceMedia,
   createWorkspaceMedia,
@@ -1028,6 +1030,21 @@ function mcpSource(
   };
 }
 
+function projectListPage<T extends object>(
+  rows: T[],
+  input: { cursor?: string; limit?: number },
+) {
+  const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
+  const page = pageItems(rows, input.cursor, limit);
+  return {
+    rows: page.items,
+    total: page.total,
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+    hasMore: page.hasMore,
+  };
+}
+
 export function createMcpToolHandlers(
   app: FastifyInstance,
   client: McpClientContext,
@@ -1695,41 +1712,10 @@ export function createMcpToolHandlers(
           statusCode: 409,
         });
       }
-      let page;
-      try {
-        page = sliceContent(record.contentMarkdown, {
-          offset: contentOffset,
-          limit: contentLimit,
-          boundary,
-        });
-      } catch (error) {
-        if (error instanceof ContentOffsetError) {
-          throw new AppError({
-            code: 'KNOWLEDGE_RECORD_CONTENT_OFFSET',
-            message: error.message,
-            statusCode: 400,
-          });
-        }
-        throw error;
-      }
-      const firstPage = page.contentOffset === 0;
-      if (firstPage) {
-        await auditKnowledgeView({
-          database: app.database,
-          organizationId: client.organizationId,
-          actorType: 'api_client',
-          actorId: client.id,
-          recordId: record.id,
-          workspaceId: record.workspaceId,
-          projectId: record.projectId,
-          systemId: record.systemId,
-          slug: record.slug,
-          via: 'mcp',
-          ipAddress,
-        });
-      }
+      const requestedOffset = contentOffset ?? 0;
+      const loadSidecars = requestedOffset <= 1;
       const reviewedByUser = await resolveReviewedByUser(app.database, record);
-      const mediaRows = firstPage
+      const mediaRows = loadSidecars
         ? await listWorkspaceMedia(app.database, {
             workspaceId: record.workspaceId,
             knowledgeRecordId: record.id,
@@ -1746,48 +1732,84 @@ export function createMcpToolHandlers(
         keyPrefix && record.documentKeyType && record.documentNumber != null
           ? `${keyPrefix}-${record.documentKeyType}-${record.documentNumber}`
           : null;
-      const tagMap = firstPage
+      const tagMap = loadSidecars
         ? await getKnowledgeRecordTags(app.database, [record.id])
         : new Map<string, Array<{ name: string }>>();
-      return {
-        knowledgeRecord: {
-          id: record.id,
+      const toPayload = (candidate: ContentPage) => {
+        const isFirst = candidate.contentOffset === 0;
+        return {
+          knowledgeRecord: {
+            id: record.id,
+            workspaceId: record.workspaceId,
+            projectId: record.projectId,
+            systemId: record.systemId,
+            title: record.title,
+            slug: record.slug,
+            summary: record.summary,
+            recordType: record.recordType,
+            documentKeyType: record.documentKeyType,
+            documentNumber: record.documentNumber,
+            humanKey,
+            lifecycleStatus: record.lifecycleStatus,
+            sourceOfTruthMode: record.sourceOfTruthMode,
+            contentMarkdown: candidate.content,
+            contentTruncated: candidate.contentTruncated,
+            contentLength: candidate.contentLength,
+            contentOffset: candidate.contentOffset,
+            nextOffset: candidate.nextOffset,
+            returnedChars: candidate.returnedChars,
+            chunkIndex: candidate.chunkIndex,
+            totalChunks: candidate.totalChunks,
+            inCodeFence: candidate.inCodeFence,
+            contentSha256: hash,
+            currentVersionNumber: record.currentVersionNumber,
+            verifiedAt: record.verifiedAt?.toISOString() ?? null,
+            lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
+            reviewedBy: record.reviewedBy,
+            reviewedByUser,
+            updatedAt: record.updatedAt.toISOString(),
+            ...(isFirst
+              ? {
+                  tags: knowledgeRecordTagNames(tagMap, record.id),
+                  media: mediaRows.map(toPublicMedia),
+                }
+              : {}),
+          },
+        };
+      };
+      let fitted;
+      try {
+        fitted = sliceContentToFit(
+          record.contentMarkdown,
+          { offset: contentOffset, limit: contentLimit, boundary },
+          (candidate) => serializedResponseBytes(toPayload(candidate)),
+        );
+      } catch (error) {
+        if (error instanceof ContentOffsetError) {
+          throw new AppError({
+            code: 'KNOWLEDGE_RECORD_CONTENT_OFFSET',
+            message: error.message,
+            statusCode: 400,
+          });
+        }
+        throw error;
+      }
+      if (fitted.contentOffset === 0) {
+        await auditKnowledgeView({
+          database: app.database,
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          recordId: record.id,
           workspaceId: record.workspaceId,
           projectId: record.projectId,
           systemId: record.systemId,
-          title: record.title,
           slug: record.slug,
-          summary: record.summary,
-          recordType: record.recordType,
-          documentKeyType: record.documentKeyType,
-          documentNumber: record.documentNumber,
-          humanKey,
-          lifecycleStatus: record.lifecycleStatus,
-          sourceOfTruthMode: record.sourceOfTruthMode,
-          contentMarkdown: page.content,
-          contentTruncated: page.contentTruncated,
-          contentLength: page.contentLength,
-          contentOffset: page.contentOffset,
-          nextOffset: page.nextOffset,
-          returnedChars: page.returnedChars,
-          chunkIndex: page.chunkIndex,
-          totalChunks: page.totalChunks,
-          inCodeFence: page.inCodeFence,
-          contentSha256: hash,
-          currentVersionNumber: record.currentVersionNumber,
-          verifiedAt: record.verifiedAt?.toISOString() ?? null,
-          lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
-          reviewedBy: record.reviewedBy,
-          reviewedByUser,
-          updatedAt: record.updatedAt.toISOString(),
-          ...(firstPage
-            ? {
-                tags: knowledgeRecordTagNames(tagMap, record.id),
-                media: mediaRows.map(toPublicMedia),
-              }
-            : {}),
-        },
-      };
+          via: 'mcp',
+          ipAddress,
+        });
+      }
+      return toPayload(fitted);
     },
 
     async listRecordMetadata() {
@@ -2532,10 +2554,18 @@ export function createMcpToolHandlers(
 
     async listProjectMilestones(input) {
       await requirePmProject(app, client, input.projectId);
-      return {
-        milestones: await listMilestones(app.database, input.projectId, {
+      const page = projectListPage(
+        await listMilestones(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        milestones: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -2661,10 +2691,18 @@ export function createMcpToolHandlers(
     async listProjectSprints(input) {
       await requirePmProject(app, client, input.projectId);
       const { listSprints } = await import('./project-sprints.js');
-      return {
-        sprints: await listSprints(app.database, input.projectId, {
+      const page = projectListPage(
+        await listSprints(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        sprints: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3193,10 +3231,18 @@ export function createMcpToolHandlers(
 
     async listProjectEpics(input) {
       await requirePmProject(app, client, input.projectId);
-      return {
-        epics: await listEpics(app.database, input.projectId, {
+      const page = projectListPage(
+        await listEpics(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        epics: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3273,11 +3319,19 @@ export function createMcpToolHandlers(
             requestedProjectId: input.projectId,
           })
         : undefined;
-      return {
-        userStories: await listUserStories(app.database, input.projectId, {
+      const page = projectListPage(
+        await listUserStories(app.database, input.projectId, {
           epicId,
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        userStories: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3375,8 +3429,13 @@ export function createMcpToolHandlers(
       });
       const task = await getTask(app.database, taskId);
       await requirePmProject(app, client, task.projectId);
+      const page = projectListPage(await listTaskActivities(app.database, taskId), input);
       return {
-        activities: await listTaskActivities(app.database, taskId),
+        activities: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -3841,10 +3900,18 @@ export function createMcpToolHandlers(
 
     async listProjectRaidItems(input) {
       await requirePmProject(app, client, input.projectId);
-      return {
-        raidItems: await listRaidItems(app.database, input.projectId, {
+      const page = projectListPage(
+        await listRaidItems(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        raidItems: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
@@ -4203,12 +4270,22 @@ export function createMcpToolHandlers(
     async listProjectChangeItems(input: {
       projectId: string;
       includeArchived?: boolean;
+      limit?: number;
+      cursor?: string;
     }) {
       await requirePmProject(app, client, input.projectId);
-      return {
-        changeItems: await listChangeItems(app.database, input.projectId, {
+      const page = projectListPage(
+        await listChangeItems(app.database, input.projectId, {
           includeArchived: input.includeArchived,
         }),
+        input,
+      );
+      return {
+        changeItems: page.rows,
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
       };
     },
 
