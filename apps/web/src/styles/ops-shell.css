@@ -2060,8 +2060,9 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   border-radius: 0;
   background: transparent;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 12px;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
 }
 

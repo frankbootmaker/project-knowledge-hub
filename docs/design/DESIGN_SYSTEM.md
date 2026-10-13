@@ -247,6 +247,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-13
 
 * **Delivery documents** — Task, epic, story, milestone, and sprint manage dialogs add a Documents tab. RAID and change dialogs use the same Details / Documents tabs, and the linked-record picker filters by type. Task dialog tabs use bold body sans, matching the setup menu.
+* **Delivery view tabs** — Board, List, Tree, Calendar, Timeline, and Scrum use the same IBM Plex Sans, 14px, medium weight as the Add button. Stakeholder view tabs share that control.
 * **Task start date** — The add form and the task manage dialog show an optional Start date beside Due date for tasks and bugs.
 
 ### 2026-10-10
