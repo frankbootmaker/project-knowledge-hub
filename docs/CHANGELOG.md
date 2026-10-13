@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **Bug items (PRO-T-52):** Bugs sit beside tasks, with their own key and fields (steps to reproduce, expected and actual behavior, found-in note). A bug’s document links still use entity type `task`. Migration `0051`.
+
+* **Delivery Documents tabs (PRO-T-55):** Epic, story, task, bug, milestone, and sprint each have a Documents tab of linked knowledge records. Task, epic, story, and milestone links save with the item; a sprint saves on Add or Remove. Milestone is a delivery-link entity type.
+
+* **RAID ratings and record links (PRO-T-18, PRO-T-19):** Severity is required and defaults to medium. Probability and impact are optional, use the same scale, and stay independent. There is no probability-times-impact matrix. Knowledge records linked from a RAID item use the RAID record-link table, not delivery links. Migration `0052`.
+
+* **RAID and change item links:** A RAID item can link epics, stories, milestones, and tasks (migration `0053`). A change item can link knowledge records (migration `0054`). Both pickers filter by type. The manage dialogs use the wider item dialog and keep Details and Documents tabs. Sprints stay out of those links.
+
+* **Paged MCP reads and lists (PRO-T-49, PRO-T-56, PRO-T-57):** `get_knowledge_record` pages with `contentOffset`, `contentLimit`, length, truncation, `nextOffset`, content hash, and chunk counts. The first page still ends with the truncation marker; a later page does not, so pages concatenate. A write that still ends with that marker is rejected. A page that would exceed 200 KB is shortened on the server. An offset on the low half of a surrogate pair moves back one unit. Large writes use begin, append, and finalize and create one version. Paging stays on `get_knowledge_record`. Task, my-task, milestone, epic, story, sprint, RAID, change, and task-activity lists page at 25 excerpted rows (`cursor`, `nextCursor`, `hasMore`, `total`). A response that still exceeds the cap is a tool error and includes `suggestedLimit`.
+
+* **Stakeholder roles:** Project manager and scrum master are roster roles.
+
+### Changed
+
+* **Task dialog tabs:** Tab labels use the same bold sans as the setup menu.
+
+### Fixed
+
+* **MCP inject sockets:** Fastify `inject` uses a mock socket without `destroySoon`. The MCP route adds that method so `@hono/node-server` 1.x can close the unread-body drain. Remove it when `@modelcontextprotocol/sdk` allows `@hono/node-server` >= 2.1.5.
+
 * **Shared sortable tables (PRO-T-27, PRO-T-28, PRO-T-29):** Delivery, RAID, change, stakeholder, and dashboard task lists, plus linked systems and linked knowledge, now share `DataTable` and `useTableState`. Columns declare a sort, a kind (wrapping text vs compact status/data/number/date/actions), and optional enum or text filters. A funnel on the header opens a popover (Tab stays inside; Esc and Clear return focus to the trigger; an outside click closes without scrolling the page back to the trigger) with an active-filter dot and Clear filters. Sort, filters, and search are stored in namespaced URL params, written about 250ms after the last change, so a view survives reload without re-rendering the page on every keystroke. Sticky headers and the fluid min-width apply only to `DataTable`; other ops tables keep the previous wrap. Text columns wrap; the delivery list no longer forces a 1040px min-width, and Updated and Manage are separate cells. The delivery status control is announced as a status. RAID kind and stakeholder role count as table filters. Status and RAID severity sort by a fixed rank. `sortBy` and the shared filter strings live once under `table` in en, hu, and de.
 
 ### Fixed

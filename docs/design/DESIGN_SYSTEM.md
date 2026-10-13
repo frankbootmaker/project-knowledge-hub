@@ -244,6 +244,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-13
+
+* **Delivery documents** — Task, epic, story, milestone, and sprint manage dialogs add a Documents tab. RAID and change dialogs use the same Details / Documents tabs, and the linked-record picker filters by type. Task dialog tabs use bold body sans, matching the setup menu.
+
 ### 2026-10-10
 
 * **Admin overview** — Admin → Dashboard shows the 24-hour health strip (API, Postgres, Redis, sessions, backup age), agent usage, and attention badges, then the organization, user, client, and workspace counts. The MCP, email, and SSO setup shortcuts are gone; those screens stay in the admin menu. Full charts stay on Monitoring.
