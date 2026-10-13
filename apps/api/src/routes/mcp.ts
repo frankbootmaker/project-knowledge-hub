@@ -34,6 +34,7 @@ function ensureSocketDestroySoon(raw: IncomingMessage): void {
   if (!socket || typeof socket.destroySoon === 'function') {
     return;
   }
+  // TODO: Remove when @modelcontextprotocol/sdk allows @hono/node-server >= 2.1.5 (forceClose guards destroySoon there).
   socket.destroySoon = () => {
     socket.destroyed = true;
   };
