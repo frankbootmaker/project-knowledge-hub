@@ -19,6 +19,8 @@ import {
   type TaskActivityType,
   type UserStoryStatus,
 } from '@project-knowledge-hub/domain';
+import type { PublicItemMediaLink } from './project-item-media.js';
+import { withMediaLinkCounts, withMediaLinks } from './project-item-media.js';
 import {
   getTask,
   recordTaskActivity,
@@ -46,6 +48,8 @@ export type PublicEpic = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  mediaLinkCount?: number;
+  mediaLinks?: PublicItemMediaLink[];
 };
 
 export type PublicUserStory = {
@@ -64,6 +68,8 @@ export type PublicUserStory = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  mediaLinkCount?: number;
+  mediaLinks?: PublicItemMediaLink[];
 };
 
 export type PublicTaskActivity = {
@@ -168,7 +174,11 @@ export async function listEpics(
     .where(and(...conditions))
     .orderBy(asc(projectEpics.sortOrder), asc(projectEpics.title));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
-  return rows.map((row) => toPublicEpic(row, keyPrefix));
+  return withMediaLinkCounts(
+    database,
+    'epic',
+    rows.map((row) => toPublicEpic(row, keyPrefix)),
+  );
 }
 
 export async function getEpic(
@@ -188,7 +198,7 @@ export async function getEpic(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return toPublicEpic(row, keyPrefix);
+  return withMediaLinks(database, 'epic', toPublicEpic(row, keyPrefix));
 }
 
 export async function createEpic(
@@ -231,7 +241,7 @@ export async function createEpic(
     }
     return { row, keyPrefix: allocated.keyPrefix };
   });
-  return toPublicEpic(result.row, result.keyPrefix);
+  return withMediaLinks(database, 'epic', toPublicEpic(result.row, result.keyPrefix));
 }
 
 export async function updateEpic(
@@ -294,7 +304,7 @@ export async function updateEpic(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return toPublicEpic(row, keyPrefix);
+  return withMediaLinks(database, 'epic', toPublicEpic(row, keyPrefix));
 }
 
 export async function listUserStories(
@@ -315,7 +325,11 @@ export async function listUserStories(
     .where(and(...conditions))
     .orderBy(asc(projectUserStories.sortOrder), asc(projectUserStories.title));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
-  return rows.map((row) => toPublicUserStory(row, keyPrefix));
+  return withMediaLinkCounts(
+    database,
+    'user_story',
+    rows.map((row) => toPublicUserStory(row, keyPrefix)),
+  );
 }
 
 export async function getUserStory(
@@ -335,7 +349,7 @@ export async function getUserStory(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return toPublicUserStory(row, keyPrefix);
+  return withMediaLinks(database, 'user_story', toPublicUserStory(row, keyPrefix));
 }
 
 async function assertEpicInProject(
@@ -402,7 +416,11 @@ export async function createUserStory(
     }
     return { row, keyPrefix: allocated.keyPrefix };
   });
-  return toPublicUserStory(result.row, result.keyPrefix);
+  return withMediaLinks(
+    database,
+    'user_story',
+    toPublicUserStory(result.row, result.keyPrefix),
+  );
 }
 
 export async function updateUserStory(
@@ -470,7 +488,7 @@ export async function updateUserStory(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return toPublicUserStory(row, keyPrefix);
+  return withMediaLinks(database, 'user_story', toPublicUserStory(row, keyPrefix));
 }
 
 export async function deleteEpic(

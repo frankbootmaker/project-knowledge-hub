@@ -17,6 +17,11 @@ import {
   useToast,
 } from './ui';
 import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
+import {
+  DeliveryMediaEditor,
+  saveItemMediaLinks,
+  type ItemMediaDraft,
+} from './DeliveryMediaEditor';
 
 export type RaidItem = {
   id: string;
@@ -213,7 +218,21 @@ export function ProjectRaidPanel({
   const [addPageSize, setAddPageSize] = useState<DocumentPageSize>(
     DEFAULT_DOCUMENT_PAGE_SIZE,
   );
-  const [raidTab, setRaidTab] = useState<'details' | 'tasks' | 'documents'>('details');
+  const [raidTab, setRaidTab] = useState<'details' | 'tasks' | 'documents' | 'media'>('details');
+  const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetch(`/api/v1/projects/${projectId}`)
+      .then(async (response) => {
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          project?: { workspaceId?: string };
+        };
+        setWorkspaceId(payload.project?.workspaceId ?? null);
+      })
+      .catch(() => setWorkspaceId(null));
+  }, [projectId]);
 
   const refresh = useCallback(() => {
     router.refresh();
@@ -378,6 +397,14 @@ export function ProjectRaidPanel({
       if (!response.ok || !payload.raidItem) {
         throw new Error(payload.error?.message || t('failedCreate'));
       }
+      if (mediaDrafts && mediaDrafts.length > 0) {
+        await saveItemMediaLinks({
+          projectId,
+          entityType: 'raid',
+          entityId: payload.raidItem.id,
+          links: mediaDrafts,
+        });
+      }
       setItems((prev) => [...prev, payload.raidItem!]);
       setCreateOpen(false);
       resetForm();
@@ -467,6 +494,14 @@ export function ProjectRaidPanel({
       };
       if (!recordsResponse.ok || !recordsPayload.raidItem) {
         throw new Error(recordsPayload.error?.message || t('failedUpdate'));
+      }
+      if (mediaDrafts && manageId) {
+        await saveItemMediaLinks({
+          projectId,
+          entityType: 'raid',
+          entityId: manageId,
+          links: mediaDrafts,
+        });
       }
 
       setItems((prev) =>
@@ -1037,7 +1072,7 @@ export function ProjectRaidPanel({
   }
 
   function tabbedForm(disabled: boolean, options?: { managing?: boolean }) {
-    const tabs = ['details', 'tasks', 'documents'] as const;
+    const tabs = ['details', 'tasks', 'documents', 'media'] as const;
     return (
       <div>
         <div className="kh-ops-modal-tabs" role="tablist">
@@ -1054,7 +1089,9 @@ export function ProjectRaidPanel({
                 ? t('tabDetails')
                 : tab === 'tasks'
                   ? t('tabItems')
-                  : t('tabDocuments')}
+                  : tab === 'documents'
+                    ? t('tabDocuments')
+                    : tDelivery('tabMedia')}
             </button>
           ))}
         </div>
@@ -1072,6 +1109,16 @@ export function ProjectRaidPanel({
           className={`kh-ops-modal-pane${raidTab === 'documents' ? ' active' : ''}`}
         >
           {linkedPane('documents', disabled)}
+        </section>
+        <section className={`kh-ops-modal-pane${raidTab === 'media' ? ' active' : ''}`}>
+          <DeliveryMediaEditor
+            projectId={projectId}
+            workspaceId={workspaceId}
+            entityType="raid"
+            entityId={options?.managing ? manageId : null}
+            canEdit={canMutate && !disabled}
+            onDraftsChange={setMediaDrafts}
+          />
         </section>
       </div>
     );

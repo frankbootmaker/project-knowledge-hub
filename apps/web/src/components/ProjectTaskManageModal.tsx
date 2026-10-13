@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import {
+  TASK_COMPLETION_PERCENTS,
+  statusForTaskCompletionChange,
+  type TaskStatus,
+} from '@project-knowledge-hub/domain';
+import {
   Badge,
   Button,
   ErrorText,
@@ -32,6 +37,11 @@ import {
   saveDeliveryDocumentLinks,
   type DeliveryDocumentRecord,
 } from './DeliveryDocumentsEditor';
+import {
+  DeliveryMediaEditor,
+  saveItemMediaLinks,
+  type ItemMediaDraft,
+} from './DeliveryMediaEditor';
 
 type RaciEntry = {
   userId: string;
@@ -52,6 +62,7 @@ type TaskDetail = {
   title: string;
   description: string | null;
   status: string;
+  completionPercent?: number | null;
   startDate: string | null;
   dueDate: string | null;
   forecastHours: string | null;
@@ -170,6 +181,10 @@ export function ProjectTaskManageModal({
   const tBudget = useTranslations('budget');
   const tCommon = useTranslations('common');
   const locale = useLocale();
+  const percentFormat = useMemo(
+    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
+    [locale],
+  );
   const { pushToast } = useToast();
 
   const [task, setTask] = useState<TaskDetail | null>(null);
@@ -182,13 +197,14 @@ export function ProjectTaskManageModal({
   const [pending, setPending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [taskTab, setTaskTab] = useState<
-    'details' | 'raci' | 'handoff' | 'activity' | 'documents'
+    'details' | 'raci' | 'handoff' | 'activity' | 'documents' | 'media'
   >('details');
   const [comment, setComment] = useState('');
   const [handoffTo, setHandoffTo] = useState('');
   const [handoffNote, setHandoffNote] = useState('');
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState('todo');
+  const [completionPercent, setCompletionPercent] = useState('0');
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [forecastHours, setForecastHours] = useState('');
@@ -218,6 +234,8 @@ export function ProjectTaskManageModal({
   const [linkedRaid, setLinkedRaid] = useState<LinkedRaid[]>([]);
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false);
   const tRaid = useTranslations('raid');
 
@@ -250,6 +268,15 @@ export function ProjectTaskManageModal({
       setTask(loaded);
       setTitle(loaded.title);
       setStatus(loaded.status);
+      setCompletionPercent(
+        loaded.status === 'cancelled'
+          ? ''
+          : String(
+              loaded.status === 'done'
+                ? 100
+                : (loaded.completionPercent ?? 0),
+            ),
+      );
       setStartDate(loaded.startDate ?? '');
       setDueDate(loaded.dueDate ?? '');
       setForecastHours(
@@ -344,15 +371,23 @@ export function ProjectTaskManageModal({
           const projectPayload = (await memberRes.json()) as {
             project?: { workspaceId?: string };
           };
-          const workspaceId = projectPayload.project?.workspaceId;
-          if (workspaceId) {
-            const memRes = await fetch(`/api/v1/workspaces/${workspaceId}/members`);
+          const loadedWorkspaceId = projectPayload.project?.workspaceId ?? null;
+          setWorkspaceId(loadedWorkspaceId);
+          if (loadedWorkspaceId) {
+            const memRes = await fetch(`/api/v1/workspaces/${loadedWorkspaceId}/members`);
             if (memRes.ok) {
               const memPayload = (await memRes.json()) as { members: Member[] };
               setMembers(memPayload.members ?? []);
             }
           }
         }
+      }
+      const projectRes = await fetch(`/api/v1/projects/${loaded.projectId}`);
+      if (projectRes.ok) {
+        const projectPayload = (await projectRes.json()) as {
+          project?: { workspaceId?: string };
+        };
+        setWorkspaceId(projectPayload.project?.workspaceId ?? null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedLoadTask'));
@@ -466,6 +501,8 @@ export function ProjectTaskManageModal({
         body: JSON.stringify({
           title: title.trim(),
           status,
+          completionPercent:
+            status === 'cancelled' ? null : Number(completionPercent || 0),
           startDate: startDate || null,
           dueDate: dueDate || null,
           forecastHours: parseHoursInput(forecastHours),
@@ -506,6 +543,14 @@ export function ProjectTaskManageModal({
           entityId: taskId,
           recordIds: documentIds,
         });
+        if (mediaDrafts) {
+          await saveItemMediaLinks({
+            projectId: task.projectId,
+            entityType: 'task',
+            entityId: taskId,
+            links: mediaDrafts,
+          });
+        }
       }
       setTask(payload.task);
       onUpdated?.(payload.task);
@@ -755,6 +800,7 @@ export function ProjectTaskManageModal({
                 ['handoff', t('tabHandoff')],
                 ['activity', t('tabActivity')],
                 ['documents', t('tabDocuments')],
+                ['media', t('tabMedia')],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -785,12 +831,45 @@ export function ProjectTaskManageModal({
               <Field label={t('statusField')}>
                 <Select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setStatus(next);
+                    if (next === 'done') setCompletionPercent('100');
+                    else if (next === 'cancelled') setCompletionPercent('');
+                    else if (completionPercent === '') setCompletionPercent('0');
+                  }}
                   disabled={pending || !canMutate}
                 >
                   {TASK_STATUSES.map((value) => (
                     <option key={value} value={value}>
                       {t(`taskStatus.${value}`)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t('completionField')}>
+                <Select
+                  value={status === 'cancelled' ? '' : completionPercent || '0'}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    const value = Number(next);
+                    setCompletionPercent(next);
+                    setStatus((current) =>
+                      statusForTaskCompletionChange({
+                        status: current as TaskStatus,
+                        requested: value,
+                        existing: completionPercent === '' ? null : Number(completionPercent),
+                      }),
+                    );
+                  }}
+                  disabled={
+                    pending || !canMutate || status === 'done' || status === 'cancelled'
+                  }
+                >
+                  {status === 'cancelled' ? <option value="">—</option> : null}
+                  {TASK_COMPLETION_PERCENTS.map((value) => (
+                    <option key={value} value={String(value)}>
+                      {percentFormat.format(value / 100)}
                     </option>
                   ))}
                 </Select>
@@ -1252,6 +1331,20 @@ export function ProjectTaskManageModal({
               disabled={pending}
               onPickerOpenChange={setDocumentPickerOpen}
             />
+          </section>
+
+          <section className={`kh-ops-modal-pane${taskTab === 'media' ? ' active' : ''}`}>
+            {task ? (
+              <DeliveryMediaEditor
+                projectId={task.projectId}
+                workspaceId={workspaceId}
+                entityType="task"
+                entityId={task.id}
+                canEdit={canMutate}
+                disabled={pending}
+                onDraftsChange={setMediaDrafts}
+              />
+            ) : null}
           </section>
         </div>
       )}

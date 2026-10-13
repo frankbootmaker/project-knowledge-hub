@@ -199,6 +199,8 @@ export type McpToolHandlers = {
     knowledgeRecordId?: string;
     /** When true with knowledgeRecordId, append markdownSnippet into the record body. */
     insertIntoRecord?: boolean;
+    targetEntityType?: 'epic' | 'user_story' | 'milestone' | 'task' | 'sprint' | 'raid' | 'change';
+    targetEntityId?: string;
   }) => Promise<unknown>;
   /** ChatGPT Actions: start a Redis-backed chunked base64 upload (prefer over single-shot). */
   beginWorkspaceMediaUpload: (input: {
@@ -208,6 +210,8 @@ export type McpToolHandlers = {
     alt?: string;
     knowledgeRecordId?: string;
     insertIntoRecord?: boolean;
+    targetEntityType?: 'epic' | 'user_story' | 'milestone' | 'task' | 'sprint' | 'raid' | 'change';
+    targetEntityId?: string;
   }) => Promise<unknown>;
   appendWorkspaceMediaUpload: (input: {
     uploadId: string;
@@ -229,6 +233,9 @@ export type McpToolHandlers = {
   listWorkspaceMedia: (input: {
     workspaceId: string;
     knowledgeRecordId?: string;
+    query?: string;
+    entityType?: 'epic' | 'user_story' | 'milestone' | 'task' | 'sprint' | 'raid' | 'change';
+    entityId?: string;
     limit: number;
   }) => Promise<unknown>;
   deleteWorkspaceMedia: (input: { mediaId: string }) => Promise<unknown>;
@@ -312,6 +319,25 @@ export type McpToolHandlers = {
     cursor?: string;
   }) => Promise<unknown>;
   getMyDashboardInsights: () => Promise<unknown>;
+  setDeliveryMediaLinks: (input: {
+    projectId: string;
+    entityType: 'epic' | 'user_story' | 'milestone' | 'task' | 'sprint' | 'raid' | 'change';
+    entityId: string;
+    links: Array<
+      | {
+          kind: 'media';
+          mediaId: string;
+          title?: string | null;
+          description?: string | null;
+        }
+      | {
+          kind: 'url';
+          url: string;
+          title: string;
+          description?: string | null;
+        }
+    >;
+  }) => Promise<unknown>;
   listProjectDeliveryDocumentLinks: (input: {
     projectId: string;
     entityType?: string;
@@ -339,6 +365,7 @@ export type McpToolHandlers = {
     userStoryId?: string | null;
     sprintId?: string | null;
     storyPoints?: number | null;
+    completionPercent?: number | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     raci?: Array<{ userId: string; role: 'R' | 'A' | 'C' | 'I' }>;
@@ -382,6 +409,7 @@ export type McpToolHandlers = {
     userStoryId?: string | null;
     sprintId?: string | null;
     storyPoints?: number | null;
+    completionPercent?: number | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
@@ -1460,7 +1488,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'begin_workspace_media_upload',
-    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. knowledgeRecordId may be UUID or document key. Allowed types: image/png, image/jpeg, image/gif, image/webp. File bytes are verified against declared type on finalize. Requires knowledge:write.',
+    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. Optional targetEntityType+targetEntityId links the image to a delivery, RAID, or change item on finalize. knowledgeRecordId and targetEntityId may be UUID or human keys. Allowed types: image/png, image/jpeg, image/gif, image/webp. File bytes are verified against declared type on finalize. Requires knowledge:write.',
     {
       workspaceId: z.string().uuid(),
       contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
@@ -1473,6 +1501,10 @@ export function createKnowledgeHubMcpServer(
         .describe(
           'When true, requires knowledgeRecordId; finalize appends media.markdownSnippet to that record',
         ),
+      targetEntityType: z
+        .enum(['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'])
+        .optional(),
+      targetEntityId: entityRef.optional(),
     },
     async (args) =>
       wrap(
@@ -1519,7 +1551,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'upload_workspace_media',
-    'AVOID for LLM/MCP/ChatGPT clients — single-shot upload often fails when base64 is large. Use begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload instead. Kept only for tiny files or non-LLM integrations. contentBase64 = raw base64 (no data: prefix). Allowed types: image/png, image/jpeg, image/gif, image/webp. File bytes are verified against declared type. Requires knowledge:write.',
+    'AVOID for LLM/MCP/ChatGPT clients — single-shot upload often fails when base64 is large. Use begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload instead. Kept only for tiny files or non-LLM integrations. contentBase64 = raw base64 (no data: prefix). Allowed types: image/png, image/jpeg, image/gif, image/webp. Optional targetEntityType+targetEntityId links the image to an item in the same step. File bytes are verified against declared type. Requires knowledge:write.',
     {
       workspaceId: z.string().uuid(),
       contentBase64: z.string().min(1).max(10_000_000),
@@ -1533,6 +1565,10 @@ export function createKnowledgeHubMcpServer(
         .describe(
           'When true, requires knowledgeRecordId and appends media.markdownSnippet to that record as a new draft version',
         ),
+      targetEntityType: z
+        .enum(['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'])
+        .optional(),
+      targetEntityId: entityRef.optional(),
     },
     async (args) =>
       wrap(
@@ -1613,10 +1649,15 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspace_media',
-    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls and markdown snippets for embedding. knowledgeRecordId may be UUID or document key. Requires knowledge:read.',
+    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls, markdown snippets, and a short usedBy list. Optional filename query. Optional entityType+entityId filters to images linked to that item. knowledgeRecordId and entityId may be UUID or human keys. Requires knowledge:read.',
     {
       workspaceId: z.string().uuid(),
       knowledgeRecordId: entityRef.optional(),
+      query: z.string().max(200).optional(),
+      entityType: z
+        .enum(['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'])
+        .optional(),
+      entityId: entityRef.optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).default(20),
     },
     async (args) =>
@@ -1884,7 +1925,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; when both startDate and dueDate are set, startDate must be on or before dueDate. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; when both startDate and dueDate are set, startDate must be on or before dueDate. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1909,6 +1950,10 @@ export function createKnowledgeHubMcpServer(
       userStoryId: entityRef.nullable().optional(),
       sprintId: entityRef.nullable().optional(),
       storyPoints: z.number().int().min(0).max(1000).nullable().optional(),
+      completionPercent: z
+        .union([z.literal(0), z.literal(25), z.literal(50), z.literal(75), z.literal(100)])
+        .nullable()
+        .optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       itemType: z.enum(['task', 'bug']).optional(),
@@ -1955,7 +2000,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task or bug. itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; null clears it. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Update a project task or bug. itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; null clears it. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1980,6 +2025,10 @@ export function createKnowledgeHubMcpServer(
       userStoryId: entityRef.nullable().optional(),
       sprintId: entityRef.nullable().optional(),
       storyPoints: z.number().int().min(0).max(1000).nullable().optional(),
+      completionPercent: z
+        .union([z.literal(0), z.literal(25), z.literal(50), z.literal(75), z.literal(100)])
+        .nullable()
+        .optional(),
       currentOwnerUserId: z.string().uuid().nullable().optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
@@ -2680,6 +2729,51 @@ export function createKnowledgeHubMcpServer(
         'knowledge:write',
         () => handlers.setKnowledgeRecordDeliveryLinks(args),
         { recordId: args.recordId },
+      )(),
+  );
+
+  const itemMediaEntityEnum = z.enum([
+    'epic',
+    'user_story',
+    'milestone',
+    'task',
+    'sprint',
+    'raid',
+    'change',
+  ]);
+
+  server.tool(
+    'set_delivery_media_links',
+    'Replace workspace-image and external URL links for one delivery, RAID, or change item. Bugs use entity type task. entityId may be a UUID or human key. A media link keeps the library file; pass the full ordered list. URLs must be http or https and need a title. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      entityType: itemMediaEntityEnum,
+      entityId: entityRef,
+      links: z
+        .array(
+          z.discriminatedUnion('kind', [
+            z.object({
+              kind: z.literal('media'),
+              mediaId: z.string().uuid(),
+              title: z.string().max(200).nullable().optional(),
+              description: z.string().max(2000).nullable().optional(),
+            }),
+            z.object({
+              kind: z.literal('url'),
+              url: z.string().min(1).max(2000),
+              title: z.string().min(1).max(200),
+              description: z.string().max(2000).nullable().optional(),
+            }),
+          ]),
+        )
+        .max(100),
+    },
+    async (args) =>
+      wrap(
+        'set_delivery_media_links',
+        'pm:write',
+        () => handlers.setDeliveryMediaLinks(args),
+        { projectId: args.projectId },
       )(),
   );
 

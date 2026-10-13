@@ -1,18 +1,19 @@
 import Link from 'next/link';
 
-export const BACKUP_ADMIN_TABS = ['backups', 'storage'] as const;
+export const BACKUP_ADMIN_TABS = ['backups', 'storage', 'media'] as const;
 
 export type BackupAdminTab = (typeof BACKUP_ADMIN_TABS)[number];
 
 export function parseBackupAdminTab(value: string | string[] | undefined): BackupAdminTab {
   const raw = Array.isArray(value) ? value[0] : value;
   if (raw === 'storage') return 'storage';
+  if (raw === 'media') return 'media';
   return 'backups';
 }
 
 export function backupAdminTabHref(tab: BackupAdminTab): string {
   if (tab === 'backups') return '/admin/backups';
-  return '/admin/backups?tab=storage';
+  return `/admin/backups?tab=${tab}`;
 }
 
 export function BackupAdminTabs({

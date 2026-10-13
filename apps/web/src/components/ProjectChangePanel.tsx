@@ -7,6 +7,11 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectChangeList } from './ProjectChangeList';
 import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
 import {
+  DeliveryMediaEditor,
+  saveItemMediaLinks,
+  type ItemMediaDraft,
+} from './DeliveryMediaEditor';
+import {
   Button,
   DELIVERY_ITEM_MODAL_SIZE,
   ErrorText,
@@ -88,7 +93,7 @@ type LinkRow = {
   recordType?: string | null;
 };
 type PickerKind = 'tasks' | 'documents';
-type ChangeTab = 'details' | 'tasks' | 'documents';
+type ChangeTab = 'details' | 'tasks' | 'documents' | 'media';
 
 const KINDS = ['scope', 'timeline', 'stakeholder', 'budget', 'other'] as const;
 const STATUSES = [
@@ -166,6 +171,18 @@ export function ProjectChangePanel({
     setItems(initialChangeItems);
   }, [initialChangeItems]);
 
+  useEffect(() => {
+    void fetch(`/api/v1/projects/${projectId}`)
+      .then(async (response) => {
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          project?: { workspaceId?: string };
+        };
+        setWorkspaceId(payload.project?.workspaceId ?? null);
+      })
+      .catch(() => setWorkspaceId(null));
+  }, [projectId]);
+
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -173,6 +190,8 @@ export function ProjectChangePanel({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
   const [changeTab, setChangeTab] = useState<ChangeTab>('details');
+  const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 
   const [kind, setKind] = useState<string>('scope');
   const [title, setTitle] = useState('');
@@ -357,6 +376,14 @@ export function ProjectChangePanel({
       if (!response.ok || !payload.changeItem) {
         throw new Error(payload.error?.message || t('failedCreate'));
       }
+      if (mediaDrafts && mediaDrafts.length > 0) {
+        await saveItemMediaLinks({
+          projectId,
+          entityType: 'change',
+          entityId: payload.changeItem.id,
+          links: mediaDrafts,
+        });
+      }
       setItems((prev) => [...prev, payload.changeItem!]);
       setCreateOpen(false);
       resetForm();
@@ -392,6 +419,14 @@ export function ProjectChangePanel({
       };
       if (!response.ok || !payload.changeItem) {
         throw new Error(payload.error?.message || t('failedUpdate'));
+      }
+      if (mediaDrafts && manageId) {
+        await saveItemMediaLinks({
+          projectId,
+          entityType: 'change',
+          entityId: manageId,
+          links: mediaDrafts,
+        });
       }
       setItems((prev) =>
         prev.map((item) => (item.id === manageId ? payload.changeItem! : item)),
@@ -916,7 +951,7 @@ export function ProjectChangePanel({
   }
 
   function tabbedForm(disabled: boolean) {
-    const tabs = ['details', 'tasks', 'documents'] as const;
+    const tabs = ['details', 'tasks', 'documents', 'media'] as const;
     return (
       <div>
         {error ? (
@@ -938,7 +973,9 @@ export function ProjectChangePanel({
                 ? t('tabDetails')
                 : tab === 'tasks'
                   ? t('tabItems')
-                  : t('tabDocuments')}
+                  : tab === 'documents'
+                    ? t('tabDocuments')
+                    : tDelivery('tabMedia')}
             </button>
           ))}
         </div>
@@ -950,6 +987,16 @@ export function ProjectChangePanel({
         </section>
         <section className={`kh-ops-modal-pane${changeTab === 'documents' ? ' active' : ''}`}>
           {linkedPane('documents', disabled)}
+        </section>
+        <section className={`kh-ops-modal-pane${changeTab === 'media' ? ' active' : ''}`}>
+          <DeliveryMediaEditor
+            projectId={projectId}
+            workspaceId={workspaceId}
+            entityType="change"
+            entityId={manageId}
+            canEdit={canMutate && !disabled}
+            onDraftsChange={setMediaDrafts}
+          />
         </section>
       </div>
     );

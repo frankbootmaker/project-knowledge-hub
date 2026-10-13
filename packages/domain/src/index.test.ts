@@ -13,6 +13,9 @@ import {
   systemItDetailsPatchSchema,
   buildItDetailsPatch,
   taskActivityTypeSchema,
+  resolveTaskCompletionPercent,
+  statusForTaskCompletionChange,
+  taskCompletionPercentSchema,
   taskStatusSchema,
   userStoryStatusSchema,
 } from './index.js';
@@ -25,6 +28,28 @@ describe('domain foundations', () => {
   it('validates project delivery statuses and RACI roles', () => {
     expect(milestoneStatusSchema.parse('planned')).toBe('planned');
     expect(taskStatusSchema.parse('in_progress')).toBe('in_progress');
+    expect(taskCompletionPercentSchema.parse(25)).toBe(25);
+    expect(resolveTaskCompletionPercent({ status: 'done', requested: 25 })).toBe(100);
+    expect(resolveTaskCompletionPercent({ status: 'cancelled', existing: 50 })).toBeNull();
+    expect(
+      resolveTaskCompletionPercent({ status: 'in_progress', requested: 50 }),
+    ).toBe(50);
+    expect(
+      resolveTaskCompletionPercent({ status: 'todo', existing: 75 }),
+    ).toBe(75);
+    expect(resolveTaskCompletionPercent({ status: 'blocked' })).toBe(0);
+    expect(
+      statusForTaskCompletionChange({ status: 'todo', requested: 25, existing: 0 }),
+    ).toBe('in_progress');
+    expect(
+      statusForTaskCompletionChange({ status: 'blocked', requested: 100, existing: 25 }),
+    ).toBe('done');
+    expect(
+      statusForTaskCompletionChange({ status: 'done', requested: 0, existing: 100 }),
+    ).toBe('todo');
+    expect(
+      statusForTaskCompletionChange({ status: 'blocked', requested: 50, existing: 50 }),
+    ).toBe('blocked');
     expect(raciRoleSchema.parse('A')).toBe('A');
     expect(epicStatusSchema.parse('active')).toBe('active');
     expect(userStoryStatusSchema.parse('done')).toBe('done');

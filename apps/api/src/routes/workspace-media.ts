@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { workspaces } from '@project-knowledge-hub/database';
-import { AppError } from '@project-knowledge-hub/domain';
+import { AppError, itemMediaEntityTypeSchema } from '@project-knowledge-hub/domain';
 import {
   requireWorkspaceMaintainer,
   requireWorkspaceView,
@@ -12,6 +12,8 @@ import {
   requireAuthenticated,
 } from '../plugins/auth.js';
 import { writeAuditEvent } from '../lib/identity.js';
+import { getEffectiveMediaMaxBytes } from '../lib/media-max-bytes.js';
+import { appendMediaLink, mediaUsedBy } from '../lib/project-item-media.js';
 import {
   archiveWorkspaceMedia,
   createWorkspaceMedia,
@@ -51,6 +53,8 @@ export async function registerWorkspaceMediaRoutes(
     let contentType = '';
     let knowledgeRecordId: string | undefined;
     let alt: string | undefined;
+    let entityType: z.infer<typeof itemMediaEntityTypeSchema> | undefined;
+    let entityId: string | undefined;
 
     for await (const part of parts) {
       if (part.type === 'file') {
@@ -68,6 +72,12 @@ export async function registerWorkspaceMediaRoutes(
         if (part.fieldname === 'contentType' && value) {
           contentType = value;
         }
+        if (part.fieldname === 'entityType' && value) {
+          entityType = itemMediaEntityTypeSchema.parse(value);
+        }
+        if (part.fieldname === 'entityId' && value) {
+          entityId = z.string().uuid().parse(value);
+        }
       }
     }
 
@@ -75,6 +85,13 @@ export async function registerWorkspaceMediaRoutes(
       throw new AppError({
         code: 'MEDIA_REQUIRED',
         message: 'Media image file is required',
+        statusCode: 400,
+      });
+    }
+    if (Boolean(entityType) !== Boolean(entityId)) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'entityType and entityId must be sent together',
         statusCode: 400,
       });
     }
@@ -89,9 +106,21 @@ export async function registerWorkspaceMediaRoutes(
       altText: alt ?? null,
       createdBy: principal.userId,
       uploadDir: app.env.MEDIA_UPLOAD_DIR,
-      maxBytes: app.env.MEDIA_MAX_BYTES,
+      maxBytes: await getEffectiveMediaMaxBytes(
+        app.database,
+        app.env.MEDIA_MAX_BYTES,
+      ),
       blobStore,
     });
+    if (entityType && entityId) {
+      await appendMediaLink(app.database, {
+        workspaceId: params.workspaceId,
+        mediaId: row.id,
+        entityType,
+        entityId,
+        createdBy: principal.userId,
+      });
+    }
 
     await writeAuditEvent(app.database, {
       organizationId: await organizationIdForWorkspace(app, params.workspaceId),
@@ -122,17 +151,39 @@ export async function registerWorkspaceMediaRoutes(
     const query = z
       .object({
         recordId: z.string().uuid().optional(),
+        q: z.string().max(200).optional(),
+        entityType: itemMediaEntityTypeSchema.optional(),
+        entityId: z.string().uuid().optional(),
         limit: z.coerce.number().int().min(1).max(100).optional(),
       })
       .parse(request.query);
+    if (Boolean(query.entityType) !== Boolean(query.entityId)) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'entityType and entityId must be sent together',
+        statusCode: 400,
+      });
+    }
 
     const rows = await listWorkspaceMedia(app.database, {
       workspaceId: params.workspaceId,
       knowledgeRecordId: query.recordId,
+      query: query.q,
+      entityType: query.entityType,
+      entityId: query.entityId,
       limit: query.limit,
     });
+    const usedBy = await mediaUsedBy(
+      app.database,
+      rows.map((row) => row.id),
+    );
 
-    return { media: rows.map(toPublicMedia) };
+    return {
+      media: rows.map((row) => ({
+        ...toPublicMedia(row),
+        usedBy: usedBy.get(row.id) ?? [],
+      })),
+    };
   });
 
   app.get('/api/v1/media/:mediaId', async (request, reply) => {

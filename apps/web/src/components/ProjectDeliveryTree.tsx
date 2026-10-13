@@ -16,12 +16,22 @@ import {
 } from '../lib/delivery-tree-filter';
 import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import { toHours } from '../lib/task-costing';
+import {
+  deliveryCompletionIndex,
+  deliveryLag,
+  deliveryPaceClass,
+  localDateIso,
+  plannedTargetPercent,
+  taskDeliveryCompletion,
+} from '../lib/delivery-completion';
 
 type TreeEpic = {
   id: string;
   title: string;
   status: string;
   sortOrder: number;
+  startDate: string | null;
+  endDate: string | null;
   humanKey?: string | null;
 };
 
@@ -31,6 +41,8 @@ type TreeStory = {
   title: string;
   status: string;
   sortOrder: number;
+  startDate: string | null;
+  endDate: string | null;
   humanKey?: string | null;
 };
 
@@ -40,6 +52,8 @@ type TreeTask = {
   status: string;
   dueDate: string | null;
   userStoryId: string | null;
+  epicId: string | null;
+  completionPercent?: number | null;
   currentOwner: {
     displayName: string;
     avatarUrl?: string | null;
@@ -286,6 +300,65 @@ export function ProjectDeliveryTree({
     return fields;
   }, [ownerOptions, sprintOptions, statusOptions, t, table.filters.sprint]);
 
+  const percentFormat = useMemo(
+    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
+    [locale],
+  );
+  const earnedFormat = useMemo(
+    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
+    [locale],
+  );
+  const today = localDateIso();
+  const completion = useMemo(
+    () =>
+      deliveryCompletionIndex(
+        tasks.map((task) => ({
+          status: task.status,
+          completionPercent: task.completionPercent,
+          userStoryId: task.userStoryId,
+          epicId: task.epicId,
+        })),
+      ),
+    [tasks],
+  );
+
+  function paceCells(input: {
+    actual: number | null;
+    target: number | null;
+    status: string;
+    comparable: boolean;
+    earned?: { done: number; total: number } | null;
+  }) {
+    const lag = input.comparable
+      ? deliveryLag({
+          actual: input.actual,
+          target: input.target,
+          status: input.status,
+        })
+      : null;
+    const earnedTitle = input.earned
+      ? t('completeOf', {
+          done: earnedFormat.format(input.earned.done),
+          total: input.earned.total,
+        })
+      : null;
+    const lagTitle = lag
+      ? t(lag === 'overdue' ? 'completeOverdue' : 'completeBehind', {
+          gap: (input.target ?? 0) - (input.actual ?? 0),
+        })
+      : null;
+    const title = [earnedTitle, lagTitle].filter(Boolean).join(' · ') || undefined;
+    const label = input.actual == null ? '—' : percentFormat.format(input.actual / 100);
+    return {
+      percent: (
+        <span className={deliveryPaceClass(lag)} title={title}>
+          {label}
+        </span>
+      ),
+      target: input.target == null ? '—' : percentFormat.format(input.target / 100),
+    };
+  }
+
   const onlyOpen = table.extras.open === '1';
   const filterState = useMemo<DeliveryTreeFilterState>(
     () => ({
@@ -411,6 +484,8 @@ export function ProjectDeliveryTree({
 
   function metaBits(input: {
     statusLabel: string;
+    percent: ReactNode;
+    target: ReactNode;
     owner?: string | null;
     sprint?: string | null;
     hours?: number | null;
@@ -419,6 +494,8 @@ export function ProjectDeliveryTree({
     return (
       <>
         <span>{input.statusLabel}</span>
+        <span className="kh-ops-tree-pct">{input.percent}</span>
+        <span className="kh-ops-tree-pct">{input.target}</span>
         <span>{input.owner ?? '—'}</span>
         <span>{input.sprint ?? '—'}</span>
         <span>{input.hours == null ? '—' : `${input.hours}h`}</span>
@@ -452,6 +529,12 @@ export function ProjectDeliveryTree({
         {...rowDim(id)}
         meta={metaBits({
           statusLabel: t(`taskStatus.${task.status}`),
+          ...paceCells({
+            actual: taskDeliveryCompletion(task.status, task.completionPercent)?.percent ?? null,
+            target: null,
+            status: task.status,
+            comparable: false,
+          }),
           owner: task.currentOwner?.displayName ?? null,
           sprint: task.sprintLabel ?? null,
           hours: toHours(task.forecastHours),
@@ -490,6 +573,13 @@ export function ProjectDeliveryTree({
         {...rowDim(id)}
         meta={metaBits({
           statusLabel: t(`milestoneStatus.${story.status}`),
+          ...paceCells({
+            actual: completion.byStoryId.get(story.id)?.percent ?? null,
+            target: plannedTargetPercent(story.startDate, story.endDate, today),
+            status: story.status,
+            comparable: true,
+            earned: completion.byStoryId.get(story.id) ?? null,
+          }),
         })}
         actions={
           onManageStory ? (
@@ -603,6 +693,13 @@ export function ProjectDeliveryTree({
                   {...rowDim(id)}
                   meta={metaBits({
                     statusLabel: t(`milestoneStatus.${epic.status}`),
+                    ...paceCells({
+                      actual: completion.byEpicId.get(epic.id)?.percent ?? null,
+                      target: plannedTargetPercent(epic.startDate, epic.endDate, today),
+                      status: epic.status,
+                      comparable: true,
+                      earned: completion.byEpicId.get(epic.id) ?? null,
+                    }),
                   })}
                   actions={
                     onManageEpic ? (

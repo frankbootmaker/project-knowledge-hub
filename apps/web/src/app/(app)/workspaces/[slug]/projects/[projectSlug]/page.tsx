@@ -262,6 +262,7 @@ export default async function ProjectDetailPage({
           itemType?: 'task' | 'bug';
           description: string | null;
           status: string;
+          completionPercent?: number | null;
           dueDate: string | null;
           forecastHours: string | null;
           actualHours: string | null;

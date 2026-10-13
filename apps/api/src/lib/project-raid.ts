@@ -25,6 +25,8 @@ import {
   type RaidSeverity,
   type RaidStatus,
 } from '@project-knowledge-hub/domain';
+import type { PublicItemMediaLink } from './project-item-media.js';
+import { withMediaLinkCounts, withMediaLinks } from './project-item-media.js';
 import { diffReplacement } from './replace-diff.js';
 import { activeMemberConditions } from './user-category.js';
 import {
@@ -106,6 +108,8 @@ export type PublicRaidItem = {
   tasks: PublicRaidTaskLink[];
   deliveryItems: PublicRaidDeliveryLink[];
   records: PublicRaidRecordLink[];
+  mediaLinkCount?: number;
+  mediaLinks?: PublicItemMediaLink[];
 };
 
 function storedRating(value: string | null): RaidSeverity | null {
@@ -445,18 +449,22 @@ export async function listRaidItems(
       .filter((id): id is string => Boolean(id)),
   );
   const transferMap = await loadTransferHumanKeys(database, rows, keyPrefix);
-  return rows.map((row) =>
-    toPublicRaidItem(
-      row,
-      taskMap.get(row.id) ?? [],
-      deliveryMap.get(row.id) ?? [],
-      recordMap.get(row.id) ?? [],
-      row.ownerUserId ? ownerMap.get(row.ownerUserId) ?? null : null,
-      keyPrefix,
-      {
-        transferredToHumanKey: transferMap.get(row.id)?.to ?? null,
-        transferredFromHumanKey: transferMap.get(row.id)?.from ?? null,
-      },
+  return withMediaLinkCounts(
+    database,
+    'raid',
+    rows.map((row) =>
+      toPublicRaidItem(
+        row,
+        taskMap.get(row.id) ?? [],
+        deliveryMap.get(row.id) ?? [],
+        recordMap.get(row.id) ?? [],
+        row.ownerUserId ? ownerMap.get(row.ownerUserId) ?? null : null,
+        keyPrefix,
+        {
+          transferredToHumanKey: transferMap.get(row.id)?.to ?? null,
+          transferredFromHumanKey: transferMap.get(row.id)?.from ?? null,
+        },
+      ),
     ),
   );
 }
@@ -486,17 +494,21 @@ export async function getRaidItem(
     row.ownerUserId ? [row.ownerUserId] : [],
   );
   const transferMap = await loadTransferHumanKeys(database, [row], keyPrefix);
-  return toPublicRaidItem(
-    row,
-    taskMap.get(row.id) ?? [],
-    deliveryMap.get(row.id) ?? [],
-    recordMap.get(row.id) ?? [],
-    row.ownerUserId ? ownerMap.get(row.ownerUserId) ?? null : null,
-    keyPrefix,
-    {
-      transferredToHumanKey: transferMap.get(row.id)?.to ?? null,
-      transferredFromHumanKey: transferMap.get(row.id)?.from ?? null,
-    },
+  return withMediaLinks(
+    database,
+    'raid',
+    toPublicRaidItem(
+      row,
+      taskMap.get(row.id) ?? [],
+      deliveryMap.get(row.id) ?? [],
+      recordMap.get(row.id) ?? [],
+      row.ownerUserId ? ownerMap.get(row.ownerUserId) ?? null : null,
+      keyPrefix,
+      {
+        transferredToHumanKey: transferMap.get(row.id)?.to ?? null,
+        transferredFromHumanKey: transferMap.get(row.id)?.from ?? null,
+      },
+    ),
   );
 }
 

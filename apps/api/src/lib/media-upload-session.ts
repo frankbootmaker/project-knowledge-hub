@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
-import { AppError } from '@project-knowledge-hub/domain';
+import { AppError, type ItemMediaEntityType } from '@project-knowledge-hub/domain';
 
 /** Prefer small chunks so ChatGPT Actions can fit them in a single tool argument. */
 export const MEDIA_UPLOAD_RECOMMENDED_CHUNK_CHARS = 8_000;
@@ -22,6 +22,8 @@ export type MediaUploadSession = {
   alt: string | null;
   knowledgeRecordId: string | null;
   insertIntoRecord: boolean;
+  targetEntityType: ItemMediaEntityType | null;
+  targetEntityId: string | null;
   /** Ordered raw base64 fragments (no data: prefix). */
   chunks: string[];
   totalBase64Chars: number;
@@ -42,6 +44,8 @@ export async function beginMediaUploadSession(
     alt?: string | null;
     knowledgeRecordId?: string | null;
     insertIntoRecord?: boolean;
+    targetEntityType?: ItemMediaEntityType | null;
+    targetEntityId?: string | null;
   },
 ): Promise<{
   uploadId: string;
@@ -59,6 +63,8 @@ export async function beginMediaUploadSession(
     alt: input.alt ?? null,
     knowledgeRecordId: input.knowledgeRecordId ?? null,
     insertIntoRecord: Boolean(input.insertIntoRecord),
+    targetEntityType: input.targetEntityType ?? null,
+    targetEntityId: input.targetEntityId ?? null,
     chunks: [],
     totalBase64Chars: 0,
     createdAt: new Date().toISOString(),
@@ -91,6 +97,8 @@ export async function loadMediaUploadSession(
     });
   }
   const session = JSON.parse(raw) as MediaUploadSession;
+  session.targetEntityType = session.targetEntityType ?? null;
+  session.targetEntityId = session.targetEntityId ?? null;
   if (session.clientId !== clientId) {
     throw new AppError({
       code: 'FORBIDDEN',

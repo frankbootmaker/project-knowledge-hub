@@ -102,6 +102,66 @@ export const taskStatusSchema = z.enum([
   'cancelled',
 ]);
 
+/** Steps a task can report while it is still open. */
+export const TASK_COMPLETION_PERCENTS = [0, 25, 50, 75, 100] as const;
+
+export const taskCompletionPercentSchema = z.union([
+  z.literal(0),
+  z.literal(25),
+  z.literal(50),
+  z.literal(75),
+  z.literal(100),
+]);
+
+const TASK_COMPLETION_PERCENT_SET = new Set<number>(TASK_COMPLETION_PERCENTS);
+
+export function isTaskCompletionPercent(value: number): boolean {
+  return TASK_COMPLETION_PERCENT_SET.has(value);
+}
+
+/**
+ * Done is always 100. Cancelled stores nothing.
+ * An open task keeps a menu value, or 0 when none is stored yet.
+ */
+export function resolveTaskCompletionPercent(input: {
+  status: z.infer<typeof taskStatusSchema>;
+  requested?: number | null;
+  existing?: number | null;
+}): number | null {
+  if (input.status === 'cancelled') return null;
+  if (input.status === 'done') return 100;
+  if (input.requested != null && isTaskCompletionPercent(input.requested)) {
+    return input.requested;
+  }
+  if (
+    input.requested === undefined &&
+    input.existing != null &&
+    isTaskCompletionPercent(input.existing)
+  ) {
+    return input.existing;
+  }
+  return 0;
+}
+
+/**
+ * Choosing a percent moves the status: 100 is done, any other step above 0
+ * is in progress. 0 leaves the status, except a done task becomes to do so
+ * the 0 can be stored. An unchanged percent does not move the status.
+ */
+export function statusForTaskCompletionChange(input: {
+  status: z.infer<typeof taskStatusSchema>;
+  requested?: number | null;
+  existing?: number | null;
+}): z.infer<typeof taskStatusSchema> {
+  if (input.requested === undefined || input.requested === input.existing) {
+    return input.status;
+  }
+  if (input.requested === 100) return 'done';
+  if (input.requested != null && input.requested > 0) return 'in_progress';
+  if (input.requested === 0 && input.status === 'done') return 'todo';
+  return input.status;
+}
+
 /** Project Scrum (NF-020): sprint lifecycle. */
 export const sprintStatusSchema = z.enum([
   'planned',
@@ -303,6 +363,56 @@ export const deliveryLinkEntityTypeSchema = z.enum([
   'task',
   'sprint',
 ]);
+
+/** Item → workspace media or external URL. Includes RAID and change; bugs stay task. */
+export const itemMediaEntityTypeSchema = z.enum([
+  'epic',
+  'user_story',
+  'milestone',
+  'task',
+  'sprint',
+  'raid',
+  'change',
+]);
+
+export const itemMediaKindSchema = z.enum(['media', 'url']);
+
+/** Accept only http(s) URLs and return a canonical href. */
+export function assertPublicHttpUrl(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new AppError({
+      code: 'INVALID_URL',
+      message: 'URL must be http or https',
+      statusCode: 400,
+    });
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new AppError({
+      code: 'INVALID_URL',
+      message: 'URL must be http or https',
+      statusCode: 400,
+    });
+  }
+  if (parsed.username || parsed.password) {
+    throw new AppError({
+      code: 'INVALID_URL',
+      message: 'URL must not include credentials',
+      statusCode: 400,
+    });
+  }
+  const href = parsed.toString();
+  if (href.length > 2000) {
+    throw new AppError({
+      code: 'INVALID_URL',
+      message: 'URL is too long',
+      statusCode: 400,
+    });
+  }
+  return href;
+}
 
 /** Change management register kind. */
 export const changeKindSchema = z.enum([
@@ -742,6 +852,8 @@ export type RaidKind = z.infer<typeof raidKindSchema>;
 export type RaidStatus = z.infer<typeof raidStatusSchema>;
 export type RaidSeverity = z.infer<typeof raidSeveritySchema>;
 export type DeliveryLinkEntityType = z.infer<typeof deliveryLinkEntityTypeSchema>;
+export type ItemMediaEntityType = z.infer<typeof itemMediaEntityTypeSchema>;
+export type ItemMediaKind = z.infer<typeof itemMediaKindSchema>;
 export type ChangeKind = z.infer<typeof changeKindSchema>;
 export type ChangeStatus = z.infer<typeof changeStatusSchema>;
 export type ChangeDeliveryEntityType = z.infer<typeof changeDeliveryEntityTypeSchema>;

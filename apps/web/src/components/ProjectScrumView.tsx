@@ -34,6 +34,7 @@ import {
   saveDeliveryDocumentLinks,
   type DeliveryDocumentRecord,
 } from './DeliveryDocumentsEditor';
+import { DeliveryMediaEditor } from './DeliveryMediaEditor';
 import {
   BurndownLegendHelp,
   SprintPointBurndownChart,
@@ -997,6 +998,7 @@ export function ProjectScrumView({
       ) : null}
 
       {selected ? (
+        <>
         <div className="kh-ops-inset mb-3">
           <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedDocuments')}</p>
           <DeliveryDocumentsEditor
@@ -1041,6 +1043,18 @@ export function ProjectScrumView({
             }}
           />
         </div>
+        <div className="kh-ops-inset mb-3">
+          <p className="mt-0 mb-2 text-sm font-semibold">{t('tabMedia')}</p>
+          <DeliveryMediaEditor
+            projectId={projectId}
+            workspaceId={workspaceId}
+            entityType="sprint"
+            entityId={selected.id}
+            canEdit={canMutate}
+            immediate
+          />
+        </div>
+        </>
       ) : null}
 
       {velocity != null ? (

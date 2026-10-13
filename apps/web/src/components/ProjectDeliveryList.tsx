@@ -17,6 +17,11 @@ import {
   isTaskDeliveryStatus,
 } from '../lib/delivery-status';
 import { toHours } from '../lib/task-costing';
+import {
+  deliveryLag,
+  deliveryPaceClass,
+  type DeliveryCompletion,
+} from '../lib/delivery-completion';
 
 export type DeliveryListKind = 'epic' | 'story' | 'milestone' | 'task';
 
@@ -28,6 +33,9 @@ export type DeliveryListRow = {
   itemType?: 'task' | 'bug' | null;
   title: string;
   status: string;
+  completion: DeliveryCompletion | null;
+  /** Plan percent for today. Stories and epics only. */
+  targetPercent: number | null;
   owner: string | null;
   sprint: string | null;
   forecastHours: string | number | null;
@@ -64,6 +72,14 @@ export function ProjectDeliveryList({
   const t = useTranslations('delivery');
   const tTable = useTranslations('table');
   const locale = useLocale();
+  const percentFormat = useMemo(
+    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
+    [locale],
+  );
+  const earnedFormat = useMemo(
+    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
+    [locale],
+  );
   const onManageRef = useRef(onManage);
   const onStatusChangeRef = useRef(onStatusChange);
   onManageRef.current = onManage;
@@ -209,6 +225,62 @@ export function ProjectDeliveryList({
       },
     },
     {
+      id: 'complete',
+      header: t('colComplete'),
+      headerLabel: t('colCompleteLabel'),
+      kind: 'number',
+      sort: {
+        type: 'number',
+        getValue: (row) => row.completion?.percent ?? -1,
+        defaultDir: 'desc',
+      },
+      cell: (row) => {
+        const comparable = row.kind === 'epic' || row.kind === 'story';
+        const lag = comparable
+          ? deliveryLag({
+              actual: row.completion?.percent ?? null,
+              target: row.targetPercent,
+              status: row.status,
+            })
+          : null;
+        const earnedTitle =
+          comparable && row.completion
+            ? t('completeOf', {
+                done: earnedFormat.format(row.completion.done),
+                total: row.completion.total,
+              })
+            : null;
+        const lagTitle = lag
+          ? t(lag === 'overdue' ? 'completeOverdue' : 'completeBehind', {
+              gap: (row.targetPercent ?? 0) - (row.completion?.percent ?? 0),
+            })
+          : null;
+        const title = [earnedTitle, lagTitle].filter(Boolean).join(' · ') || undefined;
+        const label = row.completion
+          ? percentFormat.format(row.completion.percent / 100)
+          : '—';
+        if (!title) return label;
+        return (
+          <span className={deliveryPaceClass(lag)} title={title}>
+            {label}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'target',
+      header: t('colTarget'),
+      headerLabel: t('colTargetLabel'),
+      kind: 'number',
+      sort: {
+        type: 'number',
+        getValue: (row) => row.targetPercent ?? -1,
+        defaultDir: 'desc',
+      },
+      cell: (row) =>
+        row.targetPercent == null ? '—' : percentFormat.format(row.targetPercent / 100),
+    },
+    {
       id: 'owner',
       header: t('colOwner'),
       kind: 'text',
@@ -223,7 +295,7 @@ export function ProjectDeliveryList({
     {
       id: 'sprint',
       header: t('colSprint'),
-      kind: 'data',
+      kind: 'text',
       sort: { type: 'text', getValue: (row) => row.sprint ?? '' },
       filter: {
         type: 'enum',
@@ -300,7 +372,9 @@ export function ProjectDeliveryList({
   ], [
     canMutate,
     ownerOptions,
+    earnedFormat,
     pending,
+    percentFormat,
     sprintOptions,
     statusOptions,
     t,

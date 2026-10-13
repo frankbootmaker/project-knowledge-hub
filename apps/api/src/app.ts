@@ -48,6 +48,10 @@ import { registerProjectAgileRoutes } from './routes/project-agile.js';
 import { registerProjectStakeholderRoutes } from './routes/project-stakeholders.js';
 import { registerProjectRaidRoutes } from './routes/project-raid.js';
 import { registerKnowledgeDeliveryLinkRoutes } from './routes/knowledge-delivery-links.js';
+import {
+  registerMediaLibrarySettingsRoutes,
+  registerProjectItemMediaRoutes,
+} from './routes/project-item-media.js';
 import { registerProjectChangeRoutes } from './routes/project-changes.js';
 import { registerProjectBudgetRoutes } from './routes/project-budget.js';
 import { registerProjectReportRoutes } from './routes/project-reports.js';
@@ -224,6 +228,8 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerProjectStakeholderRoutes(app);
   await registerProjectRaidRoutes(app);
   await registerKnowledgeDeliveryLinkRoutes(app);
+  await registerProjectItemMediaRoutes(app);
+  await registerMediaLibrarySettingsRoutes(app);
   await registerProjectChangeRoutes(app);
   await registerProjectBudgetRoutes(app);
   await registerProjectReportRoutes(app);

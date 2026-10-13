@@ -4,6 +4,7 @@ import {
   parseBackupAdminTab,
 } from '../../../../components/admin/BackupAdminTabs';
 import { BackupsAdmin } from '../../../../components/admin/BackupsAdmin';
+import { MediaLibrarySettingsAdmin } from '../../../../components/admin/MediaLibrarySettingsAdmin';
 import {
   StorageSettingsAdmin,
   type BlobUsageSummary,
@@ -105,10 +106,13 @@ export default async function AdminBackupsPage({
         labels={{
           backups: t('backupsTabBackups'),
           storage: t('storage'),
+          media: t('mediaLibraryTab'),
         }}
       />
       {tab === 'storage' ? (
         <StoragePane />
+      ) : tab === 'media' ? (
+        <MediaLibrarySettingsAdmin />
       ) : (
         <BackupsPane title={t('backupsPageTitle')} description={t('backupsPageBlurb')} />
       )}

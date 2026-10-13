@@ -14,6 +14,11 @@ import {
   users,
   workspaces,
 } from '@project-knowledge-hub/database';
+import type { PublicItemMediaLink } from './project-item-media.js';
+import {
+  withMediaLinkCounts,
+  withMediaLinks,
+} from './project-item-media.js';
 import {
   AppError,
   assertDateRange,
@@ -25,6 +30,8 @@ import {
   raciRoleSchema,
   raidSeveritySchema,
   resolveBugCreate,
+  resolveTaskCompletionPercent,
+  statusForTaskCompletionChange,
   resolveBugUpdate,
   taskActivityTypeSchema,
   taskItemTypeSchema,
@@ -85,6 +92,8 @@ export type PublicMilestone = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  mediaLinkCount?: number;
+  mediaLinks?: PublicItemMediaLink[];
 };
 
 export type PublicTask = {
@@ -112,6 +121,7 @@ export type PublicTask = {
   forecastHours: number | null;
   actualHours: number | null;
   storyPoints: number | null;
+  completionPercent: number | null;
   tokensUsed: number | null;
   tokensInput: number | null;
   tokensOutput: number | null;
@@ -140,6 +150,8 @@ export type PublicTask = {
    */
   completedAt: string | null;
   raci: PublicRaciEntry[];
+  mediaLinkCount?: number;
+  mediaLinks?: PublicItemMediaLink[];
 };
 
 /** Task the current user holds a RACI role on, with project/workspace context. */
@@ -222,6 +234,7 @@ function toPublicTask(
     forecastHours: row.forecastHours,
     actualHours: row.actualHours,
     storyPoints: row.storyPoints ?? null,
+    completionPercent: row.completionPercent ?? null,
     tokensUsed: row.tokensUsed ?? null,
     tokensInput: row.tokensInput ?? null,
     tokensOutput: row.tokensOutput ?? null,
@@ -562,7 +575,11 @@ export async function listMilestones(
     )
     .orderBy(asc(projectMilestones.sortOrder), asc(projectMilestones.targetDate));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
-  return rows.map((row) => toPublicMilestone(row, keyPrefix));
+  return withMediaLinkCounts(
+    database,
+    'milestone',
+    rows.map((row) => toPublicMilestone(row, keyPrefix)),
+  );
 }
 
 export async function createMilestone(
@@ -728,7 +745,11 @@ export async function listTasks(
     .where(and(...conditions))
     .orderBy(asc(projectTasks.sortOrder), asc(projectTasks.dueDate));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
-  return withTaskContext(database, rows, new Map([[projectId, keyPrefix]]));
+  return withMediaLinkCounts(
+    database,
+    'task',
+    await withTaskContext(database, rows, new Map([[projectId, keyPrefix]])),
+  );
 }
 
 export async function listAssignedTasksForUser(
@@ -843,9 +864,10 @@ export async function getTask(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return (
+  const task = (
     await withTaskContext(database, [row], new Map([[row.projectId, keyPrefix]]))
   )[0]!;
+  return withMediaLinks(database, 'task', task);
 }
 
 async function assertMilestoneInProject(
@@ -1435,6 +1457,7 @@ export async function createTask(
     userStoryId?: string | null;
     sprintId?: string | null;
     storyPoints?: number | null;
+    completionPercent?: number | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     createdBy?: string | null;
@@ -1501,6 +1524,15 @@ export async function createTask(
     input.currentOwnerUserId ??
     defaultOwnerFromRaci(input.raci ?? [], input.createdBy);
   const usage = resolveAiUsageWrite(EMPTY_AI_USAGE, input);
+  // A chosen percent sets status when the caller did not send one, or when it changed.
+  const status = statusForTaskCompletionChange({
+    status: input.status ?? 'todo',
+    requested: input.completionPercent,
+  });
+  const completionPercent = resolveTaskCompletionPercent({
+    status,
+    requested: input.completionPercent,
+  });
 
   const createdTask = await database.db.transaction(async (tx) => {
     const allocated = await allocateIssueNumber(
@@ -1519,12 +1551,13 @@ export async function createTask(
         title: input.title,
         description: input.description ?? null,
         ...bugColumns(bugWrite),
-        status: input.status ?? 'todo',
+        status,
         startDate: input.startDate ?? null,
         dueDate: input.dueDate ?? null,
         forecastHours: input.forecastHours ?? null,
         actualHours: input.actualHours ?? null,
         storyPoints: input.storyPoints ?? null,
+        completionPercent,
         tokensUsed: usage.tokensUsed,
         tokensInput: usage.tokensInput,
         tokensOutput: usage.tokensOutput,
@@ -1611,6 +1644,7 @@ export async function updateTask(
     userStoryId?: string | null;
     sprintId?: string | null;
     storyPoints?: number | null;
+    completionPercent?: number | null;
     currentOwnerUserId?: string | null;
     sortOrder?: number;
     archived?: boolean;
@@ -1722,7 +1756,21 @@ export async function updateTask(
     endField: 'dueDate',
   });
 
-  const nextStatus = input.status ?? existing.status;
+  // An explicit status is the caller's choice (the dialog already moved it
+  // when the percent changed). A percent-only patch still drives status.
+  const nextStatus =
+    input.status !== undefined
+      ? taskStatusSchema.parse(input.status)
+      : statusForTaskCompletionChange({
+          status: taskStatusSchema.parse(existing.status),
+          requested: input.completionPercent,
+          existing: existing.completionPercent,
+        });
+  const completionPercent = resolveTaskCompletionPercent({
+    status: nextStatus,
+    requested: input.completionPercent,
+    existing: existing.completionPercent,
+  });
   const nextOwner =
     input.currentOwnerUserId !== undefined
       ? input.currentOwnerUserId
@@ -1767,6 +1815,7 @@ export async function updateTask(
       sprintId: input.sprintId !== undefined ? input.sprintId : existing.sprintId,
       storyPoints:
         input.storyPoints !== undefined ? input.storyPoints : existing.storyPoints,
+      completionPercent,
       currentOwnerUserId: nextOwner,
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:
@@ -1779,12 +1828,12 @@ export async function updateTask(
     })
     .where(eq(projectTasks.id, taskId));
 
-  if (input.status !== undefined && input.status !== existing.status) {
+  if (nextStatus !== existing.status) {
     await recordTaskActivity(database, {
       taskId,
       actorUserId: input.actorUserId,
       type: 'status_changed',
-      metadata: { from: existing.status, to: input.status },
+      metadata: { from: existing.status, to: nextStatus },
     });
   }
   if (
@@ -1808,6 +1857,7 @@ export async function updateTask(
     'dueDate',
     'forecastHours',
     'actualHours',
+    'completionPercent',
     'milestoneId',
     'userStoryId',
     'sortOrder',

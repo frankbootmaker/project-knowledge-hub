@@ -2378,6 +2378,22 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   white-space: nowrap;
 }
 
+.kh-ops-tree-pct {
+  display: inline-block;
+  min-width: 3.2rem;
+  text-align: right;
+}
+
+.kh-ops-pace-behind {
+  color: var(--kh-rag-amber-ink);
+  font-weight: 650;
+}
+
+.kh-ops-pace-overdue {
+  color: var(--kh-rag-red-ink);
+  font-weight: 650;
+}
+
 .kh-ops-sprint-head {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(110px, 0.45fr));
@@ -4257,7 +4273,7 @@ button.kh-ops-stage-card:disabled {
 @media (max-width: 760px) {
   .kh-ops-delivery-tree,
   .kh-ops-delivery-tree-head {
-    min-width: 850px;
+    min-width: 980px;
   }
 
   .kh-ops-view-intro {
@@ -4351,4 +4367,48 @@ button.kh-ops-stage-card:disabled {
   .kh-ops-page-title {
     font-size: 25px;
   }
+}
+
+.kh-ops-dropzone.kh-ops-media-drop {
+  min-height: 0;
+  gap: 8px;
+  padding: 16px;
+}
+
+.kh-ops-dropzone.kh-ops-media-drop p {
+  margin: 0;
+}
+
+.kh-ops-media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.kh-ops-media-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.kh-ops-media-thumb {
+  width: 4rem;
+  height: 4rem;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--kh-surface-muted, transparent);
+}
+
+.kh-ops-media-thumb-sm {
+  width: 2rem;
+  height: 2rem;
+  margin-top: 0.05rem;
+}
+
+.kh-ops-media-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
 }

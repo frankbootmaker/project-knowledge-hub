@@ -526,6 +526,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         alt: stringProp('Optional alt text', { maxLength: 300 }),
         knowledgeRecordId: entityRefProp('Optional record to link'),
         insertIntoRecord: { type: 'boolean' },
+        targetEntityType: {
+          type: 'string',
+          enum: ['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'],
+        },
+        targetEntityId: entityRefProp('Optional item to link on finalize'),
       },
     },
   },
@@ -624,6 +629,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         userStoryId: { ...entityRefProp('User story'), nullable: true },
         sprintId: { ...entityRefProp('Sprint'), nullable: true },
         storyPoints: { type: 'integer', minimum: 0, maximum: 1000, nullable: true },
+        completionPercent: {
+          type: 'integer',
+          enum: [0, 25, 50, 75, 100],
+          nullable: true,
+        },
         currentOwnerUserId: { type: 'string', format: 'uuid', nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
         ...bugFields,
@@ -674,6 +684,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         userStoryId: { ...entityRefProp('User story'), nullable: true },
         sprintId: { ...entityRefProp('Sprint'), nullable: true },
         storyPoints: { type: 'integer', minimum: 0, maximum: 1000, nullable: true },
+        completionPercent: {
+          type: 'integer',
+          enum: [0, 25, 50, 75, 100],
+          nullable: true,
+        },
         currentOwnerUserId: { type: 'string', format: 'uuid', nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
         archived: { type: 'boolean' },
@@ -1060,7 +1075,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_workspace_media',
-    description: 'List recent workspace media with markdownSnippet.',
+    description:
+      'List recent workspace media with markdownSnippet and usedBy. Optional filename query and item filter.',
     scope: 'knowledge:read',
     defaults: { limit: 20 },
     body: {
@@ -1069,6 +1085,12 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         workspaceId: uuidProp('Workspace id'),
         knowledgeRecordId: entityRefProp('Optional record filter'),
+        query: stringProp('Optional filename search', { maxLength: 200 }),
+        entityType: {
+          type: 'string',
+          enum: ['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'],
+        },
+        entityId: entityRefProp('Optional item filter'),
         limit: { type: 'integer', minimum: 1, maximum: 50 },
       },
     },
@@ -1760,6 +1782,41 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
                 enum: ['epic', 'user_story', 'milestone', 'task', 'sprint'],
               },
               entityId: entityRefProp('Delivery entity id'),
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'set_delivery_media_links',
+    description:
+      'Replace image and external URL links for one delivery, RAID, or change item. Bugs use task. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+    openApi: true,
+    body: {
+      type: 'object',
+      required: ['projectId', 'entityType', 'entityId', 'links'],
+      properties: {
+        projectId: uuidProp('Project id'),
+        entityType: {
+          type: 'string',
+          enum: ['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'],
+        },
+        entityId: entityRefProp('Item id or human key'),
+        links: {
+          type: 'array',
+          maxItems: 100,
+          items: {
+            type: 'object',
+            required: ['kind'],
+            properties: {
+              kind: { type: 'string', enum: ['media', 'url'] },
+              mediaId: uuidProp('Workspace media id'),
+              url: stringProp('http or https URL', { maxLength: 2000 }),
+              title: stringProp('Title', { maxLength: 200 }),
+              description: stringProp('Optional description', { maxLength: 2000 }),
             },
           },
         },

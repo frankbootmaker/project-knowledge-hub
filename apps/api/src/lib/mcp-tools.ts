@@ -49,6 +49,7 @@ import {
   raidSeveritySchema,
   raidStatusSchema,
   recordTypeSchema,
+  itemMediaEntityTypeSchema,
   taskStatusSchema,
   userStoryStatusSchema,
 } from '@project-knowledge-hub/domain';
@@ -94,6 +95,12 @@ import {
   toPublicMedia,
   type PublicWorkspaceMedia,
 } from './workspace-media.js';
+import { getEffectiveMediaMaxBytes } from './media-max-bytes.js';
+import {
+  appendMediaLink,
+  mediaUsedBy,
+  setItemMediaLinks,
+} from './project-item-media.js';
 import { buildSupportDump } from './support-dump.js';
 import {
   auditKnowledgeSearch,
@@ -2263,6 +2270,13 @@ export function createMcpToolHandlers(
           statusCode: 400,
         });
       }
+      if (Boolean(input.targetEntityType) !== Boolean(input.targetEntityId)) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'targetEntityType and targetEntityId must be sent together',
+          statusCode: 400,
+        });
+      }
 
       const workspaceIds = client.allowedWorkspaceIds.length > 0 
         ? client.allowedWorkspaceIds 
@@ -2301,9 +2315,26 @@ export function createMcpToolHandlers(
         altText: input.alt ?? null,
         createdBy: actingUserId,
         uploadDir: app.env.MEDIA_UPLOAD_DIR,
-        maxBytes: app.env.MEDIA_MAX_BYTES,
+        maxBytes: await getEffectiveMediaMaxBytes(
+          app.database,
+          app.env.MEDIA_MAX_BYTES,
+        ),
         blobStore,
       });
+      if (input.targetEntityType && input.targetEntityId) {
+        const targetEntityId = await resolveEntityId(app.database, {
+          entityType: input.targetEntityType,
+          idOrKey: input.targetEntityId,
+          workspaceIds,
+        });
+        await appendMediaLink(app.database, {
+          workspaceId: input.workspaceId,
+          mediaId: row.id,
+          entityType: input.targetEntityType,
+          entityId: targetEntityId,
+          createdBy: actingUserId,
+        });
+      }
       const media = toPublicMedia(row);
 
       await writeAuditEvent(app.database, {
@@ -2354,6 +2385,13 @@ export function createMcpToolHandlers(
           statusCode: 400,
         });
       }
+      if (Boolean(input.targetEntityType) !== Boolean(input.targetEntityId)) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'targetEntityType and targetEntityId must be sent together',
+          statusCode: 400,
+        });
+      }
 
       const workspaceIds = client.allowedWorkspaceIds.length > 0 
         ? client.allowedWorkspaceIds 
@@ -2363,6 +2401,13 @@ export function createMcpToolHandlers(
         input.knowledgeRecordId,
         workspaceIds,
       );
+      const targetEntityId = input.targetEntityId
+        ? await resolveEntityId(app.database, {
+            entityType: input.targetEntityType!,
+            idOrKey: input.targetEntityId,
+            workspaceIds,
+          })
+        : null;
 
       const started = await beginMediaUploadSession(app.redis, {
         clientId: client.id,
@@ -2372,6 +2417,8 @@ export function createMcpToolHandlers(
         alt: input.alt ?? null,
         knowledgeRecordId: knowledgeRecordId ?? null,
         insertIntoRecord: input.insertIntoRecord,
+        targetEntityType: input.targetEntityType ?? null,
+        targetEntityId,
       });
 
       return {
@@ -2436,9 +2483,21 @@ export function createMcpToolHandlers(
         altText: session.alt,
         createdBy: actingUserId,
         uploadDir: app.env.MEDIA_UPLOAD_DIR,
-        maxBytes: app.env.MEDIA_MAX_BYTES,
+        maxBytes: await getEffectiveMediaMaxBytes(
+          app.database,
+          app.env.MEDIA_MAX_BYTES,
+        ),
         blobStore,
       });
+      if (session.targetEntityType && session.targetEntityId) {
+        await appendMediaLink(app.database, {
+          workspaceId: session.workspaceId,
+          mediaId: row.id,
+          entityType: session.targetEntityType,
+          entityId: session.targetEntityId,
+          createdBy: actingUserId,
+        });
+      }
       const media = toPublicMedia(row);
 
       await writeAuditEvent(app.database, {
@@ -2496,12 +2555,38 @@ export function createMcpToolHandlers(
         input.knowledgeRecordId,
         workspaceIds,
       );
+      if (Boolean(input.entityType) !== Boolean(input.entityId)) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'entityType and entityId must be sent together',
+          statusCode: 400,
+        });
+      }
+      const entityId = input.entityId
+        ? await resolveEntityId(app.database, {
+            entityType: input.entityType!,
+            idOrKey: input.entityId,
+            workspaceIds,
+          })
+        : undefined;
       const rows = await listWorkspaceMedia(app.database, {
         workspaceId: input.workspaceId,
         knowledgeRecordId: knowledgeRecordId ?? undefined,
+        query: input.query,
+        entityType: input.entityType,
+        entityId,
         limit: input.limit,
       });
-      return { media: rows.map(toPublicMedia) };
+      const usedBy = await mediaUsedBy(
+        app.database,
+        rows.map((row) => row.id),
+      );
+      return {
+        media: rows.map((row) => ({
+          ...toPublicMedia(row),
+          usedBy: usedBy.get(row.id) ?? [],
+        })),
+      };
     },
 
     async deleteWorkspaceMedia(input) {
@@ -2919,6 +3004,40 @@ export function createMcpToolHandlers(
       };
     },
 
+    async setDeliveryMediaLinks(input) {
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const actingUserId = requireActingUserId(client);
+      const entityType = itemMediaEntityTypeSchema.parse(input.entityType);
+      const entityId = await resolveEntityId(app.database, {
+        entityType,
+        idOrKey: input.entityId,
+        projectId: project.id,
+        workspaceIds: client.allowedWorkspaceIds.length > 0
+          ? client.allowedWorkspaceIds
+          : undefined,
+      });
+      const mediaLinks = await setItemMediaLinks(app.database, {
+        projectId: project.id,
+        entityType,
+        entityId,
+        links: input.links,
+        createdBy: actingUserId,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.item_media_links_set',
+        entityType,
+        entityId,
+        metadata: { projectId: project.id, linkCount: mediaLinks.length },
+        ipAddress: ipAddress ?? null,
+      });
+      return { mediaLinks };
+    },
+
     async listProjectDeliveryDocumentLinks(input) {
       await requirePmProject(app, client, input.projectId);
       let entityId = input.entityId;
@@ -3025,6 +3144,7 @@ export function createMcpToolHandlers(
         userStoryId,
         sprintId,
         storyPoints: input.storyPoints,
+        completionPercent: input.completionPercent,
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         ...(await mapMcpBugFields(app.database, input, {
@@ -3116,6 +3236,7 @@ export function createMcpToolHandlers(
         userStoryId,
         sprintId,
         storyPoints: input.storyPoints,
+        completionPercent: input.completionPercent,
         currentOwnerUserId: input.currentOwnerUserId,
         sortOrder: input.sortOrder,
         archived: input.archived,

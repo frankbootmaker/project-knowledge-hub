@@ -22,6 +22,8 @@ import {
   type ChangeKind,
   type ChangeStatus,
 } from '@project-knowledge-hub/domain';
+import type { PublicItemMediaLink } from './project-item-media.js';
+import { withMediaLinkCounts, withMediaLinks } from './project-item-media.js';
 import { diffReplacement } from './replace-diff.js';
 import { activeMemberConditions } from './user-category.js';
 import {
@@ -85,6 +87,8 @@ export type PublicChangeItem = {
   createdAt: string;
   updatedAt: string;
   deliveryLinks: PublicChangeDeliveryLink[];
+  mediaLinkCount?: number;
+  mediaLinks?: PublicItemMediaLink[];
 };
 
 async function assertWorkspaceMember(
@@ -342,16 +346,20 @@ export async function listChangeItems(
     }
   }
 
-  return rows.map((row) =>
-    toPublicChangeItem(
-      row,
-      linkMap.get(row.id) ?? [],
-      recordMap.get(row.id) ?? [],
-      people,
-      row.knowledgeRecordId
-        ? knowledgeTitles.get(row.knowledgeRecordId) ?? null
-        : null,
-      keyPrefix,
+  return withMediaLinkCounts(
+    database,
+    'change',
+    rows.map((row) =>
+      toPublicChangeItem(
+        row,
+        linkMap.get(row.id) ?? [],
+        recordMap.get(row.id) ?? [],
+        people,
+        row.knowledgeRecordId
+          ? knowledgeTitles.get(row.knowledgeRecordId) ?? null
+          : null,
+        keyPrefix,
+      ),
     ),
   );
 }
@@ -383,7 +391,7 @@ export async function getChangeItem(
       statusCode: 404,
     });
   }
-  return found;
+  return withMediaLinks(database, 'change', found);
 }
 
 export async function setChangeDeliveryLinks(

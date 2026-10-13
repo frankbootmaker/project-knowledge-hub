@@ -53,6 +53,7 @@ knowledge_records
 | RAID panel after Delivery | RAID board/calendar |
 | Delivery-item links from RAID manage UI (epic, story, task, bug, milestone) | RAID → sprint links |
 | Documents tab on the RAID dialog (add/remove record links) | Auto-create RAID from schedule “at risk” |
+| Media tab on the RAID dialog (workspace images and titled URLs) | Storing media bytes on the RAID row |
 | Documents tab on epic, story, task, bug, milestone, and sprint | A separate bug entity type for document links |
 | Linked RAID chips on task manage | Record-editor checkboxes for milestone and sprint (those links still persist) |
 | RAID Dependencies as register rows | Gantt / critical path (still out of Delivery v1) |
@@ -73,7 +74,7 @@ Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID R
 ## UI
 
 * Project page: Stakeholders → Delivery → **RAID** → Linked systems/knowledge
-* RAID manage: Details (ratings), Items, and Documents. Items covers epics, stories, tasks, bugs, and milestones. Items and Documents list only what is linked; Add opens a searchable paged picker with a type filter, and Remove drops the checked rows. Links are stored when the RAID item is saved.
+* RAID manage: Details (ratings), Items, Documents, and Media. Items covers epics, stories, tasks, bugs, and milestones. Items and Documents list only what is linked; Add opens a searchable paged picker with a type filter, and Remove drops the checked rows. Links are stored when the RAID item is saved. Media links workspace images and titled URLs and is stored with the same save.
 * Task, epic, story, and milestone manage: Documents tab adds and removes delivery links; they are stored when the item is saved. Bugs use the task tab.
 * Sprint panel: the same Documents editor stores links as soon as Add or Remove is confirmed
 * Task manage: read-only linked RAID chips

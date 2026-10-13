@@ -12,6 +12,8 @@ import {
   sprintStatusSchema,
   type SprintStatus,
 } from '@project-knowledge-hub/domain';
+import type { PublicItemMediaLink } from './project-item-media.js';
+import { withMediaLinkCounts, withMediaLinks } from './project-item-media.js';
 import {
   allocateIssueNumber,
   getProjectKeyPrefix,
@@ -36,6 +38,8 @@ export type PublicSprint = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  mediaLinkCount?: number;
+  mediaLinks?: PublicItemMediaLink[];
 };
 
 function toPublicSprint(
@@ -139,14 +143,18 @@ export async function listSprints(
     projectId,
     rows.map((row) => row.id),
   );
-  return rows.map((row) => {
-    const points = rollups.get(row.id);
-    return toPublicSprint(row, {
-      keyPrefix,
-      committedPoints: points?.committed ?? 0,
-      donePoints: points?.done ?? 0,
-    });
-  });
+  return withMediaLinkCounts(
+    database,
+    'sprint',
+    rows.map((row) => {
+      const points = rollups.get(row.id);
+      return toPublicSprint(row, {
+        keyPrefix,
+        committedPoints: points?.committed ?? 0,
+        donePoints: points?.done ?? 0,
+      });
+    }),
+  );
 }
 
 export async function getSprint(
@@ -178,11 +186,15 @@ export async function getPublicSprint(
     row.id,
   ]);
   const points = rollups.get(row.id);
-  return toPublicSprint(row, {
-    keyPrefix,
-    committedPoints: points?.committed ?? 0,
-    donePoints: points?.done ?? 0,
-  });
+  return withMediaLinks(
+    database,
+    'sprint',
+    toPublicSprint(row, {
+      keyPrefix,
+      committedPoints: points?.committed ?? 0,
+      donePoints: points?.done ?? 0,
+    }),
+  );
 }
 
 export async function createSprint(

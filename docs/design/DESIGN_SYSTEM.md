@@ -246,7 +246,13 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-13
 
+* **Delivery list sprint** — The sprint column wraps like other text cells (`overflow-wrap: anywhere`, max `28rem`). A long sprint name no longer stays on one line and widens the table past the panel.
+* **Delivery list completion** — A `%` column sits after Status. The sort name and tooltip are “Completed”. Epics and stories average child task and bug steps. Cancelled children are left out. A task shows its stored step. Milestones, and parents with no remaining children, show —. Hover on a parent shows the earned share, such as 1.5 of 4 done.
+* **Delivery target percent** — A Target column sits after `%` on the list. Stories and epics show how far today’s date is through their start and end. The start day is 0% and the end day is 100%. A missing window shows —. The tree shows the same `%` and Target after Status. A story or epic behind that line is amber; one still short after its end date is red. Hover names the gap. Tasks show their own percent and no target. Cancelled items are left uncolored.
+* **Task completion** — The add form and the task manage dialog add a Completed menu: 0%, 25%, 50%, 75%, 100%. Choosing 25%, 50%, or 75% sets status to In progress. Choosing 100% sets status to Done and disables the menu. Choosing 0% on a done task sets status to To do. Status Done still locks the value at 100%. Status Cancelled clears it and shows —. An unchanged percent does not move status, so a blocked task can stay blocked. The list percent uses this value.
 * **Delivery documents** — Task, epic, story, milestone, and sprint manage dialogs add a Documents tab. RAID and change dialogs use the same Details / Documents tabs, and the linked-record picker filters by type. Task dialog tabs use bold body sans, matching the setup menu.
+* **Delivery media** — The same dialogs, plus RAID and change, add a Media tab beside Documents. Linked images open a preview; titled URLs open in a new tab; a deleted library file shows a placeholder. Readers see the list without add, upload, unlink, or delete.
+* **Admin media library** — Backups & restore gains a Media library tab beside Backup and Storage. Allowed types stay PNG, JPEG, GIF, and WebP. The max upload size is edited in MiB and cannot exceed the server ceiling.
 * **Delivery view tabs** — Board, List, Tree, Calendar, Timeline, and Scrum use the same IBM Plex Sans, 14px, medium weight as the Add button. Stakeholder view tabs share that control.
 * **Task start date** — The add form and the task manage dialog show an optional Start date beside Due date for tasks and bugs.
 

@@ -16,6 +16,8 @@ import { TableFilterControl, type TableFilterField } from './TableFilterControl'
 export type DataColumn<T> = {
   id: string;
   header: string;
+  /** Spoken and tooltip name when `header` is abbreviated, such as %. */
+  headerLabel?: string;
   kind: ColumnKind;
   sort?: SortSpec<T>;
   filter?: FilterSpec<T>;
@@ -120,7 +122,8 @@ export function DataTable<T>({
                       data-sort-direction={
                         sortKey === column.id ? (sortDir === 'asc' ? '↑' : '↓') : undefined
                       }
-                      aria-label={t('sortBy', { column: column.header })}
+                      aria-label={t('sortBy', { column: column.headerLabel ?? column.header })}
+                      title={column.headerLabel}
                       onClick={() => onToggleSort(column.id, column.sort?.defaultDir)}
                     >
                       {column.header}

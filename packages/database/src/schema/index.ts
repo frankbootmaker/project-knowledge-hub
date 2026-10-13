@@ -1315,6 +1315,8 @@ export const projectTasks = pgTable(
     forecastHours: numeric('forecast_hours', { precision: 10, scale: 2, mode: 'number' }),
     actualHours: numeric('actual_hours', { precision: 10, scale: 2, mode: 'number' }),
     storyPoints: integer('story_points'),
+    /** 0, 25, 50, 75, or 100 while open. 100 when done. Null when cancelled. */
+    completionPercent: integer('completion_percent'),
     sortOrder: integer('sort_order').notNull().default(0),
     createdBy: uuid('created_by').references(() => users.id, {
       onDelete: 'set null',
@@ -1654,6 +1656,48 @@ export const knowledgeRecordDeliveryLinks = pgTable(
     ),
     index('knowledge_record_delivery_links_record_idx').on(table.knowledgeRecordId),
     index('knowledge_record_delivery_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/**
+ * Links a delivery, RAID, or change item to workspace media or an external URL.
+ * Media rows are soft-archived, so the FK does not cascade and a deleted file
+ * can still render as a placeholder.
+ */
+export const projectItemMediaLinks = pgTable(
+  'project_item_media_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    kind: text('kind').notNull(),
+    workspaceMediaId: uuid('workspace_media_id').references(() => workspaceMedia.id, {
+      onDelete: 'restrict',
+    }),
+    url: text('url'),
+    title: text('title'),
+    description: text('description'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_item_media_links_media_uidx')
+      .on(table.entityType, table.entityId, table.workspaceMediaId)
+      .where(sql`${table.workspaceMediaId} IS NOT NULL`),
+    uniqueIndex('project_item_media_links_url_uidx')
+      .on(table.entityType, table.entityId, table.url)
+      .where(sql`${table.url} IS NOT NULL`),
+    index('project_item_media_links_entity_idx').on(table.entityType, table.entityId),
+    index('project_item_media_links_media_idx').on(table.workspaceMediaId),
+    index('project_item_media_links_project_idx').on(table.projectId),
   ],
 );
 

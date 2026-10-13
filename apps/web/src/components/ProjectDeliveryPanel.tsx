@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
+import { TASK_COMPLETION_PERCENTS } from '@project-knowledge-hub/domain';
 import { CollapsibleSection } from './CollapsibleSection';
 import {
   ProjectDeliveryBoard,
@@ -26,6 +27,12 @@ import { ProjectScrumView, type ScrumExportHandle } from './ProjectScrumView';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
 import { ProjectTaskManageModal } from './ProjectTaskManageModal';
 import type { DeliveryDocumentRecord } from './DeliveryDocumentsEditor';
+import {
+  deliveryCompletionIndex,
+  localDateIso,
+  plannedTargetPercent,
+  taskDeliveryCompletion,
+} from '../lib/delivery-completion';
 import {
   Button,
   ErrorText,
@@ -111,6 +118,7 @@ type Task = {
   forecastHours: string | null;
   actualHours: string | null;
   storyPoints?: number | null;
+  completionPercent?: number | null;
   milestoneId: string | null;
   userStoryId: string | null;
   sprintId?: string | null;
@@ -202,6 +210,10 @@ export function ProjectDeliveryPanel({
   const tRaid = useTranslations('raid');
   const tCommon = useTranslations('common');
   const locale = useLocale();
+  const percentFormat = useMemo(
+    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
+    [locale],
+  );
   const router = useRouter();
   const searchParams = useSearchParams();
   const { pushToast } = useToast();
@@ -285,6 +297,7 @@ export function ProjectDeliveryPanel({
   const [taskAccountable, setTaskAccountable] = useState('');
   const [taskResponsible, setTaskResponsible] = useState('');
   const [taskForecastHours, setTaskForecastHours] = useState('');
+  const [taskCompletionPercent, setTaskCompletionPercent] = useState('0');
   const [taskActualHours, setTaskActualHours] = useState('');
   const [bugSeverity, setBugSeverity] = useState('medium');
   const [bugFoundIn, setBugFoundIn] = useState('');
@@ -388,6 +401,8 @@ export function ProjectDeliveryPanel({
   }, [sprintLabels]);
 
   const listRows: DeliveryListRow[] = useMemo(() => {
+    const today = localDateIso();
+    const completion = deliveryCompletionIndex(tasks);
     const epicRows: DeliveryListRow[] = epics.map((epic) => ({
       id: `epic:${epic.id}`,
       kind: 'epic',
@@ -395,6 +410,8 @@ export function ProjectDeliveryPanel({
       humanKey: epic.humanKey ?? null,
       title: epic.title,
       status: epic.status,
+      completion: completion.byEpicId.get(epic.id) ?? null,
+      targetPercent: plannedTargetPercent(epic.startDate, epic.endDate, today),
       owner: null,
       sprint: null,
       forecastHours: null,
@@ -421,6 +438,8 @@ export function ProjectDeliveryPanel({
         humanKey: story.humanKey ?? null,
         title: story.title,
         status: story.status,
+        completion: completion.byStoryId.get(story.id) ?? null,
+        targetPercent: plannedTargetPercent(story.startDate, story.endDate, today),
         owner: null,
         sprint: null,
         forecastHours: null,
@@ -447,6 +466,8 @@ export function ProjectDeliveryPanel({
       humanKey: milestone.humanKey ?? null,
       title: milestone.title,
       status: milestone.status,
+      completion: null,
+      targetPercent: null,
       owner: null,
       sprint: null,
       forecastHours: null,
@@ -477,6 +498,8 @@ export function ProjectDeliveryPanel({
         itemType: workItemType(task.itemType),
         title: task.title,
         status: task.status,
+        completion: taskDeliveryCompletion(task.status, task.completionPercent),
+        targetPercent: null,
         owner: ownerLabel,
         sprint: sprintLabel,
         forecastHours: task.forecastHours,
@@ -618,6 +641,7 @@ export function ProjectDeliveryPanel({
     setTaskResponsible('');
     setTaskForecastHours('');
     setTaskActualHours('');
+    setTaskCompletionPercent('0');
     setBugSeverity('medium');
     setBugFoundIn('');
     setBugFoundInNote('');
@@ -724,6 +748,7 @@ export function ProjectDeliveryPanel({
             dueDate: dateValue || null,
             forecastHours: parseHoursInput(taskForecastHours),
             actualHours: parseHoursInput(taskActualHours),
+            completionPercent: Number(taskCompletionPercent),
             milestoneId: taskMilestoneId || null,
             userStoryId: taskStoryId || null,
             raci: raci.length > 0 ? raci : undefined,
@@ -1330,6 +1355,19 @@ export function ProjectDeliveryPanel({
                   />
                 </Field>
               </div>
+              <Field label={t('completionField')}>
+                <Select
+                  value={taskCompletionPercent}
+                  onChange={(event) => setTaskCompletionPercent(event.target.value)}
+                  disabled={pending}
+                >
+                  {TASK_COMPLETION_PERCENTS.map((value) => (
+                    <option key={value} value={String(value)}>
+                      {percentFormat.format(value / 100)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <div className="kh-ops-form-grid">
                 <Field label={t('forecastHours')}>
                   <Input

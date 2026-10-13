@@ -1,16 +1,18 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull } from 'drizzle-orm';
 import {
   blobObjectKey,
   type BlobStore,
 } from '@project-knowledge-hub/blob-store';
 import {
   knowledgeRecords,
+  projectItemMediaLinks,
   workspaceMedia,
   type Database,
 } from '@project-knowledge-hub/database';
+import type { ItemMediaEntityType } from '@project-knowledge-hub/domain';
 import {
   AppError,
   assertMediaBytesMatchContentType,
@@ -273,11 +275,18 @@ export async function createWorkspaceMedia(
   return row;
 }
 
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 export async function listWorkspaceMedia(
   database: Database,
   input: {
     workspaceId: string;
     knowledgeRecordId?: string;
+    query?: string;
+    entityType?: ItemMediaEntityType;
+    entityId?: string;
     limit?: number;
   },
 ): Promise<WorkspaceMediaRow[]> {
@@ -288,6 +297,27 @@ export async function listWorkspaceMedia(
   ];
   if (input.knowledgeRecordId) {
     conditions.push(eq(workspaceMedia.knowledgeRecordId, input.knowledgeRecordId));
+  }
+  const query = input.query?.trim();
+  if (query) {
+    conditions.push(
+      ilike(workspaceMedia.originalFilename, `%${escapeLike(query)}%`),
+    );
+  }
+  if (input.entityType && input.entityId) {
+    const linked = await database.db
+      .select({ id: projectItemMediaLinks.workspaceMediaId })
+      .from(projectItemMediaLinks)
+      .where(
+        and(
+          eq(projectItemMediaLinks.kind, 'media'),
+          eq(projectItemMediaLinks.entityType, input.entityType),
+          eq(projectItemMediaLinks.entityId, input.entityId),
+        ),
+      );
+    const ids = linked.flatMap((row) => (row.id ? [row.id] : []));
+    if (ids.length === 0) return [];
+    conditions.push(inArray(workspaceMedia.id, ids));
   }
   return database.db
     .select()

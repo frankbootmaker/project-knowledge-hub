@@ -58,6 +58,7 @@ projects
         ├── user_story_id (optional)
         ├── item_type (task \| bug) + bug fields when bug
         ├── forecast_hours / actual_hours
+        ├── completion_percent (0 / 25 / 50 / 75 / 100; above 0 sets in progress; 100 sets done; null when cancelled)
         ├── current_owner_user_id  ← ball-in-court (≠ RACI)
         ├── project_task_raci
         └── project_task_activities
@@ -65,7 +66,11 @@ projects
 
 Knowledge documents may link to epics, stories, milestones, tasks, and sprints via `knowledge_record_delivery_links` (charter, meeting minutes, decisions, etc.). Each of those items has a Documents tab that adds and removes its own links. Bugs use the task tab.
 
+The same items, plus RAID and change items, have a Media tab. It links workspace images (PNG, JPEG, GIF, WebP) and titled `http` or `https` URLs in `project_item_media_links` (migration `0056`). Unlink removes only the link. Archiving an image leaves the link as a placeholder. Task, epic, story, and milestone links save with the item; a sprint saves when a link is added or removed. RAID and change save media with the item. Bugs use entity type `task`. The upload size is `media_max_bytes` when set, otherwise `MEDIA_MAX_BYTES`, and the stored limit cannot exceed that env ceiling.
+
 Milestones remain **timeboxes**. Agile structure is **Epic → User story → Task**. A task may link to a story and/or a milestone. A **bug** sits in the same places as a task (under a story, or ungrouped) and uses the same hours, RACI, owner, sprint, and budget totals.
+
+The list and the tree show **% complete** for a story or epic as the average of its tasks and bugs (cancelled children left out). **Target %** is how far today is through that item's start and end: 0 on the start day, 100 on the end day. A story or epic short of that line is behind; one still short after the end date is past the plan. Tasks show their own step and no target.
 
 ### Bugs
 

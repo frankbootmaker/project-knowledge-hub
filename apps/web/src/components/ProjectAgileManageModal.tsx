@@ -25,6 +25,11 @@ import {
   saveDeliveryDocumentLinks,
   type DeliveryDocumentRecord,
 } from './DeliveryDocumentsEditor';
+import {
+  DeliveryMediaEditor,
+  saveItemMediaLinks,
+  type ItemMediaDraft,
+} from './DeliveryMediaEditor';
 
 const STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 
@@ -137,7 +142,22 @@ export function ProjectAgileManageModal({
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false);
-  const [agileTab, setAgileTab] = useState<'details' | 'documents'>('details');
+  const [agileTab, setAgileTab] = useState<'details' | 'documents' | 'media'>('details');
+  const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    void fetch(`/api/v1/projects/${projectId}`)
+      .then(async (response) => {
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          project?: { workspaceId?: string };
+        };
+        setWorkspaceId(payload.project?.workspaceId ?? null);
+      })
+      .catch(() => setWorkspaceId(null));
+  }, [open, projectId]);
 
   useEffect(() => {
     if (!open || !kind || !itemId) {
@@ -292,6 +312,14 @@ export function ProjectAgileManageModal({
         entityId: itemId,
         recordIds: documentIds,
       });
+      if (mediaDrafts) {
+        await saveItemMediaLinks({
+          projectId,
+          entityType,
+          entityId: itemId,
+          links: mediaDrafts,
+        });
+      }
       onSaved(kind, saved);
       pushToast(
         kind === 'epic'
@@ -544,6 +572,15 @@ export function ProjectAgileManageModal({
         >
           {t('tabDocuments')}
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={agileTab === 'media'}
+          className={agileTab === 'media' ? 'active' : undefined}
+          onClick={() => setAgileTab('media')}
+        >
+          {t('tabMedia')}
+        </button>
       </div>
       <section className={`kh-ops-modal-pane${agileTab === 'details' ? ' active' : ''}`}>
       <div className="kh-ops-form-grid">
@@ -683,6 +720,21 @@ export function ProjectAgileManageModal({
           disabled={pending || confirmDelete}
           onPickerOpenChange={setDocumentPickerOpen}
         />
+      </section>
+      <section className={`kh-ops-modal-pane${agileTab === 'media' ? ' active' : ''}`}>
+        {itemId && kind ? (
+          <DeliveryMediaEditor
+            projectId={projectId}
+            workspaceId={workspaceId}
+            entityType={
+              kind === 'epic' ? 'epic' : kind === 'story' ? 'user_story' : 'milestone'
+            }
+            entityId={itemId}
+            canEdit={canMutate}
+            disabled={pending || confirmDelete}
+            onDraftsChange={setMediaDrafts}
+          />
+        ) : null}
       </section>
     </Modal>
   );

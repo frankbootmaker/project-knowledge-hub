@@ -42,7 +42,7 @@ project_epics / project_user_stories / project_milestones
 * `kind`: `scope` \| `timeline` \| `stakeholder` \| `budget` \| `other`
 * `status`: `proposed` \| `approved` \| `rejected` \| `implemented` \| `cancelled`
 * Optional requester / approver, effective date, baseline before/after dates
-* Optional documents (`project_change_record_links`; the legacy `knowledge_record_id` column stores the first link for older clients) and delivery links for epics, stories, milestones, and tasks. Sprints stay out. The manage dialog uses Details, Items, and Documents tabs; Add opens a searchable paged picker with a type filter.
+* Optional documents (`project_change_record_links`; the legacy `knowledge_record_id` column stores the first link for older clients) and delivery links for epics, stories, milestones, and tasks. Sprints stay out. The manage dialog uses Details, Items, Documents, and Media tabs; Add opens a searchable paged picker with a type filter. Media links workspace images and titled URLs and is stored with the change item.
 
 ### Boundaries
 
