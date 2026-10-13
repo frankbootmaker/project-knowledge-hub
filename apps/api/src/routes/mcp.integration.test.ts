@@ -9,7 +9,7 @@ import {
   users,
   workspaces,
 } from '@project-knowledge-hub/database';
-import { DEFAULT_MCP_SCOPES } from '@project-knowledge-hub/mcp';
+import { DEFAULT_MCP_SCOPES, MCP_CONTENT_TRUNCATION_SUFFIX } from '@project-knowledge-hub/mcp';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -50,6 +50,24 @@ async function mcpCall(
       params,
     },
   });
+}
+
+function toolPayload<T>(response: { json: () => unknown }): {
+  isError: boolean;
+  text: string;
+  data: T;
+} {
+  const body = response.json() as {
+    result?: { isError?: boolean; content?: Array<{ text?: string }> };
+  };
+  const text = body.result?.content?.[0]?.text ?? '';
+  let data = {} as T;
+  try {
+    data = JSON.parse(text) as T;
+  } catch {
+    data = {} as T;
+  }
+  return { isError: Boolean(body.result?.isError), text, data };
 }
 
 describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
@@ -570,5 +588,224 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(detail.knowledgeRecord?.media?.some((m) => m.id === uploaded.media!.id)).toBe(
       true,
     );
+  });
+
+  it('pages a knowledge record, writes it in chunks, and pages a task list', async () => {
+    const source = 'alpha beta gamma delta epsilon zeta '.repeat(4);
+    const create = await mcpCall(app!, writeToken, 50, 'tools/call', {
+      name: 'create_knowledge_record',
+      arguments: {
+        workspaceId,
+        title: 'Paged record',
+        recordType: 'runbook',
+        contentMarkdown: source,
+        tags: ['Paging'],
+      },
+    });
+    const created = toolPayload<{
+      knowledgeRecord?: { id: string; currentVersionNumber: number };
+    }>(create);
+    expect(created.isError).toBe(false);
+    const recordId = created.data.knowledgeRecord?.id;
+    expect(recordId).toBeTruthy();
+    const versionBefore = created.data.knowledgeRecord?.currentVersionNumber;
+
+    let offset = 0;
+    let joined = '';
+    let pageCount = 0;
+    while (pageCount < 20) {
+      const read = await mcpCall(app!, writeToken, 51 + pageCount, 'tools/call', {
+        name: 'get_knowledge_record',
+        arguments: { recordId, contentOffset: offset, contentLimit: 20 },
+      });
+      const page = toolPayload<{
+        knowledgeRecord?: {
+          contentMarkdown: string;
+          contentTruncated: boolean;
+          contentLength: number;
+          contentOffset: number;
+          nextOffset: number | null;
+          returnedChars: number;
+          contentSha256: string;
+          tags?: string[];
+        };
+      }>(read);
+      expect(page.isError).toBe(false);
+      const record = page.data.knowledgeRecord;
+      expect(record).toBeTruthy();
+      expect(record?.contentLength).toBe(source.length);
+      expect(record?.contentSha256).toMatch(/^[a-f0-9]{64}$/);
+      if (pageCount === 0) {
+        expect(record?.contentOffset).toBe(0);
+        expect(record?.contentTruncated).toBe(true);
+        expect(record?.contentMarkdown.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(true);
+        expect(record?.tags).toEqual(['Paging']);
+      } else {
+        expect(record?.contentMarkdown.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
+        expect(record?.tags).toBeUndefined();
+      }
+      joined += source.slice(
+        record!.contentOffset,
+        record!.contentOffset + record!.returnedChars,
+      );
+      pageCount += 1;
+      if (record?.nextOffset == null) break;
+      expect(record.nextOffset).toBeGreaterThan(offset);
+      offset = record.nextOffset;
+    }
+    expect(joined).toBe(source);
+    expect(pageCount).toBeGreaterThan(1);
+
+    const stale = await mcpCall(app!, writeToken, 80, 'tools/call', {
+      name: 'get_knowledge_record',
+      arguments: { recordId, expectSha256: 'ab'.repeat(32) },
+    });
+    const staleBody = toolPayload(stale);
+    expect(staleBody.isError).toBe(true);
+    expect(staleBody.text).toContain('contentSha256');
+
+    const rejected = await mcpCall(app!, writeToken, 81, 'tools/call', {
+      name: 'update_knowledge_record',
+      arguments: {
+        recordId,
+        changeMessage: 'Should fail',
+        contentMarkdown: `short${MCP_CONTENT_TRUNCATION_SUFFIX}`,
+      },
+    });
+    const rejectedBody = toolPayload(rejected);
+    expect(rejectedBody.isError).toBe(true);
+    expect(rejectedBody.text).toContain('truncat');
+
+    const begun = await mcpCall(app!, writeToken, 82, 'tools/call', {
+      name: 'begin_record_content_upload',
+      arguments: { recordId },
+    });
+    const session = toolPayload<{
+      uploadId?: string;
+      maxChunkChars?: number;
+      contentSha256?: string;
+    }>(begun);
+    expect(session.isError).toBe(false);
+    expect(session.data.maxChunkChars).toBe(40_000);
+    const uploadId = session.data.uploadId;
+    expect(uploadId).toBeTruthy();
+
+    const appended = await mcpCall(app!, writeToken, 83, 'tools/call', {
+      name: 'append_record_content',
+      arguments: { uploadId, chunk: 'Hello ', index: 0 },
+    });
+    expect(toolPayload(appended).isError).toBe(false);
+    const appendedNext = await mcpCall(app!, writeToken, 84, 'tools/call', {
+      name: 'append_record_content',
+      arguments: { uploadId, chunk: 'chunked', index: 1 },
+    });
+    expect(toolPayload(appendedNext).isError).toBe(false);
+
+    const finalized = await mcpCall(app!, writeToken, 85, 'tools/call', {
+      name: 'finalize_record_content_upload',
+      arguments: {
+        uploadId,
+        changeMessage: 'Replace from chunks',
+        expectedLength: 'Hello chunked'.length,
+      },
+    });
+    const saved = toolPayload<{
+      knowledgeRecord?: { currentVersionNumber: number };
+    }>(finalized);
+    expect(saved.isError).toBe(false);
+    expect(saved.data.knowledgeRecord?.currentVersionNumber).toBe((versionBefore ?? 1) + 1);
+
+    const reread = await mcpCall(app!, writeToken, 86, 'tools/call', {
+      name: 'get_knowledge_record',
+      arguments: { recordId },
+    });
+    const full = toolPayload<{
+      knowledgeRecord?: {
+        contentMarkdown: string;
+        contentTruncated: boolean;
+        nextOffset: number | null;
+        tags?: string[];
+      };
+    }>(reread);
+    expect(full.isError).toBe(false);
+    expect(full.data.knowledgeRecord?.contentMarkdown).toBe('Hello chunked');
+    expect(full.data.knowledgeRecord?.contentTruncated).toBe(false);
+    expect(full.data.knowledgeRecord?.nextOffset).toBeNull();
+    expect(full.data.knowledgeRecord?.tags).toEqual(['Paging']);
+
+    const project = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: { workspaceId, name: `Paged tasks ${randomUUID()}`, status: 'active' },
+    });
+    expect(project.statusCode).toBe(200);
+    const projectId = (project.json() as { project: { id: string } }).project.id;
+    const longDescription = 'D'.repeat(250);
+    for (const title of ['One', 'Two', 'Three']) {
+      const task = await app!.inject({
+        method: 'POST',
+        url: `/api/v1/projects/${projectId}/tasks`,
+        headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+        payload: { title, description: longDescription, status: 'todo' },
+      });
+      expect(task.statusCode).toBe(200);
+    }
+
+    const pmClient = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
+      payload: {
+        organizationId,
+        name: 'MCP pm client',
+        scopes: [...DEFAULT_MCP_SCOPES, 'pm:read'],
+        allowedWorkspaceIds: [workspaceId],
+      },
+    });
+    expect(pmClient.statusCode).toBe(200);
+    const pmToken = (pmClient.json() as { token: string }).token;
+
+    const firstList = await mcpCall(app!, pmToken, 90, 'tools/call', {
+      name: 'list_project_tasks',
+      arguments: { projectId, limit: 2 },
+    });
+    const firstPage = toolPayload<{
+      tasks?: Array<{ id: string; description: string | null }>;
+      total?: number;
+      limit?: number;
+      hasMore?: boolean;
+      nextCursor?: string | null;
+    }>(firstList);
+    expect(firstPage.isError).toBe(false);
+    expect(firstPage.data.total).toBe(3);
+    expect(firstPage.data.limit).toBe(2);
+    expect(firstPage.data.hasMore).toBe(true);
+    expect(firstPage.data.tasks).toHaveLength(2);
+    expect(firstPage.data.tasks?.[0]?.description).toBe(`${'D'.repeat(200)}…`);
+    const taskId = firstPage.data.tasks?.[0]?.id;
+    expect(taskId).toBeTruthy();
+
+    const secondList = await mcpCall(app!, pmToken, 91, 'tools/call', {
+      name: 'list_project_tasks',
+      arguments: { projectId, limit: 2, cursor: firstPage.data.nextCursor },
+    });
+    const secondPage = toolPayload<{
+      tasks?: Array<{ id: string }>;
+      hasMore?: boolean;
+      nextCursor?: string | null;
+    }>(secondList);
+    expect(secondPage.isError).toBe(false);
+    expect(secondPage.data.tasks).toHaveLength(1);
+    expect(secondPage.data.hasMore).toBe(false);
+    expect(secondPage.data.nextCursor).toBeNull();
+
+    const detail = await mcpCall(app!, pmToken, 92, 'tools/call', {
+      name: 'get_project_task',
+      arguments: { taskId },
+    });
+    const task = toolPayload<{ task?: { description: string | null } }>(detail);
+    expect(task.isError).toBe(false);
+    expect(task.data.task?.description).toBe(longDescription);
   });
 });
