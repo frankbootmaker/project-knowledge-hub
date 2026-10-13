@@ -258,6 +258,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(names).toContain('begin_workspace_media_upload');
     expect(names).toContain('append_workspace_media_upload');
     expect(names).toContain('finalize_workspace_media_upload');
+    expect(names).toContain('begin_record_content_upload');
+    expect(names).toContain('append_record_content');
+    expect(names).toContain('finalize_record_content_upload');
     expect(names).toContain('list_workspace_media');
 
     const search = await mcpCall(app!, readToken, 3, 'tools/call', {

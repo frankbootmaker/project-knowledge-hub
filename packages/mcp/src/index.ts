@@ -15,7 +15,9 @@ export {
   truncateContent,
   sliceContent,
   isTruncatedReadback,
+  contentSha256,
   enforceResponseSize,
+  type ContentBoundary,
   type ContentPage,
 } from './limits.js';
 export {

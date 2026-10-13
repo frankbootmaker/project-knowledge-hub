@@ -312,7 +312,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown, tags as tag-name strings, and media). Each page is at most 50,000 characters. contentLength is the full length. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. recordId may be UUID or document key.',
+      'Get a knowledge record (paged markdown). Tags and media are on the first page only. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key.',
     scope: 'knowledge:read',
     openApi: true,
     body: {
@@ -330,6 +330,18 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           minimum: 1,
           maximum: 50_000,
           description: 'Max characters in this page. Defaults to 50000.',
+        },
+        boundary: {
+          type: 'string',
+          enum: ['none', 'paragraph', 'line'],
+          description:
+            'Where to end the page. none is a hard cut. paragraph or line snaps to a break in the second half of the window.',
+        },
+        expectSha256: {
+          type: 'string',
+          minLength: 64,
+          maxLength: 64,
+          description: 'SHA-256 hex of the full body. 409 CONTENT_CHANGED when it does not match.',
         },
       },
     },
@@ -446,6 +458,55 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
     },
   },
   {
+    name: 'begin_record_content_upload',
+    description:
+      'Start a chunked markdown update. Then append_record_content and finalize_record_content_upload. One draft version per session. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['recordId'],
+      properties: {
+        recordId: entityRefProp('Knowledge record id'),
+      },
+    },
+  },
+  {
+    name: 'append_record_content',
+    description:
+      'Append one markdown chunk (max 40000 characters) to a record content upload. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['uploadId', 'chunk'],
+      properties: {
+        uploadId: uuidProp('Upload session id'),
+        chunk: stringProp('Markdown chunk', { minLength: 1, maxLength: 40_000 }),
+        index: { type: 'integer', minimum: 0 },
+      },
+    },
+  },
+  {
+    name: 'finalize_record_content_upload',
+    description:
+      'Save appended chunks as one draft version. 409 CONTENT_CHANGED when the record changed after begin. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['uploadId', 'changeMessage'],
+      properties: {
+        uploadId: uuidProp('Upload session id'),
+        changeMessage: stringProp('Why this change was made', {
+          minLength: 1,
+          maxLength: 500,
+        }),
+        expectedLength: { type: 'integer', minimum: 0, maximum: 500_000 },
+      },
+    },
+  },
+  {
     name: 'begin_workspace_media_upload',
     description:
       'Start chunked image upload (ChatGPT-safe). Next: append then finalize. Requires knowledge:write.',
@@ -501,7 +562,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_tasks',
     description:
-      'List delivery tasks for a project. Optional milestone, sprint, and itemType (task or bug) filters. Requires pm:read.',
+      'List delivery tasks for a project. Optional milestone, sprint, and itemType (task or bug) filters. Pages at 25. Descriptions are excerpts; use get_project_task for the full text. Pass cursor until hasMore is false. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -515,6 +576,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         unassignedSprint: { type: 'boolean' },
         itemType: taskItemType,
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },
@@ -811,7 +874,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_my_project_tasks',
     description:
-      'List tasks where the API client acting user is on RACI (My tasks). Requires pm:read + actingUserId.',
+      'List tasks where the API client acting user is on RACI (My tasks). Pages at 25. Descriptions are excerpts; use get_project_task for the full text. Pass cursor until hasMore is false. Requires pm:read + actingUserId.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -819,6 +882,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         role: raciRole,
         includeArchived: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1, maximum: 25 },
+        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
     },
   },

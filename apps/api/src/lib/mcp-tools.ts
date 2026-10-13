@@ -54,7 +54,9 @@ import {
 } from '@project-knowledge-hub/domain';
 import {
   ContentOffsetError,
+  contentSha256,
   isTruncatedReadback,
+  MCP_MAX_LIST_LIMIT,
   sliceContent,
   type McpClientContext,
   type McpToolHandlers,
@@ -74,6 +76,14 @@ import {
   beginMediaUploadSession,
   takeMediaUploadSession,
 } from './media-upload-session.js';
+import {
+  appendRecordContentChunk,
+  assertContentUnchanged,
+  beginRecordContentUploadSession,
+  deleteRecordContentUploadSession,
+  loadRecordContentUploadSession,
+} from './record-content-upload-session.js';
+import { pageTaskList } from './task-list-page.js';
 import {
   archiveWorkspaceMedia,
   createWorkspaceMedia,
@@ -1649,7 +1659,13 @@ export function createMcpToolHandlers(
       };
     },
 
-    async getKnowledgeRecord({ recordId, contentOffset, contentLimit }) {
+    async getKnowledgeRecord({
+      recordId,
+      contentOffset,
+      contentLimit,
+      boundary,
+      expectSha256,
+    }) {
       const workspaceIds = client.allowedWorkspaceIds.length > 0 
         ? client.allowedWorkspaceIds 
         : undefined;
@@ -1671,11 +1687,20 @@ export function createMcpToolHandlers(
       }
       assertWorkspaceAllowed(client, record.workspaceId);
       assertProjectAllowed(client, record.projectId);
+      const hash = contentSha256(record.contentMarkdown);
+      if (expectSha256 !== undefined && expectSha256 !== hash) {
+        throw new AppError({
+          code: 'CONTENT_CHANGED',
+          message: 'Record content changed since contentSha256 was captured',
+          statusCode: 409,
+        });
+      }
       let page;
       try {
         page = sliceContent(record.contentMarkdown, {
           offset: contentOffset,
           limit: contentLimit,
+          boundary,
         });
       } catch (error) {
         if (error instanceof ContentOffsetError) {
@@ -1687,25 +1712,30 @@ export function createMcpToolHandlers(
         }
         throw error;
       }
-      await auditKnowledgeView({
-        database: app.database,
-        organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
-        recordId: record.id,
-        workspaceId: record.workspaceId,
-        projectId: record.projectId,
-        systemId: record.systemId,
-        slug: record.slug,
-        via: 'mcp',
-        ipAddress,
-      });
+      const firstPage = page.contentOffset === 0;
+      if (firstPage) {
+        await auditKnowledgeView({
+          database: app.database,
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          recordId: record.id,
+          workspaceId: record.workspaceId,
+          projectId: record.projectId,
+          systemId: record.systemId,
+          slug: record.slug,
+          via: 'mcp',
+          ipAddress,
+        });
+      }
       const reviewedByUser = await resolveReviewedByUser(app.database, record);
-      const mediaRows = await listWorkspaceMedia(app.database, {
-        workspaceId: record.workspaceId,
-        knowledgeRecordId: record.id,
-        limit: 50,
-      });
+      const mediaRows = firstPage
+        ? await listWorkspaceMedia(app.database, {
+            workspaceId: record.workspaceId,
+            knowledgeRecordId: record.id,
+            limit: 50,
+          })
+        : [];
       const keyPrefixMap = await loadProjectKeyPrefixMap(app.database, [
         record.projectId,
       ]);
@@ -1716,7 +1746,9 @@ export function createMcpToolHandlers(
         keyPrefix && record.documentKeyType && record.documentNumber != null
           ? `${keyPrefix}-${record.documentKeyType}-${record.documentNumber}`
           : null;
-      const tagMap = await getKnowledgeRecordTags(app.database, [record.id]);
+      const tagMap = firstPage
+        ? await getKnowledgeRecordTags(app.database, [record.id])
+        : new Map<string, Array<{ name: string }>>();
       return {
         knowledgeRecord: {
           id: record.id,
@@ -1737,14 +1769,23 @@ export function createMcpToolHandlers(
           contentLength: page.contentLength,
           contentOffset: page.contentOffset,
           nextOffset: page.nextOffset,
+          returnedChars: page.returnedChars,
+          chunkIndex: page.chunkIndex,
+          totalChunks: page.totalChunks,
+          inCodeFence: page.inCodeFence,
+          contentSha256: hash,
           currentVersionNumber: record.currentVersionNumber,
           verifiedAt: record.verifiedAt?.toISOString() ?? null,
           lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
           reviewedBy: record.reviewedBy,
           reviewedByUser,
           updatedAt: record.updatedAt.toISOString(),
-          tags: knowledgeRecordTagNames(tagMap, record.id),
-          media: mediaRows.map(toPublicMedia),
+          ...(firstPage
+            ? {
+                tags: knowledgeRecordTagNames(tagMap, record.id),
+                media: mediaRows.map(toPublicMedia),
+              }
+            : {}),
         },
       };
     },
@@ -2051,6 +2092,136 @@ export function createMcpToolHandlers(
           lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
           sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
           archivedAt: result.knowledgeRecord.archivedAt,
+          currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
+          projectId: result.knowledgeRecord.projectId,
+          systemId: result.knowledgeRecord.systemId,
+          versioned: result.shouldVersion,
+        },
+      };
+    },
+
+    async beginRecordContentUpload(input) {
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const resolvedId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+      });
+      const [record] = await app.database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(and(eq(knowledgeRecords.id, resolvedId), isNull(knowledgeRecords.archivedAt)))
+        .limit(1);
+      if (!record) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found',
+          statusCode: 404,
+        });
+      }
+      assertWriteWorkspaceAllowed(client, record.workspaceId);
+      assertProjectAllowed(client, record.projectId);
+      requireActingUserId(client);
+      const hash = contentSha256(record.contentMarkdown);
+      const started = await beginRecordContentUploadSession(app.redis, {
+        clientId: client.id,
+        recordId: record.id,
+        workspaceId: record.workspaceId,
+        contentSha256: hash,
+      });
+      return {
+        ...started,
+        contentLength: record.contentMarkdown.length,
+        contentSha256: hash,
+        currentVersionNumber: record.currentVersionNumber,
+      };
+    },
+
+    async appendRecordContent(input) {
+      requireActingUserId(client);
+      return appendRecordContentChunk(app.redis, {
+        uploadId: input.uploadId,
+        clientId: client.id,
+        chunk: input.chunk,
+        index: input.index,
+      });
+    },
+
+    async finalizeRecordContentUpload(input) {
+      const actingUserId = requireActingUserId(client);
+      const session = await loadRecordContentUploadSession(
+        app.redis,
+        input.uploadId,
+        client.id,
+      );
+      assertWriteWorkspaceAllowed(client, session.workspaceId);
+      if (session.chunks.length === 0) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'No chunks uploaded; call append_record_content first',
+          statusCode: 400,
+        });
+      }
+      const contentMarkdown = session.chunks.join('');
+      if (isTruncatedReadback(contentMarkdown)) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_TRUNCATED_CONTENT',
+          message:
+            'contentMarkdown ends with the truncated-read marker. Page get_knowledge_record until nextOffset is null, then send the full body.',
+          statusCode: 400,
+        });
+      }
+      if (
+        input.expectedLength !== undefined &&
+        contentMarkdown.length !== input.expectedLength
+      ) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: `Joined content length ${contentMarkdown.length} does not match expectedLength ${input.expectedLength}`,
+          statusCode: 400,
+        });
+      }
+      const [record] = await app.database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(and(eq(knowledgeRecords.id, session.recordId), isNull(knowledgeRecords.archivedAt)))
+        .limit(1);
+      if (!record) {
+        throw new AppError({
+          code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+          message: 'Knowledge record not found',
+          statusCode: 404,
+        });
+      }
+      assertProjectAllowed(client, record.projectId);
+      assertContentUnchanged(session.contentSha256, contentSha256(record.contentMarkdown));
+      const result = await updateKnowledgeRecord(
+        app,
+        record.id,
+        {
+          contentMarkdown,
+          changeMessage: input.changeMessage,
+          lifecycleStatus: 'draft',
+          sourceOfTruthMode: 'ai_generated_draft',
+        },
+        {
+          actorType: 'api_client',
+          actorId: client.id,
+          userId: actingUserId,
+        },
+        ipAddress,
+      );
+      await deleteRecordContentUploadSession(app.redis, session.uploadId);
+      return {
+        knowledgeRecord: {
+          id: result.knowledgeRecord.id,
+          workspaceId: result.knowledgeRecord.workspaceId,
+          title: result.knowledgeRecord.title,
+          slug: result.knowledgeRecord.slug,
+          recordType: result.knowledgeRecord.recordType,
+          lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
+          sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
           currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
           projectId: result.knowledgeRecord.projectId,
           systemId: result.knowledgeRecord.systemId,
@@ -2390,14 +2561,14 @@ export function createMcpToolHandlers(
           requestedProjectId: input.projectId,
         });
       }
-      return {
-        tasks: await listTasks(app.database, input.projectId, {
-          milestoneId,
-          sprintId,
-          itemType: input.itemType,
-          includeArchived: input.includeArchived,
-        }),
-      };
+      const tasks = await listTasks(app.database, input.projectId, {
+        milestoneId,
+        sprintId,
+        itemType: input.itemType,
+        includeArchived: input.includeArchived,
+      });
+      const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
+      return pageTaskList(tasks, input.cursor, limit);
     },
 
     async getProjectTask(input) {
@@ -2662,17 +2833,17 @@ export function createMcpToolHandlers(
         includeArchived: input.includeArchived,
         role: input.role ? raciRoleSchema.parse(input.role) : undefined,
       });
-      return {
-        tasks: tasks.filter((task) => {
-          try {
-            assertWorkspaceAllowed(client, task.workspaceId);
-            assertProjectAllowed(client, task.projectId);
-            return true;
-          } catch {
-            return false;
-          }
-        }),
-      };
+      const visible = tasks.filter((task) => {
+        try {
+          assertWorkspaceAllowed(client, task.workspaceId);
+          assertProjectAllowed(client, task.projectId);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
+      return pageTaskList(visible, input.cursor, limit);
     },
 
     async getMyDashboardInsights() {

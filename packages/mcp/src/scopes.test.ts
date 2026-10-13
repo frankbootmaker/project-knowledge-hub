@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_MCP_SCOPES, hasMcpScope } from './scopes.js';
 import {
   ContentOffsetError,
+  enforceResponseSize,
   isTruncatedReadback,
   MCP_CONTENT_TRUNCATION_SUFFIX,
   MCP_MAX_CONTENT_BYTES,
+  MCP_MAX_RESPONSE_BYTES,
   sliceContent,
   truncateContent,
 } from './limits.js';
@@ -87,5 +89,96 @@ describe('mcp scopes and limits', () => {
     expect(isTruncatedReadback(page.content)).toBe(true);
     expect(isTruncatedReadback('abcdefghij')).toBe(false);
     expect(isTruncatedReadback(`notes ${MCP_CONTENT_TRUNCATION_SUFFIX} and more`)).toBe(false);
+  });
+
+  it('covers short, exact, and over-limit lengths', () => {
+    const empty = sliceContent('');
+    expect(empty.returnedChars).toBe(0);
+    expect(empty.contentTruncated).toBe(false);
+    expect(empty.totalChunks).toBe(1);
+    expect(empty.nextOffset).toBeNull();
+
+    const one = sliceContent('a', { limit: 1 });
+    expect(one.content).toBe('a');
+    expect(one.returnedChars).toBe(1);
+    expect(one.contentTruncated).toBe(false);
+    expect(one.chunkIndex).toBe(0);
+    expect(one.totalChunks).toBe(1);
+
+    const exact = sliceContent('x'.repeat(50_000));
+    expect(exact.contentTruncated).toBe(false);
+    expect(exact.returnedChars).toBe(50_000);
+    expect(exact.nextOffset).toBeNull();
+
+    const over = sliceContent('x'.repeat(50_001));
+    expect(over.contentTruncated).toBe(true);
+    expect(over.returnedChars).toBe(50_000);
+    expect(over.nextOffset).toBe(50_000);
+    expect(over.totalChunks).toBe(2);
+    expect(over.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(true);
+  });
+
+  it('joins a long body, including a 500k record, back to the source', () => {
+    for (const length of [120_000, 500_000]) {
+      const source = 'z'.repeat(length);
+      let offset = 0;
+      let joined = '';
+      let guard = 0;
+      while (guard < 20) {
+        const page = sliceContent(source, { offset, limit: 50_000 });
+        joined += source.slice(page.contentOffset, page.contentOffset + page.returnedChars);
+        expect(page.returnedChars).toBeGreaterThan(0);
+        if (page.nextOffset === null) break;
+        expect(page.nextOffset).toBeGreaterThan(offset);
+        offset = page.nextOffset;
+        guard += 1;
+      }
+      expect(joined).toBe(source);
+    }
+  });
+
+  it('snaps to a paragraph or line in the second half and hard-cuts otherwise', () => {
+    const paragraph = sliceContent('aaaa\n\nbbMORE', {
+      offset: 0,
+      limit: 8,
+      boundary: 'paragraph',
+    });
+    expect(paragraph.returnedChars).toBe(6);
+    expect(paragraph.nextOffset).toBe(6);
+    expect(paragraph.content.startsWith('aaaa\n\n')).toBe(true);
+
+    const line = sliceContent('abcd\nEFGHMORE', { offset: 0, limit: 6, boundary: 'line' });
+    expect(line.returnedChars).toBe(5);
+    expect(line.nextOffset).toBe(5);
+
+    const hard = sliceContent('abcdefghij', { offset: 0, limit: 4, boundary: 'paragraph' });
+    expect(hard.nextOffset).toBe(4);
+    expect(hard.returnedChars).toBe(4);
+  });
+
+  it('moves a cut back before an open fence, or flags the page when it cannot', () => {
+    const source = `intro\n\`\`\`js\n${'x'.repeat(20)}`;
+    const opener = source.indexOf('```');
+    const page = sliceContent(source, { offset: 0, limit: opener + 8, boundary: 'none' });
+    expect(page.inCodeFence).toBe(false);
+    expect(page.nextOffset).toBe(opener);
+    expect(page.content.startsWith('intro\n')).toBe(true);
+    expect(page.content.includes('```')).toBe(false);
+
+    const inside = sliceContent(`\`\`\`\n${'x'.repeat(30)}`, { offset: 4, limit: 5 });
+    expect(inside.inCodeFence).toBe(true);
+    expect(inside.content).toBe('xxxxx');
+    expect(inside.returnedChars).toBe(5);
+  });
+
+  it('adds suggestedLimit when a response exceeds the byte cap', () => {
+    const text = 'x'.repeat(MCP_MAX_RESPONSE_BYTES);
+    const halved = enforceResponseSize({ limit: 25, text }) as { suggestedLimit?: number };
+    expect(halved.suggestedLimit).toBe(12);
+    const fallback = enforceResponseSize({ text }) as { suggestedLimit?: number };
+    expect(fallback.suggestedLimit).toBe(10);
+    const floor = enforceResponseSize({ limit: 1, text }) as { suggestedLimit?: number };
+    expect(floor.suggestedLimit).toBe(1);
+    expect(enforceResponseSize({ ok: true })).toEqual({ ok: true });
   });
 });

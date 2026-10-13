@@ -65,8 +65,10 @@ Elevated catalogue (planned): `catalogue:write` — propose/confirm create/updat
 
 * 60 requests / minute / client (Redis)
 * List/search capped at 25 items
-* Content is paged at 50_000 characters (and about 100_000 UTF-8 bytes). `contentLength` is the full length. When `contentTruncated` is true, call `get_knowledge_record` again with `contentOffset` set to `nextOffset` until `nextOffset` is null. The first page still ends with `…[truncated]`; later pages are a clean slice.
-* Soft JSON response size cap ~200 KB
+* Content is paged at 50_000 characters (and about 100_000 UTF-8 bytes). `contentLength` is the full length and `contentSha256` hashes the whole body. `returnedChars`, `chunkIndex`, and `totalChunks` describe the page (the counts are approximate when a page is shorter than the limit). When `contentTruncated` is true, call `get_knowledge_record` again with `contentOffset` set to `nextOffset` until `nextOffset` is null. The first page still ends with `…[truncated]`; later pages are a clean slice. Tags and media are returned on the first page only. `boundary` may be `paragraph` or `line` to snap the cut; the default is a hard cut. `inCodeFence` is true when the page ends inside a code fence. Pass `expectSha256` to receive `409 CONTENT_CHANGED` when the stored body no longer matches.
+* A body larger than one call can be written with `begin_record_content_upload` → `append_record_content` (max 40_000 characters, 500_000 total) → `finalize_record_content_upload`. That saves one draft version. Finalize returns `409 CONTENT_CHANGED` when the record changed after begin.
+* `list_project_tasks` and `list_my_project_tasks` page at 25 items (`cursor` / `nextCursor` / `hasMore` / `total`). List rows excerpt long description and bug text; `get_project_task` returns the full text.
+* Soft JSON response size cap ~200 KB. A response that still exceeds it includes `suggestedLimit`.
 
 ## Write guardrails
 

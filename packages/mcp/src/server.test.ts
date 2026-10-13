@@ -345,6 +345,7 @@ describe('definitionOfDone on project baseline tools', () => {
       expect(JSON.parse(toolText(read))).toEqual({
         error: 'Response exceeds size limit',
         hint: 'Narrow filters or request a specific record id',
+        suggestedLimit: 10,
       });
       expect(toolText(read)).not.toContain('Output validation error');
     });
@@ -382,6 +383,7 @@ describe('tools without an output schema', () => {
       expect(JSON.parse(toolText(result))).toEqual({
         error: 'Response exceeds size limit',
         hint: 'Narrow filters or request a specific record id',
+        suggestedLimit: 10,
       });
     });
   });

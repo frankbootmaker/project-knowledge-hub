@@ -141,6 +141,8 @@ export type McpToolHandlers = {
     recordId: string;
     contentOffset?: number;
     contentLimit?: number;
+    boundary?: 'none' | 'paragraph' | 'line';
+    expectSha256?: string;
   }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
   listRecordTranslations: (input: { recordId: string }) => Promise<unknown>;
@@ -213,6 +215,17 @@ export type McpToolHandlers = {
     index?: number;
   }) => Promise<unknown>;
   finalizeWorkspaceMediaUpload: (input: { uploadId: string }) => Promise<unknown>;
+  beginRecordContentUpload: (input: { recordId: string }) => Promise<unknown>;
+  appendRecordContent: (input: {
+    uploadId: string;
+    chunk: string;
+    index?: number;
+  }) => Promise<unknown>;
+  finalizeRecordContentUpload: (input: {
+    uploadId: string;
+    changeMessage: string;
+    expectedLength?: number;
+  }) => Promise<unknown>;
   listWorkspaceMedia: (input: {
     workspaceId: string;
     knowledgeRecordId?: string;
@@ -234,6 +247,8 @@ export type McpToolHandlers = {
     unassignedSprint?: boolean;
     itemType?: 'task' | 'bug';
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   getProjectTask: (input: { taskId: string }) => Promise<unknown>;
   createProjectMilestone: (input: {
@@ -289,6 +304,8 @@ export type McpToolHandlers = {
   listMyProjectTasks: (input: {
     role?: 'R' | 'A' | 'C' | 'I';
     includeArchived?: boolean;
+    limit?: number;
+    cursor?: string;
   }) => Promise<unknown>;
   getMyDashboardInsights: () => Promise<unknown>;
   listProjectDeliveryDocumentLinks: (input: {
@@ -1346,11 +1363,13 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including markdown content, tags (string array of tag names, same shape as search_knowledge), and linked workspace media (id, url, markdownSnippet). Content is paged at 50,000 characters: contentLength is the full length, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    'Retrieve a knowledge record including markdown content. Tags and linked workspace media are included on the first page only. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex, and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     {
       recordId: z.string().min(1).max(80),
       contentOffset: z.number().int().min(0).optional(),
       contentLimit: z.number().int().min(1).max(MCP_MAX_CONTENT_CHARS).optional(),
+      boundary: z.enum(['none', 'paragraph', 'line']).optional(),
+      expectSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     },
     async (args) =>
       wrap(
@@ -1534,6 +1553,44 @@ export function createKnowledgeHubMcpServer(
   );
 
   server.tool(
+    'begin_record_content_upload',
+    'Start a chunked markdown update for a knowledge record (knowledge:write). Returns uploadId, maxChunkChars (40000), contentSha256, contentLength, and currentVersionNumber. Then append_record_content and finalize_record_content_upload. One version per session. The session expires in 15 minutes. recordId may be a UUID or project document key.',
+    { recordId: z.string().min(1).max(80) },
+    async (args) =>
+      wrap('begin_record_content_upload', 'knowledge:write', () =>
+        handlers.beginRecordContentUpload(args),
+      )(),
+  );
+
+  server.tool(
+    'append_record_content',
+    'Append one markdown chunk (max 40000 characters) to a begin_record_content_upload session. index, when set, must be the next chunk index. The joined body cannot exceed 500000 characters. Requires knowledge:write.',
+    {
+      uploadId: z.string().uuid(),
+      chunk: z.string().min(1).max(40_000),
+      index: z.number().int().min(0).optional(),
+    },
+    async (args) =>
+      wrap('append_record_content', 'knowledge:write', () =>
+        handlers.appendRecordContent(args),
+      )(),
+  );
+
+  server.tool(
+    'finalize_record_content_upload',
+    'Join the appended chunks and save them as one draft version (knowledge:write). Requires changeMessage. expectedLength, when set, must match the joined body. Rejects a body that ends with the truncation marker, and returns 409 CONTENT_CHANGED when the record changed after begin. The session is deleted on success.',
+    {
+      uploadId: z.string().uuid(),
+      changeMessage: z.string().min(1).max(500),
+      expectedLength: z.number().int().min(0).max(500_000).optional(),
+    },
+    async (args) =>
+      wrap('finalize_record_content_upload', 'knowledge:write', () =>
+        handlers.finalizeRecordContentUpload(args),
+      )(),
+  );
+
+  server.tool(
     'list_workspace_media',
     'List recent workspace media (JPEG/PNG/WebP/GIF) with urls and markdown snippets for embedding. knowledgeRecordId may be UUID or document key. Requires knowledge:read.',
     {
@@ -1590,7 +1647,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_tasks',
-    'List tasks for a project (optional milestone/sprint/itemType filter). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Requires pm:read.',
+    'List tasks for a project (optional milestone/sprint/itemType filter). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Pages at 25 items. Descriptions and bug notes are excerpts; use get_project_task for the full text. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       milestoneId: entityRef.optional(),
@@ -1599,6 +1656,8 @@ export function createKnowledgeHubMcpServer(
       unassignedSprint: z.boolean().optional(),
       itemType: z.enum(['task', 'bug']).optional(),
       includeArchived: z.boolean().optional(),
+      limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
+      cursor: z.string().min(1).max(200).optional(),
     },
     async (args) =>
       wrap(
@@ -1755,10 +1814,12 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_my_project_tasks',
-    'List tasks where the API client acting user is on RACI (My tasks). Requires pm:read and actingUserId.',
+    'List tasks where the API client acting user is on RACI (My tasks). Pages at 25 items. Descriptions and bug notes are excerpts; use get_project_task for the full text. Pass cursor from nextCursor until hasMore is false. Requires pm:read and actingUserId.',
     {
       role: z.enum(['R', 'A', 'C', 'I']).optional(),
       includeArchived: z.boolean().optional(),
+      limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
+      cursor: z.string().min(1).max(200).optional(),
     },
     async (args) =>
       wrap('list_my_project_tasks', 'pm:read', () =>
