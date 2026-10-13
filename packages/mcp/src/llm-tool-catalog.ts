@@ -595,7 +595,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task or bug (itemType, default task). Bug fields are rejected on a task. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). Optional startDate must be on or before dueDate when both are set. Bug fields are rejected on a task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -607,6 +607,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         title: stringProp('Task title', { minLength: 1, maxLength: 200 }),
         description: { type: 'string', nullable: true, maxLength: 10000 },
         status: taskStatus,
+        startDate: { ...ymd, nullable: true },
         dueDate: { ...ymd, nullable: true },
         forecastHours: money,
         actualHours: money,
@@ -644,7 +645,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a delivery task or bug. itemType cannot change. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
+      'Update a delivery task or bug. itemType cannot change. Optional startDate; null clears it, and it must be on or before dueDate when both are set. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -656,6 +657,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         title: stringProp('Title', { minLength: 1, maxLength: 200 }),
         description: { type: 'string', nullable: true, maxLength: 10000 },
         status: taskStatus,
+        startDate: { ...ymd, nullable: true },
         dueDate: { ...ymd, nullable: true },
         forecastHours: money,
         actualHours: money,

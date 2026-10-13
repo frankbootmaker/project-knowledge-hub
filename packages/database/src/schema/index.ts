@@ -1310,6 +1310,7 @@ export const projectTasks = pgTable(
       { onDelete: 'set null' },
     ),
     status: text('status').notNull().default('todo'),
+    startDate: date('start_date', { mode: 'string' }),
     dueDate: date('due_date', { mode: 'string' }),
     forecastHours: numeric('forecast_hours', { precision: 10, scale: 2, mode: 'number' }),
     actualHours: numeric('actual_hours', { precision: 10, scale: 2, mode: 'number' }),

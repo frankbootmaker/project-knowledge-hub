@@ -192,6 +192,7 @@ const createTaskSchema = z.object({
   itemType: taskItemTypeSchema.optional(),
   ...bugFieldBody,
   status: taskStatusSchema.optional(),
+  startDate: dateStringSchema.optional(),
   dueDate: dateStringSchema.optional(),
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
@@ -212,6 +213,7 @@ const updateTaskSchema = z.object({
   itemType: taskItemTypeSchema.optional(),
   ...bugFieldBody,
   status: taskStatusSchema.optional(),
+  startDate: dateStringSchema.optional(),
   dueDate: dateStringSchema.optional(),
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
@@ -383,6 +385,7 @@ export async function registerProjectDeliveryRoutes(
       description: body.description,
       ...mapBugBody(body),
       status: body.status,
+      startDate: body.startDate,
       dueDate: body.dueDate,
       forecastHours:
         body.forecastHours === undefined
@@ -448,6 +451,7 @@ export async function registerProjectDeliveryRoutes(
       description: body.description,
       ...mapBugBody(body),
       status: body.status,
+      startDate: body.startDate,
       dueDate: body.dueDate,
       forecastHours:
         body.forecastHours === undefined

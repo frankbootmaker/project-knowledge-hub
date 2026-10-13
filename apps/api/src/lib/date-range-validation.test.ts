@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Database } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 import { createEpic, updateEpic } from './project-agile.js';
+import { createTask, updateTask } from './project-delivery.js';
 import { createSprint } from './project-sprints.js';
 
 describe('date range validation wiring', () => {
@@ -125,6 +126,82 @@ describe('date range validation wiring', () => {
       });
 
       // Verify the update was not attempted
+      expect(mockDatabase.db.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createTask', () => {
+    it('rejects a start date after the due date before insert', async () => {
+      const mockDatabase = {
+        db: {
+          insert: vi.fn(),
+          select: vi.fn(),
+          transaction: vi.fn(),
+        },
+      } as unknown as Database;
+
+      await expect(
+        createTask(mockDatabase, {
+          projectId: '00000000-0000-4000-8000-000000000001',
+          workspaceId: '00000000-0000-4000-8000-000000000003',
+          title: 'Late start',
+          startDate: '2026-12-14',
+          dueDate: '2026-12-01',
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_DATE_RANGE',
+        statusCode: 400,
+      });
+
+      expect(mockDatabase.db.transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateTask', () => {
+    it('rejects a due date before the stored start date', async () => {
+      const mockDatabase = {
+        db: {
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                limit: vi.fn(() =>
+                  Promise.resolve([
+                    {
+                      id: '00000000-0000-4000-8000-000000000002',
+                      projectId: '00000000-0000-4000-8000-000000000001',
+                      itemType: 'task',
+                      status: 'todo',
+                      startDate: '2026-06-01',
+                      dueDate: '2026-12-31',
+                      severity: null,
+                      foundIn: null,
+                      foundInNote: null,
+                      stepsToReproduce: null,
+                      expectedBehavior: null,
+                      actualBehavior: null,
+                      resolution: null,
+                      regression: false,
+                      affectedSystemId: null,
+                      duplicateOfTaskId: null,
+                    },
+                  ]),
+                ),
+              })),
+            })),
+          })),
+          update: vi.fn(),
+        },
+      } as unknown as Database;
+
+      await expect(
+        updateTask(mockDatabase, '00000000-0000-4000-8000-000000000002', {
+          dueDate: '2026-05-01',
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_DATE_RANGE',
+        statusCode: 400,
+      });
+
       expect(mockDatabase.db.update).not.toHaveBeenCalled();
     });
   });

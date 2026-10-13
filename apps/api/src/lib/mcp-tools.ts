@@ -3009,6 +3009,7 @@ export function createMcpToolHandlers(
         title: input.title,
         description: input.description,
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
+        startDate: input.startDate,
         dueDate: input.dueDate,
         forecastHours:
           input.forecastHours === undefined
@@ -3099,6 +3100,7 @@ export function createMcpToolHandlers(
         title: input.title,
         description: input.description,
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
+        startDate: input.startDate,
         dueDate: input.dueDate,
         forecastHours:
           input.forecastHours === undefined

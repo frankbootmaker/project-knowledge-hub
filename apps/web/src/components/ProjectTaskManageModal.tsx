@@ -52,6 +52,7 @@ type TaskDetail = {
   title: string;
   description: string | null;
   status: string;
+  startDate: string | null;
   dueDate: string | null;
   forecastHours: string | null;
   actualHours: string | null;
@@ -188,6 +189,7 @@ export function ProjectTaskManageModal({
   const [handoffNote, setHandoffNote] = useState('');
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState('todo');
+  const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [forecastHours, setForecastHours] = useState('');
   const [actualHours, setActualHours] = useState('');
@@ -248,6 +250,7 @@ export function ProjectTaskManageModal({
       setTask(loaded);
       setTitle(loaded.title);
       setStatus(loaded.status);
+      setStartDate(loaded.startDate ?? '');
       setDueDate(loaded.dueDate ?? '');
       setForecastHours(
         loaded.forecastHours != null ? String(loaded.forecastHours) : '',
@@ -463,6 +466,7 @@ export function ProjectTaskManageModal({
         body: JSON.stringify({
           title: title.trim(),
           status,
+          startDate: startDate || null,
           dueDate: dueDate || null,
           forecastHours: parseHoursInput(forecastHours),
           actualHours: parseHoursInput(actualHours),
@@ -790,6 +794,14 @@ export function ProjectTaskManageModal({
                     </option>
                   ))}
                 </Select>
+              </Field>
+              <Field className="kh-ops-field-row-start" label={t('startDate')}>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  disabled={pending || !canMutate}
+                />
               </Field>
               <Field label={t('dueDate')}>
                 <Input

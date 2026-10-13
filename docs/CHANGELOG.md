@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Task and bug start date:** Tasks and bugs can store an optional start date (migration `0055`). It must be on or before the due date when both are set. Calendar, timeline, and overdue counts still use the due date.
+
 * **Bug items (PRO-T-52):** Bugs sit beside tasks, with their own key and fields (steps to reproduce, expected and actual behavior, found-in note). A bug’s document links still use entity type `task`. Migration `0051`.
 
 * **Delivery Documents tabs (PRO-T-55):** Epic, story, task, bug, milestone, and sprint each have a Documents tab of linked knowledge records. Task, epic, story, and milestone links save with the item; a sprint saves on Add or Remove. Milestone is a delivery-link entity type.

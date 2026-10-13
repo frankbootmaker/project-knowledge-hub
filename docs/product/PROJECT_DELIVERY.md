@@ -160,7 +160,7 @@ Project detail page gains a **Delivery** section using the same catalogue **sear
 * **Add** kind select: task / milestone / epic / user story
 * **Manage task** modal: fields, current owner + handoff, standing RACI summary, activity timeline + comments
 * Board: drag tasks between status columns; owner/story chips; Manage on cards
-* Calendar: tasks by due date, milestones by target date
+* Calendar: tasks by due date, milestones by target date. Tasks and bugs may also store an optional start date; the calendar, timeline, and overdue counts still use the due date.
 * Inline status changes for maintainers; RACI (A/R) on task create
 * **Stakeholders** section (same catalogue chrome): list with contact details; **Org chart** full modal from reports-to
 * Home **Dashboard**: collapsible My workspaces / Recently updated; **My tasks** catalogue + Manage modal

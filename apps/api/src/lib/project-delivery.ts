@@ -107,6 +107,7 @@ export type PublicTask = {
   affectedSystemId: string | null;
   duplicateOfTaskId: string | null;
   status: TaskStatus;
+  startDate: string | null;
   dueDate: string | null;
   forecastHours: number | null;
   actualHours: number | null;
@@ -216,6 +217,7 @@ function toPublicTask(
     affectedSystemId: row.affectedSystemId,
     duplicateOfTaskId: row.duplicateOfTaskId,
     status: taskStatusSchema.parse(row.status),
+    startDate: row.startDate,
     dueDate: row.dueDate,
     forecastHours: row.forecastHours,
     actualHours: row.actualHours,
@@ -1416,6 +1418,7 @@ export async function createTask(
     title: string;
     description?: string | null;
     status?: TaskStatus;
+    startDate?: string | null;
     dueDate?: string | null;
     forecastHours?: number | null;
     actualHours?: number | null;
@@ -1487,6 +1490,13 @@ export async function createTask(
     ]);
   }
 
+  assertDateRange({
+    start: input.startDate,
+    end: input.dueDate,
+    startField: 'startDate',
+    endField: 'dueDate',
+  });
+
   const ownerUserId =
     input.currentOwnerUserId ??
     defaultOwnerFromRaci(input.raci ?? [], input.createdBy);
@@ -1510,6 +1520,7 @@ export async function createTask(
         description: input.description ?? null,
         ...bugColumns(bugWrite),
         status: input.status ?? 'todo',
+        startDate: input.startDate ?? null,
         dueDate: input.dueDate ?? null,
         forecastHours: input.forecastHours ?? null,
         actualHours: input.actualHours ?? null,
@@ -1583,6 +1594,7 @@ export async function updateTask(
     title?: string;
     description?: string | null;
     status?: TaskStatus;
+    startDate?: string | null;
     dueDate?: string | null;
     forecastHours?: number | null;
     actualHours?: number | null;
@@ -1699,6 +1711,17 @@ export async function updateTask(
     ]);
   }
 
+  const effectiveDates = effectiveDateRange({
+    stored: { start: existing.startDate, end: existing.dueDate },
+    patch: { start: input.startDate, end: input.dueDate },
+  });
+  assertDateRange({
+    start: effectiveDates.start,
+    end: effectiveDates.end,
+    startField: 'startDate',
+    endField: 'dueDate',
+  });
+
   const nextStatus = input.status ?? existing.status;
   const nextOwner =
     input.currentOwnerUserId !== undefined
@@ -1717,6 +1740,8 @@ export async function updateTask(
         input.description !== undefined ? input.description : existing.description,
       ...bugColumns(bugWrite),
       status: nextStatus,
+      startDate:
+        input.startDate !== undefined ? input.startDate : existing.startDate,
       dueDate: input.dueDate !== undefined ? input.dueDate : existing.dueDate,
       forecastHours:
         input.forecastHours !== undefined
@@ -1779,6 +1804,7 @@ export async function updateTask(
   const fieldKeys = [
     'title',
     'description',
+    'startDate',
     'dueDate',
     'forecastHours',
     'actualHours',

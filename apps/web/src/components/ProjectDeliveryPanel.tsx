@@ -720,6 +720,7 @@ export function ProjectDeliveryPanel({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: title.trim(),
+            startDate: startDateValue || null,
             dueDate: dateValue || null,
             forecastHours: parseHoursInput(taskForecastHours),
             actualHours: parseHoursInput(taskActualHours),
@@ -1311,14 +1312,24 @@ export function ProjectDeliveryPanel({
           ) : null}
           {createKind === 'task' || createKind === 'bug' ? (
             <>
-              <Field label={t('dueDate')}>
-                <Input
-                  type="date"
-                  value={dateValue}
-                  onChange={(e) => setDateValue(e.target.value)}
-                  disabled={pending}
-                />
-              </Field>
+              <div className="kh-ops-form-grid">
+                <Field label={t('startDate')}>
+                  <Input
+                    type="date"
+                    value={startDateValue}
+                    onChange={(e) => setStartDateValue(e.target.value)}
+                    disabled={pending}
+                  />
+                </Field>
+                <Field label={t('dueDate')}>
+                  <Input
+                    type="date"
+                    value={dateValue}
+                    onChange={(e) => setDateValue(e.target.value)}
+                    disabled={pending}
+                  />
+                </Field>
+              </div>
               <div className="kh-ops-form-grid">
                 <Field label={t('forecastHours')}>
                   <Input
