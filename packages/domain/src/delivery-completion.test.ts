@@ -4,6 +4,8 @@ import {
   deliveryCompletionIndex,
   displayedParentCompletion,
   displayedTaskCompletionPercent,
+  milestoneCompletion,
+  milestoneLinkPoints,
   type DeliveryCompletionChild,
 } from './index.js';
 
@@ -99,5 +101,40 @@ describe('displayedParentCompletion', () => {
       done: 0,
       total: 0,
     });
+  });
+});
+
+describe('milestoneCompletion', () => {
+  it('counts done as 100, drops cancelled, and uses computed percents', () => {
+    expect(milestoneLinkPoints({ kind: 'task', status: 'done', completionPercent: 25 })).toBe(100);
+    expect(milestoneLinkPoints({ kind: 'task', status: 'cancelled', completionPercent: 50 })).toBeNull();
+    expect(milestoneLinkPoints({ kind: 'task', status: 'todo', completionPercent: null })).toBe(0);
+    expect(milestoneLinkPoints({ kind: 'parent', status: 'done', completionPercent: 10 })).toBe(100);
+    expect(milestoneLinkPoints({ kind: 'parent', status: 'cancelled', completionPercent: 10 })).toBeNull();
+    expect(milestoneLinkPoints({ kind: 'parent', status: 'active', completionPercent: null })).toBeNull();
+    expect(milestoneLinkPoints({ kind: 'parent', status: 'active', completionPercent: 50 })).toBe(50);
+
+    expect(
+      milestoneCompletion([
+        { kind: 'task', status: 'done', completionPercent: 0 },
+        { kind: 'task', status: 'in_progress', completionPercent: 50 },
+        { kind: 'task', status: 'cancelled', completionPercent: 100 },
+        { kind: 'parent', status: 'active', completionPercent: 25 },
+        { kind: 'parent', status: 'planned', completionPercent: null },
+      ]),
+    ).toEqual({ percent: 58, done: 1.75, total: 3 });
+  });
+
+  it('is complete only when every included link is 100', () => {
+    expect(
+      milestoneCompletion([
+        { kind: 'parent', status: 'done', completionPercent: 0 },
+        { kind: 'task', status: 'done', completionPercent: 25 },
+      ]),
+    ).toEqual({ percent: 100, done: 2, total: 2 });
+    expect(milestoneCompletion([])).toBeNull();
+    expect(
+      milestoneCompletion([{ kind: 'parent', status: 'cancelled', completionPercent: 0 }]),
+    ).toBeNull();
   });
 });

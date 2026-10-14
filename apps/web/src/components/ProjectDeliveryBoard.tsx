@@ -20,6 +20,11 @@ import {
 } from '../lib/task-costing';
 import { formatMoney } from '../lib/project-currency';
 import { workItemIdLabel } from '../lib/work-item-label';
+import {
+  MilestoneTimeMarkers,
+  compareMilestonesByDueDate,
+} from './MilestoneTimeMarkers';
+import { formatPercentLabel } from '../lib/delivery-completion';
 
 const SCHEDULE_LEGEND: DeliveryScheduleTone[] = [
   'onTrack',
@@ -73,6 +78,7 @@ export type BoardMilestone = {
   status: string;
   targetDate: string | null;
   humanKey?: string | null;
+  completionPercent?: number | null;
 };
 
 export type BoardMetaFilters = {
@@ -246,6 +252,7 @@ function BoardMilestoneCard({
   onManageMilestone?: (milestoneId: string) => void;
 }) {
   const t = useTranslations('delivery');
+  const locale = useLocale();
   const tone = deliveryScheduleTone({
     status: milestone.status,
     date: milestone.targetDate,
@@ -278,6 +285,12 @@ function BoardMilestoneCard({
         </span>
       </div>
       <h3>{milestone.title}</h3>
+      {milestone.completionPercent != null ? (
+        <div className="kh-ops-task-meta">
+          <span>{t('colCompleteLabel')}</span>
+          <b>{formatPercentLabel(milestone.completionPercent, locale)}</b>
+        </div>
+      ) : null}
       {showDue ? (
         <div className="kh-ops-task-meta">
           <span>{t('dueDate')}</span>
@@ -523,7 +536,8 @@ function BoardColumnPanel({
   ratePeople?: RatePerson[];
 }) {
   const t = useTranslations('delivery');
-  const itemCount = tasks.length + milestones.length;
+  const orderedMilestones = [...milestones].sort(compareMilestonesByDueDate);
+  const itemCount = tasks.length + orderedMilestones.length;
   const laneHours = tasks.reduce((sum, task) => sum + (toHours(task.forecastHours) ?? 0), 0);
   const laneCount =
     laneHours > 0
@@ -556,7 +570,7 @@ function BoardColumnPanel({
           </p>
         ) : (
           <>
-            {milestones.map((milestone) => (
+            {orderedMilestones.map((milestone) => (
               <BoardMilestoneCard
                 key={`milestone:${milestone.id}`}
                 milestone={milestone}
@@ -794,6 +808,11 @@ export function ProjectDeliveryBoard({
         </fieldset>
         <BoardMetaHelp />
       </div>
+
+      <MilestoneTimeMarkers
+        milestones={milestones}
+        onManage={onManageMilestone}
+      />
 
       {/* Mobile: one column at a time with status select on cards */}
       <div className="grid gap-3 md:hidden">

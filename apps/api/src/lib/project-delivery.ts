@@ -26,10 +26,8 @@ import {
 } from './project-item-media.js';
 import {
   AppError,
-  assertDateRange,
   bugFoundInSchema,
   bugResolutionSchema,
-  effectiveDateRange,
   resolveTaskScheduleDates,
   mergeAiUsage,
   milestoneStatusSchema,
@@ -62,6 +60,7 @@ import {
   getProjectKeyPrefix,
   toHumanKeyFields,
 } from './project-issue-keys.js';
+import { withMilestoneLinks, deleteMilestoneItemLinks } from './milestone-item-links.js';
 import { avatarUrlForUser } from './public-user.js';
 import { assertAiAssistantForProject } from './ai-assistant-systems.js';
 import { diffReplacement } from './replace-diff.js';
@@ -99,6 +98,18 @@ export type PublicMilestone = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Derived from linked items. 100 when every included link is complete. */
+  completionPercent: number | null;
+  completion: { percent: number; done: number; total: number } | null;
+  linkedItems: Array<{
+    entityType: 'epic' | 'user_story' | 'task';
+    entityId: string;
+    itemType: 'task' | 'bug' | null;
+    title: string;
+    humanKey: string | null;
+    status: string;
+    completionPercent: number | null;
+  }>;
   mediaLinkCount?: number;
   mediaLinks?: PublicItemMediaLink[];
 };
@@ -197,6 +208,9 @@ function toPublicMilestone(
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    completionPercent: null,
+    completion: null,
+    linkedItems: [],
   };
 }
 
@@ -587,11 +601,13 @@ export async function listMilestones(
     )
     .orderBy(asc(projectMilestones.sortOrder), asc(projectMilestones.targetDate));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
-  return withMediaLinkCounts(
+  const publicRows = await withMilestoneLinks(
     database,
-    'milestone',
+    projectId,
+    keyPrefix,
     rows.map((row) => toPublicMilestone(row, keyPrefix)),
   );
+  return withMediaLinkCounts(database, 'milestone', publicRows);
 }
 
 export async function createMilestone(
@@ -607,7 +623,6 @@ export async function createMilestone(
     createdBy?: string | null;
   },
 ): Promise<PublicMilestone> {
-  assertDateRange({ start: input.startDate, end: input.targetDate, startField: 'startDate', endField: 'targetDate' });
   const result = await database.db.transaction(async (tx) => {
     const allocated = await allocateIssueNumber(database, input.projectId, 'M', tx);
     const [row] = await tx
@@ -634,7 +649,14 @@ export async function createMilestone(
     }
     return { row, keyPrefix: allocated.keyPrefix };
   });
-  return toPublicMilestone(result.row, result.keyPrefix);
+  const milestone = toPublicMilestone(result.row, result.keyPrefix);
+  const [enriched] = await withMilestoneLinks(
+    database,
+    milestone.projectId,
+    result.keyPrefix,
+    [milestone],
+  );
+  return enriched ?? milestone;
 }
 
 export async function updateMilestone(
@@ -662,12 +684,6 @@ export async function updateMilestone(
       statusCode: 404,
     });
   }
-
-  const effectiveDates = effectiveDateRange({
-    stored: { start: existing.startDate, end: existing.targetDate },
-    patch: { start: input.startDate, end: input.targetDate },
-  });
-  assertDateRange({ start: effectiveDates.start, end: effectiveDates.end, startField: 'startDate', endField: 'targetDate' });
 
   const [row] = await database.db
     .update(projectMilestones)
@@ -701,12 +717,40 @@ export async function updateMilestone(
     entityType: 'milestone',
     id: row.id,
   });
-  return overlaySchedule(
+  const milestone = overlaySchedule(
     toPublicMilestone(row, keyPrefix),
     'milestone',
     writes,
     'targetDate',
   );
+  const [enriched] = await withMilestoneLinks(
+    database,
+    milestone.projectId,
+    keyPrefix,
+    [milestone],
+  );
+  return enriched ?? milestone;
+}
+
+export async function getPublicMilestone(
+  database: Database,
+  milestoneId: string,
+): Promise<PublicMilestone> {
+  const row = await getMilestone(database, milestoneId);
+  const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
+  const milestone = toPublicMilestone(row, keyPrefix);
+  const [enriched] = await withMilestoneLinks(
+    database,
+    row.projectId,
+    keyPrefix,
+    [milestone],
+  );
+  const [withMedia] = await withMediaLinkCounts(
+    database,
+    'milestone',
+    [enriched ?? milestone],
+  );
+  return withMedia ?? enriched ?? milestone;
 }
 
 export async function getMilestone(
@@ -1642,6 +1686,7 @@ export async function deleteTask(
 ): Promise<{ id: string; projectId: string }> {
   const existing = await getTask(database, taskId);
   await deleteDeliveryDependenciesFor(database, 'task', [taskId]);
+  await deleteMilestoneItemLinks(database, 'task', [taskId]);
   await database.db.delete(projectTasks).where(eq(projectTasks.id, taskId));
   return { id: existing.id, projectId: existing.projectId };
 }

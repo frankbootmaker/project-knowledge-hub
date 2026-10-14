@@ -293,7 +293,11 @@ describe.skipIf(!hasIntegrationEnv)('item media links', () => {
     expect(listed.statusCode).toBe(200);
     const media = (
       listed.json() as {
-        media: { id: string; usedBy: { entityId: string; entityType: string }[] }[];
+        media: {
+          id: string;
+          createdByName: string | null;
+          usedBy: { entityId: string; entityType: string }[];
+        }[];
       }
     ).media;
     expect(media.map((row) => row.id)).toEqual([mediaId]);
@@ -302,6 +306,7 @@ describe.skipIf(!hasIntegrationEnv)('item media links', () => {
         expect.objectContaining({ entityType: 'task', entityId: taskId }),
       ]),
     );
+    expect(media[0]).toMatchObject({ createdByName: 'Admin' });
     expect(media.map((row) => row.id)).not.toContain(spareId);
 
     const bugSaved = await putLinks(bugId, [

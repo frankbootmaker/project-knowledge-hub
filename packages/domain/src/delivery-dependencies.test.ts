@@ -174,6 +174,165 @@ describe('dependency cycles and schedule', () => {
     });
   });
 
+  it('binds two finish-to-start predecessors to the latest finish', () => {
+    const changed = scheduleDeliveryGraph({
+      nodes: [
+        node('task:a', 'task', '2026-10-01', '2026-10-06', 5),
+        node('task:c', 'task', '2026-10-08', '2026-10-10', 2),
+        node('task:b', 'task', null, null, 2),
+      ],
+      links: [
+        {
+          predecessorKey: 'task:a',
+          successorKey: 'task:b',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'task:c',
+          successorKey: 'task:b',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:b'],
+    });
+    expect(changed[0]).toMatchObject({
+      start: '2026-10-10',
+      finish: '2026-10-12',
+    });
+  });
+
+  it('binds two start-to-start predecessors to the latest start', () => {
+    const changed = scheduleDeliveryGraph({
+      nodes: [
+        node('task:a', 'task', '2026-10-01', '2026-10-06', 5),
+        node('task:c', 'task', '2026-10-04', '2026-10-09', 5),
+        node('task:b', 'task', null, null, 2),
+      ],
+      links: [
+        {
+          predecessorKey: 'task:a',
+          successorKey: 'task:b',
+          linkType: 'SS',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'task:c',
+          successorKey: 'task:b',
+          linkType: 'SS',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:b'],
+    });
+    expect(changed[0]).toMatchObject({
+      start: '2026-10-04',
+      finish: '2026-10-06',
+    });
+  });
+
+  it('sets a finish-to-finish due date from the latest predecessor finish', () => {
+    const changed = scheduleDeliveryGraph({
+      nodes: [
+        node('task:a', 'task', '2026-10-01', '2026-10-12', 11),
+        node('task:c', 'task', '2026-10-10', '2026-10-20', 10),
+        node('task:b', 'task', null, null, 4),
+      ],
+      links: [
+        {
+          predecessorKey: 'task:a',
+          successorKey: 'task:b',
+          linkType: 'FF',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'task:c',
+          successorKey: 'task:b',
+          linkType: 'FF',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:b'],
+    });
+    expect(changed[0]).toMatchObject({
+      start: '2026-10-16',
+      finish: '2026-10-20',
+    });
+  });
+
+  it('sets a start-to-finish due date from the latest predecessor start', () => {
+    const changed = scheduleDeliveryGraph({
+      nodes: [
+        node('task:a', 'task', '2026-10-03', '2026-10-08', 5),
+        node('task:c', 'task', '2026-10-08', '2026-10-12', 4),
+        node('task:b', 'task', null, null, 4),
+      ],
+      links: [
+        {
+          predecessorKey: 'task:a',
+          successorKey: 'task:b',
+          linkType: 'SF',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'task:c',
+          successorKey: 'task:b',
+          linkType: 'SF',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:b'],
+    });
+    expect(changed[0]).toMatchObject({
+      start: '2026-10-04',
+      finish: '2026-10-08',
+    });
+  });
+
+  it('takes the latest start across mixed predecessor types', () => {
+    const changed = scheduleDeliveryGraph({
+      nodes: [
+        node('task:fs', 'task', '2026-10-01', '2026-10-10', 9),
+        node('task:ss', 'task', '2026-10-12', '2026-10-14', 2),
+        node('task:ff', 'task', '2026-10-16', '2026-10-20', 4),
+        node('task:sf', 'task', '2026-10-08', '2026-10-09', 1),
+        node('task:b', 'task', null, null, 4),
+      ],
+      links: [
+        {
+          predecessorKey: 'task:fs',
+          successorKey: 'task:b',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'task:ss',
+          successorKey: 'task:b',
+          linkType: 'SS',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'task:ff',
+          successorKey: 'task:b',
+          linkType: 'FF',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'task:sf',
+          successorKey: 'task:b',
+          linkType: 'SF',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:b'],
+    });
+    expect(changed[0]).toMatchObject({
+      start: '2026-10-16',
+      finish: '2026-10-20',
+    });
+  });
+
   it('moves a successor epic window when its predecessor finish moves', () => {
     const changed = scheduleDeliveryGraph({
       nodes: [

@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
+import { MilestoneTimeMarkers } from './MilestoneTimeMarkers';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Button, Input, Select } from './ui';
 import {
@@ -44,6 +45,7 @@ export type DeliveryListRow = {
   actualHours: string | number | null;
   storyPoints: number | null;
   updatedAt: string | null;
+  dueDate?: string | null;
   searchText: string;
 };
 
@@ -229,7 +231,7 @@ export function ProjectDeliveryList({
         defaultDir: 'desc',
       },
       cell: (row) => {
-        const comparable = row.kind === 'epic' || row.kind === 'story';
+        const comparable = row.kind === 'epic' || row.kind === 'story' || row.kind === 'milestone';
         const lag = comparable
           ? deliveryLag({
               actual: row.completion?.percent ?? null,
@@ -399,8 +401,27 @@ export function ProjectDeliveryList({
   ]);
   const bareEmpty = visible.length === 0 && !table.filtersActive;
 
+  const milestoneMarkers = useMemo(
+    () =>
+      rows
+        .filter((row) => row.kind === 'milestone')
+        .map((row) => ({
+          id: row.entityId,
+          title: row.title,
+          status: row.status,
+          targetDate: row.dueDate ?? null,
+          humanKey: row.humanKey,
+          completionPercent: row.completion?.percent ?? null,
+        })),
+    [rows],
+  );
+
   return (
     <section className="kh-ops-panel">
+      <MilestoneTimeMarkers
+        milestones={milestoneMarkers}
+        onManage={(milestoneId) => onManageRef.current('milestone', milestoneId)}
+      />
       <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
         <label className="flex min-w-[220px] flex-1 items-center gap-2">
           <span className="sr-only">{t('searchPlaceholder')}</span>

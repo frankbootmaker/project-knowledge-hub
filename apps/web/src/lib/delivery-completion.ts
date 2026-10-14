@@ -16,8 +16,10 @@ export {
   deliveryCompletionIndex,
   displayedParentCompletion,
   displayedTaskCompletionPercent,
+  milestoneCompletion,
   type DeliveryCompletionChild as DeliveryCompletionTask,
   type DeliveryCompletionRollup as DeliveryCompletion,
+  type MilestoneLinkCompletion,
 } from '@project-knowledge-hub/domain';
 
 import {

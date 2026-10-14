@@ -21,6 +21,34 @@ import {
   toHumanKeyFields,
 } from './project-issue-keys.js';
 
+export type SprintClosureSnapshot = {
+  committedPoints: number;
+  donePoints: number;
+  startDate: string | null;
+  endDate: string | null;
+  points: Array<{
+    date: string;
+    idealRemaining: number;
+    remaining: number;
+  }>;
+};
+
+function closedSnapshot(
+  row: typeof projectSprints.$inferSelect,
+): SprintClosureSnapshot | null {
+  if (row.status !== 'completed' && row.status !== 'cancelled') return null;
+  const value = row.closureSnapshot;
+  if (
+    !value ||
+    typeof value.committedPoints !== 'number' ||
+    typeof value.donePoints !== 'number' ||
+    !Array.isArray(value.points)
+  ) {
+    return null;
+  }
+  return value;
+}
+
 export type PublicSprint = {
   id: string;
   projectId: string;
@@ -56,6 +84,7 @@ function toPublicSprint(
     row.issueKeyType,
     row.issueNumber,
   );
+  const snapshot = closedSnapshot(row);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -65,8 +94,8 @@ function toPublicSprint(
     startDate: row.startDate,
     endDate: row.endDate,
     capacityPoints: row.capacityPoints,
-    committedPoints: extras?.committedPoints ?? 0,
-    donePoints: extras?.donePoints ?? 0,
+    committedPoints: snapshot?.committedPoints ?? extras?.committedPoints ?? 0,
+    donePoints: snapshot?.donePoints ?? extras?.donePoints ?? 0,
     sortOrder: row.sortOrder,
     issueKeyType: keys.issueKeyType,
     issueNumber: keys.issueNumber,
@@ -309,10 +338,22 @@ export async function updateSprint(
     await assertNoOtherActiveSprint(database, existing.projectId, sprintId);
   }
 
+  let closureSnapshot: SprintClosureSnapshot | null | undefined;
   if (
     (nextStatus === 'completed' || nextStatus === 'cancelled') &&
     existing.status !== nextStatus
   ) {
+    const burndown = await getSprintPointBurndown(database, sprintId);
+    const rollups = await loadSprintPointRollups(database, existing.projectId, [
+      sprintId,
+    ]);
+    closureSnapshot = {
+      committedPoints: burndown.committedPoints,
+      donePoints: rollups.get(sprintId)?.done ?? 0,
+      startDate: burndown.startDate,
+      endDate: burndown.endDate,
+      points: burndown.points,
+    };
     const dest = input.unfinishedDestination ?? 'backlog';
     if (dest === 'backlog') {
       await database.db
@@ -347,6 +388,11 @@ export async function updateSprint(
           ),
         );
     }
+  } else if (
+    (existing.status === 'completed' || existing.status === 'cancelled') &&
+    nextStatus !== existing.status
+  ) {
+    closureSnapshot = null;
   }
 
   const [row] = await database.db
@@ -362,6 +408,7 @@ export async function updateSprint(
         input.capacityPoints !== undefined
           ? input.capacityPoints
           : existing.capacityPoints,
+      ...(closureSnapshot !== undefined ? { closureSnapshot } : {}),
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:
         input.archived === undefined
@@ -429,6 +476,16 @@ export async function getSprintPointBurndown(
   points: SprintBurndownPoint[];
 }> {
   const sprint = await getSprint(database, sprintId);
+  const snapshot = closedSnapshot(sprint);
+  if (snapshot) {
+    return {
+      sprintId,
+      startDate: snapshot.startDate,
+      endDate: snapshot.endDate,
+      committedPoints: snapshot.committedPoints,
+      points: snapshot.points,
+    };
+  }
   const tasks = await database.db
     .select({
       id: projectTasks.id,

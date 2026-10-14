@@ -510,8 +510,11 @@ async function writeSchedule(
 export async function rescheduleDeliveryFrom(
   database: Database,
   projectId: string,
-  seed: { entityType: DeliveryDependencyEntityType; id: string },
+  seed:
+    | { entityType: DeliveryDependencyEntityType; id: string }
+    | Array<{ entityType: DeliveryDependencyEntityType; id: string }>,
 ): Promise<ScheduleWrite[]> {
+  const seeds = Array.isArray(seed) ? seed : [seed];
   const linkRows = await database.db
     .select()
     .from(projectDeliveryDependencies)
@@ -543,7 +546,7 @@ export async function rescheduleDeliveryFrom(
   const changed = scheduleDeliveryGraph({
     nodes,
     links,
-    seeds: [deliveryItemKey(seed.entityType, seed.id)],
+    seeds: seeds.map((item) => deliveryItemKey(item.entityType, item.id)),
   });
   return writeSchedule(database, changed);
 }
@@ -856,6 +859,326 @@ export async function setDeliveryDependency(
     createdAt: created.createdAt.toISOString(),
   };
   return { dependency, schedule };
+}
+
+type DependencyLinkInput = {
+  predecessorId: string;
+  predecessorType?: DeliveryDependencyEntityType;
+  successorId: string;
+  successorType?: DeliveryDependencyEntityType;
+  linkType: DeliveryDependencyLinkType;
+  lagDays?: number;
+};
+
+function dependencyPairKey(
+  predecessorType: string,
+  predecessorId: string,
+  successorType: string,
+  successorId: string,
+): string {
+  return `${predecessorType}:${predecessorId}->${successorType}:${successorId}`;
+}
+
+async function cycleMessage(
+  database: Database,
+  projectId: string,
+  cycle: string[],
+  extra: LoadedItem[],
+): Promise<string> {
+  const labels = new Map<string, string>();
+  const items = await loadProjectItems(database, projectId);
+  for (const item of items) {
+    labels.set(deliveryItemKey(item.entityType, item.id), itemLabel(item));
+  }
+  for (const item of extra) {
+    labels.set(deliveryItemKey(item.entityType, item.id), itemLabel(item));
+  }
+  const path = cycle.map((key) => labels.get(key) ?? key).join(' → ');
+  return `This link would create a cycle: ${path}.`;
+}
+
+/**
+ * Add several predecessor links, then schedule once from every new successor.
+ * A link is rejected when it repeats a pair already stored or earlier in the batch.
+ */
+export async function setDeliveryDependencies(
+  database: Database,
+  input: {
+    projectId: string;
+    links: DependencyLinkInput[];
+    createdBy?: string | null;
+  },
+): Promise<{
+  dependencies: PublicDeliveryDependency[];
+  schedule: ScheduleWrite[];
+}> {
+  if (input.links.length === 0) {
+    throw new AppError({
+      code: 'DEPENDENCY_TARGET_REQUIRED',
+      message: 'Pass at least one predecessor link.',
+      statusCode: 400,
+    });
+  }
+  if (input.links.length > 50) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'At most 50 dependency links can be saved at once.',
+      statusCode: 400,
+    });
+  }
+
+  const existingLinks = await database.db
+    .select()
+    .from(projectDeliveryDependencies)
+    .where(eq(projectDeliveryDependencies.projectId, input.projectId));
+  const pairs = new Set(
+    existingLinks.map((row) =>
+      dependencyPairKey(
+        row.predecessorType,
+        row.predecessorId,
+        row.successorType,
+        row.successorId,
+      ),
+    ),
+  );
+  const graph = existingLinks
+    .filter((row) => isEntityType(row.predecessorType) && isEntityType(row.successorType))
+    .map((row) => ({
+      predecessorKey: deliveryItemKey(
+        row.predecessorType as DeliveryDependencyEntityType,
+        row.predecessorId,
+      ),
+      successorKey: deliveryItemKey(
+        row.successorType as DeliveryDependencyEntityType,
+        row.successorId,
+      ),
+    }));
+
+  const prepared: Array<{
+    predecessor: LoadedItem;
+    successor: LoadedItem;
+    linkType: DeliveryDependencyLinkType;
+    lagDays: number;
+  }> = [];
+
+  for (const link of input.links) {
+    const lagDays = link.lagDays ?? 0;
+    assertLag(lagDays);
+    const predecessor = await resolveDeliveryDependencyRef(database, {
+      projectId: input.projectId,
+      idOrKey: link.predecessorId,
+      entityType: link.predecessorType,
+      role: 'predecessor',
+    });
+    const successor = await resolveDeliveryDependencyRef(database, {
+      projectId: input.projectId,
+      idOrKey: link.successorId,
+      entityType: link.successorType,
+      role: 'successor',
+    });
+    if (
+      predecessor.entityType === successor.entityType
+      && predecessor.id === successor.id
+    ) {
+      throw new AppError({
+        code: 'DEPENDENCY_SELF_LINK',
+        message: `${itemLabel(successor)} cannot depend on itself.`,
+        statusCode: 400,
+      });
+    }
+    const pair = dependencyPairKey(
+      predecessor.entityType,
+      predecessor.id,
+      successor.entityType,
+      successor.id,
+    );
+    if (pairs.has(pair)) {
+      throw new AppError({
+        code: 'DEPENDENCY_DUPLICATE',
+        message: `A dependency from ${itemLabel(predecessor)} to ${itemLabel(successor)} already exists. Remove it before adding another.`,
+        statusCode: 409,
+      });
+    }
+    const cycle = dependencyCycleKeys(
+      graph,
+      deliveryItemKey(predecessor.entityType, predecessor.id),
+      deliveryItemKey(successor.entityType, successor.id),
+    );
+    if (cycle) {
+      throw new AppError({
+        code: 'DEPENDENCY_CYCLE',
+        message: await cycleMessage(database, input.projectId, cycle, [
+          predecessor,
+          successor,
+        ]),
+        statusCode: 400,
+      });
+    }
+    pairs.add(pair);
+    graph.push({
+      predecessorKey: deliveryItemKey(predecessor.entityType, predecessor.id),
+      successorKey: deliveryItemKey(successor.entityType, successor.id),
+    });
+    prepared.push({ predecessor, successor, linkType: link.linkType, lagDays });
+  }
+
+  let created: Array<typeof projectDeliveryDependencies.$inferSelect>;
+  try {
+    created = await database.db
+      .insert(projectDeliveryDependencies)
+      .values(
+        prepared.map((link) => ({
+          projectId: input.projectId,
+          predecessorType: link.predecessor.entityType,
+          predecessorId: link.predecessor.id,
+          successorType: link.successor.entityType,
+          successorId: link.successor.id,
+          linkType: link.linkType,
+          lagDays: link.lagDays,
+          createdBy: input.createdBy ?? null,
+        })),
+      )
+      .returning();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new AppError({
+        code: 'DEPENDENCY_DUPLICATE',
+        message: 'A dependency on one of these pairs already exists. Remove it before adding another.',
+        statusCode: 409,
+      });
+    }
+    throw error;
+  }
+
+  const schedule = await rescheduleDeliveryFrom(
+    database,
+    input.projectId,
+    prepared.map((link) => ({
+      entityType: link.successor.entityType,
+      id: link.successor.id,
+    })),
+  );
+  return {
+    dependencies: prepared.map((link) => {
+      const row = created.find(
+        (item) =>
+          item.predecessorType === link.predecessor.entityType
+          && item.predecessorId === link.predecessor.id
+          && item.successorType === link.successor.entityType
+          && item.successorId === link.successor.id,
+      );
+      if (!row) {
+        throw new AppError({
+          code: 'DEPENDENCY_CREATE_FAILED',
+          message: 'Failed to save the dependency',
+          statusCode: 500,
+        });
+      }
+      return {
+        id: row.id,
+        projectId: row.projectId,
+        linkType: link.linkType,
+        lagDays: link.lagDays,
+        predecessor: endpointOf(link.predecessor),
+        successor: endpointOf(link.successor),
+        createdAt: row.createdAt.toISOString(),
+      };
+    }),
+    schedule,
+  };
+}
+
+export async function updateDeliveryDependency(
+  database: Database,
+  input: {
+    projectId: string;
+    linkId: string;
+    linkType?: DeliveryDependencyLinkType;
+    lagDays?: number;
+  },
+): Promise<{
+  dependency: PublicDeliveryDependency;
+  schedule: ScheduleWrite[];
+}> {
+  if (input.linkType === undefined && input.lagDays === undefined) {
+    throw new AppError({
+      code: 'DEPENDENCY_TARGET_REQUIRED',
+      message: 'Pass linkType or lagDays to update a dependency.',
+      statusCode: 400,
+    });
+  }
+  const [existing] = await database.db
+    .select()
+    .from(projectDeliveryDependencies)
+    .where(eq(projectDeliveryDependencies.id, input.linkId))
+    .limit(1);
+  if (!existing || existing.projectId !== input.projectId) {
+    throw new AppError({
+      code: 'DEPENDENCY_NOT_FOUND',
+      message: 'Dependency link was not found in this project',
+      statusCode: 404,
+    });
+  }
+  if (!isEntityType(existing.predecessorType) || !isEntityType(existing.successorType)) {
+    throw new AppError({
+      code: 'DEPENDENCY_NOT_FOUND',
+      message: 'Dependency link was not found in this project',
+      statusCode: 404,
+    });
+  }
+  const linkType = input.linkType
+    ?? (existing.linkType === 'FS'
+      || existing.linkType === 'SS'
+      || existing.linkType === 'FF'
+      || existing.linkType === 'SF'
+      ? existing.linkType
+      : null);
+  if (!linkType) {
+    throw new AppError({
+      code: 'DEPENDENCY_NOT_FOUND',
+      message: 'Dependency link was not found in this project',
+      statusCode: 404,
+    });
+  }
+  const lagDays = input.lagDays ?? existing.lagDays;
+  assertLag(lagDays);
+  const [row] = await database.db
+    .update(projectDeliveryDependencies)
+    .set({ linkType, lagDays })
+    .where(eq(projectDeliveryDependencies.id, existing.id))
+    .returning();
+  if (!row) {
+    throw new AppError({
+      code: 'DEPENDENCY_CREATE_FAILED',
+      message: 'Failed to save the dependency',
+      statusCode: 500,
+    });
+  }
+  const predecessor = await loadById(database, existing.predecessorType, existing.predecessorId);
+  const successor = await loadById(database, existing.successorType, existing.successorId);
+  if (!predecessor || !successor) {
+    throw new AppError({
+      code: 'DEPENDENCY_ENTITY_NOT_FOUND',
+      message: 'A linked delivery item was not found',
+      statusCode: 404,
+    });
+  }
+  const schedule = await rescheduleDeliveryFrom(database, input.projectId, {
+    entityType: successor.entityType,
+    id: successor.id,
+  });
+  return {
+    dependency: {
+      id: row.id,
+      projectId: row.projectId,
+      linkType,
+      lagDays,
+      predecessor: endpointOf(predecessor),
+      successor: endpointOf(successor),
+      createdAt: row.createdAt.toISOString(),
+    },
+    schedule,
+  };
 }
 
 export async function removeDeliveryDependency(

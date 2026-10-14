@@ -38,6 +38,12 @@ import {
   taskDeliveryCompletion,
 } from '../lib/delivery-completion';
 import { useLocalToday } from '../lib/use-local-today';
+import {
+  compareMilestonesByDueDate,
+  type MilestoneMarker,
+} from './MilestoneTimeMarkers';
+
+const DELIVERY_TREE_MILESTONES = 'delivery-tree-milestones';
 
 type TreeEpic = {
   id: string;
@@ -171,19 +177,23 @@ export function ProjectDeliveryTree({
   epics,
   stories,
   tasks,
+  milestones = [],
   sprintsLoaded = true,
   onManageTask,
   onManageEpic,
   onManageStory,
+  onManageMilestone,
 }: {
   epics: TreeEpic[];
   stories: TreeStory[];
   tasks: TreeTask[];
+  milestones?: MilestoneMarker[];
   /** False while sprint titles are still loading, so a sprint URL filter is kept. */
   sprintsLoaded?: boolean;
   onManageTask?: (taskId: string) => void;
   onManageEpic?: (epicId: string) => void;
   onManageStory?: (storyId: string) => void;
+  onManageMilestone?: (milestoneId: string) => void;
 }) {
   const t = useTranslations('delivery');
   const tTable = useTranslations('table');
@@ -687,6 +697,10 @@ export function ProjectDeliveryTree({
     );
   }
 
+  const orderedMilestones = useMemo(
+    () => [...milestones].sort(compareMilestonesByDueDate),
+    [milestones],
+  );
   const filteredEmpty = filtering && visibility.visible.size === 0;
 
   return (
@@ -770,7 +784,7 @@ export function ProjectDeliveryTree({
             </span>
           </div>
         </div>
-        {filteredEmpty ? (
+        {filteredEmpty && orderedMilestones.length === 0 ? (
           <div className="kh-ops-empty-state">
             <div className="kh-ops-empty-mark">00</div>
             <h3>{t('emptyTitle')}</h3>
@@ -781,7 +795,51 @@ export function ProjectDeliveryTree({
           </div>
         ) : (
           <ul className="m-0 grid list-none p-0">
-            {tree.sortedEpics.map((epic) => {
+            {orderedMilestones.length > 0 ? (
+              <TreeBranch
+                open={isOpen(DELIVERY_TREE_MILESTONES)}
+                onToggle={() => toggle(DELIVERY_TREE_MILESTONES)}
+                depth={0}
+                label={t('milestoneTimeOrder')}
+                sub={t('kindMilestone')}
+              >
+                {orderedMilestones.map((milestone) => (
+                  <TreeBranch
+                    key={milestone.id}
+                    open={false}
+                    depth={1}
+                    label={milestone.title}
+                    sub={
+                      milestone.targetDate
+                        ? `${milestone.humanKey ? `${milestone.humanKey} · ` : ''}${milestone.targetDate}`
+                        : (milestone.humanKey ?? t('milestoneNoDue'))
+                    }
+                    meta={metaBits({
+                      statusLabel: t(`milestoneStatus.${milestone.status}`),
+                      percent:
+                        milestone.completionPercent == null
+                          ? '—'
+                          : formatPercentLabel(milestone.completionPercent, locale),
+                      target: '—',
+                      owner: null,
+                    })}
+                    actions={
+                      onManageMilestone ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-8 min-h-8 px-2 text-xs"
+                          onClick={() => onManageMilestone(milestone.id)}
+                        >
+                          {t('manage')}
+                        </Button>
+                      ) : null
+                    }
+                  />
+                ))}
+              </TreeBranch>
+            ) : null}
+            {filteredEmpty ? null : tree.sortedEpics.map((epic) => {
               const id = `epic:${epic.id}`;
               if (!visibility.visible.has(id)) return null;
               const epicStories = tree.storiesByEpic.get(epic.id) ?? [];
