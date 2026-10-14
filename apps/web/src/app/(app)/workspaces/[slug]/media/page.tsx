@@ -1,23 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { WorkspaceMediaLibrary } from '../../../../../components/WorkspaceMediaLibrary';
+import {
+  WorkspaceMediaLibrary,
+  type WorkspaceMediaItem,
+} from '../../../../../components/WorkspaceMediaLibrary';
 import { Page, PageHeader } from '../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../lib/session';
 
 type Workspace = { id: string; name: string; slug: string };
-type KnowledgeRecord = { id: string; title: string; slug: string };
-type MediaItem = {
-  id: string;
-  url: string;
-  markdownSnippet: string;
-  altText: string | null;
-  originalFilename: string | null;
-  contentType: string;
-  byteSize: number;
-  knowledgeRecordId: string | null;
-  createdAt: string;
-};
 
 export default async function WorkspaceMediaPage({
   params,
@@ -42,16 +33,11 @@ export default async function WorkspaceMediaPage({
         (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
     );
 
-  const [mediaResponse, recordsResponse] = await Promise.all([
-    apiFetch(`/api/v1/workspaces/${workspace.id}/media?limit=100`),
-    apiFetch(`/api/v1/knowledge-records?workspaceId=${workspace.id}`),
-  ]);
+  const mediaResponse = await apiFetch(
+    `/api/v1/workspaces/${workspace.id}/media?limit=100`,
+  );
   const media = mediaResponse.ok
-    ? ((await mediaResponse.json()) as { media: MediaItem[] }).media
-    : [];
-  const records = recordsResponse.ok
-    ? ((await recordsResponse.json()) as { knowledgeRecords: KnowledgeRecord[] })
-        .knowledgeRecords
+    ? ((await mediaResponse.json()) as { media: WorkspaceMediaItem[] }).media
     : [];
 
   return (
@@ -71,14 +57,8 @@ export default async function WorkspaceMediaPage({
       </p>
       <WorkspaceMediaLibrary
         workspaceId={workspace.id}
-        workspaceSlug={workspace.slug}
         canMutate={canMutate}
         initialMedia={media}
-        records={records.map((row) => ({
-          id: row.id,
-          title: row.title,
-          slug: row.slug,
-        }))}
       />
     </Page>
   );

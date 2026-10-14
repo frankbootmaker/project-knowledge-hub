@@ -4326,6 +4326,128 @@ a.kh-ops-admin-link-card {
   font-size: 10px;
 }
 
+/* Catalogue type matches the left rail menu: IBM Plex Sans, 13px, regular. */
+.kh-ops-media-library,
+.kh-modal-panel.kh-ops-media-library {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.kh-ops-media-library .kh-ops-media-info strong,
+.kh-ops-media-library .kh-ops-media-info small,
+.kh-ops-media-library .kh-ops-card-foot,
+.kh-ops-media-library .kh-ops-type-chip,
+.kh-ops-media-library .kh-ops-empty,
+.kh-ops-media-library .kh-ops-count-item small,
+.kh-ops-media-library .kh-ops-count-item strong,
+.kh-ops-media-library .kh-ops-data-table th,
+.kh-ops-media-library .kh-ops-data-table td,
+.kh-ops-media-library .kh-ops-data-table .kh-ops-primary-cell,
+.kh-ops-media-library .kh-ops-data-table .kh-ops-num,
+.kh-ops-media-library .kh-ops-keyvals,
+.kh-ops-media-library .kh-ops-keyvals dd,
+.kh-ops-media-library .kh-ops-panel-title,
+.kh-modal-panel.kh-ops-media-library .kh-modal-title,
+.kh-ops-media-library .kh-ops-media-link-head {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.45;
+}
+
+.kh-ops-media-library .kh-ops-keyvals {
+  grid-template-columns: minmax(6.5rem, 0.7fr) minmax(0, 1.3fr);
+  padding: 0;
+}
+
+.kh-ops-media-library .kh-ops-keyvals dd {
+  text-align: left;
+}
+
+.kh-ops-media-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.kh-ops-media-select-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.kh-ops-media-library .kh-ops-media-select {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-surface);
+  cursor: pointer;
+}
+
+.kh-ops-media-library .kh-ops-media-select input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--kh-ink);
+  cursor: pointer;
+}
+
+.kh-ops-media-library .kh-ops-media-card[data-selected='true'] {
+  border-color: var(--kh-selected-border);
+  box-shadow: inset 0 0 0 1px var(--kh-selected-border);
+}
+
+.kh-ops-media-library .kh-ops-data-table .kh-ops-media-select {
+  position: static;
+  width: auto;
+  height: auto;
+  border: 0;
+  background: transparent;
+}
+
+.kh-ops-media-library .kh-ops-data-table tr[data-selected='true'] td {
+  background: var(--kh-selected-bg);
+}
+
+.kh-ops-media-library .kh-ops-media-linked {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 18rem;
+}
+
+.kh-ops-media-link-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.kh-ops-media-link-list [role='row'] {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 0.7fr) minmax(4.5rem, 0.8fr) minmax(0, 1.5fr);
+  gap: 8px 12px;
+  align-items: baseline;
+}
+
+.kh-ops-media-link-head {
+  color: var(--kh-ink-muted);
+}
+
 button.kh-ops-stage-card {
   width: 100%;
   color: inherit;

@@ -44,6 +44,8 @@ type Props = {
   closeOnEscape?: boolean;
   /** Extra class for the scrollable body (e.g. both-axis overflow for wide tables). */
   bodyClassName?: string;
+  /** Extra class on the dialog panel (title and body share it). */
+  panelClassName?: string;
 };
 
 export function Modal({
@@ -58,6 +60,7 @@ export function Modal({
   closeOnBackdrop = true,
   closeOnEscape = true,
   bodyClassName,
+  panelClassName,
 }: Props) {
   const t = useTranslations('common');
   const titleId = useId();
@@ -161,6 +164,7 @@ export function Modal({
           size === 'lg' && 'kh-modal-panel-lg',
           size === 'xl' && 'kh-modal-panel-xl',
           size === 'full' && 'kh-modal-panel-full',
+          panelClassName,
         )}
       >
         <div className="kh-modal-header">
