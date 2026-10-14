@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **MCP tool arguments (PRO-B-4, PRO-T-65, PRO-T-66, PRO-T-67):** Unknown tool fields return a validation error that names the field. `list_project_tasks` documents `limit`, `cursor`, and output `nextCursor`. Task tools resolve any human key type (T, B, and others) the same way they resolve a UUID. `list_project_task_activities` returns full comment text unless `fullText` is false.
+
 * **Task AI tab:** Token, model, pricing, and billing fields on tasks and bugs move from Details to an AI tab. They still save with the item.
 
 * **Project menu:** The project rail section is labeled Project. Scrum, Timeline, and Calendar are no longer separate items. They stay as views inside Delivery, and that menu item stays highlighted.

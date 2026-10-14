@@ -17,6 +17,7 @@ import {
   resolveEntityId,
   resolveKnowledgeRecordId,
   allocateIssueNumber,
+  humanKeyMatchesEntity,
 } from './project-issue-keys.js';
 
 const hasTestDb = Boolean(process.env.DATABASE_URL);
@@ -411,6 +412,27 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       expect(resolved).toBe(task2Id);
     });
 
+    it('resolves a bug human key such as CSA-B-1', async () => {
+      const bugKey = await allocateIssueNumber(database, project1Id, 'B');
+      const [bug] = await database.db
+        .insert(projectTasks)
+        .values({
+          projectId: project1Id,
+          title: 'Bug in WS1',
+          itemType: 'bug',
+          issueKeyType: bugKey.issueKeyType,
+          issueNumber: bugKey.issueNumber,
+        })
+        .returning();
+
+      const resolved = await resolveEntityId(database, {
+        entityType: 'task',
+        idOrKey: `CSA-B-${bugKey.issueNumber}`,
+        workspaceIds: [workspace1Id],
+      });
+      expect(resolved).toBe(bug!.id);
+    });
+
     it('should fail with ambiguous when same key exists in multiple projects', async () => {
       // CSA-T-1 exists in both projects with shared prefix
       await expect(
@@ -458,6 +480,25 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       });
       expect(resolved).toBe(raid2Id);
     });
+  });
+});
+
+describe('humanKeyMatchesEntity', () => {
+  it('accepts every issue key type for tasks, including bugs', () => {
+    expect(humanKeyMatchesEntity('task', 'T')).toBe(true);
+    expect(humanKeyMatchesEntity('task', 'B')).toBe(true);
+    expect(humanKeyMatchesEntity('task', 'M')).toBe(true);
+  });
+
+  it('keeps non-task entities on their own key type', () => {
+    expect(humanKeyMatchesEntity('milestone', 'M')).toBe(true);
+    expect(humanKeyMatchesEntity('milestone', 'B')).toBe(false);
+    expect(humanKeyMatchesEntity('sprint', 'SP')).toBe(true);
+    expect(humanKeyMatchesEntity('raid', 'RR')).toBe(true);
+    expect(humanKeyMatchesEntity('raid', 'B')).toBe(false);
+    expect(humanKeyMatchesEntity('epic', 'E')).toBe(true);
+    expect(humanKeyMatchesEntity('user_story', 'S')).toBe(true);
+    expect(humanKeyMatchesEntity('change', 'C')).toBe(true);
   });
 });
 

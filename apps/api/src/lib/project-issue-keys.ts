@@ -407,6 +407,40 @@ async function findProjectsContainingEntity(
   return found;
 }
 
+/**
+ * Whether a human-key type may address this entity.
+ * Tasks accept every type (T, B, and any other letter stored on a task)
+ * and then look the row up the same way a UUID skips the type check.
+ */
+export function humanKeyMatchesEntity(
+  entityType: ResolvableEntityType,
+  issueKeyType: string,
+): boolean {
+  switch (entityType) {
+    case 'task':
+      return true;
+    case 'epic':
+      return issueKeyType === 'E';
+    case 'user_story':
+      return issueKeyType === 'S';
+    case 'milestone':
+      return issueKeyType === 'M';
+    case 'sprint':
+      return issueKeyType === 'SP';
+    case 'change':
+      return issueKeyType === 'C';
+    case 'raid':
+      return (
+        issueKeyType === 'RR' ||
+        issueKeyType === 'RI' ||
+        issueKeyType === 'RA' ||
+        issueKeyType === 'RD'
+      );
+    default:
+      return false;
+  }
+}
+
 export async function resolveEntityId(
   database: Database,
   input: {
@@ -430,46 +464,15 @@ export async function resolveEntityId(
     });
   }
 
-  const expectedType: IssueKeyType | null = (() => {
-    switch (input.entityType) {
-      case 'epic':
-        return 'E';
-      case 'user_story':
-        return 'S';
-      case 'milestone':
-        return 'M';
-      case 'task':
-        return 'T';
-      case 'sprint':
-        return 'SP';
-      case 'change':
-        return 'C';
-      case 'raid':
-        return isDeliveryIssueKeyType(parsed.issueKeyType) &&
-          parsed.issueKeyType.startsWith('R')
-          ? parsed.issueKeyType
-          : null;
-      default:
-        return null;
-    }
-  })();
-
-  if (!expectedType || parsed.issueKeyType !== expectedType) {
-    if (input.entityType === 'raid') {
-      if (!['RR', 'RI', 'RA', 'RD'].includes(parsed.issueKeyType)) {
-        throw new AppError({
-          code: 'ISSUE_KEY_TYPE_MISMATCH',
-          message: `Human key ${raw} is not a RAID item key`,
-          statusCode: 400,
-        });
-      }
-    } else {
-      throw new AppError({
-        code: 'ISSUE_KEY_TYPE_MISMATCH',
-        message: `Human key ${raw} does not match ${input.entityType}`,
-        statusCode: 400,
-      });
-    }
+  if (!humanKeyMatchesEntity(input.entityType, parsed.issueKeyType)) {
+    throw new AppError({
+      code: 'ISSUE_KEY_TYPE_MISMATCH',
+      message:
+        input.entityType === 'raid'
+          ? `Human key ${raw} is not a RAID item key`
+          : `Human key ${raw} does not match ${input.entityType}`,
+      statusCode: 400,
+    });
   }
 
   const projectConditions = [

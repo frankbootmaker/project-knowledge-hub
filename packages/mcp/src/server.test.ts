@@ -1,6 +1,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { invokeNamedHubTool } from './llm-tool-catalog.js';
 import {
   createKnowledgeHubMcpServer,
   toMcpErrorResult,
@@ -349,6 +350,136 @@ describe('definitionOfDone on project baseline tools', () => {
         suggestedLimit: 10,
       });
       expect(toolText(read)).not.toContain('Output validation error');
+    });
+  });
+});
+
+const BUG_FIELDS = [
+  'itemType',
+  'severity',
+  'foundIn',
+  'foundInNote',
+  'stepsToReproduce',
+  'expectedBehavior',
+  'actualBehavior',
+  'resolution',
+  'regression',
+  'affectedSystemId',
+  'duplicateOfTaskId',
+];
+
+describe('strict tool arguments', () => {
+  test('update_project_task names an unknown field and does not call the handler', async () => {
+    const updateProjectTask = vi.fn();
+    await withMcpClient(['pm:write'], { updateProjectTask }, async (client) => {
+      const result = await client.callTool({
+        name: 'update_project_task',
+        arguments: { taskId: 'PRO-T-1', statuss: 'done' },
+      });
+      expect(result.isError).toBe(true);
+      expect(toolText(result)).toContain('statuss');
+      expect(updateProjectTask).not.toHaveBeenCalled();
+    });
+  });
+
+  test('list_project_tasks names an unknown field and does not call the handler', async () => {
+    const listProjectTasks = vi.fn();
+    await withMcpClient(['pm:read'], { listProjectTasks }, async (client) => {
+      const result = await client.callTool({
+        name: 'list_project_tasks',
+        arguments: { projectId: PROJECT_ID, bogus: true },
+      });
+      expect(result.isError).toBe(true);
+      expect(toolText(result)).toContain('bogus');
+      expect(listProjectTasks).not.toHaveBeenCalled();
+    });
+  });
+
+  test('invokeNamedHubTool rejects unknown fields on write and read tools', async () => {
+    const updateProjectTask = vi.fn();
+    const listProjectTasks = vi.fn();
+    await expect(
+      invokeNamedHubTool({ updateProjectTask }, ['pm:write'], 'update_project_task', {
+        taskId: 'PRO-B-4',
+        notAField: true,
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      statusCode: 400,
+      message: 'Unknown field: notAField',
+    });
+    await expect(
+      invokeNamedHubTool({ listProjectTasks }, ['pm:read'], 'list_project_tasks', {
+        projectId: PROJECT_ID,
+        nope: 1,
+      }),
+    ).rejects.toMatchObject({ message: 'Unknown field: nope' });
+    expect(updateProjectTask).not.toHaveBeenCalled();
+    expect(listProjectTasks).not.toHaveBeenCalled();
+  });
+});
+
+describe('list_project_tasks paging schema', () => {
+  test('input schema and description include limit and cursor, output includes nextCursor', async () => {
+    await withMcpClient(['pm:read'], {}, async (client) => {
+      const listed = await client.listTools();
+      const tool = listed.tools.find((item) => item.name === 'list_project_tasks');
+      const input = tool?.inputSchema as { properties?: Record<string, { description?: string }> };
+      expect(input.properties?.limit?.description).toMatch(/25/);
+      expect(input.properties?.cursor?.description).toMatch(/nextCursor/);
+      expect(tool?.description).toMatch(/limit/);
+      expect(tool?.description).toMatch(/cursor/);
+      const output = tool?.outputSchema as {
+        properties?: { nextCursor?: { description?: string } };
+      };
+      expect(output.properties?.nextCursor?.description).toMatch(/cursor/);
+    });
+  });
+
+  test('passes limit and cursor through and returns nextCursor', async () => {
+    const page = {
+      tasks: [{ id: 'task-1', completionPercent: 0 }],
+      total: 1,
+      limit: 2,
+      nextCursor: null,
+      hasMore: false,
+    };
+    const listProjectTasks = vi.fn(async () => page);
+    await withMcpClient(['pm:read'], { listProjectTasks }, async (client) => {
+      const result = await client.callTool({
+        name: 'list_project_tasks',
+        arguments: { projectId: PROJECT_ID, limit: 2, cursor: 'page-2' },
+      });
+      expect(result.isError).not.toBe(true);
+      expect(JSON.parse(toolText(result)).nextCursor).toBeNull();
+      expect(result.structuredContent).toEqual(page);
+      expect(listProjectTasks).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: PROJECT_ID, limit: 2, cursor: 'page-2' }),
+      );
+    });
+  });
+});
+
+describe('task human keys and bug fields', () => {
+  test('create and update schemas expose bug fields and get_project_task accepts B keys', async () => {
+    await withMcpClient(['pm:read', 'pm:write'], {}, async (client) => {
+      const listed = await client.listTools();
+      for (const name of ['create_project_task', 'update_project_task']) {
+        const tool = listed.tools.find((item) => item.name === name);
+        const props = (tool?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+        for (const field of BUG_FIELDS) {
+          expect(props[field], `${name}.${field}`).toBeTruthy();
+        }
+      }
+      const getTask = listed.tools.find((item) => item.name === 'get_project_task');
+      expect(getTask?.description).toContain('HL1-B-4');
+      const updateTask = listed.tools.find((item) => item.name === 'update_project_task');
+      expect(updateTask?.description).toContain('HL1-B-4');
+      const activities = listed.tools.find((item) => item.name === 'list_project_task_activities');
+      expect(
+        (activities?.inputSchema as { properties?: Record<string, unknown> }).properties?.fullText,
+      ).toBeTruthy();
+      expect(activities?.description).toMatch(/full/);
     });
   });
 });

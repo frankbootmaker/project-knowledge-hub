@@ -504,6 +504,8 @@ export type McpToolHandlers = {
     taskId: string;
     limit?: number;
     cursor?: string;
+    /** When false, comment bodies are excerpted. Defaults to full text. */
+    fullText?: boolean;
   }) => Promise<unknown>;
   addProjectTaskComment: (input: {
     taskId: string;
@@ -1713,19 +1715,60 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  server.tool(
+  const taskListOutput = {
+    tasks: z.array(
+      z
+        .object({
+          completionPercent: z
+            .number()
+            .int()
+            .min(0)
+            .max(100)
+            .nullable()
+            .describe(
+              'Displayed percent. Done is 100, cancelled is 0, otherwise the stored step.',
+            )
+            .optional(),
+        })
+        .passthrough(),
+    ),
+    total: z.number().int(),
+    limit: z.number().int(),
+    nextCursor: z
+      .string()
+      .nullable()
+      .describe('Pass as cursor for the next page. Null when hasMore is false.'),
+    hasMore: z.boolean(),
+  };
+
+  server.registerTool(
     'list_project_tasks',
-    'List tasks for a project (optional milestone/sprint/itemType filter). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Pages at 25 items. Descriptions and bug notes are excerpts; use get_project_task for the full text. Pass cursor from nextCursor until hasMore is false. completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. Requires pm:read.',
     {
-      projectId: z.string().uuid(),
-      milestoneId: entityRef.optional(),
-      unassignedMilestone: z.boolean().optional(),
-      sprintId: entityRef.optional(),
-      unassignedSprint: z.boolean().optional(),
-      itemType: z.enum(['task', 'bug']).optional(),
-      includeArchived: z.boolean().optional(),
-      limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
-      cursor: z.string().min(1).max(200).optional(),
+      description:
+        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. Requires pm:read.',
+      inputSchema: {
+        projectId: z.string().uuid(),
+        milestoneId: entityRef.optional(),
+        unassignedMilestone: z.boolean().optional(),
+        sprintId: entityRef.optional(),
+        unassignedSprint: z.boolean().optional(),
+        itemType: z.enum(['task', 'bug']).optional(),
+        includeArchived: z.boolean().optional(),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(MCP_MAX_LIST_LIMIT)
+          .describe('Page size from 1 to 25. Defaults to 25.')
+          .optional(),
+        cursor: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe('Opaque page cursor returned as nextCursor. Omit for the first page.')
+          .optional(),
+      },
+      outputSchema: taskListOutput,
     },
     async (args) =>
       wrap(
@@ -1733,12 +1776,13 @@ export function createKnowledgeHubMcpServer(
         'pm:read',
         () => handlers.listProjectTasks(args),
         { projectId: args.projectId },
+        structuredTextResult,
       )(),
   );
 
   server.tool(
     'get_project_task',
-    'Get one project task with RACI. Hour fields (forecastHours, actualHours) returned as JSON numbers. taskId may be a UUID or human key (e.g. HL1-T-12). Requires pm:read.',
+    'Get one project task or bug with RACI. Hour fields (forecastHours, actualHours) returned as JSON numbers. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Requires pm:read.',
     { taskId: entityRef },
     async (args) =>
       wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
@@ -2000,7 +2044,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task or bug. itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; null clears it. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+    'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; null clears it. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -2220,9 +2264,15 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_task_activities',
-    'List activity timeline for a task. Pages at 25. Comment bodies are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    'List activity timeline for a task or bug. Pages at 25. Comment text is returned in full; set fullText to false to excerpt comments at 200 characters. Pass cursor from nextCursor until hasMore is false. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Requires pm:read.',
     {
       taskId: entityRef,
+      fullText: z
+        .boolean()
+        .describe(
+          'When false, comment bodies are excerpted at 200 characters. Defaults to true (full comment text).',
+        )
+        .optional(),
       ...listPage,
     },
     async (args) =>
@@ -2847,7 +2897,31 @@ export function createKnowledgeHubMcpServer(
     stampOauthSecuritySchemes(server, client.scopes);
   }
 
+  rejectUnknownToolArguments(server);
   return server;
+}
+
+/**
+ * Zod objects strip unknown keys by default, so a typo in a tool argument
+ * never reached the handler. Strict objects return a validation error that
+ * names the field. Nested records (metadata, call_hub_tool arguments) stay open.
+ */
+function rejectUnknownToolArguments(server: McpServer): void {
+  const tools = (
+    server as unknown as {
+      _registeredTools?: Record<
+        string,
+        { inputSchema?: { strict?: () => unknown } }
+      >;
+    }
+  )._registeredTools;
+  if (!tools) return;
+  for (const tool of Object.values(tools)) {
+    const schema = tool.inputSchema;
+    if (schema && typeof schema.strict === 'function') {
+      tool.inputSchema = schema.strict() as typeof schema;
+    }
+  }
 }
 
 /**
