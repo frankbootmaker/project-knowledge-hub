@@ -3421,6 +3421,14 @@ button.kh-ops-project-card:disabled {
   text-transform: uppercase;
 }
 
+.kh-ops-form-grid .kh-input {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.011em;
+}
+
 .kh-ops-page-tabs {
   display: flex;
   gap: 0;

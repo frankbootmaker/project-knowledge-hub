@@ -266,6 +266,7 @@ Record durable UI / design-system changes here (newest first).
 * **Delivery media** — The same dialogs, plus RAID and change, add a Media tab beside Documents. Linked images open a preview; titled URLs open in a new tab; a deleted library file shows a placeholder. Readers see the list without add, upload, unlink, or delete.
 * **Admin media library** — Backups & restore gains a Media library tab beside Backup and Storage. Allowed types stay PNG, JPEG, GIF, and WebP. The max upload size is edited in MiB and cannot exceed the server ceiling.
 * **Delivery view tabs** — Board, List, Tree, Calendar, Timeline, and Scrum use the same IBM Plex Sans, 14px, medium weight as the Add button. Stakeholder view tabs share that control.
+* **Form fields** — Values inside a form grid use IBM Plex Sans at 14px, medium weight, matching the effort rollup line. Labels stay the small mono caps.
 * **Task start date** — The add form and the task manage dialog show an optional Start date beside Due date for tasks and bugs.
 
 ### 2026-10-10
