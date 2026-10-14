@@ -43,6 +43,12 @@ import {
   saveItemMediaLinks,
   type ItemMediaDraft,
 } from './DeliveryMediaEditor';
+import {
+  DeliveryRaciEditor,
+  saveDeliveryRaci,
+  type RaciAssignment,
+} from './DeliveryRaciEditor';
+import { raciDraftIssues, sameRaciDraft, type RaciDraftIssue } from '../lib/raci-draft';
 
 type RaciEntry = {
   userId: string;
@@ -234,6 +240,8 @@ export function ProjectTaskManageModal({
   const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false);
+  const [raciPickerOpen, setRaciPickerOpen] = useState(false);
+  const [raciEntries, setRaciEntries] = useState<RaciAssignment[]>([]);
   const tRaid = useTranslations('raid');
 
   const rateMap = useMemo(() => {
@@ -263,6 +271,7 @@ export function ProjectTaskManageModal({
       }
       const loaded = taskPayload.task;
       setTask(loaded);
+      setRaciEntries(loaded.raci);
       setTitle(loaded.title);
       setStatus(loaded.status);
       setCompletionPercent(
@@ -482,8 +491,22 @@ export function ProjectTaskManageModal({
     };
   }
 
+  function raciIssueLabel(issue: RaciDraftIssue): string {
+    if (issue === 'exactly_one_accountable') return t('raciExactlyOne');
+    if (issue === 'duplicate_person_role') return t('raciDuplicateRole');
+    return t('raciDuplicatePerson');
+  }
+
   async function saveFields() {
     if (!taskId || !canMutate) return;
+    const raciDirty = Boolean(task && !sameRaciDraft(raciEntries, task.raci));
+    if (raciDirty) {
+      const issue = raciDraftIssues(raciEntries)[0];
+      if (issue) {
+        setError(raciIssueLabel(issue));
+        return;
+      }
+    }
     setPending(true);
     setError(null);
     const usage = aiUsagePayload();
@@ -533,6 +556,7 @@ export function ProjectTaskManageModal({
       if (!response.ok || !payload.task) {
         throw new Error(payload.error?.message || t('failedUpdateTask'));
       }
+      let savedTask = payload.task;
       if (task?.projectId) {
         await saveDeliveryDocumentLinks({
           projectId: task.projectId,
@@ -549,8 +573,16 @@ export function ProjectTaskManageModal({
           });
         }
       }
-      setTask(payload.task);
-      onUpdated?.(payload.task);
+      if (raciDirty) {
+        const raci = await saveDeliveryRaci({
+          taskId,
+          entries: raciEntries,
+        });
+        savedTask = { ...savedTask, raci };
+        setRaciEntries(raci);
+      }
+      setTask(savedTask);
+      onUpdated?.(savedTask);
       pushToast(t('taskUpdated'), 'success');
       await load();
     } catch (err) {
@@ -698,7 +730,7 @@ export function ProjectTaskManageModal({
       }
       description={t('manageTaskDescription')}
       size={DELIVERY_ITEM_MODAL_SIZE}
-      closeOnEscape={!documentPickerOpen}
+      closeOnEscape={!documentPickerOpen && !raciPickerOpen}
       tabs={
         task ? (
           <div className="kh-ops-modal-tabs" role="tablist">
@@ -1208,16 +1240,15 @@ export function ProjectTaskManageModal({
                 ? `${t('currentOwner')}: ${task.currentOwner.displayName} (${task.currentOwner.email})`
                 : t('unassigned')}
             </p>
-            {task.raci.length > 0 ? (
-              <p className="m-0 text-xs text-ink-muted">
-                {t('raciStanding')}:{' '}
-                {task.raci
-                  .map((entry) => `${entry.role}: ${entry.displayName}`)
-                  .join(' · ')}
-              </p>
-            ) : (
-              <p className="m-0 text-xs text-ink-muted">{t('noRaci')}</p>
-            )}
+            <DeliveryRaciEditor
+              projectId={task.projectId}
+              entries={raciEntries}
+              members={members}
+              canEdit={canMutate}
+              disabled={pending}
+              onChange={setRaciEntries}
+              onPickerOpenChange={setRaciPickerOpen}
+            />
             <div>
               <p className="mt-0 mb-2 text-sm font-semibold">{t('linkedRaid')}</p>
               {linkedRaid.length === 0 ? (
