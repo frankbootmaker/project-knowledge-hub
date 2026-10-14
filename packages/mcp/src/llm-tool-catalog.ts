@@ -619,7 +619,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_task',
     description:
-      'Get one task or bug with RACI. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {

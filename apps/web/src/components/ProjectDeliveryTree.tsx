@@ -7,6 +7,17 @@ import { TableFilterControl, type TableFilterField } from './ui/TableFilterContr
 import { collectEnumOptions } from '../lib/data-table';
 import { DELIVERY_STATUS_RANK, isTaskDeliveryStatus } from '../lib/delivery-status';
 import {
+  DELIVERY_TREE_ORPHAN_COLLAPSE_ID,
+  DELIVERY_TREE_UNGROUPED_COLLAPSE_ID,
+  collapseTreeAll,
+  collapseTreeOneLevel,
+  deliveryTreeCollapsibleNodes,
+  deliveryTreeDepthActions,
+  expandTreeAll,
+  expandTreeOneLevel,
+  isDeliveryTreeNodeOpen,
+} from '../lib/delivery-tree-collapse';
+import {
   DELIVERY_TREE_ORPHAN_STORIES,
   DELIVERY_TREE_UNGROUPED_TASKS,
   deliveryTreeFiltersActive,
@@ -185,7 +196,7 @@ export function ProjectDeliveryTree({
   });
 
   function isOpen(id: string) {
-    return collapsed[id] !== true;
+    return isDeliveryTreeNodeOpen(collapsed, id);
   }
 
   function toggle(id: string) {
@@ -356,7 +367,10 @@ export function ProjectDeliveryTree({
     };
   }
 
-  function parentPace(status: string, rollup: { percent: number; done: number; total: number } | null) {
+  function parentPace(
+    status: string,
+    rollup: { percent: number; done: number; total: number } | null,
+  ) {
     const shown = displayedParentCompletion(status, rollup);
     const forced = status === 'done' || status === 'cancelled';
     return {
@@ -489,6 +503,41 @@ export function ProjectDeliveryTree({
     [filterState, tree.nodes],
   );
   const filtering = deliveryTreeFiltersActive(filterState);
+  const collapseNodes = useMemo(
+    () =>
+      deliveryTreeCollapsibleNodes({
+        epics: tree.sortedEpics.map((epic) => ({
+          id: epic.id,
+          storyIds: (tree.storiesByEpic.get(epic.id) ?? []).map((story) => story.id),
+        })),
+        stories: [...tree.storiesByEpic.values(), tree.orphanStories].flat(2).map((story) => ({
+          id: story.id,
+          taskIds: (tree.tasksByStory.get(story.id) ?? []).map((task) => task.id),
+        })),
+        orphanStoryIds: tree.orphanStories.map((story) => story.id),
+        ungroupedTaskIds: tree.ungroupedTasks.map((task) => task.id),
+        visible: visibility.visible,
+        filtering,
+      }),
+    [filtering, tree, visibility.visible],
+  );
+  const depthActions = useMemo(
+    () => deliveryTreeDepthActions(collapsed, collapseNodes),
+    [collapseNodes, collapsed],
+  );
+
+  const expandLevel = useCallback(() => {
+    setCollapsed((current) => expandTreeOneLevel(current, collapseNodes));
+  }, [collapseNodes]);
+  const collapseLevel = useCallback(() => {
+    setCollapsed((current) => collapseTreeOneLevel(current, collapseNodes));
+  }, [collapseNodes]);
+  const expandAll = useCallback(() => {
+    setCollapsed((current) => expandTreeAll(current, collapseNodes));
+  }, [collapseNodes]);
+  const collapseAll = useCallback(() => {
+    setCollapsed((current) => collapseTreeAll(current, collapseNodes));
+  }, [collapseNodes]);
 
   function metaBits(input: {
     statusLabel: string;
@@ -512,9 +561,7 @@ export function ProjectDeliveryTree({
         <span className="kh-ops-tree-sprint" title={input.sprint ?? undefined}>
           {input.sprint ?? '—'}
         </span>
-        <span className="kh-ops-tree-hours">
-          {input.hours == null ? '—' : `${input.hours}h`}
-        </span>
+        <span className="kh-ops-tree-hours">{input.hours == null ? '—' : `${input.hours}h`}</span>
         <span className="kh-ops-tree-points">
           {input.points == null ? '—' : `${input.points}pt`}
         </span>
@@ -644,7 +691,39 @@ export function ProjectDeliveryTree({
     <section className="kh-ops-panel overflow-x-auto">
       <div className="kh-ops-delivery-tree">
         <div className="kh-ops-delivery-tree-head">
-          <span>{t('treeBreakdown')}</span>
+          <div className="kh-ops-delivery-tree-label">
+            <span>{t('treeBreakdown')}</span>
+            <div className="kh-ops-tree-depth" role="group" aria-label={t('treeDepthControls')}>
+              <DepthButton
+                label={t('treeExpandLevel')}
+                disabled={!depthActions.canExpandLevel}
+                onClick={expandLevel}
+              >
+                <ExpandLevelIcon />
+              </DepthButton>
+              <DepthButton
+                label={t('treeCollapseLevel')}
+                disabled={!depthActions.canCollapseLevel}
+                onClick={collapseLevel}
+              >
+                <CollapseLevelIcon />
+              </DepthButton>
+              <DepthButton
+                label={t('treeExpandAll')}
+                disabled={!depthActions.canExpandAll}
+                onClick={expandAll}
+              >
+                <ExpandAllIcon />
+              </DepthButton>
+              <DepthButton
+                label={t('treeCollapseAll')}
+                disabled={!depthActions.canCollapseAll}
+                onClick={collapseAll}
+              >
+                <CollapseAllIcon />
+              </DepthButton>
+            </div>
+          </div>
           <div className="kh-ops-tree-meta" aria-label={t('treeMetaHead')}>
             <span title={t('colStatus')}>{t('colStatus')}</span>
             <span title={t('colCompleteLabel')}>{t('colComplete')}</span>
@@ -753,8 +832,8 @@ export function ProjectDeliveryTree({
 
             {visibility.visible.has(DELIVERY_TREE_ORPHAN_STORIES) ? (
               <TreeBranch
-                open={isOpen('orphan-stories')}
-                onToggle={() => toggle('orphan-stories')}
+                open={isOpen(DELIVERY_TREE_ORPHAN_COLLAPSE_ID)}
+                onToggle={() => toggle(DELIVERY_TREE_ORPHAN_COLLAPSE_ID)}
                 depth={0}
                 label={t('treeUngroupedStories')}
                 sub={t('kindStory')}
@@ -766,8 +845,8 @@ export function ProjectDeliveryTree({
 
             {visibility.visible.has(DELIVERY_TREE_UNGROUPED_TASKS) ? (
               <TreeBranch
-                open={isOpen('ungrouped-tasks')}
-                onToggle={() => toggle('ungrouped-tasks')}
+                open={isOpen(DELIVERY_TREE_UNGROUPED_COLLAPSE_ID)}
+                onToggle={() => toggle(DELIVERY_TREE_UNGROUPED_COLLAPSE_ID)}
                 depth={0}
                 label={t('treeUngroupedTasks')}
                 sub={t('kindTask')}
@@ -780,5 +859,88 @@ export function ProjectDeliveryTree({
         )}
       </div>
     </section>
+  );
+}
+
+function DepthButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <span className="inline-flex" title={label}>
+      <Button
+        type="button"
+        variant="secondary"
+        className="kh-ops-tree-depth-btn"
+        disabled={disabled}
+        aria-label={label}
+        onClick={onClick}
+      >
+        {children}
+      </Button>
+    </span>
+  );
+}
+
+function ExpandLevelIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <path
+        d="M6 9l6 6 6-6"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CollapseLevelIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <path
+        d="M6 15l6-6 6 6"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ExpandAllIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <path
+        d="M6 7l6 5 6-5M6 13l6 5 6-5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CollapseAllIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-4 shrink-0" fill="none">
+      <path
+        d="M6 11l6-5 6 5M6 17l6-5 6 5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
