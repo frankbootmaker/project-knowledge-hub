@@ -438,7 +438,7 @@ describe('list_project_tasks paging schema', () => {
 
   test('passes limit and cursor through and returns nextCursor', async () => {
     const page = {
-      tasks: [{ id: 'task-1' }],
+      tasks: [{ id: 'task-1', completionPercent: 0 }],
       total: 1,
       limit: 2,
       nextCursor: null,

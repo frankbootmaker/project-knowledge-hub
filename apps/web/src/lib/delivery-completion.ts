@@ -1,63 +1,42 @@
-/** Derived delivery completion. Parents average child task percents. */
+/**
+ * Derived delivery completion.
+ *
+ * The stored task step and the story/epic rollup live in
+ * `@project-knowledge-hub/domain`. This module adds the schedule helpers
+ * the delivery screens use beside that percent.
+ *
+ * Status wins over the calculated value: Done is 100, Cancelled is 0.
+ * A parent average leaves cancelled children out. Counting them as 0 would
+ * make a finished story look incomplete after someone cancels a leftover task.
+ */
 
-export type DeliveryCompletion = {
-  percent: number;
-  /** Share of children finished, including partial steps such as 0.5. */
-  done: number;
-  total: number;
-};
+export {
+  averageCompletion,
+  childCompletionPoints as taskCompletionPoints,
+  deliveryCompletionIndex,
+  displayedParentCompletion,
+  displayedTaskCompletionPercent,
+  type DeliveryCompletionChild as DeliveryCompletionTask,
+  type DeliveryCompletionRollup as DeliveryCompletion,
+} from '@project-knowledge-hub/domain';
 
-export type DeliveryCompletionTask = {
-  status: string;
-  completionPercent?: number | null;
-  userStoryId: string | null;
-  epicId: string | null;
-};
+import {
+  displayedTaskCompletionPercent,
+  type DeliveryCompletionRollup,
+} from '@project-knowledge-hub/domain';
 
 export type DeliveryCompletionIndex = {
-  byStoryId: Map<string, DeliveryCompletion>;
-  byEpicId: Map<string, DeliveryCompletion>;
+  byStoryId: Map<string, DeliveryCompletionRollup>;
+  byEpicId: Map<string, DeliveryCompletionRollup>;
 };
 
-type Bucket = {
-  earned: number;
-  total: number;
-};
-
-/** Done is 100. Cancelled is omitted. An open task uses its stored step, or 0. */
-export function taskCompletionPoints(
-  status: string,
-  completionPercent?: number | null,
-): number | null {
-  if (status === 'cancelled') return null;
-  if (status === 'done') return 100;
-  if (typeof completionPercent === 'number') return completionPercent;
-  return 0;
-}
-
+/** What a task row shows. Done is 100. Cancelled is 0. Otherwise the stored step. */
 export function taskDeliveryCompletion(
   status: string,
   completionPercent?: number | null,
-): DeliveryCompletion | null {
-  const points = taskCompletionPoints(status, completionPercent);
-  if (points == null) return null;
-  return { percent: points, done: points / 100, total: 1 };
-}
-
-function bump(buckets: Map<string, Bucket>, id: string | null, points: number | null) {
-  if (!id || points == null) return;
-  const bucket = buckets.get(id) ?? { earned: 0, total: 0 };
-  bucket.earned += points;
-  bucket.total += 1;
-  buckets.set(id, bucket);
-}
-
-function toCompletion(bucket: Bucket): DeliveryCompletion {
-  return {
-    percent: Math.round(bucket.earned / bucket.total),
-    done: bucket.earned / 100,
-    total: bucket.total,
-  };
+): DeliveryCompletionRollup {
+  const percent = displayedTaskCompletionPercent(status, completionPercent);
+  return { percent, done: percent / 100, total: 1 };
 }
 
 /** Local calendar day as YYYY-MM-DD. */
@@ -66,6 +45,11 @@ export function localDateIso(now = new Date()): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/** UTC calendar day. Stable across the server and the first client paint. */
+export function utcDateIso(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
 }
 
 function utcDay(isoDate: string): number {
@@ -120,23 +104,20 @@ export function deliveryPaceClass(lag: DeliveryLag | null): string | undefined {
 }
 
 /**
- * Story and epic percents from child tasks and bugs.
- * Each child contributes its completion step. Cancelled children are left out.
- * A parent with none left is omitted.
+ * Locale percent text with unicode spaces folded to a normal space.
+ * Node and the browser disagree on NBSP vs narrow NBSP, which breaks hydration.
  */
-export function deliveryCompletionIndex(
-  tasks: readonly DeliveryCompletionTask[],
-): DeliveryCompletionIndex {
-  const stories = new Map<string, Bucket>();
-  const epics = new Map<string, Bucket>();
-  for (const task of tasks) {
-    const points = taskCompletionPoints(task.status, task.completionPercent);
-    bump(stories, task.userStoryId, points);
-    bump(epics, task.epicId, points);
-  }
-  const byStoryId = new Map<string, DeliveryCompletion>();
-  const byEpicId = new Map<string, DeliveryCompletion>();
-  for (const [id, bucket] of stories) byStoryId.set(id, toCompletion(bucket));
-  for (const [id, bucket] of epics) byEpicId.set(id, toCompletion(bucket));
-  return { byStoryId, byEpicId };
+export function formatPercentLabel(percent: number, locale: string): string {
+  const formatted = new Intl.NumberFormat(locale, {
+    style: 'percent',
+    maximumFractionDigits: 0,
+  }).format(percent / 100);
+  return formatted.replace(/[\u00a0\u202f\u2009]/g, ' ');
+}
+
+/** Same space folding for counts such as "1.5". */
+export function formatStableNumber(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 })
+    .format(value)
+    .replace(/[\u00a0\u202f\u2009]/g, ' ');
 }

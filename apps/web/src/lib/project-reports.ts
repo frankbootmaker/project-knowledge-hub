@@ -2,7 +2,10 @@ import type {
   DisplayPrefs,
   ReportDiagramPrefs,
 } from '@project-knowledge-hub/domain';
-import { DEFAULT_REPORT_DIAGRAM_PREFS } from '@project-knowledge-hub/domain';
+import {
+  DEFAULT_REPORT_DIAGRAM_PREFS,
+  displayedTaskCompletionPercent,
+} from '@project-knowledge-hub/domain';
 import {
   deliveryScheduleTone,
   projectDeliveryRag,
@@ -30,6 +33,7 @@ export type ReportTask = {
   currentOwner?: { displayName: string } | null;
   sprintId?: string | null;
   storyPoints?: number | null;
+  completionPercent?: number | null;
   /** Latest status_changed → done. Not updatedAt. */
   completedAt?: string | null;
 };
@@ -1088,6 +1092,7 @@ function formatGroupedTask(
       : null,
     forecast != null ? `${input.labels.forecastHours}: ${forecast}` : null,
     actual != null ? `${input.labels.actualHours}: ${actual}` : null,
+    `${displayedTaskCompletionPercent(row.status, row.completionPercent)}%`,
   ].filter((bit): bit is string => Boolean(bit));
   const bugWord = input.overview?.bugKind ?? 'Bug';
   const kind = row.itemType === 'bug' ? `**${bugWord}** ` : '';

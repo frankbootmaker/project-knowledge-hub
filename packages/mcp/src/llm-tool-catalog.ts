@@ -588,7 +588,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_tasks',
     description:
-      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. Requires pm:read.',
+      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: taskListPageResult,
@@ -685,7 +685,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional startDate; null clears it, and it must be on or before dueDate when both are set. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional startDate; null clears it, and it must be on or before dueDate when both are set. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -786,7 +786,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_epics',
     description:
-      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
+      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -823,7 +823,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_user_stories',
     description:
-      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
+      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {

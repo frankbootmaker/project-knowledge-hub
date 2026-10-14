@@ -25,7 +25,7 @@ import {
   type BoardMetaFilters,
   type BoardTask,
 } from './ProjectDeliveryBoard';
-import { todayYmd } from '../lib/delivery-schedule';
+import { useLocalToday } from '../lib/use-local-today';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import type { RatePerson } from '../lib/task-costing';
 import { workItemIdLabel } from '../lib/work-item-label';
@@ -136,7 +136,7 @@ export function ProjectScrumView({
   const tStakeholders = useTranslations('stakeholders');
   const tProjects = useTranslations('projects');
   const { pushToast } = useToast();
-  const today = todayYmd();
+  const today = useLocalToday();
   const [boardMeta, setBoardMeta] = useState<BoardMetaFilters>(() =>
     readBoardMetaFilters(projectId),
   );

@@ -20,10 +20,13 @@ import {
   deliveryCompletionIndex,
   deliveryLag,
   deliveryPaceClass,
-  localDateIso,
+  displayedParentCompletion,
+  formatPercentLabel,
+  formatStableNumber,
   plannedTargetPercent,
   taskDeliveryCompletion,
 } from '../lib/delivery-completion';
+import { useLocalToday } from '../lib/use-local-today';
 
 type TreeEpic = {
   id: string;
@@ -116,10 +119,12 @@ function TreeBranch({
             {dimmed && dimHint ? <span className="sr-only">{dimHint}</span> : null}
           </div>
         </div>
-        <div className="kh-ops-tree-meta">
-          {meta}
-          {actions}
-        </div>
+        {meta ? (
+          <div className="kh-ops-tree-meta">
+            {meta}
+            <span className="kh-ops-tree-actions">{actions}</span>
+          </div>
+        ) : null}
       </div>
       {hasChildren && open ? <ul className="m-0 grid list-none p-0">{children}</ul> : null}
     </li>
@@ -300,15 +305,7 @@ export function ProjectDeliveryTree({
     return fields;
   }, [ownerOptions, sprintOptions, statusOptions, t, table.filters.sprint]);
 
-  const percentFormat = useMemo(
-    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
-    [locale],
-  );
-  const earnedFormat = useMemo(
-    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
-    [locale],
-  );
-  const today = localDateIso();
+  const today = useLocalToday();
   const completion = useMemo(
     () =>
       deliveryCompletionIndex(
@@ -338,7 +335,7 @@ export function ProjectDeliveryTree({
       : null;
     const earnedTitle = input.earned
       ? t('completeOf', {
-          done: earnedFormat.format(input.earned.done),
+          done: formatStableNumber(input.earned.done, locale),
           total: input.earned.total,
         })
       : null;
@@ -348,14 +345,25 @@ export function ProjectDeliveryTree({
         })
       : null;
     const title = [earnedTitle, lagTitle].filter(Boolean).join(' · ') || undefined;
-    const label = input.actual == null ? '—' : percentFormat.format(input.actual / 100);
+    const label = input.actual == null ? '—' : formatPercentLabel(input.actual, locale);
     return {
       percent: (
         <span className={deliveryPaceClass(lag)} title={title}>
           {label}
         </span>
       ),
-      target: input.target == null ? '—' : percentFormat.format(input.target / 100),
+      target: input.target == null ? '—' : formatPercentLabel(input.target, locale),
+    };
+  }
+
+  function parentPace(status: string, rollup: { percent: number; done: number; total: number } | null) {
+    const shown = displayedParentCompletion(status, rollup);
+    const forced = status === 'done' || status === 'cancelled';
+    return {
+      actual: shown?.percent ?? null,
+      status,
+      comparable: true,
+      earned: forced ? null : shown,
     };
   }
 
@@ -493,13 +501,23 @@ export function ProjectDeliveryTree({
   }) {
     return (
       <>
-        <span>{input.statusLabel}</span>
+        <span className="kh-ops-tree-status" title={input.statusLabel}>
+          {input.statusLabel}
+        </span>
         <span className="kh-ops-tree-pct">{input.percent}</span>
         <span className="kh-ops-tree-pct">{input.target}</span>
-        <span>{input.owner ?? '—'}</span>
-        <span>{input.sprint ?? '—'}</span>
-        <span>{input.hours == null ? '—' : `${input.hours}h`}</span>
-        <span>{input.points == null ? '—' : `${input.points}pt`}</span>
+        <span className="kh-ops-tree-owner" title={input.owner ?? undefined}>
+          {input.owner ?? '—'}
+        </span>
+        <span className="kh-ops-tree-sprint" title={input.sprint ?? undefined}>
+          {input.sprint ?? '—'}
+        </span>
+        <span className="kh-ops-tree-hours">
+          {input.hours == null ? '—' : `${input.hours}h`}
+        </span>
+        <span className="kh-ops-tree-points">
+          {input.points == null ? '—' : `${input.points}pt`}
+        </span>
       </>
     );
   }
@@ -574,11 +592,8 @@ export function ProjectDeliveryTree({
         meta={metaBits({
           statusLabel: t(`milestoneStatus.${story.status}`),
           ...paceCells({
-            actual: completion.byStoryId.get(story.id)?.percent ?? null,
+            ...parentPace(story.status, completion.byStoryId.get(story.id) ?? null),
             target: plannedTargetPercent(story.startDate, story.endDate, today),
-            status: story.status,
-            comparable: true,
-            earned: completion.byStoryId.get(story.id) ?? null,
           }),
         })}
         actions={
@@ -597,7 +612,10 @@ export function ProjectDeliveryTree({
         {visibleTasks.length > 0 ? (
           visibleTasks.map((task) => renderTask(task, depth + 1))
         ) : !filtering && storyTasks.length === 0 ? (
-          <li className="kh-ops-delivery-tree-row list-none text-sm text-ink-muted">
+          <li
+            className="kh-ops-delivery-tree-row kh-ops-tree-note list-none"
+            style={{ ['--level' as string]: depth + 1 }}
+          >
             {t('treeNoTasks')}
           </li>
         ) : null}
@@ -627,40 +645,48 @@ export function ProjectDeliveryTree({
       <div className="kh-ops-delivery-tree">
         <div className="kh-ops-delivery-tree-head">
           <span>{t('treeBreakdown')}</span>
-          <div className="kh-ops-delivery-tree-head-meta">
-            <span>{t('treeMetaHead')}</span>
-            <TableFilterControl
-              fields={filterFields}
-              enumFilters={table.filters}
-              textFilters={table.textFilters}
-              onEnumFilter={table.setEnumFilter}
-              onTextFilter={table.setTextFilter}
-              onClearFilters={clearTreeFilters}
-              filtersActive={filtersActive}
-              insertAfter={{
-                id: 'status',
-                content: (
-                  <div className="kh-ops-table-filter-group">
-                    <Switch
-                      id={onlyOpenId}
-                      checked={onlyOpen}
-                      label={t('treeOnlyOpen')}
-                      onCheckedChange={(checked) => table.setExtra('open', checked ? '1' : '')}
-                    />
-                  </div>
-                ),
-              }}
-            />
-            {filtersActive ? (
-              <Button
-                type="button"
-                variant="secondary"
-                className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
-                onClick={clearTreeFilters}
-              >
-                {tTable('clearFilters')}
-              </Button>
-            ) : null}
+          <div className="kh-ops-tree-meta" aria-label={t('treeMetaHead')}>
+            <span title={t('colStatus')}>{t('colStatus')}</span>
+            <span title={t('colCompleteLabel')}>{t('colComplete')}</span>
+            <span title={t('colTargetLabel')}>{t('colTarget')}</span>
+            <span title={t('colOwner')}>{t('colOwner')}</span>
+            <span title={t('colSprint')}>{t('colSprint')}</span>
+            <span title={t('colForecast')}>{t('colForecast')}</span>
+            <span title={t('colPoints')}>{t('colPoints')}</span>
+            <span className="kh-ops-tree-actions">
+              <TableFilterControl
+                fields={filterFields}
+                enumFilters={table.filters}
+                textFilters={table.textFilters}
+                onEnumFilter={table.setEnumFilter}
+                onTextFilter={table.setTextFilter}
+                onClearFilters={clearTreeFilters}
+                filtersActive={filtersActive}
+                insertAfter={{
+                  id: 'status',
+                  content: (
+                    <div className="kh-ops-table-filter-group">
+                      <Switch
+                        id={onlyOpenId}
+                        checked={onlyOpen}
+                        label={t('treeOnlyOpen')}
+                        onCheckedChange={(checked) => table.setExtra('open', checked ? '1' : '')}
+                      />
+                    </div>
+                  ),
+                }}
+              />
+              {filtersActive ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+                  onClick={clearTreeFilters}
+                >
+                  {tTable('clearFilters')}
+                </Button>
+              ) : null}
+            </span>
           </div>
         </div>
         {filteredEmpty ? (
@@ -694,11 +720,8 @@ export function ProjectDeliveryTree({
                   meta={metaBits({
                     statusLabel: t(`milestoneStatus.${epic.status}`),
                     ...paceCells({
-                      actual: completion.byEpicId.get(epic.id)?.percent ?? null,
+                      ...parentPace(epic.status, completion.byEpicId.get(epic.id) ?? null),
                       target: plannedTargetPercent(epic.startDate, epic.endDate, today),
-                      status: epic.status,
-                      comparable: true,
-                      earned: completion.byEpicId.get(epic.id) ?? null,
                     }),
                   })}
                   actions={
@@ -717,7 +740,10 @@ export function ProjectDeliveryTree({
                   {visibleStories.length > 0 ? (
                     visibleStories.map((story) => renderStory(story, 1))
                   ) : !filtering && epicStories.length === 0 ? (
-                    <li className="kh-ops-delivery-tree-row list-none text-sm text-ink-muted">
+                    <li
+                      className="kh-ops-delivery-tree-row kh-ops-tree-note list-none"
+                      style={{ ['--level' as string]: 1 }}
+                    >
                       {t('treeNoStories')}
                     </li>
                   ) : null}

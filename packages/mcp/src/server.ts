@@ -1716,7 +1716,22 @@ export function createKnowledgeHubMcpServer(
   );
 
   const taskListOutput = {
-    tasks: z.array(z.object({}).passthrough()),
+    tasks: z.array(
+      z
+        .object({
+          completionPercent: z
+            .number()
+            .int()
+            .min(0)
+            .max(100)
+            .nullable()
+            .describe(
+              'Displayed percent. Done is 100, cancelled is 0, otherwise the stored step.',
+            )
+            .optional(),
+        })
+        .passthrough(),
+    ),
     total: z.number().int(),
     limit: z.number().int(),
     nextCursor: z
@@ -1730,7 +1745,7 @@ export function createKnowledgeHubMcpServer(
     'list_project_tasks',
     {
       description:
-        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). Requires pm:read.',
+        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. Requires pm:read.',
       inputSchema: {
         projectId: z.string().uuid(),
         milestoneId: entityRef.optional(),
@@ -1954,7 +1969,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; when both startDate and dueDate are set, startDate must be on or before dueDate. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Requires pm:write.',
+    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; when both startDate and dueDate are set, startDate must be on or before dueDate. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -2029,7 +2044,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; null clears it. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Requires pm:write.',
+    'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; null clears it. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -2134,7 +2149,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_epics',
-    'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each epic includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -2189,7 +2204,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_user_stories',
-    'List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    'List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each story includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       epicId: entityRef.optional(),
