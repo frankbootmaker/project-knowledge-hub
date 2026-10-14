@@ -58,7 +58,7 @@ projects
         ├── user_story_id (optional)
         ├── item_type (task \| bug) + bug fields when bug
         ├── forecast_hours / actual_hours
-        ├── completion_percent (0 / 25 / 50 / 75 / 100; above 0 sets in progress; 100 sets done; null when cancelled)
+        ├── completion_percent (stored step 0 / 25 / 50 / 75 / 100; done stores 100; cancelled stores null)
         ├── current_owner_user_id  ← ball-in-court (≠ RACI)
         ├── project_task_raci
         └── project_task_activities
@@ -70,7 +70,7 @@ The same items, plus RAID and change items, have a Media tab. It links workspace
 
 Milestones remain **timeboxes**. Agile structure is **Epic → User story → Task**. A task may link to a story and/or a milestone. A **bug** sits in the same places as a task (under a story, or ungrouped) and uses the same hours, RACI, owner, sprint, and budget totals.
 
-The list and the tree show **% complete** for a story or epic as the average of its tasks and bugs (cancelled children left out). **Target %** is how far today is through that item's start and end: 0 on the start day, 100 on the end day. A story or epic short of that line is behind; one still short after the end date is past the plan. Tasks show their own step and no target.
+**% complete** uses one display rule on the list, tree, detail dialog, reports, and API/MCP. A task or bug that is Done shows 100. One that is Cancelled shows 0. Any other status shows the stored step, or 0 when none is stored. A story or epic that is Done shows 100 even when its children average less, including when it has no children. One that is Cancelled shows 0. Any other status shows the average of its tasks and bugs. Cancelled children are left out of that average: counting a cancelled task as 0 would make a finished story look incomplete after a leftover task is cancelled. A planned or active parent whose children are all cancelled, or that has no children, shows no percent. The database does not roll this up. Only `project_tasks.completion_percent` is stored, and a cancelled task stays null there. Stories and epics have no completion column. The API computes the displayed task percent on read and the story and epic percent from the same child average. The UI uses those same functions. **Target %** is how far today is through that item's start and end: 0 on the start day, 100 on the end day. A story or epic short of that line is behind; one still short after the end date is past the plan. Tasks show their own percent and no target.
 
 ### Bugs
 

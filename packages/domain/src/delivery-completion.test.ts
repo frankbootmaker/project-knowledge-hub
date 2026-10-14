@@ -1,0 +1,103 @@
+import { describe, expect, it } from 'vitest';
+import {
+  childCompletionPoints,
+  deliveryCompletionIndex,
+  displayedParentCompletion,
+  displayedTaskCompletionPercent,
+  type DeliveryCompletionChild,
+} from './index.js';
+
+function child(
+  partial: Partial<DeliveryCompletionChild> & Pick<DeliveryCompletionChild, 'status'>,
+): DeliveryCompletionChild {
+  return partial;
+}
+
+describe('displayedTaskCompletionPercent', () => {
+  it('forces done to 100 and cancelled to 0', () => {
+    expect(displayedTaskCompletionPercent('done', 25)).toBe(100);
+    expect(displayedTaskCompletionPercent('cancelled', 50)).toBe(0);
+    expect(displayedTaskCompletionPercent('cancelled', null)).toBe(0);
+    expect(displayedTaskCompletionPercent('in_progress', 50)).toBe(50);
+    expect(displayedTaskCompletionPercent('todo', null)).toBe(0);
+    expect(displayedTaskCompletionPercent('blocked')).toBe(0);
+  });
+});
+
+describe('childCompletionPoints', () => {
+  it('leaves cancelled children out of a parent average', () => {
+    expect(childCompletionPoints('cancelled', 50)).toBeNull();
+    expect(childCompletionPoints('done', 25)).toBe(100);
+    expect(childCompletionPoints('in_progress', 50)).toBe(50);
+    expect(childCompletionPoints('todo', null)).toBe(0);
+  });
+});
+
+describe('deliveryCompletionIndex', () => {
+  const tasks: DeliveryCompletionChild[] = [
+    child({ status: 'done', userStoryId: 'story-a', epicId: 'epic-1' }),
+    child({
+      status: 'in_progress',
+      completionPercent: 50,
+      userStoryId: 'story-a',
+      epicId: 'epic-1',
+    }),
+    child({ status: 'cancelled', userStoryId: 'story-a', epicId: 'epic-1' }),
+    child({ status: 'todo', userStoryId: 'story-b', epicId: 'epic-1' }),
+    child({ status: 'done', userStoryId: 'story-c', epicId: 'epic-2' }),
+    child({ status: 'blocked', completionPercent: 25, userStoryId: null, epicId: null }),
+  ];
+
+  it('averages child steps and leaves cancelled ones out', () => {
+    const index = deliveryCompletionIndex(tasks);
+    expect(index.byStoryId.get('story-a')).toEqual({ percent: 75, done: 1.5, total: 2 });
+    expect(index.byStoryId.get('story-b')).toEqual({ percent: 0, done: 0, total: 1 });
+    expect(index.byStoryId.has('missing')).toBe(false);
+  });
+
+  it('rolls an epic up from the tasks on its stories', () => {
+    const index = deliveryCompletionIndex(tasks);
+    expect(index.byEpicId.get('epic-1')).toEqual({ percent: 50, done: 1.5, total: 3 });
+    expect(index.byEpicId.get('epic-2')).toEqual({ percent: 100, done: 1, total: 1 });
+  });
+
+  it('omits a parent whose children are all cancelled', () => {
+    const index = deliveryCompletionIndex([
+      child({ status: 'cancelled', userStoryId: 'story-x', epicId: 'epic-x' }),
+    ]);
+    expect(index.byStoryId.has('story-x')).toBe(false);
+    expect(index.byEpicId.has('epic-x')).toBe(false);
+  });
+});
+
+describe('displayedParentCompletion', () => {
+  const partial = { percent: 40, done: 0.4, total: 1 };
+
+  it('lets status override a contradictory child average', () => {
+    expect(displayedParentCompletion('done', partial)).toEqual({
+      percent: 100,
+      done: 1,
+      total: 1,
+    });
+    expect(displayedParentCompletion('cancelled', partial)).toEqual({
+      percent: 0,
+      done: 0,
+      total: 1,
+    });
+    expect(displayedParentCompletion('active', partial)).toEqual(partial);
+    expect(displayedParentCompletion('planned', null)).toBeNull();
+  });
+
+  it('still forces done and cancelled when every child was excluded', () => {
+    expect(displayedParentCompletion('done', null)).toEqual({
+      percent: 100,
+      done: 1,
+      total: 1,
+    });
+    expect(displayedParentCompletion('cancelled', null)).toEqual({
+      percent: 0,
+      done: 0,
+      total: 0,
+    });
+  });
+});

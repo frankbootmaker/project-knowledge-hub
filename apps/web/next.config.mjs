@@ -1,9 +1,8 @@
 import path from 'node:path';
-import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
-// next.config.mts: Next 16 compiles next.config.ts as CJS; import.meta then
-// yields "exports is not defined in ES module scope". Use .mts + import.meta.dirname.
+// next.config.mjs: Next 16.3 rejects next.config.mts, and it compiles
+// next.config.ts as CJS, where import.meta throws. Keep this file ESM.
 const configDir = import.meta.dirname;
 // Prefer NEXT_REWRITE_API_ORIGIN (Docker build) so a host/Dokploy API_URL=localhost
 // cannot bake broken rewrites into the web image.
@@ -24,7 +23,8 @@ const mcpSchemasDistRel = '../../packages/mcp/dist/llm-client-schemas.js';
 const d3PathAliasRel = '../../node_modules/d3-path/src/index.js';
 const d3ShapeAliasRel = '../../node_modules/d3-shape/src/index.js';
 
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(configDir, '../..'),
   poweredByHeader: false,

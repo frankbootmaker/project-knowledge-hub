@@ -21,6 +21,11 @@ import {
   type RatePerson,
 } from '../lib/task-costing';
 import {
+  deliveryCompletionIndex,
+  displayedParentCompletion,
+  formatPercentLabel,
+} from '../lib/delivery-completion';
+import {
   DeliveryDocumentsEditor,
   saveDeliveryDocumentLinks,
   type DeliveryDocumentRecord,
@@ -40,6 +45,7 @@ type EffortTask = {
   userStoryId: string | null;
   forecastHours: string | number | null;
   actualHours: string | number | null;
+  completionPercent?: number | null;
   currentOwnerUserId: string | null;
   raci: Array<{ userId: string; role: string }>;
 };
@@ -145,6 +151,17 @@ export function ProjectAgileManageModal({
   const [agileTab, setAgileTab] = useState<'details' | 'documents' | 'media'>('details');
   const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const parentCompletionLabel = useMemo(() => {
+    if ((kind !== 'epic' && kind !== 'story') || !itemId) return null;
+    const index = deliveryCompletionIndex(tasks);
+    const rollup =
+      kind === 'epic'
+        ? (index.byEpicId.get(itemId) ?? null)
+        : (index.byStoryId.get(itemId) ?? null);
+    const shown = displayedParentCompletion(status, rollup);
+    if (!shown) return '—';
+    return formatPercentLabel(shown.percent, locale);
+  }, [itemId, kind, locale, status, tasks]);
 
   useEffect(() => {
     if (!open) return;
@@ -653,6 +670,11 @@ export function ProjectAgileManageModal({
             ))}
           </Select>
         </Field>
+        {kind === 'epic' || kind === 'story' ? (
+          <Field label={t('completionField')}>
+            <Input value={parentCompletionLabel ?? '—'} readOnly disabled />
+          </Field>
+        ) : null}
         {kind === 'milestone' ? (
           <div className="kh-ops-form-grid">
             <Field label={t('startDate')}>

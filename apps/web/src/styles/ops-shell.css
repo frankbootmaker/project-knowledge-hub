@@ -2316,7 +2316,11 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   display: flex;
   min-width: 0;
   align-items: center;
-  padding-left: calc(var(--level, 0) * 22px);
+  padding-left: calc(var(--level, 0) * 30px);
+}
+
+.kh-ops-delivery-tree-head > span:first-child {
+  padding-left: 30px;
 }
 
 .kh-ops-tree-toggle,
@@ -2368,19 +2372,45 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 }
 
 .kh-ops-tree-meta {
-  display: flex;
+  --kh-tree-meta: 9rem 3.6rem 3.6rem 8rem 7rem 6.2rem 4.2rem 11rem;
+  display: grid;
+  grid-template-columns: var(--kh-tree-meta);
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+  column-gap: 8px;
   color: var(--kh-ink-muted);
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 10px;
   white-space: nowrap;
 }
 
+.kh-ops-tree-meta > span:not(.kh-ops-tree-actions) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kh-ops-tree-meta > span:nth-child(2),
+.kh-ops-tree-meta > span:nth-child(3),
+.kh-ops-tree-meta > span:nth-child(6),
+.kh-ops-tree-meta > span:nth-child(7) {
+  text-align: right;
+}
+
+.kh-ops-tree-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  overflow: visible;
+}
+
+.kh-ops-delivery-tree-row.kh-ops-tree-note {
+  padding-left: calc(12px + var(--level, 0) * 30px + 30px);
+  color: var(--kh-ink-muted);
+  font-size: 12px;
+}
+
 .kh-ops-tree-pct {
-  display: inline-block;
-  min-width: 3.2rem;
   text-align: right;
 }
 
@@ -4273,7 +4303,7 @@ button.kh-ops-stage-card:disabled {
 @media (max-width: 760px) {
   .kh-ops-delivery-tree,
   .kh-ops-delivery-tree-head {
-    min-width: 980px;
+    min-width: 1280px;
   }
 
   .kh-ops-view-intro {

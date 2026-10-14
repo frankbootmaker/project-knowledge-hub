@@ -12,6 +12,7 @@ import {
   Select,
   useToast,
 } from './ui';
+import { LocalDateTime } from './LocalDateTime';
 
 export type WorkspaceMediaItem = {
   id: string;
@@ -356,7 +357,7 @@ export function WorkspaceMediaLibrary(props: {
                 </strong>
                 <small>
                   {formatBytes(item.byteSize)} ·{' '}
-                  {new Date(item.createdAt).toLocaleDateString()}
+                  <LocalDateTime value={item.createdAt} dateOnly />
                 </small>
               </div>
               {props.canMutate ? (
@@ -393,7 +394,9 @@ export function WorkspaceMediaLibrary(props: {
                     </td>
                     <td>{formatBytes(item.byteSize)}</td>
                     <td>{linkSelect(item)}</td>
-                    <td>{new Date(item.createdAt).toLocaleDateString()}</td>
+                    <td>
+                      <LocalDateTime value={item.createdAt} dateOnly />
+                    </td>
                     <td>
                       <div className="flex flex-wrap gap-2">{actions(item)}</div>
                     </td>

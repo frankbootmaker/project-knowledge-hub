@@ -10,6 +10,7 @@ import {
   providerShowsBaseUrl,
   type SyncProvider,
 } from '@project-knowledge-hub/domain';
+import { LocalDateTime } from './LocalDateTime';
 import {
   Badge,
   Button,
@@ -456,7 +457,13 @@ export function GitConnectionsPanel(props: {
                       <td>
                         <span className="kh-ops-type-chip">{connection.status}</span>
                       </td>
-                      <td>{formatLastSync(connection.lastSyncedAt)}</td>
+                      <td>
+                        {connection.lastSyncedAt ? (
+                          <LocalDateTime value={connection.lastSyncedAt} />
+                        ) : (
+                          t('neverSynced')
+                        )}
+                      </td>
                       <td>
                         <button
                           type="button"

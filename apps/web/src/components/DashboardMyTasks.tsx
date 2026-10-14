@@ -12,10 +12,8 @@ import {
   type SortDir,
 } from '../lib/data-table';
 import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
-import {
-  deliveryScheduleTone,
-  todayYmd,
-} from '../lib/delivery-schedule';
+import { deliveryScheduleTone } from '../lib/delivery-schedule';
+import { useLocalToday } from '../lib/use-local-today';
 import type { DashboardAssignedTask } from '../lib/dashboard';
 
 const RACI_LABEL: Record<DashboardAssignedTask['myRole'], string> = {
@@ -67,6 +65,7 @@ export function DashboardMyTasks({
   const tDelivery = useTranslations('delivery');
   const tTable = useTranslations('table');
   const locale = useLocale();
+  const today = useLocalToday();
   const table = useTableState({
     namespace: 'tasks',
     defaultSortKey: 'due',
@@ -169,7 +168,7 @@ export function DashboardMyTasks({
         const scheduleTone = deliveryScheduleTone({
           status: task.status,
           date: task.dueDate,
-          today: todayYmd(),
+          today,
         });
         if (!task.dueDate) return <span className="text-ink-muted">—</span>;
         return (
@@ -200,7 +199,7 @@ export function DashboardMyTasks({
         const scheduleTone = deliveryScheduleTone({
           status: task.status,
           date: task.dueDate,
-          today: todayYmd(),
+          today,
         });
         return (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -212,7 +211,7 @@ export function DashboardMyTasks({
         );
       },
     },
-  ], [roleOptions, statusOptions, t, tDelivery]);
+  ], [roleOptions, statusOptions, t, tDelivery, today]);
   useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
 
   const filtered = useMemo(() => applyTableView({

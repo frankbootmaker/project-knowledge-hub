@@ -20,6 +20,8 @@ import { toHours } from '../lib/task-costing';
 import {
   deliveryLag,
   deliveryPaceClass,
+  formatPercentLabel,
+  formatStableNumber,
   type DeliveryCompletion,
 } from '../lib/delivery-completion';
 
@@ -72,14 +74,6 @@ export function ProjectDeliveryList({
   const t = useTranslations('delivery');
   const tTable = useTranslations('table');
   const locale = useLocale();
-  const percentFormat = useMemo(
-    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
-    [locale],
-  );
-  const earnedFormat = useMemo(
-    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
-    [locale],
-  );
   const onManageRef = useRef(onManage);
   const onStatusChangeRef = useRef(onStatusChange);
   onManageRef.current = onManage;
@@ -246,7 +240,7 @@ export function ProjectDeliveryList({
         const earnedTitle =
           comparable && row.completion
             ? t('completeOf', {
-                done: earnedFormat.format(row.completion.done),
+                done: formatStableNumber(row.completion.done, locale),
                 total: row.completion.total,
               })
             : null;
@@ -257,7 +251,7 @@ export function ProjectDeliveryList({
           : null;
         const title = [earnedTitle, lagTitle].filter(Boolean).join(' · ') || undefined;
         const label = row.completion
-          ? percentFormat.format(row.completion.percent / 100)
+          ? formatPercentLabel(row.completion.percent, locale)
           : '—';
         if (!title) return label;
         return (
@@ -278,7 +272,9 @@ export function ProjectDeliveryList({
         defaultDir: 'desc',
       },
       cell: (row) =>
-        row.targetPercent == null ? '—' : percentFormat.format(row.targetPercent / 100),
+        row.targetPercent == null
+          ? '—'
+          : formatPercentLabel(row.targetPercent, locale),
     },
     {
       id: 'owner',
@@ -371,10 +367,9 @@ export function ProjectDeliveryList({
     },
   ], [
     canMutate,
+    locale,
     ownerOptions,
-    earnedFormat,
     pending,
-    percentFormat,
     sprintOptions,
     statusOptions,
     t,

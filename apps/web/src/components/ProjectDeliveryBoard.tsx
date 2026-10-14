@@ -7,9 +7,9 @@ import { Button, Select, useToast } from './ui';
 import { cn } from '../lib/cn';
 import {
   deliveryScheduleTone,
-  todayYmd,
   type DeliveryScheduleTone,
 } from '../lib/delivery-schedule';
+import { useLocalToday } from '../lib/use-local-today';
 import { UserAvatar } from './UserAvatar';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import {
@@ -636,7 +636,7 @@ export function ProjectDeliveryBoard({
   const t = useTranslations('delivery');
   const tProjects = useTranslations('projects');
   const { pushToast } = useToast();
-  const today = todayYmd();
+  const today = useLocalToday();
   const filterKey = boardMetaStorageKey(projectId);
   const [mobileColumn, setMobileColumn] = useState<BoardColumn>('todo');
   const [meta, setMeta] = useState<BoardMetaFilters>(DEFAULT_META_FILTERS);

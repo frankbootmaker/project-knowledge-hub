@@ -11,10 +11,13 @@ import {
 import {
   AppError,
   assertDateRange,
+  deliveryCompletionIndex,
+  displayedParentCompletion,
   effectiveDateRange,
   epicStatusSchema,
   taskActivityTypeSchema,
   userStoryStatusSchema,
+  type DeliveryCompletionRollup,
   type EpicStatus,
   type TaskActivityType,
   type UserStoryStatus,
@@ -48,6 +51,11 @@ export type PublicEpic = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Displayed percent. Done is 100, cancelled is 0, otherwise the average of
+   * non-cancelled child tasks and bugs. Null when an open epic has none left.
+   */
+  completionPercent: number | null;
   mediaLinkCount?: number;
   mediaLinks?: PublicItemMediaLink[];
 };
@@ -68,6 +76,11 @@ export type PublicUserStory = {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Displayed percent. Done is 100, cancelled is 0, otherwise the average of
+   * non-cancelled child tasks and bugs. Null when an open story has none left.
+   */
+  completionPercent: number | null;
   mediaLinkCount?: number;
   mediaLinks?: PublicItemMediaLink[];
 };
@@ -85,9 +98,36 @@ export type PublicTaskActivity = {
   createdAt: string;
 };
 
+function parentCompletionPercent(
+  status: string,
+  rollup: DeliveryCompletionRollup | undefined,
+): number | null {
+  return displayedParentCompletion(status, rollup ?? null)?.percent ?? null;
+}
+
+async function completionMaps(database: Database, projectId: string) {
+  const rows = await database.db
+    .select({
+      status: projectTasks.status,
+      completionPercent: projectTasks.completionPercent,
+      userStoryId: projectTasks.userStoryId,
+      epicId: projectUserStories.epicId,
+    })
+    .from(projectTasks)
+    .leftJoin(
+      projectUserStories,
+      eq(projectTasks.userStoryId, projectUserStories.id),
+    )
+    .where(
+      and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)),
+    );
+  return deliveryCompletionIndex(rows);
+}
+
 function toPublicEpic(
   row: typeof projectEpics.$inferSelect,
-  keyPrefix?: string | null,
+  keyPrefix: string | null | undefined,
+  completionPercent: number | null,
 ): PublicEpic {
   const keys = toHumanKeyFields(keyPrefix, row.issueKeyType, row.issueNumber);
   return {
@@ -105,12 +145,14 @@ function toPublicEpic(
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    completionPercent,
   };
 }
 
 function toPublicUserStory(
   row: typeof projectUserStories.$inferSelect,
-  keyPrefix?: string | null,
+  keyPrefix: string | null | undefined,
+  completionPercent: number | null,
 ): PublicUserStory {
   const keys = toHumanKeyFields(keyPrefix, row.issueKeyType, row.issueNumber);
   return {
@@ -129,6 +171,7 @@ function toPublicUserStory(
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    completionPercent,
   };
 }
 
@@ -174,10 +217,17 @@ export async function listEpics(
     .where(and(...conditions))
     .orderBy(asc(projectEpics.sortOrder), asc(projectEpics.title));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
+  const maps = await completionMaps(database, projectId);
   return withMediaLinkCounts(
     database,
     'epic',
-    rows.map((row) => toPublicEpic(row, keyPrefix)),
+    rows.map((row) =>
+      toPublicEpic(
+        row,
+        keyPrefix,
+        parentCompletionPercent(row.status, maps.byEpicId.get(row.id)),
+      ),
+    ),
   );
 }
 
@@ -198,7 +248,16 @@ export async function getEpic(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return withMediaLinks(database, 'epic', toPublicEpic(row, keyPrefix));
+  const maps = await completionMaps(database, row.projectId);
+  return withMediaLinks(
+    database,
+    'epic',
+    toPublicEpic(
+      row,
+      keyPrefix,
+      parentCompletionPercent(row.status, maps.byEpicId.get(row.id)),
+    ),
+  );
 }
 
 export async function createEpic(
@@ -241,7 +300,16 @@ export async function createEpic(
     }
     return { row, keyPrefix: allocated.keyPrefix };
   });
-  return withMediaLinks(database, 'epic', toPublicEpic(result.row, result.keyPrefix));
+  const maps = await completionMaps(database, result.row.projectId);
+  return withMediaLinks(
+    database,
+    'epic',
+    toPublicEpic(
+      result.row,
+      result.keyPrefix,
+      parentCompletionPercent(result.row.status, maps.byEpicId.get(result.row.id)),
+    ),
+  );
 }
 
 export async function updateEpic(
@@ -304,7 +372,16 @@ export async function updateEpic(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return withMediaLinks(database, 'epic', toPublicEpic(row, keyPrefix));
+  const maps = await completionMaps(database, row.projectId);
+  return withMediaLinks(
+    database,
+    'epic',
+    toPublicEpic(
+      row,
+      keyPrefix,
+      parentCompletionPercent(row.status, maps.byEpicId.get(row.id)),
+    ),
+  );
 }
 
 export async function listUserStories(
@@ -325,10 +402,17 @@ export async function listUserStories(
     .where(and(...conditions))
     .orderBy(asc(projectUserStories.sortOrder), asc(projectUserStories.title));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
+  const maps = await completionMaps(database, projectId);
   return withMediaLinkCounts(
     database,
     'user_story',
-    rows.map((row) => toPublicUserStory(row, keyPrefix)),
+    rows.map((row) =>
+      toPublicUserStory(
+        row,
+        keyPrefix,
+        parentCompletionPercent(row.status, maps.byStoryId.get(row.id)),
+      ),
+    ),
   );
 }
 
@@ -349,7 +433,16 @@ export async function getUserStory(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return withMediaLinks(database, 'user_story', toPublicUserStory(row, keyPrefix));
+  const maps = await completionMaps(database, row.projectId);
+  return withMediaLinks(
+    database,
+    'user_story',
+    toPublicUserStory(
+      row,
+      keyPrefix,
+      parentCompletionPercent(row.status, maps.byStoryId.get(row.id)),
+    ),
+  );
 }
 
 async function assertEpicInProject(
@@ -416,10 +509,15 @@ export async function createUserStory(
     }
     return { row, keyPrefix: allocated.keyPrefix };
   });
+  const maps = await completionMaps(database, result.row.projectId);
   return withMediaLinks(
     database,
     'user_story',
-    toPublicUserStory(result.row, result.keyPrefix),
+    toPublicUserStory(
+      result.row,
+      result.keyPrefix,
+      parentCompletionPercent(result.row.status, maps.byStoryId.get(result.row.id)),
+    ),
   );
 }
 
@@ -488,7 +586,16 @@ export async function updateUserStory(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return withMediaLinks(database, 'user_story', toPublicUserStory(row, keyPrefix));
+  const maps = await completionMaps(database, row.projectId);
+  return withMediaLinks(
+    database,
+    'user_story',
+    toPublicUserStory(
+      row,
+      keyPrefix,
+      parentCompletionPercent(row.status, maps.byStoryId.get(row.id)),
+    ),
+  );
 }
 
 export async function deleteEpic(

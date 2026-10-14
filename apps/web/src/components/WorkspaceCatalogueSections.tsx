@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Badge, Input, LinkButton, lifecycleLabel } from './ui';
+import { LocalDateTime } from './LocalDateTime';
 import { ImportTypePickerButton } from './ImportTypePickerButton';
 import { CollapsibleSection } from './CollapsibleSection';
 import {
@@ -56,16 +57,6 @@ function ragTone(
   if (rag === 'red') return 'danger';
   if (rag === 'amber') return 'warn';
   return 'success';
-}
-
-function formatUpdated(value: string, locale: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
 }
 
 export function WorkspaceCatalogueSections({
@@ -186,7 +177,9 @@ export function WorkspaceCatalogueSections({
                     <p>{project.summary || t('noDescription')}</p>
                     <div className="kh-ops-project-card-foot">
                       <span>{project.status}</span>
-                      <span>{formatUpdated(project.updatedAt, locale)}</span>
+                      <span>
+                        <LocalDateTime value={project.updatedAt} dateOnly locale={locale} />
+                      </span>
                     </div>
                   </article>
                 );
@@ -247,7 +240,9 @@ export function WorkspaceCatalogueSections({
                       <td>
                         {system.projectId ? t('linkedToProject') : t('independent')}
                       </td>
-                      <td>{formatUpdated(system.updatedAt, locale)}</td>
+                      <td>
+                        <LocalDateTime value={system.updatedAt} dateOnly locale={locale} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -322,7 +317,9 @@ export function WorkspaceCatalogueSections({
                         <td>
                           {lifecycleLabel(preferred.lifecycleStatus, tRecords)}
                         </td>
-                        <td>{formatUpdated(preferred.updatedAt, locale)}</td>
+                        <td>
+                          <LocalDateTime value={preferred.updatedAt} dateOnly locale={locale} />
+                        </td>
                       </tr>
                     );
                   })}

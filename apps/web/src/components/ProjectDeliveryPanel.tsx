@@ -29,10 +29,12 @@ import { ProjectTaskManageModal } from './ProjectTaskManageModal';
 import type { DeliveryDocumentRecord } from './DeliveryDocumentsEditor';
 import {
   deliveryCompletionIndex,
-  localDateIso,
+  displayedParentCompletion,
+  formatPercentLabel,
   plannedTargetPercent,
   taskDeliveryCompletion,
 } from '../lib/delivery-completion';
+import { useLocalToday } from '../lib/use-local-today';
 import {
   Button,
   ErrorText,
@@ -210,10 +212,6 @@ export function ProjectDeliveryPanel({
   const tRaid = useTranslations('raid');
   const tCommon = useTranslations('common');
   const locale = useLocale();
-  const percentFormat = useMemo(
-    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
-    [locale],
-  );
   const router = useRouter();
   const searchParams = useSearchParams();
   const { pushToast } = useToast();
@@ -400,8 +398,8 @@ export function ProjectDeliveryPanel({
     return map;
   }, [sprintLabels]);
 
+  const today = useLocalToday();
   const listRows: DeliveryListRow[] = useMemo(() => {
-    const today = localDateIso();
     const completion = deliveryCompletionIndex(tasks);
     const epicRows: DeliveryListRow[] = epics.map((epic) => ({
       id: `epic:${epic.id}`,
@@ -410,7 +408,10 @@ export function ProjectDeliveryPanel({
       humanKey: epic.humanKey ?? null,
       title: epic.title,
       status: epic.status,
-      completion: completion.byEpicId.get(epic.id) ?? null,
+      completion: displayedParentCompletion(
+        epic.status,
+        completion.byEpicId.get(epic.id) ?? null,
+      ),
       targetPercent: plannedTargetPercent(epic.startDate, epic.endDate, today),
       owner: null,
       sprint: null,
@@ -438,7 +439,10 @@ export function ProjectDeliveryPanel({
         humanKey: story.humanKey ?? null,
         title: story.title,
         status: story.status,
-        completion: completion.byStoryId.get(story.id) ?? null,
+        completion: displayedParentCompletion(
+          story.status,
+          completion.byStoryId.get(story.id) ?? null,
+        ),
         targetPercent: plannedTargetPercent(story.startDate, story.endDate, today),
         owner: null,
         sprint: null,
@@ -523,7 +527,7 @@ export function ProjectDeliveryPanel({
     });
 
     return [...epicRows, ...storyRows, ...milestoneRows, ...taskRows];
-  }, [epics, stories, milestones, tasks, epicTitleById, sprintTitleById]);
+  }, [epics, stories, milestones, tasks, epicTitleById, sprintTitleById, today]);
 
   const calendarItems = useMemo(
     () => [
@@ -1363,7 +1367,7 @@ export function ProjectDeliveryPanel({
                 >
                   {TASK_COMPLETION_PERCENTS.map((value) => (
                     <option key={value} value={String(value)}>
-                      {percentFormat.format(value / 100)}
+                      {formatPercentLabel(value, locale)}
                     </option>
                   ))}
                 </Select>

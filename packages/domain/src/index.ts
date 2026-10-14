@@ -122,6 +122,9 @@ export function isTaskCompletionPercent(value: number): boolean {
 /**
  * Done is always 100. Cancelled stores nothing.
  * An open task keeps a menu value, or 0 when none is stored yet.
+ *
+ * This is the value written to `project_tasks.completion_percent`.
+ * Reads use `displayedTaskCompletionPercent`, which shows 0 for cancelled.
  */
 export function resolveTaskCompletionPercent(input: {
   status: z.infer<typeof taskStatusSchema>;
@@ -141,6 +144,126 @@ export function resolveTaskCompletionPercent(input: {
     return input.existing;
   }
   return 0;
+}
+
+export type DeliveryCompletionRollup = {
+  percent: number;
+  /** Share of children finished, including partial steps such as 0.5. */
+  done: number;
+  total: number;
+};
+
+export type DeliveryCompletionChild = {
+  status: string;
+  completionPercent?: number | null;
+  userStoryId?: string | null;
+  epicId?: string | null;
+};
+
+/**
+ * Points a child adds to a parent's average.
+ * Cancelled children are excluded. Done is 100.
+ * An open child uses its stored step, or 0 when none is stored.
+ */
+export function childCompletionPoints(
+  status: string,
+  completionPercent?: number | null,
+): number | null {
+  if (status === 'cancelled') return null;
+  if (status === 'done') return 100;
+  if (typeof completionPercent === 'number' && Number.isFinite(completionPercent)) {
+    return completionPercent;
+  }
+  return 0;
+}
+
+/**
+ * Percent shown for a task or bug.
+ * Done is 100. Cancelled is 0. Otherwise the stored step, or 0.
+ */
+export function displayedTaskCompletionPercent(
+  status: string,
+  completionPercent?: number | null,
+): number {
+  if (status === 'done') return 100;
+  if (status === 'cancelled') return 0;
+  if (typeof completionPercent === 'number' && Number.isFinite(completionPercent)) {
+    return completionPercent;
+  }
+  return 0;
+}
+
+/** Average of the points that were not excluded. Empty input has no rollup. */
+export function averageCompletion(
+  points: readonly number[],
+): DeliveryCompletionRollup | null {
+  if (points.length === 0) return null;
+  const earned = points.reduce((sum, value) => sum + value, 0);
+  return {
+    percent: Math.round(earned / points.length),
+    done: earned / 100,
+    total: points.length,
+  };
+}
+
+/**
+ * Percent shown for a story or epic.
+ * Done is 100 even when children are behind. Cancelled is 0.
+ * Any other status keeps the child rollup, or null when nothing remains to average.
+ */
+export function displayedParentCompletion(
+  status: string,
+  rollup: DeliveryCompletionRollup | null,
+): DeliveryCompletionRollup | null {
+  if (status === 'done') {
+    const total = rollup?.total ?? 1;
+    return { percent: 100, done: total, total };
+  }
+  if (status === 'cancelled') {
+    return { percent: 0, done: 0, total: rollup?.total ?? 0 };
+  }
+  return rollup;
+}
+
+/**
+ * Story and epic rollups from child tasks and bugs.
+ * Cancelled children are left out of the average. A parent whose children
+ * are all cancelled is omitted here; `displayedParentCompletion` still
+ * forces 0 or 100 from that parent's own status.
+ */
+export function deliveryCompletionIndex(
+  tasks: readonly DeliveryCompletionChild[],
+): {
+  byStoryId: Map<string, DeliveryCompletionRollup>;
+  byEpicId: Map<string, DeliveryCompletionRollup>;
+} {
+  const stories = new Map<string, number[]>();
+  const epics = new Map<string, number[]>();
+  for (const task of tasks) {
+    const points = childCompletionPoints(task.status, task.completionPercent);
+    if (points == null) continue;
+    if (task.userStoryId) {
+      const list = stories.get(task.userStoryId) ?? [];
+      list.push(points);
+      stories.set(task.userStoryId, list);
+    }
+    if (task.epicId) {
+      const list = epics.get(task.epicId) ?? [];
+      list.push(points);
+      epics.set(task.epicId, list);
+    }
+  }
+  const byStoryId = new Map<string, DeliveryCompletionRollup>();
+  const byEpicId = new Map<string, DeliveryCompletionRollup>();
+  for (const [id, list] of stories) {
+    const rollup = averageCompletion(list);
+    if (rollup) byStoryId.set(id, rollup);
+  }
+  for (const [id, list] of epics) {
+    const rollup = averageCompletion(list);
+    if (rollup) byEpicId.set(id, rollup);
+  }
+  return { byStoryId, byEpicId };
 }
 
 /**

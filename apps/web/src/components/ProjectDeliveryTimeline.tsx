@@ -20,9 +20,9 @@ import { downloadAuthenticatedExport } from '../lib/download-export';
 import {
   deliveryScheduleSurfaceClass,
   deliveryScheduleTone,
-  todayYmd,
   type DeliveryScheduleTone,
 } from '../lib/delivery-schedule';
+import { useLocalToday } from '../lib/use-local-today';
 import {
   DAY_MS,
   DEFAULT_TIMELINE_ZOOM_INDEX,
@@ -587,7 +587,7 @@ export function ProjectDeliveryTimeline({
   const [hydrated, setHydrated] = useState(false);
   const [chartPx, setChartPx] = useState(0);
   const [panning, setPanning] = useState(false);
-  const todayDate = todayYmd();
+  const todayDate = useLocalToday();
   const scrollRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<ScrollAnchor>({
@@ -609,10 +609,18 @@ export function ProjectDeliveryTimeline({
     setShowDueDates(readDueDates(dueDatesKey));
     setShowIssueIds(readIssueIds(issueIdsKey));
     setZoomIndex(DEFAULT_TIMELINE_ZOOM_INDEX);
-    anchorRef.current = { kind: 'date', dateMs: parseYmd(todayYmd()) };
+    anchorRef.current = { kind: 'date', dateMs: parseYmd(todayDate) };
     setScrollGen((current) => current + 1);
     setHydrated(true);
-  }, [filterKey, windowKey, gridKey, statusColorKey, dueDatesKey, issueIdsKey]);
+  }, [
+    dueDatesKey,
+    filterKey,
+    gridKey,
+    issueIdsKey,
+    statusColorKey,
+    todayDate,
+    windowKey,
+  ]);
 
   function toggleFilter(key: keyof TimelineFilters) {
     setFilters((current) => {

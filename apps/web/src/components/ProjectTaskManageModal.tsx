@@ -25,6 +25,7 @@ import {
   deliveryScheduleTone,
   todayYmd,
 } from '../lib/delivery-schedule';
+import { formatPercentLabel } from '../lib/delivery-completion';
 import { formatMoney } from '../lib/project-currency';
 import {
   hoursCost,
@@ -181,10 +182,6 @@ export function ProjectTaskManageModal({
   const tBudget = useTranslations('budget');
   const tCommon = useTranslations('common');
   const locale = useLocale();
-  const percentFormat = useMemo(
-    () => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }),
-    [locale],
-  );
   const { pushToast } = useToast();
 
   const [task, setTask] = useState<TaskDetail | null>(null);
@@ -269,13 +266,13 @@ export function ProjectTaskManageModal({
       setTitle(loaded.title);
       setStatus(loaded.status);
       setCompletionPercent(
-        loaded.status === 'cancelled'
-          ? ''
-          : String(
-              loaded.status === 'done'
-                ? 100
-                : (loaded.completionPercent ?? 0),
-            ),
+        String(
+          loaded.status === 'done'
+            ? 100
+            : loaded.status === 'cancelled'
+              ? 0
+              : (loaded.completionPercent ?? 0),
+        ),
       );
       setStartDate(loaded.startDate ?? '');
       setDueDate(loaded.dueDate ?? '');
@@ -836,7 +833,7 @@ export function ProjectTaskManageModal({
                     const next = event.target.value;
                     setStatus(next);
                     if (next === 'done') setCompletionPercent('100');
-                    else if (next === 'cancelled') setCompletionPercent('');
+                    else if (next === 'cancelled') setCompletionPercent('0');
                     else if (completionPercent === '') setCompletionPercent('0');
                   }}
                   disabled={pending || !canMutate}
@@ -850,7 +847,7 @@ export function ProjectTaskManageModal({
               </Field>
               <Field label={t('completionField')}>
                 <Select
-                  value={status === 'cancelled' ? '' : completionPercent || '0'}
+                  value={completionPercent || '0'}
                   onChange={(event) => {
                     const next = event.target.value;
                     const value = Number(next);
@@ -867,10 +864,9 @@ export function ProjectTaskManageModal({
                     pending || !canMutate || status === 'done' || status === 'cancelled'
                   }
                 >
-                  {status === 'cancelled' ? <option value="">—</option> : null}
                   {TASK_COMPLETION_PERCENTS.map((value) => (
                     <option key={value} value={String(value)}>
-                      {percentFormat.format(value / 100)}
+                      {formatPercentLabel(value, locale)}
                     </option>
                   ))}
                 </Select>

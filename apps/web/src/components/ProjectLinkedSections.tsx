@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
+import { LocalDateTime } from './LocalDateTime';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Input, LinkButton, lifecycleLabel } from './ui';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -48,15 +49,9 @@ type RecordFamily = {
   languages: string[];
 };
 
-function formatUpdated(value: string | null | undefined, locale: string): string {
+function formatUpdated(value: string | null | undefined, locale: string) {
   if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  return <LocalDateTime value={value} dateOnly locale={locale} />;
 }
 
 export function ProjectLinkedSections({
