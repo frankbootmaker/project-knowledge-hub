@@ -1,10 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { collectEnumOptions } from '../lib/data-table';
+import {
+  mediaMatchesFilter,
+  type MediaFilterQuery,
+} from '../lib/media-library-filter';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import { OpsCountStrip } from './ops/OpsCountStrip';
-import { Button, ErrorText, FilePicker, Modal, useToast } from './ui';
+import {
+  Button,
+  ErrorText,
+  FilePicker,
+  Input,
+  Modal,
+  TableFilterControl,
+  useToast,
+  type TableFilterField,
+} from './ui';
 import { LocalDateTime } from './LocalDateTime';
 
 const ENTITY_LABEL_KEYS = {
@@ -41,8 +56,14 @@ export type WorkspaceMediaItem = {
   usedBy: MediaUsedByItem[];
 };
 
-type Filter = 'all' | 'linked' | 'unlinked';
 type ViewMode = 'grid' | 'list';
+
+const KNOWN_MEDIA_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+] as const;
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -93,10 +114,15 @@ export function WorkspaceMediaLibrary(props: {
   const t = useTranslations('media');
   const tRecords = useTranslations('records');
   const tCommon = useTranslations('common');
+  const tTable = useTranslations('table');
+  const locale = useLocale();
   const router = useRouter();
   const { pushToast } = useToast();
+  const table = useTableState({
+    namespace: 'ml',
+    defaultSortKey: null,
+  });
   const [items, setItems] = useState(props.initialMedia);
-  const [filter, setFilter] = useState<Filter>('all');
   const [view, setView] = useState<ViewMode>('grid');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,12 +131,111 @@ export function WorkspaceMediaLibrary(props: {
   const [uploadName, setUploadName] = useState<string | null>(null);
 
   const linkedCount = items.filter((item) => isLinked(item)).length;
-  const visible = items.filter((item) => {
-    if (filter === 'linked') return isLinked(item);
-    if (filter === 'unlinked') return !isLinked(item);
-    return true;
-  });
+  const createdFrom = table.extras.from ?? '';
+  const createdTo = table.extras.to ?? '';
+  const typeOptions = useMemo(() => {
+    const values = new Set<string>(KNOWN_MEDIA_TYPES);
+    for (const item of items) values.add(item.contentType);
+    return [...values].map((value) => ({
+      value,
+      label: `${typeLabel(value)} · ${value}`,
+    }));
+  }, [items]);
+  const linkOptions = useMemo(
+    () => [
+      { value: 'linked', label: t('filter_linked') },
+      { value: 'unlinked', label: t('filter_unlinked') },
+    ],
+    [t],
+  );
+  const itemTypeOptions = useMemo(
+    () =>
+      (Object.keys(ENTITY_LABEL_KEYS) as EntityLabelKey[]).map((value) => ({
+        value,
+        label: t(ENTITY_LABEL_KEYS[value]),
+      })),
+    [t],
+  );
+  const uploaderOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        items,
+        (item) => item.createdByName ?? '',
+        (value) => value,
+        locale,
+      ),
+    [items, locale],
+  );
+  const filterFields = useMemo<TableFilterField[]>(
+    () => [
+      { id: 'type', header: t('colType'), type: 'enum', options: typeOptions },
+      {
+        id: 'link',
+        header: t('filterLinkStatus'),
+        type: 'enum',
+        options: linkOptions,
+      },
+      {
+        id: 'itemType',
+        header: t('filterItemType'),
+        type: 'enum',
+        options: itemTypeOptions,
+      },
+      {
+        id: 'uploader',
+        header: t('detailUploader'),
+        type: 'enum',
+        options: uploaderOptions,
+      },
+    ],
+    [itemTypeOptions, linkOptions, t, typeOptions, uploaderOptions],
+  );
+  const filterColumns = useMemo(
+    () =>
+      filterFields.map((field) => ({
+        id: field.id,
+        filter: {
+          type: 'enum' as const,
+          getValue: () => '',
+          options: field.options,
+        },
+      })),
+    [filterFields],
+  );
+  useSyncEnumFilters(table.filters, filterColumns, table.setEnumFilter);
+  const filterQuery = useMemo<MediaFilterQuery>(
+    () => ({
+      query: table.query,
+      contentTypes: table.filters.type ?? [],
+      linkStatus: table.filters.link ?? [],
+      itemTypes: table.filters.itemType ?? [],
+      uploaders: table.filters.uploader ?? [],
+      createdFrom,
+      createdTo,
+    }),
+    [
+      createdFrom,
+      createdTo,
+      table.filters.itemType,
+      table.filters.link,
+      table.filters.type,
+      table.filters.uploader,
+      table.query,
+    ],
+  );
+  const filtersActive =
+    table.filtersActive || createdFrom !== '' || createdTo !== '';
+  const visible = useMemo(
+    () => items.filter((item) => mediaMatchesFilter(item, filterQuery)),
+    [filterQuery, items],
+  );
   const details = items.find((item) => item.id === detailsId) ?? null;
+
+  function clearFilters() {
+    table.clearFilters();
+    table.setExtra('from', '');
+    table.setExtra('to', '');
+  }
 
   function entityLabel(entityType: string): string {
     if (!isEntityLabelKey(entityType)) return entityType;
@@ -299,18 +424,17 @@ export function WorkspaceMediaLibrary(props: {
         ) : (
           <span className="text-ink-muted">{t('readOnly')}</span>
         )}
+        <label className="flex min-w-[12rem] flex-1 items-center gap-2">
+          <span className="sr-only">{t('searchPlaceholder')}</span>
+          <Input
+            type="search"
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
+            placeholder={t('searchPlaceholder')}
+            className="h-10 min-h-10 py-1.5 text-xs"
+          />
+        </label>
         <div className="flex flex-wrap items-center gap-2">
-          {(['all', 'linked', 'unlinked'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              className="kh-ops-type-chip"
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-            >
-              {t(`filter_${value}`)}
-            </button>
-          ))}
           <button
             type="button"
             className="kh-ops-type-chip"
@@ -327,13 +451,59 @@ export function WorkspaceMediaLibrary(props: {
           >
             {t('viewList')}
           </button>
+          <TableFilterControl
+            fields={filterFields}
+            enumFilters={table.filters}
+            textFilters={table.textFilters}
+            onEnumFilter={table.setEnumFilter}
+            onTextFilter={table.setTextFilter}
+            onClearFilters={clearFilters}
+            filtersActive={filtersActive}
+            insertAfter={{
+              id: 'uploader',
+              content: (
+                <fieldset className="kh-ops-table-filter-group">
+                  <legend>{t('filterCreated')}</legend>
+                  <label className="grid gap-1">
+                    <span>{t('filterFrom')}</span>
+                    <Input
+                      type="date"
+                      value={createdFrom}
+                      aria-label={t('filterFrom')}
+                      className="h-10 min-h-10 py-1.5 text-xs"
+                      onChange={(event) => table.setExtra('from', event.target.value)}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span>{t('filterTo')}</span>
+                    <Input
+                      type="date"
+                      value={createdTo}
+                      aria-label={t('filterTo')}
+                      className="h-10 min-h-10 py-1.5 text-xs"
+                      onChange={(event) => table.setExtra('to', event.target.value)}
+                    />
+                  </label>
+                </fieldset>
+              ),
+            }}
+          />
         </div>
       </div>
 
       {error ? <ErrorText>{error}</ErrorText> : null}
 
       {visible.length === 0 ? (
-        <p className="kh-ops-empty">{t('empty')}</p>
+        <div className="grid justify-items-start gap-3">
+          <p className="kh-ops-empty">
+            {items.length === 0 ? t('empty') : t('emptyFiltered')}
+          </p>
+          {filtersActive ? (
+            <Button type="button" variant="secondary" onClick={clearFilters}>
+              {tTable('clearFilters')}
+            </Button>
+          ) : null}
+        </div>
       ) : view === 'grid' ? (
         <div className="kh-ops-media-grid">
           {visible.map((item) => (
