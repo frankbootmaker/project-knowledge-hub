@@ -129,6 +129,8 @@ export function WorkspaceMediaLibrary(props: {
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [uploadName, setUploadName] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const linkedCount = items.filter((item) => isLinked(item)).length;
   const createdFrom = table.extras.from ?? '';
@@ -230,11 +232,58 @@ export function WorkspaceMediaLibrary(props: {
     [filterQuery, items],
   );
   const details = items.find((item) => item.id === detailsId) ?? null;
+  const visibleIds = useMemo(() => visible.map((item) => item.id), [visible]);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+  const anyVisibleSelected = visibleIds.some((id) => selected.has(id));
+  const selectedItems = useMemo(
+    () => items.filter((item) => selected.has(item.id)),
+    [items, selected],
+  );
+  const selectedLinkedCount = selectedItems.filter((item) => isLinked(item)).length;
+
+  useEffect(() => {
+    const ids = new Set(items.map((item) => item.id));
+    setSelected((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of current) {
+        if (ids.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [items]);
 
   function clearFilters() {
     table.clearFilters();
     table.setExtra('from', '');
     table.setExtra('to', '');
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const id of visibleIds) next.add(id);
+      return next;
+    });
+  }
+
+  function deselectAllVisible() {
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const id of visibleIds) next.delete(id);
+      return next;
+    });
   }
 
   function entityLabel(entityType: string): string {
@@ -316,6 +365,12 @@ export function WorkspaceMediaLibrary(props: {
       }
       setConfirmId(null);
       if (detailsId === mediaId) setDetailsId(null);
+      setSelected((current) => {
+        if (!current.has(mediaId)) return current;
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
       pushToast(t('deleted'));
       await refresh();
     } catch (err) {
@@ -333,11 +388,66 @@ export function WorkspaceMediaLibrary(props: {
     return `${window.location.origin}${url}`;
   }
 
+  async function deleteSelected() {
+    if (!props.canMutate || selected.size === 0) return;
+    const ids = [...selected];
+    setPending(true);
+    setError(null);
+    const deleted: string[] = [];
+    const failed: string[] = [];
+    try {
+      for (const mediaId of ids) {
+        const response = await fetch(`/api/v1/media/${mediaId}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { Origin: window.location.origin },
+        });
+        if (response.ok) deleted.push(mediaId);
+        else failed.push(mediaId);
+      }
+      setSelected((current) => {
+        const next = new Set(current);
+        for (const id of deleted) next.delete(id);
+        return next;
+      });
+      if (detailsId && deleted.includes(detailsId)) setDetailsId(null);
+      setConfirmId(null);
+      setBulkOpen(false);
+      if (failed.length === 0) {
+        pushToast(t('bulkDeleted', { count: deleted.length }));
+      } else {
+        const message = t('bulkDeletePartial', {
+          deleted: deleted.length,
+          failed: failed.length,
+        });
+        setError(message);
+        pushToast(message, 'danger');
+      }
+      await refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
   function linkedSummary(item: WorkspaceMediaItem): string {
     if (!isLinked(item)) return t('unlinked');
     return item.usedBy
       .map((row) => row.humanKey ?? row.title)
       .join(', ');
+  }
+
+  function selectControl(item: WorkspaceMediaItem) {
+    if (!props.canMutate) return null;
+    return (
+      <label className="kh-ops-media-select">
+        <input
+          type="checkbox"
+          checked={selected.has(item.id)}
+          aria-label={t('selectFile', { name: mediaName(item) })}
+          onChange={() => toggleSelected(item.id)}
+        />
+      </label>
+    );
   }
 
   function actions(item: WorkspaceMediaItem) {
@@ -491,6 +601,37 @@ export function WorkspaceMediaLibrary(props: {
         </div>
       </div>
 
+      {props.canMutate ? (
+        <div className="kh-ops-media-select-bar">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={visible.length === 0 || allVisibleSelected}
+            onClick={selectAllVisible}
+          >
+            {t('selectAll')}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!anyVisibleSelected}
+            onClick={deselectAllVisible}
+          >
+            {t('deselectAll')}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            disabled={selected.size === 0 || pending}
+            onClick={() => setBulkOpen(true)}
+          >
+            {selected.size > 0
+              ? t('deleteSelectedCount', { count: selected.size })
+              : t('deleteSelected')}
+          </Button>
+        </div>
+      ) : null}
+
       {error ? <ErrorText>{error}</ErrorText> : null}
 
       {visible.length === 0 ? (
@@ -507,8 +648,13 @@ export function WorkspaceMediaLibrary(props: {
       ) : view === 'grid' ? (
         <div className="kh-ops-media-grid">
           {visible.map((item) => (
-            <article key={item.id} className="kh-ops-media-card">
+            <article
+              key={item.id}
+              className="kh-ops-media-card"
+              data-selected={selected.has(item.id) ? 'true' : undefined}
+            >
               <div className="kh-ops-media-preview">
+                {selectControl(item)}
                 <img src={item.url} alt={item.altText ?? item.originalFilename ?? ''} />
                 <span className="kh-ops-type-chip">{typeLabel(item.contentType)}</span>
               </div>
@@ -529,6 +675,11 @@ export function WorkspaceMediaLibrary(props: {
             <table className="kh-ops-data-table">
               <thead>
                 <tr>
+                  {props.canMutate ? (
+                    <th>
+                      <span className="sr-only">{t('selectAll')}</span>
+                    </th>
+                  ) : null}
                   <th>{t('colName')}</th>
                   <th>{t('colType')}</th>
                   <th>{t('colSize')}</th>
@@ -539,7 +690,11 @@ export function WorkspaceMediaLibrary(props: {
               </thead>
               <tbody>
                 {visible.map((item) => (
-                  <tr key={item.id}>
+                  <tr
+                    key={item.id}
+                    data-selected={selected.has(item.id) ? 'true' : undefined}
+                  >
+                    {props.canMutate ? <td>{selectControl(item)}</td> : null}
                     <td className="kh-ops-primary-cell">{mediaName(item)}</td>
                     <td>
                       <span className="kh-ops-type-chip">
@@ -634,6 +789,46 @@ export function WorkspaceMediaLibrary(props: {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={bulkOpen}
+        onClose={() => {
+          if (!pending) setBulkOpen(false);
+        }}
+        title={t('bulkDeleteTitle')}
+        panelClassName="kh-ops-media-library"
+        closeOnBackdrop={!pending}
+        closeOnEscape={!pending}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setBulkOpen(false)}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={pending || selected.size === 0}
+              onClick={() => void deleteSelected()}
+            >
+              {t('deleteSelected')}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3">
+          <p className="m-0">{t('bulkDeleteBody', { count: selected.size })}</p>
+          <p className="m-0">
+            {selectedLinkedCount > 0
+              ? t('bulkDeleteLinked', { count: selectedLinkedCount })
+              : t('bulkDeleteNoneLinked')}
+          </p>
+        </div>
       </Modal>
     </div>
   );
