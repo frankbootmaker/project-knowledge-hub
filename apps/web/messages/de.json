@@ -3139,6 +3139,7 @@
     "itemsTypeTask": "Aufgabe",
     "itemsTypeBug": "Bug",
     "itemsTypeMilestone": "Meilenstein",
+    "itemsTypeSprint": "Sprint",
     "linkedTasksCount": "{count} verknüpfte Aufgaben",
     "saveItem": "Speichern",
     "deleteItem": "Löschen",
@@ -3310,6 +3311,7 @@
     "itemsTypeTask": "Aufgabe",
     "itemsTypeBug": "Bug",
     "itemsTypeMilestone": "Meilenstein",
+    "itemsTypeSprint": "Sprint",
     "entity": {
       "epic": "Epic",
       "user_story": "Story",

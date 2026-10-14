@@ -1201,7 +1201,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_delivery_dependencies',
     description:
-      'List predecessor links for one delivery item and the successors derived from them. entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'List every predecessor link on one delivery item and the successors derived from them. An item may have many predecessors. The successor start is the latest constraint (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1221,13 +1221,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_delivery_dependency',
     description:
-      'Add a predecessor link (FS, SS, FF, or SF) with optional lagDays. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
+      'Add predecessor links (FS, SS, FF, or SF) with optional lagDays. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The successor start is the latest constraint. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
     scope: 'pm:write',
     write: true,
     body: {
       type: 'object',
       additionalProperties: false,
-      required: ['projectId', 'predecessorId', 'successorId', 'linkType'],
+      required: ['projectId'],
       properties: {
         projectId: uuidProp('Project id'),
         predecessorId: entityRefProp('Predecessor id'),
@@ -1250,6 +1250,37 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           minimum: -3650,
           maximum: 3650,
           description: 'Calendar days. Negative is a lead. Defaults to 0.',
+        },
+        links: {
+          type: 'array',
+          maxItems: 50,
+          description: 'Several predecessor links saved in one call. Each item needs predecessorId, successorId, and linkType.',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['predecessorId', 'successorId', 'linkType'],
+            properties: {
+              predecessorId: entityRefProp('Predecessor id'),
+              predecessorType: {
+                type: 'string',
+                enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+              },
+              successorId: entityRefProp('Successor id'),
+              successorType: {
+                type: 'string',
+                enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+              },
+              linkType: {
+                type: 'string',
+                enum: ['FS', 'SS', 'FF', 'SF'],
+              },
+              lagDays: {
+                type: 'integer',
+                minimum: -3650,
+                maximum: 3650,
+              },
+            },
+          },
         },
       },
     },

@@ -131,6 +131,7 @@ import {
 import {
   listDeliveryDependencies,
   removeDeliveryDependency,
+  setDeliveryDependencies,
   setDeliveryDependency,
 } from './delivery-dependencies.js';
 import {
@@ -3466,20 +3467,65 @@ export function createMcpToolHandlers(
 
     async setDeliveryDependency(input: {
       projectId: string;
-      predecessorId: string;
+      predecessorId?: string;
       predecessorType?: DeliveryDependencyEntityType;
-      successorId: string;
+      successorId?: string;
       successorType?: DeliveryDependencyEntityType;
-      linkType: DeliveryDependencyLinkType;
+      linkType?: DeliveryDependencyLinkType;
       lagDays?: number;
+      links?: Array<{
+        predecessorId: string;
+        predecessorType?: DeliveryDependencyEntityType;
+        successorId: string;
+        successorType?: DeliveryDependencyEntityType;
+        linkType: DeliveryDependencyLinkType;
+        lagDays?: number;
+      }>;
     }) {
       const actingUserId = requireActingUserId(client);
       const project = await requirePmProject(app, client, input.projectId, {
         forWrite: true,
       });
+      if (input.links && input.links.length > 0) {
+        const result = await setDeliveryDependencies(app.database, {
+          projectId: project.id,
+          links: input.links,
+          createdBy: actingUserId,
+        });
+        await writeAuditEvent(app.database, {
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          action: 'project.delivery_dependency_set',
+          entityType: 'project_delivery_dependency',
+          entityId: result.dependencies[0]?.id ?? project.id,
+          metadata: {
+            projectId: project.id,
+            count: result.dependencies.length,
+            linkIds: result.dependencies.map((link) => link.id),
+            via: 'mcp',
+            actingUserId,
+          },
+          ipAddress: ipAddress ?? null,
+        });
+        return result;
+      }
+      if (!input.predecessorId || !input.successorId || !input.linkType) {
+        throw new AppError({
+          code: 'DEPENDENCY_TARGET_REQUIRED',
+          message:
+            'Pass predecessorId, successorId, and linkType, or a links array.',
+          statusCode: 400,
+        });
+      }
       const result = await setDeliveryDependency(app.database, {
-        ...input,
         projectId: project.id,
+        predecessorId: input.predecessorId,
+        predecessorType: input.predecessorType,
+        successorId: input.successorId,
+        successorType: input.successorType,
+        linkType: input.linkType,
+        lagDays: input.lagDays,
         createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {

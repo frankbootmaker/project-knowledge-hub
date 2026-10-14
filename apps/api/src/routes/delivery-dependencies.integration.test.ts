@@ -332,4 +332,84 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     expect(after.statusCode).toBe(200);
     expect((after.json() as { predecessors: unknown[] }).predecessors).toHaveLength(0);
   });
+
+  it('schedules a successor from the latest of several predecessors', async () => {
+    const projectId = await createProject('DPC');
+    const early = await createTask(projectId, {
+      title: 'Early finish',
+      startDate: '2026-10-01',
+      durationDays: 5,
+    });
+    const late = await createTask(projectId, {
+      title: 'Late finish',
+      startDate: '2026-10-08',
+      durationDays: 2,
+    });
+    const successor = await createTask(projectId, {
+      title: 'Bound successor',
+      itemType: 'bug',
+      durationDays: 2,
+    });
+
+    const linked = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/delivery-dependencies`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        links: [
+          {
+            predecessorId: early.humanKey,
+            successorId: successor.humanKey,
+            linkType: 'FS',
+          },
+          {
+            predecessorId: late.humanKey,
+            successorId: successor.humanKey,
+            linkType: 'FS',
+          },
+        ],
+      },
+    });
+    expect(linked.statusCode).toBe(200);
+    const body = linked.json() as {
+      dependencies: Array<{
+        id: string;
+        predecessor: { id: string };
+      }>;
+      schedule: Array<{ id: string; startDate: string | null; finishDate: string | null }>;
+    };
+    expect(body.dependencies).toHaveLength(2);
+    const write = body.schedule.find((row) => row.id === successor.id);
+    expect(write).toMatchObject({
+      startDate: '2026-10-10',
+      finishDate: '2026-10-12',
+    });
+
+    const lateLink = body.dependencies.find(
+      (link) => link.predecessor.id === late.id,
+    );
+    expect(lateLink).toBeTruthy();
+    const lagged = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/projects/${projectId}/delivery-dependencies/${lateLink!.id}`,
+      headers: { cookie: adminCookie, origin },
+      payload: { lagDays: 1 },
+    });
+    expect(lagged.statusCode).toBe(200);
+    const laggedWrite = (lagged.json() as {
+      schedule: Array<{ id: string; startDate: string | null; finishDate: string | null }>;
+    }).schedule.find((row) => row.id === successor.id);
+    expect(laggedWrite).toMatchObject({
+      startDate: '2026-10-11',
+      finishDate: '2026-10-13',
+    });
+
+    const listed = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}/delivery-dependencies?entityId=${successor.humanKey}`,
+      headers: { cookie: adminCookie },
+    });
+    expect(listed.statusCode).toBe(200);
+    expect((listed.json() as { predecessors: unknown[] }).predecessors).toHaveLength(2);
+  });
 });
