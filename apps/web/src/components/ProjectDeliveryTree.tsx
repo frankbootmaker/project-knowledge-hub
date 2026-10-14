@@ -876,7 +876,7 @@ function DepthButton({
   children: ReactNode;
 }) {
   return (
-    <span className="inline-flex" title={label}>
+    <span className="kh-ops-tree-tip">
       <Button
         type="button"
         variant="secondary"
@@ -887,6 +887,9 @@ function DepthButton({
       >
         {children}
       </Button>
+      <span className="kh-ops-tree-tip-label" role="tooltip" aria-hidden="true">
+        {label}
+      </span>
     </span>
   );
 }

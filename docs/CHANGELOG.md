@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Delivery tree depth tooltips:** The four work-breakdown header buttons show their label on hover and keyboard focus. The label follows the active language (English, Hungarian, and German).
+
 * **Delivery completion vs status (PRO-B-1):** A Done story or epic showed the average of its children (for example 40%) because the list and tree never read the parent status. The database stores only a task step (`project_tasks.completion_percent`; done is 100, cancelled is null) and does not roll stories or epics up. The displayed percent is now one rule everywhere it is shown and in API/MCP output: Done is 100, Cancelled is 0, otherwise the stored step or the child average. Cancelled children stay out of that average.
 
 * **Tree column alignment (PRO-B-2):** Delivery tree rows share one set of column tracks, and each depth indents by the toggle width, so status, percent, target, owner, sprint, hours, and points line up.
