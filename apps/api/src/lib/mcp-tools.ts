@@ -110,6 +110,7 @@ import {
   requireItemMediaTarget,
   setItemMediaLinks,
 } from './project-item-media.js';
+import { setMilestoneItemLinks } from './milestone-item-links.js';
 import { buildSupportDump } from './support-dump.js';
 import {
   auditKnowledgeSearch,
@@ -120,6 +121,7 @@ import {
   createMilestone,
   createTask,
   getMilestone,
+  getPublicMilestone,
   getTask,
   listAssignedTasksForUser,
   listMilestones,
@@ -3024,6 +3026,71 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { milestone };
+    },
+
+    async getProjectMilestone(input) {
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const milestoneId = await resolveEntityId(app.database, {
+        entityType: 'milestone',
+        idOrKey: input.milestoneId,
+        workspaceIds,
+      });
+      const milestone = await getPublicMilestone(app.database, milestoneId);
+      await requirePmProject(app, client, milestone.projectId);
+      const [withLinks] = await attachItemMediaLinks(app.database, 'milestone', [milestone]);
+      return { milestone: withLinks ?? milestone };
+    },
+
+    async setProjectMilestoneItemLinks(input) {
+      const actingUserId = requireActingUserId(client);
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const milestoneId = await resolveEntityId(app.database, {
+        entityType: 'milestone',
+        idOrKey: input.milestoneId,
+        workspaceIds,
+      });
+      const existing = await getMilestone(app.database, milestoneId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const items = await Promise.all(
+        input.items.map(async (item) => ({
+          entityType: item.entityType,
+          entityId: await resolveEntityId(app.database, {
+            entityType: item.entityType,
+            idOrKey: item.entityId,
+            projectId: project.id,
+          }),
+        })),
+      );
+      await setMilestoneItemLinks(app.database, {
+        milestoneId,
+        projectId: project.id,
+        items,
+        createdBy: actingUserId,
+      });
+      const milestone = await getPublicMilestone(app.database, milestoneId);
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.milestone_item_links_set',
+        entityType: 'project_milestone',
+        entityId: milestone.id,
+        metadata: {
+          projectId: project.id,
+          itemCount: milestone.linkedItems.length,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      const [withLinks] = await attachItemMediaLinks(app.database, 'milestone', [milestone]);
+      return { milestone: withLinks ?? milestone };
     },
 
     async listProjectSprints(input) {

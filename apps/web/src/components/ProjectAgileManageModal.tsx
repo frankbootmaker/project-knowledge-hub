@@ -24,6 +24,8 @@ import {
   deliveryCompletionIndex,
   displayedParentCompletion,
   formatPercentLabel,
+  milestoneCompletion,
+  type MilestoneLinkCompletion,
 } from '../lib/delivery-completion';
 import {
   DeliveryDocumentsEditor,
@@ -36,11 +38,17 @@ import {
   type ItemMediaDraft,
 } from './DeliveryMediaEditor';
 import { DeliveryDependenciesEditor } from './DeliveryDependenciesEditor';
+import {
+  MilestoneLinkedItemsEditor,
+  milestoneLinkKey,
+  type MilestoneLinkChoice,
+} from './MilestoneLinkedItemsEditor';
 
 const STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 
 type EffortTask = {
   id: string;
+  title?: string;
   status: string;
   epicId: string | null;
   userStoryId: string | null;
@@ -48,6 +56,8 @@ type EffortTask = {
   actualHours: string | number | null;
   completionPercent?: number | null;
   currentOwnerUserId: string | null;
+  humanKey?: string | null;
+  itemType?: 'task' | 'bug' | null;
   raci: Array<{ userId: string; role: string }>;
 };
 
@@ -72,6 +82,11 @@ type Story = {
   humanKey?: string | null;
 };
 
+type MilestoneLink = {
+  entityType: 'epic' | 'user_story' | 'task';
+  entityId: string;
+};
+
 type Milestone = {
   id: string;
   title: string;
@@ -80,6 +95,9 @@ type Milestone = {
   startDate?: string | null;
   targetDate?: string | null;
   humanKey?: string | null;
+  completionPercent?: number | null;
+  completion?: { percent: number; done: number; total: number } | null;
+  linkedItems?: MilestoneLink[];
 };
 
 type LinkedDocument = {
@@ -152,8 +170,10 @@ export function ProjectAgileManageModal({
   const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false);
   const [agileTab, setAgileTab] = useState<
-    'details' | 'documents' | 'media' | 'dependencies'
+    'details' | 'linked' | 'documents' | 'media' | 'dependencies'
   >('details');
+  const [linkedItemIds, setLinkedItemIds] = useState<string[]>([]);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const parentCompletionLabel = useMemo(() => {
@@ -167,6 +187,87 @@ export function ProjectAgileManageModal({
     if (!shown) return '—';
     return formatPercentLabel(shown.percent, locale);
   }, [itemId, kind, locale, status, tasks]);
+
+  const linkChoices = useMemo<MilestoneLinkChoice[]>(() => {
+    const index = deliveryCompletionIndex(tasks);
+    const choices: MilestoneLinkChoice[] = [];
+    for (const epic of epics) {
+      const shown = displayedParentCompletion(
+        epic.status,
+        index.byEpicId.get(epic.id) ?? null,
+      );
+      choices.push({
+        id: milestoneLinkKey('epic', epic.id),
+        entityType: 'epic',
+        entityId: epic.id,
+        title: epic.title,
+        humanKey: epic.humanKey ?? null,
+        status: epic.status,
+        completionPercent: shown?.percent ?? null,
+      });
+    }
+    for (const story of stories) {
+      const shown = displayedParentCompletion(
+        story.status,
+        index.byStoryId.get(story.id) ?? null,
+      );
+      choices.push({
+        id: milestoneLinkKey('user_story', story.id),
+        entityType: 'user_story',
+        entityId: story.id,
+        title: story.title,
+        humanKey: story.humanKey ?? null,
+        status: story.status,
+        completionPercent: shown?.percent ?? null,
+      });
+    }
+    for (const task of tasks) {
+      if (!task.title) continue;
+      choices.push({
+        id: milestoneLinkKey('task', task.id),
+        entityType: 'task',
+        entityId: task.id,
+        title: task.title,
+        humanKey: task.humanKey ?? null,
+        status: task.status,
+        itemType: task.itemType === 'bug' ? 'bug' : 'task',
+        completionPercent: task.completionPercent ?? null,
+      });
+    }
+    return choices;
+  }, [epics, stories, tasks]);
+
+  const milestoneCompletionLabel = useMemo(() => {
+    if (kind !== 'milestone') return null;
+    const byId = new Map(linkChoices.map((row) => [row.id, row]));
+    const index = deliveryCompletionIndex(tasks);
+    const links: MilestoneLinkCompletion[] = [];
+    for (const id of linkedItemIds) {
+      const row = byId.get(id);
+      if (!row) continue;
+      if (row.entityType === 'task') {
+        const task = tasks.find((item) => item.id === row.entityId);
+        links.push({
+          kind: 'task',
+          status: task?.status ?? row.status,
+          completionPercent: task?.completionPercent ?? null,
+        });
+        continue;
+      }
+      const raw =
+        row.entityType === 'epic'
+          ? index.byEpicId.get(row.entityId)
+          : index.byStoryId.get(row.entityId);
+      links.push({
+        kind: 'parent',
+        status: row.status,
+        completionPercent: raw?.percent ?? null,
+      });
+    }
+    const rollup = milestoneCompletion(links);
+    if (!rollup) return '—';
+    return formatPercentLabel(rollup.percent, locale);
+  }, [kind, linkChoices, linkedItemIds, locale, tasks]);
 
   useEffect(() => {
     if (!open) return;
@@ -190,6 +291,7 @@ export function ProjectAgileManageModal({
       setLinkedDocuments([]);
       setDocumentIds([]);
       setHumanKey(null);
+      setLinkedItemIds([]);
       return;
     }
     if (kind === 'epic') {
@@ -225,6 +327,11 @@ export function ProjectAgileManageModal({
       setEndDate('');
       setTargetDate(milestone.targetDate ?? '');
       setHumanKey(milestone.humanKey ?? null);
+      setLinkedItemIds(
+        (milestone.linkedItems ?? []).map((item) =>
+          milestoneLinkKey(item.entityType, item.entityId),
+        ),
+      );
     }
     setConfirmDelete(false);
     setDeleteAcknowledged(false);
@@ -287,7 +394,6 @@ export function ProjectAgileManageModal({
                 title: title.trim(),
                 description: description.trim() || null,
                 status,
-                startDate: startDate || null,
                 targetDate: targetDate || null,
               };
       const response = await fetch(path, {
@@ -342,7 +448,32 @@ export function ProjectAgileManageModal({
           links: mediaDrafts,
         });
       }
-      onSaved(kind, saved);
+      let savedItem = saved;
+      if (kind === 'milestone') {
+        const linkResponse = await fetch(
+          `/api/v1/project-milestones/${itemId}/item-links`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              items: linkedItemIds.flatMap((id) => {
+                const row = linkChoices.find((choice) => choice.id === id);
+                if (!row) return [];
+                return [{ entityType: row.entityType, entityId: row.entityId }];
+              }),
+            }),
+          },
+        );
+        const linkPayload = (await linkResponse.json().catch(() => ({}))) as {
+          milestone?: Milestone;
+          error?: { message?: string };
+        };
+        if (!linkResponse.ok || !linkPayload.milestone) {
+          throw new Error(linkPayload.error?.message || t('failedUpdateMilestone'));
+        }
+        savedItem = linkPayload.milestone;
+      }
+      onSaved(kind, savedItem);
       pushToast(
         kind === 'epic'
           ? t('epicUpdated')
@@ -474,7 +605,7 @@ export function ProjectAgileManageModal({
       }
       description={modalDescription}
       size={DELIVERY_ITEM_MODAL_SIZE}
-      closeOnEscape={!documentPickerOpen}
+      closeOnEscape={!documentPickerOpen && !linkPickerOpen}
       tabs={
         <div className="kh-ops-modal-tabs" role="tablist">
           <button
@@ -486,6 +617,17 @@ export function ProjectAgileManageModal({
           >
             {t('tabDetails')}
           </button>
+          {kind === 'milestone' ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={agileTab === 'linked'}
+              className={agileTab === 'linked' ? 'active' : undefined}
+              onClick={() => setAgileTab('linked')}
+            >
+              {t('tabLinkedItems')}
+            </button>
+          ) : null}
           <button
             type="button"
             role="tab"
@@ -692,16 +834,8 @@ export function ProjectAgileManageModal({
           </Field>
         ) : null}
         {kind === 'milestone' ? (
-          <div className="kh-ops-form-grid">
-            <Field label={t('startDate')}>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={pending || !canMutate || confirmDelete}
-              />
-            </Field>
-            <Field label={t('targetDate')}>
+          <>
+            <Field label={t('dueDate')}>
               <Input
                 type="date"
                 value={targetDate}
@@ -709,7 +843,10 @@ export function ProjectAgileManageModal({
                 disabled={pending || !canMutate || confirmDelete}
               />
             </Field>
-          </div>
+            <Field label={t('completionField')}>
+              <Input value={milestoneCompletionLabel ?? '—'} readOnly disabled />
+            </Field>
+          </>
         ) : (
           <>
             <Field className="kh-ops-field-row-start" label={t('startDate')}>
@@ -732,7 +869,7 @@ export function ProjectAgileManageModal({
         )}
         <Field
           className={kind === 'milestone' ? undefined : 'kh-ops-field-span'}
-          label={t('description')}
+          label={kind === 'milestone' ? t('milestoneNote') : t('description')}
         >
           <Textarea
             value={description}
@@ -743,6 +880,18 @@ export function ProjectAgileManageModal({
         </Field>
       </div>
       </section>
+      {kind === 'milestone' ? (
+        <section className={`kh-ops-modal-pane${agileTab === 'linked' ? ' active' : ''}`}>
+          <MilestoneLinkedItemsEditor
+            items={linkChoices}
+            linkedIds={linkedItemIds}
+            onChange={setLinkedItemIds}
+            canEdit={canMutate}
+            disabled={pending || confirmDelete}
+            onPickerOpenChange={setLinkPickerOpen}
+          />
+        </section>
+      ) : null}
       <section className={`kh-ops-modal-pane${agileTab === 'documents' ? ' active' : ''}`}>
         <DeliveryDocumentsEditor
           records={records}
