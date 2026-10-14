@@ -651,6 +651,8 @@ export async function resolveKnowledgeRecordId(
     projectId?: string;
     workspaceId?: string;
     workspaceIds?: string[];
+    /** Soft-restore looks up an archived document key. Default lookups stay active-only. */
+    includeArchived?: boolean;
   },
 ): Promise<string> {
   const raw = input.idOrKey.trim();
@@ -702,8 +704,10 @@ export async function resolveKnowledgeRecordId(
       inArray(knowledgeRecords.projectId, candidates.map((c) => c.id)),
       eq(knowledgeRecords.documentKeyType, parsed.issueKeyType),
       eq(knowledgeRecords.documentNumber, parsed.issueNumber),
-      isNull(knowledgeRecords.archivedAt),
     ];
+    if (!input.includeArchived) {
+      conditions.push(isNull(knowledgeRecords.archivedAt));
+    }
     if (input.workspaceId) {
       conditions.push(eq(knowledgeRecords.workspaceId, input.workspaceId));
     }
@@ -738,8 +742,10 @@ export async function resolveKnowledgeRecordId(
     eq(knowledgeRecords.projectId, project.id),
     eq(knowledgeRecords.documentKeyType, parsed.issueKeyType),
     eq(knowledgeRecords.documentNumber, parsed.issueNumber),
-    isNull(knowledgeRecords.archivedAt),
   ];
+  if (!input.includeArchived) {
+    conditions.push(isNull(knowledgeRecords.archivedAt));
+  }
   if (input.workspaceId) {
     conditions.push(eq(knowledgeRecords.workspaceId, input.workspaceId));
   }
