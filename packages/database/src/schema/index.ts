@@ -1312,6 +1312,8 @@ export const projectTasks = pgTable(
     status: text('status').notNull().default('todo'),
     startDate: date('start_date', { mode: 'string' }),
     dueDate: date('due_date', { mode: 'string' }),
+    /** Calendar days. Due date is start date plus this many days when set. */
+    durationDays: integer('duration_days'),
     forecastHours: numeric('forecast_hours', { precision: 10, scale: 2, mode: 'number' }),
     actualHours: numeric('actual_hours', { precision: 10, scale: 2, mode: 'number' }),
     storyPoints: integer('story_points'),
@@ -1366,6 +1368,52 @@ export const projectTasks = pgTable(
       table.issueKeyType,
       table.issueNumber,
     ),
+  ],
+);
+
+/**
+ * Directed predecessor link between two delivery items in one project.
+ * Successors are the inverse of these rows; they are not stored separately.
+ */
+export const projectDeliveryDependencies = pgTable(
+  'project_delivery_dependencies',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    predecessorType: text('predecessor_type').notNull(),
+    predecessorId: uuid('predecessor_id').notNull(),
+    successorType: text('successor_type').notNull(),
+    successorId: uuid('successor_id').notNull(),
+    /** FS, SS, FF, or SF. */
+    linkType: text('link_type').notNull(),
+    /** Calendar days added to the relationship. Negative is a lead. */
+    lagDays: integer('lag_days').notNull().default(0),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_delivery_dependencies_pair_uidx').on(
+      table.predecessorType,
+      table.predecessorId,
+      table.successorType,
+      table.successorId,
+    ),
+    index('project_delivery_dependencies_project_idx').on(table.projectId),
+    index('project_delivery_dependencies_successor_idx').on(
+      table.successorType,
+      table.successorId,
+    ),
+    index('project_delivery_dependencies_predecessor_idx').on(
+      table.predecessorType,
+      table.predecessorId,
+    ),
+    index('project_delivery_dependencies_created_by_idx').on(table.createdBy),
   ],
 );
 

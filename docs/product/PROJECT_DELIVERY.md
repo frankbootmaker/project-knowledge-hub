@@ -27,7 +27,7 @@ Humans and AI agents work on the **same** project objects so full project contex
 
 | In v1 | Out of v1 |
 | --- | --- |
-| Milestones under a project; **Timeline** fishbone (duration bars) | Full dependency / critical-path Gantt (RAID **Dependencies** stay a register — see [PROJECT_RAID.md](./PROJECT_RAID.md), [PROJECT_BASELINE.md](./PROJECT_BASELINE.md)) |
+| Milestones under a project; **Timeline** fishbone (duration bars); predecessor links (FS/SS/FF/SF) between delivery items | Timeline arrows and critical-path Gantt (follow-up). RAID **Dependencies** stay a register — see [PROJECT_RAID.md](./PROJECT_RAID.md) |
 | Tasks and bugs (optional milestone link). A bug is a task row with `item_type = bug` | Subtasks / checklists as separate entities |
 | Due / target dates; task forecast/actual **hours** (costing in [PROJECT_BUDGET.md](./PROJECT_BUDGET.md)) | Timesheets, capacity calendars (story points live under [PROJECT_SCRUM.md](./PROJECT_SCRUM.md) / NF-020; not used for EVM AC) |
 | RACI matrix per task (`R`/`A`/`C`/`I`) | External contacts without accounts |
@@ -87,6 +87,18 @@ Bug-only fields, null on tasks:
 * **Duplicate of** — optional link to another bug on the same project. Stored only when resolution is `duplicate`. No self-link and no cycle.
 
 Writes that send bug fields on a task are rejected. Knowledge and RAID links keep entity type `task`; the row's item type says it is a bug. `create_project_task` / `update_project_task` / `list_project_tasks` take `itemType` and the bug fields. There is no separate bug tool.
+
+### Schedule dependencies
+
+A predecessor link joins any two delivery items in the **same project**: epic, user story, task, bug, milestone, or sprint. Bugs are tasks (`item_type = bug`, human key `B`). The stored row points from predecessor to successor. Successors are that row read the other way; they are not entered on their own.
+
+Link types are `FS` (finish-to-start), `SS` (start-to-start), `FF` (finish-to-finish), and `SF` (start-to-finish). `lagDays` is calendar days and may be negative (a lead). One ordered pair may have one link. Self-links, cross-project links, a second link on the same pair, and cycles are rejected with a clear error.
+
+Tasks and bugs store `duration_days`. **Due = start + duration** when duration is set. When a predecessor has the dates the link needs, the successor start is the latest of those constraints, and a task or bug due date moves with its duration. Epics, stories, milestones, and sprints keep their span and shift with the new start. Items with no predecessor dates keep the dates you typed.
+
+The item dialog has a Dependencies tab (a section on the sprint). Timeline arrows are out of scope.
+
+`list_delivery_dependencies`, `set_delivery_dependency`, and `remove_delivery_dependency` accept a UUID or a human key (`PRO-T-1`, `PRO-B-1`). A UUID also needs the entity type. `pm:read` lists; `pm:write` sets and removes.
 
 ### Stakeholders (hybrid)
 

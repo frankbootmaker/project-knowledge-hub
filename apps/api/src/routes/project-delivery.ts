@@ -195,6 +195,7 @@ const createTaskSchema = z.object({
   status: taskStatusSchema.optional(),
   startDate: dateStringSchema.optional(),
   dueDate: dateStringSchema.optional(),
+  durationDays: z.number().int().min(0).max(3650).nullable().optional(),
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
   ...aiUsageBodyFields,
@@ -217,6 +218,7 @@ const updateTaskSchema = z.object({
   status: taskStatusSchema.optional(),
   startDate: dateStringSchema.optional(),
   dueDate: dateStringSchema.optional(),
+  durationDays: z.number().int().min(0).max(3650).nullable().optional(),
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
   ...aiUsageBodyFields,
@@ -390,6 +392,7 @@ export async function registerProjectDeliveryRoutes(
       status: body.status,
       startDate: body.startDate,
       dueDate: body.dueDate,
+      durationDays: body.durationDays,
       forecastHours:
         body.forecastHours === undefined
           ? undefined
@@ -457,6 +460,7 @@ export async function registerProjectDeliveryRoutes(
       status: body.status,
       startDate: body.startDate,
       dueDate: body.dueDate,
+      durationDays: body.durationDays,
       forecastHours:
         body.forecastHours === undefined
           ? undefined

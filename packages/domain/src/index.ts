@@ -1041,6 +1041,31 @@ export {
 } from './date-validation.js';
 
 export {
+  DELIVERY_DEPENDENCY_ENTITY_TYPES,
+  DELIVERY_DEPENDENCY_LAG_MAX,
+  DELIVERY_DEPENDENCY_LAG_MIN,
+  DELIVERY_DEPENDENCY_LINK_LABELS,
+  DELIVERY_DEPENDENCY_LINK_TYPES,
+  DELIVERY_DURATION_MAX_DAYS,
+  addCalendarDays,
+  applyPredecessorSchedule,
+  dependencyCycleKeys,
+  dependencyEntityTypeFromIssueKey,
+  deliveryItemKey,
+  diffCalendarDays,
+  earliestSuccessorStart,
+  predecessorConstraintApplies,
+  resolveTaskScheduleDates,
+  scheduleDeliveryGraph,
+  successorDurationDays,
+  type DeliveryDependencyEntityType,
+  type DeliveryDependencyLinkType,
+  type ScheduleLink,
+  type ScheduleNode,
+  type TaskDateFields,
+} from './delivery-dependencies.js';
+
+export {
   AI_COST_NOTES_MAX,
   AI_MODEL_ID_MAX,
   AI_PRICING_TIER_MAX,

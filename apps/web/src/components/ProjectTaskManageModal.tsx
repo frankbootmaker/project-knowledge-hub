@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   TASK_COMPLETION_PERCENTS,
+  addCalendarDays,
   statusForTaskCompletionChange,
   type TaskStatus,
 } from '@project-knowledge-hub/domain';
@@ -43,6 +44,7 @@ import {
   saveItemMediaLinks,
   type ItemMediaDraft,
 } from './DeliveryMediaEditor';
+import { DeliveryDependenciesEditor } from './DeliveryDependenciesEditor';
 import {
   DeliveryRaciEditor,
   saveDeliveryRaci,
@@ -72,6 +74,7 @@ type TaskDetail = {
   completionPercent?: number | null;
   startDate: string | null;
   dueDate: string | null;
+  durationDays?: number | null;
   forecastHours: string | null;
   actualHours: string | null;
   milestoneId: string | null;
@@ -200,7 +203,14 @@ export function ProjectTaskManageModal({
   const [pending, setPending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [taskTab, setTaskTab] = useState<
-    'details' | 'ai' | 'raci' | 'handoff' | 'activity' | 'documents' | 'media'
+    | 'details'
+    | 'ai'
+    | 'raci'
+    | 'handoff'
+    | 'activity'
+    | 'documents'
+    | 'media'
+    | 'dependencies'
   >('details');
   const [comment, setComment] = useState('');
   const [handoffTo, setHandoffTo] = useState('');
@@ -210,6 +220,8 @@ export function ProjectTaskManageModal({
   const [completionPercent, setCompletionPercent] = useState('0');
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [durationDays, setDurationDays] = useState('');
+  const [scheduleDriven, setScheduleDriven] = useState(false);
   const [forecastHours, setForecastHours] = useState('');
   const [actualHours, setActualHours] = useState('');
   const [description, setDescription] = useState('');
@@ -285,6 +297,9 @@ export function ProjectTaskManageModal({
       );
       setStartDate(loaded.startDate ?? '');
       setDueDate(loaded.dueDate ?? '');
+      setDurationDays(
+        loaded.durationDays == null ? '' : String(loaded.durationDays),
+      );
       setForecastHours(
         loaded.forecastHours != null ? String(loaded.forecastHours) : '',
       );
@@ -525,6 +540,8 @@ export function ProjectTaskManageModal({
             status === 'cancelled' ? null : Number(completionPercent || 0),
           startDate: startDate || null,
           dueDate: dueDate || null,
+          durationDays:
+            durationDays.trim() === '' ? null : Number(durationDays),
           forecastHours: parseHoursInput(forecastHours),
           actualHours: parseHoursInput(actualHours),
           description: description.trim() || null,
@@ -743,6 +760,7 @@ export function ProjectTaskManageModal({
                 ['activity', t('tabActivity')],
                 ['documents', t('tabDocuments')],
                 ['media', t('tabMedia')],
+                ['dependencies', t('tabDependencies')],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -910,7 +928,32 @@ export function ProjectTaskManageModal({
                 <Input
                   type="date"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setStartDate(next);
+                    const days = Number(durationDays);
+                    if (next && durationDays.trim() !== '' && Number.isInteger(days)) {
+                      setDueDate(addCalendarDays(next, days));
+                    }
+                  }}
+                  disabled={pending || !canMutate || scheduleDriven}
+                />
+              </Field>
+              <Field label={t('durationDays')}>
+                <Input
+                  type="number"
+                  min={0}
+                  max={3650}
+                  step={1}
+                  value={durationDays}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setDurationDays(next);
+                    const days = Number(next);
+                    if (startDate && next.trim() !== '' && Number.isInteger(days) && days >= 0) {
+                      setDueDate(addCalendarDays(startDate, days));
+                    }
+                  }}
                   disabled={pending || !canMutate}
                 />
               </Field>
@@ -918,10 +961,20 @@ export function ProjectTaskManageModal({
                 <Input
                   type="date"
                   value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  disabled={pending || !canMutate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                  disabled={pending || !canMutate || durationDays.trim() !== ''}
                 />
               </Field>
+              {scheduleDriven ? (
+                <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+                  {t('startComputed')}
+                </p>
+              ) : null}
+              {durationDays.trim() !== '' ? (
+                <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+                  {t('durationHint')}
+                </p>
+              ) : null}
               <Field label={t('forecastHours')}>
                 <Input
                   type="number"
@@ -1385,6 +1438,33 @@ export function ProjectTaskManageModal({
                 onDraftsChange={setMediaDrafts}
               />
             ) : null}
+          </section>
+
+          <section
+            className={`kh-ops-modal-pane${taskTab === 'dependencies' ? ' active' : ''}`}
+          >
+            <DeliveryDependenciesEditor
+              projectId={task.projectId}
+              entityType="task"
+              entityId={task.id}
+              canEdit={canMutate && !pending}
+              onScheduleDriven={setScheduleDriven}
+              onScheduled={(write) => {
+                if (write) {
+                  setStartDate(write.startDate ?? '');
+                  setDueDate(write.finishDate ?? '');
+                  setDurationDays(
+                    write.durationDays == null ? '' : String(write.durationDays),
+                  );
+                }
+                onUpdated?.({
+                  ...task,
+                  startDate: write?.startDate ?? task.startDate,
+                  dueDate: write?.finishDate ?? task.dueDate,
+                  durationDays: write?.durationDays ?? task.durationDays ?? null,
+                });
+              }}
+            />
           </section>
         </div>
       )}

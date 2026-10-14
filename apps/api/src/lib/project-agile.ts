@@ -1,4 +1,9 @@
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import {
+  deleteDeliveryDependenciesFor,
+  overlaySchedule,
+  rescheduleDeliveryFrom,
+} from './delivery-dependencies.js';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   memberships,
@@ -373,13 +378,22 @@ export async function updateEpic(
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const maps = await completionMaps(database, row.projectId);
+  const writes = await rescheduleDeliveryFrom(database, row.projectId, {
+    entityType: 'epic',
+    id: row.id,
+  });
   return withMediaLinks(
     database,
     'epic',
-    toPublicEpic(
-      row,
-      keyPrefix,
-      parentCompletionPercent(row.status, maps.byEpicId.get(row.id)),
+    overlaySchedule(
+      toPublicEpic(
+        row,
+        keyPrefix,
+        parentCompletionPercent(row.status, maps.byEpicId.get(row.id)),
+      ),
+      'epic',
+      writes,
+      'endDate',
     ),
   );
 }
@@ -587,13 +601,22 @@ export async function updateUserStory(
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const maps = await completionMaps(database, row.projectId);
+  const writes = await rescheduleDeliveryFrom(database, row.projectId, {
+    entityType: 'user_story',
+    id: row.id,
+  });
   return withMediaLinks(
     database,
     'user_story',
-    toPublicUserStory(
-      row,
-      keyPrefix,
-      parentCompletionPercent(row.status, maps.byStoryId.get(row.id)),
+    overlaySchedule(
+      toPublicUserStory(
+        row,
+        keyPrefix,
+        parentCompletionPercent(row.status, maps.byStoryId.get(row.id)),
+      ),
+      'user_story',
+      writes,
+      'endDate',
     ),
   );
 }
@@ -603,6 +626,16 @@ export async function deleteEpic(
   epicId: string,
 ): Promise<{ id: string; projectId: string }> {
   const existing = await getEpic(database, epicId);
+  const stories = await database.db
+    .select({ id: projectUserStories.id })
+    .from(projectUserStories)
+    .where(eq(projectUserStories.epicId, epicId));
+  await deleteDeliveryDependenciesFor(database, 'epic', [epicId]);
+  await deleteDeliveryDependenciesFor(
+    database,
+    'user_story',
+    stories.map((row) => row.id),
+  );
   await database.db.delete(projectEpics).where(eq(projectEpics.id, epicId));
   return { id: existing.id, projectId: existing.projectId };
 }
@@ -612,6 +645,7 @@ export async function deleteUserStory(
   storyId: string,
 ): Promise<{ id: string; projectId: string }> {
   const existing = await getUserStory(database, storyId);
+  await deleteDeliveryDependenciesFor(database, 'user_story', [storyId]);
   await database.db
     .delete(projectUserStories)
     .where(eq(projectUserStories.id, storyId));
