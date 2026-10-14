@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Delivery tree type:** Work-breakdown rows use the delivery list type. Titles are primary cells, keys are the same chip as the ID column, status, owner, and sprint are 12px sans, and percent, target, hours, and points are mono numerals. Column labels use the table header.
+
 * **MCP tool arguments (PRO-B-4, PRO-T-65, PRO-T-66, PRO-T-67):** Unknown tool fields return a validation error that names the field. `list_project_tasks` documents `limit`, `cursor`, and output `nextCursor`. Task tools resolve any human key type (T, B, and others) the same way they resolve a UUID. `list_project_task_activities` returns full comment text unless `fullText` is false.
 
 * **Task AI tab:** Token, model, pricing, and billing fields on tasks and bugs move from Details to an AI tab. They still save with the item.

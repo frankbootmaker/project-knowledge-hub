@@ -1320,7 +1320,10 @@ a.kh-section-shortcut[aria-current='location'] {
   box-shadow: inset 0 -1px 0 var(--kh-line);
 }
 
-.kh-ops-data-table th {
+/* Delivery list headers and the tree header share one label style. */
+.kh-ops-data-table th,
+.kh-ops-delivery-tree-head,
+.kh-ops-delivery-tree-head-meta > span {
   background: var(--kh-surface);
   color: var(--kh-ink-muted);
   font-family: var(--font-mono), ui-monospace, monospace;
@@ -1331,8 +1334,14 @@ a.kh-section-shortcut[aria-current='location'] {
   text-transform: uppercase;
 }
 
-.kh-ops-data-table td {
+/* Body cells: list td and tree value cells. Numbers opt back into mono below. */
+.kh-ops-data-table td,
+.kh-ops-tree-meta > .kh-ops-tree-cell {
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
   font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
 }
 
 .kh-ops-data-table tbody tr:last-child td {
@@ -1343,15 +1352,24 @@ a.kh-section-shortcut[aria-current='location'] {
   background: color-mix(in oklch, var(--kh-accent), var(--kh-panel-solid) 94%);
 }
 
-.kh-ops-data-table .kh-ops-num {
+.kh-ops-data-table .kh-ops-num,
+.kh-ops-tree-meta > .kh-ops-tree-cell.kh-ops-num {
   text-align: right;
+  color: var(--kh-ink);
   font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
   font-variant-numeric: tabular-nums;
 }
 
-.kh-ops-data-table .kh-ops-primary-cell {
+.kh-ops-data-table .kh-ops-primary-cell,
+.kh-ops-tree-title .kh-ops-primary-cell {
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
   font-size: 11px;
   font-weight: 650;
+  line-height: 1.45;
 }
 
 .kh-ops-stack {
@@ -2248,15 +2266,8 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   grid-template-columns: minmax(300px, 1fr) auto;
   gap: 12px;
   align-items: center;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--kh-line);
-  background: var(--kh-surface);
-  color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .kh-ops-delivery-tree-head-meta {
@@ -2273,11 +2284,6 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 }
 
 .kh-ops-delivery-tree-head-meta > span {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -2372,24 +2378,18 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   min-width: 0;
 }
 
-.kh-ops-tree-title strong,
-.kh-ops-tree-title small {
+.kh-ops-tree-title .kh-ops-primary-cell,
+.kh-ops-tree-title .kh-ops-type-chip {
   display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.kh-ops-tree-title strong {
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.kh-ops-tree-title small {
+.kh-ops-tree-title .kh-ops-type-chip {
+  width: max-content;
   margin-top: 2px;
-  color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
 }
 
 .kh-ops-tree-meta {
@@ -2398,9 +2398,6 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   grid-template-columns: var(--kh-tree-meta);
   align-items: center;
   column-gap: 8px;
-  color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -2428,7 +2425,10 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 .kh-ops-delivery-tree-row.kh-ops-tree-note {
   padding-left: calc(12px + var(--level, 0) * 30px + 30px);
   color: var(--kh-ink-muted);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
   font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
 }
 
 .kh-ops-tree-pct {
