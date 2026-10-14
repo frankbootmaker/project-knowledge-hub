@@ -2319,8 +2319,29 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   padding-left: calc(var(--level, 0) * 30px);
 }
 
-.kh-ops-delivery-tree-head > span:first-child {
+.kh-ops-delivery-tree-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
   padding-left: 30px;
+}
+
+.kh-ops-tree-depth {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
+.kh-ops-tree-depth .kh-ops-tree-depth-btn {
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  padding: 0;
 }
 
 .kh-ops-tree-toggle,
