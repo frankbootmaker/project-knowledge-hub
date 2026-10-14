@@ -57,7 +57,7 @@ This pairing protocol is **optional / advanced** — mainstream clients (Cursor,
 
 Default (read): `projects:read`, `systems:read`, `knowledge:read`, `knowledge:search`, `provenance:read`
 
-Opt-in write: `knowledge:write` — draft create/update knowledge records **and** workspace media upload/delete; requires non-empty `allowedWorkspaceIds` and `actingUserId`. Images: prefer `begin_workspace_media_upload` → `append_workspace_media_upload` → `finalize_workspace_media_upload` (ChatGPT Actions / large base64); or single-shot `upload_workspace_media` → embed `media.markdownSnippet` (never `data:` URIs); optional `insertIntoRecord` appends into a linked record.
+Opt-in write: `knowledge:write` — draft create/update knowledge records **and** workspace media upload/delete; requires non-empty `allowedWorkspaceIds` and `actingUserId`. Images: prefer `begin_workspace_media_upload` → `append_workspace_media_upload` → `finalize_workspace_media_upload` (ChatGPT Actions / large base64); or single-shot `upload_workspace_media` → embed `media.markdownSnippet` (never `data:` URIs); optional `insertIntoRecord` appends into a linked record. Optional `targetEntityType` + `targetEntityId` links the new image to a delivery, RAID, or change item and also requires `pm:write`. `set_delivery_media_links` replaces that item's Media tab links (`pm:write`). Item reads return `mediaLinks` and `mediaLinkCount`. A link never crosses workspaces, and unlinking does not delete the library file.
 
 Elevated catalogue (planned): `catalogue:write` — propose/confirm create/update for projects and systems in allowlisted workspaces. See [ADR-014](../adr/ADR-014-elevated-api-client-capabilities.md). Higher tiers (`workspace:write`, archive, `org:admin`) are deferred.
 

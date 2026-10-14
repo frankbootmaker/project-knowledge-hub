@@ -394,11 +394,87 @@ export async function withMediaLinks<T extends { id: string }>(
   entityType: ItemMediaEntityType,
   item: T,
 ): Promise<T & { mediaLinkCount: number; mediaLinks: PublicItemMediaLink[] }> {
-  const mediaLinks = await listItemMediaLinks(database, {
-    entityType,
-    entityId: item.id,
+  const [withLinks] = await attachItemMediaLinks(database, entityType, [item]);
+  return withLinks ?? { ...item, mediaLinks: [], mediaLinkCount: 0 };
+}
+
+/** Full Media-tab links for a page of items. Count matches the link array. */
+export async function attachItemMediaLinks<T extends { id: string }>(
+  database: Database,
+  entityType: ItemMediaEntityType,
+  items: T[],
+): Promise<Array<T & { mediaLinkCount: number; mediaLinks: PublicItemMediaLink[] }>> {
+  if (items.length === 0) return [];
+  const ids = items.map((item) => item.id);
+  const rows = await database.db
+    .select({
+      entityId: projectItemMediaLinks.entityId,
+      id: projectItemMediaLinks.id,
+      kind: projectItemMediaLinks.kind,
+      title: projectItemMediaLinks.title,
+      description: projectItemMediaLinks.description,
+      url: projectItemMediaLinks.url,
+      sortOrder: projectItemMediaLinks.sortOrder,
+      createdBy: projectItemMediaLinks.createdBy,
+      createdAt: projectItemMediaLinks.createdAt,
+      displayName: users.displayName,
+      mediaId: workspaceMedia.id,
+      filename: workspaceMedia.originalFilename,
+      byteSize: workspaceMedia.byteSize,
+      contentType: workspaceMedia.contentType,
+      archivedAt: workspaceMedia.archivedAt,
+    })
+    .from(projectItemMediaLinks)
+    .leftJoin(workspaceMedia, eq(workspaceMedia.id, projectItemMediaLinks.workspaceMediaId))
+    .leftJoin(users, eq(users.id, projectItemMediaLinks.createdBy))
+    .where(
+      and(
+        eq(projectItemMediaLinks.entityType, entityType),
+        inArray(projectItemMediaLinks.entityId, ids),
+      ),
+    )
+    .orderBy(asc(projectItemMediaLinks.sortOrder), asc(projectItemMediaLinks.createdAt));
+  const grouped = new Map<string, PublicItemMediaLink[]>();
+  for (const row of rows) {
+    const list = grouped.get(row.entityId) ?? [];
+    list.push(toPublicLink(row));
+    grouped.set(row.entityId, list);
+  }
+  return items.map((item) => {
+    const mediaLinks = grouped.get(item.id) ?? [];
+    return { ...item, mediaLinks, mediaLinkCount: mediaLinks.length };
   });
-  return { ...item, mediaLinks, mediaLinkCount: mediaLinks.length };
+}
+
+/**
+ * The item must exist and its project must live in `workspaceId`.
+ * Used by MCP upload and media list filters so a link cannot cross workspaces.
+ */
+export async function requireItemMediaTarget(
+  database: Database,
+  input: {
+    workspaceId: string;
+    entityType: ItemMediaEntityType;
+    entityId: string;
+  },
+): Promise<{ projectId: string }> {
+  const entity = await loadEntity(database, input.entityType, input.entityId);
+  if (!entity) {
+    throw new AppError({
+      code: 'ITEM_MEDIA_ENTITY_NOT_FOUND',
+      message: `Item not found: ${input.entityType}`,
+      statusCode: 404,
+    });
+  }
+  const workspaceId = await projectWorkspaceId(database, entity.projectId);
+  if (workspaceId !== input.workspaceId) {
+    throw new AppError({
+      code: 'ITEM_MEDIA_WORKSPACE_MISMATCH',
+      message: 'Media must belong to the project workspace',
+      statusCode: 400,
+    });
+  }
+  return { projectId: entity.projectId };
 }
 
 export async function setItemMediaLinks(

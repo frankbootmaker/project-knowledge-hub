@@ -10,9 +10,9 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_knowledge_records` / `search_knowledge` / `get_knowledge_record`
 * `get_record_provenance`
 * `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints, **and the image/media embed workflow**
-* `list_workspace_media` — recent workspace images with Markdown snippets
+* `list_workspace_media` — recent workspace images with Markdown snippets; optional filter by a delivery, RAID, or change item
 * `get_platform_status` — redacted health/backup snapshot (requires opt-in `monitoring:read`; not in default scopes)
-* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` / `list_project_change_items` / `get_project_budget_summary` / `get_project_resource_utilization` — Project Delivery + RAID + budget/utilization (requires opt-in `pm:read`)
+* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` / `list_project_change_items` / `get_project_budget_summary` / `get_project_resource_utilization` — Project Delivery + RAID + budget/utilization (requires opt-in `pm:read`). Task, story, epic, milestone, sprint, RAID, and change reads include `mediaLinks` and `mediaLinkCount`
 * `list_project_sprints` / `get_project_sprint_burndown` / `get_project_scrum_velocity` — Scrum (NF-020)
 * `list_my_project_tasks` / `get_my_dashboard_insights` — acting-user My tasks + dashboard rollups (`pm:read` + `actingUserId`)
 * `list_project_delivery_document_links` — knowledge ↔ delivery index for a project
@@ -30,8 +30,8 @@ workspace allowlist, and `actingUserId`:
 * `create_knowledge_record` — always creates a **draft** with `ai_generated_draft` provenance
 * `update_knowledge_record` — updates as **draft**; requires `changeMessage`
 * `set_knowledge_record_delivery_links` — replace epic/story/task/**sprint** links (record must be project-scoped; entity ids may be human keys)
-* `begin_workspace_media_upload` / `append_workspace_media_upload` / `finalize_workspace_media_upload` — Redis-backed chunked base64 upload (**preferred for ChatGPT Actions**; ~8 KB chunks)
-* `upload_workspace_media` — single-shot JPEG/PNG/WebP/GIF base64 upload; returns `media.markdownSnippet`; optional `insertIntoRecord`
+* `begin_workspace_media_upload` / `append_workspace_media_upload` / `finalize_workspace_media_upload` — Redis-backed chunked base64 upload (**preferred for ChatGPT Actions**; ~8 KB chunks). Optional `targetEntityType` + `targetEntityId` (UUID or human key) links the image on finalize and also requires `pm:write`
+* `upload_workspace_media` — single-shot JPEG/PNG/WebP/GIF base64 upload; returns `media.markdownSnippet`; optional `insertIntoRecord`; optional target item (same `pm:write` rule)
 * `delete_workspace_media` — soft-delete media + remove bytes
 
 Approve / mark-current remain human/session-API only.
@@ -53,6 +53,7 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 * `create_project_raid_item` / `update_project_raid_item` / `set_project_raid_task_links` — RAID register (+ task links)
 * `transfer_project_raid_item` — move risk↔issue (new key; archives source). Do not use `update_project_raid_item` to change kind between risk and issue.
 * `create_project_change_item` / `update_project_change_item` — change register (+ delivery links; entity/knowledge ids may be human keys)
+* `set_delivery_media_links` — replace Media tab links (workspace image or titled http(s) URL) on a task, bug (`task`), story, epic, milestone, sprint, RAID, or change item. `entityId` may be a UUID or human key. Omitting a link unlinks it and does not delete the library file. Same workspace only
 * `update_project_baseline` — dates, pins, DoD, currency, budgets, and optional `keyPrefix` (workspace-unique `AAA` / `AA0`). The response includes the saved `definitionOfDone`.
 * `move_project` — move a project to another workspace. Same organization requires both workspaces on the allowlist. Another organization requires `confirmCrossOrganization` (Git tokens and conversation imports travel with the project) and the client cannot keep the destination on its allowlist, so it loses access after the move. `dryRun` returns conflicts without writing.
 
@@ -67,6 +68,7 @@ Do **not** put `data:image/...;base64,...` URIs in `contentMarkdown`. Instead:
 1. **ChatGPT Actions:** `begin_workspace_media_upload` → split raw base64 into ~8000-char chunks → `append_workspace_media_upload` each → `finalize_workspace_media_upload`.
 2. **Single-shot (small files):** `upload_workspace_media` with `workspaceId`, `contentType`, and raw `contentBase64` (no `data:` prefix).
 3. Either paste `media.markdownSnippet` (e.g. `![chart](/api/v1/media/{id})`) into `create_knowledge_record` / `update_knowledge_record`, **or** pass `knowledgeRecordId` + `insertIntoRecord: true` on begin/upload to append it automatically.
-4. `get_knowledge_record` and `list_knowledge_records` return `tags` as a string array of tag names (same shape as `search_knowledge`). `get_knowledge_record` also returns linked `media[]` metadata for that record.
+4. To attach the image to a delivery item in the same step, pass `targetEntityType` + `targetEntityId` on begin (or on the single-shot upload). That also requires `pm:write`. PDF and Office files are documents, not media.
+5. `get_knowledge_record` and `list_knowledge_records` return `tags` as a string array of tag names (same shape as `search_knowledge`). `get_knowledge_record` also returns linked `media[]` metadata for that record.
 
 Mounted by the API at `POST|GET|DELETE /mcp` with bearer API client tokens.

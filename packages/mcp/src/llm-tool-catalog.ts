@@ -530,7 +530,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'begin_workspace_media_upload',
     description:
-      'Start chunked image upload (ChatGPT-safe). Next: append then finalize. Requires knowledge:write.',
+      'Start chunked image upload (ChatGPT-safe). Next: append then finalize. Optional targetEntityType+targetEntityId (UUID or human key) links the image on finalize and requires pm:write. The item must be in workspaceId. Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     openApi: true,
@@ -573,7 +573,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'finalize_workspace_media_upload',
-    description: 'Finish chunked upload; returns media.markdownSnippet. Requires knowledge:write.',
+    description:
+      'Finish chunked upload; returns media.markdownSnippet and linkedTo when begin named an item. Requires knowledge:write. Linking requires pm:write.',
     scope: 'knowledge:write',
     write: true,
     openApi: true,
@@ -588,7 +589,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_tasks',
     description:
-      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. Requires pm:read.',
+      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: taskListPageResult,
@@ -618,7 +619,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_task',
     description:
-      'Get one task or bug with RACI. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Requires pm:read.',
+      'Get one task or bug with RACI. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -729,7 +730,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_milestones',
     description:
-      'List project milestones. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
+      'List project milestones. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -786,7 +787,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_epics',
     description:
-      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Requires pm:read.',
+      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Each epic includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -823,7 +824,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_user_stories',
     description:
-      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Requires pm:read.',
+      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Each story includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -862,7 +863,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_sprints',
     description:
-      'List Scrum sprints (committed/done points). Pages at 25. Goals are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
+      'List Scrum sprints (committed/done points). Pages at 25. Goals are excerpts. Pass cursor until hasMore is false. Each sprint includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -933,7 +934,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_my_project_tasks',
     description:
-      'List tasks where the API client acting user is on RACI (My tasks). Pages at 25. Descriptions are excerpts; use get_project_task for the full text. Pass cursor until hasMore is false. Requires pm:read + actingUserId.',
+      'List tasks where the API client acting user is on RACI (My tasks). Pages at 25. Descriptions are excerpts; use get_project_task for the full text. Pass cursor until hasMore is false. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read + actingUserId.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -1106,7 +1107,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_workspace_media',
     description:
-      'List recent workspace media with markdownSnippet and usedBy. Optional filename query and item filter.',
+      'List recent workspace media with markdownSnippet and usedBy. Optional filename query. Optional entityType+entityId filters to images linked to that item in this workspace. Requires knowledge:read.',
     scope: 'knowledge:read',
     defaults: { limit: 20 },
     body: {
@@ -1515,7 +1516,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_raid_items',
     description:
-      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
+      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each item includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1669,7 +1670,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_change_items',
     description:
-      'List change-management register items. Pages at 25. Descriptions and rationale are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
+      'List change-management register items. Pages at 25. Descriptions and rationale are excerpts. Pass cursor until hasMore is false. Each item includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1826,7 +1827,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_delivery_media_links',
     description:
-      'Replace image and external URL links for one delivery, RAID, or change item. Bugs use task. Requires pm:write.',
+      'Replace Media tab links for one delivery, RAID, or change item. entityId is a UUID or human key (PRO-T-1, PRO-B-1, PRO-S-1, PRO-E-1, RAID, or change). Bugs use task. Send the full list; omitting a link unlinks it and does not delete the image. URLs need a title. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1845,6 +1846,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           maxItems: 100,
           items: {
             type: 'object',
+            additionalProperties: false,
             required: ['kind'],
             properties: {
               kind: { type: 'string', enum: ['media', 'url'] },
@@ -2021,8 +2023,47 @@ export function unknownToolFields(
   if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
     return [];
   }
-  const allowed = new Set(Object.keys(properties as Record<string, unknown>));
-  return Object.keys(value as Record<string, unknown>).filter((key) => !allowed.has(key));
+  const props = properties as Record<string, unknown>;
+  const record = value as Record<string, unknown>;
+  const allowed = new Set(Object.keys(props));
+  const unknown = Object.keys(record).filter((key) => !allowed.has(key));
+  const nested: string[] = [];
+  for (const key of allowed) {
+    if (!(key in record)) continue;
+    const child = props[key];
+    if (!child || typeof child !== 'object') continue;
+    for (const path of nestedUnknownFields(child as Record<string, unknown>, record[key])) {
+      nested.push(path.startsWith('[') ? `${key}${path}` : `${key}.${path}`);
+    }
+  }
+  return [...unknown, ...nested];
+}
+
+/**
+ * Nested objects reject unknown keys only when the schema sets
+ * additionalProperties: false. Open objects (itDetails, call_hub_tool) stay open.
+ */
+function nestedUnknownFields(
+  schema: Record<string, unknown>,
+  value: unknown,
+): string[] {
+  if (schema.type === 'array' && Array.isArray(value)) {
+    const items = schema.items;
+    if (!items || typeof items !== 'object' || Array.isArray(items)) return [];
+    const itemSchema = items as Record<string, unknown>;
+    if (itemSchema.additionalProperties !== false) return [];
+    const found: string[] = [];
+    value.forEach((item, index) => {
+      for (const path of unknownToolFields(itemSchema, item)) {
+        found.push(`[${index}].${path}`);
+      }
+    });
+    return found;
+  }
+  if (schema.type === 'object' && schema.additionalProperties === false) {
+    return unknownToolFields(schema, value);
+  }
+  return [];
 }
 
 function assertKnownToolFields(
