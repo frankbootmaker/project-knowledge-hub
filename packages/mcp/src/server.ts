@@ -1490,7 +1490,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'begin_workspace_media_upload',
-    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. Optional targetEntityType+targetEntityId links the image to a delivery, RAID, or change item on finalize. knowledgeRecordId and targetEntityId may be UUID or human keys. Allowed types: image/png, image/jpeg, image/gif, image/webp. File bytes are verified against declared type on finalize. Requires knowledge:write.',
+    'REQUIRED default for LLM/MCP/ChatGPT image uploads: start a chunked PNG/JPEG/WebP/GIF upload. Do NOT use upload_workspace_media. Returns uploadId + recommendedChunkChars (~8000). Next: append_workspace_media_upload for each ~8000-char raw base64 chunk, then finalize_workspace_media_upload. Optional insertIntoRecord+knowledgeRecordId embeds on finalize. Optional targetEntityType+targetEntityId links the new image to a delivery, RAID, or change item on finalize (UUID or human key such as PRO-T-1, PRO-B-1, PRO-S-1, PRO-E-1). Bugs use task. The item must be in workspaceId. Linking requires pm:write in addition to knowledge:write. PDF and Office files are documents, not media. Allowed types: image/png, image/jpeg, image/gif, image/webp. File bytes are verified against declared type on finalize.',
     {
       workspaceId: z.string().uuid(),
       contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
@@ -1541,7 +1541,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'finalize_workspace_media_upload',
-    'Step 3 of image upload: assemble all chunks, verify bytes match declared type, store media, return media.markdownSnippet. Honors insertIntoRecord from begin. Do not call upload_workspace_media instead. Requires knowledge:write.',
+    'Step 3 of image upload: assemble all chunks, verify bytes match declared type, store media, return media.markdownSnippet. Honors insertIntoRecord and the target item from begin. linkedTo is set when the image was linked. Linking requires pm:write. Do not call upload_workspace_media instead. Requires knowledge:write.',
     {
       uploadId: z.string().uuid(),
     },
@@ -1553,7 +1553,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'upload_workspace_media',
-    'AVOID for LLM/MCP/ChatGPT clients — single-shot upload often fails when base64 is large. Use begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload instead. Kept only for tiny files or non-LLM integrations. contentBase64 = raw base64 (no data: prefix). Allowed types: image/png, image/jpeg, image/gif, image/webp. Optional targetEntityType+targetEntityId links the image to an item in the same step. File bytes are verified against declared type. Requires knowledge:write.',
+    'AVOID for LLM/MCP/ChatGPT clients — single-shot upload often fails when base64 is large. Use begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload instead. Kept only for tiny files or non-LLM integrations. contentBase64 = raw base64 (no data: prefix). Allowed types: image/png, image/jpeg, image/gif, image/webp. Optional targetEntityType+targetEntityId (UUID or human key) links the image to an item in this workspace in the same step and requires pm:write. File bytes are verified against declared type. Requires knowledge:write.',
     {
       workspaceId: z.string().uuid(),
       contentBase64: z.string().min(1).max(10_000_000),
@@ -1651,7 +1651,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspace_media',
-    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls, markdown snippets, and a short usedBy list. Optional filename query. Optional entityType+entityId filters to images linked to that item. knowledgeRecordId and entityId may be UUID or human keys. Requires knowledge:read.',
+    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls, markdown snippets, and a short usedBy list. Optional filename query. Optional entityType+entityId (both required together) filters to images linked to that item; entityId may be a UUID or human key and the item must be in workspaceId. Readers are read-only. Requires knowledge:read.',
     {
       workspaceId: z.string().uuid(),
       knowledgeRecordId: entityRef.optional(),
@@ -1700,7 +1700,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_milestones',
-    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each row includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -1745,7 +1745,7 @@ export function createKnowledgeHubMcpServer(
     'list_project_tasks',
     {
       description:
-        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. Requires pm:read.',
+        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. Each task includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
       inputSchema: {
         projectId: z.string().uuid(),
         milestoneId: entityRef.optional(),
@@ -1782,7 +1782,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_task',
-    'Get one project task or bug with RACI. Hour fields (forecastHours, actualHours) returned as JSON numbers. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Requires pm:read.',
+    'Get one project task or bug with RACI. Hour fields (forecastHours, actualHours) returned as JSON numbers. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     { taskId: entityRef },
     async (args) =>
       wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
@@ -1832,7 +1832,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_sprints',
-    'List Scrum sprints for a project (committed/done points). Pages at 25. Goals are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    'List Scrum sprints for a project (committed/done points). Pages at 25. Goals are excerpts. Pass cursor from nextCursor until hasMore is false. Each sprint includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -1927,7 +1927,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_my_project_tasks',
-    'List tasks where the API client acting user is on RACI (My tasks). Pages at 25 items. Descriptions and bug notes are excerpts; use get_project_task for the full text. Pass cursor from nextCursor until hasMore is false. Requires pm:read and actingUserId.',
+    'List tasks where the API client acting user is on RACI (My tasks). Pages at 25 items. Descriptions and bug notes are excerpts; use get_project_task for the full text. Pass cursor from nextCursor until hasMore is false. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read and actingUserId.',
     {
       role: z.enum(['R', 'A', 'C', 'I']).optional(),
       includeArchived: z.boolean().optional(),
@@ -2149,7 +2149,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_epics',
-    'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each epic includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Requires pm:read.',
+    'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each epic includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Each epic includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -2204,7 +2204,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_user_stories',
-    'List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each story includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Requires pm:read.',
+    'List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each story includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Each story includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
       projectId: z.string().uuid(),
       epicId: entityRef.optional(),
@@ -2490,7 +2490,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_raid_items',
-    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each item includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -2647,7 +2647,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_change_items',
-    'List change-management register items for a project. Pages at 25. Descriptions and rationale are excerpts. Pass cursor from nextCursor until hasMore is false. Requires pm:read.',
+    'List change-management register items for a project. Pages at 25. Descriptions and rationale are excerpts. Pass cursor from nextCursor until hasMore is false. Each item includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -2794,7 +2794,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'set_delivery_media_links',
-    'Replace workspace-image and external URL links for one delivery, RAID, or change item. Bugs use entity type task. entityId may be a UUID or human key. A media link keeps the library file; pass the full ordered list. URLs must be http or https and need a title. Requires pm:write.',
+    'Replace Media tab links for one delivery, RAID, or change item. entityId accepts a UUID or human key (PRO-T-1, PRO-B-1, PRO-S-1, PRO-E-1, milestone, sprint, RAID, or change). Bugs use entity type task. Send the full ordered list. Omitting a link unlinks it and does not delete the workspace image. A media link references a library image in the project workspace. A url link must be http or https and needs a title. Readers are read-only. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       entityType: itemMediaEntityEnum,
@@ -2802,18 +2802,22 @@ export function createKnowledgeHubMcpServer(
       links: z
         .array(
           z.discriminatedUnion('kind', [
-            z.object({
-              kind: z.literal('media'),
-              mediaId: z.string().uuid(),
-              title: z.string().max(200).nullable().optional(),
-              description: z.string().max(2000).nullable().optional(),
-            }),
-            z.object({
-              kind: z.literal('url'),
-              url: z.string().min(1).max(2000),
-              title: z.string().min(1).max(200),
-              description: z.string().max(2000).nullable().optional(),
-            }),
+            z
+              .object({
+                kind: z.literal('media'),
+                mediaId: z.string().uuid(),
+                title: z.string().max(200).nullable().optional(),
+                description: z.string().max(2000).nullable().optional(),
+              })
+              .strict(),
+            z
+              .object({
+                kind: z.literal('url'),
+                url: z.string().min(1).max(2000),
+                title: z.string().min(1).max(200),
+                description: z.string().max(2000).nullable().optional(),
+              })
+              .strict(),
           ]),
         )
         .max(100),

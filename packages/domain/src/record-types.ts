@@ -860,6 +860,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
         'ChatGPT Actions OpenAPI omits upload_workspace_media (single-shot fails on large base64). Native MCP may still offer it for tiny files.',
         'finalize returns media.markdownSnippet — paste into contentMarkdown, or set knowledgeRecordId + insertIntoRecord=true on begin to append automatically into the .md body.',
         'Optional knowledgeRecordId links the asset to a record; get_knowledge_record returns linked media[].',
+        'Optional targetEntityType + targetEntityId (UUID or human key) links the image to a delivery, RAID, or change item. That link requires pm:write. PDF and Office files are documents, not media.',
         'Requires knowledge:write, actingUserId, and a non-empty workspace allowlist.',
         'ChatGPT Custom GPT Actions: after hub upgrades, re-import GET /api/v1/llm/openapi.json so begin/append/finalize appear (and upload_workspace_media disappears if it was listed before).',
       ],

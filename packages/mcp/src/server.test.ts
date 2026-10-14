@@ -417,6 +417,71 @@ describe('strict tool arguments', () => {
     expect(updateProjectTask).not.toHaveBeenCalled();
     expect(listProjectTasks).not.toHaveBeenCalled();
   });
+
+  test('set_delivery_media_links rejects an unknown link field', async () => {
+    const setDeliveryMediaLinks = vi.fn();
+    await withMcpClient(['pm:write'], { setDeliveryMediaLinks }, async (client) => {
+      const result = await client.callTool({
+        name: 'set_delivery_media_links',
+        arguments: {
+          projectId: PROJECT_ID,
+          entityType: 'user_story',
+          entityId: 'PRO-S-1',
+          links: [{ kind: 'url', url: 'https://example.com', title: 'Shot', extra: true }],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(toolText(result)).toContain('extra');
+      expect(setDeliveryMediaLinks).not.toHaveBeenCalled();
+    });
+    await expect(
+      invokeNamedHubTool({ setDeliveryMediaLinks }, ['pm:write'], 'set_delivery_media_links', {
+        projectId: PROJECT_ID,
+        entityType: 'task',
+        entityId: 'PRO-T-1',
+        links: [{ kind: 'media', mediaId: PROJECT_ID, nope: 1 }],
+      }),
+    ).rejects.toMatchObject({
+      message: 'Unknown field: links[0].nope',
+    });
+    expect(setDeliveryMediaLinks).not.toHaveBeenCalled();
+  });
+
+  test('linking media requires pm:write and readers stay read-only', async () => {
+    const setDeliveryMediaLinks = vi.fn();
+    await withMcpClient(['pm:read'], { setDeliveryMediaLinks }, async (client) => {
+      const result = await client.callTool({
+        name: 'set_delivery_media_links',
+        arguments: {
+          projectId: PROJECT_ID,
+          entityType: 'task',
+          entityId: 'PRO-T-1',
+          links: [],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(toolText(result)).toContain('pm:write');
+      expect(setDeliveryMediaLinks).not.toHaveBeenCalled();
+    });
+  });
+
+  test('media tool descriptions name item links and human keys', async () => {
+    await withMcpClient(['pm:read', 'knowledge:read', 'knowledge:write'], {}, async (client) => {
+      const listed = await client.listTools();
+      const byName = new Map(listed.tools.map((tool) => [tool.name, tool.description ?? '']));
+      expect(byName.get('set_delivery_media_links')).toMatch(/PRO-T-1/);
+      expect(byName.get('set_delivery_media_links')).toMatch(/pm:write/);
+      expect(byName.get('begin_workspace_media_upload')).toMatch(/targetEntityId/);
+      expect(byName.get('begin_workspace_media_upload')).toMatch(/pm:write/);
+      expect(byName.get('list_workspace_media')).toMatch(/entityId/);
+      expect(byName.get('get_project_task')).toMatch(/mediaLinks/);
+      expect(byName.get('list_project_tasks')).toMatch(/mediaLinkCount/);
+      expect(byName.get('list_project_user_stories')).toMatch(/mediaLinks/);
+      expect(byName.get('list_project_epics')).toMatch(/mediaLinks/);
+      expect(byName.get('list_project_raid_items')).toMatch(/mediaLinks/);
+      expect(byName.get('list_project_change_items')).toMatch(/mediaLinks/);
+    });
+  });
 });
 
 describe('list_project_tasks paging schema', () => {

@@ -50,6 +50,7 @@ import {
   raidStatusSchema,
   recordTypeSchema,
   itemMediaEntityTypeSchema,
+  type ItemMediaEntityType,
   taskStatusSchema,
   userStoryStatusSchema,
 } from '@project-knowledge-hub/domain';
@@ -58,6 +59,7 @@ import {
   contentSha256,
   isTruncatedReadback,
   MCP_MAX_LIST_LIMIT,
+  hasMcpScope,
   serializedResponseBytes,
   sliceContentToFit,
   type ContentPage,
@@ -77,6 +79,7 @@ import {
 import {
   appendMediaUploadChunk,
   beginMediaUploadSession,
+  loadMediaUploadSession,
   takeMediaUploadSession,
 } from './media-upload-session.js';
 import {
@@ -98,7 +101,9 @@ import {
 import { getEffectiveMediaMaxBytes } from './media-max-bytes.js';
 import {
   appendMediaLink,
+  attachItemMediaLinks,
   mediaUsedBy,
+  requireItemMediaTarget,
   setItemMediaLinks,
 } from './project-item-media.js';
 import { buildSupportDump } from './support-dump.js';
@@ -666,6 +671,26 @@ function parseMcpCompetencies(
         : { name: item.name, skillId: item.skillId ?? null },
     ),
   );
+}
+
+async function assertUploadItemTarget(
+  app: FastifyInstance,
+  client: McpClientContext,
+  input: {
+    workspaceId: string;
+    entityType: ItemMediaEntityType;
+    entityId: string;
+  },
+): Promise<void> {
+  if (!hasMcpScope(client.scopes, 'pm:write')) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Missing required scope: pm:write',
+      statusCode: 403,
+    });
+  }
+  const target = await requireItemMediaTarget(app.database, input);
+  await requirePmProject(app, client, target.projectId, { forWrite: true });
 }
 
 async function requirePmProject(
@@ -2287,6 +2312,20 @@ export function createMcpToolHandlers(
         input.knowledgeRecordId,
         workspaceIds,
       );
+      const targetEntityId = input.targetEntityId
+        ? await resolveEntityId(app.database, {
+            entityType: input.targetEntityType!,
+            idOrKey: input.targetEntityId,
+            workspaceIds,
+          })
+        : null;
+      if (input.targetEntityType && targetEntityId) {
+        await assertUploadItemTarget(app, client, {
+          workspaceId: input.workspaceId,
+          entityType: input.targetEntityType,
+          entityId: targetEntityId,
+        });
+      }
 
       let buffer: Buffer;
       try {
@@ -2322,12 +2361,7 @@ export function createMcpToolHandlers(
         ),
         blobStore,
       });
-      if (input.targetEntityType && input.targetEntityId) {
-        const targetEntityId = await resolveEntityId(app.database, {
-          entityType: input.targetEntityType,
-          idOrKey: input.targetEntityId,
-          workspaceIds,
-        });
+      if (input.targetEntityType && targetEntityId) {
         await appendMediaLink(app.database, {
           workspaceId: input.workspaceId,
           mediaId: row.id,
@@ -2337,6 +2371,10 @@ export function createMcpToolHandlers(
         });
       }
       const media = toPublicMedia(row);
+      const linkedTo =
+        input.targetEntityType && targetEntityId
+          ? { entityType: input.targetEntityType, entityId: targetEntityId }
+          : undefined;
 
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2351,6 +2389,8 @@ export function createMcpToolHandlers(
           contentType: row.contentType,
           byteSize: row.byteSize,
           insertIntoRecord: Boolean(input.insertIntoRecord),
+          targetEntityType: input.targetEntityType ?? null,
+          targetEntityId,
           via: 'mcp',
         },
         ipAddress: ipAddress ?? null,
@@ -2360,11 +2400,12 @@ export function createMcpToolHandlers(
         return {
           media,
           insertedIntoRecord: false,
+          ...(linkedTo ? { linkedTo } : {}),
           hint: 'Paste media.markdownSnippet into create_knowledge_record or update_knowledge_record contentMarkdown. Or re-call with insertIntoRecord=true and knowledgeRecordId. ChatGPT Actions: prefer begin/append/finalize_workspace_media_upload for large base64.',
         };
       }
 
-      return embedMediaIntoRecord(
+      const embedded = await embedMediaIntoRecord(
         app,
         client,
         actingUserId,
@@ -2373,6 +2414,7 @@ export function createMcpToolHandlers(
         input.workspaceId,
         ipAddress,
       );
+      return { ...embedded, ...(linkedTo ? { linkedTo } : {}) };
     },
 
     async beginWorkspaceMediaUpload(input) {
@@ -2409,6 +2451,13 @@ export function createMcpToolHandlers(
             workspaceIds,
           })
         : null;
+      if (input.targetEntityType && targetEntityId) {
+        await assertUploadItemTarget(app, client, {
+          workspaceId: input.workspaceId,
+          entityType: input.targetEntityType,
+          entityId: targetEntityId,
+        });
+      }
 
       const started = await beginMediaUploadSession(app.redis, {
         clientId: client.id,
@@ -2440,6 +2489,18 @@ export function createMcpToolHandlers(
 
     async finalizeWorkspaceMediaUpload(input) {
       const actingUserId = requireActingUserId(client);
+      const pending = await loadMediaUploadSession(
+        app.redis,
+        input.uploadId,
+        client.id,
+      );
+      if (pending.targetEntityType && pending.targetEntityId) {
+        await assertUploadItemTarget(app, client, {
+          workspaceId: pending.workspaceId,
+          entityType: pending.targetEntityType,
+          entityId: pending.targetEntityId,
+        });
+      }
       const session = await takeMediaUploadSession(
         app.redis,
         input.uploadId,
@@ -2500,6 +2561,13 @@ export function createMcpToolHandlers(
         });
       }
       const media = toPublicMedia(row);
+      const linkedTo =
+        session.targetEntityType && session.targetEntityId
+          ? {
+              entityType: session.targetEntityType,
+              entityId: session.targetEntityId,
+            }
+          : undefined;
 
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
@@ -2515,6 +2583,8 @@ export function createMcpToolHandlers(
           byteSize: row.byteSize,
           insertIntoRecord: session.insertIntoRecord,
           chunkCount: session.chunks.length,
+          targetEntityType: session.targetEntityType,
+          targetEntityId: session.targetEntityId,
           via: 'mcp_chunked',
         },
         ipAddress: ipAddress ?? null,
@@ -2526,6 +2596,7 @@ export function createMcpToolHandlers(
           insertedIntoRecord: false,
           chunkCount: session.chunks.length,
           totalBase64Chars: session.totalBase64Chars,
+          ...(linkedTo ? { linkedTo } : {}),
           hint: 'Paste media.markdownSnippet into create/update, or begin again with insertIntoRecord=true and knowledgeRecordId.',
         };
       }
@@ -2543,6 +2614,7 @@ export function createMcpToolHandlers(
         ...embedded,
         chunkCount: session.chunks.length,
         totalBase64Chars: session.totalBase64Chars,
+        ...(linkedTo ? { linkedTo } : {}),
       };
     },
 
@@ -2570,6 +2642,13 @@ export function createMcpToolHandlers(
             workspaceIds,
           })
         : undefined;
+      if (input.entityType && entityId) {
+        await requireItemMediaTarget(app.database, {
+          workspaceId: input.workspaceId,
+          entityType: input.entityType,
+          entityId,
+        });
+      }
       const rows = await listWorkspaceMedia(app.database, {
         workspaceId: input.workspaceId,
         knowledgeRecordId: knowledgeRecordId ?? undefined,
@@ -2647,7 +2726,7 @@ export function createMcpToolHandlers(
         input,
       );
       return {
-        milestones: page.rows,
+        milestones: await attachItemMediaLinks(app.database, 'milestone', page.rows),
         total: page.total,
         limit: page.limit,
         nextCursor: page.nextCursor,
@@ -2684,7 +2763,11 @@ export function createMcpToolHandlers(
         includeArchived: input.includeArchived,
       });
       const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
-      return pageTaskList(tasks, input.cursor, limit);
+      const page = pageTaskList(tasks, input.cursor, limit);
+      return {
+        ...page,
+        tasks: await attachItemMediaLinks(app.database, 'task', page.tasks),
+      };
     },
 
     async getProjectTask(input) {
@@ -2698,7 +2781,8 @@ export function createMcpToolHandlers(
       });
       const task = await getTask(app.database, taskId);
       await requirePmProject(app, client, task.projectId);
-      return { task };
+      const [withLinks] = await attachItemMediaLinks(app.database, 'task', [task]);
+      return { task: withLinks ?? task };
     },
 
     async createProjectMilestone(input) {
@@ -2784,7 +2868,7 @@ export function createMcpToolHandlers(
         input,
       );
       return {
-        sprints: page.rows,
+        sprints: await attachItemMediaLinks(app.database, 'sprint', page.rows),
         total: page.total,
         limit: page.limit,
         nextCursor: page.nextCursor,
@@ -2967,7 +3051,11 @@ export function createMcpToolHandlers(
         }
       });
       const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
-      return pageTaskList(visible, input.cursor, limit);
+      const page = pageTaskList(visible, input.cursor, limit);
+      return {
+        ...page,
+        tasks: await attachItemMediaLinks(app.database, 'task', page.tasks),
+      };
     },
 
     async getMyDashboardInsights() {
@@ -3362,7 +3450,7 @@ export function createMcpToolHandlers(
         input,
       );
       return {
-        epics: page.rows,
+        epics: await attachItemMediaLinks(app.database, 'epic', page.rows),
         total: page.total,
         limit: page.limit,
         nextCursor: page.nextCursor,
@@ -3451,7 +3539,11 @@ export function createMcpToolHandlers(
         input,
       );
       return {
-        userStories: page.rows,
+        userStories: await attachItemMediaLinks(
+          app.database,
+          'user_story',
+          page.rows,
+        ),
         total: page.total,
         limit: page.limit,
         nextCursor: page.nextCursor,
@@ -4036,7 +4128,7 @@ export function createMcpToolHandlers(
         input,
       );
       return {
-        raidItems: page.rows,
+        raidItems: await attachItemMediaLinks(app.database, 'raid', page.rows),
         total: page.total,
         limit: page.limit,
         nextCursor: page.nextCursor,
@@ -4410,7 +4502,7 @@ export function createMcpToolHandlers(
         input,
       );
       return {
-        changeItems: page.rows,
+        changeItems: await attachItemMediaLinks(app.database, 'change', page.rows),
         total: page.total,
         limit: page.limit,
         nextCursor: page.nextCursor,
