@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activityExcerptKeys,
   decodeListCursor,
   encodeListCursor,
   excerptTask,
@@ -54,6 +55,20 @@ describe('task list pages', () => {
     expect(row.description).toBe('short');
     expect(row.stepsToReproduce?.endsWith('…')).toBe(true);
     expect(row.stepsToReproduce).toHaveLength(TASK_LIST_EXCERPT_CHARS + 1);
+  });
+
+  it('returns full comment text unless fullText is false', () => {
+    const long = 'c'.repeat(TASK_LIST_EXCERPT_CHARS + 20);
+    const rows = [{ id: '1', type: 'comment', body: long }];
+    const full = pageItems(rows, undefined, 10, {
+      excerptKeys: activityExcerptKeys(true),
+    });
+    expect(full.items[0]?.body).toBe(long);
+
+    const excerpted = pageItems(rows, undefined, 10, {
+      excerptKeys: activityExcerptKeys(false),
+    });
+    expect(excerpted.items[0]?.body).toBe(`${'c'.repeat(TASK_LIST_EXCERPT_CHARS)}…`);
   });
 
   it('pages epics and changes with excerpted description and rationale', () => {
