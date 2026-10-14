@@ -125,8 +125,8 @@ function TreeBranch({
             <span className="kh-ops-tree-spacer" aria-hidden />
           )}
           <div className="kh-ops-tree-title">
-            <strong>{label}</strong>
-            {sub ? <small>{sub}</small> : null}
+            <strong className="kh-ops-primary-cell">{label}</strong>
+            {sub ? <span className="kh-ops-type-chip">{sub}</span> : null}
             {dimmed && dimHint ? <span className="sr-only">{dimHint}</span> : null}
           </div>
         </div>
@@ -550,19 +550,21 @@ export function ProjectDeliveryTree({
   }) {
     return (
       <>
-        <span className="kh-ops-tree-status" title={input.statusLabel}>
+        <span className="kh-ops-tree-cell kh-ops-tree-status" title={input.statusLabel}>
           {input.statusLabel}
         </span>
-        <span className="kh-ops-tree-pct">{input.percent}</span>
-        <span className="kh-ops-tree-pct">{input.target}</span>
-        <span className="kh-ops-tree-owner" title={input.owner ?? undefined}>
+        <span className="kh-ops-tree-cell kh-ops-num kh-ops-tree-pct">{input.percent}</span>
+        <span className="kh-ops-tree-cell kh-ops-num kh-ops-tree-pct">{input.target}</span>
+        <span className="kh-ops-tree-cell kh-ops-tree-owner" title={input.owner ?? undefined}>
           {input.owner ?? '—'}
         </span>
-        <span className="kh-ops-tree-sprint" title={input.sprint ?? undefined}>
+        <span className="kh-ops-tree-cell kh-ops-tree-sprint" title={input.sprint ?? undefined}>
           {input.sprint ?? '—'}
         </span>
-        <span className="kh-ops-tree-hours">{input.hours == null ? '—' : `${input.hours}h`}</span>
-        <span className="kh-ops-tree-points">
+        <span className="kh-ops-tree-cell kh-ops-num kh-ops-tree-hours">
+          {input.hours == null ? '—' : `${input.hours}h`}
+        </span>
+        <span className="kh-ops-tree-cell kh-ops-num kh-ops-tree-points">
           {input.points == null ? '—' : `${input.points}pt`}
         </span>
       </>
