@@ -36,6 +36,7 @@ import {
   createTask,
   deleteTask,
   getMilestone,
+  getPublicMilestone,
   getTask,
   listMilestones,
   listTasks,
@@ -49,6 +50,7 @@ import {
   parseHours,
   upsertProjectCostSnapshot,
 } from '../lib/project-budget.js';
+import { setMilestoneItemLinks } from '../lib/milestone-item-links.js';
 import { buildBoardPdf } from '../lib/board-export.js';
 import { buildCalendarPdf } from '../lib/calendar-export.js';
 import { buildTimelinePdf } from '../lib/timeline-export.js';
@@ -325,6 +327,53 @@ export async function registerProjectDeliveryRoutes(
       entityType: 'project_milestone',
       entityId: milestone.id,
       metadata: { projectId: project.id, ...body },
+      ipAddress: request.ip,
+    });
+
+    return { milestone };
+  });
+
+  app.put('/api/v1/project-milestones/:milestoneId/item-links', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ milestoneId: z.string().uuid() }).parse(request.params);
+    const body = z
+      .object({
+        items: z
+          .array(
+            z.object({
+              entityType: z.enum(['epic', 'user_story', 'task']),
+              entityId: z.string().uuid(),
+            }),
+          )
+          .max(100),
+      })
+      .parse(request.body);
+
+    const existing = await getMilestone(app.database, params.milestoneId);
+    const { project } = await requireProjectContext(app.database, existing.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    assertProjectNotArchived(project);
+
+    await setMilestoneItemLinks(app.database, {
+      milestoneId: existing.id,
+      projectId: project.id,
+      items: body.items,
+      createdBy: principal.userId,
+    });
+    const milestone = await getPublicMilestone(app.database, existing.id);
+
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrgId(app, project.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'project.milestone_item_links_set',
+      entityType: 'project_milestone',
+      entityId: milestone.id,
+      metadata: {
+        projectId: project.id,
+        itemCount: milestone.linkedItems.length,
+      },
       ipAddress: request.ip,
     });
 

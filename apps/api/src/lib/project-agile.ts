@@ -27,6 +27,7 @@ import {
   type TaskActivityType,
   type UserStoryStatus,
 } from '@project-knowledge-hub/domain';
+import { deleteMilestoneItemLinks } from './milestone-item-links.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import { withMediaLinkCounts, withMediaLinks } from './project-item-media.js';
 import {
@@ -631,11 +632,10 @@ export async function deleteEpic(
     .from(projectUserStories)
     .where(eq(projectUserStories.epicId, epicId));
   await deleteDeliveryDependenciesFor(database, 'epic', [epicId]);
-  await deleteDeliveryDependenciesFor(
-    database,
-    'user_story',
-    stories.map((row) => row.id),
-  );
+  await deleteMilestoneItemLinks(database, 'epic', [epicId]);
+  const storyIds = stories.map((row) => row.id);
+  await deleteDeliveryDependenciesFor(database, 'user_story', storyIds);
+  await deleteMilestoneItemLinks(database, 'user_story', storyIds);
   await database.db.delete(projectEpics).where(eq(projectEpics.id, epicId));
   return { id: existing.id, projectId: existing.projectId };
 }
@@ -646,6 +646,7 @@ export async function deleteUserStory(
 ): Promise<{ id: string; projectId: string }> {
   const existing = await getUserStory(database, storyId);
   await deleteDeliveryDependenciesFor(database, 'user_story', [storyId]);
+  await deleteMilestoneItemLinks(database, 'user_story', [storyId]);
   await database.db
     .delete(projectUserStories)
     .where(eq(projectUserStories.id, storyId));

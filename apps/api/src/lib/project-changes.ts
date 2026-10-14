@@ -470,6 +470,41 @@ export async function setChangeDeliveryLinks(
   });
 }
 
+async function assertChangeRecordsInProject(
+  database: Database,
+  projectId: string,
+  recordIds: string[],
+): Promise<void> {
+  if (recordIds.length === 0) return;
+  const { project } = await requireProjectContext(database, projectId);
+  const rows = await database.db
+    .select({
+      id: knowledgeRecords.id,
+      projectId: knowledgeRecords.projectId,
+      workspaceId: knowledgeRecords.workspaceId,
+    })
+    .from(knowledgeRecords)
+    .where(inArray(knowledgeRecords.id, recordIds));
+  const found = new Map(rows.map((row) => [row.id, row]));
+  for (const recordId of recordIds) {
+    const row = found.get(recordId);
+    if (!row) {
+      throw new AppError({
+        code: 'CHANGE_KNOWLEDGE_NOT_FOUND',
+        message: 'Linked knowledge record was not found',
+        statusCode: 400,
+      });
+    }
+    if (row.projectId !== projectId || row.workspaceId !== project.workspaceId) {
+      throw new AppError({
+        code: 'CHANGE_KNOWLEDGE_PROJECT_MISMATCH',
+        message: 'Linked knowledge record must belong to this project',
+        statusCode: 400,
+      });
+    }
+  }
+}
+
 export async function setChangeRecordLinks(
   database: Database,
   input: {
@@ -480,33 +515,7 @@ export async function setChangeRecordLinks(
   },
 ): Promise<void> {
   const recordIds = [...new Set(input.recordIds)];
-  if (recordIds.length > 0) {
-    const rows = await database.db
-      .select({
-        id: knowledgeRecords.id,
-        projectId: knowledgeRecords.projectId,
-      })
-      .from(knowledgeRecords)
-      .where(inArray(knowledgeRecords.id, recordIds));
-    const found = new Map(rows.map((row) => [row.id, row.projectId]));
-    for (const recordId of recordIds) {
-      const ownerProjectId = found.get(recordId);
-      if (!ownerProjectId) {
-        throw new AppError({
-          code: 'CHANGE_KNOWLEDGE_NOT_FOUND',
-          message: 'Linked knowledge record was not found',
-          statusCode: 400,
-        });
-      }
-      if (ownerProjectId !== input.projectId) {
-        throw new AppError({
-          code: 'CHANGE_KNOWLEDGE_PROJECT_MISMATCH',
-          message: 'Linked knowledge record must belong to this project',
-          statusCode: 400,
-        });
-      }
-    }
-  }
+  await assertChangeRecordsInProject(database, input.projectId, recordIds);
 
   await database.db.transaction(async (tx) => {
     const db = tx as unknown as Database['db'];
@@ -701,6 +710,9 @@ export async function updateChangeItem(
   }
 
   const recordIds = linkedRecordIds(input);
+  if (recordIds !== undefined) {
+    await assertChangeRecordsInProject(database, existing.projectId, recordIds);
+  }
   const nextStatus = input.status ?? existing.status;
   const patch: Partial<typeof projectChangeItems.$inferInsert> = {
     updatedAt: new Date(),

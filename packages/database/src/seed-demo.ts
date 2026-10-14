@@ -27,6 +27,7 @@ import {
   projectCostSnapshots,
   projectEpics,
   projectInitialStakeholders,
+  projectMilestoneItemLinks,
   projectMilestones,
   projectRaidItems,
   projectRaidTaskLinks,
@@ -1482,6 +1483,47 @@ Prefer a tool-capable model; tiny local models often skip tools.
         handoffDemoTaskId = task.id;
       }
     }
+
+    const milestoneLinkTasks = await database.db
+      .select({
+        id: projectTasks.id,
+        milestoneId: projectTasks.milestoneId,
+      })
+      .from(projectTasks)
+      .where(eq(projectTasks.projectId, labProject.id));
+    const tasksFor = (milestoneId: string, limit: number) =>
+      milestoneLinkTasks
+        .filter((row) => row.milestoneId === milestoneId)
+        .slice(0, limit)
+        .map((row) => ({
+          milestoneId,
+          entityType: 'task' as const,
+          entityId: row.id,
+          createdBy: admin.id,
+        }));
+    await database.db.insert(projectMilestoneItemLinks).values([
+      {
+        milestoneId: mNetwork.id,
+        entityType: 'user_story',
+        entityId: storyEdge.id,
+        createdBy: admin.id,
+      },
+      ...tasksFor(mNetwork.id, 2),
+      {
+        milestoneId: mDelivery.id,
+        entityType: 'epic',
+        entityId: labEpic.id,
+        createdBy: admin.id,
+      },
+      {
+        milestoneId: mDelivery.id,
+        entityType: 'user_story',
+        entityId: storyDelivery.id,
+        createdBy: admin.id,
+      },
+      ...tasksFor(mDelivery.id, 3),
+      ...tasksFor(mObservability.id, 2),
+    ]);
 
     if (handoffDemoTaskId) {
       await database.db

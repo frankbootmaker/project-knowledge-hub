@@ -744,7 +744,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_milestones',
     description:
-      'List project milestones. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is derived from linkedItems: done is 100, cancelled is excluded, otherwise computed. 100 means every included link is complete. targetDate is the due date. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -760,7 +760,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_milestone',
-    description: 'Create a live milestone. Requires pm:write.',
+    description:
+      'Create a live milestone. description is the note. targetDate is the due date. startDate is legacy. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -780,7 +781,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'update_project_milestone',
-    description: 'Update a milestone. milestoneId may be UUID or HL1-M-1. Requires pm:write.',
+    description:
+      'Update a milestone. milestoneId may be UUID or HL1-M-1. description is the note. targetDate is the due date. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -795,6 +797,48 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         targetDate: { ...ymd, nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
         archived: { type: 'boolean' },
+      },
+    },
+  },
+  {
+    name: 'get_project_milestone',
+    description:
+      'Get one milestone with its note, due date, completionPercent, and linkedItems. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:read',
+    body: {
+      type: 'object',
+      required: ['milestoneId'],
+      properties: {
+        milestoneId: entityRefProp('Milestone id'),
+      },
+    },
+  },
+  {
+    name: 'set_project_milestone_item_links',
+    description:
+      'Replace epics, stories, tasks, and bugs linked to a milestone. Bugs use entityType task. Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['milestoneId', 'items'],
+      properties: {
+        milestoneId: entityRefProp('Milestone id'),
+        items: {
+          type: 'array',
+          maxItems: 100,
+          items: {
+            type: 'object',
+            required: ['entityType', 'entityId'],
+            properties: {
+              entityType: {
+                type: 'string',
+                enum: ['epic', 'user_story', 'task'],
+              },
+              entityId: entityRefProp('Epic, story, task, or bug id'),
+            },
+          },
+        },
       },
     },
   },

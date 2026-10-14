@@ -279,6 +279,14 @@ export type McpToolHandlers = {
     sortOrder?: number;
     archived?: boolean;
   }) => Promise<unknown>;
+  getProjectMilestone: (input: { milestoneId: string }) => Promise<unknown>;
+  setProjectMilestoneItemLinks: (input: {
+    milestoneId: string;
+    items: Array<{
+      entityType: 'epic' | 'user_story' | 'task';
+      entityId: string;
+    }>;
+  }) => Promise<unknown>;
   listProjectSprints: (input: {
     projectId: string;
     includeArchived?: boolean;
@@ -1732,7 +1740,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_milestones',
-    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each row includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
+    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (derived from linked items: done is 100, cancelled is excluded, otherwise the computed percent; 100 means every included link is complete), linkedItems, and mediaLinks plus mediaLinkCount for the Media tab. targetDate is the due date. startDate is legacy and unused by the form. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -1824,7 +1832,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_milestone',
-    'Create a project milestone (live state). Requires pm:write.',
+    'Create a project milestone (live state). description is the note. targetDate is the due date. startDate is accepted for older clients and is not shown in the form. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1845,7 +1853,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_milestone',
-    'Update a project milestone (live state). milestoneId may be UUID or human key (e.g. HL1-M-1). Requires pm:write.',
+    'Update a project milestone (live state). milestoneId may be UUID or human key (e.g. HL1-M-1). description is the note. targetDate is the due date. Omitting startDate leaves a stored start date unchanged. Requires pm:write.',
     {
       milestoneId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -1859,6 +1867,36 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('update_project_milestone', 'pm:write', () =>
         handlers.updateProjectMilestone(args),
+      )(),
+  );
+
+  server.tool(
+    'get_project_milestone',
+    'Get one milestone with its note (description), due date (targetDate), derived completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 when every included link is complete. Done links count as 100. Cancelled links count as 0 and are left out of the average. Other links use their computed percent. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
+    { milestoneId: entityRef },
+    async (args) =>
+      wrap('get_project_milestone', 'pm:read', () =>
+        handlers.getProjectMilestone(args),
+      )(),
+  );
+
+  server.tool(
+    'set_project_milestone_item_links',
+    'Replace the epics, user stories, tasks, and bugs linked to a milestone. Bugs use entityType task and a B key. Items must belong to the milestone project. The returned milestone includes completionPercent and linkedItems. Requires pm:write.',
+    {
+      milestoneId: entityRef,
+      items: z
+        .array(
+          z.object({
+            entityType: z.enum(['epic', 'user_story', 'task']),
+            entityId: entityRef,
+          }),
+        )
+        .max(100),
+    },
+    async (args) =>
+      wrap('set_project_milestone_item_links', 'pm:write', () =>
+        handlers.setProjectMilestoneItemLinks(args),
       )(),
   );
 
