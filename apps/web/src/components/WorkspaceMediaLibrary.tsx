@@ -88,7 +88,15 @@ function isLinked(item: WorkspaceMediaItem): boolean {
   return item.usedBy.length > 0;
 }
 
-function MediaUrl({ url }: { url: string }) {
+function MediaUrl({
+  url,
+  copyLabel,
+  onCopy,
+}: {
+  url: string;
+  copyLabel: string;
+  onCopy: (value: string) => void;
+}) {
   const [href, setHref] = useState(url);
 
   useEffect(() => {
@@ -100,9 +108,23 @@ function MediaUrl({ url }: { url: string }) {
   }, [url]);
 
   return (
-    <a href={href} className="break-all text-brand no-underline hover:text-brand-hover">
-      {href}
-    </a>
+    <div className="kh-ops-media-url">
+      <a
+        href={href}
+        className="kh-ops-media-url-link text-brand no-underline hover:text-brand-hover"
+        title={href}
+      >
+        {href}
+      </a>
+      <Button
+        type="button"
+        variant="secondary"
+        className="h-8 shrink-0 px-2"
+        onClick={() => onCopy(href)}
+      >
+        {copyLabel}
+      </Button>
+    </div>
   );
 }
 
@@ -758,7 +780,11 @@ export function WorkspaceMediaLibrary(props: {
                 <div className="contents">
                   <dt>{t('detailUrl')}</dt>
                   <dd>
-                    <MediaUrl url={details.url} />
+                    <MediaUrl
+                      url={details.url}
+                      copyLabel={t('copyUrl')}
+                      onCopy={(value) => void copyText(value, t('copiedUrl'))}
+                    />
                   </dd>
                 </div>
               </dl>
@@ -780,7 +806,13 @@ export function WorkspaceMediaLibrary(props: {
                       role="row"
                     >
                       <span>{entityLabel(row.entityType)}</span>
-                      <span>{row.humanKey ?? tCommon('emDash')}</span>
+                      <span>
+                        {row.humanKey ? (
+                          <span className="kh-ops-key-badge">{row.humanKey}</span>
+                        ) : (
+                          tCommon('emDash')
+                        )}
+                      </span>
                       <span>{row.title}</span>
                     </div>
                   ))}

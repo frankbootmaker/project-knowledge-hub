@@ -300,9 +300,11 @@ export function WorkspaceCatalogueSections({
                     return (
                       <tr key={preferred.translationGroupId ?? preferred.id}>
                         <td>
-                          <span className="kh-ops-type-chip">
-                            {preferred.humanKey ?? preferred.recordType}
-                          </span>
+                          {preferred.humanKey ? (
+                            <span className="kh-ops-key-badge">{preferred.humanKey}</span>
+                          ) : (
+                            <span className="kh-ops-type-chip">{preferred.recordType}</span>
+                          )}
                         </td>
                         <td className="kh-ops-primary-cell">
                           <Link

@@ -1,38 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
-function utcParts(value: string): { dd: string; mm: string; yyyy: string } | null {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return {
-    dd: String(date.getUTCDate()).padStart(2, '0'),
-    mm: String(date.getUTCMonth() + 1).padStart(2, '0'),
-    yyyy: String(date.getUTCFullYear()),
-  };
-}
-
-/** Stable UTC label for SSR + first client paint (no Intl padding quirks). */
-function formatUtcStable(value: string): string {
-  const parts = utcParts(value);
-  if (!parts) return value;
-  const date = new Date(value);
-  const hh = String(date.getUTCHours()).padStart(2, '0');
-  const mi = String(date.getUTCMinutes()).padStart(2, '0');
-  const ss = String(date.getUTCSeconds()).padStart(2, '0');
-  return `${parts.dd}/${parts.mm}/${parts.yyyy}, ${hh}:${mi}:${ss}`;
-}
-
-function formatUtcDate(value: string): string {
-  const parts = utcParts(value);
-  if (!parts) return value;
-  return `${parts.dd}/${parts.mm}/${parts.yyyy}`;
-}
+import { useLocale } from 'next-intl';
+import {
+  formatLocaleDate,
+  formatLocaleDateTime,
+  formatStableDate,
+  formatStableDateTime,
+} from '../lib/locale-date';
 
 /**
  * Format timestamps without SSR/client locale mismatches.
- * First paint uses a stable UTC string; after mount, switches to local time.
- * `dateOnly` skips the clock. Pass `locale` so the post-mount label matches the UI language.
+ * First paint uses a stable UTC string; after mount, switches to the UI locale.
+ * `dateOnly` skips the clock. Calendar days (YYYY-MM-DD) do not shift timezone.
  */
 export function LocalDateTime({
   value,
@@ -47,26 +27,19 @@ export function LocalDateTime({
   dateOnly?: boolean;
   locale?: string;
 }) {
+  const uiLocale = useLocale();
+  const resolvedLocale = locale ?? uiLocale;
   const [label, setLabel] = useState(() =>
-    dateOnly ? formatUtcDate(value) : formatUtcStable(value),
+    dateOnly ? formatStableDate(value) : formatStableDateTime(value),
   );
 
   useEffect(() => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      setLabel(value);
-      return;
-    }
     setLabel(
       dateOnly
-        ? date.toLocaleDateString(locale, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-          })
-        : date.toLocaleString(locale),
+        ? formatLocaleDate(value, resolvedLocale)
+        : formatLocaleDateTime(value, resolvedLocale),
     );
-  }, [dateOnly, locale, value]);
+  }, [dateOnly, resolvedLocale, value]);
 
   return (
     <time className={className} dateTime={value}>
