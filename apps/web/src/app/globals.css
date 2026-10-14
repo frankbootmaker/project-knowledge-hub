@@ -403,8 +403,12 @@
   }
 
   .kh-modal {
-    @apply fixed inset-0 flex items-end justify-center p-0 sm:items-center sm:p-4;
+    /* Full-viewport overlay. isolation keeps the page's sticky header
+       (backdrop-filter) from painting over the sheet. */
+    @apply fixed inset-0 flex items-stretch justify-center p-0
+      sm:items-center sm:p-4;
     z-index: var(--kh-z-modal);
+    isolation: isolate;
   }
 
   .kh-modal-backdrop {
@@ -412,19 +416,23 @@
     animation: kh-backdrop-in var(--kh-motion-base) var(--kh-ease-out);
   }
 
-  /* Mobile: bottom sheet. sm+: centered card. */
+  /* Below sm: full-screen sheet. sm+: centered card inside the viewport. */
   .kh-modal-panel {
     @apply relative flex w-full max-w-lg min-h-0 flex-col overflow-hidden
-      rounded-t-[3px] border border-b-0 border-line bg-panel-solid shadow-sm
-      sm:rounded-[3px] sm:border-b;
-    max-height: min(92dvh, 100%);
+      rounded-none border border-line bg-panel-solid shadow-sm
+      sm:rounded-[3px];
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: kh-modal-sheet-in var(--kh-motion-enter) var(--kh-ease-out);
   }
 
   @media (min-width: 640px) {
     .kh-modal-panel {
+      height: auto;
       max-height: min(40rem, calc(100dvh - 2rem));
+      padding-top: 0;
       padding-bottom: 0;
       animation: kh-modal-in var(--kh-motion-enter) var(--kh-ease-out);
     }
@@ -447,7 +455,6 @@
 
   .kh-modal-panel-xl {
     @apply max-w-none;
-    max-height: min(96dvh, 100%);
     /* Stack form columns from the sheet width, so a ~768px viewport
        (90vw panel) is one column even though the page breakpoint is 760px. */
     container-type: inline-size;
@@ -458,7 +465,8 @@
     .kh-modal-panel-xl {
       width: min(90vw, 96rem);
       max-width: min(90vw, 96rem);
-      max-height: min(90dvh, calc(100dvh - 2rem));
+      height: auto;
+      max-height: calc(100dvh - 2rem);
     }
   }
 
@@ -491,6 +499,12 @@
   .kh-modal-header {
     @apply sticky top-0 z-[1] flex shrink-0 items-start justify-between gap-3
       border-b border-line bg-panel-solid px-3 py-2 sm:px-4;
+  }
+
+  /* Sibling of the scrolling body, not a grid row inside it. */
+  .kh-modal-tabs {
+    @apply shrink-0 bg-panel-solid px-3 pt-3 sm:px-4 sm:pt-4;
+    min-width: 0;
   }
 
   .kh-modal-title {

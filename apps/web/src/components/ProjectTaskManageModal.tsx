@@ -699,6 +699,34 @@ export function ProjectTaskManageModal({
       description={t('manageTaskDescription')}
       size={DELIVERY_ITEM_MODAL_SIZE}
       closeOnEscape={!documentPickerOpen}
+      tabs={
+        task ? (
+          <div className="kh-ops-modal-tabs" role="tablist">
+            {(
+              [
+                ['details', t('tabDetails')],
+                ['ai', t('tabAi')],
+                ['raci', t('tabRaci')],
+                ['handoff', t('tabHandoff')],
+                ['activity', t('tabActivity')],
+                ['documents', t('tabDocuments')],
+                ['media', t('tabMedia')],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={taskTab === id}
+                className={taskTab === id ? 'active' : undefined}
+                onClick={() => setTaskTab(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null
+      }
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -787,31 +815,6 @@ export function ProjectTaskManageModal({
                 {t('kindStory')}: {selectedStory?.title ?? task.userStoryTitle}
               </Badge>
             ) : null}
-          </div>
-
-          <div className="kh-ops-modal-tabs" role="tablist">
-            {(
-              [
-                ['details', t('tabDetails')],
-                ['ai', t('tabAi')],
-                ['raci', t('tabRaci')],
-                ['handoff', t('tabHandoff')],
-                ['activity', t('tabActivity')],
-                ['documents', t('tabDocuments')],
-                ['media', t('tabMedia')],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={taskTab === id}
-                className={taskTab === id ? 'active' : undefined}
-                onClick={() => setTaskTab(id)}
-              >
-                {label}
-              </button>
-            ))}
           </div>
 
           <section
