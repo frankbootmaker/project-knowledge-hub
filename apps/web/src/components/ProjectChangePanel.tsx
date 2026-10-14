@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectChangeList } from './ProjectChangeList';
+import { DeliveryItemLinkPicker } from './DeliveryItemLinkPicker';
 import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
 import {
   DeliveryMediaEditor,
@@ -207,7 +208,6 @@ export function ProjectChangePanel({
   const [baselineEndAfter, setBaselineEndAfter] = useState('');
   const [itemKeys, setItemKeys] = useState<string[]>([]);
   const [recordIds, setRecordIds] = useState<string[]>([]);
-  const [itemTypeFilter, setItemTypeFilter] = useState<ItemTypeFilter>('all');
   const [documentTypeFilter, setDocumentTypeFilter] = useState('all');
   const [removeIds, setRemoveIds] = useState<string[]>([]);
   const [taskRemoveIds, setTaskRemoveIds] = useState<string[]>([]);
@@ -246,7 +246,6 @@ export function ProjectChangePanel({
     const seededRecords = seed?.records?.map((record) => record.id)
       ?? (seed?.knowledgeRecordId ? [seed.knowledgeRecordId] : []);
     setRecordIds(seededRecords);
-    setItemTypeFilter('all');
     setDocumentTypeFilter('all');
     setRemoveIds([]);
     setTaskRemoveIds([]);
@@ -300,7 +299,6 @@ export function ProjectChangePanel({
     setPickerQuery('');
     setAddIds([]);
     setAddPage(1);
-    setItemTypeFilter('all');
     setDocumentTypeFilter('all');
     setPicker(kindToOpen);
   }
@@ -551,22 +549,43 @@ export function ProjectChangePanel({
   }
 
   function linkPicker() {
-    const tasksMode = picker === 'tasks';
-    const catalog = tasksMode ? itemRows() : recordRows();
-    const linkedIds = tasksMode ? itemKeys : recordIds;
+    if (picker === 'tasks') {
+      return (
+        <DeliveryItemLinkPicker
+          items={itemRows().flatMap((row) => {
+            if (
+              row.entityType !== 'epic'
+              && row.entityType !== 'user_story'
+              && row.entityType !== 'task'
+              && row.entityType !== 'milestone'
+            ) {
+              return [];
+            }
+            return [{
+              id: row.id,
+              title: row.title,
+              humanKey: row.humanKey,
+              status: row.status,
+              entityType: row.entityType,
+              itemType: row.itemType,
+            }];
+          })}
+          hiddenIds={itemKeys}
+          selectedIds={addIds}
+          onToggle={toggleAdd}
+        />
+      );
+    }
+    const catalog = recordRows();
     const needle = pickerQuery.trim().toLowerCase();
     const available = catalog.filter((row) => {
-      if (linkedIds.includes(row.id)) return false;
-      if (tasksMode && itemTypeFilter !== 'all' && itemFilterKind(row) !== itemTypeFilter) {
-        return false;
-      }
-      if (!tasksMode && documentTypeFilter !== 'all' && row.recordType !== documentTypeFilter) {
+      if (recordIds.includes(row.id)) return false;
+      if (documentTypeFilter !== 'all' && row.recordType !== documentTypeFilter) {
         return false;
       }
       if (!needle) return true;
-      const statusLabel = row.status ? taskStatusLabel(row.status, row.entityType) : '';
       const typeLabel = row.recordType ? recordTypeLabel(row.recordType) : '';
-      const haystack = `${row.humanKey ?? ''} ${row.title} ${statusLabel} ${typeLabel}`.toLowerCase();
+      const haystack = `${row.humanKey ?? ''} ${row.title} ${typeLabel}`.toLowerCase();
       return haystack.includes(needle);
     });
     const totalPages = Math.max(1, Math.ceil(available.length / addPageSize) || 1);
@@ -588,64 +607,37 @@ export function ProjectChangePanel({
               setPickerQuery(event.target.value);
               setAddPage(1);
             }}
-            placeholder={t(tasksMode ? 'taskSearch' : 'documentSearch')}
+            placeholder={t('documentSearch')}
             data-modal-initial-focus
             className="min-w-[12rem] flex-1"
           />
-          {tasksMode ? (
-            <Select
-              value={itemTypeFilter}
-              onChange={(event) => {
-                setItemTypeFilter(event.target.value as ItemTypeFilter);
-                setAddPage(1);
-              }}
-              aria-label={t('itemsTypeFilter')}
-              className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
-            >
-              <option value="all">{t('itemsTypeAll')}</option>
-              <option value="epic">{t('itemsTypeEpic')}</option>
-              <option value="user_story">{t('itemsTypeStory')}</option>
-              <option value="task">{t('itemsTypeTask')}</option>
-              <option value="bug">{t('itemsTypeBug')}</option>
-              <option value="milestone">{t('itemsTypeMilestone')}</option>
-            </Select>
-          ) : (
-            <Select
-              value={documentTypeFilter}
-              onChange={(event) => {
-                setDocumentTypeFilter(event.target.value);
-                setAddPage(1);
-              }}
-              aria-label={t('itemsTypeFilter')}
-              className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
-            >
-              <option value="all">{t('itemsTypeAll')}</option>
-              {documentTypes.map((type) => (
-                <option key={type} value={type}>
-                  {recordTypeLabel(type)}
-                </option>
-              ))}
-            </Select>
-          )}
+          <Select
+            value={documentTypeFilter}
+            onChange={(event) => {
+              setDocumentTypeFilter(event.target.value);
+              setAddPage(1);
+            }}
+            aria-label={t('itemsTypeFilter')}
+            className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
+          >
+            <option value="all">{t('itemsTypeAll')}</option>
+            {documentTypes.map((type) => (
+              <option key={type} value={type}>
+                {recordTypeLabel(type)}
+              </option>
+            ))}
+          </Select>
         </div>
         {available.length === 0 ? (
           <p className="m-0 text-sm text-ink-muted">
             {t(
               needle
-                ? tasksMode
-                  ? 'tasksNoneToAdd'
-                  : 'documentsNoneToAdd'
+                ? 'documentsNoneToAdd'
                 : catalog.length === 0
-                  ? tasksMode
-                    ? 'noTasks'
-                    : 'documentsEmpty'
-                  : tasksMode && itemTypeFilter !== 'all'
-                    ? 'tasksNoneToAdd'
-                    : !tasksMode && documentTypeFilter !== 'all'
-                      ? 'documentsNoneToAdd'
-                      : tasksMode
-                        ? 'tasksAllLinked'
-                        : 'documentsAllLinked',
+                  ? 'documentsEmpty'
+                  : documentTypeFilter !== 'all'
+                    ? 'documentsNoneToAdd'
+                    : 'documentsAllLinked',
             )}
           </p>
         ) : (
@@ -665,16 +657,8 @@ export function ProjectChangePanel({
                         <span className="text-ink-muted">{row.humanKey} · </span>
                       ) : null}
                       {row.title}
-                      {tasksMode ? (
-                        <span className="text-ink-muted"> · {itemKindLabel(row)}</span>
-                      ) : row.recordType ? (
+                      {row.recordType ? (
                         <span className="text-ink-muted"> · {recordTypeLabel(row.recordType)}</span>
-                      ) : null}
-                      {row.status ? (
-                        <span className="text-ink-muted">
-                          {' '}
-                          ({taskStatusLabel(row.status, row.entityType)})
-                        </span>
                       ) : null}
                     </span>
                   </label>
@@ -710,7 +694,7 @@ export function ProjectChangePanel({
                 </Select>
                 <nav
                   className="flex flex-wrap items-center gap-2"
-                  aria-label={t(tasksMode ? 'tasksAddTitle' : 'documentsAddTitle')}
+                  aria-label={t('documentsAddTitle')}
                 >
                   <Button
                     type="button"

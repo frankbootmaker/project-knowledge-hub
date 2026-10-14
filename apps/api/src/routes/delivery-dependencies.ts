@@ -18,7 +18,9 @@ import { writeAuditEvent } from '../lib/identity.js';
 import {
   listDeliveryDependencies,
   removeDeliveryDependency,
+  setDeliveryDependencies,
   setDeliveryDependency,
+  updateDeliveryDependency,
 } from '../lib/delivery-dependencies.js';
 import {
   assertProjectNotArchived,
@@ -79,15 +81,19 @@ export async function registerDeliveryDependencyRoutes(
       const params = z
         .object({ projectId: z.string().uuid() })
         .parse(request.params);
+      const linkSchema = z.object({
+        predecessorId: refSchema,
+        predecessorType: entityTypeSchema.optional(),
+        successorId: refSchema,
+        successorType: entityTypeSchema.optional(),
+        linkType: linkTypeSchema,
+        lagDays: z.number().int().min(-3650).max(3650).optional(),
+      });
       const body = z
-        .object({
-          predecessorId: refSchema,
-          predecessorType: entityTypeSchema.optional(),
-          successorId: refSchema,
-          successorType: entityTypeSchema.optional(),
-          linkType: linkTypeSchema,
-          lagDays: z.number().int().min(-3650).max(3650).optional(),
-        })
+        .union([
+          z.object({ links: z.array(linkSchema).min(1).max(50) }),
+          linkSchema,
+        ])
         .parse(request.body);
       const { project } = await requireProjectContext(
         app.database,
@@ -95,6 +101,28 @@ export async function registerDeliveryDependencyRoutes(
       );
       requireWorkspaceMaintainer(principal, project.workspaceId);
       assertProjectNotArchived(project);
+      if ('links' in body) {
+        const result = await setDeliveryDependencies(app.database, {
+          projectId: project.id,
+          links: body.links,
+          createdBy: principal.userId,
+        });
+        await writeAuditEvent(app.database, {
+          organizationId: await workspaceOrgId(app, project.workspaceId),
+          actorType: 'user',
+          actorId: principal.userId,
+          action: 'project.delivery_dependency_set',
+          entityType: 'project_delivery_dependency',
+          entityId: result.dependencies[0]?.id ?? project.id,
+          metadata: {
+            projectId: project.id,
+            count: result.dependencies.length,
+            linkIds: result.dependencies.map((link) => link.id),
+          },
+          ipAddress: request.ip,
+        });
+        return result;
+      }
       const result = await setDeliveryDependency(app.database, {
         projectId: project.id,
         ...body,
@@ -113,6 +141,53 @@ export async function registerDeliveryDependencyRoutes(
           lagDays: result.dependency.lagDays,
           predecessorId: result.dependency.predecessor.id,
           successorId: result.dependency.successor.id,
+        },
+        ipAddress: request.ip,
+      });
+      return result;
+    },
+  );
+
+  app.patch(
+    '/api/v1/projects/:projectId/delivery-dependencies/:linkId',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({
+          projectId: z.string().uuid(),
+          linkId: z.string().uuid(),
+        })
+        .parse(request.params);
+      const body = z
+        .object({
+          linkType: linkTypeSchema.optional(),
+          lagDays: z.number().int().min(-3650).max(3650).optional(),
+        })
+        .refine((value) => value.linkType !== undefined || value.lagDays !== undefined)
+        .parse(request.body);
+      const { project } = await requireProjectContext(
+        app.database,
+        params.projectId,
+      );
+      requireWorkspaceMaintainer(principal, project.workspaceId);
+      assertProjectNotArchived(project);
+      const result = await updateDeliveryDependency(app.database, {
+        projectId: project.id,
+        linkId: params.linkId,
+        ...body,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.delivery_dependency_set',
+        entityType: 'project_delivery_dependency',
+        entityId: result.dependency.id,
+        metadata: {
+          projectId: project.id,
+          linkType: result.dependency.linkType,
+          lagDays: result.dependency.lagDays,
         },
         ipAddress: request.ip,
       });

@@ -56,6 +56,16 @@ import {
   type RatePerson,
 } from '../lib/task-costing';
 
+type MilestoneLink = {
+  entityType: 'epic' | 'user_story' | 'task';
+  entityId: string;
+  title?: string;
+  humanKey?: string | null;
+  status?: string;
+  itemType?: 'task' | 'bug' | null;
+  completionPercent?: number | null;
+};
+
 type Milestone = {
   id: string;
   title: string;
@@ -65,6 +75,9 @@ type Milestone = {
   targetDate: string | null;
   sortOrder: number;
   humanKey?: string | null;
+  completionPercent?: number | null;
+  completion?: { percent: number; done: number; total: number } | null;
+  linkedItems?: MilestoneLink[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -306,6 +319,7 @@ export function ProjectDeliveryPanel({
   const [bugActual, setBugActual] = useState('');
   const [bugRegression, setBugRegression] = useState(false);
   const [bugSystemId, setBugSystemId] = useState('');
+  const [milestoneNote, setMilestoneNote] = useState('');
   const timelineExportRef = useRef<TimelineExportHandle | null>(null);
   const [timelineExportState, setTimelineExportState] = useState<{
     pending: boolean;
@@ -471,7 +485,8 @@ export function ProjectDeliveryPanel({
       humanKey: milestone.humanKey ?? null,
       title: milestone.title,
       status: milestone.status,
-      completion: null,
+      completion: milestone.completion ?? null,
+      dueDate: milestone.targetDate,
       targetPercent: null,
       owner: null,
       sprint: null,
@@ -656,6 +671,7 @@ export function ProjectDeliveryPanel({
     setBugActual('');
     setBugRegression(false);
     setBugSystemId('');
+    setMilestoneNote('');
     setError(null);
   }
 
@@ -721,7 +737,7 @@ export function ProjectDeliveryPanel({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: title.trim(),
-            startDate: startDateValue || null,
+            description: milestoneNote.trim() || null,
             targetDate: dateValue || null,
           }),
         });
@@ -1083,6 +1099,14 @@ export function ProjectDeliveryPanel({
         <ProjectDeliveryTree
           epics={epics}
           stories={stories}
+          milestones={milestones.map((milestone) => ({
+            id: milestone.id,
+            title: milestone.title,
+            status: milestone.status,
+            targetDate: milestone.targetDate,
+            humanKey: milestone.humanKey ?? null,
+            completionPercent: milestone.completionPercent ?? null,
+          }))}
           tasks={tasks.map((task) => ({
             ...task,
             sprintLabel: task.sprintId
@@ -1093,6 +1117,9 @@ export function ProjectDeliveryPanel({
           onManageEpic={(epicId) => setManageAgile({ kind: 'epic', id: epicId })}
           onManageStory={(storyId) =>
             setManageAgile({ kind: 'story', id: storyId })
+          }
+          onManageMilestone={(milestoneId) =>
+            setManageAgile({ kind: 'milestone', id: milestoneId })
           }
           sprintsLoaded={sprintsLoaded}
         />
@@ -1268,16 +1295,8 @@ export function ProjectDeliveryPanel({
             />
           </Field>
           {createKind === 'milestone' ? (
-            <div className="kh-ops-form-grid">
-              <Field label={t('startDate')}>
-                <Input
-                  type="date"
-                  value={startDateValue}
-                  onChange={(e) => setStartDateValue(e.target.value)}
-                  disabled={pending}
-                />
-              </Field>
-              <Field label={t('targetDate')}>
+            <>
+              <Field label={t('dueDate')}>
                 <Input
                   type="date"
                   value={dateValue}
@@ -1285,7 +1304,15 @@ export function ProjectDeliveryPanel({
                   disabled={pending}
                 />
               </Field>
-            </div>
+              <Field label={t('milestoneNote')}>
+                <Textarea
+                  value={milestoneNote}
+                  onChange={(event) => setMilestoneNote(event.target.value)}
+                  disabled={pending}
+                  rows={4}
+                />
+              </Field>
+            </>
           ) : null}
           {createKind === 'epic' ? (
             <div className="kh-ops-form-grid">

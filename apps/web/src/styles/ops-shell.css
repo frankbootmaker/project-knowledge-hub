@@ -2141,6 +2141,59 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   color: var(--kh-ink-muted);
 }
 
+.kh-ops-milestone-markers {
+  display: grid;
+  gap: 8px;
+  padding: 12px 12px 4px;
+}
+
+.kh-ops-milestone-markers-title {
+  margin: 0;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kh-ops-milestone-markers-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.kh-ops-milestone-marker {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 11rem;
+  max-width: 18rem;
+  padding: 8px 10px;
+  border: 1px solid var(--kh-line);
+  border-left: 3px solid var(--kh-brand);
+  border-radius: var(--kh-radius-sm);
+  background: var(--kh-panel-solid);
+  color: inherit;
+  text-align: left;
+}
+
+.kh-ops-milestone-marker time,
+.kh-ops-milestone-marker-meta {
+  color: var(--kh-ink-muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.kh-ops-milestone-marker-title {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
 .kh-ops-task-card {
   margin: 8px;
   padding: 11px;

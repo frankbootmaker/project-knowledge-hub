@@ -1162,6 +1162,41 @@ export const projectMilestones = pgTable(
   ],
 );
 
+/**
+ * Items whose completion rolls up to a milestone.
+ * Epics, stories, tasks, and bugs (tasks with item_type bug).
+ * entity_id is polymorphic; the app checks project ownership.
+ */
+export const projectMilestoneItemLinks = pgTable(
+  'project_milestone_item_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    milestoneId: uuid('milestone_id')
+      .notNull()
+      .references(() => projectMilestones.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_milestone_item_links_uidx').on(
+      table.milestoneId,
+      table.entityType,
+      table.entityId,
+    ),
+    index('project_milestone_item_links_entity_idx').on(
+      table.entityType,
+      table.entityId,
+    ),
+    index('project_milestone_item_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
 /** Agile epics (orthogonal to milestone timeboxes). */
 export const projectEpics = pgTable(
   'project_epics',
@@ -1248,6 +1283,21 @@ export const projectSprints = pgTable(
     startDate: date('start_date', { mode: 'string' }),
     endDate: date('end_date', { mode: 'string' }),
     capacityPoints: integer('capacity_points'),
+    /**
+     * Points and burndown frozen when the sprint is completed or cancelled.
+     * Moving unfinished tasks off the sprint must not rewrite this history.
+     */
+    closureSnapshot: jsonb('closure_snapshot').$type<{
+      committedPoints: number;
+      donePoints: number;
+      startDate: string | null;
+      endDate: string | null;
+      points: Array<{
+        date: string;
+        idealRemaining: number;
+        remaining: number;
+      }>;
+    } | null>(),
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),

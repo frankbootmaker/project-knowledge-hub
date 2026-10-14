@@ -2,11 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [master, feature/new-design]
+    branches: [master, feature/new-design, integration/batch]
   pull_request:
 
 # One run per ref. A new push to an open PR cancels the previous PR run.
-# Pushes to master and feature/new-design are not cancelled.
+# Pushes to master, feature/new-design, and integration/batch are not cancelled.
+# There is no main branch; the default branch is master.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

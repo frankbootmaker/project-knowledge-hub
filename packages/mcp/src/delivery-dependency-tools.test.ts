@@ -40,12 +40,7 @@ describe('delivery dependency MCP tools', () => {
     const set = findLlmTool('set_delivery_dependency');
     expect(set?.scope).toBe('pm:write');
     expect(set?.write).toBe(true);
-    expect(set?.body.required).toEqual([
-      'projectId',
-      'predecessorId',
-      'successorId',
-      'linkType',
-    ]);
+    expect(set?.body.required).toEqual(['projectId']);
     expect(unknownToolFields(set?.body, {
       projectId: '00000000-0000-4000-8000-000000000001',
       predecessorId: 'PRO-T-1',
@@ -53,6 +48,17 @@ describe('delivery dependency MCP tools', () => {
       linkType: 'FS',
       successorTitle: 'nope',
     })).toEqual(['successorTitle']);
+    expect(unknownToolFields(set?.body, {
+      projectId: '00000000-0000-4000-8000-000000000001',
+      links: [
+        {
+          predecessorId: 'PRO-T-1',
+          successorId: 'PRO-B-1',
+          linkType: 'FS',
+          note: 'nope',
+        },
+      ],
+    })).toEqual(['links[0].note']);
 
     const remove = findLlmTool('remove_delivery_dependency');
     expect(remove?.scope).toBe('pm:write');

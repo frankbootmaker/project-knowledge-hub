@@ -744,7 +744,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_milestones',
     description:
-      'List project milestones. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is derived from linkedItems: done is 100, cancelled is excluded, otherwise computed. 100 means every included link is complete. targetDate is the due date. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -760,7 +760,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_milestone',
-    description: 'Create a live milestone. Requires pm:write.',
+    description:
+      'Create a live milestone. description is the note. targetDate is the due date. startDate is legacy. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -780,7 +781,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'update_project_milestone',
-    description: 'Update a milestone. milestoneId may be UUID or HL1-M-1. Requires pm:write.',
+    description:
+      'Update a milestone. milestoneId may be UUID or HL1-M-1. description is the note. targetDate is the due date. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -795,6 +797,48 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         targetDate: { ...ymd, nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
         archived: { type: 'boolean' },
+      },
+    },
+  },
+  {
+    name: 'get_project_milestone',
+    description:
+      'Get one milestone with its note, due date, completionPercent, and linkedItems. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:read',
+    body: {
+      type: 'object',
+      required: ['milestoneId'],
+      properties: {
+        milestoneId: entityRefProp('Milestone id'),
+      },
+    },
+  },
+  {
+    name: 'set_project_milestone_item_links',
+    description:
+      'Replace epics, stories, tasks, and bugs linked to a milestone. Bugs use entityType task. Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      required: ['milestoneId', 'items'],
+      properties: {
+        milestoneId: entityRefProp('Milestone id'),
+        items: {
+          type: 'array',
+          maxItems: 100,
+          items: {
+            type: 'object',
+            required: ['entityType', 'entityId'],
+            properties: {
+              entityType: {
+                type: 'string',
+                enum: ['epic', 'user_story', 'task'],
+              },
+              entityId: entityRefProp('Epic, story, task, or bug id'),
+            },
+          },
+        },
       },
     },
   },
@@ -1201,7 +1245,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_delivery_dependencies',
     description:
-      'List predecessor links for one delivery item and the successors derived from them. entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'List every predecessor link on one delivery item and the successors derived from them. An item may have many predecessors. The successor start is the latest constraint (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1221,13 +1265,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_delivery_dependency',
     description:
-      'Add a predecessor link (FS, SS, FF, or SF) with optional lagDays. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
+      'Add predecessor links (FS, SS, FF, or SF) with optional lagDays. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The successor start is the latest constraint. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
     scope: 'pm:write',
     write: true,
     body: {
       type: 'object',
       additionalProperties: false,
-      required: ['projectId', 'predecessorId', 'successorId', 'linkType'],
+      required: ['projectId'],
       properties: {
         projectId: uuidProp('Project id'),
         predecessorId: entityRefProp('Predecessor id'),
@@ -1250,6 +1294,37 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           minimum: -3650,
           maximum: 3650,
           description: 'Calendar days. Negative is a lead. Defaults to 0.',
+        },
+        links: {
+          type: 'array',
+          maxItems: 50,
+          description: 'Several predecessor links saved in one call. Each item needs predecessorId, successorId, and linkType.',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['predecessorId', 'successorId', 'linkType'],
+            properties: {
+              predecessorId: entityRefProp('Predecessor id'),
+              predecessorType: {
+                type: 'string',
+                enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+              },
+              successorId: entityRefProp('Successor id'),
+              successorType: {
+                type: 'string',
+                enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+              },
+              linkType: {
+                type: 'string',
+                enum: ['FS', 'SS', 'FF', 'SF'],
+              },
+              lagDays: {
+                type: 'integer',
+                minimum: -3650,
+                maximum: 3650,
+              },
+            },
+          },
         },
       },
     },
