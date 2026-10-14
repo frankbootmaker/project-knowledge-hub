@@ -248,6 +248,12 @@ export default async function ProjectDetailPage({
           startDate: string | null;
           targetDate: string | null;
           sortOrder: number;
+          completionPercent?: number | null;
+          completion?: { percent: number; done: number; total: number } | null;
+          linkedItems?: Array<{
+            entityType: 'epic' | 'user_story' | 'task';
+            entityId: string;
+          }>;
           createdAt?: string;
           updatedAt?: string;
         }>;

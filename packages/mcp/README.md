@@ -12,7 +12,7 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints, **and the image/media embed workflow**
 * `list_workspace_media` — recent workspace images with Markdown snippets; optional filter by a delivery, RAID, or change item
 * `get_platform_status` — redacted health/backup snapshot (requires opt-in `monitoring:read`; not in default scopes)
-* `list_project_milestones` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` / `list_project_change_items` / `get_project_budget_summary` / `get_project_resource_utilization` — Project Delivery + RAID + budget/utilization (requires opt-in `pm:read`). Task, story, epic, milestone, sprint, RAID, and change reads include `mediaLinks` and `mediaLinkCount`
+* `list_project_milestones` / `get_project_milestone` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` / `list_project_change_items` / `get_project_budget_summary` / `get_project_resource_utilization` — Project Delivery + RAID + budget/utilization (requires opt-in `pm:read`). Milestone list and get include `completionPercent` and `linkedItems`. Task, story, epic, milestone, sprint, RAID, and change reads include `mediaLinks` and `mediaLinkCount`
 * `list_project_sprints` / `get_project_sprint_burndown` / `get_project_scrum_velocity` — Scrum (NF-020)
 * `list_my_project_tasks` / `get_my_dashboard_insights` — acting-user My tasks + dashboard rollups (`pm:read` + `actingUserId`)
 * `list_project_delivery_document_links` — knowledge ↔ delivery index for a project
@@ -40,7 +40,7 @@ Approve / mark-current remain human/session-API only.
 
 Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge writes, these **commit immediately** (not draft-only):
 
-* `create_project_milestone` / `update_project_milestone`
+* `create_project_milestone` / `update_project_milestone` / `set_project_milestone_item_links` — due date is `targetDate`; `description` is the note; links are epics, stories, tasks, and bugs (`task`)
 * `create_project_epic` / `update_project_epic`
 * `create_project_user_story` / `update_project_user_story`
 * `create_project_sprint` / `update_project_sprint` — activate/close; unfinished work → backlog or another sprint

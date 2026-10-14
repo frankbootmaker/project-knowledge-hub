@@ -193,6 +193,61 @@ export function displayedTaskCompletionPercent(
   return 0;
 }
 
+export type MilestoneLinkKind = 'task' | 'parent';
+
+export type MilestoneLinkCompletion = {
+  /** Tasks and bugs use `task`. Epics and stories use `parent`. */
+  kind: MilestoneLinkKind;
+  status: string;
+  /**
+   * Computed percent for an open item.
+   * Tasks pass the stored step. Parents pass the child average.
+   * Null means nothing was computed.
+   */
+  completionPercent?: number | null;
+};
+
+/**
+ * Points one linked item adds to a milestone average.
+ * Done is 100. Cancelled is excluded.
+ * A task with no stored step counts as 0.
+ * A parent with no computed children is excluded.
+ */
+export function milestoneLinkPoints(
+  link: MilestoneLinkCompletion,
+): number | null {
+  if (link.kind === 'task') {
+    return childCompletionPoints(link.status, link.completionPercent);
+  }
+  if (link.status === 'cancelled') return null;
+  if (link.status === 'done') return 100;
+  if (
+    typeof link.completionPercent === 'number' &&
+    Number.isFinite(link.completionPercent)
+  ) {
+    return link.completionPercent;
+  }
+  return null;
+}
+
+/**
+ * Derived milestone completion from linked items.
+ * The milestone is complete when this percent is 100.
+ * An empty set of includable links has no rollup.
+ * The milestone's own status does not override the links.
+ */
+export function milestoneCompletion(
+  links: readonly MilestoneLinkCompletion[],
+): DeliveryCompletionRollup | null {
+  const points: number[] = [];
+  for (const link of links) {
+    const value = milestoneLinkPoints(link);
+    if (value == null) continue;
+    points.push(value);
+  }
+  return averageCompletion(points);
+}
+
 /** Average of the points that were not excluded. Empty input has no rollup. */
 export function averageCompletion(
   points: readonly number[],
