@@ -7,6 +7,7 @@ import {
   projectEpics,
   projectMilestones,
   projectSprints,
+  projectTasks,
   projectUserStories,
   projects,
   systems,
@@ -50,6 +51,7 @@ import {
   raidKindSchema,
   raidSeveritySchema,
   raidStatusSchema,
+  RECORD_TYPES,
   recordTypeSchema,
   itemMediaEntityTypeSchema,
   type ItemMediaEntityType,
@@ -217,6 +219,45 @@ import {
 import { moveProjectToWorkspace } from './project-move.js';
 import { getKnowledgeRecordTags } from './tags.js';
 
+function workspaceAllowlistMessage(workspace: {
+  id: string;
+  name?: string | null;
+}): string {
+  const label = workspace.name
+    ? `Workspace "${workspace.name}" (${workspace.id})`
+    : `Workspace ${workspace.id}`;
+  return (
+    `${label} is not on this API client's workspace allow-list. ` +
+    "This token's scope does not include that workspace. " +
+    'Call list_workspaces to see the workspaces this token can access.'
+  );
+}
+
+function parseMcpRecordType(value: string) {
+  const parsed = recordTypeSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: `Invalid recordType "${value}". Allowed types: ${RECORD_TYPES.join(', ')}`,
+      statusCode: 400,
+    });
+  }
+  return parsed.data;
+}
+
+function projectAllowlistMessage(project: {
+  id: string;
+  name?: string | null;
+}): string {
+  const label = project.name
+    ? `Project "${project.name}" (${project.id})`
+    : `Project ${project.id}`;
+  return (
+    `${label} is not on this API client's project allow-list. ` +
+    "This token's scope does not include that project."
+  );
+}
+
 function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): void {
   if (
     client.allowedWorkspaceIds.length > 0 &&
@@ -224,7 +265,7 @@ function assertWorkspaceAllowed(client: McpClientContext, workspaceId: string): 
   ) {
     throw new AppError({
       code: 'FORBIDDEN',
-      message: 'Workspace is not allowed for this API client',
+      message: workspaceAllowlistMessage({ id: workspaceId }),
       statusCode: 403,
     });
   }
@@ -241,7 +282,7 @@ function assertWriteWorkspaceAllowed(client: McpClientContext, workspaceId: stri
   if (!client.allowedWorkspaceIds.includes(workspaceId)) {
     throw new AppError({
       code: 'FORBIDDEN',
-      message: 'Workspace is not allowed for this API client',
+      message: workspaceAllowlistMessage({ id: workspaceId }),
       statusCode: 403,
     });
   }
@@ -383,7 +424,7 @@ async function resolveDeliveryEntityRef(
   return resolveEntityId(database, { entityType, idOrKey, projectId, workspaceIds });
 }
 
-type FilterEntityType = 'milestone' | 'sprint' | 'epic' | 'user_story';
+type FilterEntityType = 'milestone' | 'sprint' | 'epic' | 'user_story' | 'task';
 
 type EntityRow = {
   projectId: string;
@@ -407,6 +448,7 @@ const ENTITY_TYPE_LABELS: Record<FilterEntityType, string> = {
   sprint: 'Sprint',
   epic: 'Epic',
   user_story: 'User story',
+  task: 'Task',
 };
 
 /**
@@ -495,6 +537,7 @@ export async function resolveFilterEntity(
     sprint: projectSprints as unknown as FilterEntityTable,
     epic: projectEpics as unknown as FilterEntityTable,
     user_story: projectUserStories as unknown as FilterEntityTable,
+    task: projectTasks as unknown as FilterEntityTable,
   };
 
   const table = tableMap[entityType];
@@ -798,7 +841,7 @@ function assertProjectAllowed(client: McpClientContext, projectId: string | null
   if (!client.allowedProjectIds.includes(projectId)) {
     throw new AppError({
       code: 'FORBIDDEN',
-      message: 'Project is not allowed for this API client',
+      message: projectAllowlistMessage({ id: projectId }),
       statusCode: 403,
     });
   }
@@ -941,8 +984,31 @@ async function resolveMcpProject(
         statusCode: 404,
       });
     }
-    assertWorkspaceAllowed(client, project.workspaceId);
-    assertProjectAllowed(client, project.id);
+    if (
+      client.allowedWorkspaceIds.length > 0 &&
+      !client.allowedWorkspaceIds.includes(project.workspaceId)
+    ) {
+      const labels = await loadWorkspaceLabels(app, [project.workspaceId]);
+      const workspace = labels.get(project.workspaceId);
+      const workspaceLabel = workspace?.name
+        ? `"${workspace.name}" (${project.workspaceId})`
+        : project.workspaceId;
+      throw new AppError({
+        code: 'FORBIDDEN',
+        message:
+          `Project "${project.name}" is in workspace ${workspaceLabel}, which is not on this API client's workspace allow-list. ` +
+          "This token's scope does not include that workspace. " +
+          'Call list_workspaces to see the workspaces this token can access.',
+        statusCode: 403,
+      });
+    }
+    if (client.allowedProjectIds.length > 0 && !client.allowedProjectIds.includes(project.id)) {
+      throw new AppError({
+        code: 'FORBIDDEN',
+        message: projectAllowlistMessage({ id: project.id, name: project.name }),
+        statusCode: 403,
+      });
+    }
     return project;
   }
 
@@ -978,6 +1044,57 @@ async function resolveMcpProject(
     }
   });
   if (matches.length === 0) {
+    if (rows.length > 0) {
+      const hidden = rows[0]!;
+      throw new AppError({
+        code: 'FORBIDDEN',
+        message: projectAllowlistMessage({ id: hidden.id, name: hidden.name }),
+        statusCode: 403,
+      });
+    }
+    const outside = await app.database.db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        workspaceId: projects.workspaceId,
+        workspaceName: workspaces.name,
+      })
+      .from(projects)
+      .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
+      .where(
+        and(
+          eq(projects.slug, projectSlug),
+          eq(workspaces.organizationId, client.organizationId),
+          isNull(projects.archivedAt),
+        ),
+      );
+    const blocked = outside.find(
+      (row) =>
+        (client.allowedWorkspaceIds.length > 0 &&
+          !client.allowedWorkspaceIds.includes(row.workspaceId)) ||
+        (client.allowedProjectIds.length > 0 &&
+          !client.allowedProjectIds.includes(row.id)),
+    );
+    if (blocked) {
+      if (
+        client.allowedWorkspaceIds.length > 0 &&
+        !client.allowedWorkspaceIds.includes(blocked.workspaceId)
+      ) {
+        throw new AppError({
+          code: 'FORBIDDEN',
+          message:
+            `Project "${blocked.name}" is in workspace "${blocked.workspaceName}" (${blocked.workspaceId}), which is not on this API client's workspace allow-list. ` +
+            "This token's scope does not include that workspace. " +
+            'Call list_workspaces to see the workspaces this token can access.',
+          statusCode: 403,
+        });
+      }
+      throw new AppError({
+        code: 'FORBIDDEN',
+        message: projectAllowlistMessage({ id: blocked.id, name: blocked.name }),
+        statusCode: 403,
+      });
+    }
     throw new AppError({
       code: 'PROJECT_NOT_FOUND',
       message: 'Project not found',
@@ -1113,41 +1230,84 @@ export function createMcpToolHandlers(
         workspaceId,
         workspaceSlug,
       });
-      const workspaceIds = await resolveWorkspaceFilter(
-        app,
-        client,
-        selectedWorkspaceId,
-      );
-      if (workspaceIds.length === 0) {
-        return { projects: [] };
+      const orgWorkspaces = await app.database.db
+        .select({
+          id: workspaces.id,
+          name: workspaces.name,
+          slug: workspaces.slug,
+        })
+        .from(workspaces)
+        .where(
+          and(
+            eq(workspaces.organizationId, client.organizationId),
+            isNull(workspaces.archivedAt),
+          ),
+        );
+      const scopeIds = selectedWorkspaceId
+        ? [selectedWorkspaceId]
+        : orgWorkspaces.map((row) => row.id);
+      if (scopeIds.length === 0) {
+        return { projects: [], inaccessibleProjects: [] };
       }
+      const workspaceById = new Map(orgWorkspaces.map((row) => [row.id, row]));
       const rows = await app.database.db
         .select()
         .from(projects)
-        .where(and(inArray(projects.workspaceId, workspaceIds), isNull(projects.archivedAt)))
-        .limit(limit);
-      const filtered = rows.filter((row) => {
-        try {
-          assertProjectAllowed(client, row.id);
-          return true;
-        } catch {
-          return false;
+        .where(and(inArray(projects.workspaceId, scopeIds), isNull(projects.archivedAt)))
+        .orderBy(asc(projects.name));
+      const accessible: Array<(typeof rows)[number]> = [];
+      const inaccessible: Array<{
+        row: (typeof rows)[number];
+        reason: string;
+      }> = [];
+      for (const row of rows) {
+        const workspace = workspaceById.get(row.workspaceId);
+        const workspaceBlocked =
+          client.allowedWorkspaceIds.length > 0 &&
+          !client.allowedWorkspaceIds.includes(row.workspaceId);
+        if (workspaceBlocked) {
+          inaccessible.push({
+            row,
+            reason: workspaceAllowlistMessage({
+              id: row.workspaceId,
+              name: workspace?.name,
+            }),
+          });
+          continue;
         }
+        const projectBlocked =
+          client.allowedProjectIds.length > 0 &&
+          !client.allowedProjectIds.includes(row.id);
+        if (projectBlocked) {
+          inaccessible.push({
+            row,
+            reason: projectAllowlistMessage({ id: row.id, name: row.name }),
+          });
+          continue;
+        }
+        accessible.push(row);
+      }
+      const page =
+        typeof limit === 'number' ? accessible.slice(0, limit) : accessible;
+      const labels = await loadWorkspaceLabels(app, [
+        ...page.map((row) => row.workspaceId),
+        ...inaccessible.map((item) => item.row.workspaceId),
+      ]);
+      const toSummary = (row: (typeof rows)[number]) => ({
+        id: row.id,
+        workspaceId: row.workspaceId,
+        ...workspacePathFields(labels, row.workspaceId),
+        name: row.name,
+        slug: row.slug,
+        status: row.status,
+        summary: row.summary,
+        keyPrefix: row.keyPrefix,
       });
-      const labels = await loadWorkspaceLabels(
-        app,
-        filtered.map((row) => row.workspaceId),
-      );
       return {
-        projects: filtered.map((row) => ({
-          id: row.id,
-          workspaceId: row.workspaceId,
-          ...workspacePathFields(labels, row.workspaceId),
-          name: row.name,
-          slug: row.slug,
-          status: row.status,
-          summary: row.summary,
-          keyPrefix: row.keyPrefix,
+        projects: page.map(toSummary),
+        inaccessibleProjects: inaccessible.map((item) => ({
+          ...toSummary(item.row),
+          reason: item.reason,
         })),
       };
     },
@@ -2001,7 +2161,7 @@ export function createMcpToolHandlers(
         assertProjectAllowed(client, input.projectId);
       }
       const actingUserId = requireActingUserId(client);
-      const recordType = recordTypeSchema.parse(input.recordType);
+      const recordType = parseMcpRecordType(input.recordType);
 
       const result = await createKnowledgeRecord(
         app,
@@ -2056,6 +2216,7 @@ export function createMcpToolHandlers(
       const resolvedId = await resolveKnowledgeRecordId(app.database, {
         idOrKey: input.recordId,
         workspaceIds,
+        includeArchived: input.archived === false,
       });
 
       const conditions = [eq(knowledgeRecords.id, resolvedId)];
@@ -2096,7 +2257,7 @@ export function createMcpToolHandlers(
       const recordType =
         input.recordType === undefined
           ? undefined
-          : recordTypeSchema.parse(input.recordType);
+          : parseMcpRecordType(input.recordType);
 
       const archiveOnly =
         input.archived !== undefined &&
@@ -2480,7 +2641,7 @@ export function createMcpToolHandlers(
 
       return {
         ...started,
-        hint: `ChatGPT: split the raw base64 into ~${started.recommendedChunkChars}-char chunks (max ${started.maxChunkChars}). Call append_workspace_media_upload for each chunk, then finalize_workspace_media_upload.`,
+        hint: `Split the raw base64 into ~${started.recommendedChunkChars}-char chunks (max ${started.maxChunkChars}). Call append_workspace_media_upload for each chunk, then finalize_workspace_media_upload.`,
       };
     },
 
@@ -4412,10 +4573,10 @@ export function createMcpToolHandlers(
       });
       const taskIds = await Promise.all(
         input.taskIds.map((idOrKey) =>
-          resolveEntityId(app.database, {
+          resolveFilterEntity(app.database, {
             entityType: 'task',
             idOrKey,
-            projectId: project.id,
+            requestedProjectId: project.id,
           }),
         ),
       );
