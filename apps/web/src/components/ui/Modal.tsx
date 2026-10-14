@@ -29,6 +29,11 @@ type Props = {
   children: ReactNode;
   footer?: ReactNode;
   /**
+   * Pinned under the title. Stays visible while `children` scroll.
+   * Use for delivery item tab bars (Details / Documents / Media).
+   */
+  tabs?: ReactNode;
+  /**
    * Wider sheet for denser forms (e.g. API client scopes).
    * `xl` ≈ 90vw; `full` ≈ viewport for wide markdown / spreadsheet viewers.
    */
@@ -48,6 +53,7 @@ export function Modal({
   description,
   children,
   footer,
+  tabs,
   size = 'md',
   closeOnBackdrop = true,
   closeOnEscape = true,
@@ -190,6 +196,7 @@ export function Modal({
             </svg>
           </Button>
         </div>
+        {tabs ? <div className="kh-modal-tabs">{tabs}</div> : null}
         <div className={cn('kh-modal-body', bodyClassName)}>{children}</div>
         {footer ? <div className="kh-modal-footer">{footer}</div> : null}
       </div>

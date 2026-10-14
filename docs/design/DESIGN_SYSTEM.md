@@ -89,7 +89,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Grids | Prefer `grid-cols-1 sm:grid-cols-2 …`. Avoid fixed `grid-cols-[Npx_1fr]` without a mobile fallback |
 | Touch targets | Prefer existing control tokens / header control squares; keep interactive chrome ≥ ~40px |
 | Overflow | Code/JSON in `overflow-x-auto`; never rely on page-wide horizontal scroll |
-| Modals | Below `sm`: bottom sheet (`items-end`, rounded top, `max-h` ≈ 92–96dvh), body scrolls, header/footer fixed; footer actions stack full-width (`flex-col-reverse`). From `sm`: centered card. Respect `safe-area-inset-*`; root `viewportFit: 'cover'` |
+| Modals | Below `sm`: full-screen sheet (`100dvh`, no radius), header, optional tabs, and footer stay put, body scrolls. From `sm`: centered card, `max-height: calc(100dvh - 2rem)` (`xl` uses that cap; smaller sizes also cap at 40–44rem). Footer actions stack full-width below `sm`. Respect `safe-area-inset-*`; root `viewportFit: 'cover'`. Overlay is `position: fixed` on `document.body` at `--kh-z-modal` |
 | Toasts | Below `sm`: full-bleed bottom strip with safe-area padding; from `sm`: bottom-right stack (`max-w-sm`). Stay above modals (`--kh-z-toast` > `--kh-z-modal`) |
 | Section header actions | `SectionHeader` keeps title + actions on one row. Delivery view modes are a full-width `.kh-ops-delivery-modes` strip (text labels, overflow-x). Stakeholders view switchers still use icons below `md` via `ViewModeIcon` |
 | Function header | `.kh-function-header*` stacks controls above actions below `sm`; controls may wrap; from `sm` keep search/filters left and primary actions right |
@@ -180,7 +180,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-meta-chip` | Compact delivery board label/value tags |
 | `.kh-shell` / `.kh-shell-content` | Max-width shell + content vertical padding (public/auth pages) |
 | `.kh-mobile-nav` / `.kh-mobile-nav-backdrop` / `.kh-mobile-nav-panel` / `.kh-mobile-nav-links` | Full-viewport mobile nav dropdown |
-| `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg`) / `.kh-modal-header` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs |
+| `.kh-modal` / `.kh-modal-backdrop` / `.kh-modal-panel` (+ `-lg` / `-xl` / `-full`) / `.kh-modal-header` / `.kh-modal-tabs` / `.kh-modal-title` / `.kh-modal-description` / `.kh-modal-body` / `.kh-modal-footer` | Modal dialogs. Header, tabs, and footer are fixed; only `.kh-modal-body` scrolls |
 
 ## Primitives
 
@@ -190,7 +190,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `LinkButton` | Navigation that should look like a button |
 | `NavLink` | Header or admin sidebar links (active state included) |
 | `MobileNav` | Primary nav below `sm` (sheet + backdrop; Esc / route change closes) |
-| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `footer`; `size` `md`/`lg`/`xl`/`full`. Mobile bottom sheet / desktop card via `.kh-modal*` (sticky 13px/11px header, 3px radii). Delivery, RAID, and change item dialogs share `DELIVERY_ITEM_MODAL_SIZE` (`xl`) |
+| `Modal` | Focused create/edit flows; Esc + backdrop close; optional `tabs` and `footer`; `size` `md`/`lg`/`xl`/`full`. Full-screen sheet below `sm`, centered card from `sm`, via `.kh-modal*` (13px/11px header, 3px radii from `sm`). Pass tab bars as `tabs` so they stay visible. Delivery, RAID, and change item dialogs share `DELIVERY_ITEM_MODAL_SIZE` (`xl`) |
 | `Panel` | `default` / `solid` / `inset` surfaces |
 | `Field`, `Input`, `PasswordInput`, `PasswordStrengthHint`, `Select`, `Textarea`, `ErrorText` | Forms (`PasswordInput` show/hide; strength meter for new passwords) |
 | `FilePicker` | File choose control — secondary **Browse** / **Tallózás** button + filename (hides native file chrome) |
@@ -246,6 +246,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-14
 
+* **Item dialog viewport** — Story, epic, task, bug, RAID, and change dialogs keep the title and tab bar on screen at any viewport. `Modal` pins an optional `tabs` slot between the header and the scrolling body. Below `sm` the sheet is `100dvh`; from `sm` an `xl` sheet is `max-height: calc(100dvh - 2rem)`. The overlay is a fixed, isolated layer at `--kh-z-modal` so sticky page chrome cannot cover it.
 * **Delivery completion vs status** — Done shows 100% and Cancelled shows 0% on tasks, stories, and epics (list, tree, and the epic/story detail field). Any other status keeps the calculated value. A parent average still leaves cancelled children out. The task dialog shows 0% when cancelled and still stores null.
 * **Tree columns** — Status, %, target, owner, sprint, hours, points, and actions share one grid. Child rows indent by the toggle width so titles and values stay on the same vertical lines.
 * **Stable first paint** — Catalogue, linked-record, media, and git sync dates, plus “today” on delivery and the dashboard, paint a UTC value first and switch to the viewer’s calendar after mount. Percent labels fold unicode spaces.
@@ -345,7 +346,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-08-11
 
-* **Responsive modals & toasts** — Modals are bottom sheets below `sm` (scrollable body, sticky header/footer, full-width stacked actions, safe-area padding); centered cards from `sm`. Toasts are full-bleed at the bottom on small screens and corner-stacked from `sm`. Root `viewportFit: 'cover'` for insets.
+* **Responsive modals & toasts** — Modals are full-screen sheets below `sm` (scrollable body, fixed header/tabs/footer, full-width stacked actions, safe-area padding); centered cards from `sm`, capped to the viewport. Toasts are full-bleed at the bottom on small screens and corner-stacked from `sm`. Root `viewportFit: 'cover'` for insets.
 * **Icon view switchers** — Delivery / Stakeholders view controls use `ViewModeIcon` below `md` so they stay on the section title row; text labels from `md` up.
 * **Compact mobile header** — Below `md`, brand is the KnowHub mark only (`BrandMark`); wordmark from `md` up. Login/logout are icon controls (same square size as theme). `MobileNav` hamburger sits at the far right after session controls.
 * **Section header actions** — Delivery / Stakeholders view switchers live in `CollapsibleSection` → `SectionHeader` `action` (not in `FunctionHeader`). Title + actions stay one row; `FunctionHeader` stacks controls above actions on small screens so open filters do not collide with create chrome.

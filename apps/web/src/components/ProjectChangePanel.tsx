@@ -950,35 +950,40 @@ export function ProjectChangePanel({
     );
   }
 
-  function tabbedForm(disabled: boolean) {
+  function itemTabs() {
     const tabs = ['details', 'tasks', 'documents', 'media'] as const;
     return (
-      <div>
+      <div className="kh-ops-modal-tabs" role="tablist">
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={changeTab === tab}
+            className={changeTab === tab ? 'active' : undefined}
+            onClick={() => setChangeTab(tab)}
+          >
+            {tab === 'details'
+              ? t('tabDetails')
+              : tab === 'tasks'
+                ? t('tabItems')
+                : tab === 'documents'
+                  ? t('tabDocuments')
+                  : tDelivery('tabMedia')}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function tabbedForm(disabled: boolean) {
+    return (
+      <>
         {error ? (
           <div className="mb-3">
             <ErrorText>{error}</ErrorText>
           </div>
         ) : null}
-        <div className="kh-ops-modal-tabs" role="tablist">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={changeTab === tab}
-              className={changeTab === tab ? 'active' : undefined}
-              onClick={() => setChangeTab(tab)}
-            >
-              {tab === 'details'
-                ? t('tabDetails')
-                : tab === 'tasks'
-                  ? t('tabItems')
-                  : tab === 'documents'
-                    ? t('tabDocuments')
-                    : tDelivery('tabMedia')}
-            </button>
-          ))}
-        </div>
         <section className={`kh-ops-modal-pane${changeTab === 'details' ? ' active' : ''}`}>
           {formFields(disabled)}
         </section>
@@ -998,7 +1003,7 @@ export function ProjectChangePanel({
             onDraftsChange={setMediaDrafts}
           />
         </section>
-      </div>
+      </>
     );
   }
 
@@ -1040,6 +1045,7 @@ export function ProjectChangePanel({
         description={t('modalDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
         closeOnEscape={!picker}
+        tabs={itemTabs()}
         footer={
           <>
             <Button
@@ -1073,6 +1079,7 @@ export function ProjectChangePanel({
         description={t('manageDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
         closeOnEscape={!picker}
+        tabs={itemTabs()}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <div>

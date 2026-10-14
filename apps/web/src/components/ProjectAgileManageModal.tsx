@@ -470,6 +470,37 @@ export function ProjectAgileManageModal({
       description={modalDescription}
       size={DELIVERY_ITEM_MODAL_SIZE}
       closeOnEscape={!documentPickerOpen}
+      tabs={
+        <div className="kh-ops-modal-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={agileTab === 'details'}
+            className={agileTab === 'details' ? 'active' : undefined}
+            onClick={() => setAgileTab('details')}
+          >
+            {t('tabDetails')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={agileTab === 'documents'}
+            className={agileTab === 'documents' ? 'active' : undefined}
+            onClick={() => setAgileTab('documents')}
+          >
+            {t('tabDocuments')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={agileTab === 'media'}
+            className={agileTab === 'media' ? 'active' : undefined}
+            onClick={() => setAgileTab('media')}
+          >
+            {t('tabMedia')}
+          </button>
+        </div>
+      }
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -570,35 +601,6 @@ export function ProjectAgileManageModal({
           </label>
         </div>
       ) : null}
-      <div className="kh-ops-modal-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={agileTab === 'details'}
-          className={agileTab === 'details' ? 'active' : undefined}
-          onClick={() => setAgileTab('details')}
-        >
-          {t('tabDetails')}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={agileTab === 'documents'}
-          className={agileTab === 'documents' ? 'active' : undefined}
-          onClick={() => setAgileTab('documents')}
-        >
-          {t('tabDocuments')}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={agileTab === 'media'}
-          className={agileTab === 'media' ? 'active' : undefined}
-          onClick={() => setAgileTab('media')}
-        >
-          {t('tabMedia')}
-        </button>
-      </div>
       <section className={`kh-ops-modal-pane${agileTab === 'details' ? ' active' : ''}`}>
       <div className="kh-ops-form-grid">
         {effortRollup ? (

@@ -1071,30 +1071,35 @@ export function ProjectRaidPanel({
     );
   }
 
-  function tabbedForm(disabled: boolean, options?: { managing?: boolean }) {
+  function itemTabs() {
     const tabs = ['details', 'tasks', 'documents', 'media'] as const;
     return (
-      <div>
-        <div className="kh-ops-modal-tabs" role="tablist">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={raidTab === tab}
-              className={raidTab === tab ? 'active' : undefined}
-              onClick={() => setRaidTab(tab)}
-            >
-              {tab === 'details'
-                ? t('tabDetails')
-                : tab === 'tasks'
-                  ? t('tabItems')
-                  : tab === 'documents'
-                    ? t('tabDocuments')
-                    : tDelivery('tabMedia')}
-            </button>
-          ))}
-        </div>
+      <div className="kh-ops-modal-tabs" role="tablist">
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={raidTab === tab}
+            className={raidTab === tab ? 'active' : undefined}
+            onClick={() => setRaidTab(tab)}
+          >
+            {tab === 'details'
+              ? t('tabDetails')
+              : tab === 'tasks'
+                ? t('tabItems')
+                : tab === 'documents'
+                  ? t('tabDocuments')
+                  : tDelivery('tabMedia')}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function tabbedForm(disabled: boolean, options?: { managing?: boolean }) {
+    return (
+      <>
         <section
           className={`kh-ops-modal-pane${raidTab === 'details' ? ' active' : ''}`}
         >
@@ -1120,7 +1125,7 @@ export function ProjectRaidPanel({
             onDraftsChange={setMediaDrafts}
           />
         </section>
-      </div>
+      </>
     );
   }
 
@@ -1159,6 +1164,7 @@ export function ProjectRaidPanel({
         description={t('modalDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
         closeOnEscape={!picker}
+        tabs={itemTabs()}
         footer={
           <>
             <Button
@@ -1189,6 +1195,7 @@ export function ProjectRaidPanel({
         description={t('manageDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
         closeOnEscape={!picker}
+        tabs={itemTabs()}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">

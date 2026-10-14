@@ -3435,7 +3435,12 @@ button.kh-ops-project-card:disabled {
 
 .kh-ops-modal-tabs {
   display: flex;
+  flex-shrink: 0;
   gap: 0;
+  /* auto on one axis computes the other axis to auto as well. In a grid
+     track that zeroes the row's minimum size, so a short dialog crushed
+     the tab bar to its border. max-content keeps the buttons intact. */
+  min-height: max-content;
   overflow-x: auto;
   border: 1px solid var(--kh-line);
 }
