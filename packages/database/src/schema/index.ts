@@ -1248,6 +1248,21 @@ export const projectSprints = pgTable(
     startDate: date('start_date', { mode: 'string' }),
     endDate: date('end_date', { mode: 'string' }),
     capacityPoints: integer('capacity_points'),
+    /**
+     * Points and burndown frozen when the sprint is completed or cancelled.
+     * Moving unfinished tasks off the sprint must not rewrite this history.
+     */
+    closureSnapshot: jsonb('closure_snapshot').$type<{
+      committedPoints: number;
+      donePoints: number;
+      startDate: string | null;
+      endDate: string | null;
+      points: Array<{
+        date: string;
+        idealRemaining: number;
+        remaining: number;
+      }>;
+    } | null>(),
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
