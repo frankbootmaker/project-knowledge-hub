@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import de from '../../messages/de.json';
 import en from '../../messages/en.json';
 import hu from '../../messages/hu.json';
 import {
@@ -290,7 +294,7 @@ describe('filtered delivery tree', () => {
 });
 
 describe('delivery tree depth tooltips', () => {
-  it('has English and Hungarian labels', () => {
+  it('has English, Hungarian, and German labels', () => {
     expect(en.delivery.treeExpandLevel).toBe('Expand one level');
     expect(en.delivery.treeCollapseLevel).toBe('Collapse one level');
     expect(en.delivery.treeExpandAll).toBe('Expand all');
@@ -299,6 +303,22 @@ describe('delivery tree depth tooltips', () => {
     expect(hu.delivery.treeCollapseLevel).toBe('Egy szint összecsukása');
     expect(hu.delivery.treeExpandAll).toBe('Összes kibontása');
     expect(hu.delivery.treeCollapseAll).toBe('Összes összecsukása');
+    expect(de.delivery.treeExpandLevel).toBe('Eine Ebene aufklappen');
+    expect(de.delivery.treeCollapseLevel).toBe('Eine Ebene zuklappen');
+    expect(de.delivery.treeExpandAll).toBe('Alle aufklappen');
+    expect(de.delivery.treeCollapseAll).toBe('Alle zuklappen');
     expect(en.delivery.treeDepthControls).not.toBe(hu.delivery.treeDepthControls);
+    expect(en.delivery.treeDepthControls).not.toBe(de.delivery.treeDepthControls);
+  });
+
+  it('shows the translated label on hover and focus', () => {
+    const root = dirname(fileURLToPath(import.meta.url));
+    const tree = readFileSync(join(root, '../components/ProjectDeliveryTree.tsx'), 'utf8');
+    const css = readFileSync(join(root, '../styles/ops-shell.css'), 'utf8');
+    expect(tree).toContain('className="kh-ops-tree-tip"');
+    expect(tree).toContain('className="kh-ops-tree-tip-label" role="tooltip"');
+    expect(tree).toContain('{label}');
+    expect(css).toContain('.kh-ops-tree-tip:hover .kh-ops-tree-tip-label');
+    expect(css).toContain('.kh-ops-tree-tip:focus-within .kh-ops-tree-tip-label');
   });
 });

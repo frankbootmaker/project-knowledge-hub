@@ -2262,6 +2262,8 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 }
 
 .kh-ops-delivery-tree-head {
+  position: relative;
+  z-index: 2;
   display: grid;
   grid-template-columns: minmax(300px, 1fr) auto;
   gap: 12px;
@@ -2348,6 +2350,41 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   height: 2rem;
   min-height: 2rem;
   padding: 0;
+}
+
+/* Visible label for the depth buttons. Hidden until hover or focus. */
+.kh-ops-tree-tip {
+  position: relative;
+  display: inline-flex;
+}
+
+.kh-ops-tree-tip-label {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: 16rem;
+  padding: 4px 8px;
+  border: 1px solid var(--kh-line-strong);
+  background: var(--kh-ink);
+  color: var(--kh-on-brand);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.35;
+  text-transform: none;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.kh-ops-tree-tip:hover .kh-ops-tree-tip-label,
+.kh-ops-tree-tip:focus-within .kh-ops-tree-tip-label {
+  opacity: 1;
+  visibility: visible;
 }
 
 .kh-ops-tree-toggle,
