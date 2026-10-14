@@ -414,6 +414,13 @@
       "when": 1792368000000,
       "tag": "0058_delivery_dependencies",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1792454400000,
+      "tag": "0059_sprint_closure_snapshot",
+      "breakpoints": true
     }
   ]
 }

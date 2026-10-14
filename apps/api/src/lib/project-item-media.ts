@@ -470,7 +470,7 @@ export async function requireItemMediaTarget(
   if (workspaceId !== input.workspaceId) {
     throw new AppError({
       code: 'ITEM_MEDIA_WORKSPACE_MISMATCH',
-      message: 'Media must belong to the project workspace',
+      message: 'The item is outside the workspace',
       statusCode: 400,
     });
   }
@@ -630,7 +630,7 @@ export async function appendMediaLink(
   if (workspaceId !== input.workspaceId) {
     throw new AppError({
       code: 'ITEM_MEDIA_WORKSPACE_MISMATCH',
-      message: 'Media must belong to the project workspace',
+      message: 'The item is outside the workspace',
       statusCode: 400,
     });
   }
