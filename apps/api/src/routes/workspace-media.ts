@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { workspaces } from '@project-knowledge-hub/database';
+import { users, workspaces } from '@project-knowledge-hub/database';
 import { AppError, itemMediaEntityTypeSchema } from '@project-knowledge-hub/domain';
 import {
   requireWorkspaceMaintainer,
@@ -23,6 +23,19 @@ import {
   toPublicMedia,
   updateWorkspaceMedia,
 } from '../lib/workspace-media.js';
+
+async function displayNamesByUserId(
+  app: FastifyInstance,
+  userIds: Array<string | null>,
+): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return new Map();
+  const rows = await app.database.db
+    .select({ id: users.id, displayName: users.displayName })
+    .from(users)
+    .where(inArray(users.id, ids));
+  return new Map(rows.map((row) => [row.id, row.displayName]));
+}
 
 async function organizationIdForWorkspace(
   app: FastifyInstance,
@@ -173,14 +186,23 @@ export async function registerWorkspaceMediaRoutes(
       entityId: query.entityId,
       limit: query.limit,
     });
-    const usedBy = await mediaUsedBy(
-      app.database,
-      rows.map((row) => row.id),
-    );
+    const [usedBy, uploaderNames] = await Promise.all([
+      mediaUsedBy(
+        app.database,
+        rows.map((row) => row.id),
+      ),
+      displayNamesByUserId(
+        app,
+        rows.map((row) => row.createdBy),
+      ),
+    ]);
 
     return {
       media: rows.map((row) => ({
         ...toPublicMedia(row),
+        createdByName: row.createdBy
+          ? (uploaderNames.get(row.createdBy) ?? null)
+          : null,
         usedBy: usedBy.get(row.id) ?? [],
       })),
     };
