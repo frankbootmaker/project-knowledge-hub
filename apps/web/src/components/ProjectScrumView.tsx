@@ -35,6 +35,7 @@ import {
   type DeliveryDocumentRecord,
 } from './DeliveryDocumentsEditor';
 import { DeliveryMediaEditor } from './DeliveryMediaEditor';
+import { DeliveryDependenciesEditor } from './DeliveryDependenciesEditor';
 import {
   BurndownLegendHelp,
   SprintPointBurndownChart,
@@ -1052,6 +1053,31 @@ export function ProjectScrumView({
             entityId={selected.id}
             canEdit={canMutate}
             immediate
+          />
+        </div>
+        <div className="kh-ops-inset mb-3">
+          <p className="mt-0 mb-2 text-sm font-semibold">{t('tabDependencies')}</p>
+          <DeliveryDependenciesEditor
+            projectId={projectId}
+            entityType="sprint"
+            entityId={selected.id}
+            canEdit={canMutate}
+            onScheduled={(write) => {
+              if (write && selected) {
+                setSprints((rows) =>
+                  rows.map((row) =>
+                    row.id === write.id
+                      ? {
+                          ...row,
+                          startDate: write.startDate,
+                          endDate: write.finishDate,
+                        }
+                      : row,
+                  ),
+                );
+              }
+              onRefresh();
+            }}
           />
         </div>
         </>

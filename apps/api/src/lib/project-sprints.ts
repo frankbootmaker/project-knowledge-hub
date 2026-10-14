@@ -12,6 +12,7 @@ import {
   sprintStatusSchema,
   type SprintStatus,
 } from '@project-knowledge-hub/domain';
+import { rescheduleDeliveryFrom } from './delivery-dependencies.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import { withMediaLinkCounts, withMediaLinks } from './project-item-media.js';
 import {
@@ -379,6 +380,10 @@ export async function updateSprint(
       statusCode: 500,
     });
   }
+  await rescheduleDeliveryFrom(database, row.projectId, {
+    entityType: 'sprint',
+    id: row.id,
+  });
   return getPublicSprint(database, row.id);
 }
 

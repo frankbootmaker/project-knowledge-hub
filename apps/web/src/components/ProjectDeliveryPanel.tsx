@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { TASK_COMPLETION_PERCENTS } from '@project-knowledge-hub/domain';
+import { TASK_COMPLETION_PERCENTS, addCalendarDays } from '@project-knowledge-hub/domain';
 import { CollapsibleSection } from './CollapsibleSection';
 import {
   ProjectDeliveryBoard,
@@ -288,6 +288,7 @@ export function ProjectDeliveryPanel({
   const [createKind, setCreateKind] = useState<CreateKind>('task');
   const [dateValue, setDateValue] = useState('');
   const [startDateValue, setStartDateValue] = useState('');
+  const [durationDaysValue, setDurationDaysValue] = useState('');
   const [endDateValue, setEndDateValue] = useState('');
   const [taskMilestoneId, setTaskMilestoneId] = useState('');
   const [taskStoryId, setTaskStoryId] = useState('');
@@ -637,6 +638,7 @@ export function ProjectDeliveryPanel({
     setCreateKind('task');
     setDateValue('');
     setStartDateValue('');
+    setDurationDaysValue('');
     setEndDateValue('');
     setTaskMilestoneId('');
     setTaskStoryId('');
@@ -750,6 +752,8 @@ export function ProjectDeliveryPanel({
             title: title.trim(),
             startDate: startDateValue || null,
             dueDate: dateValue || null,
+            durationDays:
+              durationDaysValue.trim() === '' ? null : Number(durationDaysValue),
             forecastHours: parseHoursInput(taskForecastHours),
             actualHours: parseHoursInput(taskActualHours),
             completionPercent: Number(taskCompletionPercent),
@@ -1346,7 +1350,42 @@ export function ProjectDeliveryPanel({
                   <Input
                     type="date"
                     value={startDateValue}
-                    onChange={(e) => setStartDateValue(e.target.value)}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setStartDateValue(next);
+                      const days = Number(durationDaysValue);
+                      if (
+                        next
+                        && durationDaysValue.trim() !== ''
+                        && Number.isInteger(days)
+                        && days >= 0
+                      ) {
+                        setDateValue(addCalendarDays(next, days));
+                      }
+                    }}
+                    disabled={pending}
+                  />
+                </Field>
+                <Field label={t('durationDays')}>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={3650}
+                    step={1}
+                    value={durationDaysValue}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setDurationDaysValue(next);
+                      const days = Number(next);
+                      if (
+                        startDateValue
+                        && next.trim() !== ''
+                        && Number.isInteger(days)
+                        && days >= 0
+                      ) {
+                        setDateValue(addCalendarDays(startDateValue, days));
+                      }
+                    }}
                     disabled={pending}
                   />
                 </Field>
@@ -1355,10 +1394,13 @@ export function ProjectDeliveryPanel({
                     type="date"
                     value={dateValue}
                     onChange={(e) => setDateValue(e.target.value)}
-                    disabled={pending}
+                    disabled={pending || durationDaysValue.trim() !== ''}
                   />
                 </Field>
               </div>
+              {durationDaysValue.trim() !== '' ? (
+                <p className="m-0 text-xs text-ink-muted">{t('durationHint')}</p>
+              ) : null}
               <Field label={t('completionField')}>
                 <Select
                   value={taskCompletionPercent}
@@ -1642,6 +1684,7 @@ export function ProjectDeliveryPanel({
           }
           refresh();
         }}
+        onDependenciesChanged={refresh}
         onDeleted={(kind, id) => {
           if (kind === 'milestone') {
             return;

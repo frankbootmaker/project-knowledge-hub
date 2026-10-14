@@ -343,6 +343,28 @@ export type McpToolHandlers = {
     entityType?: string;
     entityId?: string;
   }) => Promise<unknown>;
+  listDeliveryDependencies: (input: {
+    projectId: string;
+    entityId: string;
+    entityType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
+  }) => Promise<unknown>;
+  setDeliveryDependency: (input: {
+    projectId: string;
+    predecessorId: string;
+    predecessorType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
+    successorId: string;
+    successorType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
+    linkType: 'FS' | 'SS' | 'FF' | 'SF';
+    lagDays?: number;
+  }) => Promise<unknown>;
+  removeDeliveryDependency: (input: {
+    projectId: string;
+    linkId?: string;
+    predecessorId?: string;
+    predecessorType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
+    successorId?: string;
+    successorType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
+  }) => Promise<unknown>;
   createProjectTask: (input: {
     projectId: string;
     title: string;
@@ -350,6 +372,7 @@ export type McpToolHandlers = {
     status?: string;
     startDate?: string | null;
     dueDate?: string | null;
+    durationDays?: number | null;
     forecastHours?: number | string | null;
     actualHours?: number | string | null;
     tokensUsed?: number | null;
@@ -394,6 +417,7 @@ export type McpToolHandlers = {
     status?: string;
     startDate?: string | null;
     dueDate?: string | null;
+    durationDays?: number | null;
     forecastHours?: number | string | null;
     actualHours?: number | string | null;
     tokensUsed?: number | null;
@@ -1969,7 +1993,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; when both startDate and dueDate are set, startDate must be on or before dueDate. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. When durationDays is set, dueDate is startDate plus that many calendar days. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -1979,6 +2003,7 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       startDate: isoDateNullableSchema.optional(),
       dueDate: isoDateNullableSchema.optional(),
+      durationDays: z.number().int().min(0).max(3650).nullable().optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
       tokensUsed: tokenCountSchema.nullable().optional(),
@@ -2044,7 +2069,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate; null clears it. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+    'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. When durationDays is set, dueDate is startDate plus that many calendar days. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -2054,6 +2079,7 @@ export function createKnowledgeHubMcpServer(
         .optional(),
       startDate: isoDateNullableSchema.optional(),
       dueDate: isoDateNullableSchema.optional(),
+      durationDays: z.number().int().min(0).max(3650).nullable().optional(),
       forecastHours: moneyInput.optional(),
       actualHours: moneyInput.optional(),
       tokensUsed: tokenCountSchema.nullable().optional(),
@@ -2142,6 +2168,74 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('set_project_task_raci', 'pm:write', () =>
         handlers.setProjectTaskRaci(args),
+      )(),
+  );
+
+  const dependencyEntityType = z.enum([
+    'epic',
+    'user_story',
+    'task',
+    'milestone',
+    'sprint',
+  ]);
+  const dependencyLinkType = z.enum(['FS', 'SS', 'FF', 'SF']);
+  const dependencyRef = z.string().trim().min(1).max(80);
+
+  server.tool(
+    'list_delivery_dependencies',
+    'List predecessor links on one delivery item and the successors derived from other items that name it as a predecessor. entityId is a UUID or human key (PRO-T-1, PRO-B-1, PRO-E-1, PRO-S-1, PRO-M-1, PRO-SP-1). entityType is required for a UUID and optional when the key encodes the type (B is a bug and uses entity type task). scheduleDriven is true when a predecessor date currently sets this item’s start. Requires pm:read.',
+    {
+      projectId: z.string().uuid(),
+      entityId: dependencyRef,
+      entityType: dependencyEntityType.optional(),
+    },
+    async (args) =>
+      wrap(
+        'list_delivery_dependencies',
+        'pm:read',
+        () => handlers.listDeliveryDependencies(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'set_delivery_dependency',
+    'Add one predecessor link between two delivery items in the same project. linkType is FS, SS, FF, or SF. lagDays defaults to 0 and may be negative (lead). The successor’s start date is computed from its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. predecessorId and successorId are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass predecessorType and successorType when the id is a UUID. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      predecessorId: dependencyRef,
+      predecessorType: dependencyEntityType.optional(),
+      successorId: dependencyRef,
+      successorType: dependencyEntityType.optional(),
+      linkType: dependencyLinkType,
+      lagDays: z.number().int().min(-3650).max(3650).optional(),
+    },
+    async (args) =>
+      wrap(
+        'set_delivery_dependency',
+        'pm:write',
+        () => handlers.setDeliveryDependency(args),
+        { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'remove_delivery_dependency',
+    'Remove one dependency link. Pass linkId, or both predecessorId and successorId (UUID or human key such as PRO-T-1 or PRO-B-1). Types are required when an id is a UUID. Requires pm:write.',
+    {
+      projectId: z.string().uuid(),
+      linkId: z.string().uuid().optional(),
+      predecessorId: dependencyRef.optional(),
+      predecessorType: dependencyEntityType.optional(),
+      successorId: dependencyRef.optional(),
+      successorType: dependencyEntityType.optional(),
+    },
+    async (args) =>
+      wrap(
+        'remove_delivery_dependency',
+        'pm:write',
+        () => handlers.removeDeliveryDependency(args),
+        { projectId: args.projectId },
       )(),
   );
 

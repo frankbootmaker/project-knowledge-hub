@@ -21,6 +21,8 @@ import {
   changeKindSchema,
   changeStatusSchema,
   deliveryLinkEntityTypeSchema,
+  type DeliveryDependencyEntityType,
+  type DeliveryDependencyLinkType,
   effectiveDateRange,
   epicStatusSchema,
   formatHumanKey,
@@ -126,6 +128,11 @@ import {
   updateMilestone,
   updateTask,
 } from './project-delivery.js';
+import {
+  listDeliveryDependencies,
+  removeDeliveryDependency,
+  setDeliveryDependency,
+} from './delivery-dependencies.js';
 import {
   addTaskComment,
   createEpic,
@@ -3219,6 +3226,7 @@ export function createMcpToolHandlers(
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
         startDate: input.startDate,
         dueDate: input.dueDate,
+        durationDays: input.durationDays,
         forecastHours:
           input.forecastHours === undefined
             ? undefined
@@ -3311,6 +3319,7 @@ export function createMcpToolHandlers(
         status: input.status ? taskStatusSchema.parse(input.status) : undefined,
         startDate: input.startDate,
         dueDate: input.dueDate,
+        durationDays: input.durationDays,
         forecastHours:
           input.forecastHours === undefined
             ? undefined
@@ -3439,6 +3448,92 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { task, raci };
+    },
+
+    async listDeliveryDependencies(input: {
+      projectId: string;
+      entityId: string;
+      entityType?: DeliveryDependencyEntityType;
+    }) {
+      await requirePmProject(app, client, input.projectId);
+      return listDeliveryDependencies({
+        database: app.database,
+        projectId: input.projectId,
+        idOrKey: input.entityId,
+        entityType: input.entityType,
+      });
+    },
+
+    async setDeliveryDependency(input: {
+      projectId: string;
+      predecessorId: string;
+      predecessorType?: DeliveryDependencyEntityType;
+      successorId: string;
+      successorType?: DeliveryDependencyEntityType;
+      linkType: DeliveryDependencyLinkType;
+      lagDays?: number;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const result = await setDeliveryDependency(app.database, {
+        ...input,
+        projectId: project.id,
+        createdBy: actingUserId,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.delivery_dependency_set',
+        entityType: 'project_delivery_dependency',
+        entityId: result.dependency.id,
+        metadata: {
+          projectId: project.id,
+          linkType: result.dependency.linkType,
+          lagDays: result.dependency.lagDays,
+          predecessor: result.dependency.predecessor.humanKey,
+          successor: result.dependency.successor.humanKey,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return result;
+    },
+
+    async removeDeliveryDependency(input: {
+      projectId: string;
+      linkId?: string;
+      predecessorId?: string;
+      predecessorType?: DeliveryDependencyEntityType;
+      successorId?: string;
+      successorType?: DeliveryDependencyEntityType;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const project = await requirePmProject(app, client, input.projectId, {
+        forWrite: true,
+      });
+      const result = await removeDeliveryDependency(app.database, {
+        ...input,
+        projectId: project.id,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'project.delivery_dependency_removed',
+        entityType: 'project_delivery_dependency',
+        entityId: result.removedId,
+        metadata: {
+          projectId: project.id,
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return result;
     },
 
     async listProjectEpics(input) {

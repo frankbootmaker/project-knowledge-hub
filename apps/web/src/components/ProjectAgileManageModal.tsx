@@ -35,6 +35,7 @@ import {
   saveItemMediaLinks,
   type ItemMediaDraft,
 } from './DeliveryMediaEditor';
+import { DeliveryDependenciesEditor } from './DeliveryDependenciesEditor';
 
 const STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
 
@@ -106,6 +107,7 @@ export function ProjectAgileManageModal({
   canMutate,
   onSaved,
   onDeleted,
+  onDependenciesChanged,
 }: {
   open: boolean;
   onClose: () => void;
@@ -125,6 +127,7 @@ export function ProjectAgileManageModal({
     item: Epic | Story | Milestone,
   ) => void;
   onDeleted: (kind: AgileKind, id: string) => void;
+  onDependenciesChanged?: () => void;
 }) {
   const t = useTranslations('delivery');
   const tBudget = useTranslations('budget');
@@ -148,7 +151,9 @@ export function ProjectAgileManageModal({
   const [linkedDocuments, setLinkedDocuments] = useState<LinkedDocument[]>([]);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false);
-  const [agileTab, setAgileTab] = useState<'details' | 'documents' | 'media'>('details');
+  const [agileTab, setAgileTab] = useState<
+    'details' | 'documents' | 'media' | 'dependencies'
+  >('details');
   const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const parentCompletionLabel = useMemo(() => {
@@ -499,6 +504,15 @@ export function ProjectAgileManageModal({
           >
             {t('tabMedia')}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={agileTab === 'dependencies'}
+            className={agileTab === 'dependencies' ? 'active' : undefined}
+            onClick={() => setAgileTab('dependencies')}
+          >
+            {t('tabDependencies')}
+          </button>
         </div>
       }
       footer={
@@ -757,6 +771,28 @@ export function ProjectAgileManageModal({
             canEdit={canMutate}
             disabled={pending || confirmDelete}
             onDraftsChange={setMediaDrafts}
+          />
+        ) : null}
+      </section>
+      <section
+        className={`kh-ops-modal-pane${agileTab === 'dependencies' ? ' active' : ''}`}
+      >
+        {itemId && kind ? (
+          <DeliveryDependenciesEditor
+            projectId={projectId}
+            entityType={
+              kind === 'epic' ? 'epic' : kind === 'story' ? 'user_story' : 'milestone'
+            }
+            entityId={itemId}
+            canEdit={canMutate && !pending && !confirmDelete}
+            onScheduled={(write) => {
+              if (write) {
+                setStartDate(write.startDate ?? '');
+                if (kind === 'milestone') setTargetDate(write.finishDate ?? '');
+                else setEndDate(write.finishDate ?? '');
+              }
+              onDependenciesChanged?.();
+            }}
           />
         ) : null}
       </section>

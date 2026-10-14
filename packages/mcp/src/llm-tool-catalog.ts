@@ -631,7 +631,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task or bug (itemType, default task). Optional startDate must be on or before dueDate when both are set. Bug fields are rejected on a task. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). Optional durationDays makes dueDate equal startDate plus that many calendar days. Bugs use the same start date and duration. Bug fields are rejected on a task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -645,6 +645,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         status: taskStatus,
         startDate: { ...ymd, nullable: true },
         dueDate: { ...ymd, nullable: true },
+        durationDays: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 3650,
+          nullable: true,
+          description: 'Calendar days. Due date becomes start date plus duration.',
+        },
         forecastHours: money,
         actualHours: money,
         tokensUsed: { type: 'integer', minimum: 0, nullable: true },
@@ -686,7 +693,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional startDate; null clears it, and it must be on or before dueDate when both are set. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional durationDays; when set, dueDate is startDate plus that many calendar days. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -700,6 +707,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         status: taskStatus,
         startDate: { ...ymd, nullable: true },
         dueDate: { ...ymd, nullable: true },
+        durationDays: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 3650,
+          nullable: true,
+          description: 'Calendar days. Due date becomes start date plus duration.',
+        },
         forecastHours: money,
         actualHours: money,
         tokensUsed: { type: 'integer', minimum: 0, nullable: true },
@@ -1181,6 +1195,88 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         endDate: { ...ymd, nullable: true },
         sortOrder: { type: 'integer', minimum: 0 },
         archived: { type: 'boolean' },
+      },
+    },
+  },
+  {
+    name: 'list_delivery_dependencies',
+    description:
+      'List predecessor links for one delivery item and the successors derived from them. entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:read',
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['projectId', 'entityId'],
+      properties: {
+        projectId: uuidProp('Project id'),
+        entityId: entityRefProp('Delivery item id (PRO-T-1, PRO-B-1, PRO-E-1, PRO-S-1, PRO-M-1, PRO-SP-1)'),
+        entityType: {
+          type: 'string',
+          enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+          description: 'Required when entityId is a UUID. B keys are tasks.',
+        },
+      },
+    },
+  },
+  {
+    name: 'set_delivery_dependency',
+    description:
+      'Add a predecessor link (FS, SS, FF, or SF) with optional lagDays. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['projectId', 'predecessorId', 'successorId', 'linkType'],
+      properties: {
+        projectId: uuidProp('Project id'),
+        predecessorId: entityRefProp('Predecessor id'),
+        predecessorType: {
+          type: 'string',
+          enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+        },
+        successorId: entityRefProp('Successor id. This item depends on the predecessor.'),
+        successorType: {
+          type: 'string',
+          enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+        },
+        linkType: {
+          type: 'string',
+          enum: ['FS', 'SS', 'FF', 'SF'],
+          description: 'FS finish-to-start, SS start-to-start, FF finish-to-finish, SF start-to-finish.',
+        },
+        lagDays: {
+          type: 'integer',
+          minimum: -3650,
+          maximum: 3650,
+          description: 'Calendar days. Negative is a lead. Defaults to 0.',
+        },
+      },
+    },
+  },
+  {
+    name: 'remove_delivery_dependency',
+    description:
+      'Remove one dependency by linkId or by predecessorId plus successorId (UUID or human key such as PRO-T-1). Requires pm:write. Via call_hub_tool on ChatGPT.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['projectId'],
+      properties: {
+        projectId: uuidProp('Project id'),
+        linkId: uuidProp('Dependency link id'),
+        predecessorId: entityRefProp('Predecessor id'),
+        predecessorType: {
+          type: 'string',
+          enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+        },
+        successorId: entityRefProp('Successor id'),
+        successorType: {
+          type: 'string',
+          enum: ['epic', 'user_story', 'task', 'milestone', 'sprint'],
+        },
       },
     },
   },

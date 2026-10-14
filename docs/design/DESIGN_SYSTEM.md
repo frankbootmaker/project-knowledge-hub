@@ -246,6 +246,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-14
 
+* **Delivery dependencies** — Epic, story, milestone, and task dialogs add a Dependencies tab after Media. The sprint detail adds the same section under the sprint. The tab lists predecessors (finish-to-start, start-to-start, finish-to-finish, start-to-finish, plus lag days) and the successors derived from those links. Task and bug details add Duration (days) beside Start and Due. Due is start plus duration and stays read-only while a duration is set. Start stays read-only when a predecessor date drives it.
 * **Item dialog viewport** — Story, epic, task, bug, RAID, and change dialogs keep the title and tab bar on screen at any viewport. `Modal` pins an optional `tabs` slot between the header and the scrolling body. Below `sm` the sheet is `100dvh`; from `sm` an `xl` sheet is `max-height: calc(100dvh - 2rem)`. The overlay is a fixed, isolated layer at `--kh-z-modal` so sticky page chrome cannot cover it.
 * **Delivery completion vs status** — Done shows 100% and Cancelled shows 0% on tasks, stories, and epics (list, tree, and the epic/story detail field). Any other status keeps the calculated value. A parent average still leaves cancelled children out. The task dialog shows 0% when cancelled and still stores null.
 * **Tree columns** — Status, %, target, owner, sprint, hours, points, and actions share one grid. Child rows indent by the toggle width so titles and values stay on the same vertical lines.

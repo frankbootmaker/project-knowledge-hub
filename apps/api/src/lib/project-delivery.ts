@@ -14,6 +14,11 @@ import {
   users,
   workspaces,
 } from '@project-knowledge-hub/database';
+import {
+  deleteDeliveryDependenciesFor,
+  overlaySchedule,
+  rescheduleDeliveryFrom,
+} from './delivery-dependencies.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import {
   withMediaLinkCounts,
@@ -25,6 +30,7 @@ import {
   bugFoundInSchema,
   bugResolutionSchema,
   effectiveDateRange,
+  resolveTaskScheduleDates,
   mergeAiUsage,
   milestoneStatusSchema,
   raciRoleSchema,
@@ -119,6 +125,7 @@ export type PublicTask = {
   status: TaskStatus;
   startDate: string | null;
   dueDate: string | null;
+  durationDays: number | null;
   forecastHours: number | null;
   actualHours: number | null;
   storyPoints: number | null;
@@ -232,6 +239,7 @@ function toPublicTask(
     status: taskStatusSchema.parse(row.status),
     startDate: row.startDate,
     dueDate: row.dueDate,
+    durationDays: row.durationDays ?? null,
     forecastHours: row.forecastHours,
     actualHours: row.actualHours,
     storyPoints: row.storyPoints ?? null,
@@ -689,7 +697,16 @@ export async function updateMilestone(
     });
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  return toPublicMilestone(row, keyPrefix);
+  const writes = await rescheduleDeliveryFrom(database, row.projectId, {
+    entityType: 'milestone',
+    id: row.id,
+  });
+  return overlaySchedule(
+    toPublicMilestone(row, keyPrefix),
+    'milestone',
+    writes,
+    'targetDate',
+  );
 }
 
 export async function getMilestone(
@@ -1446,6 +1463,7 @@ export async function createTask(
     status?: TaskStatus;
     startDate?: string | null;
     dueDate?: string | null;
+    durationDays?: number | null;
     forecastHours?: number | null;
     actualHours?: number | null;
     tokensUsed?: number | null;
@@ -1517,11 +1535,13 @@ export async function createTask(
     ]);
   }
 
-  assertDateRange({
-    start: input.startDate,
-    end: input.dueDate,
-    startField: 'startDate',
-    endField: 'dueDate',
+  const scheduledDates = resolveTaskScheduleDates({
+    stored: { startDate: null, dueDate: null, durationDays: null },
+    patch: {
+      startDate: input.startDate,
+      dueDate: input.dueDate,
+      durationDays: input.durationDays,
+    },
   });
 
   const ownerUserId =
@@ -1556,8 +1576,9 @@ export async function createTask(
         description: input.description ?? null,
         ...bugColumns(bugWrite),
         status,
-        startDate: input.startDate ?? null,
-        dueDate: input.dueDate ?? null,
+        startDate: scheduledDates.startDate,
+        dueDate: scheduledDates.dueDate,
+        durationDays: scheduledDates.durationDays,
         forecastHours: input.forecastHours ?? null,
         actualHours: input.actualHours ?? null,
         storyPoints: input.storyPoints ?? null,
@@ -1620,6 +1641,7 @@ export async function deleteTask(
   taskId: string,
 ): Promise<{ id: string; projectId: string }> {
   const existing = await getTask(database, taskId);
+  await deleteDeliveryDependenciesFor(database, 'task', [taskId]);
   await database.db.delete(projectTasks).where(eq(projectTasks.id, taskId));
   return { id: existing.id, projectId: existing.projectId };
 }
@@ -1633,6 +1655,7 @@ export async function updateTask(
     status?: TaskStatus;
     startDate?: string | null;
     dueDate?: string | null;
+    durationDays?: number | null;
     forecastHours?: number | null;
     actualHours?: number | null;
     tokensUsed?: number | null;
@@ -1749,15 +1772,17 @@ export async function updateTask(
     ]);
   }
 
-  const effectiveDates = effectiveDateRange({
-    stored: { start: existing.startDate, end: existing.dueDate },
-    patch: { start: input.startDate, end: input.dueDate },
-  });
-  assertDateRange({
-    start: effectiveDates.start,
-    end: effectiveDates.end,
-    startField: 'startDate',
-    endField: 'dueDate',
+  const scheduledDates = resolveTaskScheduleDates({
+    stored: {
+      startDate: existing.startDate,
+      dueDate: existing.dueDate,
+      durationDays: existing.durationDays,
+    },
+    patch: {
+      startDate: input.startDate,
+      dueDate: input.dueDate,
+      durationDays: input.durationDays,
+    },
   });
 
   // An explicit status is the caller's choice (the dialog already moved it
@@ -1792,9 +1817,9 @@ export async function updateTask(
         input.description !== undefined ? input.description : existing.description,
       ...bugColumns(bugWrite),
       status: nextStatus,
-      startDate:
-        input.startDate !== undefined ? input.startDate : existing.startDate,
-      dueDate: input.dueDate !== undefined ? input.dueDate : existing.dueDate,
+      startDate: scheduledDates.startDate,
+      dueDate: scheduledDates.dueDate,
+      durationDays: scheduledDates.durationDays,
       forecastHours:
         input.forecastHours !== undefined
           ? input.forecastHours
@@ -1859,6 +1884,7 @@ export async function updateTask(
     'description',
     'startDate',
     'dueDate',
+    'durationDays',
     'forecastHours',
     'actualHours',
     'completionPercent',
@@ -1891,5 +1917,9 @@ export async function updateTask(
     });
   }
 
+  await rescheduleDeliveryFrom(database, existing.projectId, {
+    entityType: 'task',
+    id: taskId,
+  });
   return getTask(database, taskId);
 }
