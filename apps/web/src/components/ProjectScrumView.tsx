@@ -11,6 +11,7 @@ import { useTranslations } from 'next-intl';
 import {
   Badge,
   Button,
+  DELIVERY_ITEM_MODAL_SIZE,
   Field,
   Input,
   Modal,
@@ -1198,6 +1199,7 @@ export function ProjectScrumView({
         onClose={() => {
           if (!exportPending) setExportOpen(false);
         }}
+        size={DELIVERY_ITEM_MODAL_SIZE}
         title={t('scrumExportPdf')}
         description={t('scrumExportHint')}
       >
@@ -1263,6 +1265,7 @@ export function ProjectScrumView({
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
+        size={DELIVERY_ITEM_MODAL_SIZE}
         title={t('scrumNewSprint')}
       >
         <div className="grid gap-3">
@@ -1342,7 +1345,7 @@ export function ProjectScrumView({
             ? t('scrumRetroHint')
             : t('scrumReviewHint')
         }
-        size="lg"
+        size={DELIVERY_ITEM_MODAL_SIZE}
       >
         <div className="grid gap-3">
           <Field label={tCommon('title')}>
@@ -1538,6 +1541,7 @@ export function ProjectScrumView({
       <Modal
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
+        size={DELIVERY_ITEM_MODAL_SIZE}
         title={t('scrumPlanWizard')}
         description={t('scrumPlanWizardHint')}
       >

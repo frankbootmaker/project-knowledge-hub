@@ -358,12 +358,20 @@ export type McpToolHandlers = {
   }) => Promise<unknown>;
   setDeliveryDependency: (input: {
     projectId: string;
-    predecessorId: string;
+    predecessorId?: string;
     predecessorType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
-    successorId: string;
+    successorId?: string;
     successorType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
-    linkType: 'FS' | 'SS' | 'FF' | 'SF';
+    linkType?: 'FS' | 'SS' | 'FF' | 'SF';
     lagDays?: number;
+    links?: Array<{
+      predecessorId: string;
+      predecessorType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
+      successorId: string;
+      successorType?: 'epic' | 'user_story' | 'task' | 'milestone' | 'sprint';
+      linkType: 'FS' | 'SS' | 'FF' | 'SF';
+      lagDays?: number;
+    }>;
   }) => Promise<unknown>;
   removeDeliveryDependency: (input: {
     projectId: string;
@@ -2221,7 +2229,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_delivery_dependencies',
-    'List predecessor links on one delivery item and the successors derived from other items that name it as a predecessor. entityId is a UUID or human key (PRO-T-1, PRO-B-1, PRO-E-1, PRO-S-1, PRO-M-1, PRO-SP-1). entityType is required for a UUID and optional when the key encodes the type (B is a bug and uses entity type task). scheduleDriven is true when a predecessor date currently sets this item’s start. Requires pm:read.',
+    'List every predecessor link on one delivery item and the successors derived from other items that name it as a predecessor. An item may have many predecessors. The successor start is the latest constraint across them (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). entityId is a UUID or human key (PRO-T-1, PRO-B-1, PRO-E-1, PRO-S-1, PRO-M-1, PRO-SP-1). entityType is required for a UUID and optional when the key encodes the type (B is a bug and uses entity type task). scheduleDriven is true when a predecessor date currently sets this item’s start. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       entityId: dependencyRef,
@@ -2236,17 +2244,27 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  const dependencyLink = z.object({
+    predecessorId: dependencyRef,
+    predecessorType: dependencyEntityType.optional(),
+    successorId: dependencyRef,
+    successorType: dependencyEntityType.optional(),
+    linkType: dependencyLinkType,
+    lagDays: z.number().int().min(-3650).max(3650).optional(),
+  });
+
   server.tool(
     'set_delivery_dependency',
-    'Add one predecessor link between two delivery items in the same project. linkType is FS, SS, FF, or SF. lagDays defaults to 0 and may be negative (lead). The successor’s start date is computed from its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. predecessorId and successorId are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass predecessorType and successorType when the id is a UUID. Requires pm:write.',
+    'Add predecessor links between delivery items in the same project. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several at once. An item may have many predecessors; each ordered pair is stored once. linkType is FS, SS, FF, or SF. lagDays defaults to 0 and may be negative (lead). The successor start is the latest constraint across its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. Ids are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass a type when the id is a UUID. Requires pm:write.',
     {
       projectId: z.string().uuid(),
-      predecessorId: dependencyRef,
+      predecessorId: dependencyRef.optional(),
       predecessorType: dependencyEntityType.optional(),
-      successorId: dependencyRef,
+      successorId: dependencyRef.optional(),
       successorType: dependencyEntityType.optional(),
-      linkType: dependencyLinkType,
+      linkType: dependencyLinkType.optional(),
       lagDays: z.number().int().min(-3650).max(3650).optional(),
+      links: z.array(dependencyLink).min(1).max(50).optional(),
     },
     async (args) =>
       wrap(

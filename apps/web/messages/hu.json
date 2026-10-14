@@ -3143,6 +3143,7 @@
     "itemsTypeTask": "Feladat",
     "itemsTypeBug": "Bug",
     "itemsTypeMilestone": "Mérföldkő",
+    "itemsTypeSprint": "Sprint",
     "linkedTasksCount": "{count} kapcsolt feladat",
     "saveItem": "Mentés",
     "deleteItem": "Törlés",
@@ -3314,6 +3315,7 @@
     "itemsTypeTask": "Feladat",
     "itemsTypeBug": "Bug",
     "itemsTypeMilestone": "Mérföldkő",
+    "itemsTypeSprint": "Sprint",
     "entity": {
       "epic": "Epik",
       "user_story": "Sztori",

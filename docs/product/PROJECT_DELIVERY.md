@@ -92,13 +92,13 @@ Writes that send bug fields on a task are rejected. Knowledge and RAID links kee
 
 A predecessor link joins any two delivery items in the **same project**: epic, user story, task, bug, milestone, or sprint. Bugs are tasks (`item_type = bug`, human key `B`). The stored row points from predecessor to successor. Successors are that row read the other way; they are not entered on their own.
 
-Link types are `FS` (finish-to-start), `SS` (start-to-start), `FF` (finish-to-finish), and `SF` (start-to-finish). `lagDays` is calendar days and may be negative (a lead). One ordered pair may have one link. Self-links, cross-project links, a second link on the same pair, and cycles are rejected with a clear error.
+Link types are `FS` (finish-to-start), `SS` (start-to-start), `FF` (finish-to-finish), and `SF` (start-to-finish). `lagDays` is calendar days and may be negative (a lead). An item may have many predecessors. One ordered pair may have one link; changing type or lag updates that row. Self-links, cross-project links, a second link on the same pair, and cycles are rejected with a clear error.
 
-Tasks and bugs store `duration_days`. **Due = start + duration** when duration is set. When a predecessor has the dates the link needs, the successor start is the latest of those constraints, and a task or bug due date moves with its duration. Epics, stories, milestones, and sprints keep their span and shift with the new start. Items with no predecessor dates keep the dates you typed.
+Tasks and bugs store `duration_days`. **Due = start + duration** when duration is set. Each link contributes a start constraint, and the successor start is the latest of them: FS uses the predecessor finish, SS the predecessor start, FF the predecessor finish minus the successor duration, and SF the predecessor start minus the successor duration. Lag is added in each case. A task or bug due date moves with its duration. Epics, stories, milestones, and sprints keep their span and shift with the new start. Items with no predecessor dates keep the dates you typed.
 
-The item dialog has a Dependencies tab (a section on the sprint). Timeline arrows are out of scope.
+The item dialog has a Dependencies tab (a section on the sprint). Add opens the same delivery-item picker used by RAID and change. Each predecessor row has its own type and lag. Timeline arrows are out of scope.
 
-`list_delivery_dependencies`, `set_delivery_dependency`, and `remove_delivery_dependency` accept a UUID or a human key (`PRO-T-1`, `PRO-B-1`). A UUID also needs the entity type. `pm:read` lists; `pm:write` sets and removes.
+`list_delivery_dependencies`, `set_delivery_dependency`, and `remove_delivery_dependency` accept a UUID or a human key (`PRO-T-1`, `PRO-B-1`). A UUID also needs the entity type. `set_delivery_dependency` accepts one link or a `links` array of up to 50. `pm:read` lists; `pm:write` sets and removes.
 
 ### Stakeholders (hybrid)
 
