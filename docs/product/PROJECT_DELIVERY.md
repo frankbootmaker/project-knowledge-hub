@@ -105,6 +105,7 @@ Writes that send bug fields on a task are rejected. Knowledge and RAID links kee
 ### RACI vs current owner
 
 * Standing **RACI** (`R`/`A`/`C`/`I`) is unchanged (one user per task; at most one `A`)
+* The task and bug manage dialog edits that set (add from stakeholder search, change role, remove). An edit must leave exactly one Accountable, and a person cannot hold two roles. Readers see the list only. Epics and stories do not store RACI.
 * **`current_owner_user_id`** is ball-in-court; handoff moves owner and writes an activity event **without** rewriting RACI
 * Default owner on create: Responsible → Accountable → `createdBy`
 
@@ -163,7 +164,7 @@ Project detail page gains a **Delivery** section using the same catalogue **sear
 * View modes: **List** (inline), **Board** / **Calendar** in a full-width modal
 * Catalogue list of epics, stories, milestones, and tasks (badges + status filter); story/owner chips on tasks
 * **Add** kind select: task / milestone / epic / user story
-* **Manage task** modal: fields, current owner + handoff, standing RACI summary, activity timeline + comments
+* **Manage task** modal: fields, current owner + handoff, editable RACI, activity timeline + comments
 * Board: drag tasks between status columns; owner/story chips; Manage on cards
 * Calendar: tasks by due date, milestones by target date. Tasks and bugs may also store an optional start date; the calendar, timeline, and overdue counts still use the due date.
 * Inline status changes for maintainers; RACI (A/R) on task create
