@@ -178,7 +178,6 @@ export function DeliveryMediaEditor({
     onDraftsChange?.(null);
     void load();
     // Reload when the item changes. onDraftsChange is stable enough for parents.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, entityType, entityId]);
 
   async function commit(next: ItemMediaDraft[]) {

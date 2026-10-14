@@ -34,7 +34,7 @@ function entityRefProp(description: string) {
     type: 'string',
     minLength: 1,
     maxLength: 80,
-    description: `${description} (UUID or human key, e.g. HL1-T-12 / HL1-VIS-2)`,
+    description: `${description} (UUID or human key, e.g. HL1-T-12 / HL1-B-4)`,
   };
 }
 
@@ -204,6 +204,27 @@ const projectBaselineResult = {
         },
       },
     },
+  },
+};
+
+/** Paged list_project_tasks result. nextCursor is null on the last page. */
+const taskListPageResult = {
+  type: 'object',
+  required: ['tasks', 'total', 'limit', 'nextCursor', 'hasMore'],
+  properties: {
+    tasks: {
+      type: 'array',
+      description: 'Task or bug rows. Descriptions and bug notes are excerpts.',
+      items: { type: 'object' },
+    },
+    total: { type: 'integer', description: 'Total rows matching the filter.' },
+    limit: { type: 'integer', description: 'Page size used for this response.' },
+    nextCursor: {
+      type: 'string',
+      nullable: true,
+      description: 'Pass as cursor to read the next page. Null when hasMore is false.',
+    },
+    hasMore: { type: 'boolean' },
   },
 };
 
@@ -567,9 +588,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_tasks',
     description:
-      'List delivery tasks for a project. Optional milestone, sprint, and itemType (task or bug) filters. Pages at 25. Descriptions are excerpts; use get_project_task for the full text. Pass cursor until hasMore is false. Requires pm:read.',
+      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: taskListPageResult,
     body: {
       type: 'object',
       required: ['projectId'],
@@ -581,14 +603,22 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         unassignedSprint: { type: 'boolean' },
         itemType: taskItemType,
         includeArchived: { type: 'boolean' },
-        limit: { type: 'integer', minimum: 1, maximum: 25 },
-        cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 25,
+          description: 'Page size from 1 to 25. Defaults to 25.',
+        },
+        cursor: stringProp('Opaque page cursor from the previous nextCursor', {
+          maxLength: 200,
+        }),
       },
     },
   },
   {
     name: 'get_project_task',
-    description: 'Get one task with RACI. taskId may be UUID or HL1-T-12. Requires pm:read.',
+    description:
+      'Get one task or bug with RACI. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -655,7 +685,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a delivery task or bug. itemType cannot change. Optional startDate; null clears it, and it must be on or before dueDate when both are set. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional startDate; null clears it, and it must be on or before dueDate when both are set. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1207,13 +1237,18 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_task_activities',
     description:
-      'List activity timeline for a task. Pages at 25. Comment bodies are excerpts. Pass cursor until hasMore is false. Requires pm:read.',
+      'List activity for a task or bug. Pages at 25. Comment text is full by default; fullText false excerpts comments at 200 characters. Pass cursor from nextCursor until hasMore is false. taskId may be a UUID or human key (T or B). Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
       required: ['taskId'],
       properties: {
         taskId: entityRefProp('Task id'),
+        fullText: {
+          type: 'boolean',
+          description:
+            'When false, comment bodies are excerpted at 200 characters. Defaults to true (full comment text).',
+        },
         limit: { type: 'integer', minimum: 1, maximum: 25 },
         cursor: stringProp('Page cursor from nextCursor', { maxLength: 200 }),
       },
@@ -1970,6 +2005,43 @@ function asToolArgs(body: unknown): Record<string, unknown> {
   return {};
 }
 
+/**
+ * Names of top-level arguments that are not in the tool schema.
+ * Objects with additionalProperties: true (itDetails, call_hub_tool arguments) stay open.
+ */
+export function unknownToolFields(
+  schema: Record<string, unknown> | undefined,
+  value: unknown,
+): string[] {
+  if (!schema || schema.type !== 'object' || schema.additionalProperties === true) {
+    return [];
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const properties = schema.properties;
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+    return [];
+  }
+  const allowed = new Set(Object.keys(properties as Record<string, unknown>));
+  return Object.keys(value as Record<string, unknown>).filter((key) => !allowed.has(key));
+}
+
+function assertKnownToolFields(
+  schema: Record<string, unknown> | undefined,
+  value: unknown,
+): void {
+  const unknown = unknownToolFields(schema, value);
+  if (unknown.length === 0) return;
+  const message =
+    unknown.length === 1
+      ? `Unknown field: ${unknown[0]}`
+      : `Unknown fields: ${unknown.join(', ')}`;
+  throw new AppError({
+    code: 'VALIDATION_ERROR',
+    message,
+    statusCode: 400,
+  });
+}
+
 /** Invoke a catalog tool by name. Used by OpenAPI and the ChatGPT OAuth dispatcher. */
 export async function invokeNamedHubTool(
   handlers: object,
@@ -2054,9 +2126,13 @@ export async function invokeNamedHubTool(
     });
   }
 
+  const rawArgs = asToolArgs(body);
+  if (catalog?.body) {
+    assertKnownToolFields(catalog.body, rawArgs);
+  }
   const args = {
     ...(catalog?.defaults ?? {}),
-    ...asToolArgs(body),
+    ...rawArgs,
   };
   return (fn as (input: Record<string, unknown>) => Promise<unknown>).call(handlers, args);
 }

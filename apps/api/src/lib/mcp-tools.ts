@@ -86,7 +86,7 @@ import {
   deleteRecordContentUploadSession,
   loadRecordContentUploadSession,
 } from './record-content-upload-session.js';
-import { pageItems, pageTaskList } from './task-list-page.js';
+import { activityExcerptKeys, pageItems, pageTaskList } from './task-list-page.js';
 import {
   archiveWorkspaceMedia,
   createWorkspaceMedia,
@@ -1040,9 +1040,10 @@ function mcpSource(
 function projectListPage<T extends object>(
   rows: T[],
   input: { cursor?: string; limit?: number },
+  options?: { excerptKeys?: readonly string[] },
 ) {
   const limit = Math.min(input.limit ?? MCP_MAX_LIST_LIMIT, MCP_MAX_LIST_LIMIT);
-  const page = pageItems(rows, input.cursor, limit);
+  const page = pageItems(rows, input.cursor, limit, options);
   return {
     rows: page.items,
     total: page.total,
@@ -3552,7 +3553,12 @@ export function createMcpToolHandlers(
       });
       const task = await getTask(app.database, taskId);
       await requirePmProject(app, client, task.projectId);
-      const page = projectListPage(await listTaskActivities(app.database, taskId), input);
+      const fullText = input.fullText !== false;
+      const page = projectListPage(
+        await listTaskActivities(app.database, taskId),
+        input,
+        { excerptKeys: activityExcerptKeys(fullText) },
+      );
       return {
         activities: page.rows,
         total: page.total,

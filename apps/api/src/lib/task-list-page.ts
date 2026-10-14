@@ -21,14 +21,26 @@ const EXCERPT_KEYS = [
   'body',
 ] as const;
 
+/**
+ * Comment bodies on task activity are full by default.
+ * Pass fullText false to excerpt `body` with the other list fields.
+ */
+export function activityExcerptKeys(fullText: boolean): readonly string[] {
+  if (fullText) return EXCERPT_KEYS.filter((key) => key !== 'body');
+  return EXCERPT_KEYS;
+}
+
 function excerptField(value: string | null): string | null {
   if (value === null || value.length <= TASK_LIST_EXCERPT_CHARS) return value;
   return `${value.slice(0, TASK_LIST_EXCERPT_CHARS)}…`;
 }
 
-export function excerptItem<T extends object>(item: T): T {
+export function excerptItem<T extends object>(
+  item: T,
+  keys: readonly string[] = EXCERPT_KEYS,
+): T {
   const copy = { ...item } as Record<string, unknown>;
-  for (const key of EXCERPT_KEYS) {
+  for (const key of keys) {
     const value = copy[key];
     if (typeof value === 'string') copy[key] = excerptField(value);
   }
@@ -68,6 +80,7 @@ export function pageItems<T extends object>(
   items: T[],
   cursor: string | undefined,
   limit: number,
+  options?: { excerptKeys?: readonly string[] },
 ): {
   items: T[];
   total: number;
@@ -76,7 +89,8 @@ export function pageItems<T extends object>(
   hasMore: boolean;
 } {
   const offset = decodeListCursor(cursor);
-  const page = items.slice(offset, offset + limit).map(excerptItem);
+  const keys = options?.excerptKeys ?? EXCERPT_KEYS;
+  const page = items.slice(offset, offset + limit).map((item) => excerptItem(item, keys));
   const next = offset + page.length;
   const hasMore = next < items.length;
   return {

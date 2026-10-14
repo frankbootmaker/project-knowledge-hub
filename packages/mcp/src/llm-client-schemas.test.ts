@@ -103,10 +103,53 @@ describe('llm-client-schemas', () => {
       if (path.endsWith('/get_project')) {
         expect(schema.$ref).toBeUndefined();
         expect(JSON.stringify(schema)).toContain('definitionOfDone');
+      } else if (path.endsWith('/list_project_tasks')) {
+        expect(schema.$ref).toBeUndefined();
+        expect(JSON.stringify(schema)).toContain('nextCursor');
       } else {
         expect(schema.$ref).toBe('#/components/schemas/ToolResult');
       }
     }
+
+    const taskList = findLlmTool('list_project_tasks');
+    const taskListProps = (
+      taskList?.body as { properties?: Record<string, unknown> }
+    ).properties;
+    expect(taskListProps?.limit).toBeTruthy();
+    expect(taskListProps?.cursor).toBeTruthy();
+    expect(taskList?.description).toMatch(/limit/);
+    expect(taskList?.description).toMatch(/cursor/);
+    expect(JSON.stringify(taskList?.output)).toContain('nextCursor');
+
+    const bugFields = [
+      'itemType',
+      'severity',
+      'foundIn',
+      'foundInNote',
+      'stepsToReproduce',
+      'expectedBehavior',
+      'actualBehavior',
+      'resolution',
+      'regression',
+      'affectedSystemId',
+      'duplicateOfTaskId',
+    ];
+    for (const name of ['create_project_task', 'update_project_task']) {
+      const tool = findLlmTool(name);
+      const props = (tool?.body as { properties?: Record<string, unknown> }).properties ?? {};
+      for (const field of bugFields) {
+        expect(props[field], `${name}.${field}`).toBeTruthy();
+      }
+    }
+    expect(findLlmTool('get_project_task')?.description).toMatch(/B-4/);
+    expect(findLlmTool('list_project_task_activities')?.description).toMatch(/full/);
+    expect(
+      (
+        findLlmTool('list_project_task_activities')?.body as {
+          properties?: Record<string, unknown>;
+        }
+      ).properties?.fullText,
+    ).toBeTruthy();
 
     const baseline = findLlmTool('update_project_baseline');
     expect(baseline?.description).toContain('definitionOfDone');
