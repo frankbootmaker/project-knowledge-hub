@@ -72,8 +72,8 @@ function formatBytes(bytes: number): string {
 }
 
 function typeLabel(contentType: string): string {
-  const subtype = contentType.split('/')[1];
-  return (subtype ?? contentType).toUpperCase();
+  const subtype = contentType.split('/')[1]?.trim();
+  return subtype || contentType;
 }
 
 function isEntityLabelKey(value: string): value is EntityLabelKey {

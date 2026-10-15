@@ -17,6 +17,7 @@ import { DeliveryScheduleLegend } from './DeliveryScheduleLegend';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { UserAvatar } from './UserAvatar';
 import { workItemIdLabel } from '../lib/work-item-label';
+import { WorkItemIdLine } from './WorkItemIdLine';
 
 export type CalendarItem = {
   id: string;
@@ -117,15 +118,14 @@ function CalendarItemChip({
         )}
         <span className="min-w-0 truncate font-medium text-ink">{item.title}</span>
       </div>
-      {idLabel ? (
-        <span
-          className={
-            item.humanKey
-              ? 'kh-ops-key-badge mt-0.5 max-w-full truncate'
-              : 'kh-ops-menu-type mt-0.5 block text-ink-muted'
-          }
-        >
-          {idLabel}
+      {item.kind === 'task' || item.humanKey ? (
+        <span className="mt-0.5 block max-w-full">
+          <WorkItemIdLine
+            itemType={item.kind === 'task' ? item.itemType : undefined}
+            humanKey={item.humanKey}
+            bugLabel={item.kind === 'task' ? t('kindBug') : undefined}
+            milestoneLabel={item.kind === 'milestone' ? '' : undefined}
+          />
         </span>
       ) : null}
       <span className="kh-ops-menu-type mt-1 block text-ink-muted">
