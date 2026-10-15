@@ -2731,6 +2731,80 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   background: var(--kh-danger);
 }
 
+/* Point cards on the delivery timeline. Same type as the left rail menu:
+   IBM Plex Sans, 13px, regular. Solid panel, not the span-bar ink fill. */
+.kh-ops-time-card {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 14rem;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.35;
+  text-align: left;
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--kh-ink), transparent 88%);
+}
+
+.kh-ops-time-card:hover {
+  border-color: color-mix(in oklch, var(--kh-brand), transparent 50%);
+}
+
+button.kh-ops-time-card {
+  cursor: pointer;
+}
+
+button.kh-ops-time-card:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: 1px;
+}
+
+.kh-ops-time-card .kh-ops-key-badge {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.kh-ops-time-card[data-tone='onTrack'] {
+  border-color: color-mix(in oklch, var(--kh-accent), transparent 65%);
+  background: var(--kh-accent-soft);
+  color: var(--kh-rag-on-track);
+}
+
+.kh-ops-time-card[data-tone='atRisk'] {
+  border-color: color-mix(in oklch, var(--kh-warn), transparent 60%);
+  background: var(--kh-warn-soft);
+  color: var(--kh-rag-amber-ink);
+}
+
+.kh-ops-time-card[data-tone='overdue'] {
+  border-color: color-mix(in oklch, var(--kh-danger), transparent 65%);
+  background: var(--kh-danger-soft);
+  color: var(--kh-rag-red-ink);
+}
+
+.kh-ops-time-card[data-tone='completed'] {
+  border-color: color-mix(in oklch, var(--kh-brand), transparent 65%);
+  background: var(--kh-brand-soft);
+  color: var(--kh-brand);
+}
+
+.kh-ops-time-card[data-tone='neutral'] {
+  border-color: var(--kh-line);
+  background: var(--kh-panel);
+  color: var(--kh-ink-muted);
+}
+
 .kh-ops-time-milestone {
   width: 12px;
   height: 12px;
@@ -2773,6 +2847,8 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   border-right: 1px solid var(--kh-line);
   border-bottom: 1px solid var(--kh-line);
   background: var(--kh-panel-solid);
+  color: inherit;
+  font: inherit;
   text-align: left;
   cursor: pointer;
 }
@@ -2786,7 +2862,7 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 }
 
 .kh-ops-day:hover,
-.kh-ops-day[aria-pressed='true'] {
+.kh-ops-day[data-selected='true'] {
   background: var(--kh-selected-bg);
   color: var(--kh-selected-fg);
 }

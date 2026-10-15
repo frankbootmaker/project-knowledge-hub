@@ -1,18 +1,11 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type RefObject,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react';
 import { useTranslations } from 'next-intl';
-import { Badge, Button, useToast } from './ui';
-import {
-  deliveryScheduleTone,
-  todayYmd,
-} from '../lib/delivery-schedule';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { useToast } from './ui/Toast';
+import { deliveryScheduleTone, todayYmd } from '../lib/delivery-schedule';
 import { DeliveryScheduleLegend } from './DeliveryScheduleLegend';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { UserAvatar } from './UserAvatar';
@@ -21,7 +14,7 @@ import { WorkItemIdLine } from './WorkItemIdLine';
 
 export type CalendarItem = {
   id: string;
-  kind: 'task' | 'milestone';
+  kind: 'task' | 'milestone' | 'epic' | 'story';
   title: string;
   date: string;
   status: string;
@@ -84,7 +77,15 @@ function CalendarItemChip({
         })
       : (item.humanKey ?? '');
   const badgeLetter =
-    item.kind === 'milestone' ? 'M' : item.itemType === 'bug' ? 'B' : 'T';
+    item.kind === 'milestone'
+      ? 'M'
+      : item.kind === 'epic'
+        ? 'E'
+        : item.kind === 'story'
+          ? 'S'
+          : item.itemType === 'bug'
+            ? 'B'
+            : 'T';
 
   const entryTitle = `${idLabel ? `${idLabel} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`;
 
@@ -114,10 +115,7 @@ function CalendarItemChip({
   }
 
   return (
-    <li
-      className="kh-ops-data-item"
-      title={entryTitle}
-    >
+    <li className="kh-ops-data-item" title={entryTitle}>
       <div className="flex min-w-0 items-center gap-1.5">
         {item.owner ? (
           <UserAvatar
@@ -126,10 +124,7 @@ function CalendarItemChip({
             size="xs"
           />
         ) : (
-          <Badge
-            tone={item.kind === 'milestone' ? 'brand' : 'neutral'}
-            className="shrink-0"
-          >
+          <Badge tone={item.kind === 'milestone' ? 'brand' : 'neutral'} className="shrink-0">
             {badgeLetter}
           </Badge>
         )}
@@ -160,29 +155,34 @@ export function ProjectDeliveryCalendar({
   exportHandleRef,
   onExportStateChange,
   onOpenItem,
+  initialCursor,
+  initialToday,
 }: {
   projectId: string;
   projectName: string;
   items: CalendarItem[];
   exportHandleRef?: RefObject<CalendarExportHandle | null>;
-  onExportStateChange?: (
-    state: { pending: boolean; canExport: boolean } | null,
-  ) => void;
+  onExportStateChange?: (state: { pending: boolean; canExport: boolean } | null) => void;
   onOpenItem?: (item: CalendarItem) => void;
+  /** Skip the post-hydration clock when the month is already known. */
+  initialCursor?: { year: number; month: number };
+  initialToday?: string;
 }) {
   const t = useTranslations('delivery');
   const tProjects = useTranslations('projects');
   const { pushToast } = useToast();
-  const [cursor, setCursor] = useState<{ year: number; month: number } | null>(null);
-  const [today, setToday] = useState<string | null>(null);
-  const [selectedIso, setSelectedIso] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<{ year: number; month: number } | null>(
+    initialCursor ?? null,
+  );
+  const [today, setToday] = useState<string | null>(initialToday ?? null);
+  const [selectedIso, setSelectedIso] = useState<string | null>(initialToday ?? null);
   const [exportPending, setExportPending] = useState(false);
 
   useEffect(() => {
     const now = new Date();
     const iso = todayYmd(now);
-    setCursor({ year: now.getFullYear(), month: now.getMonth() });
-    setToday(iso);
+    setCursor((current) => current ?? { year: now.getFullYear(), month: now.getMonth() });
+    setToday((current) => current ?? iso);
     setSelectedIso((current) => current ?? iso);
   }, []);
 
@@ -233,23 +233,11 @@ export function ProjectDeliveryCalendar({
       );
       pushToast(t('calendarExported'));
     } catch (err) {
-      pushToast(
-        err instanceof Error ? err.message : t('calendarExportFailed'),
-        'danger',
-      );
+      pushToast(err instanceof Error ? err.message : t('calendarExportFailed'), 'danger');
     } finally {
       setExportPending(false);
     }
-  }, [
-    cursor,
-    exportPending,
-    projectId,
-    projectName,
-    pushToast,
-    t,
-    tProjects,
-    today,
-  ]);
+  }, [cursor, exportPending, projectId, projectName, pushToast, t, tProjects, today]);
 
   useEffect(() => {
     if (exportHandleRef) {
@@ -267,14 +255,7 @@ export function ProjectDeliveryCalendar({
       if (exportHandleRef) exportHandleRef.current = null;
       onExportStateChange?.(null);
     };
-  }, [
-    cursor,
-    exportCalendarPdf,
-    exportHandleRef,
-    exportPending,
-    onExportStateChange,
-    today,
-  ]);
+  }, [cursor, exportCalendarPdf, exportHandleRef, exportPending, onExportStateChange, today]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
@@ -326,9 +307,7 @@ export function ProjectDeliveryCalendar({
   }, [cursor, byDate]);
 
   const selectedItems = selectedIso ? (byDate.get(selectedIso) ?? []) : [];
-  const selectedDayNumber = selectedIso
-    ? Number(selectedIso.slice(8, 10))
-    : null;
+  const selectedDayNumber = selectedIso ? Number(selectedIso.slice(8, 10)) : null;
 
   if (!cursor || !today) {
     return (
@@ -397,20 +376,24 @@ export function ProjectDeliveryCalendar({
               </div>
             ))}
             {cells.map((cell) => (
-              <button
+              <div
                 key={cell.key}
-                type="button"
                 className="kh-ops-day"
                 data-muted={cell.inMonth ? undefined : 'true'}
-                aria-pressed={cell.iso != null && cell.iso === selectedIso}
-                disabled={!cell.inMonth}
+                data-selected={cell.iso != null && cell.iso === selectedIso ? 'true' : undefined}
+                tabIndex={cell.inMonth ? 0 : undefined}
                 onClick={() => {
-                  if (cell.iso) setSelectedIso(cell.iso);
+                  if (cell.inMonth && cell.iso) setSelectedIso(cell.iso);
+                }}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (!cell.inMonth || !cell.iso) return;
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  setSelectedIso(cell.iso);
                 }}
               >
-                {cell.day != null ? (
-                  <span className="kh-ops-day-num">{cell.day}</span>
-                ) : null}
+                {cell.day != null ? <span className="kh-ops-day-num">{cell.day}</span> : null}
                 {cell.items.slice(0, 3).map((item) => (
                   <CalendarItemChip
                     key={item.id}
@@ -425,7 +408,7 @@ export function ProjectDeliveryCalendar({
                     {t('calendarMore', { count: cell.items.length - 3 })}
                   </span>
                 ) : null}
-              </button>
+              </div>
             ))}
           </div>
         </section>
