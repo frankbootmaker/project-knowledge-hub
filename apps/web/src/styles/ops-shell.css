@@ -108,10 +108,12 @@
 .kh-ops-mode-copy {
   display: block;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), monospace;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-workspace-select strong {
@@ -414,9 +416,12 @@ a.kh-section-shortcut[aria-current='location'] {
 .kh-ops-jump-kind {
   margin-left: auto;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), monospace;
-  font-size: 10px;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-jump-empty {
@@ -521,11 +526,12 @@ a.kh-section-shortcut[aria-current='location'] {
   display: block;
   padding: 7px 9px 5px;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), monospace;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-user-menu a,
@@ -569,7 +575,6 @@ a.kh-section-shortcut[aria-current='location'] {
 
 .kh-ops-mode-copy {
   margin-top: 9px;
-  font-size: 10px;
 }
 
 .kh-ops-content {
@@ -600,11 +605,12 @@ a.kh-section-shortcut[aria-current='location'] {
 
 .kh-ops-crumb {
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), monospace;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  line-height: 1.4;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-crumb a {
@@ -997,12 +1003,12 @@ a.kh-section-shortcut[aria-current='location'] {
 .kh-ops-eyebrow {
   margin: 0 0 4px;
   color: var(--kh-accent);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.09em;
-  line-height: 1.4;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-page-title {
@@ -1019,8 +1025,12 @@ a.kh-section-shortcut[aria-current='location'] {
   max-width: 720px;
   margin: 6px 0 0;
   color: var(--kh-ink-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-count-strip {
@@ -1057,10 +1067,12 @@ a.kh-section-shortcut[aria-current='location'] {
   display: block;
   overflow: hidden;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1097,10 +1109,12 @@ a.kh-section-shortcut[aria-current='location'] {
   justify-content: space-between;
   gap: 8px;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-stat-label b {
@@ -1457,11 +1471,12 @@ a.kh-ops-health-card:hover {
   display: -webkit-box;
   overflow: hidden;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  line-height: 1.3;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow-wrap: anywhere;
@@ -1564,11 +1579,11 @@ a.kh-ops-health-card:hover {
 .kh-ops-panel-sub {
   margin: 3px 0 0;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px;
-  line-height: 1.4;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
   font-weight: 400;
-  letter-spacing: 0;
+  letter-spacing: normal;
+  line-height: 1.45;
   text-transform: none;
 }
 
@@ -1708,9 +1723,12 @@ a.kh-ops-health-card:hover {
 
 .kh-ops-stamp small {
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-stamp strong {
@@ -1964,11 +1982,12 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   display: block;
   margin-bottom: 2px;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-meta-chip > span {
@@ -2012,10 +2031,12 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 .kh-ops-setting-row small {
   display: block;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-setting-row strong {
@@ -2171,6 +2192,12 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 
 .kh-ops-lane-count {
   color: var(--kh-ink-muted);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-milestone-markers {
@@ -3102,11 +3129,12 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
 .kh-ops-table-filter-group legend,
 .kh-ops-table-filter-group > span {
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-popover {
@@ -3330,9 +3358,12 @@ a.kh-ops-choice {
 .kh-ops-cost-part small {
   display: block;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-cost-part strong {
@@ -3368,9 +3399,12 @@ a.kh-ops-choice {
 .kh-ops-field-cell small {
   display: block;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-field-cell strong {
@@ -3479,10 +3513,12 @@ button.kh-ops-project-card:disabled {
   justify-content: space-between;
   gap: 8px;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-search-group {
@@ -3491,6 +3527,15 @@ button.kh-ops-project-card:disabled {
 
 .kh-ops-search-group .kh-ops-panel-head {
   border-bottom: 0;
+}
+
+.kh-ops-search-group .kh-ops-panel-title {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-competency-list {
@@ -3870,9 +3915,12 @@ a.kh-ops-record-link:hover {
 
 .kh-ops-stage-card small {
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  text-transform: uppercase;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-stage-card strong {
@@ -4293,8 +4341,12 @@ a.kh-ops-admin-link-card {
   padding: 3px 7px;
   border: 1px solid var(--kh-line);
   background: var(--kh-bg);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-markdown-view {
@@ -4381,6 +4433,12 @@ a.kh-ops-admin-link-card {
   position: relative;
   z-index: 1;
   background: var(--kh-surface);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .kh-ops-media-info {
@@ -4401,8 +4459,12 @@ a.kh-ops-admin-link-card {
 
 .kh-ops-media-info small {
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 /* Catalogue type matches the left rail menu: IBM Plex Sans, 13px, regular. */
@@ -4792,12 +4854,23 @@ button.kh-ops-stage-card:disabled {
   max-width: 100%;
 }
 
+.kh-ops-media-library .kh-ops-keyvals dd:has(.kh-ops-media-url) {
+  overflow: hidden;
+}
+
 .kh-ops-media-url-link {
-  flex: 1;
+  display: block;
+  flex: 1 1 0;
+  width: 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .kh-label {

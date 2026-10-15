@@ -19,7 +19,7 @@ import {
   type RatePerson,
 } from '../lib/task-costing';
 import { formatMoney } from '../lib/project-currency';
-import { workItemIdLabel } from '../lib/work-item-label';
+import { WorkItemIdLine } from './WorkItemIdLine';
 import {
   MilestoneTimeMarkers,
   compareMilestonesByDueDate,
@@ -278,9 +278,10 @@ function BoardMilestoneCard({
       )}
     >
       <div className="kh-ops-task-top">
-        <span className={showIssueId ? 'kh-ops-task-id' : 'kh-ops-menu-type'}>
-          {showIssueId ? milestone.humanKey! : t('kindMilestone')}
-        </span>
+        <WorkItemIdLine
+          humanKey={showIssueId ? milestone.humanKey : null}
+          milestoneLabel={t('kindMilestone')}
+        />
         <span className="kh-ops-type-chip" data-tone={tone}>
           {t(`scheduleToneShort.${tone}`)}
         </span>
@@ -410,14 +411,12 @@ export function BoardTaskCard({
       )}
     >
       <div className="kh-ops-task-top">
-        <span className={showIssueId ? 'kh-ops-task-id' : 'kh-ops-menu-type'}>
-          {workItemIdLabel({
-            itemType: task.itemType,
-            humanKey: showIssueId ? task.humanKey : null,
-            taskLabel: t('kindTask'),
-            bugLabel: t('kindBug'),
-          })}
-        </span>
+        <WorkItemIdLine
+          itemType={task.itemType}
+          humanKey={showIssueId ? task.humanKey : null}
+          taskLabel={t('kindTask')}
+          bugLabel={t('kindBug')}
+        />
         <span className="kh-ops-type-chip" data-tone={tone}>
           {t(`scheduleToneShort.${tone}`)}
         </span>
