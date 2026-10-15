@@ -343,9 +343,6 @@ export function ProjectBaselinePanel({
       >
         <div className="grid gap-3">
           <section className="kh-ops-panel">
-            <div className="kh-ops-panel-head">
-              <h2 className="kh-ops-menu-type m-0">{t('fieldsTitle')}</h2>
-            </div>
             <div className="kh-ops-baseline-grid">
               <div className="kh-ops-field-cell">
                 <small>{t('startDate')}</small>
