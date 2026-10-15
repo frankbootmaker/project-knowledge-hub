@@ -18,6 +18,12 @@ export const TIMELINE_DATE_FONT_PX = 11;
 export const MARKER_TAG_MIN_WIDTH_PX = 132;
 export const MARKER_TAG_GAP_PX = 12;
 export const MARKER_LANE_PITCH_PX = 100;
+/** Centers closer than this share one row on the spine. */
+export const MARKER_ICON_STACK_GAP_PX = 18;
+/** Space between spine icons on different dates, enough for a diamond. */
+export const MARKER_ICON_STACK_PITCH_PX = 18;
+/** Same-date icons use 76% of the usual spacing: 20% closer, then another 5%. */
+export const MARKER_ICON_SAME_DATE_PITCH_SCALE = 0.76;
 
 export const STORY_TAG_WIDTH_PX = 224;
 export const STORY_TAG_GAP_PX = 8;
@@ -382,6 +388,76 @@ export function packStoryLanes(
       laneRight.push(right);
     }
     result.set(item.id, placed);
+  }
+  return result;
+}
+
+/**
+ * Horizontal offset for spine icons that would cover each other.
+ * A lone icon stays on its date. A cluster sits in a tight row on the
+ * axis, centered on the shared point. Icons on one date use 76% of the pitch.
+ * Spreading a row pulls in a neighbor
+ * that would otherwise land on top of it.
+ */
+export function packMarkerIconStacks(
+  items: Array<{ id: string; xPx: number }>,
+  options: { gapPx?: number; pitchPx?: number } = {},
+): Map<string, number> {
+  const gapPx = options.gapPx ?? MARKER_ICON_STACK_GAP_PX;
+  const pitchPx = options.pitchPx ?? MARKER_ICON_STACK_PITCH_PX;
+  const sorted = items
+    .map((item, index) => ({ ...item, index }))
+    .sort((a, b) => a.xPx - b.xPx || a.index - b.index);
+  const clusters: Array<Array<{ id: string; xPx: number }>> = [];
+  for (const item of sorted) {
+    const cluster = clusters[clusters.length - 1];
+    const previous = cluster?.[cluster.length - 1];
+    if (!cluster || !previous || item.xPx - previous.xPx >= gapPx) {
+      clusters.push([item]);
+    } else {
+      cluster.push(item);
+    }
+  }
+
+  const placed = new Map<string, number>();
+  const stepPx = (previous: { xPx: number }, item: { xPx: number }) =>
+    previous.xPx === item.xPx ? pitchPx * MARKER_ICON_SAME_DATE_PITCH_SCALE : pitchPx;
+  const place = (cluster: Array<{ id: string; xPx: number }>) => {
+    const along: number[] = [0];
+    for (let index = 1; index < cluster.length; index += 1) {
+      const previous = cluster[index - 1];
+      const item = cluster[index];
+      if (!previous || !item) continue;
+      along.push((along[index - 1] ?? 0) + stepPx(previous, item));
+    }
+    const mid = cluster.reduce((sum, item) => sum + item.xPx, 0) / cluster.length;
+    const shift = mid - (along[along.length - 1] ?? 0) / 2;
+    cluster.forEach((item, index) => {
+      placed.set(item.id, shift + (along[index] ?? 0));
+    });
+  };
+  clusters.forEach(place);
+
+  let merged = true;
+  while (merged) {
+    merged = false;
+    for (let index = 0; index < clusters.length - 1; index += 1) {
+      const left = clusters[index] ?? [];
+      const right = clusters[index + 1] ?? [];
+      const leftEdge = Math.max(...left.map((item) => placed.get(item.id) ?? item.xPx));
+      const rightEdge = Math.min(...right.map((item) => placed.get(item.id) ?? item.xPx));
+      if (rightEdge - leftEdge >= pitchPx) continue;
+      const combined = [...left, ...right];
+      clusters.splice(index, 2, combined);
+      place(combined);
+      merged = true;
+      break;
+    }
+  }
+
+  const result = new Map<string, number>();
+  for (const item of sorted) {
+    result.set(item.id, (placed.get(item.id) ?? item.xPx) - item.xPx);
   }
   return result;
 }

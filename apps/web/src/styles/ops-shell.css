@@ -2672,6 +2672,11 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   overscroll-behavior-x: contain;
 }
 
+.kh-ops-chart-wide .kh-ops-gantt-scroll,
+.kh-ops-chart-wide .kh-ops-timeline-scroll {
+  max-height: calc(96dvh - 12rem);
+}
+
 .kh-ops-timeline-chart {
   width: max(100%, calc(var(--kh-timeline-days, 1) * var(--kh-timeline-px, 8) * 1px));
   min-width: 48rem;

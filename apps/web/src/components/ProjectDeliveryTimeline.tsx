@@ -15,6 +15,7 @@ import {
 } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Badge, Button, Field, Input, useToast } from './ui';
+import { DeliveryWideFrame } from './DeliveryWideFrame';
 import { cn } from '../lib/cn';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import {
@@ -41,6 +42,7 @@ import {
   markerBaseY,
   markerTrackHeightPx,
   nextZoomIndex,
+  packMarkerIconStacks,
   packMarkerLanes,
   parseYmd,
   scrollLeftForDate,
@@ -344,21 +346,31 @@ function writeIssueIds(storageKey: string, enabled: boolean): void {
   }
 }
 
-function markerShape(kind: AxisMarker['kind']): 'milestone' | 'epic' | 'story' | 'task' {
-  if (kind === 'milestone' || kind === 'epic' || kind === 'story') return kind;
-  return 'task';
+const BUG_CROSS_CLASS =
+  '[clip-path:polygon(0_18%,18%_0,50%_32%,82%_0,100%_18%,68%_50%,' +
+  '100%_82%,82%_100%,50%_68%,18%_100%,0_82%,32%_50%)]';
+
+function markerShape(
+  marker: Pick<AxisMarker, 'kind' | 'itemType'>,
+): 'milestone' | 'epic' | 'story' | 'task' | 'bug' {
+  if (marker.kind === 'milestone' || marker.kind === 'epic' || marker.kind === 'story') {
+    return marker.kind;
+  }
+  return marker.itemType === 'bug' ? 'bug' : 'task';
 }
 
-function markerShapeClass(kind: AxisMarker['kind']): string {
-  if (kind === 'milestone') return 'size-3 rotate-45 border border-warn bg-warn/80';
-  if (kind === 'epic') return 'size-3 bg-ink-muted [clip-path:polygon(50%_0,100%_100%,0_100%)]';
-  if (kind === 'story') return 'size-2.5 bg-ink-muted';
+function markerShapeClass(marker: Pick<AxisMarker, 'kind' | 'itemType'>): string {
+  const shape = markerShape(marker);
+  if (shape === 'milestone') return 'size-3 border border-warn bg-warn/80';
+  if (shape === 'epic') return 'size-3 bg-ink-muted [clip-path:polygon(50%_0,100%_100%,0_100%)]';
+  if (shape === 'story') return 'size-2.5 bg-ink-muted';
+  if (shape === 'bug') return `size-3 bg-ink-muted ${BUG_CROSS_CLASS}`;
   return 'size-2.5 rounded-full bg-ink-muted';
 }
 
 function scheduleMarkerDotClass(
   tone: DeliveryScheduleTone,
-  kind: 'milestone' | 'epic' | 'story' | 'task',
+  kind: 'milestone' | 'epic' | 'story' | 'task' | 'bug',
 ): string {
   const fill =
     tone === 'completed'
@@ -370,11 +382,12 @@ function scheduleMarkerDotClass(
           : tone === 'onTrack'
             ? 'border-accent bg-accent'
             : 'border-line bg-ink-muted';
-  if (kind === 'milestone') return cn('size-3 rotate-45 border', fill);
+  if (kind === 'milestone') return cn('size-3 border', fill);
   if (kind === 'epic') {
     return cn('size-3 [clip-path:polygon(50%_0,100%_100%,0_100%)]', fill);
   }
   if (kind === 'story') return cn('size-2.5 border', fill);
+  if (kind === 'bug') return cn('size-3', BUG_CROSS_CLASS, fill);
   return cn('size-2.5 rounded-full border', fill);
 }
 
@@ -530,6 +543,10 @@ function TimelineHintHelp({
             <li className="inline-flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-ink-muted" aria-hidden />
               <span>{t('kindTask')}</span>
+            </li>
+            <li className="inline-flex items-center gap-1.5">
+              <span className={`size-3 bg-ink-muted ${BUG_CROSS_CLASS}`} aria-hidden />
+              <span>{t('kindBug')}</span>
             </li>
           </ul>
           {canReset ? (
@@ -690,6 +707,7 @@ export function ProjectDeliveryTimeline({
     to: '',
   });
   const [showGrid, setShowGrid] = useState(true);
+  const [wideOpen, setWideOpen] = useState(false);
   const [colorByStatus, setColorByStatus] = useState(false);
   const [showDueDates, setShowDueDates] = useState(false);
   const [showStartDates, setShowStartDates] = useState(false);
@@ -1158,6 +1176,16 @@ export function ProjectDeliveryTimeline({
     );
   }, [axisMarkers, layoutWidth, locale, rangeStart, showDueDates, showStartDates, span]);
   const markerTrackHeight = markerTrackHeightPx(markerLanes.values());
+  const iconStacks = useMemo(
+    () =>
+      packMarkerIconStacks(
+        axisMarkers.map((marker) => ({
+          id: marker.id,
+          xPx: ((parseYmd(marker.date) - rangeStart) / span) * layoutWidth,
+        })),
+      ),
+    [axisMarkers, layoutWidth, rangeStart, span],
+  );
 
   const unscheduledEpics = filters.epics
     ? epics.filter((epic) => !timelineDueDate(epic.startDate, epic.endDate))
@@ -1207,6 +1235,7 @@ export function ProjectDeliveryTimeline({
               story: t('kindStory'),
               milestone: t('kindMilestone'),
               task: t('kindTask'),
+              bug: t('kindBug'),
               generated: tProjects('reportGenerated'),
               empty: t('timelineExportEmpty'),
               today: t('timelineToday'),
@@ -1268,10 +1297,17 @@ export function ProjectDeliveryTimeline({
   }, [anyTypeVisible, exportHandleRef, exportPending, exportTimelinePdf, onExportStateChange]);
 
   return (
+    <DeliveryWideFrame
+      open={wideOpen}
+      title={t('viewMode.timeline')}
+      description={t('wideViewDescription')}
+      className="kh-ops-chart-wide"
+      onClose={() => setWideOpen(false)}
+    >
     <div className="grid gap-4">
       <fieldset className="kh-ops-panel m-0 grid gap-2 p-3">
         <legend className="px-1 text-sm font-semibold">{t('timelineFilterLabel')}</legend>
-        <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           {(
             [
               ['epics', 'kindEpic'],
@@ -1301,6 +1337,15 @@ export function ProjectDeliveryTimeline({
             <input type="checkbox" checked={showIssueIds} onChange={toggleIssueIds} />
             <span>{t('timelineIssueIds')}</span>
           </label>
+          <Button
+            type="button"
+            variant="secondary"
+            className="ml-auto text-sm"
+            aria-pressed={wideOpen}
+            onClick={() => setWideOpen((open) => !open)}
+          >
+            {t('wideViewHint')}
+          </Button>
         </div>
       </fieldset>
 
@@ -1517,7 +1562,8 @@ export function ProjectDeliveryTimeline({
                   : null;
                 const offset = offsets[marker.id] ?? { dx: 0, dy: 0 };
                 const baseY = markerBaseY(placement.side, placement.lane);
-                const ribX = offset.dx;
+                const stackDx = iconStacks.get(marker.id) ?? 0;
+                const ribX = offset.dx - stackDx;
                 const ribY = baseY + offset.dy;
                 const ribLen = Math.max(1, Math.hypot(ribX, ribY));
                 const ribAngle = (Math.atan2(ribY, ribX) * 180) / Math.PI;
@@ -1548,7 +1594,10 @@ export function ProjectDeliveryTimeline({
                       className="pointer-events-none absolute left-1/2 top-1/2 h-px origin-left bg-line-strong"
                       style={{
                         width: ribLen,
-                        transform: `rotate(${ribAngle}deg)`,
+                        transform:
+                          stackDx === 0
+                            ? `rotate(${ribAngle}deg)`
+                            : `translateX(${stackDx}px) rotate(${ribAngle}deg)`,
                       }}
                       aria-hidden
                     />
@@ -1592,11 +1641,17 @@ export function ProjectDeliveryTimeline({
                     <button
                       type="button"
                       className={cn(
-                        'absolute left-1/2 top-1/2 z-[3] -translate-x-1/2 -translate-y-1/2',
+                        'absolute left-1/2 top-1/2 z-[3]',
                         tone
-                          ? scheduleMarkerDotClass(tone, markerShape(marker.kind))
-                          : markerShapeClass(marker.kind),
+                          ? scheduleMarkerDotClass(tone, markerShape(marker))
+                          : markerShapeClass(marker),
                       )}
+                      style={{
+                        transform:
+                          marker.kind === 'milestone'
+                            ? `translate(calc(-50% + ${stackDx}px), -50%) rotate(45deg)`
+                            : `translate(calc(-50% + ${stackDx}px), -50%)`,
+                      }}
                       title={tooltip}
                       aria-label={tooltip}
                       onClick={marker.onOpen}
@@ -1672,5 +1727,6 @@ export function ProjectDeliveryTimeline({
         </div>
       ) : null}
     </div>
+    </DeliveryWideFrame>
   );
 }

@@ -42,6 +42,7 @@ export type TimelineExportTask = {
   dueDate: string | null;
   startDate?: string | null;
   humanKey?: string | null;
+  itemType?: 'task' | 'bug' | null;
 };
 
 export type TimelineTagOffset = { dx: number; dy: number };
@@ -401,6 +402,7 @@ export type TimelineExportInput = {
     story: string;
     milestone: string;
     task: string;
+    bug?: string;
     generated: string;
     empty: string;
     today?: string;
@@ -495,6 +497,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       startDate: row.startDate ?? null,
       status: row.status,
       humanKey: row.humanKey ?? null,
+      itemType: row.itemType === 'bug' ? ('bug' as const) : ('task' as const),
     })),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
 
@@ -579,7 +582,9 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
             ? 'triangle'
             : marker.kind === 'story'
               ? 'square'
-              : 'dot';
+              : 'itemType' in marker && marker.itemType === 'bug'
+                ? 'cross'
+                : 'dot';
       const tone = colorByStatus
         ? scheduleTone({
             status: marker.status,
@@ -656,6 +661,12 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     }
     .swatch-square { width: 8px; height: 8px; background: #5b6b7c; }
     .swatch-dot { width: 8px; height: 8px; border-radius: 50%; background: #5b6b7c; }
+    .swatch-cross {
+      width: 10px;
+      height: 10px;
+      background: #5b6b7c;
+      clip-path: polygon(0 18%, 18% 0, 50% 32%, 82% 0, 100% 18%, 68% 50%, 100% 82%, 82% 100%, 50% 68%, 18% 100%, 0 82%, 32% 50%);
+    }
     .swatch-tone { width: 10px; height: 10px; border-radius: 2px; border: 1px solid transparent; display: inline-block; }
     .chart {
       padding: 0;
@@ -862,6 +873,17 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       background: #5b6b7c;
       z-index: 3;
     }
+    .cross {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      margin: -5px 0 0 -5px;
+      background: #5b6b7c;
+      clip-path: polygon(0 18%, 18% 0, 50% 32%, 82% 0, 100% 18%, 68% 50%, 100% 82%, 82% 100%, 50% 68%, 18% 100%, 0 82%, 32% 50%);
+      z-index: 3;
+    }
     .empty { color: #5b6b7c; padding: 1.5rem 0; text-align: center; }
   </style>
 </head>
@@ -879,7 +901,8 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
         : `${input.filters.includeEpics ? `<span><i class="swatch-triangle"></i>${escapeHtml(input.labels.epic)}</span>` : ''}
     ${input.filters.includeStories ? `<span><i class="swatch-square"></i>${escapeHtml(input.labels.story)}</span>` : ''}
     ${input.filters.includeMilestones ? `<span><i class="swatch-diamond"></i>${escapeHtml(input.labels.milestone)}</span>` : ''}
-    ${input.filters.includeTasks ? `<span><i class="swatch-dot"></i>${escapeHtml(input.labels.task)}</span>` : ''}`
+    ${input.filters.includeTasks ? `<span><i class="swatch-dot"></i>${escapeHtml(input.labels.task)}</span>` : ''}
+    ${input.filters.includeTasks && input.labels.bug ? `<span><i class="swatch-cross"></i>${escapeHtml(input.labels.bug)}</span>` : ''}`
     }
   </div>
   <div class="chart">

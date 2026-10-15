@@ -703,6 +703,7 @@ export async function registerProjectDeliveryRoutes(
               story: z.string().min(1).max(80),
               milestone: z.string().min(1).max(80),
               task: z.string().min(1).max(80),
+              bug: z.string().min(1).max(80).optional(),
               generated: z.string().min(1).max(80),
               empty: z.string().min(1).max(200),
               today: z.string().min(1).max(80).optional(),

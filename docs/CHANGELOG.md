@@ -17,9 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **Timeline cards:** Start and due dates stack on two lines, each with its own icon, and the card narrows to the longer date so both stay fully visible.
 
-* **Timeline markers:** Epics use a triangle and stories use a square. Milestones stay diamonds and tasks stay dots.
+* **Timeline markers:** Epics use a triangle and stories use a square. Milestones stay diamonds, tasks stay dots, and bugs use a cross. Icons that share a date sit side by side on the spine, another 5% closer than the previous same-date spacing.
 
 * **Gantt freeze table:** A checkbox pins every column at the calendar edge, so moving the timeline keeps the full table in view.
+
+* **Wide chart view:** Gantt and Timeline open in the same full-window viewer as documents, about 25% wider on each side.
 
 ### Added
 

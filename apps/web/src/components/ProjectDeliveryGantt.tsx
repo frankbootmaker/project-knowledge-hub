@@ -7,6 +7,7 @@ import {
   type ProjectWorkingCalendar,
 } from '@project-knowledge-hub/domain';
 import { DeliveryItemIdButton } from './DeliveryItemIdButton';
+import { DeliveryWideFrame } from './DeliveryWideFrame';
 import { Button, ErrorText, Input, Switch } from './ui';
 import { TableFilterControl, type TableFilterField } from './ui/TableFilterControl';
 import {
@@ -159,6 +160,7 @@ export function ProjectDeliveryGantt({
   const markerId = `gantt-arrow-${useId().replace(/:/g, '')}`;
   const [columnView, setColumnView] = useState<GanttColumnView>('default');
   const [freezeTable, setFreezeTable] = useState(false);
+  const [wideOpen, setWideOpen] = useState(false);
   const [predMode, setPredMode] = useState<GanttPredecessorMode>('key');
   const [zoom, setZoom] = useState<GanttZoom>('week');
   const [collapsed, setCollapsed] = useState<DeliveryTreeCollapsed>({});
@@ -541,6 +543,13 @@ export function ProjectDeliveryGantt({
   };
 
   return (
+    <DeliveryWideFrame
+      open={wideOpen}
+      title={t('viewMode.gantt')}
+      description={t('wideViewDescription')}
+      className="kh-ops-chart-wide"
+      onClose={() => setWideOpen(false)}
+    >
     <section
       className="kh-ops-gantt"
       data-delivery-gantt={columnView}
@@ -651,6 +660,15 @@ export function ProjectDeliveryGantt({
           />
           <span>{t('ganttFreezeTable')}</span>
         </label>
+        <Button
+          type="button"
+          variant="secondary"
+          className="kh-ops-gantt-choice"
+          aria-pressed={wideOpen}
+          onClick={() => setWideOpen((open) => !open)}
+        >
+          {t('wideViewHint')}
+        </Button>
         <div className="kh-ops-tree-depth" role="group" aria-label={t('treeDepthControls')}>
           <DepthButton
             label={t('treeExpandLevel')}
@@ -828,6 +846,7 @@ export function ProjectDeliveryGantt({
       </div>
       )}
     </section>
+    </DeliveryWideFrame>
   );
 }
 
