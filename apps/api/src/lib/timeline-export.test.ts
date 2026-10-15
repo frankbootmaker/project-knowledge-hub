@@ -38,11 +38,12 @@ describe('buildTimelineHtml due anchoring', () => {
       labels,
     });
 
-    expect(html).toContain('class="item-card"');
+    expect(html).toContain('class="marker"');
     expect(html).not.toContain('lane-title');
     expect(html).not.toContain('epic-bar');
+    expect(html).not.toContain('class="item-card"');
     expect(html).not.toMatch(/width:\s*4[0-9]\./);
-    const card = html.match(/class="item-card" style="([^"]*)"/);
+    const card = html.match(/class="marker" style="([^"]*)"/);
     expect(card).toBeTruthy();
     const left = Number(card?.[1]?.match(/left:([\d.]+)%/)?.[1]);
     expect(left).toBeGreaterThan(30);
@@ -79,8 +80,11 @@ describe('buildTimelineHtml due anchoring', () => {
       labels,
     });
 
-    expect(html).toContain('2026-02-01 · 2026-02-28');
-    expect(html).toContain('class="item-card"');
+    expect(html).toContain('2026-02-01');
+    expect(html).toContain('2026-02-28');
+    expect(html).not.toContain('2026-02-01 · 2026-02-28');
+    expect(html).toContain('class="marker"');
+    expect(html).not.toContain('class="item-card"');
     expect(html).not.toContain('lane-title');
   });
 
@@ -133,20 +137,27 @@ describe('buildTimelineHtml due anchoring', () => {
 
     expect(html).not.toContain('lane-title');
     expect(html).not.toContain('story-bar');
+    expect(html).not.toContain('class="item-card"');
 
-    function cardStyle(title: string): string {
-      const match = html.match(new RegExp(`class="item-card" style="([^"]*)"[^>]*>${title}`));
-      expect(match, title).toBeTruthy();
-      return match?.[1] ?? '';
+    function markerBlock(title: string): string {
+      const chunk = html
+        .split('<div class="marker"')
+        .slice(1)
+        .find((part) => part.includes(`>${title}<`));
+      expect(chunk, title).toBeTruthy();
+      return chunk ?? '';
     }
 
-    const early = cardStyle('Early');
-    const late = cardStyle('Late');
-    const also = cardStyle('Also early');
-    expect(early).toContain('top:0px');
-    expect(late).toContain('top:0px');
-    expect(also).not.toContain('top:0px');
-    expect(Number(early.match(/left:([\d.]+)/)?.[1])).toBe(0);
+    const early = markerBlock('Early');
+    const late = markerBlock('Late');
+    const also = markerBlock('Also early');
+    const shiftPattern = /calc\(-50% \+ -?\d+px\), calc\(-50% \+ (-?\d+)px\)/;
+    const earlyShift = early.match(shiftPattern);
+    const lateShift = late.match(shiftPattern);
+    const alsoShift = also.match(shiftPattern);
+    expect(earlyShift?.[1]).toBe(lateShift?.[1]);
+    expect(alsoShift?.[1]).not.toBe(earlyShift?.[1]);
+    expect(Number(early.match(/left:([\d.]+)/)?.[1])).toBeLessThan(10);
     expect(Number(late.match(/left:([\d.]+)/)?.[1])).toBeGreaterThan(70);
   });
 });

@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   coerceProjectCalendar,
   type ProjectWorkingCalendar,
 } from '@project-knowledge-hub/domain';
 import { DeliveryItemIdButton } from './DeliveryItemIdButton';
-import { Button, ErrorText } from './ui';
+import { DeliveryWideFrame } from './DeliveryWideFrame';
+import { Button, ErrorText, Input, Switch } from './ui';
+import { TableFilterControl, type TableFilterField } from './ui/TableFilterControl';
 import {
   deliveryCompletionIndex,
   displayedParentCompletion,
@@ -28,6 +30,7 @@ import {
   ganttBarShape,
   ganttChartWidth,
   ganttCollapseNodes,
+  ganttColumnOffsets,
   ganttDependencyArrows,
   ganttDurationDetail,
   ganttGridTemplate,
@@ -53,10 +56,20 @@ import {
   expandTreeAll,
   expandTreeOneLevel,
   isDeliveryTreeNodeOpen,
+  openCollapsedForDeliveryTreeSearch,
   type DeliveryTreeCollapsed,
 } from '../lib/delivery-tree-collapse';
+import {
+  deliveryTreeFiltersActive,
+  filterDeliveryTree,
+  type DeliveryTreeFilterNode,
+  type DeliveryTreeFilterState,
+} from '../lib/delivery-tree-filter';
+import { collectEnumOptions } from '../lib/data-table';
+import { DELIVERY_STATUS_RANK, isTaskDeliveryStatus } from '../lib/delivery-status';
 import { formatLocaleDate } from '../lib/locale-date';
 import { useLocalToday } from '../lib/use-local-today';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 
 type GanttEpic = {
   id: string;
@@ -91,6 +104,7 @@ type GanttTask = {
   currentOwner?: { displayName: string } | null;
   humanKey?: string | null;
   itemType?: 'task' | 'bug';
+  sprintLabel?: string | null;
 };
 
 type GanttMilestone = {
@@ -117,6 +131,7 @@ export function ProjectDeliveryGantt({
   tasks,
   milestones,
   workingCalendar,
+  sprintsLoaded = true,
   onManageTask,
   onManageEpic,
   onManageStory,
@@ -132,6 +147,8 @@ export function ProjectDeliveryGantt({
     workdaysPerWeek?: number | null;
     nonWorkingDays?: readonly string[] | null;
   };
+  /** False while sprint titles are still loading, so a sprint URL filter is kept. */
+  sprintsLoaded?: boolean;
   onManageTask?: (taskId: string) => void;
   onManageEpic?: (epicId: string) => void;
   onManageStory?: (storyId: string) => void;
@@ -142,9 +159,22 @@ export function ProjectDeliveryGantt({
   const today = useLocalToday();
   const markerId = `gantt-arrow-${useId().replace(/:/g, '')}`;
   const [columnView, setColumnView] = useState<GanttColumnView>('default');
+  const [freezeTable, setFreezeTable] = useState(false);
+  const [wideOpen, setWideOpen] = useState(false);
   const [predMode, setPredMode] = useState<GanttPredecessorMode>('key');
   const [zoom, setZoom] = useState<GanttZoom>('week');
   const [collapsed, setCollapsed] = useState<DeliveryTreeCollapsed>({});
+  const collapsedBeforeSearchRef = useRef<DeliveryTreeCollapsed | null>(null);
+  const onlyOpenId = useId();
+  const tTable = useTranslations('table');
+  const table = useTableState({
+    namespace: 'gantt',
+    defaultSortKey: null,
+  });
+  const clearGanttFilters = useCallback(() => {
+    table.clearFilters();
+    table.setExtra('open', '');
+  }, [table]);
   const [links, setLinks] = useState<GanttDependency[]>([]);
   const [linkError, setLinkError] = useState<string | null>(null);
 
@@ -243,13 +273,178 @@ export function ProjectDeliveryGantt({
     })),
   }), [completion, epics, milestones, stories, tasks]);
 
+  const statusOptions = useMemo(
+    () =>
+      Object.keys(DELIVERY_STATUS_RANK).map((value) => ({
+        value,
+        label: isTaskDeliveryStatus(value)
+          ? t(`taskStatus.${value}`)
+          : t(`milestoneStatus.${value}`),
+      })),
+    [t],
+  );
+  const ownerOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        tasks,
+        (task) => task.currentOwner?.displayName ?? '',
+        (value) => value,
+        locale,
+      ),
+    [locale, tasks],
+  );
+  const sprintOptions = useMemo(
+    () =>
+      sprintsLoaded
+        ? collectEnumOptions(
+          tasks,
+          (task) => task.sprintLabel ?? '',
+          (value) => value,
+          locale,
+        )
+        : [],
+    [locale, sprintsLoaded, tasks],
+  );
+  const syncColumns = useMemo(
+    () => [
+      {
+        id: 'status',
+        filter: {
+          type: 'enum' as const,
+          getValue: () => '',
+          options: statusOptions,
+        },
+      },
+      {
+        id: 'itemType',
+        filter: {
+          type: 'enum' as const,
+          getValue: () => '',
+          options: [
+            { value: 'task', label: t('kindTask') },
+            { value: 'bug', label: t('kindBug') },
+          ],
+        },
+      },
+      {
+        id: 'owner',
+        filter: {
+          type: 'enum' as const,
+          getValue: () => '',
+          options: ownerOptions,
+        },
+      },
+      {
+        id: 'sprint',
+        filter: {
+          type: 'enum' as const,
+          getValue: () => '',
+          options: sprintOptions,
+        },
+      },
+    ],
+    [ownerOptions, sprintOptions, statusOptions, t],
+  );
+  useSyncEnumFilters(table.filters, syncColumns, table.setEnumFilter);
+  const filterFields = useMemo<TableFilterField[]>(() => {
+    const fields: TableFilterField[] = [
+      { id: 'status', header: t('colStatus'), type: 'enum', options: statusOptions },
+    ];
+    if (ownerOptions.length > 0) {
+      fields.push({
+        id: 'owner',
+        header: t('colOwner'),
+        type: 'enum',
+        options: ownerOptions,
+      });
+    }
+    const sprintSelected = table.filters.sprint ?? [];
+    if (sprintOptions.length > 0 || sprintSelected.length > 0) {
+      fields.push({
+        id: 'sprint',
+        header: t('colSprint'),
+        type: 'enum',
+        options: sprintOptions,
+      });
+    }
+    fields.push({
+      id: 'itemType',
+      header: t('colType'),
+      type: 'enum',
+      options: [
+        { value: 'task', label: t('kindTask') },
+        { value: 'bug', label: t('kindBug') },
+      ],
+    });
+    fields.push({ id: 'title', header: t('colTitle'), type: 'text' });
+    return fields;
+  }, [ownerOptions, sprintOptions, statusOptions, t, table.filters.sprint]);
+  const sprintByTaskId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const task of tasks) map.set(task.id, task.sprintLabel ?? null);
+    return map;
+  }, [tasks]);
+  const filterNodes = useMemo(
+    () => rowsWithEpicPercent.map((row) => ganttFilterNode(row, sprintByTaskId)),
+    [rowsWithEpicPercent, sprintByTaskId],
+  );
+  const filterState = useMemo<DeliveryTreeFilterState>(() => ({
+    statuses: table.filters.status ?? [],
+    owners: table.filters.owner ?? [],
+    sprints: sprintsLoaded ? (table.filters.sprint ?? []) : [],
+    itemTypes: table.filters.itemType ?? [],
+    title: table.textFilters.title ?? '',
+    search: table.query,
+    onlyOpen: table.extras.open === '1',
+  }), [
+    sprintsLoaded,
+    table.extras.open,
+    table.filters.itemType,
+    table.filters.owner,
+    table.filters.sprint,
+    table.filters.status,
+    table.query,
+    table.textFilters.title,
+  ]);
+  const visibility = useMemo(
+    () => filterDeliveryTree(filterNodes, filterState),
+    [filterNodes, filterState],
+  );
+  const filtering = deliveryTreeFiltersActive(filterState);
+  const searching = table.query.trim().length > 0;
+  const filteredRows = useMemo(
+    () => (
+      filtering
+        ? rowsWithEpicPercent.filter((row) => visibility.visible.has(row.id))
+        : rowsWithEpicPercent
+    ),
+    [filtering, rowsWithEpicPercent, visibility.visible],
+  );
+
+  useEffect(() => {
+    if (!searching) {
+      if (collapsedBeforeSearchRef.current !== null) {
+        setCollapsed(collapsedBeforeSearchRef.current);
+        collapsedBeforeSearchRef.current = null;
+      }
+      return;
+    }
+    const forceOpen = ganttSearchOpenIds(rowsWithEpicPercent, visibility.visible);
+    setCollapsed((current) => {
+      if (collapsedBeforeSearchRef.current === null) {
+        collapsedBeforeSearchRef.current = { ...current };
+      }
+      return openCollapsedForDeliveryTreeSearch(current, forceOpen);
+    });
+  }, [rowsWithEpicPercent, searching, visibility.visible]);
+
   const visible = useMemo(
-    () => visibleGanttRows(rowsWithEpicPercent, collapsed),
-    [collapsed, rowsWithEpicPercent],
+    () => visibleGanttRows(filteredRows, collapsed),
+    [collapsed, filteredRows],
   );
   const collapseNodes = useMemo(
-    () => ganttCollapseNodes(rowsWithEpicPercent),
-    [rowsWithEpicPercent],
+    () => ganttCollapseNodes(filteredRows),
+    [filteredRows],
   );
   const depthActions = useMemo(
     () => deliveryTreeDepthActions(collapsed, collapseNodes),
@@ -262,12 +457,16 @@ export function ProjectDeliveryGantt({
   );
   const pxPerDay = GANTT_PX_PER_DAY[zoom];
   const range = useMemo(() => ganttTimelineRange(
-    rowsWithEpicPercent.flatMap((row) => [row.start, row.end]),
+    filteredRows.flatMap((row) => [row.start, row.end]),
     today,
     zoom,
-  ), [rowsWithEpicPercent, today, zoom]);
+  ), [filteredRows, today, zoom]);
   const chartWidth = ganttChartWidth(range, pxPerDay);
   const columns = GANTT_COLUMNS[columnView];
+  const columnLeft = useMemo(
+    () => (freezeTable ? ganttColumnOffsets(columnView) : null),
+    [columnView, freezeTable],
+  );
   const gridWidth = ganttGridWidth(columnView);
   const ticks = useMemo(
     () => ganttScaleTicks(range, zoom, pxPerDay, calendar),
@@ -333,6 +532,8 @@ export function ProjectDeliveryGantt({
     );
   }
 
+  const filteredEmpty = filtering && visibility.visible.size === 0;
+
   const sheetStyle = {
     ['--gantt-cols' as string]: ganttGridTemplate(columnView, chartWidth),
     ['--gantt-grid' as string]: `${gridWidth}px`,
@@ -342,7 +543,62 @@ export function ProjectDeliveryGantt({
   };
 
   return (
-    <section className="kh-ops-gantt" data-delivery-gantt={columnView}>
+    <DeliveryWideFrame
+      open={wideOpen}
+      title={t('viewMode.gantt')}
+      description={t('wideViewDescription')}
+      className="kh-ops-chart-wide"
+      onClose={() => setWideOpen(false)}
+    >
+    <section
+      className="kh-ops-gantt"
+      data-delivery-gantt={columnView}
+      data-freeze={freezeTable ? 'table' : undefined}
+    >
+      <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
+        <label className="flex min-w-[220px] flex-1 items-center gap-2">
+          <span className="sr-only">{t('searchPlaceholder')}</span>
+          <Input
+            type="search"
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
+            placeholder={t('searchPlaceholder')}
+            className="h-10 min-h-10 py-1.5 text-xs"
+          />
+        </label>
+        <TableFilterControl
+          fields={filterFields}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={clearGanttFilters}
+          filtersActive={filtering}
+          insertAfter={{
+            id: 'status',
+            content: (
+              <div className="kh-ops-table-filter-group">
+                <Switch
+                  id={onlyOpenId}
+                  checked={table.extras.open === '1'}
+                  label={t('treeOnlyOpen')}
+                  onCheckedChange={(checked) => table.setExtra('open', checked ? '1' : '')}
+                />
+              </div>
+            ),
+          }}
+        />
+        {filtering ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+            onClick={clearGanttFilters}
+          >
+            {tTable('clearFilters')}
+          </Button>
+        ) : null}
+      </div>
       <div className="kh-ops-gantt-tools">
         <div role="group" aria-label={t('ganttColumns')}>
           {GANTT_COLUMN_VIEWS.map((view) => (
@@ -396,6 +652,23 @@ export function ProjectDeliveryGantt({
             </Button>
           ))}
         </div>
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={freezeTable}
+            onChange={(event) => setFreezeTable(event.target.checked)}
+          />
+          <span>{t('ganttFreezeTable')}</span>
+        </label>
+        <Button
+          type="button"
+          variant="secondary"
+          className="kh-ops-gantt-choice"
+          aria-pressed={wideOpen}
+          onClick={() => setWideOpen((open) => !open)}
+        >
+          {t('wideViewHint')}
+        </Button>
         <div className="kh-ops-tree-depth" role="group" aria-label={t('treeDepthControls')}>
           <DepthButton
             label={t('treeExpandLevel')}
@@ -432,6 +705,20 @@ export function ProjectDeliveryGantt({
           <ErrorText>{linkError}</ErrorText>
         </div>
       ) : null}
+      {filteredEmpty ? (
+        <div className="kh-ops-empty-state">
+          <div className="kh-ops-empty-mark">00</div>
+          <h3>{t('emptyTitle')}</h3>
+          <p>
+            {searching || table.textFilters.title?.trim()
+              ? t('emptyFiltered')
+              : tTable('emptyFiltered')}
+          </p>
+          <Button type="button" variant="secondary" onClick={clearGanttFilters}>
+            {tTable('clearFilters')}
+          </Button>
+        </div>
+      ) : (
       <div className="kh-ops-gantt-scroll">
         <div
           className="kh-ops-gantt-sheet"
@@ -441,16 +728,20 @@ export function ProjectDeliveryGantt({
           style={sheetStyle}
         >
           <div className="kh-ops-gantt-head" role="row">
-            {columns.map((column) => (
-              <div
-                key={column}
-                role="columnheader"
-                className={cellClass(column)}
-                title={headerTitle(column, t)}
-              >
-                {headerLabel(column, t)}
-              </div>
-            ))}
+            {columns.map((column) => {
+              const frozen = frozenCell(column, columns, columnLeft);
+              return (
+                <div
+                  key={column}
+                  role="columnheader"
+                  className={frozen.className}
+                  style={frozen.style}
+                  title={headerTitle(column, t)}
+                >
+                  {headerLabel(column, t)}
+                </div>
+              );
+            })}
             <div role="columnheader" className="kh-ops-gantt-scale" aria-label={t('ganttScale')}>
               {ticks.map((tick) => (
                 <div
@@ -513,6 +804,9 @@ export function ProjectDeliveryGantt({
                   onManageStory,
                   onManageMilestone,
                 })}
+                columnLeft={columnLeft}
+                dimmed={filtering && visibility.dimmed.has(row.id)}
+                dimHint={t('treeFilterDimmed')}
                 t={t}
               />
             ))}
@@ -550,8 +844,52 @@ export function ProjectDeliveryGantt({
           </div>
         </div>
       </div>
+      )}
     </section>
+    </DeliveryWideFrame>
   );
+}
+
+function ganttFilterKind(kind: GanttRow['kind']): DeliveryTreeFilterNode['kind'] {
+  if (kind === 'bug') return 'task';
+  return kind;
+}
+
+function ganttFilterNode(
+  row: GanttRow,
+  sprintByTaskId: ReadonlyMap<string, string | null>,
+): DeliveryTreeFilterNode {
+  const task = row.kind === 'task' || row.kind === 'bug';
+  return {
+    id: row.id,
+    kind: ganttFilterKind(row.kind),
+    parentId: row.parentId,
+    title: row.title,
+    humanKey: row.humanKey,
+    status: row.status,
+    owner: task ? row.owner : null,
+    sprint: task && row.entityId ? (sprintByTaskId.get(row.entityId) ?? null) : null,
+    itemType: row.kind === 'bug' ? 'bug' : row.kind === 'task' ? 'task' : undefined,
+  };
+}
+
+/** Parent row ids that must stay open so a search match remains on screen. */
+function ganttSearchOpenIds(
+  rows: readonly GanttRow[],
+  visible: ReadonlySet<string>,
+): string[] {
+  const parentById = new Map(rows.map((row) => [row.id, row.parentId]));
+  const open = new Set<string>();
+  for (const id of visible) {
+    let parentId = parentById.get(id) ?? null;
+    const seen = new Set<string>();
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId);
+      open.add(parentId);
+      parentId = parentById.get(parentId) ?? null;
+    }
+  }
+  return [...open];
 }
 
 function headerLabel(
@@ -581,6 +919,19 @@ function cellClass(column: GanttColumnId): string {
   if (column === 'wbs') return 'kh-ops-gantt-cell kh-ops-gantt-wbs';
   if (column === 'title') return 'kh-ops-gantt-cell kh-ops-gantt-title';
   return 'kh-ops-gantt-cell';
+}
+
+function frozenCell(
+  column: GanttColumnId,
+  columns: readonly GanttColumnId[],
+  columnLeft: ReadonlyMap<GanttColumnId, number> | null,
+): { className: string; style?: { left: number } } {
+  if (!columnLeft) return { className: cellClass(column) };
+  const edge = column === columns[columns.length - 1];
+  return {
+    className: `${cellClass(column)}${edge ? ' kh-ops-gantt-freeze-edge' : ''}`,
+    style: { left: columnLeft.get(column) ?? 0 },
+  };
 }
 
 function canOpen(
@@ -614,6 +965,9 @@ function GanttGridRow({
   pxPerDay,
   onOpen,
   canOpen: allowOpen,
+  columnLeft = null,
+  dimmed = false,
+  dimHint,
   t,
 }: {
   row: GanttRow;
@@ -629,6 +983,9 @@ function GanttGridRow({
   pxPerDay: number;
   onOpen: () => void;
   canOpen: boolean;
+  columnLeft?: ReadonlyMap<GanttColumnId, number> | null;
+  dimmed?: boolean;
+  dimHint?: string;
   t: ReturnType<typeof useTranslations<'delivery'>>;
 }) {
   const shape = ganttBarShape(row.kind);
@@ -722,12 +1079,27 @@ function GanttGridRow({
   }
 
   return (
-    <div className="kh-ops-gantt-row" role="row" data-kind={row.kind}>
-      {columns.map((column) => (
-        <div key={column} role="gridcell" className={cellClass(column)} title={column === 'predecessors' && predecessors ? predecessors : undefined}>
-          {cell(column)}
-        </div>
-      ))}
+    <div
+      className="kh-ops-gantt-row"
+      role="row"
+      data-kind={row.kind}
+      data-filter-dimmed={dimmed ? 'true' : undefined}
+      title={dimmed ? dimHint : undefined}
+    >
+      {columns.map((column) => {
+        const frozen = frozenCell(column, columns, columnLeft);
+        return (
+          <div
+            key={column}
+            role="gridcell"
+            className={frozen.className}
+            style={frozen.style}
+            title={column === 'predecessors' && predecessors ? predecessors : undefined}
+          >
+            {cell(column)}
+          </div>
+        );
+      })}
       <div role="gridcell" className="kh-ops-gantt-track">
         {layout?.kind === 'bar' ? (
           <span className="kh-ops-gantt-bar" data-kind={row.kind} style={{ left: layout.leftPx, width: layout.widthPx }} title={barTitle}>

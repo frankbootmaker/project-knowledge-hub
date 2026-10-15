@@ -1232,8 +1232,14 @@ export function ProjectDeliveryPanel({
           epics={shownDelivery.epics}
           stories={shownDelivery.stories}
           milestones={shownDelivery.milestones}
-          tasks={tasks}
+          tasks={tasks.map((task) => ({
+            ...task,
+            sprintLabel: task.sprintId
+              ? (sprintTitleById.get(task.sprintId) ?? null)
+              : null,
+          }))}
           workingCalendar={workingCalendar}
+          sprintsLoaded={sprintsLoaded}
           onManageTask={(taskId) => setManageTaskId(taskId)}
           onManageEpic={(epicId) => setManageAgile({ kind: 'epic', id: epicId })}
           onManageStory={(storyId) => setManageAgile({ kind: 'story', id: storyId })}

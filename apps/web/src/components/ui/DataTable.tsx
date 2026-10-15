@@ -51,6 +51,15 @@ function filterField<T>(column: DataColumn<T>): TableFilterField | null {
   };
 }
 
+export function dataTableFilterFields<T>(
+  columns: Array<DataColumn<T>>,
+): TableFilterField[] {
+  return columns.flatMap((column) => {
+    const field = filterField(column);
+    return field ? [field] : [];
+  });
+}
+
 export function DataTable<T>({
   rows,
   rowKey,
@@ -64,6 +73,7 @@ export function DataTable<T>({
   onTextFilter,
   onClearFilters,
   filtersActive,
+  hideHeaderFilter = false,
   empty,
   tableClassName,
   footer,
@@ -80,18 +90,19 @@ export function DataTable<T>({
   onTextFilter: (columnId: string, value: string) => void;
   onClearFilters: () => void;
   filtersActive: boolean;
+  /** Keep the funnel in a toolbar instead of the header. Other tables stay in the header. */
+  hideHeaderFilter?: boolean;
   empty?: ReactNode;
   tableClassName?: string;
   footer?: ReactNode;
 }) {
   const t = useTranslations('table');
-  const filterFields = columns.flatMap((column) => {
-    const field = filterField(column);
-    return field ? [field] : [];
-  });
+  const filterFields = dataTableFilterFields(columns);
   const embedFilters =
-    filterFields.length > 0 && columns.some((column) => column.kind === 'actions');
-  const filterControl = (
+    !hideHeaderFilter &&
+    filterFields.length > 0 &&
+    columns.some((column) => column.kind === 'actions');
+  const filterControl = hideHeaderFilter ? null : (
     <TableFilterControl
       fields={filterFields}
       enumFilters={enumFilters}
@@ -136,7 +147,7 @@ export function DataTable<T>({
                   {embedFilters && column.kind === 'actions' ? filterControl : null}
                 </th>
               ))}
-              {!embedFilters && filterFields.length > 0 ? (
+              {!hideHeaderFilter && !embedFilters && filterFields.length > 0 ? (
                 <th className="kh-ops-cell-actions">{filterControl}</th>
               ) : null}
             </tr>
@@ -156,7 +167,7 @@ export function DataTable<T>({
                       {column.cell(row)}
                     </td>
                   ))}
-                  {!embedFilters && filterFields.length > 0 ? (
+                  {!hideHeaderFilter && !embedFilters && filterFields.length > 0 ? (
                     <td className="kh-ops-cell-actions" />
                   ) : null}
                 </tr>

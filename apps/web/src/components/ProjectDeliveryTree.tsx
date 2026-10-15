@@ -775,6 +775,38 @@ export function ProjectDeliveryTree({
             className="h-10 min-h-10 py-1.5 text-xs"
           />
         </label>
+        <TableFilterControl
+          fields={filterFields}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={clearTreeFilters}
+          filtersActive={filtersActive}
+          insertAfter={{
+            id: 'status',
+            content: (
+              <div className="kh-ops-table-filter-group">
+                <Switch
+                  id={onlyOpenId}
+                  checked={onlyOpen}
+                  label={t('treeOnlyOpen')}
+                  onCheckedChange={(checked) => table.setExtra('open', checked ? '1' : '')}
+                />
+              </div>
+            ),
+          }}
+        />
+        {filtersActive ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+            onClick={clearTreeFilters}
+          >
+            {tTable('clearFilters')}
+          </Button>
+        ) : null}
       </div>
       <div className="kh-ops-delivery-tree">
         <div className="kh-ops-delivery-tree-head">
@@ -819,40 +851,7 @@ export function ProjectDeliveryTree({
             <span title={t('colSprint')}>{t('colSprint')}</span>
             <span title={t('colForecast')}>{t('colForecast')}</span>
             <span title={t('colPoints')}>{t('colPoints')}</span>
-            <span className="kh-ops-tree-actions">
-              <TableFilterControl
-                fields={filterFields}
-                enumFilters={table.filters}
-                textFilters={table.textFilters}
-                onEnumFilter={table.setEnumFilter}
-                onTextFilter={table.setTextFilter}
-                onClearFilters={clearTreeFilters}
-                filtersActive={filtersActive}
-                insertAfter={{
-                  id: 'status',
-                  content: (
-                    <div className="kh-ops-table-filter-group">
-                      <Switch
-                        id={onlyOpenId}
-                        checked={onlyOpen}
-                        label={t('treeOnlyOpen')}
-                        onCheckedChange={(checked) => table.setExtra('open', checked ? '1' : '')}
-                      />
-                    </div>
-                  ),
-                }}
-              />
-              {filtersActive ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
-                  onClick={clearTreeFilters}
-                >
-                  {tTable('clearFilters')}
-                </Button>
-              ) : null}
-            </span>
+            <span className="kh-ops-tree-actions" />
           </div>
         </div>
         {filteredEmpty && orderedMilestones.length === 0 ? (

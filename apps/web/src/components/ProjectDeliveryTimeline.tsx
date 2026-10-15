@@ -15,6 +15,7 @@ import {
 } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Badge, Button, Field, Input, useToast } from './ui';
+import { DeliveryWideFrame } from './DeliveryWideFrame';
 import { cn } from '../lib/cn';
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import {
@@ -30,7 +31,8 @@ import {
   addDays,
   MARKER_TAG_GAP_PX,
   MARKER_TAG_WIDTH_PX,
-  STORY_TAG_GAP_PX,
+  TIMELINE_DATE_FONT_PX,
+  timelineMarkerWidthPx,
   TIMELINE_ZOOM_LEVELS,
   buildTimelineTicks,
   pruneCollidingAxisLabels,
@@ -40,16 +42,12 @@ import {
   markerBaseY,
   markerTrackHeightPx,
   nextZoomIndex,
+  packMarkerIconStacks,
   packMarkerLanes,
-  packStoryLanes,
   parseYmd,
   scrollLeftForDate,
-  timelineBandHeightPx,
-  timelineBandTopPx,
-  timelineCardLeftPx,
   timelineDueDate,
   timelineTagShiftX,
-  TIMELINE_CARD_WIDTH_PX,
   scrollLeftForFraction,
   viewportCenterFraction,
   type MarkerLane,
@@ -95,7 +93,7 @@ type Task = {
 
 type AxisMarker = {
   id: string;
-  kind: 'milestone' | 'task';
+  kind: 'milestone' | 'task' | 'epic' | 'story';
   itemType?: 'task' | 'bug';
   title: string;
   date: string;
@@ -107,16 +105,33 @@ type AxisMarker = {
 
 type TagOffset = { dx: number; dy: number };
 
-type TimelineBandCard = {
-  id: string;
-  tagId: string | null;
-  title: string;
-  due: string;
-  startDate: string | null;
-  status: string;
-  humanKey?: string | null;
-  onOpen: () => void;
-};
+function StartDateIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden className="size-[11px] shrink-0" fill="none">
+      <path
+        d="M3.5 3v10M3.5 8h7.5M8.5 5.25 11.25 8 8.5 10.75"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DueDateIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden className="size-[11px] shrink-0" fill="none">
+      <path
+        d="M4.25 2.75v10.5M4.25 3.75h7.25L9.5 6.25l2 2.5H4.25"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function ItemMetaRow({
   issueId,
@@ -136,25 +151,43 @@ function ItemMetaRow({
   className?: string;
 }) {
   const locale = useLocale();
+  const t = useTranslations('delivery');
   const id = showIssueIds && issueId ? issueId : null;
   const start = showStartDates && startDate ? formatLocaleDate(startDate, locale) : null;
   const due = showDueDates && dueDate ? formatLocaleDate(dueDate, locale) : null;
-  const dates = [start, due].filter(Boolean).join(' · ');
-  if (!id && !dates) return null;
-  if (id && dates) {
+  const dates = [
+    start ? { kind: 'start' as const, text: start, label: t('startDate') } : null,
+    due ? { kind: 'due' as const, text: due, label: t('dueDate') } : null,
+  ].filter((line): line is { kind: 'start' | 'due'; text: string; label: string } => Boolean(line));
+  if (!id && dates.length === 0) return null;
+  const dateStyle = { fontSize: TIMELINE_DATE_FONT_PX, lineHeight: 1.35 };
+  const dateBlock = dates.length > 0 ? (
+    <span className="grid">
+      {dates.map((line) => (
+        <span
+          key={line.kind}
+          className="flex items-center gap-1 whitespace-nowrap tabular-nums"
+          style={dateStyle}
+        >
+          {line.kind === 'start' ? <StartDateIcon /> : <DueDateIcon />}
+          <span className="sr-only">{line.label}</span>
+          <span>{line.text}</span>
+        </span>
+      ))}
+    </span>
+  ) : null;
+  if (id && dateBlock) {
     return (
-      <span className={cn('mt-0.5 grid min-w-0 gap-0.5', className)}>
+      <span className={cn('mt-0.5 grid gap-0.5', className)}>
         <span className="kh-ops-key-badge max-w-full truncate">{id}</span>
-        <span className="kh-ops-menu-type block truncate tabular-nums">{dates}</span>
+        {dateBlock}
       </span>
     );
   }
   if (id) {
     return <span className={cn('kh-ops-key-badge max-w-full truncate', className)}>{id}</span>;
   }
-  return (
-    <span className={cn('kh-ops-menu-type block truncate tabular-nums', className)}>{dates}</span>
-  );
+  return <span className={className}>{dateBlock}</span>;
 }
 
 type TimelineFilters = {
@@ -313,7 +346,32 @@ function writeIssueIds(storageKey: string, enabled: boolean): void {
   }
 }
 
-function scheduleMarkerDotClass(tone: DeliveryScheduleTone, kind: 'milestone' | 'task'): string {
+const BUG_CROSS_CLASS =
+  '[clip-path:polygon(0_18%,18%_0,50%_32%,82%_0,100%_18%,68%_50%,' +
+  '100%_82%,82%_100%,50%_68%,18%_100%,0_82%,32%_50%)]';
+
+function markerShape(
+  marker: Pick<AxisMarker, 'kind' | 'itemType'>,
+): 'milestone' | 'epic' | 'story' | 'task' | 'bug' {
+  if (marker.kind === 'milestone' || marker.kind === 'epic' || marker.kind === 'story') {
+    return marker.kind;
+  }
+  return marker.itemType === 'bug' ? 'bug' : 'task';
+}
+
+function markerShapeClass(marker: Pick<AxisMarker, 'kind' | 'itemType'>): string {
+  const shape = markerShape(marker);
+  if (shape === 'milestone') return 'size-3 border border-warn bg-warn/80';
+  if (shape === 'epic') return 'size-3 bg-ink-muted [clip-path:polygon(50%_0,100%_100%,0_100%)]';
+  if (shape === 'story') return 'size-2.5 bg-ink-muted';
+  if (shape === 'bug') return `size-3 bg-ink-muted ${BUG_CROSS_CLASS}`;
+  return 'size-2.5 rounded-full bg-ink-muted';
+}
+
+function scheduleMarkerDotClass(
+  tone: DeliveryScheduleTone,
+  kind: 'milestone' | 'epic' | 'story' | 'task' | 'bug',
+): string {
   const fill =
     tone === 'completed'
       ? 'border-brand bg-brand'
@@ -324,9 +382,13 @@ function scheduleMarkerDotClass(tone: DeliveryScheduleTone, kind: 'milestone' | 
           : tone === 'onTrack'
             ? 'border-accent bg-accent'
             : 'border-line bg-ink-muted';
-  return kind === 'milestone'
-    ? cn('size-3 rotate-45 border', fill)
-    : cn('size-2.5 rounded-full border', fill);
+  if (kind === 'milestone') return cn('size-3 border', fill);
+  if (kind === 'epic') {
+    return cn('size-3 [clip-path:polygon(50%_0,100%_100%,0_100%)]', fill);
+  }
+  if (kind === 'story') return cn('size-2.5 border', fill);
+  if (kind === 'bug') return cn('size-3', BUG_CROSS_CLASS, fill);
+  return cn('size-2.5 rounded-full border', fill);
 }
 
 function ZoomInIcon() {
@@ -464,12 +526,27 @@ function TimelineHintHelp({
           <p className="m-0">{t('timelineDragHint')}</p>
           <ul className="m-0 flex list-none flex-wrap items-center gap-3 p-0">
             <li className="inline-flex items-center gap-1.5">
+              <span
+                className="size-3 bg-ink-muted [clip-path:polygon(50%_0,100%_100%,0_100%)]"
+                aria-hidden
+              />
+              <span>{t('kindEpic')}</span>
+            </li>
+            <li className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 bg-ink-muted" aria-hidden />
+              <span>{t('kindStory')}</span>
+            </li>
+            <li className="inline-flex items-center gap-1.5">
               <span className="size-2.5 rotate-45 border border-warn bg-warn/80" aria-hidden />
               <span>{t('kindMilestone')}</span>
             </li>
             <li className="inline-flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-ink-muted" aria-hidden />
               <span>{t('kindTask')}</span>
+            </li>
+            <li className="inline-flex items-center gap-1.5">
+              <span className={`size-3 bg-ink-muted ${BUG_CROSS_CLASS}`} aria-hidden />
+              <span>{t('kindBug')}</span>
             </li>
           </ul>
           {canReset ? (
@@ -630,6 +707,7 @@ export function ProjectDeliveryTimeline({
     to: '',
   });
   const [showGrid, setShowGrid] = useState(true);
+  const [wideOpen, setWideOpen] = useState(false);
   const [colorByStatus, setColorByStatus] = useState(false);
   const [showDueDates, setShowDueDates] = useState(false);
   const [showStartDates, setShowStartDates] = useState(false);
@@ -1029,76 +1107,85 @@ export function ProjectDeliveryTimeline({
         });
       }
     }
+    if (filters.epics) {
+      for (const epic of epics) {
+        const due = timelineDueDate(epic.startDate, epic.endDate);
+        if (!due || !inWindow(due)) continue;
+        items.push({
+          id: `epic:${epic.id}`,
+          kind: 'epic',
+          title: epic.title,
+          date: due,
+          startDate: epic.startDate,
+          status: epic.status,
+          humanKey: epic.humanKey ?? null,
+          onOpen: () => onManageEpic(epic.id),
+        });
+      }
+    }
+    if (filters.stories) {
+      for (const story of stories) {
+        const due = timelineDueDate(story.startDate, story.endDate);
+        if (!due || !inWindow(due)) continue;
+        items.push({
+          id: `story:${story.id}`,
+          kind: 'story',
+          title: story.title,
+          date: due,
+          startDate: story.startDate,
+          status: story.status,
+          humanKey: story.humanKey ?? null,
+          onOpen: () => onManageStory(story.id),
+        });
+      }
+    }
     items.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
     return items;
   }, [
+    epics,
+    filters.epics,
     filters.milestones,
+    filters.stories,
     filters.tasks,
     milestones,
-    tasks,
-    rangeStart,
-    rangeEnd,
+    onManageEpic,
     onManageMilestone,
+    onManageStory,
     onManageTask,
+    rangeEnd,
+    rangeStart,
+    stories,
+    tasks,
   ]);
+
+  function markerDateLines(marker: AxisMarker): string[] {
+    const start =
+      showStartDates && marker.startDate ? formatLocaleDate(marker.startDate, locale) : null;
+    const due = showDueDates ? formatLocaleDate(marker.date, locale) : null;
+    return [start, due].filter((line): line is string => Boolean(line));
+  }
 
   const markerLanes = useMemo(() => {
     return packMarkerLanes(
       axisMarkers.map((marker) => ({
         id: marker.id,
         xPx: ((parseYmd(marker.date) - rangeStart) / span) * layoutWidth,
+        widthPx: timelineMarkerWidthPx(markerDateLines(marker)),
       })),
       { tagWidthPx: MARKER_TAG_WIDTH_PX, gapPx: MARKER_TAG_GAP_PX },
     );
-  }, [axisMarkers, layoutWidth, rangeStart, span]);
+  }, [axisMarkers, layoutWidth, locale, rangeStart, showDueDates, showStartDates, span]);
   const markerTrackHeight = markerTrackHeightPx(markerLanes.values());
-
-  const bandCards: TimelineBandCard[] = [];
-  if (filters.epics) {
-    for (const epic of epics) {
-      const due = timelineDueDate(epic.startDate, epic.endDate);
-      if (!due || !dateInWindow(due)) continue;
-      bandCards.push({
-        id: `epic:${epic.id}`,
-        tagId: null,
-        title: epic.title,
-        due,
-        startDate: epic.startDate,
-        status: epic.status,
-        humanKey: epic.humanKey ?? null,
-        onOpen: () => onManageEpic(epic.id),
-      });
-    }
-  }
-  if (filters.stories) {
-    for (const story of stories) {
-      const due = timelineDueDate(story.startDate, story.endDate);
-      if (!due || !dateInWindow(due)) continue;
-      bandCards.push({
-        id: `story:${story.id}`,
-        tagId: `story:${story.id}`,
-        title: story.title,
-        due,
-        startDate: story.startDate,
-        status: story.status,
-        humanKey: story.humanKey ?? null,
-        onOpen: () => onManageStory(story.id),
-      });
-    }
-  }
-  const bandLanes = packStoryLanes(
-    bandCards.map((card) => ({ id: card.id, xPx: dueAnchorPx(card.due) })),
-    { tagWidthPx: TIMELINE_CARD_WIDTH_PX, gapPx: STORY_TAG_GAP_PX },
+  const iconStacks = useMemo(
+    () =>
+      packMarkerIconStacks(
+        axisMarkers.map((marker) => ({
+          id: marker.id,
+          xPx: ((parseYmd(marker.date) - rangeStart) / span) * layoutWidth,
+        })),
+      ),
+    [axisMarkers, layoutWidth, rangeStart, span],
   );
-  let maxBandLane = -1;
-  let bandDragDy = 0;
-  for (const card of bandCards) {
-    maxBandLane = Math.max(maxBandLane, bandLanes.get(card.id) ?? 0);
-    if (card.tagId) {
-      bandDragDy = Math.max(bandDragDy, offsets[card.tagId]?.dy ?? 0);
-    }
-  }
-  const bandHeight = timelineBandHeightPx(maxBandLane) + Math.max(0, bandDragDy);
 
   const unscheduledEpics = filters.epics
     ? epics.filter((epic) => !timelineDueDate(epic.startDate, epic.endDate))
@@ -1148,6 +1235,7 @@ export function ProjectDeliveryTimeline({
               story: t('kindStory'),
               milestone: t('kindMilestone'),
               task: t('kindTask'),
+              bug: t('kindBug'),
               generated: tProjects('reportGenerated'),
               empty: t('timelineExportEmpty'),
               today: t('timelineToday'),
@@ -1208,73 +1296,18 @@ export function ProjectDeliveryTimeline({
     };
   }, [anyTypeVisible, exportHandleRef, exportPending, exportTimelinePdf, onExportStateChange]);
 
-  function renderBandCard(card: TimelineBandCard) {
-    const lane = bandLanes.get(card.id) ?? 0;
-    const offset = card.tagId ? (offsets[card.tagId] ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
-    const left =
-      timelineCardLeftPx(dueAnchorPx(card.due), layoutWidth, TIMELINE_CARD_WIDTH_PX) + offset.dx;
-    const top = timelineBandTopPx(lane) + offset.dy;
-    const tone = colorByStatus
-      ? deliveryScheduleTone({ status: card.status, date: card.due, today: todayDate })
-      : null;
-    const tooltip = [
-      card.title,
-      colorByStatus ? t(`milestoneStatus.${card.status}`) : null,
-      card.due,
-    ]
-      .filter(Boolean)
-      .join(' · ');
-    const style = { left, top, width: TIMELINE_CARD_WIDTH_PX };
-    const body = (
-      <>
-        <span className="block truncate">{card.title}</span>
-        <ItemMetaRow
-          issueId={card.humanKey}
-          startDate={card.startDate}
-          dueDate={card.due}
-          showIssueIds={showIssueIds}
-          showStartDates={showStartDates}
-          showDueDates={showDueDates}
-        />
-      </>
-    );
-    if (card.tagId) {
-      return (
-        <DraggableTag
-          key={card.id}
-          tagId={card.tagId}
-          offset={offset}
-          onOffsetChange={updateOffset}
-          onOpen={card.onOpen}
-          className="kh-ops-time-card"
-          style={style}
-          dataTone={tone ?? undefined}
-          title={tooltip}
-        >
-          {body}
-        </DraggableTag>
-      );
-    }
-    return (
-      <button
-        key={card.id}
-        type="button"
-        className="kh-ops-time-card"
-        style={style}
-        data-tone={tone ?? undefined}
-        title={tooltip}
-        onClick={card.onOpen}
-      >
-        {body}
-      </button>
-    );
-  }
-
   return (
+    <DeliveryWideFrame
+      open={wideOpen}
+      title={t('viewMode.timeline')}
+      description={t('wideViewDescription')}
+      className="kh-ops-chart-wide"
+      onClose={() => setWideOpen(false)}
+    >
     <div className="grid gap-4">
       <fieldset className="kh-ops-panel m-0 grid gap-2 p-3">
         <legend className="px-1 text-sm font-semibold">{t('timelineFilterLabel')}</legend>
-        <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           {(
             [
               ['epics', 'kindEpic'],
@@ -1304,6 +1337,15 @@ export function ProjectDeliveryTimeline({
             <input type="checkbox" checked={showIssueIds} onChange={toggleIssueIds} />
             <span>{t('timelineIssueIds')}</span>
           </label>
+          <Button
+            type="button"
+            variant="secondary"
+            className="ml-auto text-sm"
+            aria-pressed={wideOpen}
+            onClick={() => setWideOpen((open) => !open)}
+          >
+            {t('wideViewHint')}
+          </Button>
         </div>
       </fieldset>
 
@@ -1470,16 +1512,10 @@ export function ProjectDeliveryTimeline({
               </div>
             ) : null}
 
-            {bandHeight > 0 ? (
-              <div className="relative z-[1] mb-2" style={{ height: bandHeight }}>
-                {bandCards.map((card) => renderBandCard(card))}
-              </div>
-            ) : null}
-
             <div
               className="relative z-[1] my-2 overflow-visible"
               style={{
-                height: filters.milestones || filters.tasks ? markerTrackHeight : 32,
+                height: axisMarkers.length > 0 ? markerTrackHeight : 32,
               }}
             >
               <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-line" />
@@ -1506,13 +1542,17 @@ export function ProjectDeliveryTimeline({
                 const kindLabel =
                   marker.kind === 'milestone'
                     ? t('kindMilestone')
-                    : marker.itemType === 'bug'
-                      ? t('kindBug')
-                      : t('kindTask');
+                    : marker.kind === 'epic'
+                      ? t('kindEpic')
+                      : marker.kind === 'story'
+                        ? t('kindStory')
+                        : marker.itemType === 'bug'
+                          ? t('kindBug')
+                          : t('kindTask');
                 const statusLabel =
-                  marker.kind === 'milestone'
-                    ? t(`milestoneStatus.${marker.status}`)
-                    : t(`taskStatus.${marker.status}`);
+                  marker.kind === 'task'
+                    ? t(`taskStatus.${marker.status}`)
+                    : t(`milestoneStatus.${marker.status}`);
                 const tone = colorByStatus
                   ? deliveryScheduleTone({
                       status: marker.status,
@@ -1522,7 +1562,8 @@ export function ProjectDeliveryTimeline({
                   : null;
                 const offset = offsets[marker.id] ?? { dx: 0, dy: 0 };
                 const baseY = markerBaseY(placement.side, placement.lane);
-                const ribX = offset.dx;
+                const stackDx = iconStacks.get(marker.id) ?? 0;
+                const ribX = offset.dx - stackDx;
                 const ribY = baseY + offset.dy;
                 const ribLen = Math.max(1, Math.hypot(ribX, ribY));
                 const ribAngle = (Math.atan2(ribY, ribX) * 180) / Math.PI;
@@ -1535,10 +1576,11 @@ export function ProjectDeliveryTimeline({
                 ]
                   .filter(Boolean)
                   .join(' · ');
+                const cardWidth = timelineMarkerWidthPx(markerDateLines(marker));
                 const tagShift = timelineTagShiftX(
                   dueAnchorPx(marker.date),
                   layoutWidth,
-                  MARKER_TAG_WIDTH_PX,
+                  cardWidth,
                   offset.dx,
                 );
 
@@ -1552,7 +1594,10 @@ export function ProjectDeliveryTimeline({
                       className="pointer-events-none absolute left-1/2 top-1/2 h-px origin-left bg-line-strong"
                       style={{
                         width: ribLen,
-                        transform: `rotate(${ribAngle}deg)`,
+                        transform:
+                          stackDx === 0
+                            ? `rotate(${ribAngle}deg)`
+                            : `translateX(${stackDx}px) rotate(${ribAngle}deg)`,
                       }}
                       aria-hidden
                     />
@@ -1569,20 +1614,20 @@ export function ProjectDeliveryTimeline({
                           : 'border-line bg-panel-solid text-ink hover:border-brand/50',
                       )}
                       style={{
-                        width: MARKER_TAG_WIDTH_PX,
+                        width: cardWidth,
                         transform: `translate(calc(-50% + ${tagShift}px), calc(-50% + ${baseY + offset.dy}px))`,
                       }}
                       title={tooltip}
                     >
                       <span
                         className={cn(
-                          'mb-0.5 block text-[10px] font-semibold uppercase tracking-wide',
+                          'mb-0.5 line-clamp-2 block text-[10px] font-semibold uppercase tracking-wide',
                           tone ? 'opacity-80' : 'text-ink-muted',
                         )}
                       >
                         {colorByStatus ? `${kindLabel} · ${statusLabel}` : kindLabel}
                       </span>
-                      <span className="block truncate">{marker.title}</span>
+                      <span className="line-clamp-2 block">{marker.title}</span>
                       <ItemMetaRow
                         issueId={marker.humanKey}
                         startDate={marker.startDate}
@@ -1590,19 +1635,23 @@ export function ProjectDeliveryTimeline({
                         showIssueIds={showIssueIds}
                         showStartDates={showStartDates}
                         showDueDates={showDueDates}
-                        className={cn('mt-0.5 text-[10px]', tone ? 'opacity-80' : 'text-ink-muted')}
+                        className={cn('mt-0.5', tone ? 'opacity-80' : 'text-ink-muted')}
                       />
                     </DraggableTag>
                     <button
                       type="button"
                       className={cn(
-                        'absolute left-1/2 top-1/2 z-[3] -translate-x-1/2 -translate-y-1/2',
+                        'absolute left-1/2 top-1/2 z-[3]',
                         tone
-                          ? scheduleMarkerDotClass(tone, marker.kind)
-                          : marker.kind === 'milestone'
-                            ? 'size-3 rotate-45 border border-warn bg-warn/80'
-                            : 'size-2.5 rounded-full bg-ink-muted',
+                          ? scheduleMarkerDotClass(tone, markerShape(marker))
+                          : markerShapeClass(marker),
                       )}
+                      style={{
+                        transform:
+                          marker.kind === 'milestone'
+                            ? `translate(calc(-50% + ${stackDx}px), -50%) rotate(45deg)`
+                            : `translate(calc(-50% + ${stackDx}px), -50%)`,
+                      }}
                       title={tooltip}
                       aria-label={tooltip}
                       onClick={marker.onOpen}
@@ -1612,7 +1661,7 @@ export function ProjectDeliveryTimeline({
               })}
             </div>
 
-            {anyTypeVisible && bandCards.length === 0 && axisMarkers.length === 0 ? (
+            {anyTypeVisible && axisMarkers.length === 0 ? (
               <p className="m-0 py-4 text-center text-sm text-ink-muted">{t('timelineNoBars')}</p>
             ) : null}
           </div>
@@ -1678,5 +1727,6 @@ export function ProjectDeliveryTimeline({
         </div>
       ) : null}
     </div>
+    </DeliveryWideFrame>
   );
 }

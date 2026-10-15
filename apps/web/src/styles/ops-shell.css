@@ -1887,21 +1887,28 @@ a.kh-ops-health-card:hover {
 }
 
 button.kh-ops-key-badge,
-button.kh-ops-type-chip {
+a.kh-ops-key-badge,
+button.kh-ops-type-chip,
+a.kh-ops-type-chip {
   margin: 0;
   color: var(--kh-ink);
   cursor: pointer;
+  text-decoration: none;
 }
 
 button.kh-ops-key-badge:hover,
-button.kh-ops-type-chip:hover {
+a.kh-ops-key-badge:hover,
+button.kh-ops-type-chip:hover,
+a.kh-ops-type-chip:hover {
   border-color: var(--kh-line-strong);
   background: var(--kh-neutral-soft);
   color: var(--kh-ink);
 }
 
 button.kh-ops-key-badge:focus-visible,
-button.kh-ops-type-chip:focus-visible {
+a.kh-ops-key-badge:focus-visible,
+button.kh-ops-type-chip:focus-visible,
+a.kh-ops-type-chip:focus-visible {
   outline: 2px solid var(--kh-accent);
   outline-offset: 2px;
 }
@@ -2670,6 +2677,11 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   max-height: min(70vh, 48rem);
   overflow: auto;
   overscroll-behavior-x: contain;
+}
+
+.kh-ops-chart-wide .kh-ops-gantt-scroll,
+.kh-ops-chart-wide .kh-ops-timeline-scroll {
+  max-height: calc(96dvh - 12rem);
 }
 
 .kh-ops-timeline-chart {
@@ -5071,8 +5083,24 @@ button.kh-ops-stage-card:disabled {
 
 .kh-ops-gantt-row {
   height: var(--gantt-row);
-  position: relative;
-  z-index: 1;
+}
+
+.kh-ops-gantt-row[data-filter-dimmed='true'] {
+  color: color-mix(in oklch, var(--kh-ink), transparent 52%);
+}
+
+.kh-ops-gantt-row[data-filter-dimmed='true'] .kh-ops-gantt-bar,
+.kh-ops-gantt-row[data-filter-dimmed='true'] .kh-ops-gantt-diamond {
+  opacity: 0.48;
+}
+
+.kh-ops-gantt-row[data-filter-dimmed='true']:hover {
+  color: var(--kh-ink);
+}
+
+.kh-ops-gantt-row[data-filter-dimmed='true']:hover .kh-ops-gantt-bar,
+.kh-ops-gantt-row[data-filter-dimmed='true']:hover .kh-ops-gantt-diamond {
+  opacity: 0.78;
 }
 
 .kh-ops-gantt .kh-ops-tree-toggle,
@@ -5112,7 +5140,9 @@ button.kh-ops-stage-card:disabled {
 .kh-ops-gantt-wbs,
 .kh-ops-gantt-title {
   position: sticky;
-  z-index: 2;
+  /* Above the arrow layer, which scrolls with the chart. */
+  z-index: 3;
+  background: var(--kh-panel-solid);
 }
 
 .kh-ops-gantt-wbs {
@@ -5131,6 +5161,23 @@ button.kh-ops-stage-card:disabled {
 .kh-ops-gantt-head .kh-ops-gantt-title {
   z-index: 5;
   background: var(--kh-surface);
+}
+
+.kh-ops-gantt[data-freeze='table'] .kh-ops-gantt-cell {
+  position: sticky;
+  z-index: 3;
+  background: var(--kh-panel-solid);
+}
+
+.kh-ops-gantt[data-freeze='table'] .kh-ops-gantt-head .kh-ops-gantt-cell {
+  z-index: 5;
+  background: var(--kh-surface);
+}
+
+.kh-ops-gantt[data-freeze='table'] .kh-ops-gantt-freeze-edge {
+  box-shadow:
+    1px 0 0 var(--kh-line),
+    8px 0 12px -8px color-mix(in oklch, var(--kh-ink) 28%, transparent);
 }
 
 .kh-ops-gantt-row:hover .kh-ops-gantt-cell {
@@ -5250,8 +5297,8 @@ button.kh-ops-stage-card:disabled {
 }
 
 .kh-ops-gantt-arrows {
-  z-index: 2;
-  overflow: visible;
+  z-index: 1;
+  overflow: hidden;
 }
 
 .kh-ops-gantt-arrows path {

@@ -42,6 +42,7 @@ export type TimelineExportTask = {
   dueDate: string | null;
   startDate?: string | null;
   humanKey?: string | null;
+  itemType?: 'task' | 'bug' | null;
 };
 
 export type TimelineTagOffset = { dx: number; dy: number };
@@ -314,12 +315,6 @@ function dueInWindow(
 
 const CARD_WIDTH_PCT = 18;
 const CARD_GAP_PCT = 1;
-const CARD_LANE_PX = 52;
-
-/** Left edge of a due-anchored card, clamped inside the page. */
-function cardLeftPct(anchorPct: number, widthPct = CARD_WIDTH_PCT): number {
-  return clamp(anchorPct - widthPct / 2, 0, 100 - widthPct);
-}
 
 /** Greedy rows. Items that do not overlap share a lane. */
 function packLanesPct(items: Array<{ id: string; xPct: number }>): Map<string, number> {
@@ -354,6 +349,13 @@ function ribHtml(dx: number, dy: number): string {
   return `<div class="rib" style="width:${len.toFixed(1)}px;transform:rotate(${angle.toFixed(2)}deg)"></div>`;
 }
 
+function dateLineHtml(kind: 'start' | 'due', value: string): string {
+  const icon = kind === 'start'
+    ? '<svg class="date-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3v10M3.5 8h7.5M8.5 5.25 11.25 8 8.5 10.75"/></svg>'
+    : '<svg class="date-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.25 2.75v10.5M4.25 3.75h7.25L9.5 6.25l2 2.5H4.25"/></svg>';
+  return `<span class="due">${icon}${escapeHtml(value)}</span>`;
+}
+
 function metaRowHtml(input: {
   humanKey?: string | null;
   startDate?: string | null;
@@ -365,16 +367,15 @@ function metaRowHtml(input: {
   const id = input.showIssueIds && input.humanKey ? input.humanKey : null;
   const start = input.showStartDates && input.startDate ? input.startDate : null;
   const due = input.showDueDates && input.dueDate ? input.dueDate : null;
-  const dates = [start, due]
-    .filter(Boolean)
-    .map((value) => escapeHtml(value!))
-    .join(' · ');
-  if (!id && !dates) return '';
-  if (id && dates) {
-    return `<span class="meta-stack"><span class="id">${escapeHtml(id)}</span><span class="due">${dates}</span></span>`;
+  const dateHtml = [
+    start ? dateLineHtml('start', start) : '',
+    due ? dateLineHtml('due', due) : '',
+  ].join('');
+  if (id && dateHtml) {
+    return `<span class="meta-stack"><span class="id">${escapeHtml(id)}</span>${dateHtml}</span>`;
   }
   if (id) return `<span class="id">${escapeHtml(id)}</span>`;
-  return `<span class="due">${dates}</span>`;
+  return dateHtml;
 }
 
 export type TimelineExportInput = {
@@ -401,6 +402,7 @@ export type TimelineExportInput = {
     story: string;
     milestone: string;
     task: string;
+    bug?: string;
     generated: string;
     empty: string;
     today?: string;
@@ -425,45 +427,40 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
   const todayMs = parseYmd(today);
   const todayInRange = todayMs >= startMs && todayMs <= endMs;
 
-  const scheduleCards: Array<{
-    id: string;
-    title: string;
-    due: string;
-    startDate: string | null;
-    endDate: string | null;
-    status: string;
-    humanKey: string | null;
-  }> = [];
-  if (input.filters.includeEpics) {
-    for (const epic of input.epics) {
-      const due = timelineDueDate(epic.startDate, epic.endDate);
-      if (!due || !dueInWindow(epic.startDate, epic.endDate, startMs, endMs)) continue;
-      scheduleCards.push({
-        id: `epic:${epic.id}`,
-        title: epic.title,
-        due,
-        startDate: epic.startDate,
-        endDate: epic.endDate,
-        status: epic.status,
-        humanKey: epic.humanKey ?? null,
-      });
-    }
-  }
-  if (input.filters.includeStories) {
-    for (const story of input.stories) {
-      const due = timelineDueDate(story.startDate, story.endDate);
-      if (!due || !dueInWindow(story.startDate, story.endDate, startMs, endMs)) continue;
-      scheduleCards.push({
-        id: `story:${story.id}`,
-        title: story.title,
-        due,
-        startDate: story.startDate,
-        endDate: story.endDate,
-        status: story.status,
-        humanKey: story.humanKey ?? null,
-      });
-    }
-  }
+  const epicMarkers = input.filters.includeEpics
+    ? input.epics.flatMap((row) => {
+        const due = timelineDueDate(row.startDate, row.endDate);
+        if (!due || !dueInWindow(row.startDate, row.endDate, startMs, endMs)) return [];
+        return [
+          {
+            id: `epic:${row.id}`,
+            kind: 'epic' as const,
+            title: row.title,
+            date: due,
+            startDate: row.startDate,
+            status: row.status,
+            humanKey: row.humanKey ?? null,
+          },
+        ];
+      })
+    : [];
+  const storyMarkers = input.filters.includeStories
+    ? input.stories.flatMap((row) => {
+        const due = timelineDueDate(row.startDate, row.endDate);
+        if (!due || !dueInWindow(row.startDate, row.endDate, startMs, endMs)) return [];
+        return [
+          {
+            id: `story:${row.id}`,
+            kind: 'story' as const,
+            title: row.title,
+            date: due,
+            startDate: row.startDate,
+            status: row.status,
+            humanKey: row.humanKey ?? null,
+          },
+        ];
+      })
+    : [];
 
   const milestoneMarkers = input.filters.includeMilestones
     ? input.milestones.filter((row) => {
@@ -481,6 +478,8 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     : [];
 
   const markers = [
+    ...epicMarkers,
+    ...storyMarkers,
     ...milestoneMarkers.map((row) => ({
       id: `milestone:${row.id}`,
       kind: 'milestone' as const,
@@ -498,16 +497,28 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       startDate: row.startDate ?? null,
       status: row.status,
       humanKey: row.humanKey ?? null,
+      itemType: row.itemType === 'bug' ? ('bug' as const) : ('task' as const),
     })),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
+
+  const markerLanes = packLanesPct(
+    markers.map((marker) => ({
+      id: marker.id,
+      xPct: pct(marker.date, startMs, endMs),
+    })),
+  );
+
+  function placedBaseY(placed: number): number {
+    const depth = Math.floor(placed / 2) + 1;
+    return placed % 2 === 0 ? -DEFAULT_RIB_Y * depth : DEFAULT_RIB_Y * depth;
+  }
 
   const showSpine =
     markers.length > 0 || Boolean(input.projectStartDate) || Boolean(input.projectEndDate);
 
   let spineHalf = markers.length > 0 ? 160 : 16;
-  for (const [index, marker] of markers.entries()) {
-    const above = index % 2 === 0;
-    const baseY = above ? -DEFAULT_RIB_Y : DEFAULT_RIB_Y;
+  for (const marker of markers) {
+    const baseY = placedBaseY(markerLanes.get(marker.id) ?? 0);
     const offset = getOffset(offsets, marker.id);
     spineHalf = Math.max(
       spineHalf,
@@ -544,40 +555,6 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
 </div>`
     : '';
 
-  const cardLanes = packLanesPct(
-    scheduleCards.map((card) => ({
-      id: card.id,
-      xPct: pct(card.due, startMs, endMs),
-    })),
-  );
-  let maxCardLane = -1;
-  for (const lane of cardLanes.values()) maxCardLane = Math.max(maxCardLane, lane);
-  const cardTrackHeight = maxCardLane < 0 ? 0 : (maxCardLane + 1) * CARD_LANE_PX;
-  const scheduleHtml =
-    cardTrackHeight === 0
-      ? ''
-      : `<div class="card-track" style="height:${cardTrackHeight}px">${scheduleCards
-          .map((card) => {
-            const anchor = pct(card.due, startMs, endMs);
-            const left = cardLeftPct(anchor);
-            const top = (cardLanes.get(card.id) ?? 0) * CARD_LANE_PX;
-            const tone = colorByStatus
-              ? scheduleTone({ status: card.status, date: card.due, today })
-              : null;
-            const toneCss = tone ? surfaceStyle(tone) : '';
-            return `<div class="item-card" style="left:${left.toFixed(2)}%;top:${top}px;width:${CARD_WIDTH_PCT}%;${toneCss}">${escapeHtml(card.title)}${metaRowHtml(
-              {
-                humanKey: card.humanKey,
-                startDate: card.startDate,
-                dueDate: card.endDate,
-                showIssueIds,
-                showStartDates,
-                showDueDates,
-              },
-            )}</div>`;
-          })
-          .join('')}</div>`;
-
   const projectMarkersHtml = [
     input.projectStartDate &&
     parseYmd(input.projectStartDate) >= startMs &&
@@ -592,14 +569,22 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
   ].join('');
 
   const markersHtml = markers
-    .map((marker, index) => {
+    .map((marker) => {
       const left = pct(marker.date, startMs, endMs);
-      const above = index % 2 === 0;
-      const baseY = above ? -DEFAULT_RIB_Y : DEFAULT_RIB_Y;
+      const baseY = placedBaseY(markerLanes.get(marker.id) ?? 0);
       const offset = getOffset(offsets, marker.id);
       const ribX = offset.dx;
       const ribY = baseY + offset.dy;
-      const iconClass = marker.kind === 'milestone' ? 'diamond' : 'dot';
+      const iconClass =
+        marker.kind === 'milestone'
+          ? 'diamond'
+          : marker.kind === 'epic'
+            ? 'triangle'
+            : marker.kind === 'story'
+              ? 'square'
+              : 'itemType' in marker && marker.itemType === 'bug'
+                ? 'cross'
+                : 'dot';
       const tone = colorByStatus
         ? scheduleTone({
             status: marker.status,
@@ -626,7 +611,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     })
     .join('');
 
-  const hasContent = scheduleCards.length > 0 || markers.length > 0;
+  const hasContent = markers.length > 0;
 
   const scheduleLegend = colorByStatus
     ? [
@@ -667,7 +652,21 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
     .swatch-epic, .swatch-story { width: 18px; height: 8px; border-radius: 3px; background: #fff; border: 1px solid #c5ced6; }
     .swatch-diamond { width: 8px; height: 8px; background: #d4a017; border: 1px solid #b8860b; transform: rotate(45deg); }
+    .swatch-triangle {
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 8px solid #5b6b7c;
+    }
+    .swatch-square { width: 8px; height: 8px; background: #5b6b7c; }
     .swatch-dot { width: 8px; height: 8px; border-radius: 50%; background: #5b6b7c; }
+    .swatch-cross {
+      width: 10px;
+      height: 10px;
+      background: #5b6b7c;
+      clip-path: polygon(0 18%, 18% 0, 50% 32%, 82% 0, 100% 18%, 68% 50%, 100% 82%, 82% 100%, 50% 68%, 18% 100%, 0 82%, 32% 50%);
+    }
     .swatch-tone { width: 10px; height: 10px; border-radius: 2px; border: 1px solid transparent; display: inline-block; }
     .chart {
       padding: 0;
@@ -766,13 +765,23 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       page-break-inside: avoid;
     }
     .due {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 2px;
       margin-top: 1px;
       font-size: 7px;
       opacity: 0.8;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    }
+    .date-icon {
+      width: 8px;
+      height: 8px;
+      flex: none;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .id {
       display: block;
@@ -832,6 +841,27 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       transform: rotate(45deg);
       z-index: 3;
     }
+    .triangle {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 10px;
+      height: 9px;
+      margin: -4.5px 0 0 -5px;
+      background: #5b6b7c;
+      clip-path: polygon(50% 0, 100% 100%, 0 100%);
+      z-index: 3;
+    }
+    .square {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin: -4px 0 0 -4px;
+      background: #5b6b7c;
+      z-index: 3;
+    }
     .dot {
       position: absolute;
       left: 50%;
@@ -841,6 +871,17 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       margin: -4px 0 0 -4px;
       border-radius: 50%;
       background: #5b6b7c;
+      z-index: 3;
+    }
+    .cross {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      margin: -5px 0 0 -5px;
+      background: #5b6b7c;
+      clip-path: polygon(0 18%, 18% 0, 50% 32%, 82% 0, 100% 18%, 68% 50%, 100% 82%, 82% 100%, 50% 68%, 18% 100%, 0 82%, 32% 50%);
       z-index: 3;
     }
     .empty { color: #5b6b7c; padding: 1.5rem 0; text-align: center; }
@@ -857,17 +898,17 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     ${
       colorByStatus
         ? scheduleLegend
-        : `${input.filters.includeEpics ? `<span><i class="swatch-epic"></i>${escapeHtml(input.labels.epic)}</span>` : ''}
-    ${input.filters.includeStories ? `<span><i class="swatch-story"></i>${escapeHtml(input.labels.story)}</span>` : ''}
+        : `${input.filters.includeEpics ? `<span><i class="swatch-triangle"></i>${escapeHtml(input.labels.epic)}</span>` : ''}
+    ${input.filters.includeStories ? `<span><i class="swatch-square"></i>${escapeHtml(input.labels.story)}</span>` : ''}
     ${input.filters.includeMilestones ? `<span><i class="swatch-diamond"></i>${escapeHtml(input.labels.milestone)}</span>` : ''}
-    ${input.filters.includeTasks ? `<span><i class="swatch-dot"></i>${escapeHtml(input.labels.task)}</span>` : ''}`
+    ${input.filters.includeTasks ? `<span><i class="swatch-dot"></i>${escapeHtml(input.labels.task)}</span>` : ''}
+    ${input.filters.includeTasks && input.labels.bug ? `<span><i class="swatch-cross"></i>${escapeHtml(input.labels.bug)}</span>` : ''}`
     }
   </div>
   <div class="chart">
     <div class="axis">${ticksHtml}${todayAxisHtml}</div>
     <div class="chart-body">
       ${gridHtml}
-      ${scheduleHtml}
       ${
         showSpine
           ? `<div class="spine"><div class="spine-line"></div>${projectMarkersHtml}${markersHtml}</div>`

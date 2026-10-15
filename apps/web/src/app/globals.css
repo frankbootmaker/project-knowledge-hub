@@ -495,6 +495,17 @@
       padding-top: 0;
       padding-bottom: 0;
     }
+
+    /* Chart viewer: 25% more than the 96rem document viewer on each side. */
+    .kh-modal:has(.kh-ops-chart-modal) {
+      padding-left: 0.375rem;
+      padding-right: 0.375rem;
+    }
+
+    .kh-modal-panel-full.kh-ops-chart-modal {
+      width: min(calc(100vw - 0.75rem), 144rem);
+      max-width: min(calc(100vw - 0.75rem), 144rem);
+    }
   }
 
   .kh-modal-panel-full .kh-modal-body {

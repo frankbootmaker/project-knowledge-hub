@@ -817,6 +817,17 @@ export function ganttGridWidth(view: GanttColumnView): number {
   return GANTT_COLUMNS[view].reduce((sum, column) => sum + GANTT_COLUMN_WIDTH[column], 0);
 }
 
+/** Left edge of each grid column, so a frozen table can stick at the calendar. */
+export function ganttColumnOffsets(view: GanttColumnView): Map<GanttColumnId, number> {
+  const offsets = new Map<GanttColumnId, number>();
+  let left = 0;
+  for (const column of GANTT_COLUMNS[view]) {
+    offsets.set(column, left);
+    left += GANTT_COLUMN_WIDTH[column];
+  }
+  return offsets;
+}
+
 export function ganttGridTemplate(view: GanttColumnView, chartWidth: number): string {
   const tracks = GANTT_COLUMNS[view].map((column) => `${GANTT_COLUMN_WIDTH[column]}px`);
   tracks.push(`${chartWidth}px`);

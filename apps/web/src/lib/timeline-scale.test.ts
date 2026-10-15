@@ -8,6 +8,11 @@ import {
   markerBaseY,
   markerTrackHeightPx,
   nextZoomIndex,
+  MARKER_TAG_MIN_WIDTH_PX,
+  MARKER_TAG_WIDTH_PX,
+  MARKER_ICON_SAME_DATE_PITCH_SCALE,
+  MARKER_ICON_STACK_PITCH_PX,
+  packMarkerIconStacks,
   packMarkerLanes,
   packStoryLanes,
   rangeOverlaps,
@@ -15,6 +20,7 @@ import {
   timelineBandTopPx,
   timelineCardLeftPx,
   timelineDueDate,
+  timelineMarkerWidthPx,
   timelineDueInRange,
   timelineDueLeftPct,
   timelineTagShiftX,
@@ -110,6 +116,60 @@ describe('timeline lanes', () => {
     expect(markerBaseY('above', 0)).toBeLessThan(0);
     expect(markerBaseY('below', 0)).toBeGreaterThan(0);
     expect(markerTrackHeightPx(lanes.values())).toBeGreaterThan(0);
+  });
+
+  it('uses each card width when dates make one card wider', () => {
+    const lanes = packMarkerLanes(
+      [
+        { id: 'wide', xPx: 100, widthPx: 220 },
+        { id: 'near', xPx: 180, widthPx: 176 },
+      ],
+      { tagWidthPx: 176, gapPx: 12 },
+    );
+    expect(lanes.get('wide')?.side).toBe('above');
+    expect(lanes.get('near')?.side).toBe('below');
+  });
+
+  it('sizes a card to the longer date line when start and due wrap', () => {
+    expect(timelineMarkerWidthPx(null)).toBe(MARKER_TAG_WIDTH_PX);
+    expect(timelineMarkerWidthPx([])).toBe(MARKER_TAG_WIDTH_PX);
+    expect(timelineMarkerWidthPx(['1 Jul 2026'])).toBe(MARKER_TAG_MIN_WIDTH_PX);
+    const pair = timelineMarkerWidthPx(['2026. okt. 15.', '2026. dec. 31.']);
+    expect(pair).toBe(timelineMarkerWidthPx(['2026. okt. 15.']));
+    expect(pair).toBeLessThan(MARKER_TAG_WIDTH_PX);
+  });
+
+  it('places overlapping spine icons side by side and leaves separated ones in place', () => {
+    const stacks = packMarkerIconStacks([
+      { id: 'later', xPx: 40 },
+      { id: 'top', xPx: 40 },
+      { id: 'clear', xPx: 400 },
+    ]);
+    const samePitch = MARKER_ICON_STACK_PITCH_PX * MARKER_ICON_SAME_DATE_PITCH_SCALE;
+    expect(stacks.get('later')).toBeCloseTo(-samePitch / 2);
+    expect(stacks.get('top')).toBeCloseTo(samePitch / 2);
+    expect(stacks.get('clear')).toBe(0);
+  });
+
+  it('pulls a neighbor into the row when spreading would cover it', () => {
+    const stacks = packMarkerIconStacks(
+      [
+        { id: 'left', xPx: 0 },
+        { id: 'a', xPx: 30 },
+        { id: 'b', xPx: 30 },
+        { id: 'c', xPx: 30 },
+      ],
+      { gapPx: 18, pitchPx: 18 },
+    );
+    const placed = [
+      0 + (stacks.get('left') ?? 0),
+      30 + (stacks.get('a') ?? 0),
+      30 + (stacks.get('b') ?? 0),
+      30 + (stacks.get('c') ?? 0),
+    ];
+    expect(placed[1]! - placed[0]!).toBeGreaterThanOrEqual(18);
+    expect(placed[2]! - placed[1]!).toBeCloseTo(18 * MARKER_ICON_SAME_DATE_PITCH_SCALE);
+    expect(placed[3]! - placed[2]!).toBeCloseTo(18 * MARKER_ICON_SAME_DATE_PITCH_SCALE);
   });
 
   it('packs story tags downward and spaces the spacer', () => {

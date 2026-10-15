@@ -9,9 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* **Timeline due-date anchoring (PRO-T-81):** Epics and stories on the delivery Timeline view anchor on their due date again instead of stretching across rolled-up start..end ranges from parent date rollup (PRO-T-73).
+* **Timeline due-date anchoring (PRO-T-81):** Epics and stories sit on the same timeline spine as tasks, bugs, and milestones. Each card is anchored on its due date and shares a lane when it does not overlap another card.
+
+### Changed
+
+* **Delivery search toolbar:** List and Tree place the filter control on the same line as the search field, matching the Gantt.
+
+* **Timeline cards:** Start and due dates stack on two lines, each with its own icon, and the card narrows to the longer date so both stay fully visible.
+
+* **Timeline markers:** Epics use a triangle and stories use a square. Milestones stay diamonds, tasks stay dots, and bugs use a cross. Icons that share a date sit side by side on the spine, another 5% closer than the previous same-date spacing.
+
+* **Gantt freeze table:** A checkbox pins every column at the calendar edge, so moving the timeline keeps the full table in view.
+
+* **Wide chart view:** Gantt and Timeline open in the same full-window viewer as documents, about 25% wider on each side.
+
+* **Linked knowledge titles:** Project linked-knowledge titles are plain links again, matching linked systems. The key chip opens the same record.
 
 ### Added
+
+* **Delivery Gantt search:** The Gantt uses the same search box and filter as List and Tree: status, owner, sprint, task or bug, title, and only open. Matching rows stay visible with their ancestors dimmed, and dependency arrows are drawn only between rows that remain on the chart.
 
 * **Delivery Gantt (PRO-T-62):** Project Delivery adds a Gantt tab to the right of Tree. The left grid and the timeline scroll vertically together, with a sticky scale. WBS and task title stay frozen; the title column is the widest and WBS is narrow. Hierarchy and expand/collapse follow the work-breakdown tree, with outline numbers such as 3.4. Column presets are Default, Compact, Planning, and Execution. Percent shows a number and a mini bar. Predecessors show a human key or a WBS number, never a UUID. Bars run from start to due with percent shading. Milestones are diamonds. Epic and story bars use the rolled-up child dates. The chart draws a today line, FS/SS/FF/SF arrows, and non-working-day shading from the project calendar (hours per workday, workdays per week, holidays). Zoom is day, week, or month. Rows without dates stay in the grid. This version is read-only. Baseline comparison is not included. The Timeline view is unchanged. `GET /api/v1/projects/:projectId/delivery-dependencies` without `entityId` returns every link in the project.
 
