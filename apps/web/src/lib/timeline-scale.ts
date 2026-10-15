@@ -20,6 +20,11 @@ export const STORY_TAG_GAP_PX = 8;
 export const STORY_LANE_PITCH_PX = 48;
 export const STORY_BASE_Y_PX = 36;
 
+/** Due-anchored epic and story cards. Width matches the story tag. */
+export const TIMELINE_CARD_WIDTH_PX = STORY_TAG_WIDTH_PX;
+/** Tall enough for title, key chip, and start/due text without overlap. */
+export const TIMELINE_CARD_LANE_PITCH_PX = 68;
+
 const GRID_STEP_DAYS = [1, 2, 7, 14, 30, 60, 90, 180] as const;
 const GRID_TARGET_PX = 56;
 const LABEL_TARGET_PX = 110;
@@ -70,6 +75,69 @@ export function rangeOverlaps(
   winEnd: number,
 ): boolean {
   return startMs <= winEnd && endMs >= winStart;
+}
+
+/** Due/end date used to place timeline cards; start does not affect position. */
+export function timelineDueDate(
+  startDate: string | null,
+  endOrDueDate: string | null,
+): string | null {
+  return endOrDueDate ?? startDate;
+}
+
+export function timelineDueInRange(
+  dueDate: string | null,
+  rangeStart: number,
+  rangeEnd: number,
+): boolean {
+  if (!dueDate) return false;
+  const ms = parseYmd(dueDate);
+  return ms >= rangeStart && ms <= rangeEnd;
+}
+
+export function timelineDueLeftPct(dueDate: string, rangeStart: number, span: number): number {
+  return clamp(((parseYmd(dueDate) - rangeStart) / span) * 100, 0, 100);
+}
+
+/**
+ * Left edge of a card centered on `anchorPx`, kept inside the chart.
+ * A due date near either edge stays fully visible instead of clipping.
+ */
+export function timelineCardLeftPx(
+  anchorPx: number,
+  layoutWidth: number,
+  cardWidthPx: number,
+): number {
+  const width = Math.max(1, layoutWidth);
+  const card = Math.min(Math.max(1, cardWidthPx), width);
+  const maxLeft = Math.max(0, width - card);
+  return clamp(anchorPx - card / 2, 0, maxLeft);
+}
+
+/**
+ * Extra translateX (px) for a tag centered on `anchorPx` with `translateX(-50%)`.
+ * Drag shift is included, then the tag is clamped inside the chart.
+ */
+export function timelineTagShiftX(
+  anchorPx: number,
+  layoutWidth: number,
+  tagWidthPx: number,
+  dragDx = 0,
+): number {
+  const width = Math.max(1, layoutWidth);
+  const tag = Math.min(Math.max(1, tagWidthPx), width);
+  const maxLeft = Math.max(0, width - tag);
+  const desiredLeft = clamp(anchorPx - tag / 2 + dragDx, 0, maxLeft);
+  return desiredLeft - (anchorPx - tag / 2);
+}
+
+export function timelineBandTopPx(lane: number): number {
+  return Math.max(0, lane) * TIMELINE_CARD_LANE_PITCH_PX;
+}
+
+export function timelineBandHeightPx(maxLane: number): number {
+  if (maxLane < 0) return 0;
+  return timelineBandTopPx(maxLane) + TIMELINE_CARD_LANE_PITCH_PX;
 }
 
 export function timelineZoomPx(index: number): number {

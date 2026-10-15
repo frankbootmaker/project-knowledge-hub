@@ -31,7 +31,6 @@ import {
   MARKER_TAG_GAP_PX,
   MARKER_TAG_WIDTH_PX,
   STORY_TAG_GAP_PX,
-  STORY_TAG_WIDTH_PX,
   TIMELINE_ZOOM_LEVELS,
   buildTimelineTicks,
   pruneCollidingAxisLabels,
@@ -44,11 +43,14 @@ import {
   packMarkerLanes,
   packStoryLanes,
   parseYmd,
-  rangeOverlaps,
   scrollLeftForDate,
+  timelineBandHeightPx,
+  timelineBandTopPx,
+  timelineCardLeftPx,
+  timelineDueDate,
+  timelineTagShiftX,
+  TIMELINE_CARD_WIDTH_PX,
   scrollLeftForFraction,
-  storyBaseY,
-  storyLaneSpacerPx,
   viewportCenterFraction,
   type MarkerLane,
 } from '../lib/timeline-scale';
@@ -86,6 +88,7 @@ type Task = {
   title: string;
   status: string;
   dueDate: string | null;
+  startDate?: string | null;
   humanKey?: string | null;
   itemType?: 'task' | 'bug';
 };
@@ -96,6 +99,7 @@ type AxisMarker = {
   itemType?: 'task' | 'bug';
   title: string;
   date: string;
+  startDate?: string | null;
   status: string;
   humanKey?: string | null;
   onOpen: () => void;
@@ -103,35 +107,54 @@ type AxisMarker = {
 
 type TagOffset = { dx: number; dy: number };
 
+type TimelineBandCard = {
+  id: string;
+  tagId: string | null;
+  title: string;
+  due: string;
+  startDate: string | null;
+  status: string;
+  humanKey?: string | null;
+  onOpen: () => void;
+};
+
 function ItemMetaRow({
   issueId,
-  date,
+  startDate,
+  dueDate,
   showIssueIds,
+  showStartDates,
   showDueDates,
   className,
 }: {
   issueId?: string | null;
-  date?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
   showIssueIds: boolean;
+  showStartDates: boolean;
   showDueDates: boolean;
   className?: string;
 }) {
   const locale = useLocale();
   const id = showIssueIds && issueId ? issueId : null;
-  const due = showDueDates && date ? formatLocaleDate(date, locale) : null;
-  if (!id && !due) return null;
-  if (id && due) {
+  const start = showStartDates && startDate ? formatLocaleDate(startDate, locale) : null;
+  const due = showDueDates && dueDate ? formatLocaleDate(dueDate, locale) : null;
+  const dates = [start, due].filter(Boolean).join(' · ');
+  if (!id && !dates) return null;
+  if (id && dates) {
     return (
-      <span className={cn('flex w-full min-w-0 items-center justify-between gap-1', className)}>
-        <span className="kh-ops-key-badge min-w-0 truncate">{id}</span>
-        <span className="shrink-0 tabular-nums">{due}</span>
+      <span className={cn('mt-0.5 grid min-w-0 gap-0.5', className)}>
+        <span className="kh-ops-key-badge max-w-full truncate">{id}</span>
+        <span className="kh-ops-menu-type block truncate tabular-nums">{dates}</span>
       </span>
     );
   }
   if (id) {
     return <span className={cn('kh-ops-key-badge max-w-full truncate', className)}>{id}</span>;
   }
-  return <span className={cn('kh-ops-menu-type block truncate', className)}>{due}</span>;
+  return (
+    <span className={cn('kh-ops-menu-type block truncate tabular-nums', className)}>{dates}</span>
+  );
 }
 
 type TimelineFilters = {
@@ -247,6 +270,24 @@ function readDueDates(storageKey: string): boolean {
 }
 
 function writeDueDates(storageKey: string, enabled: boolean): void {
+  try {
+    window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function readStartDates(storageKey: string): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (raw === null) return false;
+    return raw === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeStartDates(storageKey: string, enabled: boolean): void {
   try {
     window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
   } catch {
@@ -452,6 +493,7 @@ function DraggableTag({
   className,
   style,
   title,
+  dataTone,
   children,
 }: {
   tagId: string;
@@ -461,6 +503,7 @@ function DraggableTag({
   className?: string;
   style?: React.CSSProperties;
   title?: string;
+  dataTone?: string;
   children: ReactNode;
 }) {
   const t = useTranslations('delivery');
@@ -521,6 +564,7 @@ function DraggableTag({
       type="button"
       className={cn('cursor-grab touch-none active:cursor-grabbing', className)}
       style={style}
+      data-tone={dataTone}
       title={title ?? t('timelineDragHint')}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -577,6 +621,7 @@ export function ProjectDeliveryTimeline({
   const gridKey = `kh-timeline-grid:${projectId}`;
   const statusColorKey = `kh-timeline-status-colors:${projectId}`;
   const dueDatesKey = `kh-timeline-due-dates:${projectId}`;
+  const startDatesKey = `kh-timeline-start-dates:${projectId}`;
   const issueIdsKey = `kh-timeline-issue-ids:${projectId}`;
   const { offsets, updateOffset, resetOffsets } = useTagOffsets(storageKey);
   const [filters, setFilters] = useState<TimelineFilters>(DEFAULT_FILTERS);
@@ -587,6 +632,7 @@ export function ProjectDeliveryTimeline({
   const [showGrid, setShowGrid] = useState(true);
   const [colorByStatus, setColorByStatus] = useState(false);
   const [showDueDates, setShowDueDates] = useState(false);
+  const [showStartDates, setShowStartDates] = useState(false);
   const [showIssueIds, setShowIssueIds] = useState(true);
   const [exportPending, setExportPending] = useState(false);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_TIMELINE_ZOOM_INDEX);
@@ -614,6 +660,7 @@ export function ProjectDeliveryTimeline({
     setShowGrid(readGrid(gridKey));
     setColorByStatus(readStatusColors(statusColorKey));
     setShowDueDates(readDueDates(dueDatesKey));
+    setShowStartDates(readStartDates(startDatesKey));
     setShowIssueIds(readIssueIds(issueIdsKey));
     setZoomIndex(DEFAULT_TIMELINE_ZOOM_INDEX);
     anchorRef.current = { kind: 'date', dateMs: parseYmd(todayDate) };
@@ -621,6 +668,7 @@ export function ProjectDeliveryTimeline({
     setHydrated(true);
   }, [
     dueDatesKey,
+    startDatesKey,
     filterKey,
     gridKey,
     issueIdsKey,
@@ -649,6 +697,14 @@ export function ProjectDeliveryTimeline({
     setShowDueDates((current) => {
       const next = !current;
       writeDueDates(dueDatesKey, next);
+      return next;
+    });
+  }
+
+  function toggleStartDates() {
+    setShowStartDates((current) => {
+      const next = !current;
+      writeStartDates(startDatesKey, next);
       return next;
     });
   }
@@ -910,21 +966,6 @@ export function ProjectDeliveryTimeline({
     }
   }
 
-  function barStyle(start: string | null, end: string | null) {
-    if (!start && !end) return null;
-    const itemStart = parseYmd(start ?? end!);
-    const itemEnd = parseYmd(end ?? start!);
-    if (!rangeOverlaps(itemStart, itemEnd, rangeStart, rangeEnd)) return null;
-    const clippedStart = Math.max(itemStart, rangeStart);
-    const clippedEnd = Math.min(itemEnd, rangeEnd);
-    const left = ((clippedStart - rangeStart) / span) * 100;
-    const width = Math.max(1.2, ((Math.max(clippedStart, clippedEnd) - clippedStart) / span) * 100);
-    return {
-      left: `${clamp(left, 0, 100)}%`,
-      width: `${clamp(width, 1.2, 100 - clamp(left, 0, 100))}%`,
-    };
-  }
-
   function markerLeftPct(date: string): number {
     return clamp(((parseYmd(date) - rangeStart) / span) * 100, 0, 100);
   }
@@ -945,6 +986,10 @@ export function ProjectDeliveryTimeline({
     return ms >= rangeStart && ms <= rangeEnd;
   }
 
+  function dueAnchorPx(date: string): number {
+    return ((parseYmd(date) - rangeStart) / span) * layoutWidth;
+  }
+
   const axisMarkers = useMemo(() => {
     const inWindow = (date: string) => {
       const ms = parseYmd(date);
@@ -961,6 +1006,7 @@ export function ProjectDeliveryTimeline({
           kind: 'milestone',
           title: milestone.title,
           date: milestone.targetDate,
+          startDate: milestone.startDate,
           status: milestone.status,
           humanKey: milestone.humanKey ?? null,
           onOpen: () => onManageMilestone(milestone.id),
@@ -976,6 +1022,7 @@ export function ProjectDeliveryTimeline({
           itemType: task.itemType === 'bug' ? 'bug' : 'task',
           title: task.title,
           date: task.dueDate,
+          startDate: task.startDate ?? null,
           status: task.status,
           humanKey: task.humanKey ?? null,
           onOpen: () => onManageTask(task.id),
@@ -1006,35 +1053,63 @@ export function ProjectDeliveryTimeline({
   }, [axisMarkers, layoutWidth, rangeStart, span]);
   const markerTrackHeight = markerTrackHeightPx(markerLanes.values());
 
-  const scheduledEpics = filters.epics
-    ? epics.filter((epic) => {
-        if (!epic.startDate && !epic.endDate) return false;
-        const start = parseYmd(epic.startDate ?? epic.endDate!);
-        const end = parseYmd(epic.endDate ?? epic.startDate!);
-        return rangeOverlaps(start, end, rangeStart, rangeEnd);
-      })
-    : [];
-  const standaloneStories =
-    filters.stories && !filters.epics
-      ? stories.filter((story) => {
-          if (!story.startDate && !story.endDate) return false;
-          const start = parseYmd(story.startDate ?? story.endDate!);
-          const end = parseYmd(story.endDate ?? story.startDate!);
-          return rangeOverlaps(start, end, rangeStart, rangeEnd);
-        })
-      : [];
+  const bandCards: TimelineBandCard[] = [];
+  if (filters.epics) {
+    for (const epic of epics) {
+      const due = timelineDueDate(epic.startDate, epic.endDate);
+      if (!due || !dateInWindow(due)) continue;
+      bandCards.push({
+        id: `epic:${epic.id}`,
+        tagId: null,
+        title: epic.title,
+        due,
+        startDate: epic.startDate,
+        status: epic.status,
+        humanKey: epic.humanKey ?? null,
+        onOpen: () => onManageEpic(epic.id),
+      });
+    }
+  }
+  if (filters.stories) {
+    for (const story of stories) {
+      const due = timelineDueDate(story.startDate, story.endDate);
+      if (!due || !dateInWindow(due)) continue;
+      bandCards.push({
+        id: `story:${story.id}`,
+        tagId: `story:${story.id}`,
+        title: story.title,
+        due,
+        startDate: story.startDate,
+        status: story.status,
+        humanKey: story.humanKey ?? null,
+        onOpen: () => onManageStory(story.id),
+      });
+    }
+  }
+  const bandLanes = packStoryLanes(
+    bandCards.map((card) => ({ id: card.id, xPx: dueAnchorPx(card.due) })),
+    { tagWidthPx: TIMELINE_CARD_WIDTH_PX, gapPx: STORY_TAG_GAP_PX },
+  );
+  let maxBandLane = -1;
+  let bandDragDy = 0;
+  for (const card of bandCards) {
+    maxBandLane = Math.max(maxBandLane, bandLanes.get(card.id) ?? 0);
+    if (card.tagId) {
+      bandDragDy = Math.max(bandDragDy, offsets[card.tagId]?.dy ?? 0);
+    }
+  }
+  const bandHeight = timelineBandHeightPx(maxBandLane) + Math.max(0, bandDragDy);
+
   const unscheduledEpics = filters.epics
-    ? epics.filter((epic) => !epic.startDate && !epic.endDate)
+    ? epics.filter((epic) => !timelineDueDate(epic.startDate, epic.endDate))
     : [];
   const unscheduledStories = filters.stories
-    ? stories.filter((story) => !story.startDate && !story.endDate)
+    ? stories.filter((story) => !timelineDueDate(story.startDate, story.endDate))
     : [];
   const unscheduledMilestones = filters.milestones
     ? milestones.filter((milestone) => !milestone.startDate && !milestone.targetDate)
     : [];
 
-  const above = scheduledEpics.filter((_, index) => index % 2 === 0);
-  const below = scheduledEpics.filter((_, index) => index % 2 === 1);
   const hasCustomOffsets = Object.keys(offsets).length > 0;
   const anyTypeVisible = filters.epics || filters.stories || filters.milestones || filters.tasks;
 
@@ -1060,6 +1135,7 @@ export function ProjectDeliveryTimeline({
             includeMilestones: filters.milestones,
             includeTasks: filters.tasks,
             colorByStatus,
+            showStartDates,
             showDueDates,
             showIssueIds,
             showGrid,
@@ -1104,6 +1180,7 @@ export function ProjectDeliveryTimeline({
     pushToast,
     rangeEnd,
     rangeStart,
+    showStartDates,
     showDueDates,
     showIssueIds,
     showGrid,
@@ -1131,219 +1208,65 @@ export function ProjectDeliveryTimeline({
     };
   }, [anyTypeVisible, exportHandleRef, exportPending, exportTimelinePdf, onExportStateChange]);
 
-  function storyAnchorLeft(story: Story): number | null {
-    const storyStyle = barStyle(story.startDate, story.endDate);
-    if (!storyStyle) return null;
-    const midDate = formatYmd(
-      (parseYmd(story.startDate ?? story.endDate!) + parseYmd(story.endDate ?? story.startDate!)) /
-        2,
-    );
-    const midLeft = markerLeftPct(midDate);
-    const barLeft = Number.parseFloat(storyStyle.left);
-    const barWidth = Number.parseFloat(storyStyle.width);
-    return clamp(midLeft, barLeft, barLeft + barWidth);
-  }
-
-  function epicLane(epic: Epic, side: 'above' | 'below') {
-    const style = barStyle(epic.startDate, epic.endDate);
-    if (!style) return null;
-    const epicStories = filters.stories
-      ? stories.filter((story) => {
-          if (story.epicId !== epic.id) return false;
-          if (!story.startDate && !story.endDate) return false;
-          const start = parseYmd(story.startDate ?? story.endDate!);
-          const end = parseYmd(story.endDate ?? story.startDate!);
-          return rangeOverlaps(start, end, rangeStart, rangeEnd);
-        })
-      : [];
-    const epicTone = colorByStatus
-      ? deliveryScheduleTone({
-          status: epic.status,
-          date: epic.endDate ?? epic.startDate,
-          today: todayDate,
-        })
+  function renderBandCard(card: TimelineBandCard) {
+    const lane = bandLanes.get(card.id) ?? 0;
+    const offset = card.tagId ? (offsets[card.tagId] ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
+    const left =
+      timelineCardLeftPx(dueAnchorPx(card.due), layoutWidth, TIMELINE_CARD_WIDTH_PX) + offset.dx;
+    const top = timelineBandTopPx(lane) + offset.dy;
+    const tone = colorByStatus
+      ? deliveryScheduleTone({ status: card.status, date: card.due, today: todayDate })
       : null;
-    const epicHasMeta =
-      (showIssueIds && Boolean(epic.humanKey)) || (showDueDates && Boolean(epic.endDate));
-    const storyLanes = packStoryLanes(
-      epicStories.flatMap((story) => {
-        const anchorLeft = storyAnchorLeft(story);
-        if (anchorLeft === null) return [];
-        return [{ id: story.id, xPx: (anchorLeft / 100) * layoutWidth }];
-      }),
-      { tagWidthPx: STORY_TAG_WIDTH_PX, gapPx: STORY_TAG_GAP_PX },
+    const tooltip = [
+      card.title,
+      colorByStatus ? t(`milestoneStatus.${card.status}`) : null,
+      card.due,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const style = { left, top, width: TIMELINE_CARD_WIDTH_PX };
+    const body = (
+      <>
+        <span className="block truncate">{card.title}</span>
+        <ItemMetaRow
+          issueId={card.humanKey}
+          startDate={card.startDate}
+          dueDate={card.due}
+          showIssueIds={showIssueIds}
+          showStartDates={showStartDates}
+          showDueDates={showDueDates}
+        />
+      </>
     );
-    let maxStoryLane = -1;
-    for (const lane of storyLanes.values()) {
-      maxStoryLane = Math.max(maxStoryLane, lane);
+    if (card.tagId) {
+      return (
+        <DraggableTag
+          key={card.id}
+          tagId={card.tagId}
+          offset={offset}
+          onOffsetChange={updateOffset}
+          onOpen={card.onOpen}
+          className="kh-ops-time-card"
+          style={style}
+          dataTone={tone ?? undefined}
+          title={tooltip}
+        >
+          {body}
+        </DraggableTag>
+      );
     }
     return (
-      <div key={epic.id} className={cn('relative mb-4 min-h-12', side === 'below' && 'mt-4')}>
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="border-0 bg-transparent p-0 text-left text-sm font-semibold text-ink underline-offset-2 hover:underline"
-            onClick={() => onManageEpic(epic.id)}
-          >
-            {epic.title}
-          </button>
-          <Badge>{t(`milestoneStatus.${epic.status}`)}</Badge>
-        </div>
-        <div className={cn('relative', epicHasMeta ? 'h-10' : 'h-8')}>
-          <button
-            type="button"
-            className={cn(
-              'kh-ops-time-bar absolute top-1 text-left',
-              epicHasMeta ? 'h-8 py-0.5 leading-tight' : 'h-6',
-            )}
-            data-tone={epicTone ?? undefined}
-            style={style}
-            title={`${epic.startDate ?? '…'} → ${epic.endDate ?? '…'}`}
-            onClick={() => onManageEpic(epic.id)}
-          >
-            <span className="block truncate">{epic.title}</span>
-            <ItemMetaRow
-              issueId={epic.humanKey}
-              date={epic.endDate}
-              showIssueIds={showIssueIds}
-              showDueDates={showDueDates}
-              className="text-[10px] font-normal opacity-80"
-            />
-          </button>
-          {epicStories.map((story) => {
-            const storyStyle = barStyle(story.startDate, story.endDate);
-            if (!storyStyle) return null;
-            const tagId = `story:${story.id}`;
-            const offset = offsets[tagId] ?? { dx: 0, dy: 0 };
-            const midDate = formatYmd(
-              (parseYmd(story.startDate ?? story.endDate!) +
-                parseYmd(story.endDate ?? story.startDate!)) /
-                2,
-            );
-            const midLeft = markerLeftPct(midDate);
-            const barLeft = Number.parseFloat(storyStyle.left);
-            const barWidth = Number.parseFloat(storyStyle.width);
-            const anchorLeft = clamp(midLeft, barLeft, barLeft + barWidth);
-            const lane = storyLanes.get(story.id) ?? 0;
-            const baseY = storyBaseY(lane);
-            const ribX = offset.dx;
-            const ribY = baseY + offset.dy;
-            const ribLen = Math.max(1, Math.hypot(ribX, ribY));
-            const ribAngle = (Math.atan2(ribY, ribX) * 180) / Math.PI;
-            const storyTone = colorByStatus
-              ? deliveryScheduleTone({
-                  status: story.status,
-                  date: story.endDate ?? story.startDate,
-                  today: todayDate,
-                })
-              : null;
-            const storyDue = story.endDate ?? story.startDate;
-            const storyHasMeta =
-              (showIssueIds && Boolean(story.humanKey)) || (showDueDates && Boolean(storyDue));
-
-            return (
-              <div
-                key={story.id}
-                className="absolute top-0 h-full"
-                style={{ left: `${anchorLeft}%` }}
-              >
-                <div
-                  className="pointer-events-none absolute left-0 top-1 h-px origin-left bg-line-strong/70"
-                  style={{
-                    width: ribLen,
-                    transform: `rotate(${ribAngle}deg)`,
-                  }}
-                  aria-hidden
-                />
-                <DraggableTag
-                  tagId={tagId}
-                  offset={offset}
-                  onOffsetChange={updateOffset}
-                  onOpen={() => onManageStory(story.id)}
-                  className={cn(
-                    'absolute left-0 top-1 z-[1] max-w-[14rem] border px-1.5 text-left text-[11px] shadow-sm',
-                    storyHasMeta ? 'h-auto min-h-5 py-0.5' : 'h-5',
-                    storyTone
-                      ? deliveryScheduleSurfaceClass(storyTone)
-                      : 'border-line bg-panel-solid text-ink hover:border-brand/50',
-                  )}
-                  style={{
-                    transform: `translate(calc(-50% + ${offset.dx}px), ${baseY + offset.dy}px)`,
-                  }}
-                  title={
-                    colorByStatus
-                      ? `${story.title} · ${t(`milestoneStatus.${story.status}`)}${storyDue ? ` (${storyDue})` : ''}`
-                      : storyDue
-                        ? `${story.title} (${storyDue})`
-                        : story.title
-                  }
-                >
-                  <span className="block truncate">{story.title}</span>
-                  <ItemMetaRow
-                    issueId={story.humanKey}
-                    date={storyDue}
-                    showIssueIds={showIssueIds}
-                    showDueDates={showDueDates}
-                    className="text-[10px] opacity-80"
-                  />
-                </DraggableTag>
-              </div>
-            );
-          })}
-        </div>
-        {maxStoryLane >= 0 ? <div style={{ height: storyLaneSpacerPx(maxStoryLane) }} /> : null}
-      </div>
-    );
-  }
-
-  function storyLane(story: Story) {
-    const style = barStyle(story.startDate, story.endDate);
-    if (!style) return null;
-    const storyTone = colorByStatus
-      ? deliveryScheduleTone({
-          status: story.status,
-          date: story.endDate ?? story.startDate,
-          today: todayDate,
-        })
-      : null;
-    const storyDue = story.endDate ?? story.startDate;
-    const storyHasMeta =
-      (showIssueIds && Boolean(story.humanKey)) || (showDueDates && Boolean(storyDue));
-    return (
-      <div key={story.id} className="relative mb-4 min-h-12">
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="border-0 bg-transparent p-0 text-left text-sm font-semibold text-ink underline-offset-2 hover:underline"
-            onClick={() => onManageStory(story.id)}
-          >
-            {story.title}
-          </button>
-          <Badge>{t(`milestoneStatus.${story.status}`)}</Badge>
-        </div>
-        <div className={cn('relative', storyHasMeta ? 'h-10' : 'h-8')}>
-          <button
-            type="button"
-            className={cn(
-              'kh-ops-time-bar absolute top-1 max-w-full text-left',
-              storyHasMeta ? 'h-8 py-0.5 leading-tight' : 'h-6',
-            )}
-            data-tone={storyTone ?? undefined}
-            style={style}
-            title={storyDue ? `${story.title} (${storyDue})` : story.title}
-            onClick={() => onManageStory(story.id)}
-          >
-            <span className="block truncate">{story.title}</span>
-            <ItemMetaRow
-              issueId={story.humanKey}
-              date={storyDue}
-              showIssueIds={showIssueIds}
-              showDueDates={showDueDates}
-              className="text-[10px] opacity-80"
-            />
-          </button>
-        </div>
-      </div>
+      <button
+        key={card.id}
+        type="button"
+        className="kh-ops-time-card"
+        style={style}
+        data-tone={tone ?? undefined}
+        title={tooltip}
+        onClick={card.onOpen}
+      >
+        {body}
+      </button>
     );
   }
 
@@ -1368,6 +1291,10 @@ export function ProjectDeliveryTimeline({
           <label className="inline-flex items-center gap-2">
             <input type="checkbox" checked={colorByStatus} onChange={toggleStatusColors} />
             <span>{t('timelineStatusColors')}</span>
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={showStartDates} onChange={toggleStartDates} />
+            <span>{t('startDate')}</span>
           </label>
           <label className="inline-flex items-center gap-2">
             <input type="checkbox" checked={showDueDates} onChange={toggleDueDates} />
@@ -1543,8 +1470,11 @@ export function ProjectDeliveryTimeline({
               </div>
             ) : null}
 
-            {above.map((epic) => epicLane(epic, 'above'))}
-            {standaloneStories.map((story) => storyLane(story))}
+            {bandHeight > 0 ? (
+              <div className="relative z-[1] mb-2" style={{ height: bandHeight }}>
+                {bandCards.map((card) => renderBandCard(card))}
+              </div>
+            ) : null}
 
             <div
               className="relative z-[1] my-2 overflow-visible"
@@ -1605,6 +1535,12 @@ export function ProjectDeliveryTimeline({
                 ]
                   .filter(Boolean)
                   .join(' · ');
+                const tagShift = timelineTagShiftX(
+                  dueAnchorPx(marker.date),
+                  layoutWidth,
+                  MARKER_TAG_WIDTH_PX,
+                  offset.dx,
+                );
 
                 return (
                   <div
@@ -1626,13 +1562,15 @@ export function ProjectDeliveryTimeline({
                       onOffsetChange={updateOffset}
                       onOpen={marker.onOpen}
                       className={cn(
-                        'absolute left-1/2 top-1/2 z-[2] w-max max-w-[11rem] border px-1.5 py-0.5 text-left text-[10px] leading-snug shadow-sm',
+                        'absolute left-1/2 top-1/2 z-[2] overflow-hidden border px-1.5 py-0.5',
+                        'text-left text-[10px] leading-snug shadow-sm',
                         tone
                           ? deliveryScheduleSurfaceClass(tone)
                           : 'border-line bg-panel-solid text-ink hover:border-brand/50',
                       )}
                       style={{
-                        transform: `translate(calc(-50% + ${offset.dx}px), calc(-50% + ${baseY + offset.dy}px))`,
+                        width: MARKER_TAG_WIDTH_PX,
+                        transform: `translate(calc(-50% + ${tagShift}px), calc(-50% + ${baseY + offset.dy}px))`,
                       }}
                       title={tooltip}
                     >
@@ -1647,8 +1585,10 @@ export function ProjectDeliveryTimeline({
                       <span className="block truncate">{marker.title}</span>
                       <ItemMetaRow
                         issueId={marker.humanKey}
-                        date={marker.date}
+                        startDate={marker.startDate}
+                        dueDate={marker.date}
                         showIssueIds={showIssueIds}
+                        showStartDates={showStartDates}
                         showDueDates={showDueDates}
                         className={cn('mt-0.5 text-[10px]', tone ? 'opacity-80' : 'text-ink-muted')}
                       />
@@ -1672,12 +1612,7 @@ export function ProjectDeliveryTimeline({
               })}
             </div>
 
-            {below.map((epic) => epicLane(epic, 'below'))}
-
-            {anyTypeVisible &&
-            scheduledEpics.length === 0 &&
-            standaloneStories.length === 0 &&
-            axisMarkers.length === 0 ? (
+            {anyTypeVisible && bandCards.length === 0 && axisMarkers.length === 0 ? (
               <p className="m-0 py-4 text-center text-sm text-ink-muted">{t('timelineNoBars')}</p>
             ) : null}
           </div>

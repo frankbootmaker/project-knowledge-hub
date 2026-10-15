@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **Timeline due-date anchoring (PRO-T-81):** Epics and stories on the delivery Timeline view anchor on their due date again instead of stretching across rolled-up start..end ranges from parent date rollup (PRO-T-73).
+
 ### Added
 
 * **Delivery Gantt (PRO-T-62):** Project Delivery adds a Gantt tab to the right of Tree. The left grid and the timeline scroll vertically together, with a sticky scale. WBS and task title stay frozen; the title column is the widest and WBS is narrow. Hierarchy and expand/collapse follow the work-breakdown tree, with outline numbers such as 3.4. Column presets are Default, Compact, Planning, and Execution. Percent shows a number and a mini bar. Predecessors show a human key or a WBS number, never a UUID. Bars run from start to due with percent shading. Milestones are diamonds. Epic and story bars use the rolled-up child dates. The chart draws a today line, FS/SS/FF/SF arrows, and non-working-day shading from the project calendar (hours per workday, workdays per week, holidays). Zoom is day, week, or month. Rows without dates stay in the grid. This version is read-only. Baseline comparison is not included. The Timeline view is unchanged. `GET /api/v1/projects/:projectId/delivery-dependencies` without `entityId` returns every link in the project.
+
+* **Timeline start date display (PRO-T-81):** The Timeline “Show on timeline” options include an optional Start date label (default off, session-persisted, EN/HU/DE) before Due date; card position is unchanged.
 
 * **Delivery tree depth (PRO-T-54):** The work-breakdown header can expand or collapse one level, or expand or collapse the whole filtered tree. A control is disabled when that action would change nothing. One-level actions follow the visible frontier, including mixed depths and active filters.
 
