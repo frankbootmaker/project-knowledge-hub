@@ -380,6 +380,37 @@ describe('filterDeliveryTree', () => {
     expect(result.visible.has(taskBlocked.id)).toBe(false);
   });
 
+  it('matches a milestone by title and hides it for a task-only owner filter', () => {
+    const group = node({
+      id: 'delivery-tree-milestones',
+      kind: 'group',
+      parentId: null,
+      title: '',
+    });
+    const milestone = node({
+      id: 'milestone:edge',
+      kind: 'milestone',
+      parentId: group.id,
+      title: 'Network edge hardening',
+      humanKey: 'HL1-M-1',
+      status: 'done',
+    });
+    const byTitle = filterDeliveryTree([group, milestone], {
+      ...idle,
+      search: 'edge',
+    });
+    expect(byTitle.visible.has(milestone.id)).toBe(true);
+    expect(byTitle.visible.has(group.id)).toBe(true);
+    expect(byTitle.dimmed.has(group.id)).toBe(true);
+
+    const byOwner = filterDeliveryTree([group, milestone, taskOpen], {
+      ...idle,
+      owners: ['Ada'],
+    });
+    expect(byOwner.visible.has(milestone.id)).toBe(false);
+    expect(byOwner.visible.has(taskOpen.id)).toBe(true);
+  });
+
   it('does not mutate nodes or invent rolled-up values', () => {
     const snapshot = nodes.map((item) => ({ ...item }));
     filterDeliveryTree(nodes, { ...idle, onlyOpen: true, owners: ['Ada'] });

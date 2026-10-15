@@ -5073,6 +5073,24 @@ button.kh-ops-stage-card:disabled {
   height: var(--gantt-row);
 }
 
+.kh-ops-gantt-row[data-filter-dimmed='true'] {
+  color: color-mix(in oklch, var(--kh-ink), transparent 52%);
+}
+
+.kh-ops-gantt-row[data-filter-dimmed='true'] .kh-ops-gantt-bar,
+.kh-ops-gantt-row[data-filter-dimmed='true'] .kh-ops-gantt-diamond {
+  opacity: 0.48;
+}
+
+.kh-ops-gantt-row[data-filter-dimmed='true']:hover {
+  color: var(--kh-ink);
+}
+
+.kh-ops-gantt-row[data-filter-dimmed='true']:hover .kh-ops-gantt-bar,
+.kh-ops-gantt-row[data-filter-dimmed='true']:hover .kh-ops-gantt-diamond {
+  opacity: 0.78;
+}
+
 .kh-ops-gantt .kh-ops-tree-toggle,
 .kh-ops-gantt .kh-ops-tree-spacer {
   width: 22px;

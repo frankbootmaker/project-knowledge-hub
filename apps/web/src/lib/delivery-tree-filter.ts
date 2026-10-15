@@ -9,7 +9,7 @@ import { isClosedDeliveryStatus } from './delivery-status';
  * stories or epics, and it does not change the numbers rendered on a task.
  */
 
-export type DeliveryTreeNodeKind = 'epic' | 'story' | 'task' | 'group';
+export type DeliveryTreeNodeKind = 'epic' | 'story' | 'task' | 'milestone' | 'group';
 
 export type DeliveryTreeFilterNode = {
   id: string;
