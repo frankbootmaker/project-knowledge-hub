@@ -5071,8 +5071,6 @@ button.kh-ops-stage-card:disabled {
 
 .kh-ops-gantt-row {
   height: var(--gantt-row);
-  position: relative;
-  z-index: 1;
 }
 
 .kh-ops-gantt .kh-ops-tree-toggle,
@@ -5112,7 +5110,9 @@ button.kh-ops-stage-card:disabled {
 .kh-ops-gantt-wbs,
 .kh-ops-gantt-title {
   position: sticky;
-  z-index: 2;
+  /* Above the arrow layer, which scrolls with the chart. */
+  z-index: 3;
+  background: var(--kh-panel-solid);
 }
 
 .kh-ops-gantt-wbs {
@@ -5250,8 +5250,8 @@ button.kh-ops-stage-card:disabled {
 }
 
 .kh-ops-gantt-arrows {
-  z-index: 2;
-  overflow: visible;
+  z-index: 1;
+  overflow: hidden;
 }
 
 .kh-ops-gantt-arrows path {
