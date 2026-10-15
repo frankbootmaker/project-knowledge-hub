@@ -11,9 +11,13 @@ import {
   packMarkerLanes,
   packStoryLanes,
   rangeOverlaps,
+  timelineBandHeightPx,
+  timelineBandTopPx,
+  timelineCardLeftPx,
   timelineDueDate,
   timelineDueInRange,
   timelineDueLeftPct,
+  timelineTagShiftX,
   scrollLeftForDate,
   scrollLeftForFraction,
   storyBaseY,
@@ -159,5 +163,33 @@ describe('timeline due anchoring', () => {
     expect(dueOnly).toBe(wideStart);
     expect(dueOnly).toBeGreaterThan(0);
     expect(dueOnly).toBeLessThan(100);
+  });
+
+  it('clamps a due-anchored card inside the chart', () => {
+    expect(timelineCardLeftPx(500, 1000, 200)).toBe(400);
+    expect(timelineCardLeftPx(10, 1000, 200)).toBe(0);
+    expect(timelineCardLeftPx(990, 1000, 200)).toBe(800);
+    expect(timelineCardLeftPx(0, 80, 100)).toBe(0);
+    expect(timelineTagShiftX(500, 1000, 200, 0)).toBe(0);
+    expect(timelineTagShiftX(10, 1000, 200, 0)).toBe(90);
+    expect(timelineTagShiftX(500, 1000, 200, 12)).toBe(12);
+  });
+
+  it('shares a lane when cards do not overlap and stacks when they do', () => {
+    const lanes = packStoryLanes(
+      [
+        { id: 'left', xPx: 40 },
+        { id: 'overlap', xPx: 80 },
+        { id: 'clear', xPx: 400 },
+      ],
+      { tagWidthPx: 100, gapPx: 8 },
+    );
+    expect(lanes.get('left')).toBe(0);
+    expect(lanes.get('overlap')).toBe(1);
+    expect(lanes.get('clear')).toBe(0);
+    expect(timelineBandTopPx(0)).toBe(0);
+    expect(timelineBandTopPx(1)).toBeGreaterThan(0);
+    expect(timelineBandHeightPx(1)).toBeGreaterThan(timelineBandHeightPx(0));
+    expect(timelineBandHeightPx(-1)).toBe(0);
   });
 });
