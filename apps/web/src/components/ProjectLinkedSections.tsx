@@ -202,11 +202,12 @@ export function ProjectLinkedSections({
         type: 'text',
         getValue: (row) => row.preferred.humanKey ?? row.preferred.recordType,
       },
-      cell: (row) => (
-        <span className="kh-ops-type-chip">
-          {row.preferred.humanKey ?? row.preferred.recordType}
-        </span>
-      ),
+      cell: (row) =>
+        row.preferred.humanKey ? (
+          <span className="kh-ops-key-badge">{row.preferred.humanKey}</span>
+        ) : (
+          <span className="kh-ops-type-chip">{row.preferred.recordType}</span>
+        ),
     },
     {
       id: 'title',
@@ -215,16 +216,17 @@ export function ProjectLinkedSections({
       primary: true,
       sort: { type: 'text', getValue: (row) => row.preferred.title },
       cell: (row) => (
-        <Link
+        <LinkButton
           href={recordHref({
             workspaceSlug,
             projectSlug,
             recordSlug: row.preferred.slug,
           })}
-          className="no-underline"
+          variant="secondary"
+          className="h-auto whitespace-normal px-2 py-1 text-left font-normal"
         >
           {row.preferred.title}
-        </Link>
+        </LinkButton>
       ),
     },
     {

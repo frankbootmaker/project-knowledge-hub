@@ -1,6 +1,7 @@
 import { RECORD_TYPE_CATALOG } from '@project-knowledge-hub/domain';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { LocalDateTime } from '../../../components/LocalDateTime';
 import {
   Badge,
   Button,
@@ -278,7 +279,7 @@ export default async function SearchPage({
                               {result.title}
                             </Link>
                             {result.excerpt ? (
-                              <div className="max-w-[28rem] truncate text-[11px] font-normal text-ink-muted">
+                              <div className="kh-ops-search-caption max-w-[28rem]">
                                 {result.excerpt}
                               </div>
                             ) : null}
@@ -295,7 +296,7 @@ export default async function SearchPage({
                           </td>
                           <td>{result.project?.name ?? '—'}</td>
                           <td>
-                            {new Date(result.updatedAt).toLocaleDateString()}
+                            <LocalDateTime value={result.updatedAt} dateOnly />
                           </td>
                         </tr>
                       );

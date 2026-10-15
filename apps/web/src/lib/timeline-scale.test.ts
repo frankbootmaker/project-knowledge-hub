@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   TIMELINE_ZOOM_LEVELS,
+  AXIS_LABEL_MIN_GAP_PX,
   buildTimelineTicks,
+  pruneCollidingAxisLabels,
   canZoomTimeline,
   markerBaseY,
   markerTrackHeightPx,
@@ -52,6 +54,20 @@ describe('timeline zoom scale', () => {
     expect(month.labelTicks[0]).toBe('2026-01-01');
     expect(month.labelTicks.at(-1)).toBe('2026-07-01');
     expect(day.labelTicks.length).toBeGreaterThan(month.labelTicks.length);
+  });
+
+  it('drops the axis label that sits on the last one', () => {
+    const startMs = Date.UTC(2026, 6, 1);
+    const endMs = Date.UTC(2026, 6, 10);
+    const ticks = ['2026-07-01', '2026-07-08', '2026-07-10'];
+    const width = 400;
+    const pruned = pruneCollidingAxisLabels(ticks, startMs, endMs, width);
+    expect(pruned[0]).toBe('2026-07-01');
+    expect(pruned.at(-1)).toBe('2026-07-10');
+    expect(pruned).not.toContain('2026-07-08');
+    const wide = pruneCollidingAxisLabels(ticks, startMs, endMs, 9 * 80);
+    expect(wide).toEqual(ticks);
+    expect(AXIS_LABEL_MIN_GAP_PX).toBeGreaterThan(110);
   });
 });
 

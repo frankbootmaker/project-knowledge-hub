@@ -2,6 +2,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { formatPercentLabel } from '../lib/delivery-completion';
+import { formatLocaleDate } from '../lib/locale-date';
 
 export type MilestoneMarker = {
   id: string;
@@ -42,7 +43,9 @@ export function MilestoneTimeMarkers({
             milestone.completionPercent == null
               ? null
               : formatPercentLabel(milestone.completionPercent, locale);
-          const due = milestone.targetDate ?? t('milestoneNoDue');
+          const due = milestone.targetDate
+            ? formatLocaleDate(milestone.targetDate, locale)
+            : t('milestoneNoDue');
           return (
             <button
               key={milestone.id}
@@ -52,7 +55,9 @@ export function MilestoneTimeMarkers({
             >
               <time dateTime={milestone.targetDate ?? undefined}>{due}</time>
               <span className="kh-ops-milestone-marker-title">
-                {milestone.humanKey ? `${milestone.humanKey} · ` : ''}
+                {milestone.humanKey ? (
+                  <span className="kh-ops-key-badge">{milestone.humanKey}</span>
+                ) : null}
                 {milestone.title}
               </span>
               <span className="kh-ops-milestone-marker-meta">

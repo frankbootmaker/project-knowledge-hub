@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
+import { LocalDateTime } from './LocalDateTime';
 import { MilestoneTimeMarkers } from './MilestoneTimeMarkers';
 import { DataTable, type DataColumn } from './ui/DataTable';
 import { Button, Input, Select } from './ui';
@@ -123,13 +124,14 @@ export function ProjectDeliveryList({
       header: t('colId'),
       kind: 'data',
       sort: { type: 'text', getValue: (row) => row.humanKey ?? '' },
-      cell: (row) => (
-        <span className="kh-ops-type-chip">
-          {row.kind === 'task' && row.itemType === 'bug'
-            ? (row.humanKey ?? t('kindBug'))
-            : (row.humanKey ?? t(KIND_LABEL[row.kind]))}
-        </span>
-      ),
+      cell: (row) => {
+        const key = row.humanKey;
+        const label =
+          row.kind === 'task' && row.itemType === 'bug'
+            ? (key ?? t('kindBug'))
+            : (key ?? t(KIND_LABEL[row.kind]));
+        return <span className={key ? 'kh-ops-key-badge' : 'kh-ops-type-chip'}>{label}</span>;
+      },
     },
     {
       id: 'type',
@@ -350,7 +352,12 @@ export function ProjectDeliveryList({
         getValue: (row) => row.updatedAt ?? '',
         defaultDir: 'desc',
       },
-      cell: (row) => row.updatedAt ?? '—',
+      cell: (row) =>
+        row.updatedAt ? (
+          <LocalDateTime value={row.updatedAt} dateOnly locale={locale} />
+        ) : (
+          '—'
+        ),
     },
     {
       id: 'manage',

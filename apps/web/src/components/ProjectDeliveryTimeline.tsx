@@ -13,7 +13,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Badge, Button, Field, Input, useToast } from './ui';
 import { cn } from '../lib/cn';
 import { downloadAuthenticatedExport } from '../lib/download-export';
@@ -22,6 +22,7 @@ import {
   deliveryScheduleTone,
   type DeliveryScheduleTone,
 } from '../lib/delivery-schedule';
+import { formatLocaleDate } from '../lib/locale-date';
 import { useLocalToday } from '../lib/use-local-today';
 import {
   DAY_MS,
@@ -33,6 +34,7 @@ import {
   STORY_TAG_WIDTH_PX,
   TIMELINE_ZOOM_LEVELS,
   buildTimelineTicks,
+  pruneCollidingAxisLabels,
   canZoomTimeline,
   clamp,
   formatYmd,
@@ -114,18 +116,22 @@ function ItemMetaRow({
   showDueDates: boolean;
   className?: string;
 }) {
+  const locale = useLocale();
   const id = showIssueIds && issueId ? issueId : null;
-  const due = showDueDates && date ? date : null;
+  const due = showDueDates && date ? formatLocaleDate(date, locale) : null;
   if (!id && !due) return null;
   if (id && due) {
     return (
       <span className={cn('flex w-full min-w-0 items-center justify-between gap-1', className)}>
-        <span className="min-w-0 truncate">{id}</span>
+        <span className="kh-ops-key-badge min-w-0 truncate">{id}</span>
         <span className="shrink-0 tabular-nums">{due}</span>
       </span>
     );
   }
-  return <span className={cn('block truncate', className)}>{id ?? due}</span>;
+  if (id) {
+    return <span className={cn('kh-ops-key-badge max-w-full truncate', className)}>{id}</span>;
+  }
+  return <span className={cn('kh-ops-menu-type block truncate', className)}>{due}</span>;
 }
 
 type TimelineFilters = {
@@ -563,6 +569,7 @@ export function ProjectDeliveryTimeline({
 }) {
   const t = useTranslations('delivery');
   const tProjects = useTranslations('projects');
+  const locale = useLocale();
   const { pushToast } = useToast();
   const storageKey = `kh-timeline-tags:${projectId}`;
   const filterKey = `kh-timeline-filters:${projectId}`;
@@ -806,6 +813,10 @@ export function ProjectDeliveryTimeline({
   const rangeDays = Math.max(1, (rangeEnd - rangeStart) / DAY_MS);
   const estimatedWidth = Math.max(rangeDays * timelineZoomPx, 768);
   const layoutWidth = chartPx > 0 ? chartPx : estimatedWidth;
+  const axisLabels = useMemo(
+    () => pruneCollidingAxisLabels(labelTicks, rangeStart, rangeEnd, layoutWidth),
+    [labelTicks, layoutWidth, rangeEnd, rangeStart],
+  );
   const canZoomIn = canZoomTimeline(zoomIndex, 'in');
   const canZoomOut = canZoomTimeline(zoomIndex, 'out');
   const todayInRange = parseYmd(todayDate) >= rangeStart && parseYmd(todayDate) <= rangeEnd;
@@ -1492,19 +1503,19 @@ export function ProjectDeliveryTimeline({
           onPointerUp={onPanPointerUp}
           onPointerCancel={onPanPointerUp}
         >
-          <div className="relative mb-2 h-6">
-            {labelTicks.map((tick) => (
+          <div className="relative mb-2 h-7">
+            {axisLabels.map((tick) => (
               <div
                 key={tick}
-                className="absolute top-0 whitespace-nowrap text-[11px] text-ink-muted"
+                className="kh-ops-timeline-axis absolute top-0 whitespace-nowrap"
                 style={tickLabelStyle(tick)}
               >
-                {tick}
+                {formatLocaleDate(tick, locale)}
               </div>
             ))}
             {showGrid && todayInRange ? (
               <div
-                className="absolute bottom-0 whitespace-nowrap text-[10px] font-semibold leading-none text-danger"
+                className="kh-ops-menu-type absolute bottom-0 whitespace-nowrap font-semibold leading-none text-danger"
                 style={tickLabelStyle(todayDate)}
               >
                 {t('timelineToday')}
@@ -1682,7 +1693,12 @@ export function ProjectDeliveryTimeline({
             {unscheduledEpics.map((epic) => (
               <li key={epic.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm">
-                  <Badge tone="brand">{epic.humanKey ?? t('kindEpic')}</Badge> {epic.title}
+                  {epic.humanKey ? (
+                    <span className="kh-ops-key-badge">{epic.humanKey}</span>
+                  ) : (
+                    <Badge tone="brand">{t('kindEpic')}</Badge>
+                  )}{' '}
+                  {epic.title}
                 </span>
                 <Button type="button" variant="secondary" onClick={() => onManageEpic(epic.id)}>
                   {t('manage')}
@@ -1692,7 +1708,12 @@ export function ProjectDeliveryTimeline({
             {unscheduledStories.map((story) => (
               <li key={story.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm">
-                  <Badge tone="brand">{story.humanKey ?? t('kindStory')}</Badge> {story.title}
+                  {story.humanKey ? (
+                    <span className="kh-ops-key-badge">{story.humanKey}</span>
+                  ) : (
+                    <Badge tone="brand">{t('kindStory')}</Badge>
+                  )}{' '}
+                  {story.title}
                 </span>
                 <Button type="button" variant="secondary" onClick={() => onManageStory(story.id)}>
                   {t('manage')}
@@ -1702,7 +1723,11 @@ export function ProjectDeliveryTimeline({
             {unscheduledMilestones.map((milestone) => (
               <li key={milestone.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm">
-                  <Badge tone="brand">{milestone.humanKey ?? t('kindMilestone')}</Badge>{' '}
+                  {milestone.humanKey ? (
+                    <span className="kh-ops-key-badge">{milestone.humanKey}</span>
+                  ) : (
+                    <Badge tone="brand">{t('kindMilestone')}</Badge>
+                  )}{' '}
                   {milestone.title}
                 </span>
                 <Button
