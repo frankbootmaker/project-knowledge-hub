@@ -16,6 +16,7 @@ import {
 import {
   Badge,
   Button,
+  DELIVERY_ITEM_MODAL_SIZE,
   ErrorText,
   Field,
   Input,
@@ -343,7 +344,7 @@ export function ProjectBaselinePanel({
         <div className="grid gap-3">
           <section className="kh-ops-panel">
             <div className="kh-ops-panel-head">
-              <h2 className="kh-ops-panel-title">{t('fieldsTitle')}</h2>
+              <h2 className="kh-ops-menu-type m-0">{t('fieldsTitle')}</h2>
             </div>
             <div className="kh-ops-baseline-grid">
               <div className="kh-ops-field-cell">
@@ -392,26 +393,23 @@ export function ProjectBaselinePanel({
                 <small>{t('keyPrefix')}</small>
                 <strong>{project.keyPrefix || tCommon('none')}</strong>
               </div>
-              <div className="kh-ops-field-cell">
-                <small>{t('definitionOfDone')}</small>
-                <strong>
-                  {project.definitionOfDone?.trim()
-                    ? project.definitionOfDone.trim().split('\n')[0]
-                    : tCommon('none')}
-                </strong>
-              </div>
             </div>
-            {project.definitionOfDone?.trim() ? (
-              <p className="kh-ops-card-body kh-ops-menu-type m-0 whitespace-pre-wrap">
-                {project.definitionOfDone}
-              </p>
-            ) : null}
             <div className="border-t border-line">
               <div className="kh-ops-panel-head">
-                <h3 className="kh-ops-panel-title">{t('nonWorkingDays')}</h3>
+                <h3 className="kh-ops-menu-type m-0">{t('definitionOfDone')}</h3>
+              </div>
+              <p className="kh-ops-menu-type m-0 whitespace-pre-wrap px-3.5 py-3">
+                {project.definitionOfDone?.trim() || tCommon('none')}
+              </p>
+            </div>
+            <div className="border-t border-line">
+              <div className="kh-ops-panel-head">
+                <h3 className="kh-ops-menu-type m-0">{t('nonWorkingDays')}</h3>
               </div>
               {holidayList.length === 0 ? (
-                <p className="kh-ops-empty">{tCommon('none')}</p>
+                <p className="kh-ops-menu-type m-0 px-3.5 py-3 text-ink-muted">
+                  {tCommon('none')}
+                </p>
               ) : (
                 <ul className="m-0 grid list-none gap-0 p-0">
                   {holidayList.map((day) => (
@@ -528,7 +526,7 @@ export function ProjectBaselinePanel({
         onClose={() => setEditOpen(false)}
         title={t('editTitle')}
         description={t('editDescription')}
-        size="md"
+        size={DELIVERY_ITEM_MODAL_SIZE}
         footer={
           <>
             <Button
@@ -567,7 +565,7 @@ export function ProjectBaselinePanel({
           </div>
           <Field label={t('finishDate')}>
             <p className="kh-ops-menu-type m-0">{dateLabel(project.finishDate)}</p>
-            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('finishHint')}</p>
+            <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">{t('finishHint')}</p>
           </Field>
           <div className="kh-ops-form-grid">
             <Field label={t('hoursPerWorkday')}>
@@ -608,9 +606,10 @@ export function ProjectBaselinePanel({
                 />
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant={holidayDraft ? 'primary' : 'secondary'}
                   disabled={pending || !holidayDraft}
                   onClick={addNonWorkingDay}
+                  className="kh-ops-menu-type shrink-0"
                 >
                   {t('addNonWorkingDay')}
                 </Button>
@@ -627,9 +626,10 @@ export function ProjectBaselinePanel({
                       <span className="kh-ops-menu-type">{dateLabel(day)}</span>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="secondary"
                         disabled={pending}
                         onClick={() => removeNonWorkingDay(day)}
+                        className="kh-btn-danger-outline kh-ops-menu-type shrink-0"
                       >
                         {t('removeNonWorkingDay')}
                       </Button>
@@ -637,7 +637,7 @@ export function ProjectBaselinePanel({
                   ))}
                 </ul>
               )}
-              <p className="m-0 text-xs text-ink-muted">{t('nonWorkingDaysHint')}</p>
+              <p className="kh-ops-menu-type m-0 text-ink-muted">{t('nonWorkingDaysHint')}</p>
             </div>
           </Field>
           <div className="kh-ops-form-grid">
