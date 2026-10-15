@@ -714,6 +714,163 @@ function sortLinks(links: PublicDeliveryDependency[]): PublicDeliveryDependency[
   });
 }
 
+function keyedItem(
+  entityType: DeliveryDependencyEntityType,
+  row: {
+    id: string;
+    projectId: string;
+    title: string;
+    start: string | null;
+    finish: string | null;
+    durationDays?: number | null;
+    itemType?: string | null;
+    issueKeyType: string | null;
+    issueNumber: number | null;
+    keyPrefix: string | null;
+  },
+): LoadedItem {
+  return {
+    entityType,
+    id: row.id,
+    projectId: row.projectId,
+    title: row.title,
+    humanKey: formatHumanKey(row.keyPrefix, row.issueKeyType, row.issueNumber),
+    itemType: entityType === 'task' ? (row.itemType === 'bug' ? 'bug' : 'task') : null,
+    start: row.start,
+    finish: row.finish,
+    durationDays: row.durationDays ?? null,
+  };
+}
+
+async function loadMany(
+  database: Database,
+  entityType: DeliveryDependencyEntityType,
+  ids: string[],
+): Promise<LoadedItem[]> {
+  if (ids.length === 0) return [];
+  if (entityType === 'epic') {
+    const rows = await database.db
+      .select({
+        id: projectEpics.id,
+        projectId: projectEpics.projectId,
+        title: projectEpics.title,
+        start: projectEpics.startDate,
+        finish: projectEpics.endDate,
+        issueKeyType: projectEpics.issueKeyType,
+        issueNumber: projectEpics.issueNumber,
+        keyPrefix: projects.keyPrefix,
+      })
+      .from(projectEpics)
+      .innerJoin(projects, eq(projectEpics.projectId, projects.id))
+      .where(inArray(projectEpics.id, ids));
+    return rows.map((row) => keyedItem('epic', row));
+  }
+  if (entityType === 'user_story') {
+    const rows = await database.db
+      .select({
+        id: projectUserStories.id,
+        projectId: projectUserStories.projectId,
+        title: projectUserStories.title,
+        start: projectUserStories.startDate,
+        finish: projectUserStories.endDate,
+        issueKeyType: projectUserStories.issueKeyType,
+        issueNumber: projectUserStories.issueNumber,
+        keyPrefix: projects.keyPrefix,
+      })
+      .from(projectUserStories)
+      .innerJoin(projects, eq(projectUserStories.projectId, projects.id))
+      .where(inArray(projectUserStories.id, ids));
+    return rows.map((row) => keyedItem('user_story', row));
+  }
+  if (entityType === 'milestone') {
+    const rows = await database.db
+      .select({
+        id: projectMilestones.id,
+        projectId: projectMilestones.projectId,
+        title: projectMilestones.title,
+        start: projectMilestones.startDate,
+        finish: projectMilestones.targetDate,
+        issueKeyType: projectMilestones.issueKeyType,
+        issueNumber: projectMilestones.issueNumber,
+        keyPrefix: projects.keyPrefix,
+      })
+      .from(projectMilestones)
+      .innerJoin(projects, eq(projectMilestones.projectId, projects.id))
+      .where(inArray(projectMilestones.id, ids));
+    return rows.map((row) => keyedItem('milestone', row));
+  }
+  if (entityType === 'sprint') {
+    const rows = await database.db
+      .select({
+        id: projectSprints.id,
+        projectId: projectSprints.projectId,
+        title: projectSprints.name,
+        start: projectSprints.startDate,
+        finish: projectSprints.endDate,
+        issueKeyType: projectSprints.issueKeyType,
+        issueNumber: projectSprints.issueNumber,
+        keyPrefix: projects.keyPrefix,
+      })
+      .from(projectSprints)
+      .innerJoin(projects, eq(projectSprints.projectId, projects.id))
+      .where(inArray(projectSprints.id, ids));
+    return rows.map((row) => keyedItem('sprint', row));
+  }
+  const rows = await database.db
+    .select({
+      id: projectTasks.id,
+      projectId: projectTasks.projectId,
+      title: projectTasks.title,
+      start: projectTasks.startDate,
+      finish: projectTasks.dueDate,
+      durationDays: projectTasks.durationDays,
+      itemType: projectTasks.itemType,
+      issueKeyType: projectTasks.issueKeyType,
+      issueNumber: projectTasks.issueNumber,
+      keyPrefix: projects.keyPrefix,
+    })
+    .from(projectTasks)
+    .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+    .where(inArray(projectTasks.id, ids));
+  return rows.map((row) => keyedItem('task', row));
+}
+
+/** Every predecessor link in the project, for the Gantt arrows and labels. */
+export async function listProjectDeliveryDependencies(input: {
+  database: Database;
+  projectId: string;
+}): Promise<{ dependencies: PublicDeliveryDependency[] }> {
+  const rows = await input.database.db
+    .select()
+    .from(projectDeliveryDependencies)
+    .where(eq(projectDeliveryDependencies.projectId, input.projectId));
+  const wanted = new Map<DeliveryDependencyEntityType, Set<string>>();
+  const add = (type: string, id: string) => {
+    if (!isEntityType(type)) return;
+    const set = wanted.get(type) ?? new Set<string>();
+    set.add(id);
+    wanted.set(type, set);
+  };
+  for (const row of rows) {
+    add(row.predecessorType, row.predecessorId);
+    add(row.successorType, row.successorId);
+  }
+  const items = new Map<string, LoadedItem>();
+  await Promise.all([...wanted.entries()].map(async ([type, ids]) => {
+    const loaded = await loadMany(input.database, type, [...ids]);
+    for (const item of loaded) {
+      items.set(deliveryItemKey(item.entityType, item.id), item);
+    }
+  }));
+  return {
+    dependencies: sortLinks(
+      rows
+        .map((row) => toPublicLink(row, items))
+        .filter((link): link is PublicDeliveryDependency => link != null),
+    ),
+  };
+}
+
 export async function listDeliveryDependencies(input: {
   database: Database;
   projectId: string;

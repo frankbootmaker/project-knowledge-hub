@@ -22,6 +22,7 @@ import {
   ProjectDeliveryTimeline,
   type TimelineExportHandle,
 } from './ProjectDeliveryTimeline';
+import { ProjectDeliveryGantt } from './ProjectDeliveryGantt';
 import { ProjectDeliveryTree } from './ProjectDeliveryTree';
 import { ProjectScrumView, type ScrumExportHandle } from './ProjectScrumView';
 import { ProjectAgileManageModal } from './ProjectAgileManageModal';
@@ -159,7 +160,7 @@ type Member = {
   email: string;
 };
 
-const VIEW_MODES = ['board', 'list', 'tree', 'calendar', 'timeline', 'scrum'] as const;
+const VIEW_MODES = ['board', 'list', 'tree', 'gantt', 'calendar', 'timeline', 'scrum'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
 type DeliveryKind = 'epic' | 'story' | 'milestone' | 'task';
@@ -194,6 +195,7 @@ export function ProjectDeliveryPanel({
   canMutate,
   projectStartDate = null,
   projectEndDate = null,
+  workingCalendar,
   definitionOfDone = null,
   initialEpics,
   initialStories,
@@ -212,6 +214,11 @@ export function ProjectDeliveryPanel({
   canMutate: boolean;
   projectStartDate?: string | null;
   projectEndDate?: string | null;
+  workingCalendar?: {
+    hoursPerWorkday?: number | string | null;
+    workdaysPerWeek?: number | null;
+    nonWorkingDays?: readonly string[] | null;
+  };
   definitionOfDone?: string | null;
   initialEpics: Epic[];
   initialStories: UserStory[];
@@ -1035,7 +1042,7 @@ export function ProjectDeliveryPanel({
   }
 
   const showDeliveryStats =
-    viewMode === 'board' || viewMode === 'list' || viewMode === 'tree';
+    viewMode === 'board' || viewMode === 'list' || viewMode === 'tree' || viewMode === 'gantt';
 
   return (
     <>
@@ -1216,6 +1223,23 @@ export function ProjectDeliveryPanel({
             setManageAgile({ kind: 'milestone', id: milestoneId })
           }
           sprintsLoaded={sprintsLoaded}
+        />
+      ) : null}
+
+      {viewMode === 'gantt' ? (
+        <ProjectDeliveryGantt
+          projectId={projectId}
+          epics={shownDelivery.epics}
+          stories={shownDelivery.stories}
+          milestones={shownDelivery.milestones}
+          tasks={tasks}
+          workingCalendar={workingCalendar}
+          onManageTask={(taskId) => setManageTaskId(taskId)}
+          onManageEpic={(epicId) => setManageAgile({ kind: 'epic', id: epicId })}
+          onManageStory={(storyId) => setManageAgile({ kind: 'story', id: storyId })}
+          onManageMilestone={(milestoneId) =>
+            setManageAgile({ kind: 'milestone', id: milestoneId })
+          }
         />
       ) : null}
 

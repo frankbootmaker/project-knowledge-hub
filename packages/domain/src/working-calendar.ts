@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AppError } from './index.js';
 
 /**
- * Project working calendar shared by scheduling and the upcoming Gantt (PRO-T-62).
+ * Project working calendar shared by scheduling and the Gantt (PRO-T-62).
  *
  * Date offsets count working days only. `workdaysPerWeek` is Monday-first:
  * 5 is Monday–Friday, 6 is Monday–Saturday, 7 is every day, 1 is Monday only.
