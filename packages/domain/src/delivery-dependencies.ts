@@ -1,4 +1,14 @@
 import { AppError } from './index.js';
+import {
+  addCalendarDays,
+  addWorkingDays,
+  DEFAULT_PROJECT_CALENDAR,
+  diffCalendarDays,
+  diffWorkingDays,
+  type ProjectWorkingCalendar,
+} from './working-calendar.js';
+
+export { addCalendarDays, diffCalendarDays };
 
 /** Delivery items that can take a predecessor link. Bugs use entity type task. */
 export const DELIVERY_DEPENDENCY_ENTITY_TYPES = [
@@ -12,7 +22,10 @@ export const DELIVERY_DEPENDENCY_ENTITY_TYPES = [
 export type DeliveryDependencyEntityType =
   (typeof DELIVERY_DEPENDENCY_ENTITY_TYPES)[number];
 
-/** Finish/start relationships. Lag is calendar days and may be negative (lead). */
+/**
+ * Finish/start relationships. Lag is working days on the project calendar
+ * and may be negative (lead). Non-working days are skipped.
+ */
 export const DELIVERY_DEPENDENCY_LINK_TYPES = ['FS', 'SS', 'FF', 'SF'] as const;
 
 export type DeliveryDependencyLinkType =
@@ -31,8 +44,6 @@ export const DELIVERY_DEPENDENCY_LINK_LABELS: Record<
 export const DELIVERY_DEPENDENCY_LAG_MIN = -3650;
 export const DELIVERY_DEPENDENCY_LAG_MAX = 3650;
 export const DELIVERY_DURATION_MAX_DAYS = 3650;
-
-const YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export function deliveryItemKey(
   entityType: DeliveryDependencyEntityType,
@@ -62,50 +73,6 @@ export function dependencyEntityTypeFromIssueKey(
   }
 }
 
-export function addCalendarDays(ymd: string, days: number): string {
-  const match = YMD.exec(ymd);
-  if (!match) {
-    throw new AppError({
-      code: 'INVALID_DATE',
-      message: `Expected YYYY-MM-DD, received ${ymd}`,
-      statusCode: 400,
-    });
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const utc = new Date(Date.UTC(year, month - 1, day));
-  if (
-    utc.getUTCFullYear() !== year
-    || utc.getUTCMonth() !== month - 1
-    || utc.getUTCDate() !== day
-  ) {
-    throw new AppError({
-      code: 'INVALID_DATE',
-      message: `Invalid date ${ymd}`,
-      statusCode: 400,
-    });
-  }
-  utc.setUTCDate(utc.getUTCDate() + days);
-  const y = String(utc.getUTCFullYear()).padStart(4, '0');
-  const m = String(utc.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(utc.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-export function diffCalendarDays(start: string, end: string): number {
-  const startUtc = Date.parse(`${start}T00:00:00Z`);
-  const endUtc = Date.parse(`${end}T00:00:00Z`);
-  if (Number.isNaN(startUtc) || Number.isNaN(endUtc)) {
-    throw new AppError({
-      code: 'INVALID_DATE',
-      message: `Expected YYYY-MM-DD dates, received ${start} and ${end}`,
-      statusCode: 400,
-    });
-  }
-  return Math.round((endUtc - startUtc) / 86_400_000);
-}
-
 export type TaskDateFields = {
   startDate: string | null;
   dueDate: string | null;
@@ -121,9 +88,10 @@ function invalidRange(start: string, due: string): AppError {
 }
 
 /**
- * Tasks and bugs: duration is calendar days added to the start date.
+ * Tasks and bugs: duration is working days on the project calendar.
  * Due = start + duration when duration is known. An explicit duration wins
  * over a sent due date. Clearing the start date clears duration.
+ * Weekends and listed non-working days are skipped.
  */
 export function resolveTaskScheduleDates(input: {
   stored: {
@@ -136,7 +104,9 @@ export function resolveTaskScheduleDates(input: {
     dueDate?: string | null;
     durationDays?: number | null;
   };
+  calendar?: ProjectWorkingCalendar;
 }): TaskDateFields {
+  const calendar = input.calendar ?? DEFAULT_PROJECT_CALENDAR;
   const start =
     input.patch.startDate !== undefined
       ? input.patch.startDate
@@ -162,13 +132,13 @@ export function resolveTaskScheduleDates(input: {
     if (start) {
       return {
         startDate: start,
-        dueDate: addCalendarDays(start, days),
+        dueDate: addWorkingDays(start, days, calendar),
         durationDays: days,
       };
     }
     if (due) {
       return {
-        startDate: addCalendarDays(due, -days),
+        startDate: addWorkingDays(due, -days, calendar),
         dueDate: due,
         durationDays: days,
       };
@@ -188,20 +158,20 @@ export function resolveTaskScheduleDates(input: {
   if (input.patch.dueDate === undefined && start && duration != null) {
     return {
       startDate: start,
-      dueDate: addCalendarDays(start, duration),
+      dueDate: addWorkingDays(start, duration, calendar),
       durationDays: duration,
     };
   }
 
   if (start && due) {
-    const span = diffCalendarDays(start, due);
+    const span = diffWorkingDays(start, due, calendar);
     if (span < 0) throw invalidRange(start, due);
     return { startDate: start, dueDate: due, durationDays: span };
   }
 
   if (!start && due && duration != null && input.patch.startDate === undefined) {
     return {
-      startDate: addCalendarDays(due, -duration),
+      startDate: addWorkingDays(due, -duration, calendar),
       dueDate: due,
       durationDays: duration,
     };
@@ -233,16 +203,19 @@ export type ScheduleLink = {
 
 /**
  * Duration used to turn a finish constraint into a start.
- * Tasks use stored duration, else the existing span. A finish with no start
- * is a point (milestones). Missing dates cannot satisfy FF or SF.
+ * Tasks use stored duration, else the existing working-day span. A finish
+ * with no start is a point (milestones). Missing dates cannot satisfy FF or SF.
  */
-export function successorDurationDays(node: ScheduleNode): number | null {
+export function successorDurationDays(
+  node: ScheduleNode,
+  calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
+): number | null {
   if (node.entityType === 'task') {
     if (node.durationDays != null) return node.durationDays;
-    if (node.start && node.finish) return diffCalendarDays(node.start, node.finish);
+    if (node.start && node.finish) return diffWorkingDays(node.start, node.finish, calendar);
     return null;
   }
-  if (node.start && node.finish) return diffCalendarDays(node.start, node.finish);
+  if (node.start && node.finish) return diffWorkingDays(node.start, node.finish, calendar);
   if (!node.start && node.finish) return 0;
   return null;
 }
@@ -251,23 +224,24 @@ export function earliestSuccessorStart(
   link: { linkType: DeliveryDependencyLinkType; lagDays: number },
   predecessor: { start: string | null; finish: string | null },
   successorDuration: number | null,
+  calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
 ): string | null {
   const lag = link.lagDays;
   switch (link.linkType) {
     case 'FS':
       return predecessor.finish
-        ? addCalendarDays(predecessor.finish, lag)
+        ? addWorkingDays(predecessor.finish, lag, calendar)
         : null;
     case 'SS':
       return predecessor.start
-        ? addCalendarDays(predecessor.start, lag)
+        ? addWorkingDays(predecessor.start, lag, calendar)
         : null;
     case 'FF':
       if (!predecessor.finish || successorDuration == null) return null;
-      return addCalendarDays(predecessor.finish, lag - successorDuration);
+      return addWorkingDays(predecessor.finish, lag - successorDuration, calendar);
     case 'SF':
       if (!predecessor.start || successorDuration == null) return null;
-      return addCalendarDays(predecessor.start, lag - successorDuration);
+      return addWorkingDays(predecessor.start, lag - successorDuration, calendar);
     default: {
       const _exhaustive: never = link.linkType;
       return _exhaustive;
@@ -285,12 +259,13 @@ type DatedLink = {
 export function applyPredecessorSchedule(
   node: ScheduleNode,
   links: DatedLink[],
+  calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
 ): ScheduleNode | null {
   if (node.rollupLocked) return null;
   if (links.length === 0) return null;
-  const duration = successorDurationDays(node);
+  const duration = successorDurationDays(node, calendar);
   const starts = links
-    .map((link) => earliestSuccessorStart(link, link.predecessor, duration))
+    .map((link) => earliestSuccessorStart(link, link.predecessor, duration, calendar))
     .filter((value): value is string => value != null);
   if (starts.length === 0) return null;
   const start = starts.reduce((max, value) => (value > max ? value : max));
@@ -299,17 +274,21 @@ export function applyPredecessorSchedule(
   let durationDays = node.durationDays;
   if (node.entityType === 'task') {
     if (node.durationDays != null) {
-      finish = addCalendarDays(start, node.durationDays);
+      finish = addWorkingDays(start, node.durationDays, calendar);
     } else if (node.start && node.finish) {
-      const span = diffCalendarDays(node.start, node.finish);
-      finish = addCalendarDays(start, span);
+      const span = diffWorkingDays(node.start, node.finish, calendar);
+      finish = addWorkingDays(start, span, calendar);
       durationDays = span;
     } else if (node.finish && node.finish < start) {
       finish = start;
       durationDays = 0;
     }
   } else if (node.start && node.finish) {
-    finish = addCalendarDays(start, diffCalendarDays(node.start, node.finish));
+    finish = addWorkingDays(
+      start,
+      diffWorkingDays(node.start, node.finish, calendar),
+      calendar,
+    );
   } else if (node.finish && !node.start) {
     finish = start;
   } else if (node.finish && node.finish < start) {
@@ -329,11 +308,12 @@ export function applyPredecessorSchedule(
 export function predecessorConstraintApplies(
   node: ScheduleNode,
   links: DatedLink[],
+  calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
 ): boolean {
   if (links.length === 0) return false;
-  const duration = successorDurationDays(node);
+  const duration = successorDurationDays(node, calendar);
   return links.some(
-    (link) => earliestSuccessorStart(link, link.predecessor, duration) != null,
+    (link) => earliestSuccessorStart(link, link.predecessor, duration, calendar) != null,
   );
 }
 
@@ -345,7 +325,9 @@ export function scheduleDeliveryGraph(input: {
   nodes: ScheduleNode[];
   links: ScheduleLink[];
   seeds: string[];
+  calendar?: ProjectWorkingCalendar;
 }): ScheduleNode[] {
+  const calendar = input.calendar ?? DEFAULT_PROJECT_CALENDAR;
   const byKey = new Map(input.nodes.map((node) => [node.key, { ...node }]));
   const original = new Map(input.nodes.map((node) => [node.key, node]));
   const outgoing = new Map<string, string[]>();
@@ -414,7 +396,7 @@ export function scheduleDeliveryGraph(input: {
         predecessor,
       });
     }
-    const next = applyPredecessorSchedule(node, preds);
+    const next = applyPredecessorSchedule(node, preds, calendar);
     if (!next) continue;
     byKey.set(key, next);
     const before = original.get(key);

@@ -1245,6 +1245,32 @@ export {
 } from './delivery-dependencies.js';
 
 export {
+  DEFAULT_PROJECT_CALENDAR,
+  EVERY_DAY_CALENDAR,
+  HOURS_PER_WORKDAY_MAX,
+  HOURS_PER_WORKDAY_MIN,
+  NON_WORKING_DAY_LIMIT,
+  WORKDAYS_PER_WEEK_MAX,
+  WORKDAYS_PER_WEEK_MIN,
+  addWorkingDays,
+  assertUsableCalendar,
+  coerceProjectCalendar,
+  diffWorkingDays,
+  hoursPerWorkdaySchema,
+  isWorkingDay,
+  isoWeekday,
+  nonWorkingDaySchema,
+  nonWorkingDaysSchema,
+  normalizeNonWorkingDays,
+  planDurationWorkingDays,
+  planWindowFromDatedItems,
+  scheduledEffortHours,
+  workdaysPerWeekSchema,
+  type PlanDateSpan,
+  type ProjectWorkingCalendar,
+} from './working-calendar.js';
+
+export {
   AI_COST_NOTES_MAX,
   AI_MODEL_ID_MAX,
   AI_PRICING_TIER_MAX,

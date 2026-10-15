@@ -72,6 +72,11 @@ type Project = {
   tags: Array<{ name: string }>;
   startDate: string | null;
   endDate: string | null;
+  hoursPerWorkday?: number | null;
+  workdaysPerWeek?: number | null;
+  nonWorkingDays?: string[];
+  finishDate?: string | null;
+  durationWorkingDays?: number | null;
   currency: string;
   initialBudget: string | null;
   approvedBudget: string | null;

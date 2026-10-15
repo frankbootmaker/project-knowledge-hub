@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   projectDeliveryDependencies,
@@ -10,6 +10,7 @@ import {
   projects,
 } from '@project-knowledge-hub/database';
 import {
+  addWorkingDays,
   AppError,
   DELIVERY_DEPENDENCY_ENTITY_TYPES,
   DELIVERY_DEPENDENCY_LINK_LABELS,
@@ -30,6 +31,7 @@ import {
   recomputeDeliveryParentStatuses,
   rollupLockedParentKeys,
 } from './parent-status.js';
+import { loadProjectCalendar } from './project-calendar.js';
 
 export type DeliveryDependencyEndpoint = {
   entityType: DeliveryDependencyEntityType;
@@ -566,10 +568,12 @@ export async function rescheduleDeliveryFrom(
       lagDays: row.lagDays,
     });
   }
+  const calendar = await loadProjectCalendar(database, projectId);
   const changed = scheduleDeliveryGraph({
     nodes,
     links,
     seeds: seedItems.map((item) => deliveryItemKey(item.entityType, item.id)),
+    calendar,
   });
   const writes = await writeSchedule(database, changed);
   if (depth >= 4) return writes;
@@ -588,6 +592,70 @@ export async function rescheduleDeliveryFrom(
     depth + 1,
   );
   return [...writes, ...more];
+}
+
+/**
+ * Rewrite duration-based task dues onto the project calendar, roll parent
+ * dates back up, then walk dependency links so FS/SS/FF/SF skip non-working days.
+ */
+export async function rescheduleProjectCalendar(
+  database: Database,
+  projectId: string,
+): Promise<void> {
+  const calendar = await loadProjectCalendar(database, projectId);
+  const tasks = await database.db
+    .select({
+      id: projectTasks.id,
+      startDate: projectTasks.startDate,
+      dueDate: projectTasks.dueDate,
+      durationDays: projectTasks.durationDays,
+      status: projectTasks.status,
+    })
+    .from(projectTasks)
+    .where(
+      and(
+        eq(projectTasks.projectId, projectId),
+        isNull(projectTasks.archivedAt),
+        ne(projectTasks.status, 'cancelled'),
+      ),
+    );
+  const moved: Array<{ entityType: 'task'; id: string }> = [];
+  for (const task of tasks) {
+    if (task.startDate == null || task.durationDays == null) continue;
+    const dueDate = addWorkingDays(task.startDate, task.durationDays, calendar);
+    if (dueDate === task.dueDate) continue;
+    await database.db
+      .update(projectTasks)
+      .set({ dueDate, updatedAt: new Date() })
+      .where(eq(projectTasks.id, task.id));
+    moved.push({ entityType: 'task', id: task.id });
+  }
+
+  await recomputeDeliveryParentStatuses(database, projectId, { projectScope: true });
+
+  const linkRows = await database.db
+    .select({
+      predecessorType: projectDeliveryDependencies.predecessorType,
+      predecessorId: projectDeliveryDependencies.predecessorId,
+    })
+    .from(projectDeliveryDependencies)
+    .where(eq(projectDeliveryDependencies.projectId, projectId));
+  if (linkRows.length === 0) return;
+
+  const seeds: Array<{ entityType: DeliveryDependencyEntityType; id: string }> = [
+    ...moved,
+  ];
+  const seen = new Set(moved.map((row) => row.id));
+  for (const row of linkRows) {
+    if (!isEntityType(row.predecessorType) || seen.has(row.predecessorId)) continue;
+    seen.add(row.predecessorId);
+    seeds.push({
+      entityType: row.predecessorType,
+      id: row.predecessorId,
+    });
+  }
+  if (seeds.length === 0) return;
+  await rescheduleDeliveryFrom(database, projectId, seeds);
 }
 
 export function overlaySchedule<T extends { id: string; startDate: string | null }>(

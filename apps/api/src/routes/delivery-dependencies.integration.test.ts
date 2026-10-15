@@ -171,7 +171,7 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
       durationDays: 5,
     });
     expect(task.startDate).toBe('2026-10-01');
-    expect(task.dueDate).toBe('2026-10-06');
+    expect(task.dueDate).toBe('2026-10-08');
     expect(task.durationDays).toBe(5);
     expect(task.humanKey).toMatch(/-T-1$/);
 
@@ -204,8 +204,8 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     const bugWrite = link.schedule.find((row) => row.id === bug.id);
     expect(bugWrite).toMatchObject({
       entityType: 'task',
-      startDate: '2026-10-06',
-      finishDate: '2026-10-08',
+      startDate: '2026-10-08',
+      finishDate: '2026-10-12',
       durationDays: 2,
     });
 
@@ -246,8 +246,8 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     });
     expect(stretched.statusCode).toBe(200);
     const stretchedBug = (stretched.json() as { task: TaskBody }).task;
-    expect(stretchedBug.startDate).toBe('2026-10-06');
-    expect(stretchedBug.dueDate).toBe('2026-10-10');
+    expect(stretchedBug.startDate).toBe('2026-10-08');
+    expect(stretchedBug.dueDate).toBe('2026-10-14');
     expect(stretchedBug.durationDays).toBe(4);
 
     const selfLink = await app!.inject({
@@ -381,8 +381,8 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     expect(body.dependencies).toHaveLength(2);
     const write = body.schedule.find((row) => row.id === successor.id);
     expect(write).toMatchObject({
-      startDate: '2026-10-10',
-      finishDate: '2026-10-12',
+      startDate: '2026-10-12',
+      finishDate: '2026-10-14',
     });
 
     const lateLink = body.dependencies.find(
@@ -400,8 +400,8 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
       schedule: Array<{ id: string; startDate: string | null; finishDate: string | null }>;
     }).schedule.find((row) => row.id === successor.id);
     expect(laggedWrite).toMatchObject({
-      startDate: '2026-10-11',
-      finishDate: '2026-10-13',
+      startDate: '2026-10-13',
+      finishDate: '2026-10-15',
     });
 
     const listed = await app!.inject({
@@ -411,5 +411,77 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     });
     expect(listed.statusCode).toBe(200);
     expect((listed.json() as { predecessors: unknown[] }).predecessors).toHaveLength(2);
+  });
+
+  it('skips holidays for duration, dependencies, and the plan finish', async () => {
+    const projectId = await createProject('DPH');
+    const saved = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        hoursPerWorkday: 7.5,
+        workdaysPerWeek: 5,
+        nonWorkingDays: ['2026-10-09'],
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    const project = (saved.json() as {
+      project: {
+        hoursPerWorkday: number;
+        workdaysPerWeek: number;
+        nonWorkingDays: string[];
+        finishDate: string | null;
+        durationWorkingDays: number | null;
+      };
+    }).project;
+    expect(project.hoursPerWorkday).toBe(7.5);
+    expect(project.workdaysPerWeek).toBe(5);
+    expect(project.nonWorkingDays).toEqual(['2026-10-09']);
+    expect(project.finishDate).toBeNull();
+    expect(project.durationWorkingDays).toBeNull();
+
+    const early = await createTask(projectId, {
+      title: 'Before the holiday',
+      startDate: '2026-10-08',
+      durationDays: 1,
+    });
+    expect(early.dueDate).toBe('2026-10-12');
+
+    const successor = await createTask(projectId, {
+      title: 'After the holiday',
+      durationDays: 2,
+    });
+    const linked = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/delivery-dependencies`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        predecessorId: early.humanKey,
+        successorId: successor.humanKey,
+        linkType: 'FS',
+        lagDays: 1,
+      },
+    });
+    expect(linked.statusCode).toBe(200);
+    const write = (linked.json() as {
+      schedule: Array<{ id: string; startDate: string | null; finishDate: string | null }>;
+    }).schedule.find((row) => row.id === successor.id);
+    expect(write).toMatchObject({
+      startDate: '2026-10-13',
+      finishDate: '2026-10-15',
+    });
+
+    const read = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie },
+    });
+    expect(read.statusCode).toBe(200);
+    const planned = (read.json() as {
+      project: { finishDate: string | null; durationWorkingDays: number | null };
+    }).project;
+    expect(planned.finishDate).toBe('2026-10-15');
+    expect(planned.durationWorkingDays).toBe(4);
   });
 });
