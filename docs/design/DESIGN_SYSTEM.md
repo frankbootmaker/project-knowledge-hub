@@ -248,6 +248,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-15
 
+* **Delivery tree search** — Tree view adds the same toolbar search field as delivery List (`.kh-ops-toolbar` + `Input`, `searchPlaceholder`, 13px menu type). Search filters title and human keys, keeps ancestor rows visible (dimmed), auto-expands branches while active, and restores the prior expand map when cleared.
 * **Project header RAG badge** — Overall status badge in the project `PageHeader` uses `Badge` `matchControlHeight` (`.kh-badge-control` sets only `min-height: var(--kh-button-height)`; compact `px-1.5` and tone washes unchanged) so it lines up with Refresh and Manage without altering `.kh-btn` sizing.
 * **Project information** — The baseline field grid has no inner section heading (the collapsible section title carries the label). Labels, values, hints, and holiday actions use the left-rail menu type (IBM Plex Sans, 13px, regular). Duration and finish are read-only. Definition of Done is shown once, under the grid. Public holidays use an Add date `Button` (primary once a date is chosen) and a small danger-outline Remove `Button`. The edit dialog uses `DELIVERY_ITEM_MODAL_SIZE` (`xl`), the same sheet as the task dialog.
 * **Parent dates** — Story, epic, and milestone start and end shown in the tree, list, and item dialog follow included children: earliest start and latest end. A parent with no dated children keeps the dates stored on it. Milestone due dates in the tree use that end. Target percent uses the same window.
