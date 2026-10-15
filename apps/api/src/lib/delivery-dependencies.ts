@@ -26,6 +26,10 @@ import {
   type ScheduleLink,
   type ScheduleNode,
 } from '@project-knowledge-hub/domain';
+import {
+  recomputeDeliveryParentStatuses,
+  rollupLockedParentKeys,
+} from './parent-status.js';
 
 export type DeliveryDependencyEndpoint = {
   entityType: DeliveryDependencyEntityType;
@@ -432,13 +436,15 @@ async function loadProjectItems(
   return loaded.filter((row): row is LoadedItem => row != null);
 }
 
-function toNode(item: LoadedItem): ScheduleNode {
+function toNode(item: LoadedItem, locked: Set<string> = new Set()): ScheduleNode {
+  const key = deliveryItemKey(item.entityType, item.id);
   return {
-    key: deliveryItemKey(item.entityType, item.id),
+    key,
     entityType: item.entityType,
     start: item.start,
     finish: item.finish,
     durationDays: item.entityType === 'task' ? item.durationDays : null,
+    rollupLocked: locked.has(key),
   };
 }
 
@@ -513,6 +519,7 @@ export async function rescheduleDeliveryFrom(
   seed:
     | { entityType: DeliveryDependencyEntityType; id: string }
     | Array<{ entityType: DeliveryDependencyEntityType; id: string }>,
+  depth = 0,
 ): Promise<ScheduleWrite[]> {
   const seeds = Array.isArray(seed) ? seed : [seed];
   const linkRows = await database.db
@@ -521,8 +528,24 @@ export async function rescheduleDeliveryFrom(
     .where(eq(projectDeliveryDependencies.projectId, projectId));
   if (!Array.isArray(linkRows) || linkRows.length === 0) return [];
 
+  let seedItems = seeds;
+  if (depth === 0) {
+    const applied = await recomputeDeliveryParentStatuses(database, projectId, {
+      projectScope: true,
+    });
+    const seen = new Set(seeds.map((item) => `${item.entityType}:${item.id}`));
+    seedItems = [...seeds];
+    for (const change of applied.dateChanges) {
+      const key = `${change.entityType}:${change.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      seedItems.push(change);
+    }
+  }
+
   const items = await loadProjectItems(database, projectId);
-  const nodes = items.map(toNode);
+  const locked = await rollupLockedParentKeys(database, projectId);
+  const nodes = items.map((item) => toNode(item, locked));
   const links: ScheduleLink[] = [];
   for (const row of linkRows) {
     if (!isEntityType(row.predecessorType) || !isEntityType(row.successorType)) {
@@ -546,9 +569,25 @@ export async function rescheduleDeliveryFrom(
   const changed = scheduleDeliveryGraph({
     nodes,
     links,
-    seeds: seeds.map((item) => deliveryItemKey(item.entityType, item.id)),
+    seeds: seedItems.map((item) => deliveryItemKey(item.entityType, item.id)),
   });
-  return writeSchedule(database, changed);
+  const writes = await writeSchedule(database, changed);
+  if (depth >= 4) return writes;
+  const movedTaskIds = writes
+    .filter((row) => row.entityType === 'task')
+    .map((row) => row.id);
+  if (movedTaskIds.length === 0) return writes;
+  const applied = await recomputeDeliveryParentStatuses(database, projectId, {
+    taskIds: movedTaskIds,
+  });
+  if (applied.dateChanges.length === 0) return writes;
+  const more = await rescheduleDeliveryFrom(
+    database,
+    projectId,
+    applied.dateChanges,
+    depth + 1,
+  );
+  return [...writes, ...more];
 }
 
 export function overlaySchedule<T extends { id: string; startDate: string | null }>(

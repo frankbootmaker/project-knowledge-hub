@@ -720,12 +720,18 @@ export async function updateMilestone(
     milestoneIds: [row.id],
   });
   const status = applied.milestones.get(row.id) ?? row.status;
-  const stored = status === row.status ? row : { ...row, status };
+  const span = applied.dates.milestones.get(row.id);
+  const stored = {
+    ...row,
+    status,
+    startDate: span?.start ?? row.startDate,
+    targetDate: span?.end ?? row.targetDate,
+  };
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
-  const writes = await rescheduleDeliveryFrom(database, row.projectId, {
-    entityType: 'milestone',
-    id: row.id,
-  });
+  const writes = await rescheduleDeliveryFrom(database, row.projectId, [
+    { entityType: 'milestone', id: row.id },
+    ...applied.dateChanges,
+  ]);
   const milestone = overlaySchedule(
     toPublicMilestone(stored, keyPrefix),
     'milestone',
@@ -1686,12 +1692,21 @@ export async function createTask(
     },
   });
 
+  let dateChanges: Array<{
+    entityType: 'task' | 'user_story' | 'epic' | 'milestone' | 'sprint';
+    id: string;
+  }> = [];
   if (createdTask.userStoryId) {
-    await recomputeDeliveryParentStatuses(database, createdTask.projectId, {
+    const applied = await recomputeDeliveryParentStatuses(database, createdTask.projectId, {
       storyIds: [createdTask.userStoryId],
       taskIds: [createdTask.id],
     });
+    dateChanges = applied.dateChanges;
   }
+  await rescheduleDeliveryFrom(database, createdTask.projectId, [
+    { entityType: 'task', id: createdTask.id },
+    ...dateChanges,
+  ]);
 
   return getTask(database, createdTask.id);
 }
@@ -1709,11 +1724,20 @@ export async function deleteTask(
   await deleteDeliveryDependenciesFor(database, 'task', [taskId]);
   await deleteMilestoneItemLinks(database, 'task', [taskId]);
   await database.db.delete(projectTasks).where(eq(projectTasks.id, taskId));
-  await recomputeDeliveryParentStatuses(database, existing.projectId, {
+  const applied = await recomputeDeliveryParentStatuses(database, existing.projectId, {
     storyIds: [existing.userStoryId],
     epicIds: [existing.epicId],
     milestoneIds,
   });
+  const seeds = [...applied.dateChanges];
+  if (existing.userStoryId) {
+    seeds.push({ entityType: 'user_story', id: existing.userStoryId });
+  }
+  if (existing.epicId) seeds.push({ entityType: 'epic', id: existing.epicId });
+  for (const id of milestoneIds) seeds.push({ entityType: 'milestone', id });
+  if (seeds.length > 0) {
+    await rescheduleDeliveryFrom(database, existing.projectId, seeds);
+  }
   return { id: existing.id, projectId: existing.projectId };
 }
 
@@ -1988,22 +2012,30 @@ export async function updateTask(
     });
   }
 
-  await rescheduleDeliveryFrom(database, existing.projectId, {
-    entityType: 'task',
-    id: taskId,
-  });
   const parentTouched =
     input.status !== undefined ||
     input.completionPercent !== undefined ||
     input.userStoryId !== undefined ||
-    input.archived !== undefined;
+    input.archived !== undefined ||
+    input.startDate !== undefined ||
+    input.dueDate !== undefined ||
+    input.durationDays !== undefined;
+  let dateChanges: Array<{
+    entityType: 'task' | 'user_story' | 'epic' | 'milestone' | 'sprint';
+    id: string;
+  }> = [];
   if (parentTouched) {
     const nextStoryId =
       input.userStoryId !== undefined ? input.userStoryId : existing.userStoryId;
-    await recomputeDeliveryParentStatuses(database, existing.projectId, {
+    const applied = await recomputeDeliveryParentStatuses(database, existing.projectId, {
       storyIds: [existing.userStoryId, nextStoryId],
       taskIds: [taskId],
     });
+    dateChanges = applied.dateChanges;
   }
+  await rescheduleDeliveryFrom(database, existing.projectId, [
+    { entityType: 'task', id: taskId },
+    ...dateChanges,
+  ]);
   return getTask(database, taskId);
 }

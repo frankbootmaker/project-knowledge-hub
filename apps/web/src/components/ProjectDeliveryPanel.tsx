@@ -31,6 +31,7 @@ import {
   deliveryCompletionIndex,
   displayedMilestoneStatus,
   displayedParentCompletion,
+  derivedParentDates,
   formatPercentLabel,
   parentStatusFromChildren,
   plannedTargetPercent,
@@ -132,6 +133,7 @@ type Task = {
   description: string | null;
   status: string;
   dueDate: string | null;
+  startDate?: string | null;
   forecastHours: string | null;
   actualHours: string | null;
   storyPoints?: number | null;
@@ -419,7 +421,9 @@ export function ProjectDeliveryPanel({
   const shownDelivery = useMemo(() => {
     const tasksByStory = new Map<string, Task[]>();
     const tasksByEpic = new Map<string, Task[]>();
+    const taskById = new Map<string, Task>();
     for (const task of tasks) {
+      taskById.set(task.id, task);
       if (task.userStoryId) {
         const list = tasksByStory.get(task.userStoryId) ?? [];
         list.push(task);
@@ -431,19 +435,77 @@ export function ProjectDeliveryPanel({
         tasksByEpic.set(task.epicId, list);
       }
     }
-    return {
-      epics: epics.map((epic) => ({
+    const derivedStories = stories.map((story) => {
+      const children = tasksByStory.get(story.id) ?? [];
+      const dates = derivedParentDates(
+        { start: story.startDate, end: story.endDate },
+        children.map((task) => ({
+          status: task.status,
+          start: task.startDate ?? null,
+          end: task.dueDate,
+        })),
+      );
+      return {
+        ...story,
+        status: parentStatusFromChildren(story.status, children),
+        startDate: dates.start,
+        endDate: dates.end,
+      };
+    });
+    const storyById = new Map(derivedStories.map((story) => [story.id, story]));
+    const derivedEpics = epics.map((epic) => {
+      const dates = derivedParentDates(
+        { start: epic.startDate, end: epic.endDate },
+        derivedStories
+          .filter((story) => story.epicId === epic.id)
+          .map((story) => ({
+            status: story.status,
+            start: story.startDate,
+            end: story.endDate,
+          })),
+      );
+      return {
         ...epic,
         status: parentStatusFromChildren(epic.status, tasksByEpic.get(epic.id) ?? []),
-      })),
-      stories: stories.map((story) => ({
-        ...story,
-        status: parentStatusFromChildren(story.status, tasksByStory.get(story.id) ?? []),
-      })),
-      milestones: milestones.map((milestone) => ({
-        ...milestone,
-        status: displayedMilestoneStatus(milestone.status, milestone.linkedItems ?? []),
-      })),
+        startDate: dates.start,
+        endDate: dates.end,
+      };
+    });
+    const epicById = new Map(derivedEpics.map((epic) => [epic.id, epic]));
+    return {
+      epics: derivedEpics,
+      stories: derivedStories,
+      milestones: milestones.map((milestone) => {
+        const linkDates = (milestone.linkedItems ?? []).flatMap((link) => {
+          if (link.entityType === 'task') {
+            const task = taskById.get(link.entityId);
+            if (!task) return [];
+            return [{
+              status: task.status,
+              start: task.startDate ?? null,
+              end: task.dueDate,
+            }];
+          }
+          if (link.entityType === 'user_story') {
+            const story = storyById.get(link.entityId);
+            if (!story) return [];
+            return [{ status: story.status, start: story.startDate, end: story.endDate }];
+          }
+          const epic = epicById.get(link.entityId);
+          if (!epic) return [];
+          return [{ status: epic.status, start: epic.startDate, end: epic.endDate }];
+        });
+        const dates = derivedParentDates(
+          { start: milestone.startDate, end: milestone.targetDate },
+          linkDates,
+        );
+        return {
+          ...milestone,
+          status: displayedMilestoneStatus(milestone.status, milestone.linkedItems ?? []),
+          startDate: dates.start,
+          targetDate: dates.end,
+        };
+      }),
     };
   }, [epics, milestones, stories, tasks]);
   const listRows: DeliveryListRow[] = useMemo(() => {

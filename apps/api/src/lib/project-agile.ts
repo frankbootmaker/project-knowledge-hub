@@ -385,13 +385,19 @@ export async function updateEpic(
     epicIds: [row.id],
   });
   const status = applied.epics.get(row.id) ?? row.status;
-  const stored = status === row.status ? row : { ...row, status };
+  const span = applied.dates.epics.get(row.id);
+  const stored = {
+    ...row,
+    status,
+    startDate: span?.start ?? row.startDate,
+    endDate: span?.end ?? row.endDate,
+  };
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const maps = await completionMaps(database, row.projectId);
-  const writes = await rescheduleDeliveryFrom(database, row.projectId, {
-    entityType: 'epic',
-    id: row.id,
-  });
+  const writes = await rescheduleDeliveryFrom(database, row.projectId, [
+    { entityType: 'epic', id: row.id },
+    ...applied.dateChanges,
+  ]);
   return withMediaLinks(
     database,
     'epic',
@@ -614,13 +620,19 @@ export async function updateUserStory(
     epicIds: [existing.epicId, row.epicId],
   });
   const status = applied.stories.get(row.id) ?? row.status;
-  const stored = status === row.status ? row : { ...row, status };
+  const span = applied.dates.stories.get(row.id);
+  const stored = {
+    ...row,
+    status,
+    startDate: span?.start ?? row.startDate,
+    endDate: span?.end ?? row.endDate,
+  };
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const maps = await completionMaps(database, row.projectId);
-  const writes = await rescheduleDeliveryFrom(database, row.projectId, {
-    entityType: 'user_story',
-    id: row.id,
-  });
+  const writes = await rescheduleDeliveryFrom(database, row.projectId, [
+    { entityType: 'user_story', id: row.id },
+    ...applied.dateChanges,
+  ]);
   return withMediaLinks(
     database,
     'user_story',
@@ -657,6 +669,13 @@ export async function deleteEpic(
   await deleteMilestoneItemLinks(database, 'user_story', storyIds);
   await database.db.delete(projectEpics).where(eq(projectEpics.id, epicId));
   await recomputeDeliveryParentStatuses(database, existing.projectId, { milestoneIds });
+  if (milestoneIds.length > 0) {
+    await rescheduleDeliveryFrom(
+      database,
+      existing.projectId,
+      milestoneIds.map((id) => ({ entityType: 'milestone' as const, id })),
+    );
+  }
   return { id: existing.id, projectId: existing.projectId };
 }
 
@@ -678,6 +697,10 @@ export async function deleteUserStory(
     epicIds: [existing.epicId],
     milestoneIds,
   });
+  await rescheduleDeliveryFrom(database, existing.projectId, [
+    { entityType: 'epic', id: existing.epicId },
+    ...milestoneIds.map((id) => ({ entityType: 'milestone' as const, id })),
+  ]);
   return { id: existing.id, projectId: existing.projectId };
 }
 

@@ -358,6 +358,50 @@ export function milestoneStatusFromLinks(
   return derived ?? manualStatus;
 }
 
+export type ParentDateSource = {
+  status: string;
+  start?: string | null;
+  end?: string | null;
+};
+
+export type ParentDateSpan = {
+  start: string | null;
+  end: string | null;
+};
+
+function earliestDate(values: readonly string[]): string | null {
+  if (values.length === 0) return null;
+  return values.reduce((min, value) => (value < min ? value : min));
+}
+
+function latestDate(values: readonly string[]): string | null {
+  if (values.length === 0) return null;
+  return values.reduce((max, value) => (value > max ? value : max));
+}
+
+/**
+ * Start is the earliest included child start. End is the latest included end.
+ * Cancelled children are excluded. A side with no child date keeps the manual value.
+ */
+export function derivedParentDates(
+  manual: ParentDateSpan,
+  children: readonly ParentDateSource[],
+): ParentDateSpan {
+  const included = children.filter((child) => child.status !== 'cancelled');
+  const starts = included
+    .map((child) => child.start)
+    .filter((value): value is string => Boolean(value));
+  const ends = included
+    .map((child) => child.end)
+    .filter((value): value is string => Boolean(value));
+  const start = earliestDate(starts);
+  const end = latestDate(ends);
+  return {
+    start: start ?? manual.start,
+    end: end ?? manual.end,
+  };
+}
+
 /**
  * Story and epic rollups from child tasks and bugs.
  * Cancelled children are left out of the average. A parent whose children

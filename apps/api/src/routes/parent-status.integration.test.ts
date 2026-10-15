@@ -29,6 +29,16 @@ function testEnv() {
 }
 
 type StatusRow = { id: string; status: string };
+type DatedRow = StatusRow & {
+  startDate: string | null;
+  endDate?: string | null;
+  targetDate?: string | null;
+};
+type ScheduleRow = {
+  id: string;
+  startDate: string | null;
+  finishDate: string | null;
+};
 
 describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
   let app: FastifyInstance | undefined;
@@ -174,9 +184,9 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
   }
 
   async function statuses(projectId: string): Promise<{
-    epics: StatusRow[];
-    stories: StatusRow[];
-    milestones: StatusRow[];
+    epics: DatedRow[];
+    stories: DatedRow[];
+    milestones: DatedRow[];
   }> {
     const [epics, stories, milestones] = await Promise.all([
       app!.inject({
@@ -199,9 +209,9 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
     expect(stories.statusCode).toBe(200);
     expect(milestones.statusCode).toBe(200);
     return {
-      epics: (epics.json() as { epics: StatusRow[] }).epics,
-      stories: (stories.json() as { userStories: StatusRow[] }).userStories,
-      milestones: (milestones.json() as { milestones: StatusRow[] }).milestones,
+      epics: (epics.json() as { epics: DatedRow[] }).epics,
+      stories: (stories.json() as { userStories: DatedRow[] }).userStories,
+      milestones: (milestones.json() as { milestones: DatedRow[] }).milestones,
     };
   }
 
@@ -209,6 +219,26 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
     const row = rows.find((item) => item.id === id);
     expect(row).toBeTruthy();
     return row!.status;
+  }
+
+  async function windows(projectId: string): Promise<{
+    epics: DatedRow[];
+    stories: DatedRow[];
+    milestones: DatedRow[];
+  }> {
+    return statuses(projectId);
+  }
+
+  function windowOf(rows: DatedRow[], id: string): {
+    startDate: string | null;
+    endDate: string | null;
+  } {
+    const row = rows.find((item) => item.id === id);
+    expect(row).toBeTruthy();
+    return {
+      startDate: row!.startDate,
+      endDate: row!.endDate ?? row!.targetDate ?? null,
+    };
   }
 
   it('derives story and epic status from child status and percent', async () => {
@@ -385,5 +415,185 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
     expect((cleared.json() as { milestone: { status: string } }).milestone.status).toBe(
       'blocked',
     );
+  });
+
+  it('derives parent dates and schedules successors from them', async () => {
+    const projectId = await createProject();
+    const epicA = await createEpic(projectId, 'Epic A');
+    const epicB = await createEpic(projectId, 'Epic B');
+    const storyId = await createStory(projectId, epicA, 'Story');
+    const kept = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-user-stories/${storyId}`,
+      headers: headers(true),
+      payload: { startDate: '2026-01-01', endDate: '2026-01-31' },
+    });
+    expect(kept.statusCode).toBe(200);
+    expect((kept.json() as { userStory: DatedRow }).userStory).toMatchObject({
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+    });
+
+    await createTask(projectId, {
+      title: 'Undated',
+      userStoryId: storyId,
+      status: 'todo',
+    });
+    const stillManual = await windows(projectId);
+    expect(windowOf(stillManual.stories, storyId)).toEqual({
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+    });
+
+    const taskId = await createTask(projectId, {
+      title: 'Dated',
+      userStoryId: storyId,
+      status: 'in_progress',
+      startDate: '2026-03-02',
+      dueDate: '2026-03-20',
+    });
+    await createTask(projectId, {
+      title: 'Dropped',
+      userStoryId: storyId,
+      status: 'cancelled',
+      startDate: '2026-01-01',
+      dueDate: '2026-06-01',
+    });
+    const rolled = await windows(projectId);
+    expect(windowOf(rolled.stories, storyId)).toEqual({
+      startDate: '2026-03-02',
+      endDate: '2026-03-20',
+    });
+    expect(windowOf(rolled.epics, epicA)).toEqual({
+      startDate: '2026-03-02',
+      endDate: '2026-03-20',
+    });
+
+    const createdMilestone = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/milestones`,
+      headers: headers(true),
+      payload: {
+        title: 'Gate',
+        status: 'active',
+        startDate: '2026-08-01',
+        targetDate: '2026-08-31',
+      },
+    });
+    expect(createdMilestone.statusCode).toBe(200);
+    const milestoneId = (createdMilestone.json() as { milestone: { id: string } }).milestone.id;
+    const linked = await app!.inject({
+      method: 'PUT',
+      url: `/api/v1/project-milestones/${milestoneId}/item-links`,
+      headers: headers(true),
+      payload: { items: [{ entityType: 'task', entityId: taskId }] },
+    });
+    expect(linked.statusCode).toBe(200);
+    expect((linked.json() as { milestone: DatedRow }).milestone).toMatchObject({
+      startDate: '2026-03-02',
+      targetDate: '2026-03-20',
+    });
+    const cleared = await app!.inject({
+      method: 'PUT',
+      url: `/api/v1/project-milestones/${milestoneId}/item-links`,
+      headers: headers(true),
+      payload: { items: [] },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect((cleared.json() as { milestone: DatedRow }).milestone).toMatchObject({
+      startDate: '2026-03-02',
+      targetDate: '2026-03-20',
+    });
+
+    await createTask(projectId, {
+      title: 'Wider',
+      userStoryId: storyId,
+      status: 'todo',
+      startDate: '2026-02-15',
+      dueDate: '2026-04-01',
+    });
+    const wider = await windows(projectId);
+    expect(windowOf(wider.stories, storyId)).toEqual({
+      startDate: '2026-02-15',
+      endDate: '2026-04-01',
+    });
+    expect(windowOf(wider.epics, epicA)).toEqual({
+      startDate: '2026-02-15',
+      endDate: '2026-04-01',
+    });
+
+    const moved = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-user-stories/${storyId}`,
+      headers: headers(true),
+      payload: { epicId: epicB },
+    });
+    expect(moved.statusCode).toBe(200);
+    const afterMove = await windows(projectId);
+    expect(windowOf(afterMove.stories, storyId)).toEqual({
+      startDate: '2026-02-15',
+      endDate: '2026-04-01',
+    });
+    expect(windowOf(afterMove.epics, epicA)).toEqual({
+      startDate: '2026-02-15',
+      endDate: '2026-04-01',
+    });
+    expect(windowOf(afterMove.epics, epicB)).toEqual({
+      startDate: '2026-02-15',
+      endDate: '2026-04-01',
+    });
+
+    const successorId = await createTask(projectId, {
+      title: 'After the story',
+      durationDays: 2,
+    });
+    const linkedStory = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/delivery-dependencies`,
+      headers: headers(true),
+      payload: {
+        predecessorId: storyId,
+        predecessorType: 'user_story',
+        successorId,
+        successorType: 'task',
+        linkType: 'FS',
+        lagDays: 0,
+      },
+    });
+    expect(linkedStory.statusCode).toBe(200);
+    const storyWrite = (
+      linkedStory.json() as { schedule: ScheduleRow[] }
+    ).schedule.find((row) => row.id === successorId);
+    expect(storyWrite).toMatchObject({
+      startDate: '2026-04-01',
+      finishDate: '2026-04-03',
+    });
+
+    const lateId = await createTask(projectId, {
+      title: 'Later finish',
+      startDate: '2026-05-01',
+      durationDays: 3,
+    });
+    const both = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/delivery-dependencies`,
+      headers: headers(true),
+      payload: {
+        predecessorId: lateId,
+        predecessorType: 'task',
+        successorId,
+        successorType: 'task',
+        linkType: 'FS',
+        lagDays: 0,
+      },
+    });
+    expect(both.statusCode).toBe(200);
+    const lateWrite = (both.json() as { schedule: ScheduleRow[] }).schedule.find(
+      (row) => row.id === successorId,
+    );
+    expect(lateWrite).toMatchObject({
+      startDate: '2026-05-04',
+      finishDate: '2026-05-06',
+    });
   });
 });

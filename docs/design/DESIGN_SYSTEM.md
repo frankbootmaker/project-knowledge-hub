@@ -247,6 +247,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-15
 
+* **Parent dates** — Story, epic, and milestone start and end shown in the tree, list, and item dialog follow included children: earliest start and latest end. A parent with no dated children keeps the dates stored on it. Milestone due dates in the tree use that end. Target percent uses the same window.
 * **Parent status** — Story, epic, and milestone status labels include In progress and Blocked (`milestoneStatus.in_progress`, `milestoneStatus.blocked`) in English, German, and Hungarian. The tree, list, board, and item dialog show the status derived from children. A blocked parent sits in the board’s blocked lane. Active remains the label for a parent that was set to active and has no included children.
 * **Kicker type** — Uppercase mono kickers and eyebrows use the rail menu type (IBM Plex Sans, 13px, regular): page eyebrows, shell breadcrumbs, workspace and expanded-navigation labels, KPI and count-strip labels, budgeting BAC/EV/AC/CPI/SPI labels, board lane counts, search group headings, knowledge-record tag chips and the subtitle line, and the media-library kicker and file-type chips. A board or calendar bug line keeps the kind word in that type and the key on `.kh-ops-key-badge`. Global search result titles are `LinkButton`s, matching linked knowledge. The media More details URL stays truncated beside its copy button. Item keys and code stay monospace.
 

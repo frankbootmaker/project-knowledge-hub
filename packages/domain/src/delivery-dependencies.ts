@@ -217,6 +217,11 @@ export type ScheduleNode = {
   finish: string | null;
   /** Stored duration for tasks and bugs. Null when the span is not duration-driven. */
   durationDays: number | null;
+  /**
+   * Story, epic, or milestone whose dates come from children.
+   * Predecessors do not move it. Successors still read its start and finish.
+   */
+  rollupLocked?: boolean;
 };
 
 export type ScheduleLink = {
@@ -281,6 +286,7 @@ export function applyPredecessorSchedule(
   node: ScheduleNode,
   links: DatedLink[],
 ): ScheduleNode | null {
+  if (node.rollupLocked) return null;
   if (links.length === 0) return null;
   const duration = successorDurationDays(node);
   const starts = links

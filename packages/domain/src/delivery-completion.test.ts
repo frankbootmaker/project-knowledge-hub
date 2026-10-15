@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   childCompletionPoints,
   deliveryCompletionIndex,
+  derivedParentDates,
   derivedParentStatus,
   displayedParentCompletion,
   displayedTaskCompletionPercent,
@@ -212,6 +213,33 @@ describe('derivedParentStatus', () => {
         { kind: 'task', status: 'todo', completionPercent: 0 },
       ]),
     ).toBe('planned');
+  });
+});
+
+describe('derivedParentDates', () => {
+  const manual = { start: '2026-01-01', end: '2026-01-31' };
+
+  it('keeps manual dates when no included child has a date', () => {
+    expect(derivedParentDates(manual, [])).toEqual(manual);
+    expect(
+      derivedParentDates(manual, [
+        { status: 'cancelled', start: '2026-06-01', end: '2026-06-30' },
+      ]),
+    ).toEqual(manual);
+    expect(
+      derivedParentDates(manual, [{ status: 'todo', start: null, end: null }]),
+    ).toEqual(manual);
+  });
+
+  it('uses the earliest start and the latest end', () => {
+    expect(
+      derivedParentDates(manual, [
+        { status: 'todo', start: '2026-03-10', end: '2026-03-12' },
+        { status: 'in_progress', start: '2026-02-01', end: null },
+        { status: 'done', start: null, end: '2026-04-20' },
+        { status: 'cancelled', start: '2026-01-01', end: '2026-12-31' },
+      ]),
+    ).toEqual({ start: '2026-02-01', end: '2026-04-20' });
   });
 });
 

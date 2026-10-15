@@ -19,6 +19,7 @@ export {
   milestoneCompletion,
   milestoneStatusFromLinks,
   parentStatusFromChildren,
+  derivedParentDates,
   type DeliveryCompletionChild as DeliveryCompletionTask,
   type DeliveryCompletionRollup as DeliveryCompletion,
   type MilestoneLinkCompletion,
