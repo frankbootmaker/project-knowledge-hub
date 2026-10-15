@@ -85,10 +85,15 @@ export const projectStatusSchema = z.enum([
   'archived',
 ]);
 
-/** Project Delivery (NF-018): milestone lifecycle. */
+/**
+ * Milestone, epic, and user-story lifecycle.
+ * `active` remains a manual status. Derived status uses `in_progress` and `blocked`.
+ */
 export const milestoneStatusSchema = z.enum([
   'planned',
   'active',
+  'in_progress',
+  'blocked',
   'done',
   'cancelled',
 ]);
@@ -280,6 +285,79 @@ export function displayedParentCompletion(
   return rollup;
 }
 
+export type ParentStatusSource = {
+  status: string;
+  /** Null excludes the child. Cancelled, or a parent with nothing to average. */
+  points: number | null;
+};
+
+/** Status stored on a story, epic, or milestone when children imply one. */
+export type DerivedDeliveryStatus = 'planned' | 'todo' | 'in_progress' | 'blocked' | 'done';
+
+const IDLE_CHILD_STATUSES = new Set(['todo', 'planned']);
+
+/**
+ * Status implied by included children.
+ * Null means nothing is included, so the parent keeps its manual status.
+ *
+ * All included children done -> done.
+ * Any included child that is not done and is blocked -> blocked.
+ * Computed completion above 0, or any child that has started -> in_progress.
+ * Otherwise planned, or todo when idleStatus is todo.
+ */
+export function derivedParentStatus(
+  children: readonly ParentStatusSource[],
+  idleStatus: 'planned' | 'todo' = 'planned',
+): DerivedDeliveryStatus | null {
+  const included = children.filter(
+    (child): child is ParentStatusSource & { points: number } => child.points != null,
+  );
+  if (included.length === 0) return null;
+  const allDone = included.every(
+    (child) => child.status === 'done' || child.points === 100,
+  );
+  if (allDone) return 'done';
+  if (included.some((child) => child.status === 'blocked' && child.points < 100)) {
+    return 'blocked';
+  }
+  const rollup = averageCompletion(included.map((child) => child.points));
+  const started = included.some(
+    (child) => child.points > 0 || !IDLE_CHILD_STATUSES.has(child.status),
+  );
+  if ((rollup?.percent ?? 0) > 0 || started) return 'in_progress';
+  return idleStatus;
+}
+
+/** Story or epic status from child tasks and bugs. No included children keeps manualStatus. */
+export function parentStatusFromChildren(
+  manualStatus: string,
+  children: readonly { status: string; completionPercent?: number | null }[],
+  idleStatus: 'planned' | 'todo' = 'planned',
+): string {
+  const derived = derivedParentStatus(
+    children.map((child) => ({
+      status: child.status,
+      points: childCompletionPoints(child.status, child.completionPercent),
+    })),
+    idleStatus,
+  );
+  return derived ?? manualStatus;
+}
+
+/** Milestone status from the same links that feed milestone completion. */
+export function milestoneStatusFromLinks(
+  manualStatus: string,
+  links: readonly MilestoneLinkCompletion[],
+): string {
+  const derived = derivedParentStatus(
+    links.map((link) => ({
+      status: link.status,
+      points: milestoneLinkPoints(link),
+    })),
+  );
+  return derived ?? manualStatus;
+}
+
 /**
  * Story and epic rollups from child tasks and bugs.
  * Cancelled children are left out of the average. A parent whose children
@@ -355,6 +433,8 @@ export const raciRoleSchema = z.enum(['R', 'A', 'C', 'I']);
 export const epicStatusSchema = z.enum([
   'planned',
   'active',
+  'in_progress',
+  'blocked',
   'done',
   'cancelled',
 ]);

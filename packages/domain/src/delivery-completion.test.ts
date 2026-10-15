@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   childCompletionPoints,
   deliveryCompletionIndex,
+  derivedParentStatus,
   displayedParentCompletion,
   displayedTaskCompletionPercent,
   milestoneCompletion,
   milestoneLinkPoints,
+  milestoneStatusFromLinks,
+  parentStatusFromChildren,
   type DeliveryCompletionChild,
 } from './index.js';
 
@@ -101,6 +104,114 @@ describe('displayedParentCompletion', () => {
       done: 0,
       total: 0,
     });
+  });
+});
+
+describe('derivedParentStatus', () => {
+  it('keeps a manual status when every child is cancelled or absent', () => {
+    expect(derivedParentStatus([])).toBeNull();
+    expect(
+      derivedParentStatus([{ status: 'cancelled', points: null }]),
+    ).toBeNull();
+    expect(
+      parentStatusFromChildren('active', [{ status: 'cancelled', completionPercent: 50 }]),
+    ).toBe('active');
+    expect(parentStatusFromChildren('done', [])).toBe('done');
+  });
+
+  it('is done only when every included child is done', () => {
+    expect(
+      parentStatusFromChildren('planned', [
+        { status: 'done', completionPercent: 25 },
+        { status: 'cancelled', completionPercent: 0 },
+      ]),
+    ).toBe('done');
+    expect(
+      parentStatusFromChildren('planned', [
+        { status: 'done' },
+        { status: 'todo', completionPercent: 0 },
+      ]),
+    ).toBe('in_progress');
+  });
+
+  it('is blocked when a child that is not done is blocked', () => {
+    expect(
+      parentStatusFromChildren('planned', [
+        { status: 'blocked', completionPercent: 0 },
+        { status: 'todo', completionPercent: 0 },
+      ]),
+    ).toBe('blocked');
+    expect(
+      parentStatusFromChildren('planned', [
+        { status: 'done' },
+        { status: 'blocked', completionPercent: 25 },
+      ]),
+    ).toBe('blocked');
+  });
+
+  it('is in progress when completion is above 0 or a child has started', () => {
+    expect(
+      parentStatusFromChildren('planned', [
+        { status: 'in_progress', completionPercent: 0 },
+        { status: 'todo', completionPercent: 0 },
+      ]),
+    ).toBe('in_progress');
+    expect(
+      parentStatusFromChildren('planned', [
+        { status: 'todo', completionPercent: 25 },
+        { status: 'todo', completionPercent: 0 },
+      ]),
+    ).toBe('in_progress');
+    expect(
+      derivedParentStatus([
+        { status: 'active', points: 0 },
+        { status: 'planned', points: 0 },
+      ]),
+    ).toBe('in_progress');
+  });
+
+  it('is planned or todo when nothing has started', () => {
+    expect(
+      parentStatusFromChildren('active', [
+        { status: 'todo', completionPercent: 0 },
+        { status: 'planned', completionPercent: null },
+      ]),
+    ).toBe('planned');
+    expect(
+      derivedParentStatus([{ status: 'todo', points: 0 }], 'todo'),
+    ).toBe('todo');
+  });
+
+  it('applies the same rule to milestone links', () => {
+    expect(
+      milestoneStatusFromLinks('planned', [
+        { kind: 'task', status: 'done', completionPercent: 0 },
+        { kind: 'task', status: 'cancelled', completionPercent: 100 },
+      ]),
+    ).toBe('done');
+    expect(
+      milestoneStatusFromLinks('active', [
+        { kind: 'task', status: 'in_progress', completionPercent: 50 },
+        { kind: 'parent', status: 'planned', completionPercent: null },
+      ]),
+    ).toBe('in_progress');
+    expect(
+      milestoneStatusFromLinks('planned', [
+        { kind: 'parent', status: 'blocked', completionPercent: 25 },
+        { kind: 'task', status: 'todo', completionPercent: 0 },
+      ]),
+    ).toBe('blocked');
+    expect(
+      milestoneStatusFromLinks('active', [
+        { kind: 'parent', status: 'planned', completionPercent: null },
+        { kind: 'task', status: 'cancelled', completionPercent: 50 },
+      ]),
+    ).toBe('active');
+    expect(
+      milestoneStatusFromLinks('planned', [
+        { kind: 'task', status: 'todo', completionPercent: 0 },
+      ]),
+    ).toBe('planned');
   });
 });
 

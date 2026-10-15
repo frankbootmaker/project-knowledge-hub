@@ -61,6 +61,10 @@ import {
   toHumanKeyFields,
 } from './project-issue-keys.js';
 import { withMilestoneLinks, deleteMilestoneItemLinks } from './milestone-item-links.js';
+import {
+  milestoneIdsForDeliveryEntities,
+  recomputeDeliveryParentStatuses,
+} from './parent-status.js';
 import { avatarUrlForUser } from './public-user.js';
 import { assertAiAssistantForProject } from './ai-assistant-systems.js';
 import { diffReplacement } from './replace-diff.js';
@@ -712,13 +716,18 @@ export async function updateMilestone(
       statusCode: 500,
     });
   }
+  const applied = await recomputeDeliveryParentStatuses(database, row.projectId, {
+    milestoneIds: [row.id],
+  });
+  const status = applied.milestones.get(row.id) ?? row.status;
+  const stored = status === row.status ? row : { ...row, status };
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const writes = await rescheduleDeliveryFrom(database, row.projectId, {
     entityType: 'milestone',
     id: row.id,
   });
   const milestone = overlaySchedule(
-    toPublicMilestone(row, keyPrefix),
+    toPublicMilestone(stored, keyPrefix),
     'milestone',
     writes,
     'targetDate',
@@ -1677,6 +1686,13 @@ export async function createTask(
     },
   });
 
+  if (createdTask.userStoryId) {
+    await recomputeDeliveryParentStatuses(database, createdTask.projectId, {
+      storyIds: [createdTask.userStoryId],
+      taskIds: [createdTask.id],
+    });
+  }
+
   return getTask(database, createdTask.id);
 }
 
@@ -1685,9 +1701,19 @@ export async function deleteTask(
   taskId: string,
 ): Promise<{ id: string; projectId: string }> {
   const existing = await getTask(database, taskId);
+  const milestoneIds = await milestoneIdsForDeliveryEntities(database, existing.projectId, {
+    taskIds: [existing.id],
+    storyIds: [existing.userStoryId],
+    epicIds: [existing.epicId],
+  });
   await deleteDeliveryDependenciesFor(database, 'task', [taskId]);
   await deleteMilestoneItemLinks(database, 'task', [taskId]);
   await database.db.delete(projectTasks).where(eq(projectTasks.id, taskId));
+  await recomputeDeliveryParentStatuses(database, existing.projectId, {
+    storyIds: [existing.userStoryId],
+    epicIds: [existing.epicId],
+    milestoneIds,
+  });
   return { id: existing.id, projectId: existing.projectId };
 }
 
@@ -1966,5 +1992,18 @@ export async function updateTask(
     entityType: 'task',
     id: taskId,
   });
+  const parentTouched =
+    input.status !== undefined ||
+    input.completionPercent !== undefined ||
+    input.userStoryId !== undefined ||
+    input.archived !== undefined;
+  if (parentTouched) {
+    const nextStoryId =
+      input.userStoryId !== undefined ? input.userStoryId : existing.userStoryId;
+    await recomputeDeliveryParentStatuses(database, existing.projectId, {
+      storyIds: [existing.userStoryId, nextStoryId],
+      taskIds: [taskId],
+    });
+  }
   return getTask(database, taskId);
 }

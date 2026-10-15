@@ -2630,6 +2630,8 @@
     "milestoneStatus": {
       "planned": "Geplant",
       "active": "Aktiv",
+      "in_progress": "In Arbeit",
+      "blocked": "Blockiert",
       "done": "Erledigt",
       "cancelled": "Abgebrochen"
     },

@@ -17,6 +17,8 @@ export {
   displayedParentCompletion,
   displayedTaskCompletionPercent,
   milestoneCompletion,
+  milestoneStatusFromLinks,
+  parentStatusFromChildren,
   type DeliveryCompletionChild as DeliveryCompletionTask,
   type DeliveryCompletionRollup as DeliveryCompletion,
   type MilestoneLinkCompletion,
@@ -24,13 +26,36 @@ export {
 
 import {
   displayedTaskCompletionPercent,
+  milestoneStatusFromLinks,
   type DeliveryCompletionRollup,
+  type MilestoneLinkCompletion,
 } from '@project-knowledge-hub/domain';
 
 export type DeliveryCompletionIndex = {
   byStoryId: Map<string, DeliveryCompletionRollup>;
   byEpicId: Map<string, DeliveryCompletionRollup>;
 };
+
+/**
+ * Milestone status shown from its linked items.
+ * Links without a status keep the stored milestone status.
+ */
+export function displayedMilestoneStatus(
+  manualStatus: string,
+  links: readonly {
+    entityType: string;
+    status?: string | null;
+    completionPercent?: number | null;
+  }[],
+): string {
+  if (links.length === 0 || links.some((link) => !link.status)) return manualStatus;
+  const sources: MilestoneLinkCompletion[] = links.map((link) => ({
+    kind: link.entityType === 'task' ? 'task' : 'parent',
+    status: link.status ?? 'planned',
+    completionPercent: link.completionPercent ?? null,
+  }));
+  return milestoneStatusFromLinks(manualStatus, sources);
+}
 
 /** What a task row shows. Done is 100. Cancelled is 0. Otherwise the stored step. */
 export function taskDeliveryCompletion(

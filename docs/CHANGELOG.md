@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Parent status from children (PRO-T-73):** Stories, epics, and milestones take their status from included children. All done is Done. A child that is not done and is blocked is Blocked. Completion above 0, or any started child, is In progress. Nothing started is Planned. Cancelled children are left out. A parent with no included children keeps its status. Task status, percent, and story assignment recompute the story and epic. Moving a story recomputes both epics. Milestone status uses the same rule on its linked items. Migration `0061` backfills existing rows. List, tree, board, and MCP show that status.
+
 * **Delivery tree type:** Work-breakdown rows use the delivery list type. Titles are primary cells, keys are the same chip as the ID column, status, owner, and sprint are 12px sans, and percent, target, hours, and points are mono numerals. Column labels use the table header.
 
 * **MCP tool arguments (PRO-B-4, PRO-T-65, PRO-T-66, PRO-T-67):** Unknown tool fields return a validation error that names the field. `list_project_tasks` documents `limit`, `cursor`, and output `nextCursor`. Task tools resolve any human key type (T, B, and others) the same way they resolve a UUID. `list_project_task_activities` returns full comment text unless `fullText` is false.

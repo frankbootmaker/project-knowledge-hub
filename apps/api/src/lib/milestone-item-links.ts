@@ -17,6 +17,7 @@ import {
   type MilestoneLinkCompletion,
 } from '@project-knowledge-hub/domain';
 import { diffReplacement } from './replace-diff.js';
+import { recomputeDeliveryParentStatuses } from './parent-status.js';
 import { toHumanKeyFields } from './project-issue-keys.js';
 
 export type MilestoneCompletionFields = {
@@ -330,6 +331,9 @@ export async function setMilestoneItemLinks(
         })),
       );
     }
+  });
+  await recomputeDeliveryParentStatuses(database, input.projectId, {
+    milestoneIds: [input.milestoneId],
   });
 }
 

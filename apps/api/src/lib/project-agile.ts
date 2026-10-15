@@ -28,6 +28,10 @@ import {
   type UserStoryStatus,
 } from '@project-knowledge-hub/domain';
 import { deleteMilestoneItemLinks } from './milestone-item-links.js';
+import {
+  milestoneIdsForDeliveryEntities,
+  recomputeDeliveryParentStatuses,
+} from './parent-status.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import { withMediaLinkCounts, withMediaLinks } from './project-item-media.js';
 import {
@@ -377,6 +381,11 @@ export async function updateEpic(
       statusCode: 404,
     });
   }
+  const applied = await recomputeDeliveryParentStatuses(database, row.projectId, {
+    epicIds: [row.id],
+  });
+  const status = applied.epics.get(row.id) ?? row.status;
+  const stored = status === row.status ? row : { ...row, status };
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const maps = await completionMaps(database, row.projectId);
   const writes = await rescheduleDeliveryFrom(database, row.projectId, {
@@ -388,9 +397,9 @@ export async function updateEpic(
     'epic',
     overlaySchedule(
       toPublicEpic(
-        row,
+        stored,
         keyPrefix,
-        parentCompletionPercent(row.status, maps.byEpicId.get(row.id)),
+        parentCompletionPercent(stored.status, maps.byEpicId.get(row.id)),
       ),
       'epic',
       writes,
@@ -600,6 +609,12 @@ export async function updateUserStory(
       statusCode: 404,
     });
   }
+  const applied = await recomputeDeliveryParentStatuses(database, row.projectId, {
+    storyIds: [row.id],
+    epicIds: [existing.epicId, row.epicId],
+  });
+  const status = applied.stories.get(row.id) ?? row.status;
+  const stored = status === row.status ? row : { ...row, status };
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const maps = await completionMaps(database, row.projectId);
   const writes = await rescheduleDeliveryFrom(database, row.projectId, {
@@ -611,9 +626,9 @@ export async function updateUserStory(
     'user_story',
     overlaySchedule(
       toPublicUserStory(
-        row,
+        stored,
         keyPrefix,
-        parentCompletionPercent(row.status, maps.byStoryId.get(row.id)),
+        parentCompletionPercent(stored.status, maps.byStoryId.get(row.id)),
       ),
       'user_story',
       writes,
@@ -631,12 +646,17 @@ export async function deleteEpic(
     .select({ id: projectUserStories.id })
     .from(projectUserStories)
     .where(eq(projectUserStories.epicId, epicId));
+  const storyIds = stories.map((row) => row.id);
+  const milestoneIds = await milestoneIdsForDeliveryEntities(database, existing.projectId, {
+    epicIds: [epicId],
+    storyIds,
+  });
   await deleteDeliveryDependenciesFor(database, 'epic', [epicId]);
   await deleteMilestoneItemLinks(database, 'epic', [epicId]);
-  const storyIds = stories.map((row) => row.id);
   await deleteDeliveryDependenciesFor(database, 'user_story', storyIds);
   await deleteMilestoneItemLinks(database, 'user_story', storyIds);
   await database.db.delete(projectEpics).where(eq(projectEpics.id, epicId));
+  await recomputeDeliveryParentStatuses(database, existing.projectId, { milestoneIds });
   return { id: existing.id, projectId: existing.projectId };
 }
 
@@ -645,11 +665,19 @@ export async function deleteUserStory(
   storyId: string,
 ): Promise<{ id: string; projectId: string }> {
   const existing = await getUserStory(database, storyId);
+  const milestoneIds = await milestoneIdsForDeliveryEntities(database, existing.projectId, {
+    storyIds: [storyId],
+    epicIds: [existing.epicId],
+  });
   await deleteDeliveryDependenciesFor(database, 'user_story', [storyId]);
   await deleteMilestoneItemLinks(database, 'user_story', [storyId]);
   await database.db
     .delete(projectUserStories)
     .where(eq(projectUserStories.id, storyId));
+  await recomputeDeliveryParentStatuses(database, existing.projectId, {
+    epicIds: [existing.epicId],
+    milestoneIds,
+  });
   return { id: existing.id, projectId: existing.projectId };
 }
 

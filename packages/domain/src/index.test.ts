@@ -27,6 +27,8 @@ describe('domain foundations', () => {
 
   it('validates project delivery statuses and RACI roles', () => {
     expect(milestoneStatusSchema.parse('planned')).toBe('planned');
+    expect(milestoneStatusSchema.parse('in_progress')).toBe('in_progress');
+    expect(milestoneStatusSchema.parse('blocked')).toBe('blocked');
     expect(taskStatusSchema.parse('in_progress')).toBe('in_progress');
     expect(taskCompletionPercentSchema.parse(25)).toBe(25);
     expect(resolveTaskCompletionPercent({ status: 'done', requested: 25 })).toBe(100);
@@ -52,6 +54,8 @@ describe('domain foundations', () => {
     ).toBe('blocked');
     expect(raciRoleSchema.parse('A')).toBe('A');
     expect(epicStatusSchema.parse('active')).toBe('active');
+    expect(epicStatusSchema.parse('in_progress')).toBe('in_progress');
+    expect(userStoryStatusSchema.parse('blocked')).toBe('blocked');
     expect(userStoryStatusSchema.parse('done')).toBe('done');
     expect(taskActivityTypeSchema.parse('handoff')).toBe('handoff');
   });
