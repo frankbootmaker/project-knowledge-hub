@@ -61,10 +61,12 @@ function CalendarItemChip({
   item,
   today,
   dense,
+  onOpen,
 }: {
   item: CalendarItem;
   today: string;
   dense?: boolean;
+  onOpen?: () => void;
 }) {
   const t = useTranslations('delivery');
   const tone = deliveryScheduleTone({
@@ -84,22 +86,37 @@ function CalendarItemChip({
   const badgeLetter =
     item.kind === 'milestone' ? 'M' : item.itemType === 'bug' ? 'B' : 'T';
 
+  const entryTitle = `${idLabel ? `${idLabel} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`;
+
   if (dense) {
+    if (!onOpen) {
+      return (
+        <span className="kh-ops-event-dot" data-tone={tone} title={entryTitle}>
+          {item.title}
+        </span>
+      );
+    }
     return (
-      <span
+      <button
+        type="button"
         className="kh-ops-event-dot"
         data-tone={tone}
-        title={`${idLabel ? `${idLabel} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
+        title={entryTitle}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen();
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
       >
         {item.title}
-      </span>
+      </button>
     );
   }
 
   return (
     <li
       className="kh-ops-data-item"
-      title={`${idLabel ? `${idLabel} · ` : ''}${item.title} — ${t(`scheduleTone.${tone}`)}`}
+      title={entryTitle}
     >
       <div className="flex min-w-0 items-center gap-1.5">
         {item.owner ? (
@@ -125,6 +142,7 @@ function CalendarItemChip({
             humanKey={item.humanKey}
             bugLabel={item.kind === 'task' ? t('kindBug') : undefined}
             milestoneLabel={item.kind === 'milestone' ? '' : undefined}
+            onHumanKeyOpen={onOpen}
           />
         </span>
       ) : null}
@@ -141,6 +159,7 @@ export function ProjectDeliveryCalendar({
   items,
   exportHandleRef,
   onExportStateChange,
+  onOpenItem,
 }: {
   projectId: string;
   projectName: string;
@@ -149,6 +168,7 @@ export function ProjectDeliveryCalendar({
   onExportStateChange?: (
     state: { pending: boolean; canExport: boolean } | null,
   ) => void;
+  onOpenItem?: (item: CalendarItem) => void;
 }) {
   const t = useTranslations('delivery');
   const tProjects = useTranslations('projects');
@@ -332,6 +352,13 @@ export function ProjectDeliveryCalendar({
     });
   }
 
+  const openCalendarItem = useCallback(
+    (item: CalendarItem) => {
+      onOpenItem?.(item);
+    },
+    [onOpenItem],
+  );
+
   return (
     <div className="grid gap-3">
       <div className="kh-ops-toolbar">
@@ -390,6 +417,7 @@ export function ProjectDeliveryCalendar({
                     item={item}
                     today={today}
                     dense
+                    onOpen={onOpenItem ? () => openCalendarItem(item) : undefined}
                   />
                 ))}
                 {cell.items.length > 3 ? (
@@ -417,7 +445,12 @@ export function ProjectDeliveryCalendar({
           ) : (
             <ul className="kh-ops-stack">
               {selectedItems.map((item) => (
-                <CalendarItemChip key={item.id} item={item} today={today} />
+                <CalendarItemChip
+                  key={item.id}
+                  item={item}
+                  today={today}
+                  onOpen={onOpenItem ? () => openCalendarItem(item) : undefined}
+                />
               ))}
             </ul>
           )}

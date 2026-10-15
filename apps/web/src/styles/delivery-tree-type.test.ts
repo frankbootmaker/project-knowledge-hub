@@ -62,7 +62,8 @@ describe('delivery tree type matches the list', () => {
   it('keeps monospace on item key badges only', () => {
     const key = ruleBody(css, '.kh-ops-key-badge');
     expect(key).toContain('font-family: var(--font-mono)');
-    expect(tree).toContain("subIsKey ? 'kh-ops-key-badge' : 'kh-ops-type-chip'");
+    expect(tree).toContain('DeliveryItemIdButton');
+    expect(tree).toContain("variant={subIsKey ? 'key' : 'type'}");
   });
 
   it('marks tree title, key, status, and percent with the list classes', () => {
