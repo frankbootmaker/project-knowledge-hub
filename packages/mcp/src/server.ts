@@ -2229,11 +2229,15 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_delivery_dependencies',
-    'List every predecessor link on one delivery item and the successors derived from other items that name it as a predecessor. An item may have many predecessors. The successor start is the latest constraint across them (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). entityId is a UUID or human key (PRO-T-1, PRO-B-1, PRO-E-1, PRO-S-1, PRO-M-1, PRO-SP-1). entityType is required for a UUID and optional when the key encodes the type (B is a bug and uses entity type task). scheduleDriven is true when a predecessor date currently sets this item’s start. Requires pm:read.',
+    'List every predecessor link on one delivery item and the successors derived from other items that name it as a predecessor. An item may have many predecessors. The successor start is the latest constraint across them (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). projectId (UUID) and entityId are required. entityId is a UUID or human key (PRO-T-1, PRO-B-1, PRO-E-1, PRO-S-1, PRO-M-1, PRO-SP-1). entityType is required for a UUID and optional when the key encodes the type (B is a bug and uses entity type task). scheduleDriven is true when a predecessor date currently sets this item’s start. Requires pm:read.',
     {
-      projectId: z.string().uuid(),
-      entityId: dependencyRef,
-      entityType: dependencyEntityType.optional(),
+      projectId: z.string().uuid().describe('Required project id (UUID).'),
+      entityId: dependencyRef.describe(
+        'Required delivery item id (UUID or human key such as PRO-T-1 or PRO-B-1).',
+      ),
+      entityType: dependencyEntityType.optional().describe(
+        'Required when entityId is a UUID. Optional when the human key encodes the type.',
+      ),
     },
     async (args) =>
       wrap(
@@ -2255,9 +2259,9 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'set_delivery_dependency',
-    'Add predecessor links between delivery items in the same project. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several at once. An item may have many predecessors; each ordered pair is stored once. linkType is FS, SS, FF, or SF. lagDays defaults to 0 and may be negative (lead). The successor start is the latest constraint across its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. Ids are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass a type when the id is a UUID. Requires pm:write.',
+    'Add predecessor links between delivery items in the same project. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several at once. An item may have many predecessors; each ordered pair is stored once. linkType is FS, SS, FF, or SF. lagDays defaults to 0 and may be negative (lead). The successor start is the latest constraint across its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. Ids are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass a type when the id is a UUID. Requires pm:write.',
     {
-      projectId: z.string().uuid(),
+      projectId: z.string().uuid().describe('Required project id (UUID).'),
       predecessorId: dependencyRef.optional(),
       predecessorType: dependencyEntityType.optional(),
       successorId: dependencyRef.optional(),
@@ -2277,9 +2281,9 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'remove_delivery_dependency',
-    'Remove one dependency link. Pass linkId, or both predecessorId and successorId (UUID or human key such as PRO-T-1 or PRO-B-1). Types are required when an id is a UUID. Requires pm:write.',
+    'Remove one dependency link. projectId (UUID) is required. Pass linkId, or both predecessorId and successorId (UUID or human key such as PRO-T-1 or PRO-B-1). Types are required when an id is a UUID. Requires pm:write.',
     {
-      projectId: z.string().uuid(),
+      projectId: z.string().uuid().describe('Required project id (UUID).'),
       linkId: z.string().uuid().optional(),
       predecessorId: dependencyRef.optional(),
       predecessorType: dependencyEntityType.optional(),
@@ -3052,6 +3056,7 @@ export function createKnowledgeHubMcpServer(
   }
 
   rejectUnknownToolArguments(server);
+  describeRequiredToolInputs(server);
   return server;
 }
 
@@ -3075,6 +3080,135 @@ function rejectUnknownToolArguments(server: McpServer): void {
     if (schema && typeof schema.strict === 'function') {
       tool.inputSchema = schema.strict() as typeof schema;
     }
+  }
+}
+
+type ZodDef = {
+  typeName?: string;
+  innerType?: z.ZodTypeAny;
+  type?: z.ZodTypeAny;
+  options?: z.ZodTypeAny[];
+  discriminator?: string;
+  unknownKeys?: string;
+  description?: string;
+  minLength?: { value: number } | null;
+  maxLength?: { value: number } | null;
+  defaultValue?: () => unknown;
+  checks?: Array<{ kind?: string }>;
+};
+
+function zodDef(schema: z.ZodTypeAny): ZodDef {
+  if (!schema || typeof schema !== 'object') return {};
+  const def = (schema as unknown as { _def?: ZodDef })._def;
+  if (!def) return {};
+  return def;
+}
+
+function isUuidField(field: z.ZodTypeAny): boolean {
+  let current = field;
+  let def = zodDef(current);
+  while (
+    def.typeName === 'ZodOptional'
+    || def.typeName === 'ZodNullable'
+    || def.typeName === 'ZodDefault'
+  ) {
+    if (!def.innerType) break;
+    current = def.innerType;
+    def = zodDef(current);
+  }
+  return Boolean(def.checks?.some((check) => check.kind === 'uuid'));
+}
+
+function requiredFieldDescription(key: string, field: z.ZodTypeAny): string {
+  if (key === 'projectId' && isUuidField(field)) return 'Required project id (UUID).';
+  if (isUuidField(field)) return `Required ${key} (UUID).`;
+  if (key === 'entityId') return 'Required entity id (UUID or human key).';
+  return `Required ${key}.`;
+}
+
+/**
+ * Copy a tool input schema, adding "Required" to required fields that lack it.
+ * The copy is assigned only to the MCP tool. Shared domain schemas stay as written.
+ */
+function withRequiredDescriptions(schema: z.ZodTypeAny): z.ZodTypeAny {
+  const def = zodDef(schema);
+  if (def.typeName === 'ZodOptional' && def.innerType) {
+    const inner = withRequiredDescriptions(def.innerType);
+    if (inner === def.innerType) return schema;
+    const next = inner.optional();
+    return schema.description ? next.describe(schema.description) : next;
+  }
+  if (def.typeName === 'ZodNullable' && def.innerType) {
+    const inner = withRequiredDescriptions(def.innerType);
+    if (inner === def.innerType) return schema;
+    const next = inner.nullable();
+    return schema.description ? next.describe(schema.description) : next;
+  }
+  if (def.typeName === 'ZodDefault' && def.innerType && def.defaultValue) {
+    const inner = withRequiredDescriptions(def.innerType);
+    if (inner === def.innerType) return schema;
+    const next = inner.default(def.defaultValue());
+    return schema.description ? next.describe(schema.description) : next;
+  }
+  if (def.typeName === 'ZodArray' && def.type) {
+    const inner = withRequiredDescriptions(def.type);
+    if (inner === def.type) return schema;
+    let array = z.array(inner);
+    if (def.minLength) array = array.min(def.minLength.value);
+    if (def.maxLength) array = array.max(def.maxLength.value);
+    return schema.description ? array.describe(schema.description) : array;
+  }
+  if (
+    (def.typeName === 'ZodUnion' || def.typeName === 'ZodDiscriminatedUnion')
+    && def.options
+    && def.options.length >= 2
+  ) {
+    const options = def.options.map((option) => withRequiredDescriptions(option));
+    if (options.every((option, index) => option === def.options?.[index])) return schema;
+    const tuple = options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]];
+    const next = def.typeName === 'ZodDiscriminatedUnion' && def.discriminator
+      ? z.discriminatedUnion(
+        def.discriminator,
+        tuple as unknown as [
+          z.ZodDiscriminatedUnionOption<string>,
+          ...z.ZodDiscriminatedUnionOption<string>[],
+        ],
+      )
+      : z.union(tuple);
+    return schema.description ? next.describe(schema.description) : next;
+  }
+  if (def.typeName !== 'ZodObject') return schema;
+
+  const shape = (schema as z.ZodObject<z.ZodRawShape>).shape;
+  const nextShape: z.ZodRawShape = {};
+  let changed = false;
+  for (const [key, field] of Object.entries(shape)) {
+    let updated = withRequiredDescriptions(field);
+    const description = updated.description ?? '';
+    if (!field.isOptional() && !/required/i.test(description)) {
+      updated = updated.describe(
+        description ? `Required. ${description}` : requiredFieldDescription(key, field),
+      );
+    }
+    if (updated !== field) changed = true;
+    nextShape[key] = updated;
+  }
+  if (!changed) return schema;
+  const object = def.unknownKeys === 'strict' ? z.object(nextShape).strict() : z.object(nextShape);
+  return schema.description ? object.describe(schema.description) : object;
+}
+
+function describeRequiredToolInputs(server: McpServer): void {
+  const tools = (
+    server as unknown as {
+      _registeredTools?: Record<string, { inputSchema?: z.ZodTypeAny }>;
+    }
+  )._registeredTools;
+  if (!tools) return;
+  for (const tool of Object.values(tools)) {
+    if (!tool.inputSchema || typeof tool.inputSchema.safeParse !== 'function') continue;
+    const next = withRequiredDescriptions(tool.inputSchema);
+    if (next !== tool.inputSchema) tool.inputSchema = next;
   }
 }
 
