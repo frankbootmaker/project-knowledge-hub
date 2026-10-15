@@ -164,7 +164,7 @@ describe('ops nav', () => {
       (item) => item.id === 'delivery',
     );
     expect(delivery).toBeTruthy();
-    for (const view of ['board', 'list', 'tree', 'scrum', 'timeline', 'calendar']) {
+    for (const view of ['board', 'list', 'tree', 'gantt', 'scrum', 'timeline', 'calendar']) {
       expect(
         matchNavItem(
           delivery!,
@@ -448,7 +448,7 @@ describe('ops nav', () => {
     const delivery = NAV_SECTIONS.flatMap((section) => section.items).find(
       (item) => item.id === 'delivery',
     )!;
-    for (const view of ['', '?delivery=board', '?delivery=list', '?delivery=scrum', '?delivery=timeline', '?delivery=calendar']) {
+    for (const view of ['', '?delivery=board', '?delivery=list', '?delivery=gantt', '?delivery=scrum', '?delivery=timeline', '?delivery=calendar']) {
       expect(
         isRailItemActive(delivery, ctx, path, 'project-delivery', view, 'project-delivery'),
       ).toBe(true);

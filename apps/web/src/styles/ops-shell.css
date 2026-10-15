@@ -4993,3 +4993,315 @@ button.kh-ops-stage-card:disabled {
   font-size: 13px;
   font-weight: 400;
 }
+
+/* Delivery Gantt. Rail menu type, frozen WBS + title, sticky scale. */
+.kh-ops-gantt {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+}
+
+.kh-ops-gantt-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.kh-ops-gantt-tools [role='group'] {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.kh-ops-gantt-tools .kh-btn {
+  min-height: 2rem;
+  height: 2rem;
+  padding-inline: 0.7rem;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.kh-ops-gantt-choice[aria-pressed='true'] {
+  background: var(--kh-ink);
+  border-color: var(--kh-ink);
+  color: var(--kh-on-brand);
+}
+
+.kh-ops-gantt-choice[aria-pressed='true']:hover {
+  background: var(--kh-ink);
+  color: var(--kh-on-brand);
+}
+
+.kh-ops-gantt-scroll {
+  max-height: min(70vh, 48rem);
+  overflow: auto;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-panel-solid);
+}
+
+.kh-ops-gantt-sheet {
+  width: max-content;
+  min-width: 100%;
+}
+
+.kh-ops-gantt-head,
+.kh-ops-gantt-row {
+  display: grid;
+  grid-template-columns: var(--gantt-cols);
+}
+
+.kh-ops-gantt-head {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  height: var(--gantt-head);
+  background: var(--kh-surface);
+  border-bottom: 1px solid var(--kh-line);
+  color: var(--kh-ink-muted);
+}
+
+.kh-ops-gantt-row {
+  height: var(--gantt-row);
+  position: relative;
+  z-index: 1;
+}
+
+.kh-ops-gantt .kh-ops-tree-toggle,
+.kh-ops-gantt .kh-ops-tree-spacer {
+  width: 22px;
+  min-width: 22px;
+  height: 28px;
+  min-height: 0;
+}
+
+.kh-ops-gantt-title-inner .kh-ops-key-badge {
+  flex: none;
+}
+
+.kh-ops-gantt-cell,
+.kh-ops-gantt-scale,
+.kh-ops-gantt-track {
+  min-width: 0;
+  border-bottom: 1px solid var(--kh-line);
+  background: var(--kh-panel-solid);
+}
+
+.kh-ops-gantt-cell {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.kh-ops-gantt-head .kh-ops-gantt-cell,
+.kh-ops-gantt-head .kh-ops-gantt-scale {
+  background: var(--kh-surface);
+}
+
+.kh-ops-gantt-wbs,
+.kh-ops-gantt-title {
+  position: sticky;
+  z-index: 2;
+}
+
+.kh-ops-gantt-wbs {
+  left: 0;
+  justify-content: flex-end;
+  padding-inline: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-ops-gantt-title {
+  left: var(--gantt-wbs);
+  box-shadow: 1px 0 0 var(--kh-line);
+}
+
+.kh-ops-gantt-head .kh-ops-gantt-wbs,
+.kh-ops-gantt-head .kh-ops-gantt-title {
+  z-index: 5;
+  background: var(--kh-surface);
+}
+
+.kh-ops-gantt-row:hover .kh-ops-gantt-cell {
+  background: var(--kh-neutral-soft);
+}
+
+.kh-ops-gantt-row:hover .kh-ops-gantt-track {
+  background: color-mix(in oklch, var(--kh-neutral-soft) 55%, transparent);
+}
+
+.kh-ops-gantt-title-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  padding-left: calc(var(--level, 0) * 12px);
+}
+
+.kh-ops-gantt-title-btn,
+.kh-ops-gantt-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.kh-ops-gantt-title-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.kh-ops-gantt-title-btn:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: 2px;
+}
+
+.kh-ops-gantt-pct {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-ops-gantt-pct-track {
+  flex: 1 1 auto;
+  height: 6px;
+  min-width: 2rem;
+  background: var(--kh-neutral-soft);
+  border: 1px solid var(--kh-line);
+}
+
+.kh-ops-gantt-pct-track > span {
+  display: block;
+  height: 100%;
+  background: var(--kh-brand);
+}
+
+.kh-ops-gantt-scale,
+.kh-ops-gantt-track {
+  position: relative;
+  overflow: hidden;
+  background: transparent;
+}
+
+.kh-ops-gantt-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 4px 6px;
+  overflow: hidden;
+  border-left: 1px solid var(--kh-line);
+  color: var(--kh-ink-muted);
+  white-space: nowrap;
+}
+
+.kh-ops-gantt-tick[data-off='true'] {
+  background: color-mix(in oklch, var(--kh-ink) 6%, transparent);
+}
+
+.kh-ops-gantt-today-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--kh-danger);
+  pointer-events: none;
+}
+
+.kh-ops-gantt-body {
+  position: relative;
+}
+
+.kh-ops-gantt-shade,
+.kh-ops-gantt-arrows {
+  position: absolute;
+  top: 0;
+  left: var(--gantt-grid);
+  pointer-events: none;
+}
+
+.kh-ops-gantt-shade {
+  z-index: 0;
+}
+
+.kh-ops-gantt-shade rect {
+  fill: color-mix(in oklch, var(--kh-ink) 7%, transparent);
+}
+
+.kh-ops-gantt-arrows {
+  z-index: 2;
+  overflow: visible;
+}
+
+.kh-ops-gantt-arrows path {
+  fill: none;
+  stroke: var(--kh-ink-muted);
+  stroke-width: 1.25;
+}
+
+.kh-ops-gantt-arrows marker path {
+  fill: var(--kh-ink-muted);
+  stroke: none;
+}
+
+.kh-ops-gantt-today {
+  stroke: var(--kh-danger);
+  stroke-width: 1.5;
+}
+
+.kh-ops-gantt-bar {
+  position: absolute;
+  top: 50%;
+  height: 14px;
+  transform: translateY(-50%);
+  background: color-mix(in oklch, var(--kh-brand) 28%, var(--kh-panel-solid));
+  border: 1px solid color-mix(in oklch, var(--kh-brand) 55%, var(--kh-line));
+}
+
+.kh-ops-gantt-bar[data-kind='epic'],
+.kh-ops-gantt-bar[data-kind='story'] {
+  height: 10px;
+  background: color-mix(in oklch, var(--kh-ink) 18%, var(--kh-panel-solid));
+  border-color: color-mix(in oklch, var(--kh-ink) 45%, var(--kh-line));
+}
+
+.kh-ops-gantt-bar-done {
+  display: block;
+  height: 100%;
+  background: var(--kh-brand);
+}
+
+.kh-ops-gantt-bar[data-kind='epic'] .kh-ops-gantt-bar-done,
+.kh-ops-gantt-bar[data-kind='story'] .kh-ops-gantt-bar-done {
+  background: var(--kh-ink);
+}
+
+.kh-ops-gantt-diamond {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  background: var(--kh-ink);
+  transform: translate(-50%, -50%) rotate(45deg);
+}

@@ -17,6 +17,7 @@ import {
 import { writeAuditEvent } from '../lib/identity.js';
 import {
   listDeliveryDependencies,
+  listProjectDeliveryDependencies,
   removeDeliveryDependency,
   setDeliveryDependencies,
   setDeliveryDependency,
@@ -55,7 +56,7 @@ export async function registerDeliveryDependencyRoutes(
         .parse(request.params);
       const query = z
         .object({
-          entityId: refSchema,
+          entityId: refSchema.optional(),
           entityType: entityTypeSchema.optional(),
         })
         .parse(request.query);
@@ -64,6 +65,12 @@ export async function registerDeliveryDependencyRoutes(
         params.projectId,
       );
       requireWorkspaceView(principal, project.workspaceId);
+      if (!query.entityId) {
+        return listProjectDeliveryDependencies({
+          database: app.database,
+          projectId: project.id,
+        });
+      }
       return listDeliveryDependencies({
         database: app.database,
         projectId: project.id,
