@@ -531,6 +531,11 @@ export default async function ProjectDetailPage({
         canMutate={canMutate && !isArchived}
         projectStartDate={project.startDate}
         projectEndDate={project.endDate}
+        workingCalendar={{
+          hoursPerWorkday: project.hoursPerWorkday,
+          workdaysPerWeek: project.workdaysPerWeek,
+          nonWorkingDays: project.nonWorkingDays,
+        }}
         definitionOfDone={project.definitionOfDone ?? null}
         initialEpics={epics}
         initialStories={stories}

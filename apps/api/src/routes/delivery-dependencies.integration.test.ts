@@ -238,6 +238,18 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     expect(taskLinks.successors).toHaveLength(1);
     expect(taskLinks.successors[0]?.successor.humanKey).toBe(bug.humanKey);
 
+    const listedAll = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}/delivery-dependencies`,
+      headers: { cookie: adminCookie },
+    });
+    expect(listedAll.statusCode).toBe(200);
+    const allLinks = listedAll.json() as {
+      dependencies: Array<{ id: string; predecessor: { humanKey: string | null } }>;
+    };
+    expect(allLinks.dependencies.map((row) => row.id)).toContain(link.dependency.id);
+    expect(allLinks.dependencies.some((row) => row.predecessor.humanKey === task.humanKey)).toBe(true);
+
     const stretched = await app!.inject({
       method: 'PATCH',
       url: `/api/v1/project-tasks/${bug.id}`,
