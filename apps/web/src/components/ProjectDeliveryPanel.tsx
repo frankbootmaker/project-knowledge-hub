@@ -1304,6 +1304,19 @@ export function ProjectDeliveryPanel({
           items={calendarItems}
           exportHandleRef={calendarExportRef}
           onExportStateChange={onCalendarExportStateChange}
+          onOpenItem={(item) => {
+            if (item.kind === 'task') {
+              const taskId = item.id.startsWith('task:')
+                ? item.id.slice('task:'.length)
+                : item.id;
+              setManageTaskId(taskId);
+              return;
+            }
+            const milestoneId = item.id.startsWith('milestone:')
+              ? item.id.slice('milestone:'.length)
+              : item.id;
+            setManageAgile({ kind: 'milestone', id: milestoneId });
+          }}
         />
       ) : null}
 

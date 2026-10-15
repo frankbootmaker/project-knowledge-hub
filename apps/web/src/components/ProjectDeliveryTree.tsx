@@ -45,6 +45,7 @@ import {
   compareMilestonesByDueDate,
   type MilestoneMarker,
 } from './MilestoneTimeMarkers';
+import { DeliveryItemIdButton } from './DeliveryItemIdButton';
 
 const DELIVERY_TREE_MILESTONES = 'delivery-tree-milestones';
 
@@ -95,6 +96,7 @@ function TreeBranch({
   label,
   sub,
   subIsKey = false,
+  onSubOpen,
   note,
   meta,
   children,
@@ -109,6 +111,7 @@ function TreeBranch({
   sub?: ReactNode;
   /** Item keys stay on the mono badge. Kind words use the menu type chip. */
   subIsKey?: boolean;
+  onSubOpen?: () => void;
   note?: ReactNode;
   meta?: ReactNode;
   children?: ReactNode;
@@ -141,7 +144,18 @@ function TreeBranch({
           <div className="kh-ops-tree-title">
             <strong className="kh-ops-primary-cell">{label}</strong>
             {sub ? (
-              <span className={subIsKey ? 'kh-ops-key-badge' : 'kh-ops-type-chip'}>{sub}</span>
+              onSubOpen ? (
+                <DeliveryItemIdButton
+                  variant={subIsKey ? 'key' : 'type'}
+                  onClick={onSubOpen}
+                >
+                  {sub}
+                </DeliveryItemIdButton>
+              ) : (
+                <span className={subIsKey ? 'kh-ops-key-badge' : 'kh-ops-type-chip'}>
+                  {sub}
+                </span>
+              )
             ) : null}
             {note ? <span className="kh-ops-menu-type">{note}</span> : null}
             {dimmed && dimHint ? <span className="sr-only">{dimHint}</span> : null}
@@ -640,6 +654,7 @@ export function ProjectDeliveryTree({
             : (task.humanKey ?? t('kindTask'))
         }
         subIsKey={Boolean(task.humanKey)}
+        onSubOpen={onManageTask ? () => onManageTask(task.id) : undefined}
         {...rowDim(id)}
         meta={metaBits({
           statusLabel: t(`taskStatus.${task.status}`),
@@ -685,6 +700,7 @@ export function ProjectDeliveryTree({
         label={story.title}
         sub={story.humanKey ?? t('kindStory')}
         subIsKey={Boolean(story.humanKey)}
+        onSubOpen={onManageStory ? () => onManageStory(story.id) : undefined}
         {...rowDim(id)}
         meta={metaBits({
           statusLabel: t(`milestoneStatus.${story.status}`),
@@ -866,6 +882,11 @@ export function ProjectDeliveryTree({
                     label={milestone.title}
                     sub={milestone.humanKey ?? undefined}
                     subIsKey={Boolean(milestone.humanKey)}
+                    onSubOpen={
+                      onManageMilestone && milestone.humanKey
+                        ? () => onManageMilestone(milestone.id)
+                        : undefined
+                    }
                     note={
                       milestone.targetDate
                         ? formatLocaleDate(milestone.targetDate, locale)
@@ -915,6 +936,7 @@ export function ProjectDeliveryTree({
                   label={epic.title}
                   sub={epic.humanKey ?? t('kindEpic')}
                   subIsKey={Boolean(epic.humanKey)}
+                  onSubOpen={onManageEpic ? () => onManageEpic(epic.id) : undefined}
                   {...rowDim(id)}
                   meta={metaBits({
                     statusLabel: t(`milestoneStatus.${epic.status}`),
