@@ -72,6 +72,32 @@ export function rangeOverlaps(
   return startMs <= winEnd && endMs >= winStart;
 }
 
+/** Due/end date used to place timeline cards; start does not affect position. */
+export function timelineDueDate(
+  startDate: string | null,
+  endOrDueDate: string | null,
+): string | null {
+  return endOrDueDate ?? startDate;
+}
+
+export function timelineDueInRange(
+  dueDate: string | null,
+  rangeStart: number,
+  rangeEnd: number,
+): boolean {
+  if (!dueDate) return false;
+  const ms = parseYmd(dueDate);
+  return ms >= rangeStart && ms <= rangeEnd;
+}
+
+export function timelineDueLeftPct(
+  dueDate: string,
+  rangeStart: number,
+  span: number,
+): number {
+  return clamp(((parseYmd(dueDate) - rangeStart) / span) * 100, 0, 100);
+}
+
 export function timelineZoomPx(index: number): number {
   const level = TIMELINE_ZOOM_LEVELS[clampZoomIndex(index)];
   return level ? level.pxPerDay : TIMELINE_ZOOM_LEVELS[0].pxPerDay;

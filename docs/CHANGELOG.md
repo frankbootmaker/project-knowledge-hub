@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **Timeline due-date anchoring (PRO-T-81):** Epics and stories on the delivery Timeline view anchor on their due date again instead of stretching across rolled-up start..end ranges from parent date rollup (PRO-T-73).
+
 ### Added
+
+* **Timeline start date display (PRO-T-81):** The Timeline “Show on timeline” options include an optional Start date label (default off, session-persisted, EN/HU/DE) before Due date; card position is unchanged.
 
 * **Delivery tree depth (PRO-T-54):** The work-breakdown header can expand or collapse one level, or expand or collapse the whole filtered tree. A control is disabled when that action would change nothing. One-level actions follow the visible frontier, including mixed depths and active filters.
 
