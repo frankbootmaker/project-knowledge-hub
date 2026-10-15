@@ -11,6 +11,9 @@ import {
   packMarkerLanes,
   packStoryLanes,
   rangeOverlaps,
+  timelineDueDate,
+  timelineDueInRange,
+  timelineDueLeftPct,
   scrollLeftForDate,
   scrollLeftForFraction,
   storyBaseY,
@@ -130,5 +133,31 @@ describe('timeline period overlap', () => {
     expect(rangeOverlaps(Date.UTC(2026, 2, 1), Date.UTC(2026, 3, 10), from, to)).toBe(true);
     expect(rangeOverlaps(Date.UTC(2026, 5, 1), Date.UTC(2026, 5, 20), from, to)).toBe(false);
     expect(rangeOverlaps(from, from, from, to)).toBe(true);
+  });
+});
+
+describe('timeline due anchoring', () => {
+  it('prefers end/due over start for card position', () => {
+    expect(timelineDueDate('2026-01-01', '2026-03-15')).toBe('2026-03-15');
+    expect(timelineDueDate('2026-01-01', null)).toBe('2026-01-01');
+    expect(timelineDueDate(null, null)).toBeNull();
+  });
+
+  it('filters by due date inside the visible window', () => {
+    const from = Date.UTC(2026, 3, 1);
+    const to = Date.UTC(2026, 3, 30);
+    expect(timelineDueInRange('2026-05-10', from, to)).toBe(false);
+    expect(timelineDueInRange('2026-04-15', from, to)).toBe(true);
+    expect(timelineDueInRange(null, from, to)).toBe(false);
+  });
+
+  it('maps due dates to horizontal percent without using the start span', () => {
+    const rangeStart = Date.UTC(2026, 0, 1);
+    const span = Date.UTC(2026, 2, 1) - rangeStart;
+    const dueOnly = timelineDueLeftPct('2026-02-01', rangeStart, span);
+    const wideStart = timelineDueLeftPct('2026-02-01', rangeStart, span);
+    expect(dueOnly).toBe(wideStart);
+    expect(dueOnly).toBeGreaterThan(0);
+    expect(dueOnly).toBeLessThan(100);
   });
 });

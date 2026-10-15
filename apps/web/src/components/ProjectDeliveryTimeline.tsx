@@ -44,8 +44,9 @@ import {
   packMarkerLanes,
   packStoryLanes,
   parseYmd,
-  rangeOverlaps,
   scrollLeftForDate,
+  timelineDueDate,
+  timelineDueInRange,
   scrollLeftForFraction,
   storyBaseY,
   storyLaneSpacerPx,
@@ -86,6 +87,7 @@ type Task = {
   title: string;
   status: string;
   dueDate: string | null;
+  startDate?: string | null;
   humanKey?: string | null;
   itemType?: 'task' | 'bug';
 };
@@ -96,6 +98,7 @@ type AxisMarker = {
   itemType?: 'task' | 'bug';
   title: string;
   date: string;
+  startDate?: string | null;
   status: string;
   humanKey?: string | null;
   onOpen: () => void;
@@ -105,33 +108,39 @@ type TagOffset = { dx: number; dy: number };
 
 function ItemMetaRow({
   issueId,
-  date,
+  startDate,
+  dueDate,
   showIssueIds,
+  showStartDates,
   showDueDates,
   className,
 }: {
   issueId?: string | null;
-  date?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
   showIssueIds: boolean;
+  showStartDates: boolean;
   showDueDates: boolean;
   className?: string;
 }) {
   const locale = useLocale();
   const id = showIssueIds && issueId ? issueId : null;
-  const due = showDueDates && date ? formatLocaleDate(date, locale) : null;
-  if (!id && !due) return null;
-  if (id && due) {
+  const start = showStartDates && startDate ? formatLocaleDate(startDate, locale) : null;
+  const due = showDueDates && dueDate ? formatLocaleDate(dueDate, locale) : null;
+  const dates = [start, due].filter(Boolean).join(' · ');
+  if (!id && !dates) return null;
+  if (id && dates) {
     return (
       <span className={cn('flex w-full min-w-0 items-center justify-between gap-1', className)}>
         <span className="kh-ops-key-badge min-w-0 truncate">{id}</span>
-        <span className="shrink-0 tabular-nums">{due}</span>
+        <span className="shrink-0 tabular-nums">{dates}</span>
       </span>
     );
   }
   if (id) {
     return <span className={cn('kh-ops-key-badge max-w-full truncate', className)}>{id}</span>;
   }
-  return <span className={cn('kh-ops-menu-type block truncate', className)}>{due}</span>;
+  return <span className={cn('kh-ops-menu-type block truncate tabular-nums', className)}>{dates}</span>;
 }
 
 type TimelineFilters = {
@@ -247,6 +256,24 @@ function readDueDates(storageKey: string): boolean {
 }
 
 function writeDueDates(storageKey: string, enabled: boolean): void {
+  try {
+    window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function readStartDates(storageKey: string): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (raw === null) return false;
+    return raw === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeStartDates(storageKey: string, enabled: boolean): void {
   try {
     window.sessionStorage.setItem(storageKey, enabled ? '1' : '0');
   } catch {
@@ -577,6 +604,7 @@ export function ProjectDeliveryTimeline({
   const gridKey = `kh-timeline-grid:${projectId}`;
   const statusColorKey = `kh-timeline-status-colors:${projectId}`;
   const dueDatesKey = `kh-timeline-due-dates:${projectId}`;
+  const startDatesKey = `kh-timeline-start-dates:${projectId}`;
   const issueIdsKey = `kh-timeline-issue-ids:${projectId}`;
   const { offsets, updateOffset, resetOffsets } = useTagOffsets(storageKey);
   const [filters, setFilters] = useState<TimelineFilters>(DEFAULT_FILTERS);
@@ -587,6 +615,7 @@ export function ProjectDeliveryTimeline({
   const [showGrid, setShowGrid] = useState(true);
   const [colorByStatus, setColorByStatus] = useState(false);
   const [showDueDates, setShowDueDates] = useState(false);
+  const [showStartDates, setShowStartDates] = useState(false);
   const [showIssueIds, setShowIssueIds] = useState(true);
   const [exportPending, setExportPending] = useState(false);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_TIMELINE_ZOOM_INDEX);
@@ -614,6 +643,7 @@ export function ProjectDeliveryTimeline({
     setShowGrid(readGrid(gridKey));
     setColorByStatus(readStatusColors(statusColorKey));
     setShowDueDates(readDueDates(dueDatesKey));
+    setShowStartDates(readStartDates(startDatesKey));
     setShowIssueIds(readIssueIds(issueIdsKey));
     setZoomIndex(DEFAULT_TIMELINE_ZOOM_INDEX);
     anchorRef.current = { kind: 'date', dateMs: parseYmd(todayDate) };
@@ -621,6 +651,7 @@ export function ProjectDeliveryTimeline({
     setHydrated(true);
   }, [
     dueDatesKey,
+    startDatesKey,
     filterKey,
     gridKey,
     issueIdsKey,
@@ -649,6 +680,14 @@ export function ProjectDeliveryTimeline({
     setShowDueDates((current) => {
       const next = !current;
       writeDueDates(dueDatesKey, next);
+      return next;
+    });
+  }
+
+  function toggleStartDates() {
+    setShowStartDates((current) => {
+      const next = !current;
+      writeStartDates(startDatesKey, next);
       return next;
     });
   }
@@ -910,18 +949,13 @@ export function ProjectDeliveryTimeline({
     }
   }
 
-  function barStyle(start: string | null, end: string | null) {
-    if (!start && !end) return null;
-    const itemStart = parseYmd(start ?? end!);
-    const itemEnd = parseYmd(end ?? start!);
-    if (!rangeOverlaps(itemStart, itemEnd, rangeStart, rangeEnd)) return null;
-    const clippedStart = Math.max(itemStart, rangeStart);
-    const clippedEnd = Math.min(itemEnd, rangeEnd);
-    const left = ((clippedStart - rangeStart) / span) * 100;
-    const width = Math.max(1.2, ((Math.max(clippedStart, clippedEnd) - clippedStart) / span) * 100);
+  function dueAnchorStyle(due: string | null): CSSProperties | null {
+    if (!due || !dateInWindow(due)) return null;
     return {
-      left: `${clamp(left, 0, 100)}%`,
-      width: `${clamp(width, 1.2, 100 - clamp(left, 0, 100))}%`,
+      left: `${markerLeftPct(due)}%`,
+      transform: 'translateX(-50%)',
+      maxWidth: '14rem',
+      width: 'max-content',
     };
   }
 
@@ -961,6 +995,7 @@ export function ProjectDeliveryTimeline({
           kind: 'milestone',
           title: milestone.title,
           date: milestone.targetDate,
+          startDate: milestone.startDate,
           status: milestone.status,
           humanKey: milestone.humanKey ?? null,
           onOpen: () => onManageMilestone(milestone.id),
@@ -976,6 +1011,7 @@ export function ProjectDeliveryTimeline({
           itemType: task.itemType === 'bug' ? 'bug' : 'task',
           title: task.title,
           date: task.dueDate,
+          startDate: task.startDate ?? null,
           status: task.status,
           humanKey: task.humanKey ?? null,
           onOpen: () => onManageTask(task.id),
@@ -1007,27 +1043,25 @@ export function ProjectDeliveryTimeline({
   const markerTrackHeight = markerTrackHeightPx(markerLanes.values());
 
   const scheduledEpics = filters.epics
-    ? epics.filter((epic) => {
-        if (!epic.startDate && !epic.endDate) return false;
-        const start = parseYmd(epic.startDate ?? epic.endDate!);
-        const end = parseYmd(epic.endDate ?? epic.startDate!);
-        return rangeOverlaps(start, end, rangeStart, rangeEnd);
-      })
+    ? epics.filter((epic) =>
+        timelineDueInRange(timelineDueDate(epic.startDate, epic.endDate), rangeStart, rangeEnd),
+      )
     : [];
   const standaloneStories =
     filters.stories && !filters.epics
-      ? stories.filter((story) => {
-          if (!story.startDate && !story.endDate) return false;
-          const start = parseYmd(story.startDate ?? story.endDate!);
-          const end = parseYmd(story.endDate ?? story.startDate!);
-          return rangeOverlaps(start, end, rangeStart, rangeEnd);
-        })
+      ? stories.filter((story) =>
+          timelineDueInRange(
+            timelineDueDate(story.startDate, story.endDate),
+            rangeStart,
+            rangeEnd,
+          ),
+        )
       : [];
   const unscheduledEpics = filters.epics
-    ? epics.filter((epic) => !epic.startDate && !epic.endDate)
+    ? epics.filter((epic) => !timelineDueDate(epic.startDate, epic.endDate))
     : [];
   const unscheduledStories = filters.stories
-    ? stories.filter((story) => !story.startDate && !story.endDate)
+    ? stories.filter((story) => !timelineDueDate(story.startDate, story.endDate))
     : [];
   const unscheduledMilestones = filters.milestones
     ? milestones.filter((milestone) => !milestone.startDate && !milestone.targetDate)
@@ -1060,6 +1094,7 @@ export function ProjectDeliveryTimeline({
             includeMilestones: filters.milestones,
             includeTasks: filters.tasks,
             colorByStatus,
+            showStartDates,
             showDueDates,
             showIssueIds,
             showGrid,
@@ -1104,6 +1139,7 @@ export function ProjectDeliveryTimeline({
     pushToast,
     rangeEnd,
     rangeStart,
+    showStartDates,
     showDueDates,
     showIssueIds,
     showGrid,
@@ -1132,39 +1168,36 @@ export function ProjectDeliveryTimeline({
   }, [anyTypeVisible, exportHandleRef, exportPending, exportTimelinePdf, onExportStateChange]);
 
   function storyAnchorLeft(story: Story): number | null {
-    const storyStyle = barStyle(story.startDate, story.endDate);
-    if (!storyStyle) return null;
-    const midDate = formatYmd(
-      (parseYmd(story.startDate ?? story.endDate!) + parseYmd(story.endDate ?? story.startDate!)) /
-        2,
-    );
-    const midLeft = markerLeftPct(midDate);
-    const barLeft = Number.parseFloat(storyStyle.left);
-    const barWidth = Number.parseFloat(storyStyle.width);
-    return clamp(midLeft, barLeft, barLeft + barWidth);
+    const due = timelineDueDate(story.startDate, story.endDate);
+    if (!due || !dateInWindow(due)) return null;
+    return markerLeftPct(due);
   }
 
   function epicLane(epic: Epic, side: 'above' | 'below') {
-    const style = barStyle(epic.startDate, epic.endDate);
+    const epicDue = timelineDueDate(epic.startDate, epic.endDate);
+    const style = dueAnchorStyle(epicDue);
     if (!style) return null;
     const epicStories = filters.stories
       ? stories.filter((story) => {
           if (story.epicId !== epic.id) return false;
-          if (!story.startDate && !story.endDate) return false;
-          const start = parseYmd(story.startDate ?? story.endDate!);
-          const end = parseYmd(story.endDate ?? story.startDate!);
-          return rangeOverlaps(start, end, rangeStart, rangeEnd);
+          return timelineDueInRange(
+            timelineDueDate(story.startDate, story.endDate),
+            rangeStart,
+            rangeEnd,
+          );
         })
       : [];
     const epicTone = colorByStatus
       ? deliveryScheduleTone({
           status: epic.status,
-          date: epic.endDate ?? epic.startDate,
+          date: epicDue,
           today: todayDate,
         })
       : null;
     const epicHasMeta =
-      (showIssueIds && Boolean(epic.humanKey)) || (showDueDates && Boolean(epic.endDate));
+      (showIssueIds && Boolean(epic.humanKey)) ||
+      (showStartDates && Boolean(epic.startDate)) ||
+      (showDueDates && Boolean(epic.endDate));
     const storyLanes = packStoryLanes(
       epicStories.flatMap((story) => {
         const anchorLeft = storyAnchorLeft(story);
@@ -1198,32 +1231,26 @@ export function ProjectDeliveryTimeline({
             )}
             data-tone={epicTone ?? undefined}
             style={style}
-            title={`${epic.startDate ?? '…'} → ${epic.endDate ?? '…'}`}
+            title={epicDue ? `${epic.title} (${epicDue})` : epic.title}
             onClick={() => onManageEpic(epic.id)}
           >
             <span className="block truncate">{epic.title}</span>
             <ItemMetaRow
               issueId={epic.humanKey}
-              date={epic.endDate}
+              startDate={epic.startDate}
+              dueDate={epic.endDate}
               showIssueIds={showIssueIds}
+              showStartDates={showStartDates}
               showDueDates={showDueDates}
               className="text-[10px] font-normal opacity-80"
             />
           </button>
           {epicStories.map((story) => {
-            const storyStyle = barStyle(story.startDate, story.endDate);
-            if (!storyStyle) return null;
+            const storyDue = timelineDueDate(story.startDate, story.endDate);
+            const anchorLeft = storyAnchorLeft(story);
+            if (anchorLeft === null) return null;
             const tagId = `story:${story.id}`;
             const offset = offsets[tagId] ?? { dx: 0, dy: 0 };
-            const midDate = formatYmd(
-              (parseYmd(story.startDate ?? story.endDate!) +
-                parseYmd(story.endDate ?? story.startDate!)) /
-                2,
-            );
-            const midLeft = markerLeftPct(midDate);
-            const barLeft = Number.parseFloat(storyStyle.left);
-            const barWidth = Number.parseFloat(storyStyle.width);
-            const anchorLeft = clamp(midLeft, barLeft, barLeft + barWidth);
             const lane = storyLanes.get(story.id) ?? 0;
             const baseY = storyBaseY(lane);
             const ribX = offset.dx;
@@ -1233,13 +1260,14 @@ export function ProjectDeliveryTimeline({
             const storyTone = colorByStatus
               ? deliveryScheduleTone({
                   status: story.status,
-                  date: story.endDate ?? story.startDate,
+                  date: storyDue,
                   today: todayDate,
                 })
               : null;
-            const storyDue = story.endDate ?? story.startDate;
             const storyHasMeta =
-              (showIssueIds && Boolean(story.humanKey)) || (showDueDates && Boolean(storyDue));
+              (showIssueIds && Boolean(story.humanKey)) ||
+              (showStartDates && Boolean(story.startDate)) ||
+              (showDueDates && Boolean(story.endDate));
 
             return (
               <div
@@ -1281,8 +1309,10 @@ export function ProjectDeliveryTimeline({
                   <span className="block truncate">{story.title}</span>
                   <ItemMetaRow
                     issueId={story.humanKey}
-                    date={storyDue}
+                    startDate={story.startDate}
+                    dueDate={story.endDate}
                     showIssueIds={showIssueIds}
+                    showStartDates={showStartDates}
                     showDueDates={showDueDates}
                     className="text-[10px] opacity-80"
                   />
@@ -1297,18 +1327,20 @@ export function ProjectDeliveryTimeline({
   }
 
   function storyLane(story: Story) {
-    const style = barStyle(story.startDate, story.endDate);
+    const storyDue = timelineDueDate(story.startDate, story.endDate);
+    const style = dueAnchorStyle(storyDue);
     if (!style) return null;
     const storyTone = colorByStatus
       ? deliveryScheduleTone({
           status: story.status,
-          date: story.endDate ?? story.startDate,
+          date: storyDue,
           today: todayDate,
         })
       : null;
-    const storyDue = story.endDate ?? story.startDate;
     const storyHasMeta =
-      (showIssueIds && Boolean(story.humanKey)) || (showDueDates && Boolean(storyDue));
+      (showIssueIds && Boolean(story.humanKey)) ||
+      (showStartDates && Boolean(story.startDate)) ||
+      (showDueDates && Boolean(story.endDate));
     return (
       <div key={story.id} className="relative mb-4 min-h-12">
         <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -1336,8 +1368,10 @@ export function ProjectDeliveryTimeline({
             <span className="block truncate">{story.title}</span>
             <ItemMetaRow
               issueId={story.humanKey}
-              date={storyDue}
+              startDate={story.startDate}
+              dueDate={story.endDate}
               showIssueIds={showIssueIds}
+              showStartDates={showStartDates}
               showDueDates={showDueDates}
               className="text-[10px] opacity-80"
             />
@@ -1368,6 +1402,10 @@ export function ProjectDeliveryTimeline({
           <label className="inline-flex items-center gap-2">
             <input type="checkbox" checked={colorByStatus} onChange={toggleStatusColors} />
             <span>{t('timelineStatusColors')}</span>
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={showStartDates} onChange={toggleStartDates} />
+            <span>{t('startDate')}</span>
           </label>
           <label className="inline-flex items-center gap-2">
             <input type="checkbox" checked={showDueDates} onChange={toggleDueDates} />
@@ -1647,8 +1685,10 @@ export function ProjectDeliveryTimeline({
                       <span className="block truncate">{marker.title}</span>
                       <ItemMetaRow
                         issueId={marker.humanKey}
-                        date={marker.date}
+                        startDate={marker.startDate}
+                        dueDate={marker.date}
                         showIssueIds={showIssueIds}
+                        showStartDates={showStartDates}
                         showDueDates={showDueDates}
                         className={cn('mt-0.5 text-[10px]', tone ? 'opacity-80' : 'text-ink-muted')}
                       />

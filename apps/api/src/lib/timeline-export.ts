@@ -30,6 +30,7 @@ export type TimelineExportMilestone = {
   id: string;
   title: string;
   status: string;
+  startDate?: string | null;
   targetDate: string | null;
   humanKey?: string | null;
 };
@@ -39,6 +40,7 @@ export type TimelineExportTask = {
   title: string;
   status: string;
   dueDate: string | null;
+  startDate?: string | null;
   humanKey?: string | null;
 };
 
@@ -180,15 +182,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function rangeOverlaps(
-  startMs: number,
-  endMs: number,
-  winStart: number,
-  winEnd: number,
-): boolean {
-  return startMs <= winEnd && endMs >= winStart;
-}
-
 function sanitizeOffsets(
   raw: Record<string, TimelineTagOffset> | null | undefined,
 ): Record<string, TimelineTagOffset> {
@@ -319,41 +312,27 @@ function pct(date: string, startMs: number, endMs: number): number {
   return clamp(((parseYmd(date) - startMs) / span) * 100, 0, 100);
 }
 
-function barBox(
+function timelineDueDate(
   start: string | null,
-  end: string | null,
-  startMs: number,
-  endMs: number,
-): { left: number; width: number } | null {
-  if (!start && !end) return null;
-  const a = parseYmd(start ?? end!);
-  const b = parseYmd(end ?? start!);
-  if (!rangeOverlaps(a, b, startMs, endMs)) return null;
-  const clippedStart = Math.max(a, startMs);
-  const clippedEnd = Math.min(b, endMs);
-  const span = Math.max(1, endMs - startMs);
-  const left = clamp(((clippedStart - startMs) / span) * 100, 0, 100);
-  const width = Math.max(
-    1.2,
-    clamp(
-      ((Math.max(clippedStart, clippedEnd) - clippedStart) / span) * 100,
-      1.2,
-      100 - left,
-    ),
-  );
-  return { left, width };
+  endOrDue: string | null,
+): string | null {
+  return endOrDue ?? start;
 }
 
-function datedRangeOverlapsWindow(
+function dueInWindow(
   start: string | null,
-  end: string | null,
+  endOrDue: string | null,
   startMs: number,
   endMs: number,
 ): boolean {
-  if (!start && !end) return false;
-  const a = parseYmd(start ?? end!);
-  const b = parseYmd(end ?? start!);
-  return rangeOverlaps(a, b, startMs, endMs);
+  const due = timelineDueDate(start, endOrDue);
+  if (!due) return false;
+  const ms = parseYmd(due);
+  return ms >= startMs && ms <= endMs;
+}
+
+function dueAnchorCss(leftPct: number, extra = ''): string {
+  return `left:${leftPct.toFixed(2)}%;transform:translateX(-50%);max-width:14rem;width:max-content;${extra}`;
 }
 
 function ribHtml(dx: number, dy: number): string {
@@ -364,18 +343,22 @@ function ribHtml(dx: number, dy: number): string {
 
 function metaRowHtml(input: {
   humanKey?: string | null;
-  date?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
   showIssueIds: boolean;
+  showStartDates: boolean;
   showDueDates: boolean;
 }): string {
   const id = input.showIssueIds && input.humanKey ? input.humanKey : null;
-  const due = input.showDueDates && input.date ? input.date : null;
-  if (!id && !due) return '';
-  if (id && due) {
-    return `<span class="meta-row"><span class="id">${escapeHtml(id)}</span><span class="due">${escapeHtml(due)}</span></span>`;
+  const start = input.showStartDates && input.startDate ? input.startDate : null;
+  const due = input.showDueDates && input.dueDate ? input.dueDate : null;
+  const dates = [start, due].filter(Boolean).map((value) => escapeHtml(value!)).join(' · ');
+  if (!id && !dates) return '';
+  if (id && dates) {
+    return `<span class="meta-row"><span class="id">${escapeHtml(id)}</span><span class="due">${dates}</span></span>`;
   }
   if (id) return `<span class="id">${escapeHtml(id)}</span>`;
-  return `<span class="due">${escapeHtml(due!)}</span>`;
+  return `<span class="due">${dates}</span>`;
 }
 
 function storyTagsHtml(
@@ -384,41 +367,37 @@ function storyTagsHtml(
   endMs: number,
   offsets: Record<string, TimelineTagOffset>,
   colorByStatus: boolean,
+  showStartDates: boolean,
   showDueDates: boolean,
   showIssueIds: boolean,
   today: string,
 ): string {
   return stories
     .map((story) => {
-      const box = barBox(story.startDate, story.endDate, startMs, endMs);
-      if (!box) return '';
-      const midDate = formatYmd(
-        (parseYmd(story.startDate ?? story.endDate!) +
-          parseYmd(story.endDate ?? story.startDate!)) /
-          2,
-      );
-      const midLeft = pct(midDate, startMs, endMs);
-      const anchorLeft = clamp(midLeft, box.left, box.left + box.width);
+      const due = timelineDueDate(story.startDate, story.endDate);
+      if (!due || !dueInWindow(story.startDate, story.endDate, startMs, endMs)) return '';
+      const anchorLeft = pct(due, startMs, endMs);
       const offset = getOffset(offsets, `story:${story.id}`);
       const ribX = offset.dx;
       const ribY = STORY_BASE_Y + offset.dy;
       const tone = colorByStatus
         ? scheduleTone({
             status: story.status,
-            date: story.endDate ?? story.startDate,
+            date: due,
             today,
           })
         : null;
       const styleAttrs = tone
         ? `transform:translate(calc(-50% + ${offset.dx}px), ${ribY}px);${surfaceStyle(tone)}`
         : `transform:translate(calc(-50% + ${offset.dx}px), ${ribY}px)`;
-      const due = story.endDate ?? story.startDate;
       return `<div class="story-anchor" style="left:${anchorLeft.toFixed(2)}%">
   ${ribHtml(ribX, ribY)}
   <div class="story-tag" style="${styleAttrs}" title="${escapeHtml(story.title)}">${escapeHtml(story.title)}${metaRowHtml({
     humanKey: story.humanKey,
-    date: due,
+    startDate: story.startDate,
+    dueDate: story.endDate,
     showIssueIds,
+    showStartDates,
     showDueDates,
   })}</div>
 </div>`;
@@ -433,19 +412,22 @@ function epicLaneHtml(
   endMs: number,
   offsets: Record<string, TimelineTagOffset>,
   colorByStatus: boolean,
+  showStartDates: boolean,
   showDueDates: boolean,
   showIssueIds: boolean,
   today: string,
 ): string {
-  const box = barBox(epic.startDate, epic.endDate, startMs, endMs);
-  if (!box) return '';
+  const epicDue = timelineDueDate(epic.startDate, epic.endDate);
+  if (!epicDue || !dueInWindow(epic.startDate, epic.endDate, startMs, endMs)) return '';
 
   let tagRoom = stories.length > 0 ? STORY_BASE_Y + 28 : 8;
   for (const story of stories) {
     const offset = getOffset(offsets, `story:${story.id}`);
     tagRoom = Math.max(
       tagRoom,
-      STORY_BASE_Y + offset.dy + (showDueDates || showIssueIds ? 40 : 28),
+      STORY_BASE_Y +
+        offset.dy +
+        (showStartDates || showDueDates || showIssueIds ? 40 : 28),
       Math.abs(offset.dx) + 24,
     );
   }
@@ -453,24 +435,27 @@ function epicLaneHtml(
   const epicTone = colorByStatus
     ? scheduleTone({
         status: epic.status,
-        date: epic.endDate ?? epic.startDate,
+        date: epicDue,
         today,
       })
     : null;
-  const epicStyle = epicTone
-    ? `left:${box.left.toFixed(2)}%;width:${box.width.toFixed(2)}%;${surfaceStyle(epicTone)}`
-    : `left:${box.left.toFixed(2)}%;width:${box.width.toFixed(2)}%`;
+  const epicStyle = dueAnchorCss(
+    pct(epicDue, startMs, endMs),
+    epicTone ? surfaceStyle(epicTone) : '',
+  );
 
   return `<section class="lane" style="padding-bottom:${Math.max(8, tagRoom)}px">
   <div class="lane-title">${escapeHtml(epic.title)}</div>
   <div class="track">
     <div class="epic-bar" style="${epicStyle}">${escapeHtml(epic.title)}${metaRowHtml({
       humanKey: epic.humanKey,
-      date: epic.endDate,
+      startDate: epic.startDate,
+      dueDate: epic.endDate,
       showIssueIds,
+      showStartDates,
       showDueDates,
     })}</div>
-    ${storyTagsHtml(stories, startMs, endMs, offsets, colorByStatus, showDueDates, showIssueIds, today)}
+    ${storyTagsHtml(stories, startMs, endMs, offsets, colorByStatus, showStartDates, showDueDates, showIssueIds, today)}
   </div>
 </section>`;
 }
@@ -486,6 +471,7 @@ export type TimelineExportInput = {
   tasks: TimelineExportTask[];
   filters: TimelineExportFilters;
   colorByStatus?: boolean;
+  showStartDates?: boolean;
   showDueDates?: boolean;
   showIssueIds?: boolean;
   showGrid?: boolean;
@@ -514,6 +500,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
   const offsets = sanitizeOffsets(input.tagOffsets);
   const generated = new Date().toISOString().slice(0, 10);
   const colorByStatus = Boolean(input.colorByStatus);
+  const showStartDates = Boolean(input.showStartDates);
   const showDueDates = Boolean(input.showDueDates);
   const showIssueIds = input.showIssueIds !== false;
   const showGrid = input.showGrid !== false;
@@ -523,20 +510,13 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
 
   const epicRows = input.filters.includeEpics
     ? input.epics.filter((epic) =>
-        datedRangeOverlapsWindow(epic.startDate, epic.endDate, startMs, endMs),
+        dueInWindow(epic.startDate, epic.endDate, startMs, endMs),
       )
     : [];
   const storiesByEpic = new Map<string, TimelineExportStory[]>();
   if (input.filters.includeStories) {
     for (const story of input.stories) {
-      if (
-        !datedRangeOverlapsWindow(
-          story.startDate,
-          story.endDate,
-          startMs,
-          endMs,
-        )
-      ) {
+      if (!dueInWindow(story.startDate, story.endDate, startMs, endMs)) {
         continue;
       }
       if (input.filters.includeEpics) {
@@ -549,12 +529,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
   const standaloneStories =
     input.filters.includeStories && !input.filters.includeEpics
       ? input.stories.filter((story) =>
-          datedRangeOverlapsWindow(
-            story.startDate,
-            story.endDate,
-            startMs,
-            endMs,
-          ),
+          dueInWindow(story.startDate, story.endDate, startMs, endMs),
         )
       : [];
 
@@ -579,6 +554,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       kind: 'milestone' as const,
       title: row.title,
       date: row.targetDate!,
+      startDate: row.startDate ?? null,
       status: row.status,
       humanKey: row.humanKey ?? null,
     })),
@@ -587,6 +563,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       kind: 'task' as const,
       title: row.title,
       date: row.dueDate!,
+      startDate: row.startDate ?? null,
       status: row.status,
       humanKey: row.humanKey ?? null,
     })),
@@ -606,7 +583,8 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     const offset = getOffset(offsets, marker.id);
     spineHalf = Math.max(
       spineHalf,
-      Math.abs(baseY + offset.dy) + (showDueDates || showIssueIds ? 48 : 36),
+      Math.abs(baseY + offset.dy) +
+        (showStartDates || showDueDates || showIssueIds ? 48 : 36),
       Math.abs(offset.dx) + 36,
     );
   }
@@ -652,6 +630,7 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
           endMs,
           offsets,
           colorByStatus,
+          showStartDates,
           showDueDates,
           showIssueIds,
           today,
@@ -661,28 +640,30 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
 
   const standaloneHtml = standaloneStories
     .map((story) => {
-      const box = barBox(story.startDate, story.endDate, startMs, endMs);
-      if (!box) return '';
+      const due = timelineDueDate(story.startDate, story.endDate);
+      if (!due || !dueInWindow(story.startDate, story.endDate, startMs, endMs)) return '';
       const tone = colorByStatus
         ? scheduleTone({
             status: story.status,
-            date: story.endDate ?? story.startDate,
+            date: due,
             today,
           })
         : null;
-      const style = tone
-        ? `left:${box.left.toFixed(2)}%;width:${box.width.toFixed(2)}%;${surfaceStyle(tone)}`
-        : `left:${box.left.toFixed(2)}%;width:${box.width.toFixed(2)}%`;
-      const due = story.endDate ?? story.startDate;
+      const style = dueAnchorCss(
+        pct(due, startMs, endMs),
+        tone ? surfaceStyle(tone) : '',
+      );
       return `<section class="lane">
   <div class="lane-title">${escapeHtml(story.title)}</div>
   <div class="track alone">
     <div class="story-bar" style="${style}">${escapeHtml(story.title)}${metaRowHtml({
-      humanKey: story.humanKey,
-      date: due,
-      showIssueIds,
-      showDueDates,
-    })}</div>
+    humanKey: story.humanKey,
+    startDate: story.startDate,
+    dueDate: story.endDate,
+    showIssueIds,
+    showStartDates,
+    showDueDates,
+  })}</div>
   </div>
 </section>`;
     })
@@ -725,8 +706,10 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
   ${ribHtml(ribX, ribY)}
   <div class="marker-tag" style="${tagStyle}">${escapeHtml(marker.title)}${metaRowHtml({
     humanKey: marker.humanKey,
-    date: marker.date,
+    startDate: marker.startDate,
+    dueDate: marker.date,
     showIssueIds,
+    showStartDates,
     showDueDates,
   })}</div>
   <div class="${iconClass}"${iconStyle}></div>
