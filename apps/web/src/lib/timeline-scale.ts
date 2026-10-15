@@ -25,6 +25,12 @@ const GRID_TARGET_PX = 56;
 const LABEL_TARGET_PX = 110;
 const MAX_GRID_TICKS = 400;
 
+/**
+ * Minimum space between axis label anchors. The last label is right-aligned,
+ * so this is wider than a centered pair and keeps the end date off the previous tick.
+ */
+export const AXIS_LABEL_MIN_GAP_PX = 156;
+
 export type TimelineZoomDirection = 'in' | 'out';
 
 export type MarkerLane = {
@@ -139,6 +145,30 @@ function collectTicks(startMs: number, endMs: number, stepDays: number): string[
   const endLabel = formatYmd(endMs);
   if (ticks[ticks.length - 1] !== endLabel) ticks.push(endLabel);
   return ticks;
+}
+
+/**
+ * Drop ticks that would paint on top of the next kept label.
+ * Walking from the end keeps the last label and removes the one crowding it.
+ */
+export function pruneCollidingAxisLabels(
+  ticks: string[],
+  startMs: number,
+  endMs: number,
+  widthPx: number,
+  minGapPx = AXIS_LABEL_MIN_GAP_PX,
+): string[] {
+  if (ticks.length <= 1) return ticks;
+  const span = Math.max(1, endMs - startMs);
+  const width = Math.max(1, widthPx);
+  const xOf = (tick: string) => ((parseYmd(tick) - startMs) / span) * width;
+  const kept: string[] = [];
+  for (let index = ticks.length - 1; index >= 0; index -= 1) {
+    const tick = ticks[index]!;
+    const next = kept[0];
+    if (!next || xOf(next) - xOf(tick) >= minGapPx) kept.unshift(tick);
+  }
+  return kept;
 }
 
 /** Grid and label ticks. Finer px-per-day yields finer steps. */

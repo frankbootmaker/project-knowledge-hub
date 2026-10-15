@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import { Button } from './ui';
 
 /**
  * Collapses summary / links / source metadata behind a single disclosure
@@ -50,14 +51,14 @@ export function KnowledgeRecordMoreDetails({
       ) : (
         <div className="kh-ops-panel-head">
           <h2 className="kh-ops-panel-title">{t('showMoreDetails')}</h2>
-          <button
+          <Button
             type="button"
-            className="kh-ops-text-btn"
+            variant="secondary"
             aria-expanded={open}
             onClick={() => setOpen((current) => !current)}
           >
             {open ? t('hideMoreDetails') : t('showMoreDetails')}
-          </button>
+          </Button>
         </div>
       )}
       {open ? (

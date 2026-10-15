@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { LocalDateTime } from '../LocalDateTime';
 import { KnowledgeRecordDetailActions } from '../KnowledgeRecordDetailActions';
 import { KnowledgeRecordMoreDetails } from '../KnowledgeRecordMoreDetails';
 import { MarkdownDocument } from '../MarkdownDocument';
@@ -70,6 +71,7 @@ export async function KnowledgeRecordDetailView({
   projectContext?: ProjectRecordContext;
 }) {
   const session = await requireSession();
+  const locale = await getLocale();
   const t = await getTranslations('records');
   const tArchive = await getTranslations('archive');
   const tCommon = await getTranslations('common');
@@ -207,7 +209,11 @@ export async function KnowledgeRecordDetailView({
         <article className="kh-ops-panel min-w-0 overflow-hidden">
           <div className="kh-ops-record-head">
             <div className="kh-ops-history-meta">
-              <span>{record.humanKey || record.slug}</span>
+              {record.humanKey ? (
+                <span className="kh-ops-key-badge">{record.humanKey}</span>
+              ) : (
+                <span>{record.slug}</span>
+              )}
               <span>{record.recordType}</span>
               <span>v{record.currentVersionNumber}</span>
               <span>{record.language ?? 'en'}</span>
@@ -333,11 +339,15 @@ export async function KnowledgeRecordDetailView({
               <dt>{t('contentLanguage')}</dt>
               <dd>{record.language ?? 'en'}</dd>
               <dt>{tCommon('updated')}</dt>
-              <dd>{record.updatedAt}</dd>
-              {isArchived ? (
+              <dd>
+                <LocalDateTime value={record.updatedAt} locale={locale} />
+              </dd>
+              {isArchived && record.archivedAt ? (
                 <>
                   <dt>{tArchive('archivedBadge')}</dt>
-                  <dd>{record.archivedAt}</dd>
+                  <dd>
+                    <LocalDateTime value={record.archivedAt} locale={locale} />
+                  </dd>
                 </>
               ) : null}
             </dl>
@@ -402,7 +412,14 @@ export async function KnowledgeRecordDetailView({
                 ),
               },
               { label: t('model'), value: record.source?.generatedByModel ?? dash },
-              { label: t('verifiedAt'), value: record.verifiedAt ?? dash },
+              {
+                label: t('verifiedAt'),
+                value: record.verifiedAt ? (
+                  <LocalDateTime value={record.verifiedAt} locale={locale} />
+                ) : (
+                  dash
+                ),
+              },
               {
                 label: t('reviewedBy'),
                 value: record.reviewedByUser
@@ -411,8 +428,18 @@ export async function KnowledgeRecordDetailView({
                     : record.reviewedByUser.displayName
                   : (record.reviewedBy ?? dash),
               },
-              { label: t('lastValidated'), value: record.lastValidatedAt ?? dash },
-              { label: tCommon('updated'), value: record.updatedAt },
+              {
+                label: t('lastValidated'),
+                value: record.lastValidatedAt ? (
+                  <LocalDateTime value={record.lastValidatedAt} locale={locale} />
+                ) : (
+                  dash
+                ),
+              },
+              {
+                label: tCommon('updated'),
+                value: <LocalDateTime value={record.updatedAt} locale={locale} />,
+              },
             ]}
           />
         </aside>

@@ -37,6 +37,7 @@ import {
   plannedTargetPercent,
   taskDeliveryCompletion,
 } from '../lib/delivery-completion';
+import { formatLocaleDate } from '../lib/locale-date';
 import { useLocalToday } from '../lib/use-local-today';
 import {
   compareMilestonesByDueDate,
@@ -91,6 +92,8 @@ function TreeBranch({
   onToggle,
   label,
   sub,
+  subIsKey = false,
+  note,
   meta,
   children,
   depth,
@@ -102,6 +105,9 @@ function TreeBranch({
   onToggle?: () => void;
   label: ReactNode;
   sub?: ReactNode;
+  /** Item keys stay on the mono badge. Kind words use the menu type chip. */
+  subIsKey?: boolean;
+  note?: ReactNode;
   meta?: ReactNode;
   children?: ReactNode;
   depth: number;
@@ -132,7 +138,10 @@ function TreeBranch({
           )}
           <div className="kh-ops-tree-title">
             <strong className="kh-ops-primary-cell">{label}</strong>
-            {sub ? <span className="kh-ops-type-chip">{sub}</span> : null}
+            {sub ? (
+              <span className={subIsKey ? 'kh-ops-key-badge' : 'kh-ops-type-chip'}>{sub}</span>
+            ) : null}
+            {note ? <span className="kh-ops-menu-type">{note}</span> : null}
             {dimmed && dimHint ? <span className="sr-only">{dimHint}</span> : null}
           </div>
         </div>
@@ -603,6 +612,7 @@ export function ProjectDeliveryTree({
             ? (task.humanKey ?? t('kindBug'))
             : (task.humanKey ?? t('kindTask'))
         }
+        subIsKey={Boolean(task.humanKey)}
         {...rowDim(id)}
         meta={metaBits({
           statusLabel: t(`taskStatus.${task.status}`),
@@ -647,6 +657,7 @@ export function ProjectDeliveryTree({
         depth={depth}
         label={story.title}
         sub={story.humanKey ?? t('kindStory')}
+        subIsKey={Boolean(story.humanKey)}
         {...rowDim(id)}
         meta={metaBits({
           statusLabel: t(`milestoneStatus.${story.status}`),
@@ -809,10 +820,14 @@ export function ProjectDeliveryTree({
                     open={false}
                     depth={1}
                     label={milestone.title}
-                    sub={
+                    sub={milestone.humanKey ?? undefined}
+                    subIsKey={Boolean(milestone.humanKey)}
+                    note={
                       milestone.targetDate
-                        ? `${milestone.humanKey ? `${milestone.humanKey} · ` : ''}${milestone.targetDate}`
-                        : (milestone.humanKey ?? t('milestoneNoDue'))
+                        ? formatLocaleDate(milestone.targetDate, locale)
+                        : milestone.humanKey
+                          ? undefined
+                          : t('milestoneNoDue')
                     }
                     meta={metaBits({
                       statusLabel: t(`milestoneStatus.${milestone.status}`),
@@ -855,6 +870,7 @@ export function ProjectDeliveryTree({
                   depth={0}
                   label={epic.title}
                   sub={epic.humanKey ?? t('kindEpic')}
+                  subIsKey={Boolean(epic.humanKey)}
                   {...rowDim(id)}
                   meta={metaBits({
                     statusLabel: t(`milestoneStatus.${epic.status}`),

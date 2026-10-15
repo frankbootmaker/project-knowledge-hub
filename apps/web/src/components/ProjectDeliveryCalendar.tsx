@@ -118,11 +118,17 @@ function CalendarItemChip({
         <span className="min-w-0 truncate font-medium text-ink">{item.title}</span>
       </div>
       {idLabel ? (
-        <span className="mt-0.5 block truncate font-mono text-[10px] text-ink-muted">
+        <span
+          className={
+            item.humanKey
+              ? 'kh-ops-key-badge mt-0.5 max-w-full truncate'
+              : 'kh-ops-menu-type mt-0.5 block text-ink-muted'
+          }
+        >
           {idLabel}
         </span>
       ) : null}
-      <span className="mt-1 block text-xs text-ink-muted">
+      <span className="kh-ops-menu-type mt-1 block text-ink-muted">
         {t(`scheduleTone.${tone}`)}
       </span>
     </li>
@@ -387,7 +393,7 @@ export function ProjectDeliveryCalendar({
                   />
                 ))}
                 {cell.items.length > 3 ? (
-                  <span className="mt-1 block font-mono text-[10px] text-ink-muted">
+                  <span className="kh-ops-menu-type mt-1 block text-ink-muted">
                     {t('calendarMore', { count: cell.items.length - 3 })}
                   </span>
                 ) : null}

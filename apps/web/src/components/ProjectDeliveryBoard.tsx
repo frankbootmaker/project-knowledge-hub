@@ -25,6 +25,7 @@ import {
   compareMilestonesByDueDate,
 } from './MilestoneTimeMarkers';
 import { formatPercentLabel } from '../lib/delivery-completion';
+import { formatLocaleDate } from '../lib/locale-date';
 
 const SCHEDULE_LEGEND: DeliveryScheduleTone[] = [
   'onTrack',
@@ -277,7 +278,7 @@ function BoardMilestoneCard({
       )}
     >
       <div className="kh-ops-task-top">
-        <span className="kh-ops-task-id">
+        <span className={showIssueId ? 'kh-ops-task-id' : 'kh-ops-menu-type'}>
           {showIssueId ? milestone.humanKey! : t('kindMilestone')}
         </span>
         <span className="kh-ops-type-chip" data-tone={tone}>
@@ -294,7 +295,7 @@ function BoardMilestoneCard({
       {showDue ? (
         <div className="kh-ops-task-meta">
           <span>{t('dueDate')}</span>
-          <b>{milestone.targetDate}</b>
+          <b>{formatLocaleDate(milestone.targetDate!, locale)}</b>
         </div>
       ) : null}
       {onManageMilestone ? (
@@ -409,7 +410,7 @@ export function BoardTaskCard({
       )}
     >
       <div className="kh-ops-task-top">
-        <span className="kh-ops-task-id">
+        <span className={showIssueId ? 'kh-ops-task-id' : 'kh-ops-menu-type'}>
           {workItemIdLabel({
             itemType: task.itemType,
             humanKey: showIssueId ? task.humanKey : null,
@@ -442,7 +443,7 @@ export function BoardTaskCard({
               {cost != null ? ` · ${formatMoney(cost, currency, locale)}` : ''}
             </b>
           ) : null}
-          {showDue ? <span>{task.dueDate}</span> : <span />}
+          {showDue ? <span>{formatLocaleDate(task.dueDate!, locale)}</span> : <span />}
           {showPoints ? (
             <span className="kh-ops-points">{task.storyPoints} PT</span>
           ) : null}

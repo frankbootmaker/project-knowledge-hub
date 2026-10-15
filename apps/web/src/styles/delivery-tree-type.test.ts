@@ -24,18 +24,18 @@ describe('delivery tree type matches the list', () => {
       css,
       '.kh-ops-data-table th,\n.kh-ops-delivery-tree-head,\n.kh-ops-delivery-tree-head-meta > span',
     );
-    expect(header).toContain('font-family: var(--font-mono)');
-    expect(header).toContain('font-size: 10px');
-    expect(header).toContain('font-weight: 650');
-    expect(header).toContain('letter-spacing: 0.06em');
-    expect(header).toContain('line-height: 1.35');
-    expect(header).toContain('text-transform: uppercase');
+    expect(header).toContain('font-family: var(--font-sans)');
+    expect(header).toContain('font-size: 13px');
+    expect(header).toContain('font-weight: 400');
+    expect(header).toContain('letter-spacing: normal');
+    expect(header).toContain('line-height: 1.45');
+    expect(header).toContain('text-transform: none');
   });
 
   it('shares body, title, and number type with the list cells', () => {
     const body = ruleBody(css, '.kh-ops-data-table td,\n.kh-ops-tree-meta > .kh-ops-tree-cell');
     expect(body).toContain('font-family: var(--font-sans)');
-    expect(body).toContain('font-size: 12px');
+    expect(body).toContain('font-size: 13px');
     expect(body).toContain('font-weight: 400');
     expect(body).toContain('line-height: 1.45');
 
@@ -44,24 +44,30 @@ describe('delivery tree type matches the list', () => {
       '.kh-ops-data-table .kh-ops-primary-cell,\n.kh-ops-tree-title .kh-ops-primary-cell',
     );
     expect(title).toContain('font-family: var(--font-sans)');
-    expect(title).toContain('font-size: 11px');
-    expect(title).toContain('font-weight: 650');
+    expect(title).toContain('font-size: 13px');
+    expect(title).toContain('font-weight: 400');
     expect(title).toContain('line-height: 1.45');
 
     const number = ruleBody(
       css,
       '.kh-ops-data-table .kh-ops-num,\n.kh-ops-tree-meta > .kh-ops-tree-cell.kh-ops-num',
     );
-    expect(number).toContain('font-family: var(--font-mono)');
-    expect(number).toContain('font-size: 12px');
+    expect(number).toContain('font-family: var(--font-sans)');
+    expect(number).toContain('font-size: 13px');
     expect(number).toContain('font-weight: 400');
     expect(number).toContain('line-height: 1.45');
     expect(number).toContain('font-variant-numeric: tabular-nums');
   });
 
+  it('keeps monospace on item key badges only', () => {
+    const key = ruleBody(css, '.kh-ops-key-badge');
+    expect(key).toContain('font-family: var(--font-mono)');
+    expect(tree).toContain("subIsKey ? 'kh-ops-key-badge' : 'kh-ops-type-chip'");
+  });
+
   it('marks tree title, key, status, and percent with the list classes', () => {
     expect(tree).toContain('className="kh-ops-primary-cell"');
-    expect(tree).toContain('className="kh-ops-type-chip"');
+    expect(tree).toContain('kh-ops-type-chip');
     expect(tree).toContain('kh-ops-tree-cell kh-ops-tree-status');
     expect(tree).toContain('kh-ops-tree-cell kh-ops-num kh-ops-tree-pct');
     expect(tree).not.toContain('<small>');
