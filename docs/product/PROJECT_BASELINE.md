@@ -12,6 +12,8 @@ Capture a project’s **planned kickoff baseline** (dates, charter, initial plan
 | Topic | Decision |
 | --- | --- |
 | Baseline location | Fields on `projects` + `project_initial_stakeholders` snapshot |
+| Project information | Start date is editable. Duration and finish are calculated from scheduled delivery items (earliest start to latest end, including the parent date rollup). Duration is working days. |
+| Working calendar | `hours_per_workday` (default 8), Monday-first `workdays_per_week` (default 5), and `project_non_working_days`. Scheduling and the future Gantt share this calendar. |
 | Issue key prefix | Workspace-unique `key_prefix` (`AAA` or `AA0`) on Baseline; used for human keys (ADR-019) |
 | Charter / plan | Nullable FKs to project-scoped knowledge records (`project-charter` / `plan`) |
 | Initial stakeholders | Editable snapshot of workspace user IDs — **not** auto-synced with live Stakeholders |
@@ -24,6 +26,8 @@ Capture a project’s **planned kickoff baseline** (dates, charter, initial plan
 ```text
 projects
   ├── start_date / end_date
+  ├── hours_per_workday / workdays_per_week
+  ├── project_non_working_days
   ├── key_prefix / issue_counters
   ├── charter_record_id → knowledge_records
   ├── initial_plan_record_id → knowledge_records

@@ -72,6 +72,11 @@ type Project = {
   tags: Array<{ name: string }>;
   startDate: string | null;
   endDate: string | null;
+  hoursPerWorkday?: number | null;
+  workdaysPerWeek?: number | null;
+  nonWorkingDays?: string[];
+  finishDate?: string | null;
+  durationWorkingDays?: number | null;
   currency: string;
   initialBudget: string | null;
   approvedBudget: string | null;
@@ -431,6 +436,7 @@ export default async function ProjectDetailPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Badge
+              matchControlHeight
               tone={ragBadgeTone(overallRag)}
               title={[
                 `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,

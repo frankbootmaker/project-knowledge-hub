@@ -173,6 +173,11 @@ const projectBaselineResult = {
         'description',
         'startDate',
         'endDate',
+        'hoursPerWorkday',
+        'workdaysPerWeek',
+        'nonWorkingDays',
+        'finishDate',
+        'durationWorkingDays',
         'charterRecordId',
         'charterRecord',
         'initialPlanRecordId',
@@ -193,6 +198,34 @@ const projectBaselineResult = {
         description: nullableString,
         startDate: { ...ymd, nullable: true },
         endDate: { ...ymd, nullable: true },
+        hoursPerWorkday: {
+          type: 'number',
+          exclusiveMinimum: 0,
+          maximum: 24,
+          description: 'Hours in one working day. Default 8.',
+        },
+        workdaysPerWeek: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 7,
+          description: 'Monday-first working days. 5 is Monday–Friday. 7 is every day.',
+        },
+        nonWorkingDays: {
+          type: 'array',
+          items: ymd,
+          description: 'Public holidays and other non-working dates (YYYY-MM-DD).',
+        },
+        finishDate: {
+          ...ymd,
+          nullable: true,
+          description: 'Latest scheduled delivery finish. Calculated. Not an input.',
+        },
+        durationWorkingDays: {
+          type: 'integer',
+          nullable: true,
+          description:
+            'Working days from the earliest scheduled start to finishDate. Calculated. Not an input.',
+        },
         charterRecordId: { ...uuidProp('Pinned charter id'), nullable: true },
         charterRecord: pinnedRecordOutput,
         initialPlanRecordId: { ...uuidProp('Pinned plan id'), nullable: true },
@@ -273,7 +306,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project',
     description:
-      'Get a project by id. Returns baseline, definitionOfDone, keyPrefix, and budgets.',
+      'Get a project by id. projectId (UUID) is required. Returns baseline, working calendar (hoursPerWorkday, workdaysPerWeek, nonWorkingDays), calculated finishDate and durationWorkingDays, definitionOfDone, keyPrefix, and budgets.',
     scope: 'projects:read',
     openApi: true,
     output: projectBaselineResult,
@@ -640,7 +673,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task or bug (itemType, default task). Optional durationDays makes dueDate equal startDate plus that many calendar days. Bugs use the same start date and duration. Bug fields are rejected on a task. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -702,7 +735,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional durationDays; when set, dueDate is startDate plus that many calendar days. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1274,7 +1307,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_delivery_dependency',
     description:
-      'Add predecessor links (FS, SS, FF, or SF) with optional lagDays. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The successor start is the latest constraint. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
+      'Add predecessor links (FS, SS, FF, or SF) with optional lagDays counted in working days. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The successor start is the latest constraint. Non-working days are skipped. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -1911,7 +1944,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_baseline',
     description:
-      'Update baseline window, DoD, currency, budgets, and keyPrefix. Returns saved definitionOfDone. Requires pm:write.',
+      'Update baseline window, working calendar, DoD, currency, budgets, and keyPrefix. projectId (UUID) is required. hoursPerWorkday, workdaysPerWeek (1–7, Monday-first), and nonWorkingDays replace the calendar used by scheduling. finishDate and durationWorkingDays are calculated from the plan and are not inputs. Returns saved definitionOfDone. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     output: projectBaselineResult,
@@ -1922,6 +1955,24 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         projectId: uuidProp('Project id'),
         startDate: { ...ymd, nullable: true },
         endDate: { ...ymd, nullable: true },
+        hoursPerWorkday: {
+          type: 'number',
+          exclusiveMinimum: 0,
+          maximum: 24,
+          description: 'Hours in one working day.',
+        },
+        workdaysPerWeek: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 7,
+          description: 'Monday-first working days. 5 is Monday–Friday.',
+        },
+        nonWorkingDays: {
+          type: 'array',
+          nullable: true,
+          items: ymd,
+          description: 'Replaces public holidays and other non-working dates. Null clears the list.',
+        },
         definitionOfDone: { type: 'string', nullable: true, maxLength: 20000 },
         currency: {
           type: 'string',
