@@ -431,6 +431,7 @@ export default async function ProjectDetailPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Badge
+              matchControlHeight
               tone={ragBadgeTone(overallRag)}
               title={[
                 `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,

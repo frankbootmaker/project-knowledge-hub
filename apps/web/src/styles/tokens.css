@@ -56,6 +56,8 @@
   --kh-control-width: 2.2rem;
   --kh-control-pad-x: 0.8rem;
   --kh-control-pad-y: 0.4rem;
+  /* Matches `.kh-btn` (text-sm line box + vertical padding). */
+  --kh-button-height: calc(2 * var(--kh-control-pad-y) + 1.25rem);
   --kh-focus-ring: color-mix(in oklch, var(--kh-accent) 30%, transparent);
   --kh-rail: 224px;
   --kh-rail-compact: 64px;

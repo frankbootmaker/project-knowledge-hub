@@ -13,17 +13,21 @@ const tones: Record<Tone, string> = {
 
 export function Badge({
   tone = 'neutral',
+  matchControlHeight = false,
   className,
   children,
   ...props
 }: HTMLAttributes<HTMLSpanElement> & {
   tone?: Tone;
+  /** Toolbar badges beside `.kh-btn` (same height via `--kh-button-height`). */
+  matchControlHeight?: boolean;
   children: ReactNode;
 }) {
   return (
     <span
       className={cn(
-        'kh-ops-menu-type inline-flex items-center rounded-sm border border-current/25 px-1.5 py-0.5',
+        'kh-ops-menu-type inline-flex items-center rounded-sm border border-current/25',
+        matchControlHeight ? 'kh-badge-control' : 'px-1.5 py-0.5',
         tones[tone],
         className,
       )}

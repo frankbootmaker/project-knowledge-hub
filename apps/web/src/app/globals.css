@@ -250,6 +250,13 @@
     @apply text-ink-muted;
   }
 
+  .kh-badge-control {
+    box-sizing: border-box;
+    min-height: var(--kh-button-height);
+    padding-inline: var(--kh-control-pad-x);
+    padding-block: 0;
+  }
+
   .kh-btn {
     @apply inline-flex items-center justify-center gap-2 rounded-sm border text-sm font-medium no-underline
       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30
