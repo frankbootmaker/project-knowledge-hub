@@ -309,6 +309,13 @@ export function ProjectDeliveryCalendar({
   const selectedItems = selectedIso ? (byDate.get(selectedIso) ?? []) : [];
   const selectedDayNumber = selectedIso ? Number(selectedIso.slice(8, 10)) : null;
 
+  const openCalendarItem = useCallback(
+    (item: CalendarItem) => {
+      onOpenItem?.(item);
+    },
+    [onOpenItem],
+  );
+
   if (!cursor || !today) {
     return (
       <div className="kh-ops-empty-state kh-ops-panel">
@@ -330,13 +337,6 @@ export function ProjectDeliveryCalendar({
       return { year: date.getFullYear(), month: date.getMonth() };
     });
   }
-
-  const openCalendarItem = useCallback(
-    (item: CalendarItem) => {
-      onOpenItem?.(item);
-    },
-    [onOpenItem],
-  );
 
   return (
     <div className="grid gap-3">
