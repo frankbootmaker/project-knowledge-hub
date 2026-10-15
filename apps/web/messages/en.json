@@ -2816,7 +2816,7 @@
     "scrumBurndownLegend": "Dashed: ideal remaining points. Solid: remaining points (done by day).",
     "scrumBurndownHelp": "Explain burndown chart lines",
     "scrumBurndownAria": "Sprint point burndown chart",
-    "timelineHint": "Fishbone timeline: epics and stories sit on their due dates; diamonds on the axis are milestones; dots are tasks with due dates. Labels connect to each marker. Full dependency Gantt stays out of scope.",
+    "timelineHint": "Fishbone timeline: epics are triangles, stories are squares, milestones are diamonds, and tasks are dots, each on its due date. Labels connect to each marker. Full dependency Gantt stays out of scope.",
     "timelineLegendHelp": "Explain timeline markers",
     "timelineDragHint": "Drag tags to rearrange them. Click a tag (without dragging) to open it. Connector lines stay attached to the markers.",
     "timelineResetTags": "Reset tag positions",

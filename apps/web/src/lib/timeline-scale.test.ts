@@ -8,6 +8,7 @@ import {
   markerBaseY,
   markerTrackHeightPx,
   nextZoomIndex,
+  MARKER_TAG_MIN_WIDTH_PX,
   MARKER_TAG_WIDTH_PX,
   packMarkerLanes,
   packStoryLanes,
@@ -126,11 +127,13 @@ describe('timeline lanes', () => {
     expect(lanes.get('near')?.side).toBe('below');
   });
 
-  it('keeps the default card width until the date label needs more room', () => {
+  it('sizes a card to the longer date line when start and due wrap', () => {
     expect(timelineMarkerWidthPx(null)).toBe(MARKER_TAG_WIDTH_PX);
-    expect(timelineMarkerWidthPx('1 Jul 2026')).toBe(MARKER_TAG_WIDTH_PX);
-    const pair = timelineMarkerWidthPx('2026. okt. 15. · 2026. dec. 31.');
-    expect(pair).toBeGreaterThan(MARKER_TAG_WIDTH_PX);
+    expect(timelineMarkerWidthPx([])).toBe(MARKER_TAG_WIDTH_PX);
+    expect(timelineMarkerWidthPx(['1 Jul 2026'])).toBe(MARKER_TAG_MIN_WIDTH_PX);
+    const pair = timelineMarkerWidthPx(['2026. okt. 15.', '2026. dec. 31.']);
+    expect(pair).toBe(timelineMarkerWidthPx(['2026. okt. 15.']));
+    expect(pair).toBeLessThan(MARKER_TAG_WIDTH_PX);
   });
 
   it('packs story tags downward and spaces the spacer', () => {

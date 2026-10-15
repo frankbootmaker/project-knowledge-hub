@@ -2719,7 +2719,7 @@
     "scrumDaysLeft": "Tage übrig",
     "calendarSelectedEmpty": "Keine Einträge an diesem Datum.",
     "calendarDayCount": "{count} geplant",
-    "timelineHint": "Fishbone-Zeitachse: Epics und Stories sitzen auf ihrem Fälligkeitsdatum; Rauten auf der Achse sind Meilensteine, Punkte sind Aufgaben mit Fälligkeit. Beschriftungen sind mit Linien an die Markierungen gebunden. Ein vollständiges Abhängigkeits-Gantt bleibt außerhalb des Scopes.",
+    "timelineHint": "Fishbone-Zeitachse: Epics sind Dreiecke, Stories sind Quadrate, Meilensteine sind Rauten und Aufgaben sind Punkte, jeweils auf dem Fälligkeitsdatum. Beschriftungen sind mit Linien an die Markierungen gebunden. Ein vollständiges Abhängigkeits-Gantt bleibt außerhalb des Scopes.",
     "timelineLegendHelp": "Zeitachsen-Markierungen erklären",
     "timelineDragHint": "Ziehe Labels zum Anordnen. Klicke (ohne Ziehen) zum Öffnen. Verbindungslinien bleiben an den Markierungen.",
     "timelineResetTags": "Label-Positionen zurücksetzen",

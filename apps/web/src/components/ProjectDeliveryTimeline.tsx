@@ -103,6 +103,34 @@ type AxisMarker = {
 
 type TagOffset = { dx: number; dy: number };
 
+function StartDateIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden className="size-[11px] shrink-0" fill="none">
+      <path
+        d="M3.5 3v10M3.5 8h7.5M8.5 5.25 11.25 8 8.5 10.75"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DueDateIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden className="size-[11px] shrink-0" fill="none">
+      <path
+        d="M4.25 2.75v10.5M4.25 3.75h7.25L9.5 6.25l2 2.5H4.25"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ItemMetaRow({
   issueId,
   startDate,
@@ -121,30 +149,43 @@ function ItemMetaRow({
   className?: string;
 }) {
   const locale = useLocale();
+  const t = useTranslations('delivery');
   const id = showIssueIds && issueId ? issueId : null;
   const start = showStartDates && startDate ? formatLocaleDate(startDate, locale) : null;
   const due = showDueDates && dueDate ? formatLocaleDate(dueDate, locale) : null;
-  const dates = [start, due].filter(Boolean).join(' · ');
-  if (!id && !dates) return null;
+  const dates = [
+    start ? { kind: 'start' as const, text: start, label: t('startDate') } : null,
+    due ? { kind: 'due' as const, text: due, label: t('dueDate') } : null,
+  ].filter((line): line is { kind: 'start' | 'due'; text: string; label: string } => Boolean(line));
+  if (!id && dates.length === 0) return null;
   const dateStyle = { fontSize: TIMELINE_DATE_FONT_PX, lineHeight: 1.35 };
-  if (id && dates) {
+  const dateBlock = dates.length > 0 ? (
+    <span className="grid">
+      {dates.map((line) => (
+        <span
+          key={line.kind}
+          className="flex items-center gap-1 whitespace-nowrap tabular-nums"
+          style={dateStyle}
+        >
+          {line.kind === 'start' ? <StartDateIcon /> : <DueDateIcon />}
+          <span className="sr-only">{line.label}</span>
+          <span>{line.text}</span>
+        </span>
+      ))}
+    </span>
+  ) : null;
+  if (id && dateBlock) {
     return (
       <span className={cn('mt-0.5 grid gap-0.5', className)}>
         <span className="kh-ops-key-badge max-w-full truncate">{id}</span>
-        <span className="block whitespace-nowrap tabular-nums" style={dateStyle}>
-          {dates}
-        </span>
+        {dateBlock}
       </span>
     );
   }
   if (id) {
     return <span className={cn('kh-ops-key-badge max-w-full truncate', className)}>{id}</span>;
   }
-  return (
-    <span className={cn('block whitespace-nowrap tabular-nums', className)} style={dateStyle}>
-      {dates}
-    </span>
-  );
+  return <span className={className}>{dateBlock}</span>;
 }
 
 type TimelineFilters = {
@@ -303,7 +344,22 @@ function writeIssueIds(storageKey: string, enabled: boolean): void {
   }
 }
 
-function scheduleMarkerDotClass(tone: DeliveryScheduleTone, kind: 'milestone' | 'task'): string {
+function markerShape(kind: AxisMarker['kind']): 'milestone' | 'epic' | 'story' | 'task' {
+  if (kind === 'milestone' || kind === 'epic' || kind === 'story') return kind;
+  return 'task';
+}
+
+function markerShapeClass(kind: AxisMarker['kind']): string {
+  if (kind === 'milestone') return 'size-3 rotate-45 border border-warn bg-warn/80';
+  if (kind === 'epic') return 'size-3 bg-ink-muted [clip-path:polygon(50%_0,100%_100%,0_100%)]';
+  if (kind === 'story') return 'size-2.5 bg-ink-muted';
+  return 'size-2.5 rounded-full bg-ink-muted';
+}
+
+function scheduleMarkerDotClass(
+  tone: DeliveryScheduleTone,
+  kind: 'milestone' | 'epic' | 'story' | 'task',
+): string {
   const fill =
     tone === 'completed'
       ? 'border-brand bg-brand'
@@ -314,9 +370,12 @@ function scheduleMarkerDotClass(tone: DeliveryScheduleTone, kind: 'milestone' | 
           : tone === 'onTrack'
             ? 'border-accent bg-accent'
             : 'border-line bg-ink-muted';
-  return kind === 'milestone'
-    ? cn('size-3 rotate-45 border', fill)
-    : cn('size-2.5 rounded-full border', fill);
+  if (kind === 'milestone') return cn('size-3 rotate-45 border', fill);
+  if (kind === 'epic') {
+    return cn('size-3 [clip-path:polygon(50%_0,100%_100%,0_100%)]', fill);
+  }
+  if (kind === 'story') return cn('size-2.5 border', fill);
+  return cn('size-2.5 rounded-full border', fill);
 }
 
 function ZoomInIcon() {
@@ -453,6 +512,17 @@ function TimelineHintHelp({
           <p className="m-0">{t('timelineHint')}</p>
           <p className="m-0">{t('timelineDragHint')}</p>
           <ul className="m-0 flex list-none flex-wrap items-center gap-3 p-0">
+            <li className="inline-flex items-center gap-1.5">
+              <span
+                className="size-3 bg-ink-muted [clip-path:polygon(50%_0,100%_100%,0_100%)]"
+                aria-hidden
+              />
+              <span>{t('kindEpic')}</span>
+            </li>
+            <li className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 bg-ink-muted" aria-hidden />
+              <span>{t('kindStory')}</span>
+            </li>
             <li className="inline-flex items-center gap-1.5">
               <span className="size-2.5 rotate-45 border border-warn bg-warn/80" aria-hidden />
               <span>{t('kindMilestone')}</span>
@@ -1070,12 +1140,11 @@ export function ProjectDeliveryTimeline({
     tasks,
   ]);
 
-  function markerDateLabel(marker: AxisMarker): string | null {
+  function markerDateLines(marker: AxisMarker): string[] {
     const start =
       showStartDates && marker.startDate ? formatLocaleDate(marker.startDate, locale) : null;
     const due = showDueDates ? formatLocaleDate(marker.date, locale) : null;
-    const dates = [start, due].filter(Boolean).join(' · ');
-    return dates || null;
+    return [start, due].filter((line): line is string => Boolean(line));
   }
 
   const markerLanes = useMemo(() => {
@@ -1083,7 +1152,7 @@ export function ProjectDeliveryTimeline({
       axisMarkers.map((marker) => ({
         id: marker.id,
         xPx: ((parseYmd(marker.date) - rangeStart) / span) * layoutWidth,
-        widthPx: timelineMarkerWidthPx(markerDateLabel(marker)),
+        widthPx: timelineMarkerWidthPx(markerDateLines(marker)),
       })),
       { tagWidthPx: MARKER_TAG_WIDTH_PX, gapPx: MARKER_TAG_GAP_PX },
     );
@@ -1461,7 +1530,7 @@ export function ProjectDeliveryTimeline({
                 ]
                   .filter(Boolean)
                   .join(' · ');
-                const cardWidth = timelineMarkerWidthPx(markerDateLabel(marker));
+                const cardWidth = timelineMarkerWidthPx(markerDateLines(marker));
                 const tagShift = timelineTagShiftX(
                   dueAnchorPx(marker.date),
                   layoutWidth,
@@ -1503,13 +1572,13 @@ export function ProjectDeliveryTimeline({
                     >
                       <span
                         className={cn(
-                          'mb-0.5 block text-[10px] font-semibold uppercase tracking-wide',
+                          'mb-0.5 line-clamp-2 block text-[10px] font-semibold uppercase tracking-wide',
                           tone ? 'opacity-80' : 'text-ink-muted',
                         )}
                       >
                         {colorByStatus ? `${kindLabel} · ${statusLabel}` : kindLabel}
                       </span>
-                      <span className="block truncate">{marker.title}</span>
+                      <span className="line-clamp-2 block">{marker.title}</span>
                       <ItemMetaRow
                         issueId={marker.humanKey}
                         startDate={marker.startDate}
@@ -1525,13 +1594,8 @@ export function ProjectDeliveryTimeline({
                       className={cn(
                         'absolute left-1/2 top-1/2 z-[3] -translate-x-1/2 -translate-y-1/2',
                         tone
-                          ? scheduleMarkerDotClass(
-                              tone,
-                              marker.kind === 'milestone' ? 'milestone' : 'task',
-                            )
-                          : marker.kind === 'milestone'
-                            ? 'size-3 rotate-45 border border-warn bg-warn/80'
-                            : 'size-2.5 rounded-full bg-ink-muted',
+                          ? scheduleMarkerDotClass(tone, markerShape(marker.kind))
+                          : markerShapeClass(marker.kind),
                       )}
                       title={tooltip}
                       aria-label={tooltip}

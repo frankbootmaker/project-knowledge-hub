@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **Delivery search toolbar:** List and Tree place the filter control on the same line as the search field, matching the Gantt.
 
+* **Timeline cards:** Start and due dates stack on two lines, each with its own icon, and the card narrows to the longer date so both stay fully visible.
+
+* **Timeline markers:** Epics use a triangle and stories use a square. Milestones stay diamonds and tasks stay dots.
+
 ### Added
 
 * **Delivery Gantt search:** The Gantt uses the same search box and filter as List and Tree: status, owner, sprint, task or bug, title, and only open. Matching rows stay visible with their ancestors dimmed, and dependency arrows are drawn only between rows that remain on the chart.

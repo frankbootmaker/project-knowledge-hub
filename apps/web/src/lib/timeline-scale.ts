@@ -14,8 +14,10 @@ export const DEFAULT_TIMELINE_ZOOM_INDEX = 0;
 export const MARKER_TAG_WIDTH_PX = 176;
 /** Date line on a timeline card. Two pixels under the 13px menu type. */
 export const TIMELINE_DATE_FONT_PX = 11;
+/** Narrowest card that still holds one locale date line. */
+export const MARKER_TAG_MIN_WIDTH_PX = 132;
 export const MARKER_TAG_GAP_PX = 12;
-export const MARKER_LANE_PITCH_PX = 84;
+export const MARKER_LANE_PITCH_PX = 100;
 
 export const STORY_TAG_WIDTH_PX = 224;
 export const STORY_TAG_GAP_PX = 8;
@@ -293,14 +295,23 @@ type PackOptions = {
 };
 
 /**
- * Width that keeps a date line on one row. Short labels stay at the default
- * card width; a start and due pair grows the card instead of ellipsizing.
+ * Width that fits the longest date line. Start and due stack, so the card
+ * stays as narrow as the wider date instead of the joined pair.
  */
-export function timelineMarkerWidthPx(dateLabel: string | null): number {
-  if (!dateLabel) return MARKER_TAG_WIDTH_PX;
-  const textPx = Math.ceil(dateLabel.length * TIMELINE_DATE_FONT_PX * 0.72);
+export function timelineMarkerWidthPx(
+  dateLines: readonly (string | null | undefined)[] | null,
+): number {
+  if (!dateLines || dateLines.length === 0) return MARKER_TAG_WIDTH_PX;
+  let longest = 0;
+  for (const line of dateLines) {
+    const length = line?.trim().length ?? 0;
+    if (length > longest) longest = length;
+  }
+  if (longest === 0) return MARKER_TAG_WIDTH_PX;
+  const textPx = Math.ceil(longest * TIMELINE_DATE_FONT_PX * 0.72);
   const chromePx = 16;
-  return Math.max(MARKER_TAG_WIDTH_PX, textPx + chromePx);
+  const iconPx = 14;
+  return Math.max(MARKER_TAG_MIN_WIDTH_PX, textPx + chromePx + iconPx);
 }
 
 /**

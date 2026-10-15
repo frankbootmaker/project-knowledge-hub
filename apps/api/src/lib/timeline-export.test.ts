@@ -80,7 +80,9 @@ describe('buildTimelineHtml due anchoring', () => {
       labels,
     });
 
-    expect(html).toContain('2026-02-01 · 2026-02-28');
+    expect(html).toContain('2026-02-01');
+    expect(html).toContain('2026-02-28');
+    expect(html).not.toContain('2026-02-01 · 2026-02-28');
     expect(html).toContain('class="marker"');
     expect(html).not.toContain('class="item-card"');
     expect(html).not.toContain('lane-title');

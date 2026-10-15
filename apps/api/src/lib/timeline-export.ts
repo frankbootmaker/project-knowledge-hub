@@ -348,6 +348,13 @@ function ribHtml(dx: number, dy: number): string {
   return `<div class="rib" style="width:${len.toFixed(1)}px;transform:rotate(${angle.toFixed(2)}deg)"></div>`;
 }
 
+function dateLineHtml(kind: 'start' | 'due', value: string): string {
+  const icon = kind === 'start'
+    ? '<svg class="date-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3v10M3.5 8h7.5M8.5 5.25 11.25 8 8.5 10.75"/></svg>'
+    : '<svg class="date-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.25 2.75v10.5M4.25 3.75h7.25L9.5 6.25l2 2.5H4.25"/></svg>';
+  return `<span class="due">${icon}${escapeHtml(value)}</span>`;
+}
+
 function metaRowHtml(input: {
   humanKey?: string | null;
   startDate?: string | null;
@@ -359,16 +366,15 @@ function metaRowHtml(input: {
   const id = input.showIssueIds && input.humanKey ? input.humanKey : null;
   const start = input.showStartDates && input.startDate ? input.startDate : null;
   const due = input.showDueDates && input.dueDate ? input.dueDate : null;
-  const dates = [start, due]
-    .filter(Boolean)
-    .map((value) => escapeHtml(value!))
-    .join(' · ');
-  if (!id && !dates) return '';
-  if (id && dates) {
-    return `<span class="meta-stack"><span class="id">${escapeHtml(id)}</span><span class="due">${dates}</span></span>`;
+  const dateHtml = [
+    start ? dateLineHtml('start', start) : '',
+    due ? dateLineHtml('due', due) : '',
+  ].join('');
+  if (id && dateHtml) {
+    return `<span class="meta-stack"><span class="id">${escapeHtml(id)}</span>${dateHtml}</span>`;
   }
   if (id) return `<span class="id">${escapeHtml(id)}</span>`;
-  return `<span class="due">${dates}</span>`;
+  return dateHtml;
 }
 
 export type TimelineExportInput = {
@@ -566,7 +572,14 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       const offset = getOffset(offsets, marker.id);
       const ribX = offset.dx;
       const ribY = baseY + offset.dy;
-      const iconClass = marker.kind === 'milestone' ? 'diamond' : 'dot';
+      const iconClass =
+        marker.kind === 'milestone'
+          ? 'diamond'
+          : marker.kind === 'epic'
+            ? 'triangle'
+            : marker.kind === 'story'
+              ? 'square'
+              : 'dot';
       const tone = colorByStatus
         ? scheduleTone({
             status: marker.status,
@@ -634,6 +647,14 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
     .swatch-epic, .swatch-story { width: 18px; height: 8px; border-radius: 3px; background: #fff; border: 1px solid #c5ced6; }
     .swatch-diamond { width: 8px; height: 8px; background: #d4a017; border: 1px solid #b8860b; transform: rotate(45deg); }
+    .swatch-triangle {
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 8px solid #5b6b7c;
+    }
+    .swatch-square { width: 8px; height: 8px; background: #5b6b7c; }
     .swatch-dot { width: 8px; height: 8px; border-radius: 50%; background: #5b6b7c; }
     .swatch-tone { width: 10px; height: 10px; border-radius: 2px; border: 1px solid transparent; display: inline-block; }
     .chart {
@@ -733,13 +754,23 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       page-break-inside: avoid;
     }
     .due {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 2px;
       margin-top: 1px;
       font-size: 7px;
       opacity: 0.8;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    }
+    .date-icon {
+      width: 8px;
+      height: 8px;
+      flex: none;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .id {
       display: block;
@@ -799,6 +830,27 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
       transform: rotate(45deg);
       z-index: 3;
     }
+    .triangle {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 10px;
+      height: 9px;
+      margin: -4.5px 0 0 -5px;
+      background: #5b6b7c;
+      clip-path: polygon(50% 0, 100% 100%, 0 100%);
+      z-index: 3;
+    }
+    .square {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin: -4px 0 0 -4px;
+      background: #5b6b7c;
+      z-index: 3;
+    }
     .dot {
       position: absolute;
       left: 50%;
@@ -824,8 +876,8 @@ export function buildTimelineHtml(input: TimelineExportInput): string {
     ${
       colorByStatus
         ? scheduleLegend
-        : `${input.filters.includeEpics ? `<span><i class="swatch-dot"></i>${escapeHtml(input.labels.epic)}</span>` : ''}
-    ${input.filters.includeStories ? `<span><i class="swatch-dot"></i>${escapeHtml(input.labels.story)}</span>` : ''}
+        : `${input.filters.includeEpics ? `<span><i class="swatch-triangle"></i>${escapeHtml(input.labels.epic)}</span>` : ''}
+    ${input.filters.includeStories ? `<span><i class="swatch-square"></i>${escapeHtml(input.labels.story)}</span>` : ''}
     ${input.filters.includeMilestones ? `<span><i class="swatch-diamond"></i>${escapeHtml(input.labels.milestone)}</span>` : ''}
     ${input.filters.includeTasks ? `<span><i class="swatch-dot"></i>${escapeHtml(input.labels.task)}</span>` : ''}`
     }

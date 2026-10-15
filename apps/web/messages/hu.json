@@ -2797,7 +2797,7 @@
     "scrumBurndownLegend": "Szaggatott: ideális fennmaradó pontok. Folyamatos: fennmaradó pontok (kész naponta).",
     "scrumBurndownHelp": "Burndown vonalak magyarázata",
     "scrumBurndownAria": "Sprint pont burndown diagram",
-    "timelineHint": "Fishbone idővonal: az epikok és story-k a határidőjükön jelennek meg; a tengelyen a gyémántok mérföldkövek, a pontok határidős feladatok. A címkék vonallal kapcsolódnak a jelölőkhöz. A teljes függőségi Gantt kívül esik a körön.",
+    "timelineHint": "Fishbone idővonal: az epikok háromszögek, a story-k négyzetek, a mérföldkövek gyémántok, a feladatok pontok, mind a határidőjükön. A címkék vonallal kapcsolódnak a jelölőkhöz. A teljes függőségi Gantt kívül esik a körön.",
     "timelineLegendHelp": "Idővonal jelölők magyarázata",
     "timelineDragHint": "Húzd a címkéket az átrendezéshez. Kattints (húzás nélkül) a megnyitáshoz. Az összekötő vonalak a jelölőkhöz maradnak rögzítve.",
     "timelineResetTags": "Címke pozíciók visszaállítása",
