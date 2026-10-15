@@ -2673,6 +2673,7 @@
     "ganttZoomDay": "Tag",
     "ganttZoomWeek": "Woche",
     "ganttZoomMonth": "Monat",
+    "ganttFreezeTable": "Tabelle fixieren",
     "ganttScale": "Zeitskala",
     "ganttToday": "Heute",
     "ganttEmpty": "Noch keine Umsetzungseinträge für das Diagramm.",

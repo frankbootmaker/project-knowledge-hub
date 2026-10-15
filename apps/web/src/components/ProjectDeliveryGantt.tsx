@@ -29,6 +29,7 @@ import {
   ganttBarShape,
   ganttChartWidth,
   ganttCollapseNodes,
+  ganttColumnOffsets,
   ganttDependencyArrows,
   ganttDurationDetail,
   ganttGridTemplate,
@@ -157,6 +158,7 @@ export function ProjectDeliveryGantt({
   const today = useLocalToday();
   const markerId = `gantt-arrow-${useId().replace(/:/g, '')}`;
   const [columnView, setColumnView] = useState<GanttColumnView>('default');
+  const [freezeTable, setFreezeTable] = useState(false);
   const [predMode, setPredMode] = useState<GanttPredecessorMode>('key');
   const [zoom, setZoom] = useState<GanttZoom>('week');
   const [collapsed, setCollapsed] = useState<DeliveryTreeCollapsed>({});
@@ -459,6 +461,10 @@ export function ProjectDeliveryGantt({
   ), [filteredRows, today, zoom]);
   const chartWidth = ganttChartWidth(range, pxPerDay);
   const columns = GANTT_COLUMNS[columnView];
+  const columnLeft = useMemo(
+    () => (freezeTable ? ganttColumnOffsets(columnView) : null),
+    [columnView, freezeTable],
+  );
   const gridWidth = ganttGridWidth(columnView);
   const ticks = useMemo(
     () => ganttScaleTicks(range, zoom, pxPerDay, calendar),
@@ -535,7 +541,11 @@ export function ProjectDeliveryGantt({
   };
 
   return (
-    <section className="kh-ops-gantt" data-delivery-gantt={columnView}>
+    <section
+      className="kh-ops-gantt"
+      data-delivery-gantt={columnView}
+      data-freeze={freezeTable ? 'table' : undefined}
+    >
       <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
         <label className="flex min-w-[220px] flex-1 items-center gap-2">
           <span className="sr-only">{t('searchPlaceholder')}</span>
@@ -633,6 +643,14 @@ export function ProjectDeliveryGantt({
             </Button>
           ))}
         </div>
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={freezeTable}
+            onChange={(event) => setFreezeTable(event.target.checked)}
+          />
+          <span>{t('ganttFreezeTable')}</span>
+        </label>
         <div className="kh-ops-tree-depth" role="group" aria-label={t('treeDepthControls')}>
           <DepthButton
             label={t('treeExpandLevel')}
@@ -692,16 +710,20 @@ export function ProjectDeliveryGantt({
           style={sheetStyle}
         >
           <div className="kh-ops-gantt-head" role="row">
-            {columns.map((column) => (
-              <div
-                key={column}
-                role="columnheader"
-                className={cellClass(column)}
-                title={headerTitle(column, t)}
-              >
-                {headerLabel(column, t)}
-              </div>
-            ))}
+            {columns.map((column) => {
+              const frozen = frozenCell(column, columns, columnLeft);
+              return (
+                <div
+                  key={column}
+                  role="columnheader"
+                  className={frozen.className}
+                  style={frozen.style}
+                  title={headerTitle(column, t)}
+                >
+                  {headerLabel(column, t)}
+                </div>
+              );
+            })}
             <div role="columnheader" className="kh-ops-gantt-scale" aria-label={t('ganttScale')}>
               {ticks.map((tick) => (
                 <div
@@ -764,6 +786,7 @@ export function ProjectDeliveryGantt({
                   onManageStory,
                   onManageMilestone,
                 })}
+                columnLeft={columnLeft}
                 dimmed={filtering && visibility.dimmed.has(row.id)}
                 dimHint={t('treeFilterDimmed')}
                 t={t}
@@ -879,6 +902,19 @@ function cellClass(column: GanttColumnId): string {
   return 'kh-ops-gantt-cell';
 }
 
+function frozenCell(
+  column: GanttColumnId,
+  columns: readonly GanttColumnId[],
+  columnLeft: ReadonlyMap<GanttColumnId, number> | null,
+): { className: string; style?: { left: number } } {
+  if (!columnLeft) return { className: cellClass(column) };
+  const edge = column === columns[columns.length - 1];
+  return {
+    className: `${cellClass(column)}${edge ? ' kh-ops-gantt-freeze-edge' : ''}`,
+    style: { left: columnLeft.get(column) ?? 0 },
+  };
+}
+
 function canOpen(
   row: GanttRow,
   handlers: {
@@ -910,6 +946,7 @@ function GanttGridRow({
   pxPerDay,
   onOpen,
   canOpen: allowOpen,
+  columnLeft = null,
   dimmed = false,
   dimHint,
   t,
@@ -927,6 +964,7 @@ function GanttGridRow({
   pxPerDay: number;
   onOpen: () => void;
   canOpen: boolean;
+  columnLeft?: ReadonlyMap<GanttColumnId, number> | null;
   dimmed?: boolean;
   dimHint?: string;
   t: ReturnType<typeof useTranslations<'delivery'>>;
@@ -1029,11 +1067,20 @@ function GanttGridRow({
       data-filter-dimmed={dimmed ? 'true' : undefined}
       title={dimmed ? dimHint : undefined}
     >
-      {columns.map((column) => (
-        <div key={column} role="gridcell" className={cellClass(column)} title={column === 'predecessors' && predecessors ? predecessors : undefined}>
-          {cell(column)}
-        </div>
-      ))}
+      {columns.map((column) => {
+        const frozen = frozenCell(column, columns, columnLeft);
+        return (
+          <div
+            key={column}
+            role="gridcell"
+            className={frozen.className}
+            style={frozen.style}
+            title={column === 'predecessors' && predecessors ? predecessors : undefined}
+          >
+            {cell(column)}
+          </div>
+        );
+      })}
       <div role="gridcell" className="kh-ops-gantt-track">
         {layout?.kind === 'bar' ? (
           <span className="kh-ops-gantt-bar" data-kind={row.kind} style={{ left: layout.leftPx, width: layout.widthPx }} title={barTitle}>

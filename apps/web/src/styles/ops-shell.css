@@ -5151,6 +5151,23 @@ button.kh-ops-stage-card:disabled {
   background: var(--kh-surface);
 }
 
+.kh-ops-gantt[data-freeze='table'] .kh-ops-gantt-cell {
+  position: sticky;
+  z-index: 3;
+  background: var(--kh-panel-solid);
+}
+
+.kh-ops-gantt[data-freeze='table'] .kh-ops-gantt-head .kh-ops-gantt-cell {
+  z-index: 5;
+  background: var(--kh-surface);
+}
+
+.kh-ops-gantt[data-freeze='table'] .kh-ops-gantt-freeze-edge {
+  box-shadow:
+    1px 0 0 var(--kh-line),
+    8px 0 12px -8px color-mix(in oklch, var(--kh-ink) 28%, transparent);
+}
+
 .kh-ops-gantt-row:hover .kh-ops-gantt-cell {
   background: var(--kh-neutral-soft);
 }

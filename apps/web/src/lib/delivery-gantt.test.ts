@@ -13,6 +13,7 @@ import {
   dependencyEndpoints,
   ganttArrowPath,
   ganttBarGeometry,
+  ganttColumnOffsets,
   ganttDependencyArrows,
   ganttDurationDetail,
   ganttNonWorkingBands,
@@ -432,6 +433,9 @@ describe('gantt column presets and copy', () => {
       'predecessors',
     ]);
     expect(GANTT_COLUMNS.compact).toEqual(['wbs', 'title', 'percent']);
+    expect(ganttColumnOffsets('default').get('wbs')).toBe(0);
+    expect(ganttColumnOffsets('default').get('predecessors')).toBe(700);
+    expect(ganttColumnOffsets('compact').get('percent')).toBe(344);
     expect(GANTT_COLUMNS.planning).toEqual([
       'wbs',
       'title',

@@ -2692,6 +2692,7 @@
     "ganttZoomDay": "Day",
     "ganttZoomWeek": "Week",
     "ganttZoomMonth": "Month",
+    "ganttFreezeTable": "Freeze table",
     "ganttScale": "Timeline",
     "ganttToday": "Today",
     "ganttEmpty": "No delivery items to chart yet.",
