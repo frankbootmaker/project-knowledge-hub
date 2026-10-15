@@ -8,6 +8,7 @@ import {
   markerBaseY,
   markerTrackHeightPx,
   nextZoomIndex,
+  MARKER_TAG_WIDTH_PX,
   packMarkerLanes,
   packStoryLanes,
   rangeOverlaps,
@@ -15,6 +16,7 @@ import {
   timelineBandTopPx,
   timelineCardLeftPx,
   timelineDueDate,
+  timelineMarkerWidthPx,
   timelineDueInRange,
   timelineDueLeftPct,
   timelineTagShiftX,
@@ -110,6 +112,25 @@ describe('timeline lanes', () => {
     expect(markerBaseY('above', 0)).toBeLessThan(0);
     expect(markerBaseY('below', 0)).toBeGreaterThan(0);
     expect(markerTrackHeightPx(lanes.values())).toBeGreaterThan(0);
+  });
+
+  it('uses each card width when dates make one card wider', () => {
+    const lanes = packMarkerLanes(
+      [
+        { id: 'wide', xPx: 100, widthPx: 220 },
+        { id: 'near', xPx: 180, widthPx: 176 },
+      ],
+      { tagWidthPx: 176, gapPx: 12 },
+    );
+    expect(lanes.get('wide')?.side).toBe('above');
+    expect(lanes.get('near')?.side).toBe('below');
+  });
+
+  it('keeps the default card width until the date label needs more room', () => {
+    expect(timelineMarkerWidthPx(null)).toBe(MARKER_TAG_WIDTH_PX);
+    expect(timelineMarkerWidthPx('1 Jul 2026')).toBe(MARKER_TAG_WIDTH_PX);
+    const pair = timelineMarkerWidthPx('2026. okt. 15. · 2026. dec. 31.');
+    expect(pair).toBeGreaterThan(MARKER_TAG_WIDTH_PX);
   });
 
   it('packs story tags downward and spaces the spacer', () => {

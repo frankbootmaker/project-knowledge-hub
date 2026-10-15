@@ -12,6 +12,8 @@ export const TIMELINE_ZOOM_LEVELS = [
 export const DEFAULT_TIMELINE_ZOOM_INDEX = 0;
 
 export const MARKER_TAG_WIDTH_PX = 176;
+/** Date line on a timeline card. Two pixels under the 13px menu type. */
+export const TIMELINE_DATE_FONT_PX = 11;
 export const MARKER_TAG_GAP_PX = 12;
 export const MARKER_LANE_PITCH_PX = 84;
 
@@ -291,11 +293,22 @@ type PackOptions = {
 };
 
 /**
+ * Width that keeps a date line on one row. Short labels stay at the default
+ * card width; a start and due pair grows the card instead of ellipsizing.
+ */
+export function timelineMarkerWidthPx(dateLabel: string | null): number {
+  if (!dateLabel) return MARKER_TAG_WIDTH_PX;
+  const textPx = Math.ceil(dateLabel.length * TIMELINE_DATE_FONT_PX * 0.72);
+  const chromePx = 16;
+  return Math.max(MARKER_TAG_WIDTH_PX, textPx + chromePx);
+}
+
+/**
  * Greedy horizontal lanes. Lane 0 is above the axis, lane 1 below,
  * then further out. Items far apart share a lane.
  */
 export function packMarkerLanes(
-  items: Array<{ id: string; xPx: number }>,
+  items: Array<{ id: string; xPx: number; widthPx?: number }>,
   options: PackOptions = {
     tagWidthPx: MARKER_TAG_WIDTH_PX,
     gapPx: MARKER_TAG_GAP_PX,
@@ -304,8 +317,8 @@ export function packMarkerLanes(
   const sorted = [...items].sort((a, b) => a.xPx - b.xPx || a.id.localeCompare(b.id));
   const laneRight: number[] = [];
   const result = new Map<string, MarkerLane>();
-  const half = options.tagWidthPx / 2;
   for (const item of sorted) {
+    const half = (item.widthPx ?? options.tagWidthPx) / 2;
     const left = item.xPx - half;
     const right = item.xPx + half;
     let placed = -1;

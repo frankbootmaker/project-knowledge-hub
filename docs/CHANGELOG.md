@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* **Timeline due-date anchoring (PRO-T-81):** Epics and stories on the delivery Timeline view anchor on their due date again instead of stretching across rolled-up start..end ranges from parent date rollup (PRO-T-73).
+* **Timeline due-date anchoring (PRO-T-81):** Epics and stories sit on the same timeline spine as tasks, bugs, and milestones. Each card is anchored on its due date and shares a lane when it does not overlap another card.
 
 ### Added
 
