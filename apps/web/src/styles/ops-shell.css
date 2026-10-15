@@ -3410,8 +3410,26 @@ a.kh-ops-choice {
 .kh-ops-field-cell strong {
   display: block;
   margin-top: 5px;
-  font-size: 12px;
-  font-weight: 650;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+}
+
+.kh-btn.kh-btn-danger-outline {
+  border-color: var(--kh-danger);
+  background: transparent;
+  color: var(--kh-danger);
+  padding: 4px 10px;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.kh-btn.kh-btn-danger-outline:not(:disabled):hover {
+  background: var(--kh-danger-soft);
 }
 
 .kh-ops-pinned {

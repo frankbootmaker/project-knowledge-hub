@@ -36,7 +36,7 @@ describe('delivery dependency dates', () => {
       }),
     ).toEqual({
       startDate: '2026-10-01',
-      dueDate: '2026-10-06',
+      dueDate: '2026-10-08',
       durationDays: 5,
     });
   });
@@ -47,7 +47,7 @@ describe('delivery dependency dates', () => {
         stored: { startDate: null, dueDate: null, durationDays: null },
         patch: { startDate: '2026-10-01', dueDate: '2026-10-20' },
       }).durationDays,
-    ).toBe(19);
+    ).toBe(13);
   });
 
   it('keeps a due date when the start date is cleared', () => {
@@ -148,8 +148,8 @@ describe('dependency cycles and schedule', () => {
       ],
       seeds: ['task:b'],
     });
-    expect(changed[0]?.start).toBe('2026-10-11');
-    expect(changed[0]?.finish).toBe('2026-10-13');
+    expect(changed[0]?.start).toBe('2026-10-12');
+    expect(changed[0]?.finish).toBe('2026-10-14');
   });
 
   it('applies finish-to-finish by backing the start up by duration', () => {
@@ -169,8 +169,8 @@ describe('dependency cycles and schedule', () => {
       seeds: ['task:b'],
     });
     expect(changed[0]).toMatchObject({
-      start: '2026-10-29',
-      finish: '2026-11-01',
+      start: '2026-10-28',
+      finish: '2026-11-02',
     });
   });
 
@@ -199,7 +199,7 @@ describe('dependency cycles and schedule', () => {
     });
     expect(changed[0]).toMatchObject({
       start: '2026-10-10',
-      finish: '2026-10-12',
+      finish: '2026-10-13',
     });
   });
 
@@ -256,7 +256,7 @@ describe('dependency cycles and schedule', () => {
       seeds: ['task:b'],
     });
     expect(changed[0]).toMatchObject({
-      start: '2026-10-16',
+      start: '2026-10-14',
       finish: '2026-10-20',
     });
   });
@@ -285,7 +285,7 @@ describe('dependency cycles and schedule', () => {
       seeds: ['task:b'],
     });
     expect(changed[0]).toMatchObject({
-      start: '2026-10-04',
+      start: '2026-10-02',
       finish: '2026-10-08',
     });
   });
@@ -328,7 +328,7 @@ describe('dependency cycles and schedule', () => {
       seeds: ['task:b'],
     });
     expect(changed[0]).toMatchObject({
-      start: '2026-10-16',
+      start: '2026-10-14',
       finish: '2026-10-20',
     });
   });
@@ -422,7 +422,7 @@ describe('dependency cycles and schedule', () => {
       ],
       seeds: ['task:ff'],
     });
-    expect(finishBound[0]).toMatchObject({ start: '2026-03-29', finish: '2026-04-01' });
+    expect(finishBound[0]).toMatchObject({ start: '2026-03-27', finish: '2026-04-01' });
 
     const startFinish = scheduleDeliveryGraph({
       nodes: [
@@ -439,7 +439,7 @@ describe('dependency cycles and schedule', () => {
       ],
       seeds: ['task:sf'],
     });
-    expect(startFinish[0]).toMatchObject({ start: '2026-02-28', finish: '2026-03-02' });
+    expect(startFinish[0]).toMatchObject({ start: '2026-02-26', finish: '2026-03-02' });
   });
 
   it('moves a successor epic window when its predecessor finish moves', () => {
@@ -459,7 +459,7 @@ describe('dependency cycles and schedule', () => {
       seeds: ['task:a'],
     });
     expect(changed).toEqual([
-      node('epic:e', 'epic', '2026-10-12', '2026-10-26', null),
+      node('epic:e', 'epic', '2026-10-13', '2026-10-27', null),
     ]);
   });
 });

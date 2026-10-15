@@ -592,8 +592,8 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
       (row) => row.id === successorId,
     );
     expect(lateWrite).toMatchObject({
-      startDate: '2026-05-04',
-      finishDate: '2026-05-06',
+      startDate: '2026-05-06',
+      finishDate: '2026-05-08',
     });
   });
 });

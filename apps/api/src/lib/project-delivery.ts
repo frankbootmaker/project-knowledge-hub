@@ -19,6 +19,7 @@ import {
   overlaySchedule,
   rescheduleDeliveryFrom,
 } from './delivery-dependencies.js';
+import { loadProjectCalendar } from './project-calendar.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import {
   withMediaLinkCounts,
@@ -1594,13 +1595,23 @@ export async function createTask(
     ]);
   }
 
+  const schedulePatch = {
+    startDate: input.startDate,
+    dueDate: input.dueDate,
+    durationDays: input.durationDays,
+  };
+  // Reject an inverted explicit range before the calendar query. Duration
+  // still needs the project calendar, because it rewrites the due date.
+  if (schedulePatch.durationDays == null) {
+    resolveTaskScheduleDates({
+      stored: { startDate: null, dueDate: null, durationDays: null },
+      patch: schedulePatch,
+    });
+  }
   const scheduledDates = resolveTaskScheduleDates({
     stored: { startDate: null, dueDate: null, durationDays: null },
-    patch: {
-      startDate: input.startDate,
-      dueDate: input.dueDate,
-      durationDays: input.durationDays,
-    },
+    patch: schedulePatch,
+    calendar: await loadProjectCalendar(database, input.projectId),
   });
 
   const ownerUserId =
@@ -1867,17 +1878,26 @@ export async function updateTask(
     ]);
   }
 
+  const scheduleStored = {
+    startDate: existing.startDate,
+    dueDate: existing.dueDate,
+    durationDays: existing.durationDays,
+  };
+  const schedulePatch = {
+    startDate: input.startDate,
+    dueDate: input.dueDate,
+    durationDays: input.durationDays,
+  };
+  if (schedulePatch.durationDays == null) {
+    resolveTaskScheduleDates({
+      stored: scheduleStored,
+      patch: schedulePatch,
+    });
+  }
   const scheduledDates = resolveTaskScheduleDates({
-    stored: {
-      startDate: existing.startDate,
-      dueDate: existing.dueDate,
-      durationDays: existing.durationDays,
-    },
-    patch: {
-      startDate: input.startDate,
-      dueDate: input.dueDate,
-      durationDays: input.durationDays,
-    },
+    stored: scheduleStored,
+    patch: schedulePatch,
+    calendar: await loadProjectCalendar(database, existing.projectId),
   });
 
   // An explicit status is the caller's choice (the dialog already moved it

@@ -228,6 +228,11 @@ function baselineProject(definitionOfDone: string | null) {
     description: null,
     startDate: null,
     endDate: null,
+    hoursPerWorkday: 8,
+    workdaysPerWeek: 5,
+    nonWorkingDays: [],
+    finishDate: null,
+    durationWorkingDays: null,
     charterRecordId: null,
     charterRecord: null,
     initialPlanRecordId: null,
@@ -276,7 +281,16 @@ describe('definitionOfDone on project baseline tools', () => {
         const tool = listed.tools.find((item) => item.name === name);
         expect(tool?.description).toContain('definitionOfDone');
         expect(JSON.stringify(tool?.outputSchema)).toContain('definitionOfDone');
+        expect(JSON.stringify(tool?.outputSchema)).toContain('finishDate');
+        expect(JSON.stringify(tool?.outputSchema)).toContain('durationWorkingDays');
+        expect(JSON.stringify(tool?.inputSchema)).toContain('projectId');
       }
+      const update = listed.tools.find((item) => item.name === 'update_project_baseline');
+      const input = JSON.stringify(update?.inputSchema);
+      expect(input).toContain('hoursPerWorkday');
+      expect(input).toContain('workdaysPerWeek');
+      expect(input).toContain('nonWorkingDays');
+      expect(update?.inputSchema).toMatchObject({ required: ['projectId'] });
     });
   });
 

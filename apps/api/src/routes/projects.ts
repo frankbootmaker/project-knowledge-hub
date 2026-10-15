@@ -6,12 +6,16 @@ import { projects, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
   assertDateRange,
+  coerceProjectCalendar,
   effectiveDateRange,
   keyPrefixSchema,
   projectCurrencySchema,
   projectStakeholderRoleSchema,
   projectStatusSchema,
+  hoursPerWorkdaySchema,
   isoDateNullableSchema,
+  nonWorkingDaysSchema,
+  workdaysPerWeekSchema,
 } from '@project-knowledge-hub/domain';
 import {
   parseBudgetAmount,
@@ -40,6 +44,12 @@ import {
 } from '../lib/project-issue-keys.js';
 import { listProjectOverallRags } from '../lib/project-overall-rag.js';
 import { moveProjectToWorkspace } from '../lib/project-move.js';
+import {
+  loadProjectScheduleFacts,
+  replaceProjectNonWorkingDays,
+  type ProjectScheduleFacts,
+} from '../lib/project-calendar.js';
+import { rescheduleProjectCalendar } from '../lib/delivery-dependencies.js';
 
 const createProjectSchema = z.object({
   workspaceId: z.string().uuid(),
@@ -60,6 +70,9 @@ const createProjectSchema = z.object({
   initialBudget: z.union([z.number(), z.string()]).nullable().optional(),
   approvedBudget: z.union([z.number(), z.string()]).nullable().optional(),
   keyPrefix: keyPrefixSchema.optional(),
+  hoursPerWorkday: hoursPerWorkdaySchema.optional(),
+  workdaysPerWeek: workdaysPerWeekSchema.optional(),
+  nonWorkingDays: nonWorkingDaysSchema.nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -81,6 +94,9 @@ const updateProjectSchema = z.object({
   initialBudget: z.union([z.number(), z.string()]).nullable().optional(),
   approvedBudget: z.union([z.number(), z.string()]).nullable().optional(),
   keyPrefix: keyPrefixSchema.optional(),
+  hoursPerWorkday: hoursPerWorkdaySchema.optional(),
+  workdaysPerWeek: workdaysPerWeekSchema.optional(),
+  nonWorkingDays: nonWorkingDaysSchema.nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
   archived: z.boolean().optional(),
@@ -98,15 +114,35 @@ const initialStakeholdersSchema = z.object({
     .max(200),
 });
 
+function scheduleFields(
+  project: typeof projects.$inferSelect,
+  facts: ProjectScheduleFacts | undefined,
+) {
+  const calendar = coerceProjectCalendar({
+    hoursPerWorkday: project.hoursPerWorkday,
+    workdaysPerWeek: project.workdaysPerWeek,
+    nonWorkingDays: facts?.nonWorkingDays ?? [],
+  });
+  return {
+    hoursPerWorkday: calendar.hoursPerWorkday,
+    workdaysPerWeek: calendar.workdaysPerWeek,
+    nonWorkingDays: facts?.nonWorkingDays ?? [],
+    finishDate: facts?.finishDate ?? null,
+    durationWorkingDays: facts?.durationWorkingDays ?? null,
+  };
+}
+
 async function toPublicProject(
   database: Parameters<typeof loadPinnedRecords>[0],
   project: typeof projects.$inferSelect,
   tagList: Array<{ id: string; name: string; slug: string }>,
+  facts?: ProjectScheduleFacts,
 ) {
   const pinned = await loadPinnedRecords(database, [
     project.charterRecordId,
     project.initialPlanRecordId,
   ]);
+  const schedule = facts ?? (await loadProjectScheduleFacts(database, [project])).get(project.id);
   return {
     id: project.id,
     workspaceId: project.workspaceId,
@@ -120,6 +156,7 @@ async function toPublicProject(
     criticality: project.criticality,
     startDate: project.startDate,
     endDate: project.endDate,
+    ...scheduleFields(project, schedule),
     charterRecordId: project.charterRecordId,
     charterRecord: project.charterRecordId
       ? pinned.get(project.charterRecordId) ?? null
@@ -166,9 +203,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       );
 
     const projectIds = rows.map((row) => row.id);
-    const [tagMap, overallRagById] = await Promise.all([
+    const [tagMap, overallRagById, scheduleById] = await Promise.all([
       getProjectTags(app.database, projectIds),
       listProjectOverallRags(app.database, projectIds),
+      loadProjectScheduleFacts(app.database, rows),
     ]);
 
     return {
@@ -178,6 +216,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
             app.database,
             row,
             tagMap.get(row.id) ?? [],
+            scheduleById.get(row.id),
           )),
           overallRag: overallRagById.get(row.id) ?? 'green',
         })),
@@ -524,6 +563,14 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         criticality: body.criticality === undefined ? project.criticality : body.criticality,
         startDate: body.startDate === undefined ? project.startDate : body.startDate,
         endDate: body.endDate === undefined ? project.endDate : body.endDate,
+        hoursPerWorkday:
+          body.hoursPerWorkday === undefined
+            ? project.hoursPerWorkday
+            : body.hoursPerWorkday,
+        workdaysPerWeek:
+          body.workdaysPerWeek === undefined
+            ? project.workdaysPerWeek
+            : body.workdaysPerWeek,
         charterRecordId: nextCharterId,
         initialPlanRecordId: nextPlanId,
         definitionOfDone:
@@ -578,6 +625,20 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       body.approvedBudget !== undefined
     ) {
       await upsertProjectCostSnapshot(app.database, updated.id);
+    }
+
+    const calendarTouched =
+      body.workdaysPerWeek !== undefined
+      || body.nonWorkingDays !== undefined;
+    if (body.nonWorkingDays !== undefined) {
+      await replaceProjectNonWorkingDays(
+        app.database,
+        updated.id,
+        body.nonWorkingDays ?? [],
+      );
+    }
+    if (calendarTouched) {
+      await rescheduleProjectCalendar(app.database, updated.id);
     }
 
     await writeAuditEvent(app.database, {

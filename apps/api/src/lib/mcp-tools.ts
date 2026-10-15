@@ -24,6 +24,7 @@ import {
   deliveryLinkEntityTypeSchema,
   type DeliveryDependencyEntityType,
   type DeliveryDependencyLinkType,
+  coerceProjectCalendar,
   effectiveDateRange,
   epicStatusSchema,
   formatHumanKey,
@@ -206,6 +207,12 @@ import {
   loadPinnedRecords,
   setInitialStakeholders,
 } from './project-baseline.js';
+import {
+  loadProjectScheduleFacts,
+  replaceProjectNonWorkingDays,
+  type ProjectScheduleFacts,
+} from './project-calendar.js';
+import { rescheduleProjectCalendar } from './delivery-dependencies.js';
 import {
   createChangeItem,
   getChangeItem,
@@ -1139,7 +1146,13 @@ function toMcpProject(
   project: typeof projects.$inferSelect,
   pinned: Awaited<ReturnType<typeof loadPinnedRecords>>,
   workspace: WorkspaceLabel | null,
+  facts?: ProjectScheduleFacts,
 ) {
+  const calendar = coerceProjectCalendar({
+    hoursPerWorkday: project.hoursPerWorkday,
+    workdaysPerWeek: project.workdaysPerWeek,
+    nonWorkingDays: facts?.nonWorkingDays ?? [],
+  });
   return {
     id: project.id,
     workspaceId: project.workspaceId,
@@ -1152,6 +1165,11 @@ function toMcpProject(
     description: project.description,
     startDate: project.startDate,
     endDate: project.endDate,
+    hoursPerWorkday: calendar.hoursPerWorkday,
+    workdaysPerWeek: calendar.workdaysPerWeek,
+    nonWorkingDays: facts?.nonWorkingDays ?? [],
+    finishDate: facts?.finishDate ?? null,
+    durationWorkingDays: facts?.durationWorkingDays ?? null,
     charterRecordId: project.charterRecordId,
     charterRecord: project.charterRecordId
       ? (pinned.get(project.charterRecordId) ?? null)
@@ -1495,8 +1513,14 @@ export function createMcpToolHandlers(
         project.initialPlanRecordId,
       ]);
       const labels = await loadWorkspaceLabels(app, [project.workspaceId]);
+      const facts = await loadProjectScheduleFacts(app.database, [project]);
       return {
-        project: toMcpProject(project, pinned, labels.get(project.workspaceId) ?? null),
+        project: toMcpProject(
+          project,
+          pinned,
+          labels.get(project.workspaceId) ?? null,
+          facts.get(project.id),
+        ),
       };
     },
 
@@ -1511,6 +1535,9 @@ export function createMcpToolHandlers(
       initialBudget?: number | string | null;
       approvedBudget?: number | string | null;
       keyPrefix?: string;
+      hoursPerWorkday?: number;
+      workdaysPerWeek?: number;
+      nonWorkingDays?: string[] | null;
     }) {
       const actingUserId = requireActingUserId(client);
       const project = await requirePmProject(app, client, input.projectId, {
@@ -1561,6 +1588,14 @@ export function createMcpToolHandlers(
             input.startDate === undefined ? project.startDate : input.startDate,
           endDate:
             input.endDate === undefined ? project.endDate : input.endDate,
+          hoursPerWorkday:
+            input.hoursPerWorkday === undefined
+              ? project.hoursPerWorkday
+              : input.hoursPerWorkday,
+          workdaysPerWeek:
+            input.workdaysPerWeek === undefined
+              ? project.workdaysPerWeek
+              : input.workdaysPerWeek,
           charterRecordId: nextCharterId,
           initialPlanRecordId: nextPlanId,
           definitionOfDone:
@@ -1597,6 +1632,18 @@ export function createMcpToolHandlers(
       ) {
         await upsertProjectCostSnapshot(app.database, project.id);
       }
+      const calendarTouched =
+        input.workdaysPerWeek !== undefined || input.nonWorkingDays !== undefined;
+      if (input.nonWorkingDays !== undefined) {
+        await replaceProjectNonWorkingDays(
+          app.database,
+          project.id,
+          input.nonWorkingDays ?? [],
+        );
+      }
+      if (calendarTouched) {
+        await rescheduleProjectCalendar(app.database, project.id);
+      }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
         actorType: 'api_client',
@@ -1612,11 +1659,13 @@ export function createMcpToolHandlers(
         updated.initialPlanRecordId,
       ]);
       const labels = await loadWorkspaceLabels(app, [updated.workspaceId]);
+      const facts = await loadProjectScheduleFacts(app.database, [updated]);
       return {
         project: toMcpProject(
           updated,
           pinned,
           labels.get(updated.workspaceId) ?? null,
+          facts.get(updated.id),
         ),
       };
     },
