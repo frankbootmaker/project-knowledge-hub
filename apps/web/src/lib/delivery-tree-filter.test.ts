@@ -161,6 +161,7 @@ const idle: DeliveryTreeFilterState = {
   sprints: [],
   itemTypes: [],
   title: '',
+  search: '',
   onlyOpen: false,
 };
 
@@ -175,6 +176,8 @@ describe('deliveryTreeFiltersActive', () => {
     expect(deliveryTreeFiltersActive({ ...idle, onlyOpen: true })).toBe(true);
     expect(deliveryTreeFiltersActive({ ...idle, statuses: ['todo'] })).toBe(true);
     expect(deliveryTreeFiltersActive({ ...idle, title: 'form' })).toBe(true);
+    expect(deliveryTreeFiltersActive({ ...idle, search: '  ' })).toBe(false);
+    expect(deliveryTreeFiltersActive({ ...idle, search: 'PRO-T-1' })).toBe(true);
   });
 });
 
@@ -292,6 +295,23 @@ describe('filterDeliveryTree', () => {
     expect(ids(result.dimmed)).toEqual([epicDone.id, storyDone.id].sort());
   });
 
+  it('matches human keys in the toolbar search and keeps ancestors', () => {
+    const keyed = node({
+      id: 'task:keyed',
+      kind: 'task',
+      parentId: storyActive.id,
+      title: 'Opaque label',
+      status: 'todo',
+      humanKey: 'PRO-T-12',
+    });
+    const withKey = [...nodes, keyed];
+    const result = filterDeliveryTree(withKey, { ...idle, search: 'pro-t-12' });
+    expect(ids(result.visible)).toEqual([epicDone.id, storyActive.id, keyed.id].sort());
+    expect(result.dimmed.has(keyed.id)).toBe(false);
+    expect(result.dimmed.has(storyActive.id)).toBe(true);
+    expect(result.dimmed.has(epicDone.id)).toBe(true);
+  });
+
   it('does not let a grouping row match on its own title', () => {
     const result = filterDeliveryTree(nodes, {
       ...idle,
@@ -307,6 +327,7 @@ describe('filterDeliveryTree', () => {
       sprints: ['Sprint 2'],
       itemTypes: [],
       title: 'form',
+      search: '',
       onlyOpen: true,
     });
     expect(ids(combined.visible)).toEqual([epicDone.id, storyDone.id, taskOpen.id].sort());
