@@ -21,16 +21,24 @@ describe('toolbar badge height matches buttons', () => {
   const badge = source('../components/ui/Badge.tsx');
 
   it('defines --kh-button-height from control padding', () => {
-    expect(tokens).toContain('--kh-button-height: calc(2 * var(--kh-control-pad-y) + 1.25rem);');
+    expect(tokens).toContain(
+      '--kh-button-height: calc(2 * var(--kh-control-pad-y) + 1.25rem + 2px);',
+    );
   });
 
   it('maps matchControlHeight to kh-badge-control', () => {
-    expect(badge).toContain('matchControlHeight ? \'kh-badge-control\'');
+    expect(badge).toContain("matchControlHeight ? 'kh-badge-control py-0'");
   });
 
-  it('uses the button height token on kh-badge-control', () => {
+  it('uses the button height token on kh-badge-control without button padding', () => {
     const body = ruleBody(globals, '.kh-badge-control');
     expect(body).toContain('min-height: var(--kh-button-height);');
-    expect(body).toContain('padding-inline: var(--kh-control-pad-x);');
+    expect(body).not.toContain('padding-inline');
+    expect(body).not.toContain('padding-block');
+  });
+
+  it('keeps compact badge padding when matchControlHeight is enabled', () => {
+    expect(badge).toContain("'kh-badge-control py-0'");
+    expect(badge).toContain('px-1.5');
   });
 });

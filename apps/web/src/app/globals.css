@@ -253,8 +253,6 @@
   .kh-badge-control {
     box-sizing: border-box;
     min-height: var(--kh-button-height);
-    padding-inline: var(--kh-control-pad-x);
-    padding-block: 0;
   }
 
   .kh-btn {
