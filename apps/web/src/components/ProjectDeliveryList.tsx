@@ -26,6 +26,7 @@ import {
   formatStableNumber,
   type DeliveryCompletion,
 } from '../lib/delivery-completion';
+import { DeliveryItemIdButton } from './DeliveryItemIdButton';
 
 export type DeliveryListKind = 'epic' | 'story' | 'milestone' | 'task';
 
@@ -130,7 +131,14 @@ export function ProjectDeliveryList({
           row.kind === 'task' && row.itemType === 'bug'
             ? (key ?? t('kindBug'))
             : (key ?? t(KIND_LABEL[row.kind]));
-        return <span className={key ? 'kh-ops-key-badge' : 'kh-ops-type-chip'}>{label}</span>;
+        return (
+          <DeliveryItemIdButton
+            variant={key ? 'key' : 'type'}
+            onClick={() => onManageRef.current(row.kind, row.entityId)}
+          >
+            {label}
+          </DeliveryItemIdButton>
+        );
       },
     },
     {
