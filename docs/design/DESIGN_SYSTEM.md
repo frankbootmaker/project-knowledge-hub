@@ -47,6 +47,7 @@ Before considering UI work done:
 | `--kh-z-rail` / `--kh-z-header` | Rail and sticky header stacking |
 | `--kh-control-height/width` | Switch and compact controls |
 | `--kh-control-pad-x/y` | Button padding |
+| `--kh-button-height` | Shared action control height (`2×` pad-y + `text-sm` line box); badges beside buttons use `.kh-badge-control` |
 | `--kh-focus-ring` | Focus ring color mix |
 | `--kh-toast-duration-ms` | Auto-dismiss duration for toasts (JS reads this via constant alignment) |
 | `--kh-z-toast` | Toast stacking context |
@@ -247,6 +248,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-15
 
+* **Project header RAG badge** — Overall status badge in the project `PageHeader` uses `Badge` `matchControlHeight` (`.kh-badge-control` sets only `min-height: var(--kh-button-height)`; compact `px-1.5` and tone washes unchanged) so it lines up with Refresh and Manage without altering `.kh-btn` sizing.
 * **Project information** — The baseline field grid is titled Project information. Labels, values, hints, and holiday actions use the left-rail menu type (IBM Plex Sans, 13px, regular). Duration and finish are read-only. Definition of Done is shown once, under the grid. Public holidays use an Add date `Button` (primary once a date is chosen) and a small danger-outline Remove `Button`. The edit dialog uses `DELIVERY_ITEM_MODAL_SIZE` (`xl`), the same sheet as the task dialog.
 * **Parent dates** — Story, epic, and milestone start and end shown in the tree, list, and item dialog follow included children: earliest start and latest end. A parent with no dated children keeps the dates stored on it. Milestone due dates in the tree use that end. Target percent uses the same window.
 * **Parent status** — Story, epic, and milestone status labels include In progress and Blocked (`milestoneStatus.in_progress`, `milestoneStatus.blocked`) in English, German, and Hungarian. The tree, list, board, and item dialog show the status derived from children. A blocked parent sits in the board’s blocked lane. Active remains the label for a parent that was set to active and has no included children.
