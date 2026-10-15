@@ -4,8 +4,9 @@ import { useMemo, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { LocalDateTime } from './LocalDateTime';
 import { MilestoneTimeMarkers } from './MilestoneTimeMarkers';
-import { DataTable, type DataColumn } from './ui/DataTable';
+import { DataTable, dataTableFilterFields, type DataColumn } from './ui/DataTable';
 import { Button, Input, Select } from './ui';
+import { TableFilterControl } from './ui/TableFilterControl';
 import {
   applyTableView,
   collectEnumOptions,
@@ -448,6 +449,25 @@ export function ProjectDeliveryList({
             className="h-10 min-h-10 py-1.5 text-xs"
           />
         </label>
+        <TableFilterControl
+          fields={dataTableFilterFields(columns)}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={table.clearFilters}
+          filtersActive={table.filtersActive}
+        />
+        {table.filtersActive ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+            onClick={table.clearFilters}
+          >
+            {tTable('clearFilters')}
+          </Button>
+        ) : null}
       </div>
       {bareEmpty ? (
         <div className="kh-ops-empty-state">
@@ -469,6 +489,7 @@ export function ProjectDeliveryList({
           onTextFilter={table.setTextFilter}
           onClearFilters={table.clearFilters}
           filtersActive={table.filtersActive}
+          hideHeaderFilter
           tableClassName="kh-ops-delivery-list"
           empty={
             <>

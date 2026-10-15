@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **Timeline due-date anchoring (PRO-T-81):** Epics and stories sit on the same timeline spine as tasks, bugs, and milestones. Each card is anchored on its due date and shares a lane when it does not overlap another card.
 
+### Changed
+
+* **Delivery search toolbar:** List and Tree place the filter control on the same line as the search field, matching the Gantt.
+
 ### Added
 
 * **Delivery Gantt search:** The Gantt uses the same search box and filter as List and Tree: status, owner, sprint, task or bug, title, and only open. Matching rows stay visible with their ancestors dimmed, and dependency arrows are drawn only between rows that remain on the chart.
