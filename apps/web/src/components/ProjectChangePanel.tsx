@@ -271,6 +271,8 @@ export function ProjectChangePanel({
       if (
         value === 'planned'
         || value === 'active'
+        || value === 'in_progress'
+        || value === 'blocked'
         || value === 'done'
         || value === 'cancelled'
       ) {

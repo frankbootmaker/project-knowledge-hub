@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   deliveryCompletionIndex,
   deliveryLag,
+  displayedMilestoneStatus,
   displayedParentCompletion,
   formatPercentLabel,
+  parentStatusFromChildren,
   plannedTargetPercent,
   taskCompletionPoints,
   taskDeliveryCompletion,
@@ -19,6 +21,24 @@ function task(
     ...partial,
   };
 }
+
+describe('parent status shown in delivery views', () => {
+  it('uses the child rule and keeps a manual status with no children', () => {
+    expect(
+      parentStatusFromChildren('planned', [
+        { status: 'in_progress', completionPercent: 50 },
+        { status: 'cancelled', completionPercent: 0 },
+      ]),
+    ).toBe('in_progress');
+    expect(parentStatusFromChildren('active', [])).toBe('active');
+    expect(
+      displayedMilestoneStatus('planned', [
+        { entityType: 'task', status: 'done', completionPercent: 100 },
+      ]),
+    ).toBe('done');
+    expect(displayedMilestoneStatus('active', [])).toBe('active');
+  });
+});
 
 describe('taskDeliveryCompletion', () => {
   it('uses the stored step, and forces done or cancelled', () => {

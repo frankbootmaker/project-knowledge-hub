@@ -17,6 +17,8 @@ import {
   type MilestoneLinkCompletion,
 } from '@project-knowledge-hub/domain';
 import { diffReplacement } from './replace-diff.js';
+import { recomputeDeliveryParentStatuses } from './parent-status.js';
+import { rescheduleDeliveryFrom } from './delivery-dependencies.js';
 import { toHumanKeyFields } from './project-issue-keys.js';
 
 export type MilestoneCompletionFields = {
@@ -331,6 +333,13 @@ export async function setMilestoneItemLinks(
       );
     }
   });
+  const applied = await recomputeDeliveryParentStatuses(database, input.projectId, {
+    milestoneIds: [input.milestoneId],
+  });
+  await rescheduleDeliveryFrom(database, input.projectId, [
+    { entityType: 'milestone', id: input.milestoneId },
+    ...applied.dateChanges,
+  ]);
 }
 
 async function assertSameProject(

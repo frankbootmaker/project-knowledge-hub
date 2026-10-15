@@ -29,8 +29,11 @@ import { ProjectTaskManageModal } from './ProjectTaskManageModal';
 import type { DeliveryDocumentRecord } from './DeliveryDocumentsEditor';
 import {
   deliveryCompletionIndex,
+  displayedMilestoneStatus,
   displayedParentCompletion,
+  derivedParentDates,
   formatPercentLabel,
+  parentStatusFromChildren,
   plannedTargetPercent,
   taskDeliveryCompletion,
 } from '../lib/delivery-completion';
@@ -130,6 +133,7 @@ type Task = {
   description: string | null;
   status: string;
   dueDate: string | null;
+  startDate?: string | null;
   forecastHours: string | null;
   actualHours: string | null;
   storyPoints?: number | null;
@@ -414,9 +418,99 @@ export function ProjectDeliveryPanel({
   }, [sprintLabels]);
 
   const today = useLocalToday();
+  const shownDelivery = useMemo(() => {
+    const tasksByStory = new Map<string, Task[]>();
+    const tasksByEpic = new Map<string, Task[]>();
+    const taskById = new Map<string, Task>();
+    for (const task of tasks) {
+      taskById.set(task.id, task);
+      if (task.userStoryId) {
+        const list = tasksByStory.get(task.userStoryId) ?? [];
+        list.push(task);
+        tasksByStory.set(task.userStoryId, list);
+      }
+      if (task.epicId) {
+        const list = tasksByEpic.get(task.epicId) ?? [];
+        list.push(task);
+        tasksByEpic.set(task.epicId, list);
+      }
+    }
+    const derivedStories = stories.map((story) => {
+      const children = tasksByStory.get(story.id) ?? [];
+      const dates = derivedParentDates(
+        { start: story.startDate, end: story.endDate },
+        children.map((task) => ({
+          status: task.status,
+          start: task.startDate ?? null,
+          end: task.dueDate,
+        })),
+      );
+      return {
+        ...story,
+        status: parentStatusFromChildren(story.status, children),
+        startDate: dates.start,
+        endDate: dates.end,
+      };
+    });
+    const storyById = new Map(derivedStories.map((story) => [story.id, story]));
+    const derivedEpics = epics.map((epic) => {
+      const dates = derivedParentDates(
+        { start: epic.startDate, end: epic.endDate },
+        derivedStories
+          .filter((story) => story.epicId === epic.id)
+          .map((story) => ({
+            status: story.status,
+            start: story.startDate,
+            end: story.endDate,
+          })),
+      );
+      return {
+        ...epic,
+        status: parentStatusFromChildren(epic.status, tasksByEpic.get(epic.id) ?? []),
+        startDate: dates.start,
+        endDate: dates.end,
+      };
+    });
+    const epicById = new Map(derivedEpics.map((epic) => [epic.id, epic]));
+    return {
+      epics: derivedEpics,
+      stories: derivedStories,
+      milestones: milestones.map((milestone) => {
+        const linkDates = (milestone.linkedItems ?? []).flatMap((link) => {
+          if (link.entityType === 'task') {
+            const task = taskById.get(link.entityId);
+            if (!task) return [];
+            return [{
+              status: task.status,
+              start: task.startDate ?? null,
+              end: task.dueDate,
+            }];
+          }
+          if (link.entityType === 'user_story') {
+            const story = storyById.get(link.entityId);
+            if (!story) return [];
+            return [{ status: story.status, start: story.startDate, end: story.endDate }];
+          }
+          const epic = epicById.get(link.entityId);
+          if (!epic) return [];
+          return [{ status: epic.status, start: epic.startDate, end: epic.endDate }];
+        });
+        const dates = derivedParentDates(
+          { start: milestone.startDate, end: milestone.targetDate },
+          linkDates,
+        );
+        return {
+          ...milestone,
+          status: displayedMilestoneStatus(milestone.status, milestone.linkedItems ?? []),
+          startDate: dates.start,
+          targetDate: dates.end,
+        };
+      }),
+    };
+  }, [epics, milestones, stories, tasks]);
   const listRows: DeliveryListRow[] = useMemo(() => {
     const completion = deliveryCompletionIndex(tasks);
-    const epicRows: DeliveryListRow[] = epics.map((epic) => ({
+    const epicRows: DeliveryListRow[] = shownDelivery.epics.map((epic) => ({
       id: `epic:${epic.id}`,
       kind: 'epic',
       entityId: epic.id,
@@ -445,7 +539,7 @@ export function ProjectDeliveryPanel({
         .toLowerCase(),
     }));
 
-    const storyRows: DeliveryListRow[] = stories.map((story) => {
+    const storyRows: DeliveryListRow[] = shownDelivery.stories.map((story) => {
       const epicLabel = epicTitleById.get(story.epicId) ?? '';
       return {
         id: `story:${story.id}`,
@@ -478,7 +572,7 @@ export function ProjectDeliveryPanel({
       };
     });
 
-    const milestoneRows: DeliveryListRow[] = milestones.map((milestone) => ({
+    const milestoneRows: DeliveryListRow[] = shownDelivery.milestones.map((milestone) => ({
       id: `milestone:${milestone.id}`,
       kind: 'milestone',
       entityId: milestone.id,
@@ -543,11 +637,11 @@ export function ProjectDeliveryPanel({
     });
 
     return [...epicRows, ...storyRows, ...milestoneRows, ...taskRows];
-  }, [epics, stories, milestones, tasks, epicTitleById, sprintTitleById, today]);
+  }, [shownDelivery, tasks, epicTitleById, sprintTitleById, today]);
 
   const calendarItems = useMemo(
     () => [
-      ...milestones
+      ...shownDelivery.milestones
         .filter((milestone) => milestone.targetDate)
         .map((milestone) => ({
           id: `milestone:${milestone.id}`,
@@ -575,7 +669,7 @@ export function ProjectDeliveryPanel({
             : null,
         })),
     ],
-    [milestones, tasks],
+    [shownDelivery.milestones, tasks],
   );
 
   const boardTasks = useMemo(
@@ -1097,9 +1191,9 @@ export function ProjectDeliveryPanel({
 
       {viewMode === 'tree' ? (
         <ProjectDeliveryTree
-          epics={epics}
-          stories={stories}
-          milestones={milestones.map((milestone) => ({
+          epics={shownDelivery.epics}
+          stories={shownDelivery.stories}
+          milestones={shownDelivery.milestones.map((milestone) => ({
             id: milestone.id,
             title: milestone.title,
             status: milestone.status,
@@ -1130,7 +1224,7 @@ export function ProjectDeliveryPanel({
           projectId={projectId}
           projectName={projectName}
           tasks={boardTasks}
-          milestones={milestones}
+          milestones={shownDelivery.milestones}
           milestoneTitles={milestoneTitleById}
           canMutate={canMutate}
           pending={pending}
@@ -1219,9 +1313,9 @@ export function ProjectDeliveryPanel({
           projectName={projectName}
           projectStartDate={projectStartDate}
           projectEndDate={projectEndDate}
-          epics={epics}
-          stories={stories}
-          milestones={milestones}
+          epics={shownDelivery.epics}
+          stories={shownDelivery.stories}
+          milestones={shownDelivery.milestones}
           tasks={tasks}
           exportHandleRef={timelineExportRef}
           onExportStateChange={onTimelineExportStateChange}
@@ -1620,9 +1714,9 @@ export function ProjectDeliveryPanel({
         taskId={manageTaskId}
         canMutate={canMutate}
         members={members}
-        epics={epics}
-        stories={stories}
-        milestones={milestones}
+        epics={shownDelivery.epics}
+        stories={shownDelivery.stories}
+        milestones={shownDelivery.milestones}
         currency={currency}
         ratePeople={ratePeople}
         systems={systems}
@@ -1660,9 +1754,9 @@ export function ProjectDeliveryPanel({
         kind={manageAgile?.kind ?? null}
         itemId={manageAgile?.id ?? null}
         projectId={projectId}
-        epics={epics}
-        stories={stories}
-        milestones={milestones}
+        epics={shownDelivery.epics}
+        stories={shownDelivery.stories}
+        milestones={shownDelivery.milestones}
         tasks={tasks}
         records={records}
         currency={currency}

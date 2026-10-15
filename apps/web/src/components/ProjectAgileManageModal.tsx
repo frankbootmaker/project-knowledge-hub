@@ -44,7 +44,14 @@ import {
   type MilestoneLinkChoice,
 } from './MilestoneLinkedItemsEditor';
 
-const STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
+const STATUSES = [
+  'planned',
+  'active',
+  'in_progress',
+  'blocked',
+  'done',
+  'cancelled',
+] as const;
 
 type EffortTask = {
   id: string;
