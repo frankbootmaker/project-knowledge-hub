@@ -1,5 +1,4 @@
 import { RECORD_TYPE_CATALOG } from '@project-knowledge-hub/domain';
-import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { LocalDateTime } from '../../../components/LocalDateTime';
 import {
@@ -8,6 +7,7 @@ import {
   ErrorText,
   Field,
   Input,
+  LinkButton,
   Page,
   PageHeader,
   Select,
@@ -275,9 +275,13 @@ export default async function SearchPage({
                       return (
                         <tr key={result.id}>
                           <td className="kh-ops-primary-cell">
-                            <Link href={href} className="no-underline">
+                            <LinkButton
+                              href={href}
+                              variant="secondary"
+                              className="h-auto whitespace-normal px-2 py-1 text-left font-normal"
+                            >
                               {result.title}
-                            </Link>
+                            </LinkButton>
                             {result.excerpt ? (
                               <div className="kh-ops-search-caption max-w-[28rem]">
                                 {result.excerpt}
