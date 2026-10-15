@@ -3410,8 +3410,11 @@ a.kh-ops-choice {
 .kh-ops-field-cell strong {
   display: block;
   margin-top: 5px;
-  font-size: 12px;
-  font-weight: 650;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
 }
 
 .kh-ops-pinned {

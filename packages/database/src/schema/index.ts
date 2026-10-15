@@ -161,6 +161,16 @@ export const projects = pgTable(
     criticality: text('criticality'),
     startDate: date('start_date', { mode: 'string' }),
     endDate: date('end_date', { mode: 'string' }),
+    /** Effort hours in one working day. Scheduling and Gantt share this calendar. */
+    hoursPerWorkday: numeric('hours_per_workday', {
+      precision: 4,
+      scale: 2,
+      mode: 'number',
+    })
+      .notNull()
+      .default(8),
+    /** Monday-first working days: 5 is Monday–Friday, 7 is every day. */
+    workdaysPerWeek: integer('workdays_per_week').notNull().default(5),
     /** Pinned project charter knowledge record (same project). */
     charterRecordId: uuid('charter_record_id').references(
       (): AnyPgColumn => knowledgeRecords.id,
@@ -196,6 +206,28 @@ export const projects = pgTable(
       .on(table.workspaceId, sql`upper(${table.keyPrefix})`)
       .where(sql`${table.keyPrefix} IS NOT NULL`),
     index('projects_workspace_id_idx').on(table.workspaceId),
+  ],
+);
+
+/** Dates the project calendar never treats as working days. */
+export const projectNonWorkingDays = pgTable(
+  'project_non_working_days',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    day: date('day', { mode: 'string' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_non_working_days_project_day_uidx').on(
+      table.projectId,
+      table.day,
+    ),
+    index('project_non_working_days_project_id_idx').on(table.projectId),
   ],
 );
 

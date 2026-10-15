@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { suggestKeyPrefix } from '@project-knowledge-hub/domain';
 import { CollapsibleSection } from './CollapsibleSection';
+import { LocalDateTime } from './LocalDateTime';
 import { recordHref } from '../lib/record-href';
 import {
   PROJECT_CURRENCIES,
@@ -46,6 +47,11 @@ export type BaselineProject = {
   slug?: string;
   startDate: string | null;
   endDate: string | null;
+  hoursPerWorkday?: number | null;
+  workdaysPerWeek?: number | null;
+  nonWorkingDays?: string[];
+  finishDate?: string | null;
+  durationWorkingDays?: number | null;
   charterRecordId: string | null;
   charterRecord: PinnedRecord | null;
   initialPlanRecordId: string | null;
@@ -121,7 +127,16 @@ export function ProjectBaselinePanel({
   const [error, setError] = useState<string | null>(null);
 
   const [startDate, setStartDate] = useState(project.startDate ?? '');
-  const [endDate, setEndDate] = useState(project.endDate ?? '');
+  const [hoursPerWorkday, setHoursPerWorkday] = useState(
+    String(project.hoursPerWorkday ?? 8),
+  );
+  const [workdaysPerWeek, setWorkdaysPerWeek] = useState(
+    String(project.workdaysPerWeek ?? 5),
+  );
+  const [nonWorkingDays, setNonWorkingDays] = useState<string[]>(
+    project.nonWorkingDays ?? [],
+  );
+  const [holidayDraft, setHolidayDraft] = useState('');
   const [charterRecordId, setCharterRecordId] = useState(
     project.charterRecordId ?? '',
   );
@@ -159,7 +174,10 @@ export function ProjectBaselinePanel({
 
   function openEdit() {
     setStartDate(project.startDate ?? '');
-    setEndDate(project.endDate ?? '');
+    setHoursPerWorkday(String(project.hoursPerWorkday ?? 8));
+    setWorkdaysPerWeek(String(project.workdaysPerWeek ?? 5));
+    setNonWorkingDays([...(project.nonWorkingDays ?? [])].sort());
+    setHolidayDraft('');
     setCharterRecordId(project.charterRecordId ?? '');
     setInitialPlanRecordId(project.initialPlanRecordId ?? '');
     setCurrency(project.currency ?? 'EUR');
@@ -179,6 +197,19 @@ export function ProjectBaselinePanel({
     );
     setError(null);
     setEditOpen(true);
+  }
+
+  function addNonWorkingDay() {
+    const day = holidayDraft.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+    setNonWorkingDays((prev) =>
+      prev.includes(day) ? prev : [...prev, day].sort(),
+    );
+    setHolidayDraft('');
+  }
+
+  function removeNonWorkingDay(day: string) {
+    setNonWorkingDays((prev) => prev.filter((value) => value !== day));
   }
 
   function toggleMember(userId: string) {
@@ -213,7 +244,9 @@ export function ProjectBaselinePanel({
         },
         body: JSON.stringify({
           startDate: startDate || null,
-          endDate: endDate || null,
+          hoursPerWorkday: Number(hoursPerWorkday),
+          workdaysPerWeek: Number(workdaysPerWeek),
+          nonWorkingDays,
           charterRecordId: charterRecordId || null,
           initialPlanRecordId: initialPlanRecordId || null,
           currency,
@@ -271,6 +304,19 @@ export function ProjectBaselinePanel({
     }
   }
 
+  function dateLabel(value: string | null | undefined) {
+    if (!value) return tCommon('none');
+    return <LocalDateTime value={value} dateOnly />;
+  }
+
+  const durationLabel =
+    project.durationWorkingDays == null
+      ? tCommon('none')
+      : t('durationValue', { count: project.durationWorkingDays });
+  const hoursLabel = String(project.hoursPerWorkday ?? 8);
+  const workdays = project.workdaysPerWeek ?? 5;
+  const holidayList = [...(project.nonWorkingDays ?? [])].sort();
+
   function pinnedRecordHref(record: PinnedRecord) {
     return recordHref({
       workspaceSlug,
@@ -302,11 +348,29 @@ export function ProjectBaselinePanel({
             <div className="kh-ops-baseline-grid">
               <div className="kh-ops-field-cell">
                 <small>{t('startDate')}</small>
-                <strong>{project.startDate || tCommon('none')}</strong>
+                <strong>{dateLabel(project.startDate)}</strong>
               </div>
               <div className="kh-ops-field-cell">
-                <small>{t('endDate')}</small>
-                <strong>{project.endDate || tCommon('none')}</strong>
+                <small>{t('duration')}</small>
+                <strong>{durationLabel}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('finishDate')}</small>
+                <strong>{dateLabel(project.finishDate)}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('hoursPerWorkday')}</small>
+                <strong>{hoursLabel}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('workdaysPerWeek')}</small>
+                <strong>
+                  {workdays}
+                  <span className="kh-ops-menu-type text-ink-muted">
+                    {' '}
+                    · {t(`workweek.${workdays}`)}
+                  </span>
+                </strong>
               </div>
               <div className="kh-ops-field-cell">
                 <small>{t('currency')}</small>
@@ -338,10 +402,29 @@ export function ProjectBaselinePanel({
               </div>
             </div>
             {project.definitionOfDone?.trim() ? (
-              <p className="kh-ops-card-body m-0 whitespace-pre-wrap text-xs text-ink-muted">
+              <p className="kh-ops-card-body kh-ops-menu-type m-0 whitespace-pre-wrap">
                 {project.definitionOfDone}
               </p>
             ) : null}
+            <div className="border-t border-line">
+              <div className="kh-ops-panel-head">
+                <h3 className="kh-ops-panel-title">{t('nonWorkingDays')}</h3>
+              </div>
+              {holidayList.length === 0 ? (
+                <p className="kh-ops-empty">{tCommon('none')}</p>
+              ) : (
+                <ul className="m-0 grid list-none gap-0 p-0">
+                  {holidayList.map((day) => (
+                    <li
+                      key={day}
+                      className="kh-ops-menu-type border-b border-line px-3.5 py-2 last:border-b-0"
+                    >
+                      {dateLabel(day)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
 
           <section className="kh-ops-panel">
@@ -478,15 +561,85 @@ export function ProjectBaselinePanel({
                 data-modal-initial-focus
               />
             </Field>
-            <Field label={t('endDate')}>
+            <Field label={t('duration')}>
+              <p className="kh-ops-menu-type m-0 min-h-10 py-2">{durationLabel}</p>
+            </Field>
+          </div>
+          <Field label={t('finishDate')}>
+            <p className="kh-ops-menu-type m-0">{dateLabel(project.finishDate)}</p>
+            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('finishHint')}</p>
+          </Field>
+          <div className="kh-ops-form-grid">
+            <Field label={t('hoursPerWorkday')}>
               <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                type="number"
+                min="0.25"
+                max="24"
+                step="0.25"
+                value={hoursPerWorkday}
+                onChange={(e) => setHoursPerWorkday(e.target.value)}
                 disabled={pending}
               />
             </Field>
+            <Field label={t('workdaysPerWeek')}>
+              <Select
+                value={workdaysPerWeek}
+                onChange={(e) => setWorkdaysPerWeek(e.target.value)}
+                disabled={pending}
+              >
+                {[1, 2, 3, 4, 5, 6, 7].map((count) => (
+                  <option key={count} value={count}>
+                    {count} · {t(`workweek.${count}`)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </div>
+          <Field label={t('nonWorkingDays')}>
+            <div className="grid gap-2">
+              <div className="flex items-end gap-2">
+                <Input
+                  type="date"
+                  value={holidayDraft}
+                  onChange={(e) => setHolidayDraft(e.target.value)}
+                  disabled={pending}
+                  aria-label={t('nonWorkingDay')}
+                  className="min-w-0 flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending || !holidayDraft}
+                  onClick={addNonWorkingDay}
+                >
+                  {t('addNonWorkingDay')}
+                </Button>
+              </div>
+              {nonWorkingDays.length === 0 ? (
+                <p className="kh-ops-menu-type m-0 text-ink-muted">{tCommon('none')}</p>
+              ) : (
+                <ul className="m-0 grid list-none gap-1 p-0">
+                  {nonWorkingDays.map((day) => (
+                    <li
+                      key={day}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="kh-ops-menu-type">{dateLabel(day)}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={pending}
+                        onClick={() => removeNonWorkingDay(day)}
+                      >
+                        {t('removeNonWorkingDay')}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="m-0 text-xs text-ink-muted">{t('nonWorkingDaysHint')}</p>
+            </div>
+          </Field>
           <div className="kh-ops-form-grid">
             <Field label={t('currency')}>
               <Select

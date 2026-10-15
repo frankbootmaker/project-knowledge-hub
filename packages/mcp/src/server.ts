@@ -13,7 +13,10 @@ import {
   MCP_MAX_LIST_LIMIT,
 } from './limits.js';
 import {
+  hoursPerWorkdaySchema,
   isoDateNullableSchema,
+  nonWorkingDaysSchema,
+  workdaysPerWeekSchema,
   sanitizeError,
   AppError,
   epicStatusSchema,
@@ -100,6 +103,9 @@ export type McpToolHandlers = {
     initialBudget?: number | string | null;
     approvedBudget?: number | string | null;
     keyPrefix?: string;
+    hoursPerWorkday?: number;
+    workdaysPerWeek?: number;
+    nonWorkingDays?: string[] | null;
   }) => Promise<unknown>;
   moveProject: (input: {
     projectId: string;
@@ -1227,6 +1233,11 @@ export function createKnowledgeHubMcpServer(
       description: nullableText,
       startDate: nullableText,
       endDate: nullableText,
+      hoursPerWorkday: z.number(),
+      workdaysPerWeek: z.number().int(),
+      nonWorkingDays: z.array(z.string()),
+      finishDate: nullableText,
+      durationWorkingDays: z.number().int().nullable(),
       charterRecordId: nullableText,
       charterRecord: pinnedRecordOutput,
       initialPlanRecordId: nullableText,
@@ -1245,7 +1256,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id, or by projectSlug plus workspaceSlug when the slug is shared. Returns workspaceName, workspaceSlug, baseline dates, pinned charter/plan, keyPrefix, budgets, and definitionOfDone (string or null). Money fields (initialBudget, approvedBudget) are JSON numbers.',
+        'Get a project by id, or by projectSlug plus workspaceSlug when the slug is shared. Returns workspaceName, workspaceSlug, baseline dates, the working calendar (hoursPerWorkday, workdaysPerWeek, nonWorkingDays), plan finishDate and durationWorkingDays, pinned charter/plan, keyPrefix, budgets, and definitionOfDone (string or null). finishDate is the latest scheduled delivery end and durationWorkingDays counts working days from the earliest scheduled start to that finish. Money fields (initialBudget, approvedBudget) are JSON numbers.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
@@ -1271,11 +1282,14 @@ export function createKnowledgeHubMcpServer(
     'update_project_baseline',
     {
       description:
-        'Update project baseline window, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. Returns the saved project, including definitionOfDone (string or null). Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
+        'Update project baseline window, working calendar, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. hoursPerWorkday, workdaysPerWeek (Monday-first, 1–7), and nonWorkingDays (YYYY-MM-DD, replaces the list) drive scheduling. finishDate and durationWorkingDays are calculated from the plan and are not inputs. Returns the saved project, including definitionOfDone (string or null). Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
       inputSchema: {
         projectId: z.string().uuid(),
         startDate: isoDateNullableSchema.optional(),
         endDate: isoDateNullableSchema.optional(),
+        hoursPerWorkday: hoursPerWorkdaySchema.optional(),
+        workdaysPerWeek: workdaysPerWeekSchema.optional(),
+        nonWorkingDays: nonWorkingDaysSchema.nullable().optional(),
         charterRecordId: z.string().uuid().nullable().optional(),
         initialPlanRecordId: z.string().uuid().nullable().optional(),
         definitionOfDone: z.string().max(20000).nullable().optional(),
@@ -2045,7 +2059,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_task',
-    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. When durationDays is set, dueDate is startDate plus that many calendar days. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -2121,7 +2135,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_task',
-    'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. When durationDays is set, dueDate is startDate plus that many calendar days. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+    'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -2265,7 +2279,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'set_delivery_dependency',
-    'Add predecessor links between delivery items in the same project. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several at once. An item may have many predecessors; each ordered pair is stored once. linkType is FS, SS, FF, or SF. lagDays defaults to 0 and may be negative (lead). The successor start is the latest constraint across its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. Ids are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass a type when the id is a UUID. Requires pm:write.',
+    'Add predecessor links between delivery items in the same project. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several at once. An item may have many predecessors; each ordered pair is stored once. linkType is FS, SS, FF, or SF. lagDays defaults to 0, is counted in working days, and may be negative (lead). Non-working days are skipped. The successor start is the latest constraint across its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. Ids are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass a type when the id is a UUID. Requires pm:write.',
     {
       projectId: z.string().uuid().describe('Required project id (UUID).'),
       predecessorId: dependencyRef.optional(),
