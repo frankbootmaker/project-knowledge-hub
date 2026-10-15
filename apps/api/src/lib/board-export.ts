@@ -40,7 +40,8 @@ const BOARD_COLUMNS = [
 ] as const;
 
 function milestoneBoardColumn(status: string): (typeof BOARD_COLUMNS)[number] {
-  if (status === 'active') return 'in_progress';
+  if (status === 'active' || status === 'in_progress') return 'in_progress';
+  if (status === 'blocked') return 'blocked';
   if (status === 'done') return 'done';
   if (status === 'cancelled') return 'cancelled';
   return 'todo';

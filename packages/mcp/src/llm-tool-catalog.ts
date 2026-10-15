@@ -6,6 +6,11 @@
 
 import { AppError, RECORD_TYPES } from '@project-knowledge-hub/domain';
 import { hasMcpScope, type McpScope } from './scopes.js';
+import {
+  annotateRequiredFieldDescriptions,
+  assertToolInput,
+  type ToolInputSchema,
+} from './tool-input.js';
 
 export type LlmToolDef = {
   name: string;
@@ -118,12 +123,16 @@ const bugFields = {
 
 const milestoneStatus = {
   type: 'string',
-  enum: ['planned', 'in_progress', 'done', 'cancelled'],
+  enum: ['planned', 'active', 'in_progress', 'blocked', 'done', 'cancelled'],
+  description:
+    'Derived from included links when any remain: done, blocked, in_progress, or planned. Otherwise the stored status, including active.',
 };
 
 const epicStatus = {
   type: 'string',
-  enum: ['planned', 'in_progress', 'done', 'cancelled'],
+  enum: ['planned', 'active', 'in_progress', 'blocked', 'done', 'cancelled'],
+  description:
+    'Derived from included child tasks and bugs when any remain: done, blocked, in_progress, or planned. Otherwise the stored status, including active.',
 };
 
 const sprintStatus = {
@@ -693,7 +702,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional durationDays; when set, dueDate is startDate plus that many calendar days. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional durationDays; when set, dueDate is startDate plus that many calendar days. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -744,7 +753,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_milestones',
     description:
-      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is derived from linkedItems: done is 100, cancelled is excluded, otherwise computed. 100 means every included link is complete. targetDate is the due date. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is derived from linkedItems: done is 100, cancelled is excluded, otherwise computed. 100 means every included link is complete. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. startDate is the earliest linked start when a link has one, and targetDate is the latest linked end; with no dated links both stay as stored. targetDate is the due date. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -803,7 +812,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_milestone',
     description:
-      'Get one milestone with its note, due date, completionPercent, and linkedItems. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'Get one milestone with its note, due date, completionPercent, linkedItems, and status derived from those links. No included links keeps the stored status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -845,7 +854,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_epics',
     description:
-      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Each epic includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. Each epic includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -882,7 +891,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_user_stories',
     description:
-      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Each story includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. Each story includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     body: {
@@ -1245,7 +1254,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_delivery_dependencies',
     description:
-      'List every predecessor link on one delivery item and the successors derived from them. An item may have many predecessors. The successor start is the latest constraint (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'List every predecessor link on one delivery item and the successors derived from them. An item may have many predecessors. The successor start is the latest constraint (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). projectId (UUID) and entityId are required. entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1265,7 +1274,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_delivery_dependency',
     description:
-      'Add predecessor links (FS, SS, FF, or SF) with optional lagDays. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The successor start is the latest constraint. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
+      'Add predecessor links (FS, SS, FF, or SF) with optional lagDays. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The successor start is the latest constraint. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -1332,7 +1341,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'remove_delivery_dependency',
     description:
-      'Remove one dependency by linkId or by predecessorId plus successorId (UUID or human key such as PRO-T-1). Requires pm:write. Via call_hub_tool on ChatGPT.',
+      'Remove one dependency by linkId or by predecessorId plus successorId (UUID or human key such as PRO-T-1). projectId (UUID) is required. Requires pm:write. Via call_hub_tool on ChatGPT.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -2144,7 +2153,13 @@ export function listHubToolSummaries(includeWriteTools: boolean): Array<{
     openApiFirstClass: Boolean(tool.openApi),
   })).concat(
     includeWriteTools
-      ? EXTRA_HUB_TOOLS.map((tool) => ({ ...tool, openApiFirstClass: false }))
+      ? EXTRA_HUB_TOOLS.map(({ name, description, scope, write }) => ({
+          name,
+          description,
+          scope,
+          write,
+          openApiFirstClass: false,
+        }))
       : [],
   );
 }
@@ -2154,22 +2169,131 @@ const EXTRA_HUB_TOOLS: Array<{
   description: string;
   scope: McpScope;
   write: boolean;
+  body: ToolInputSchema;
 }> = [
   {
     name: 'update_project_change_item',
     description:
-      'Update a change-management item. Requires pm:write.',
+      'Update a change-management item. changeId is required. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['changeId'],
+      properties: {
+        changeId: entityRefProp('Change item id'),
+        kind: {
+          type: 'string',
+          enum: ['scope', 'timeline', 'stakeholder', 'budget', 'other'],
+        },
+        title: stringProp('Title', { minLength: 1, maxLength: 300 }),
+        description: { type: 'string', nullable: true, maxLength: 10000 },
+        rationale: { type: 'string', nullable: true, maxLength: 10000 },
+        status: {
+          type: 'string',
+          enum: ['proposed', 'approved', 'rejected', 'implemented', 'cancelled'],
+        },
+        requestedByUserId: { type: 'string', format: 'uuid', nullable: true },
+        approvedByUserId: { type: 'string', format: 'uuid', nullable: true },
+        effectiveDate: ymd,
+        baselineStartBefore: ymd,
+        baselineStartAfter: ymd,
+        baselineEndBefore: ymd,
+        baselineEndAfter: ymd,
+        knowledgeRecordId: { ...entityRefProp('Linked knowledge record'), nullable: true },
+        recordIds: {
+          type: 'array',
+          maxItems: 100,
+          items: entityRefProp('Knowledge record id'),
+        },
+        sortOrder: { type: 'integer', minimum: 0, maximum: 100000 },
+        archived: { type: 'boolean' },
+        deliveryLinks: {
+          type: 'array',
+          maxItems: 200,
+          items: {
+            type: 'object',
+            required: ['entityType', 'entityId'],
+            properties: {
+              entityType: {
+                type: 'string',
+                enum: ['epic', 'user_story', 'milestone', 'task'],
+              },
+              entityId: entityRefProp('Delivery entity id'),
+            },
+          },
+        },
+      },
+    },
   },
   {
     name: 'update_project_ai_assistant_cost',
     description:
-      'Set AI assistant cost mode on a project AI system. Requires pm:write.',
+      'Set AI assistant cost mode on a project AI system. systemId is required. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['systemId'],
+      properties: {
+        systemId: uuidProp('System id'),
+        aiCostMode: {
+          type: 'string',
+          enum: ['flat', 'api', 'mixed', 'note_only'],
+          nullable: true,
+        },
+        aiFlatMonthlyFee: money,
+        aiTokenRatePer1k: money,
+        aiTokenRateInputPer1k: money,
+        aiTokenRateOutputPer1k: money,
+        aiTokenRateCachePer1k: money,
+        aiCostNotes: { type: 'string', maxLength: 500, nullable: true },
+        aiBudgetAllocation: money,
+      },
+    },
   },
 ];
+
+/** Invocable by name, but kept off list_hub_tools (prefer the chunked media flow). */
+const UNLISTED_INPUT_SCHEMAS: Record<string, ToolInputSchema> = {
+  upload_workspace_media: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['workspaceId', 'contentBase64', 'contentType'],
+    properties: {
+      workspaceId: uuidProp('Workspace id'),
+      contentBase64: stringProp('Raw base64 image bytes, without a data: prefix', {
+        minLength: 1,
+        maxLength: 10_000_000,
+      }),
+      contentType: {
+        type: 'string',
+        enum: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      },
+      filename: stringProp('Filename', { minLength: 1, maxLength: 200 }),
+      alt: stringProp('Alt text', { maxLength: 300 }),
+      knowledgeRecordId: entityRefProp('Knowledge record id'),
+      insertIntoRecord: { type: 'boolean' },
+      targetEntityType: {
+        type: 'string',
+        enum: ['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'],
+      },
+      targetEntityId: entityRefProp('Target item id'),
+    },
+  },
+};
+
+for (const tool of LLM_TOOL_CATALOG) {
+  annotateRequiredFieldDescriptions(tool.body);
+}
+for (const tool of EXTRA_HUB_TOOLS) {
+  annotateRequiredFieldDescriptions(tool.body);
+}
+for (const schema of Object.values(UNLISTED_INPUT_SCHEMAS)) {
+  annotateRequiredFieldDescriptions(schema);
+}
 
 function asToolArgs(body: unknown): Record<string, unknown> {
   if (body && typeof body === 'object' && !Array.isArray(body)) {
@@ -2339,13 +2463,15 @@ export async function invokeNamedHubTool(
   }
 
   const rawArgs = asToolArgs(body);
-  if (catalog?.body) {
-    assertKnownToolFields(catalog.body, rawArgs);
+  const inputSchema = catalog?.body ?? extra?.body ?? UNLISTED_INPUT_SCHEMAS[toolName];
+  if (inputSchema) {
+    assertKnownToolFields(inputSchema as Record<string, unknown>, rawArgs);
   }
   const args = {
     ...(catalog?.defaults ?? {}),
     ...rawArgs,
   };
+  assertToolInput(inputSchema, args);
   return (fn as (input: Record<string, unknown>) => Promise<unknown>).call(handlers, args);
 }
 

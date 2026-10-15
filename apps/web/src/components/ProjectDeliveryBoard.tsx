@@ -111,18 +111,27 @@ const DEFAULT_META_FILTERS = DEFAULT_BOARD_META_FILTERS;
 const BOARD_COLUMNS = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
 type BoardColumn = (typeof BOARD_COLUMNS)[number];
 
-const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
+const MILESTONE_STATUSES = [
+  'planned',
+  'active',
+  'in_progress',
+  'blocked',
+  'done',
+  'cancelled',
+] as const;
 
-/** Map milestone lifecycle onto board columns (no blocked state). */
+/** Map milestone lifecycle onto board columns. Active stays in the in-progress lane. */
 function milestoneBoardColumn(status: string): BoardColumn {
-  if (status === 'active') return 'in_progress';
+  if (status === 'active' || status === 'in_progress') return 'in_progress';
+  if (status === 'blocked') return 'blocked';
   if (status === 'done') return 'done';
   if (status === 'cancelled') return 'cancelled';
   return 'todo';
 }
 
 function boardColumnToMilestoneStatus(column: string): string {
-  if (column === 'in_progress' || column === 'blocked') return 'active';
+  if (column === 'in_progress') return 'in_progress';
+  if (column === 'blocked') return 'blocked';
   if (column === 'done') return 'done';
   if (column === 'cancelled') return 'cancelled';
   return 'planned';

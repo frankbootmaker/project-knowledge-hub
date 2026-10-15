@@ -2630,6 +2630,8 @@
     "milestoneStatus": {
       "planned": "Tervezett",
       "active": "Aktív",
+      "in_progress": "Folyamatban",
+      "blocked": "Blokkolva",
       "done": "Kész",
       "cancelled": "Törölve"
     },

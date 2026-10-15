@@ -61,6 +61,8 @@ export function DeliveryItemLinkPicker({
       if (
         status === 'planned'
         || status === 'active'
+        || status === 'in_progress'
+        || status === 'blocked'
         || status === 'done'
         || status === 'cancelled'
       ) {

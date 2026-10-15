@@ -549,6 +549,124 @@ describe('task human keys and bug fields', () => {
   });
 });
 
+describe('delivery dependency required arguments', () => {
+  test('schemas and descriptions say projectId is required', async () => {
+    await withMcpClient(['pm:read', 'pm:write'], {}, async (client) => {
+      const listed = await client.listTools();
+      for (const name of ['list_delivery_dependencies', 'set_delivery_dependency'] as const) {
+        const tool = listed.tools.find((item) => item.name === name);
+        const input = tool?.inputSchema as {
+          required?: string[];
+          properties?: Record<string, { description?: string }>;
+        };
+        expect(tool?.description, name).toMatch(/projectId \(UUID\)/);
+        expect(tool?.description, name).toMatch(/required/i);
+        expect(input.required, name).toContain('projectId');
+        expect(input.properties?.projectId?.description, name).toMatch(/Required project id/);
+      }
+      const list = listed.tools.find((item) => item.name === 'list_delivery_dependencies');
+      const listInput = list?.inputSchema as { required?: string[] };
+      expect(listInput.required).toEqual(expect.arrayContaining(['projectId', 'entityId']));
+
+      for (const tool of listed.tools) {
+        const input = tool.inputSchema as {
+          required?: string[];
+          properties?: Record<string, { description?: string }>;
+        };
+        for (const field of input.required ?? []) {
+          expect(input.properties?.[field]?.description, `${tool.name}.${field}`).toMatch(
+            /required/i,
+          );
+        }
+      }
+    });
+  });
+
+  test('omitting projectId is a validation error and does not call the handler', async () => {
+    const listDeliveryDependencies = vi.fn(async () => {
+      throw new Error('postgres://user:secret@db/knowledge');
+    });
+    const setDeliveryDependency = vi.fn(async () => {
+      throw new Error('postgres://user:secret@db/knowledge');
+    });
+    await withMcpClient(
+      ['pm:read', 'pm:write'],
+      { listDeliveryDependencies, setDeliveryDependency },
+      async (client) => {
+        const list = await client.callTool({
+          name: 'list_delivery_dependencies',
+          arguments: { entityId: 'PRO-T-1' },
+        });
+        const set = await client.callTool({
+          name: 'set_delivery_dependency',
+          arguments: {
+            predecessorId: 'PRO-T-1',
+            successorId: 'PRO-B-1',
+            linkType: 'FS',
+          },
+        });
+        expect(list.isError).toBe(true);
+        expect(set.isError).toBe(true);
+        expect(toolText(list)).toContain('projectId');
+        expect(toolText(set)).toContain('projectId');
+        expect(toolText(list)).not.toContain('Internal error');
+        expect(toolText(set)).not.toContain('Internal error');
+        expect(toolText(list)).not.toContain('postgres://');
+        expect(listDeliveryDependencies).not.toHaveBeenCalled();
+        expect(setDeliveryDependency).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  test('call_hub_tool reports a missing projectId instead of an internal error', async () => {
+    const listDeliveryDependencies = vi.fn();
+    const setDeliveryDependency = vi.fn();
+    const server = createKnowledgeHubMcpServer(
+      testClient(['projects:read', 'pm:read', 'pm:write']),
+      { listDeliveryDependencies, setDeliveryDependency } as McpToolHandlers,
+      {
+        oauth: {
+          resourceMetadataUrl: 'https://knowledge.example.com/.well-known/oauth-protected-resource',
+          profile: { id: 'user-1', name: 'Ada' },
+        },
+      },
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'dependency-validation', version: '0.0.0' });
+    await Promise.all([
+      client.connect(clientTransport),
+      server.connect(serverTransport),
+    ]);
+    try {
+      const list = await client.callTool({
+        name: 'call_hub_tool',
+        arguments: {
+          toolName: 'list_delivery_dependencies',
+          arguments: { entityId: 'PRO-T-1' },
+        },
+      });
+      const set = await client.callTool({
+        name: 'call_hub_tool',
+        arguments: {
+          toolName: 'set_delivery_dependency',
+          arguments: { predecessorId: 'PRO-T-1', successorId: 'PRO-B-1', linkType: 'FS' },
+        },
+      });
+      expect(list.isError).toBe(true);
+      expect(set.isError).toBe(true);
+        expect(toolText(list)).toBe('Missing required field: projectId');
+        expect(toolText(set)).toBe('Missing required field: projectId');
+      expect(toolText(list)).not.toContain('Internal error');
+      expect(toolText(set)).not.toContain('Internal error');
+      expect(listDeliveryDependencies).not.toHaveBeenCalled();
+      expect(setDeliveryDependency).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
+
 describe('tools without an output schema', () => {
   test('list_projects stays a success and omits structuredContent', async () => {
     const projects = [{ id: PROJECT_ID, name: 'Demo' }];

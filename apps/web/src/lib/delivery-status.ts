@@ -1,6 +1,13 @@
 /** Shared delivery status order and labels for list and tree filters. */
 
-export const MILESTONE_STATUSES = ['planned', 'active', 'done', 'cancelled'] as const;
+export const MILESTONE_STATUSES = [
+  'planned',
+  'active',
+  'in_progress',
+  'blocked',
+  'done',
+  'cancelled',
+] as const;
 
 export const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
 

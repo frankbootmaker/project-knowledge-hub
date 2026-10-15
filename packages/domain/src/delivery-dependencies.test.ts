@@ -333,6 +333,115 @@ describe('dependency cycles and schedule', () => {
     });
   });
 
+  it('keeps a rolled-up parent in place and schedules from those dates', () => {
+    const story = {
+      ...node('user_story:s', 'user_story', '2026-03-02', '2026-04-01', null),
+      rollupLocked: true,
+    };
+    const locked = scheduleDeliveryGraph({
+      nodes: [
+        node('task:early', 'task', '2026-01-01', '2026-01-10', 9),
+        story,
+        node('task:after', 'task', null, null, 2),
+      ],
+      links: [
+        {
+          predecessorKey: 'task:early',
+          successorKey: 'user_story:s',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'user_story:s',
+          successorKey: 'task:after',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:early', 'user_story:s'],
+    });
+    expect(locked.find((item) => item.key === 'user_story:s')).toBeUndefined();
+    expect(locked.find((item) => item.key === 'task:after')).toMatchObject({
+      start: '2026-04-01',
+      finish: '2026-04-03',
+    });
+
+    const latest = scheduleDeliveryGraph({
+      nodes: [
+        story,
+        node('task:late', 'task', '2026-05-01', '2026-05-04', 3),
+        node('task:bound', 'task', '2026-01-01', '2026-01-03', 2),
+      ],
+      links: [
+        {
+          predecessorKey: 'user_story:s',
+          successorKey: 'task:bound',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+        {
+          predecessorKey: 'task:late',
+          successorKey: 'task:bound',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:bound'],
+    });
+    expect(latest[0]).toMatchObject({ start: '2026-05-04', finish: '2026-05-06' });
+
+    const startBound = scheduleDeliveryGraph({
+      nodes: [
+        story,
+        node('task:ss', 'task', null, null, 1),
+      ],
+      links: [
+        {
+          predecessorKey: 'user_story:s',
+          successorKey: 'task:ss',
+          linkType: 'SS',
+          lagDays: 1,
+        },
+      ],
+      seeds: ['task:ss'],
+    });
+    expect(startBound[0]).toMatchObject({ start: '2026-03-03', finish: '2026-03-04' });
+
+    const finishBound = scheduleDeliveryGraph({
+      nodes: [
+        story,
+        node('task:ff', 'task', '2026-01-01', '2026-01-04', 3),
+      ],
+      links: [
+        {
+          predecessorKey: 'user_story:s',
+          successorKey: 'task:ff',
+          linkType: 'FF',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:ff'],
+    });
+    expect(finishBound[0]).toMatchObject({ start: '2026-03-29', finish: '2026-04-01' });
+
+    const startFinish = scheduleDeliveryGraph({
+      nodes: [
+        story,
+        node('task:sf', 'task', '2026-01-01', '2026-01-03', 2),
+      ],
+      links: [
+        {
+          predecessorKey: 'user_story:s',
+          successorKey: 'task:sf',
+          linkType: 'SF',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['task:sf'],
+    });
+    expect(startFinish[0]).toMatchObject({ start: '2026-02-28', finish: '2026-03-02' });
+  });
+
   it('moves a successor epic window when its predecessor finish moves', () => {
     const changed = scheduleDeliveryGraph({
       nodes: [
