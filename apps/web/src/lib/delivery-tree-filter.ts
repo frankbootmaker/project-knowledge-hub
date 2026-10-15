@@ -16,6 +16,7 @@ export type DeliveryTreeFilterNode = {
   kind: DeliveryTreeNodeKind;
   parentId: string | null;
   title: string;
+  humanKey?: string | null;
   /** Null on grouping rows (stories without an epic, tasks without a story). */
   status: string | null;
   /** Tasks only. Null or blank is unassigned. */
@@ -32,6 +33,8 @@ export type DeliveryTreeFilterState = {
   sprints: readonly string[];
   itemTypes: readonly string[];
   title: string;
+  /** Toolbar search (title and human key). Separate from the title column filter. */
+  search: string;
   onlyOpen: boolean;
 };
 
@@ -51,6 +54,7 @@ const EMPTY_FILTERS: DeliveryTreeFilterState = {
   sprints: [],
   itemTypes: [],
   title: '',
+  search: '',
   onlyOpen: false,
 };
 
@@ -63,8 +67,13 @@ export function deliveryTreeFiltersActive(
     filters.sprints.length > 0 ||
     filters.itemTypes.length > 0 ||
     filters.title.trim() !== '' ||
+    (filters.search ?? '').trim() !== '' ||
     filters.onlyOpen
   );
+}
+
+function nodeSearchHaystack(node: DeliveryTreeFilterNode): string {
+  return [node.title, node.humanKey ?? ''].join(' ').toLowerCase();
 }
 
 function enumToken(value: string | null | undefined): string {
@@ -102,6 +111,9 @@ function itemMatches(node: DeliveryTreeFilterNode, filters: DeliveryTreeFilterSt
 
   const title = filters.title.trim().toLowerCase();
   if (title && !node.title.toLowerCase().includes(title)) return false;
+
+  const search = (filters.search ?? '').trim().toLowerCase();
+  if (search && !nodeSearchHaystack(node).includes(search)) return false;
 
   return true;
 }

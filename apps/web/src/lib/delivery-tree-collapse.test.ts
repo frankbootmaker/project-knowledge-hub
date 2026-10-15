@@ -16,10 +16,12 @@ import {
   DELIVERY_TREE_UNGROUPED_COLLAPSE_ID,
   collapseTreeAll,
   collapseTreeOneLevel,
+  deliveryTreeCollapseIdsForVisibleNodes,
   deliveryTreeCollapsibleNodes,
   deliveryTreeDepthActions,
   expandTreeAll,
   expandTreeOneLevel,
+  openCollapsedForDeliveryTreeSearch,
   type DeliveryTreeCollapseNode,
   type DeliveryTreeCollapseSource,
 } from './delivery-tree-collapse';
@@ -269,6 +271,25 @@ describe('filtered delivery tree', () => {
     filtering: true,
   };
 
+  it('opens ancestor collapse ids for visible search matches', () => {
+    const visibility = filterDeliveryTree(filterNodes, {
+      statuses: [],
+      owners: [],
+      sprints: [],
+      itemTypes: [],
+      title: '',
+      search: 'invoice',
+      onlyOpen: false,
+    });
+    const forceOpen = deliveryTreeCollapseIdsForVisibleNodes(
+      filterNodes,
+      visibility.visible,
+    );
+    expect(forceOpen.sort()).toEqual(['epic:a', 'story:a'].sort());
+    const collapsed = { 'epic:a': true, 'story:a': true };
+    expect(openCollapsedForDeliveryTreeSearch(collapsed, forceOpen)).toEqual({});
+  });
+
   it('limits one-level collapse to the filtered branch', () => {
     const visibility = filterDeliveryTree(filterNodes, {
       statuses: [],
@@ -276,6 +297,7 @@ describe('filtered delivery tree', () => {
       sprints: [],
       itemTypes: [],
       title: 'invoice',
+      search: '',
       onlyOpen: false,
     });
     const nodes = deliveryTreeCollapsibleNodes({

@@ -1,6 +1,7 @@
 import {
   DELIVERY_TREE_ORPHAN_STORIES,
   DELIVERY_TREE_UNGROUPED_TASKS,
+  type DeliveryTreeFilterNode,
 } from './delivery-tree-filter';
 
 /**
@@ -216,5 +217,44 @@ export function collapseTreeAll(
   if (targets.length === 0) return collapsed;
   const next = { ...collapsed };
   for (const node of targets) next[node.id] = true;
+  return next;
+}
+
+function collapseIdForTreeNode(id: string): string | null {
+  if (id === DELIVERY_TREE_ORPHAN_STORIES) return DELIVERY_TREE_ORPHAN_COLLAPSE_ID;
+  if (id === DELIVERY_TREE_UNGROUPED_TASKS) return DELIVERY_TREE_UNGROUPED_COLLAPSE_ID;
+  if (id.startsWith('epic:') || id.startsWith('story:')) return id;
+  return null;
+}
+
+/** Collapse-map ids that must stay open so every visible filtered row stays reachable. */
+export function deliveryTreeCollapseIdsForVisibleNodes(
+  nodes: readonly DeliveryTreeFilterNode[],
+  visible: ReadonlySet<string>,
+): string[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const open = new Set<string>();
+  for (const id of visible) {
+    let current: string | null = id;
+    const seen = new Set<string>();
+    while (current && !seen.has(current)) {
+      seen.add(current);
+      const collapseId = collapseIdForTreeNode(current);
+      if (collapseId) open.add(collapseId);
+      current = byId.get(current)?.parentId ?? null;
+    }
+  }
+  return [...open];
+}
+
+export function openCollapsedForDeliveryTreeSearch(
+  collapsed: DeliveryTreeCollapsed,
+  forceOpenIds: readonly string[],
+): DeliveryTreeCollapsed {
+  if (forceOpenIds.length === 0) return collapsed;
+  const next = { ...collapsed };
+  for (const id of forceOpenIds) {
+    delete next[id];
+  }
   return next;
 }

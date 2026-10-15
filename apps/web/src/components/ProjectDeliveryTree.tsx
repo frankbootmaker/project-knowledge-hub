@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useId, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Button, Switch } from './ui';
+import { Button, Input, Switch } from './ui';
 import { TableFilterControl, type TableFilterField } from './ui/TableFilterControl';
 import { collectEnumOptions } from '../lib/data-table';
 import { DELIVERY_STATUS_RANK, isTaskDeliveryStatus } from '../lib/delivery-status';
@@ -11,11 +11,13 @@ import {
   DELIVERY_TREE_UNGROUPED_COLLAPSE_ID,
   collapseTreeAll,
   collapseTreeOneLevel,
+  deliveryTreeCollapseIdsForVisibleNodes,
   deliveryTreeCollapsibleNodes,
   deliveryTreeDepthActions,
   expandTreeAll,
   expandTreeOneLevel,
   isDeliveryTreeNodeOpen,
+  openCollapsedForDeliveryTreeSearch,
 } from '../lib/delivery-tree-collapse';
 import {
   DELIVERY_TREE_ORPHAN_STORIES,
@@ -163,6 +165,7 @@ function taskNode(task: TreeTask, parentId: string): DeliveryTreeFilterNode {
     kind: 'task',
     parentId,
     title: task.title,
+    humanKey: task.humanKey ?? null,
     status: task.status,
     owner: task.currentOwner?.displayName ?? null,
     sprint: task.sprintLabel ?? null,
@@ -176,6 +179,7 @@ function storyNode(story: TreeStory, parentId: string): DeliveryTreeFilterNode {
     kind: 'story',
     parentId,
     title: story.title,
+    humanKey: story.humanKey ?? null,
     status: story.status,
     owner: null,
     sprint: null,
@@ -209,6 +213,7 @@ export function ProjectDeliveryTree({
   const locale = useLocale();
   const onlyOpenId = useId();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const collapsedBeforeSearchRef = useRef<Record<string, boolean> | null>(null);
   const table = useTableState({
     namespace: 'dt',
     defaultSortKey: null,
@@ -401,6 +406,8 @@ export function ProjectDeliveryTree({
   }
 
   const onlyOpen = table.extras.open === '1';
+  const searchNeedle = table.query.trim();
+  const searching = searchNeedle !== '';
   const filterState = useMemo<DeliveryTreeFilterState>(
     () => ({
       statuses: table.filters.status ?? [],
@@ -408,6 +415,7 @@ export function ProjectDeliveryTree({
       sprints: sprintsLoaded ? (table.filters.sprint ?? []) : [],
       itemTypes: table.filters.itemType ?? [],
       title: table.textFilters.title ?? '',
+      search: table.query,
       onlyOpen,
     }),
     [
@@ -417,10 +425,11 @@ export function ProjectDeliveryTree({
       table.filters.sprint,
       table.filters.itemType,
       table.filters.status,
+      table.query,
       table.textFilters.title,
     ],
   );
-  const filtersActive = table.filtersActive || onlyOpen;
+  const filtersActive = table.filtersActive || onlyOpen || searching;
 
   const tree = useMemo(() => {
     const storiesByEpic = new Map<string, TreeStory[]>();
@@ -462,6 +471,7 @@ export function ProjectDeliveryTree({
         kind: 'epic',
         parentId: null,
         title: epic.title,
+        humanKey: epic.humanKey ?? null,
         status: epic.status,
         owner: null,
         sprint: null,
@@ -522,6 +532,23 @@ export function ProjectDeliveryTree({
     [filterState, tree.nodes],
   );
   const filtering = deliveryTreeFiltersActive(filterState);
+
+  useEffect(() => {
+    if (!searching) {
+      if (collapsedBeforeSearchRef.current !== null) {
+        setCollapsed(collapsedBeforeSearchRef.current);
+        collapsedBeforeSearchRef.current = null;
+      }
+      return;
+    }
+    const forceOpen = deliveryTreeCollapseIdsForVisibleNodes(tree.nodes, visibility.visible);
+    setCollapsed((current) => {
+      if (collapsedBeforeSearchRef.current === null) {
+        collapsedBeforeSearchRef.current = { ...current };
+      }
+      return openCollapsedForDeliveryTreeSearch(current, forceOpen);
+    });
+  }, [searching, tree.nodes, visibility.visible]);
   const collapseNodes = useMemo(
     () =>
       deliveryTreeCollapsibleNodes({
@@ -714,8 +741,25 @@ export function ProjectDeliveryTree({
   );
   const filteredEmpty = filtering && visibility.visible.size === 0;
 
+  const emptyFilterMessage =
+    searching || table.textFilters.title?.trim()
+      ? t('emptyFiltered')
+      : tTable('emptyFiltered');
+
   return (
     <section className="kh-ops-panel overflow-x-auto">
+      <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
+        <label className="flex min-w-[220px] flex-1 items-center gap-2">
+          <span className="sr-only">{t('searchPlaceholder')}</span>
+          <Input
+            type="search"
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
+            placeholder={t('searchPlaceholder')}
+            className="h-10 min-h-10 py-1.5 text-xs"
+          />
+        </label>
+      </div>
       <div className="kh-ops-delivery-tree">
         <div className="kh-ops-delivery-tree-head">
           <div className="kh-ops-delivery-tree-label">
@@ -799,7 +843,7 @@ export function ProjectDeliveryTree({
           <div className="kh-ops-empty-state">
             <div className="kh-ops-empty-mark">00</div>
             <h3>{t('emptyTitle')}</h3>
-            <p>{tTable('emptyFiltered')}</p>
+            <p>{emptyFilterMessage}</p>
             <Button type="button" variant="secondary" onClick={clearTreeFilters}>
               {tTable('clearFilters')}
             </Button>
