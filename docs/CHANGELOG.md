@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **Wide chart view:** Gantt and Timeline open in the same full-window viewer as documents, about 25% wider on each side.
 
+* **Linked knowledge titles:** Project linked-knowledge titles are plain links again, matching linked systems. The key chip opens the same record.
+
 ### Added
 
 * **Delivery Gantt search:** The Gantt uses the same search box and filter as List and Tree: status, owner, sprint, task or bug, title, and only open. Matching rows stay visible with their ancestors dimmed, and dependency arrows are drawn only between rows that remain on the chart.

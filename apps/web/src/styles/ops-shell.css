@@ -1887,21 +1887,28 @@ a.kh-ops-health-card:hover {
 }
 
 button.kh-ops-key-badge,
-button.kh-ops-type-chip {
+a.kh-ops-key-badge,
+button.kh-ops-type-chip,
+a.kh-ops-type-chip {
   margin: 0;
   color: var(--kh-ink);
   cursor: pointer;
+  text-decoration: none;
 }
 
 button.kh-ops-key-badge:hover,
-button.kh-ops-type-chip:hover {
+a.kh-ops-key-badge:hover,
+button.kh-ops-type-chip:hover,
+a.kh-ops-type-chip:hover {
   border-color: var(--kh-line-strong);
   background: var(--kh-neutral-soft);
   color: var(--kh-ink);
 }
 
 button.kh-ops-key-badge:focus-visible,
-button.kh-ops-type-chip:focus-visible {
+a.kh-ops-key-badge:focus-visible,
+button.kh-ops-type-chip:focus-visible,
+a.kh-ops-type-chip:focus-visible {
   outline: 2px solid var(--kh-accent);
   outline-offset: 2px;
 }
