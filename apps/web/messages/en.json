@@ -2502,6 +2502,7 @@
     "tabLinkedItems": "Linked items",
     "milestoneNote": "Note",
     "milestoneTimeOrder": "Milestones by due date",
+    "milestonesWithoutDates": "Milestones without dates",
     "milestoneNoDue": "No due date",
     "dependenciesHint": "A predecessor must finish or start before this item, depending on the link. The start date is computed from those links. Successors are the items that list this one as a predecessor.",
     "dependenciesFailed": "Could not update dependencies",

@@ -5223,6 +5223,20 @@ button.kh-ops-stage-card:disabled {
   text-align: left;
 }
 
+.kh-ops-gantt-row[data-kind='epic'] .kh-ops-gantt-title-btn,
+.kh-ops-gantt-row[data-kind='epic'] .kh-ops-gantt-title-text,
+.kh-ops-gantt-row[data-kind='story'] .kh-ops-gantt-title-btn,
+.kh-ops-gantt-row[data-kind='story'] .kh-ops-gantt-title-text {
+  font-weight: 700;
+}
+
+.kh-ops-gantt-row[data-kind='milestone'] .kh-ops-gantt-title-btn,
+.kh-ops-gantt-row[data-kind='milestone'] .kh-ops-gantt-title-text {
+  font-style: italic;
+  /* Italic glyphs extend past the text box and were clipped against the ID. */
+  padding-right: 1px;
+}
+
 .kh-ops-gantt-title-btn {
   border: 0;
   background: transparent;

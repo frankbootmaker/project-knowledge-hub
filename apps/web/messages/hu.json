@@ -2483,6 +2483,7 @@
     "tabLinkedItems": "Kapcsolt elemek",
     "milestoneNote": "Megjegyzés",
     "milestoneTimeOrder": "Mérföldkövek határidő szerint",
+    "milestonesWithoutDates": "Dátum nélküli mérföldkövek",
     "milestoneNoDue": "Nincs határidő",
     "dependenciesHint": "Az előzménynek a kapcsolat típusától függően be kell fejeződnie vagy el kell indulnia, mielőtt ez az elem indul. A kezdés dátuma ezekből a kapcsolatokból számolódik. Az utódok azok az elemek, amelyek ezt előzményként jelölik.",
     "dependenciesFailed": "A függőségeket nem sikerült frissíteni",
