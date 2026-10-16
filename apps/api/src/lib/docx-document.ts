@@ -612,9 +612,28 @@ const IMAGE_FETCH_TIMEOUT_MS = 10_000;
  * private media has to be fetched here with the caller's cookie or it would
  * silently drop out of the document.
  */
+export type InlineImageDataUrisOptions = {
+  cookieHeader?: string | null;
+  /**
+   * When a remote image cannot be inlined, `keep-src` leaves the URL (DOCX may
+   * retry). `alt` replaces the tag with visible alt text (PDF/Chromium cannot
+   * send SameSite cookies from setContent pages).
+   */
+  unresolved?: 'keep-src' | 'alt';
+};
+
+function imageAltFallbackHtml(attributes: string): string {
+  const altMatch = attributes.match(/\salt="([^"]*)"/i);
+  const alt = altMatch?.[1]?.trim();
+  if (alt) {
+    return `<span class="export-image-alt">${escapeHtml(alt)}</span>`;
+  }
+  return '<span class="export-image-alt export-image-missing">[Image]</span>';
+}
+
 export async function inlineImageDataUris(
   html: string,
-  options: { cookieHeader?: string | null } = {},
+  options: InlineImageDataUrisOptions = {},
 ): Promise<string> {
   const sources = new Set<string>();
   for (const match of html.matchAll(/<img[^>]*\ssrc="([^"]+)"/g)) {
@@ -627,6 +646,7 @@ export async function inlineImageDataUris(
     return html;
   }
 
+  const unresolved = options.unresolved ?? 'keep-src';
   const inlined = new Map<string, string>();
   await Promise.all(
     [...sources].map(async (source) => {
@@ -650,12 +670,24 @@ export async function inlineImageDataUris(
     }),
   );
 
-  if (inlined.size === 0) {
+  if (inlined.size === 0 && unresolved === 'keep-src') {
     return html;
   }
-  return html.replace(/(<img[^>]*\ssrc=")([^"]+)(")/g, (match, prefix, source, suffix) => {
+
+  return html.replace(/<img\b([^>]*)>/gi, (full, attributes: string) => {
+    const srcMatch = attributes.match(/\ssrc="([^"]+)"/i);
+    const source = srcMatch?.[1];
+    if (!source || !/^https?:\/\//i.test(source)) {
+      return full;
+    }
     const dataUri = inlined.get(source);
-    return dataUri ? `${prefix}${dataUri}${suffix}` : match;
+    if (dataUri) {
+      return full.replace(/(\ssrc=")([^"]+)(")/i, `$1${dataUri}$3`);
+    }
+    if (unresolved === 'alt') {
+      return imageAltFallbackHtml(attributes);
+    }
+    return full;
   });
 }
 
