@@ -380,11 +380,13 @@ describe.skipIf(!hasIntegrationEnv)('MCP create_project and update_project (PRO-
     const project = fetched.data.project as {
       createdVia: string;
       createdByApiClientId: string;
+      createdByOauthGrantId: string | null;
       generatedByModel: string;
       status: string;
     };
     expect(project.createdVia).toBe('mcp');
     expect(project.createdByApiClientId).toBeTruthy();
+    expect(project.createdByOauthGrantId).toBeNull();
     expect(project.generatedByModel).toBe('gpt-test');
     expect(project.status).toBe('idea');
 

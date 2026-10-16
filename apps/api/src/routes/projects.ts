@@ -173,6 +173,7 @@ async function toPublicProject(
     methodology: project.methodology,
     createdVia: project.createdVia,
     createdByApiClientId: project.createdByApiClientId,
+    createdByOauthGrantId: project.createdByOauthGrantId,
     createdByUserId: project.createdByUserId,
     generatedByModel: project.generatedByModel,
     metadata: project.metadataJson,

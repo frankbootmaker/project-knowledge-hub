@@ -1,12 +1,15 @@
 import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { hashPassword } from '@project-knowledge-hub/auth';
 import { loadEnv } from '@project-knowledge-hub/config';
 import {
+  auditEvents,
   createDatabase,
   memberships,
   organizations,
+  projects,
   users,
   workspaces,
 } from '@project-knowledge-hub/database';
@@ -440,6 +443,158 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
     });
     expect(consent.statusCode).toBe(200);
     expect((consent.json() as { redirectTo: string }).redirectTo).toContain('code=');
+  });
+
+  it('creates a project from an OAuth grant without an api_clients foreign key', async () => {
+    const enabled = await app!.inject({
+      method: 'PUT',
+      url: '/api/v1/admin/oauth-mcp-settings',
+      headers: { cookie, origin: 'http://localhost:3100' },
+      payload: {
+        enabled: true,
+        redirectUris: [REDIRECT],
+        clientIdPrefixes: ['https://chatgpt.com/oauth/'],
+        scopeCeiling: ['projects:read', 'projects:write'],
+      },
+    });
+    expect(enabled.statusCode).toBe(200);
+
+    const { verifier, txn } = await authorize('projects:read projects:write');
+    const consent = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/oauth/consent',
+      headers: { cookie, origin: 'http://localhost:3100' },
+      payload: {
+        txn,
+        scopes: ['projects:read', 'projects:write'],
+        allowedWorkspaceIds: [workspaceId],
+      },
+    });
+    expect(consent.statusCode).toBe(200);
+    const code = new URL((consent.json() as { redirectTo: string }).redirectTo).searchParams.get(
+      'code',
+    )!;
+    const token = await app!.inject({
+      method: 'POST',
+      url: '/oauth/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT,
+        client_id: CLIENT_ID,
+        code_verifier: verifier,
+        resource: 'http://localhost:3100/mcp/oauth',
+      }).toString(),
+    });
+    expect(token.statusCode).toBe(200);
+    const access = (token.json() as { access_token: string }).access_token;
+
+    const grants = await app!.inject({
+      method: 'GET',
+      url: '/api/v1/oauth/grants',
+      headers: { cookie },
+    });
+    const grant = (
+      grants.json() as { grants: Array<{ id: string; status: string; scopes: string[] }> }
+    ).grants.find(
+      (row) => row.status === 'active' && row.scopes.includes('projects:write'),
+    );
+    expect(grant?.id).toBeTruthy();
+
+    const created = await app!.inject({
+      method: 'POST',
+      url: '/mcp/oauth',
+      headers: {
+        authorization: `Bearer ${access}`,
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+      },
+      payload: {
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'tools/call',
+        params: {
+          name: 'call_hub_tool',
+          arguments: {
+            toolName: 'create_project',
+            arguments: {
+              workspaceId,
+              name: 'OAuth Idea',
+              description: 'Created by a ChatGPT grant',
+            },
+          },
+        },
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const createdText = (
+      created.json() as { result?: { isError?: boolean; content?: Array<{ text?: string }> } }
+    ).result;
+    expect(createdText?.isError).toBeFalsy();
+    const createdBody = JSON.parse(createdText?.content?.[0]?.text ?? '{}') as {
+      project: {
+        id: string;
+        status: string;
+        createdByApiClientId: string | null;
+        createdByOauthGrantId: string | null;
+        createdByUserId: string;
+      };
+    };
+    expect(createdBody.project.status).toBe('idea');
+    expect(createdBody.project.createdByApiClientId).toBeNull();
+    expect(createdBody.project.createdByOauthGrantId).toBe(grant!.id);
+    expect(createdBody.project.createdByUserId).toBe(userId);
+
+    const [row] = await database!.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, createdBody.project.id))
+      .limit(1);
+    expect(row?.createdByApiClientId).toBeNull();
+    expect(row?.createdByOauthGrantId).toBe(grant!.id);
+    expect(row?.ownerUserId).toBe(userId);
+
+    const updated = await app!.inject({
+      method: 'POST',
+      url: '/mcp/oauth',
+      headers: {
+        authorization: `Bearer ${access}`,
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+      },
+      payload: {
+        jsonrpc: '2.0',
+        id: 8,
+        method: 'tools/call',
+        params: {
+          name: 'call_hub_tool',
+          arguments: {
+            toolName: 'update_project',
+            arguments: {
+              projectId: createdBody.project.id,
+              description: 'Still an idea',
+            },
+          },
+        },
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    const updatedResult = (
+      updated.json() as { result?: { isError?: boolean; content?: Array<{ text?: string }> } }
+    ).result;
+    expect(updatedResult?.isError).toBeFalsy();
+
+    const audits = await database!.db
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.entityId, createdBody.project.id));
+    expect(audits.map((event) => event.action).sort()).toEqual([
+      'project.create',
+      'project.update',
+    ]);
+    expect(audits.every((event) => event.actorType === 'oauth_grant')).toBe(true);
+    expect(audits.every((event) => event.actorId === grant!.id)).toBe(true);
   });
 
   it('disabling OAuth leaves bearer /mcp usable, and closing the user stops a grant', async () => {
