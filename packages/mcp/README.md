@@ -12,7 +12,7 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_record_metadata` — field guides, allowed `recordType` values (incl. planning ledger types), lifecycle/SoT enums, MCP write constraints, **and the image/media embed workflow**
 * `list_workspace_media` — recent workspace images with Markdown snippets; optional filter by a delivery, RAID, or change item
 * `get_platform_status` — redacted health/backup snapshot (requires opt-in `monitoring:read`; not in default scopes)
-* `list_project_milestones` / `get_project_milestone` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` / `list_project_change_items` / `get_project_budget_summary` / `get_project_resource_utilization` — Project Delivery + RAID + budget/utilization (requires opt-in `pm:read`). Milestone list and get include `completionPercent` and `linkedItems`. Task, story, epic, milestone, sprint, RAID, and change reads include `mediaLinks` and `mediaLinkCount`
+* `list_project_milestones` / `get_project_milestone` / `list_project_tasks` / `get_project_task` / `list_project_epics` / `list_project_user_stories` / `list_project_task_activities` / `list_project_stakeholders` / `list_project_raid_items` / `list_project_change_items` / `get_project_budget_summary` / `get_project_resource_utilization` — Project Delivery + RAID + budget/utilization (requires opt-in `pm:read`). Milestone list and get include `completionPercent` and `linkedItems`. Task, story, epic, milestone, sprint, RAID, and change reads include `mediaLinks` and `mediaLinkCount`. RAID list rows include `records[]`
 * `list_project_sprints` / `get_project_sprint_burndown` / `get_project_scrum_velocity` — Scrum (NF-020)
 * `list_my_project_tasks` / `get_my_dashboard_insights` — acting-user My tasks + dashboard rollups (`pm:read` + `actingUserId`)
 * `list_project_delivery_document_links` — knowledge ↔ delivery index for a project
@@ -50,7 +50,7 @@ Require `pm:write`, workspace allowlist, and `actingUserId`. Unlike knowledge wr
 * `add_project_task_comment` / `handoff_project_task` — activity timeline; handoff moves current owner only
 * `create_project_stakeholder` / `update_project_stakeholder` / `delete_project_stakeholder` — durable roster (+ reports-to, engagement, capacity, contract)
 * `update_project_ai_assistant_cost` — AI cost mode (`flat`|`api`|`mixed`|`note_only`), flat fee, blended `aiTokenRatePer1k`, optional input/output/cache rates, `aiCostNotes`, soft allocation
-* `create_project_raid_item` / `update_project_raid_item` / `set_project_raid_task_links` — RAID register (+ task links)
+* `create_project_raid_item` / `update_project_raid_item` / `set_project_raid_task_links` — RAID register (+ task links; create accepts optional `recordIds`)
 * `transfer_project_raid_item` — move risk↔issue (new key; archives source). Do not use `update_project_raid_item` to change kind between risk and issue.
 * `create_project_change_item` / `update_project_change_item` — change register (+ delivery links; entity/knowledge ids may be human keys)
 * `set_delivery_media_links` — replace Media tab links (workspace image or titled http(s) URL) on a task, bug (`task`), story, epic, milestone, sprint, RAID, or change item. `entityId` may be a UUID or human key. Omitting a link unlinks it and does not delete the library file. Same workspace only
@@ -69,6 +69,6 @@ Do **not** put `data:image/...;base64,...` URIs in `contentMarkdown`. Instead:
 2. **Single-shot (small files):** `upload_workspace_media` with `workspaceId`, `contentType`, and raw `contentBase64` (no `data:` prefix).
 3. Either paste `media.markdownSnippet` (e.g. `![chart](/api/v1/media/{id})`) into `create_knowledge_record` / `update_knowledge_record`, **or** pass `knowledgeRecordId` + `insertIntoRecord: true` on begin/upload to append it automatically.
 4. To attach the image to a delivery item in the same step, pass `targetEntityType` + `targetEntityId` on begin (or on the single-shot upload). That also requires `pm:write`. PDF and Office files are documents, not media.
-5. `get_knowledge_record` and `list_knowledge_records` return `tags` as a string array of tag names (same shape as `search_knowledge`). `get_knowledge_record` also returns linked `media[]` metadata for that record.
+5. `get_knowledge_record` and `list_knowledge_records` return `tags` as a string array of tag names (same shape as `search_knowledge`). `get_knowledge_record` also returns linked `media[]` metadata and, on the first page, `linkedItems` (`deliveryLinks`, `raidLinks`, `changeItems`) for the same project. Archived rows are omitted.
 
 Mounted by the API at `POST|GET|DELETE /mcp` with bearer API client tokens.

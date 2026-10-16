@@ -1079,6 +1079,18 @@
     "changeMessageLabel": "Change message: {message}",
     "sourceAndVerification": "Source & approval",
     "summaryAndLinks": "Summary & links",
+    "linkedItems": "Linked items",
+    "linkedItemsEmpty": "No linked items.",
+    "linkedItemTypes": {
+      "epic": "Epic",
+      "user_story": "User story",
+      "milestone": "Milestone",
+      "task": "Task",
+      "bug": "Bug",
+      "sprint": "Sprint",
+      "raid": "RAID",
+      "change": "Change"
+    },
     "showMoreDetails": "More details",
     "hideMoreDetails": "Hide details",
     "sourceType": "Source type",

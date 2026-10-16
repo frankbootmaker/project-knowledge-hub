@@ -1078,6 +1078,18 @@
     "changeMessageLabel": "Änderungsnotiz: {message}",
     "sourceAndVerification": "Quelle & Freigabe",
     "summaryAndLinks": "Zusammenfassung & Links",
+    "linkedItems": "Verknüpfte Elemente",
+    "linkedItemsEmpty": "Keine verknüpften Elemente.",
+    "linkedItemTypes": {
+      "epic": "Epic",
+      "user_story": "Story",
+      "milestone": "Meilenstein",
+      "task": "Aufgabe",
+      "bug": "Bug",
+      "sprint": "Sprint",
+      "raid": "RAID",
+      "change": "Änderung"
+    },
     "showMoreDetails": "Weitere Details",
     "hideMoreDetails": "Details ausblenden",
     "sourceType": "Quelltyp",
