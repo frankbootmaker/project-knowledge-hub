@@ -236,9 +236,9 @@ export function milestoneLinkPoints(
 }
 
 /**
- * Derived milestone completion from linked items.
- * The milestone is complete when this percent is 100.
- * An empty set of includable links has no rollup.
+ * Derived milestone completion from linked items and dependencies.
+ * 100 only when every included item is complete. Anything else is 0.
+ * Cancelled items are left out. An empty set has no rollup.
  * The milestone's own status does not override the links.
  */
 export function milestoneCompletion(
@@ -250,7 +250,13 @@ export function milestoneCompletion(
     if (value == null) continue;
     points.push(value);
   }
-  return averageCompletion(points);
+  if (points.length === 0) return null;
+  const complete = points.every((value) => value === 100);
+  return {
+    percent: complete ? 100 : 0,
+    done: complete ? points.length : 0,
+    total: points.length,
+  };
 }
 
 /** Average of the points that were not excluded. Empty input has no rollup. */

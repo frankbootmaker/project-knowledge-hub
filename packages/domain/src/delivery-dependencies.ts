@@ -188,7 +188,7 @@ export type ScheduleNode = {
   /** Stored duration for tasks and bugs. Null when the span is not duration-driven. */
   durationDays: number | null;
   /**
-   * Story, epic, or milestone whose dates come from children.
+   * Story or epic whose dates come from children.
    * Predecessors do not move it. Successors still read its start and finish.
    */
   rollupLocked?: boolean;
@@ -210,6 +210,7 @@ export function successorDurationDays(
   node: ScheduleNode,
   calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
 ): number | null {
+  if (node.entityType === 'milestone') return 0;
   if (node.entityType === 'task') {
     if (node.durationDays != null) return node.durationDays;
     if (node.start && node.finish) return diffWorkingDays(node.start, node.finish, calendar);
@@ -269,6 +270,13 @@ export function applyPredecessorSchedule(
     .filter((value): value is string => value != null);
   if (starts.length === 0) return null;
   const start = starts.reduce((max, value) => (value > max ? value : max));
+
+  if (node.entityType === 'milestone') {
+    if (node.finish === start && node.start == null && (node.durationDays ?? 0) === 0) {
+      return null;
+    }
+    return { ...node, start: null, finish: start, durationDays: 0 };
+  }
 
   let finish = node.finish;
   let durationDays = node.durationDays;

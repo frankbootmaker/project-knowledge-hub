@@ -490,8 +490,8 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
     });
     expect(linked.statusCode).toBe(200);
     expect((linked.json() as { milestone: DatedRow }).milestone).toMatchObject({
-      startDate: '2026-03-02',
-      targetDate: '2026-03-20',
+      startDate: '2026-08-01',
+      targetDate: '2026-08-31',
     });
     const cleared = await app!.inject({
       method: 'PUT',
@@ -501,8 +501,8 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
     });
     expect(cleared.statusCode).toBe(200);
     expect((cleared.json() as { milestone: DatedRow }).milestone).toMatchObject({
-      startDate: '2026-03-02',
-      targetDate: '2026-03-20',
+      startDate: '2026-08-01',
+      targetDate: '2026-08-31',
     });
 
     await createTask(projectId, {

@@ -1771,7 +1771,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_milestones',
-    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (derived from linked items: done is 100, cancelled is excluded, otherwise the computed percent; 100 means every included link is complete), linkedItems, and mediaLinks plus mediaLinkCount for the Media tab. Status follows those same links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate is the earliest linked start when a link has one, and targetDate is the latest linked end; with no dated links both stay as stored. targetDate is the due date. Requires pm:read.',
+    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (0 or 100 from linked items and predecessor dependencies: 100 only when every included item is done or 100 percent, cancelled items are left out, otherwise 0; no included items leaves it null), linkedItems, and mediaLinks plus mediaLinkCount for the Media tab. Status follows those same links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. targetDate is the due date and is not derived from linked items. A predecessor moves that due date. Duration is always 0. Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -1903,7 +1903,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_milestone',
-    'Get one milestone with its note (description), due date (targetDate), derived completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 when every included link is complete. Done links count as 100. Cancelled links count as 0 and are left out of the average. Other links use their computed percent. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
+    'Get one milestone with its note (description), due date (targetDate), completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 only when every included linked item and every predecessor dependency is done or 100 percent. Cancelled items are left out. Anything else included is 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. targetDate is the stored due date. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
     { milestoneId: entityRef },
     async (args) =>
       wrap('get_project_milestone', 'pm:read', () =>
