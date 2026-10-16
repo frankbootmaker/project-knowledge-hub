@@ -44,6 +44,7 @@ import {
   type PublicOauthMcpSettings,
   type StoredOauthMcpSettings,
 } from '../lib/oauth-mcp-settings.js';
+import { logOauthFlow, secretHashPrefix } from '../lib/oauth-flow-log.js';
 import { publishedRedirectMatches, redirectAllowed } from '../lib/oauth-redirect.js';
 
 const TXN_TTL_SECONDS = 10 * 60;
@@ -243,7 +244,18 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
     const stored = await getStoredOauthMcpSettings(app.database);
     const urls = await resourceContext(app);
     const trustedRedirect = redirectAllowed(query.redirect_uri, stored.redirectUris);
+    const userAgent = request.headers['user-agent'];
+    const authorizeLogBase = {
+      clientId: query.client_id,
+      redirectUri: query.redirect_uri,
+      stateHash: secretHashPrefix(query.state),
+      userAgent,
+    };
     const fail = (error: string, description: string) => {
+      logOauthFlow(request.log, 'authorize', {
+        ...authorizeLogBase,
+        outcome: { kind: 'error', code: error },
+      });
       if (!trustedRedirect) {
         return oauthError(reply, 400, error, description);
       }
@@ -296,6 +308,11 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
     };
     const txnId = randomUUID();
     await app.redis.set(txnKey(txnId), JSON.stringify(txn), 'EX', TXN_TTL_SECONDS);
+    logOauthFlow(request.log, 'authorize', {
+      ...authorizeLogBase,
+      txnId,
+      outcome: { kind: 'success' },
+    });
     const next = `/oauth/consent?txn=${encodeURIComponent(txnId)}`;
     if (!request.principal) {
       const login = new URL('/login', urls.issuer);
@@ -307,9 +324,15 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
 
   app.get('/api/v1/oauth/consent-request', async (request) => {
     const principal = requireAuthenticated(request);
+    const userAgent = request.headers['user-agent'];
     const query = z.object({ txn: z.string().uuid() }).parse(request.query);
     const raw = await app.redis.get(txnKey(query.txn));
     if (!raw) {
+      logOauthFlow(request.log, 'consent_request', {
+        txnId: query.txn,
+        userAgent,
+        outcome: { kind: 'error', code: 'OAUTH_TXN_EXPIRED' },
+      });
       throw new AppError({
         code: 'OAUTH_TXN_EXPIRED',
         message: 'This sign-in request expired. Start again from ChatGPT.',
@@ -317,6 +340,14 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
       });
     }
     const txn = JSON.parse(raw) as AuthorizeTxn;
+    logOauthFlow(request.log, 'consent_request', {
+      clientId: txn.clientId,
+      redirectUri: txn.redirectUri,
+      txnId: query.txn,
+      stateHash: secretHashPrefix(txn.state),
+      userAgent,
+      outcome: { kind: 'success' },
+    });
     const [user] = await app.database.db
       .select()
       .from(users)
@@ -334,6 +365,7 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
   app.post('/api/v1/oauth/consent', async (request) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
+    const userAgent = request.headers['user-agent'];
     const body = z
       .object({
         txn: z.string().uuid(),
@@ -343,6 +375,11 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
       .parse(request.body);
     const raw = await app.redis.get(txnKey(body.txn));
     if (!raw) {
+      logOauthFlow(request.log, 'consent', {
+        txnId: body.txn,
+        userAgent,
+        outcome: { kind: 'error', code: 'OAUTH_TXN_EXPIRED' },
+      });
       throw new AppError({
         code: 'OAUTH_TXN_EXPIRED',
         message: 'This sign-in request expired. Start again from ChatGPT.',
@@ -350,12 +387,23 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
       });
     }
     const txn = JSON.parse(raw) as AuthorizeTxn;
+    const consentLogBase = {
+      clientId: txn.clientId,
+      redirectUri: txn.redirectUri,
+      txnId: body.txn,
+      stateHash: secretHashPrefix(txn.state),
+      userAgent,
+    };
     const [user] = await app.database.db
       .select()
       .from(users)
       .where(eq(users.id, principal.userId))
       .limit(1);
     if (!user || user.status !== 'active' || user.userType === 'system') {
+      logOauthFlow(request.log, 'consent', {
+        ...consentLogBase,
+        outcome: { kind: 'error', code: 'FORBIDDEN' },
+      });
       throw new AppError({
         code: 'FORBIDDEN',
         message: 'This account cannot connect ChatGPT',
@@ -364,6 +412,10 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
     }
     const scopes = body.scopes.filter((scope) => txn.requestedScopes.includes(scope));
     if (scopes.length === 0) {
+      logOauthFlow(request.log, 'consent', {
+        ...consentLogBase,
+        outcome: { kind: 'error', code: 'VALIDATION_ERROR' },
+      });
       throw new AppError({
         code: 'VALIDATION_ERROR',
         message: 'Choose at least one allowed scope',
@@ -399,6 +451,11 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
     if (txn.state) {
       redirectTo.searchParams.set('state', txn.state);
     }
+    logOauthFlow(request.log, 'consent', {
+      ...consentLogBase,
+      codeHash: secretHashPrefix(code),
+      outcome: { kind: 'success' },
+    });
     return { redirectTo: redirectTo.toString() };
   });
 
@@ -414,17 +471,31 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
         resource: z.string().min(1),
       })
       .parse(request.body ?? {});
+    const userAgent = request.headers['user-agent'];
+    const tokenLogBase = {
+      clientId: body.client_id,
+      redirectUri: body.redirect_uri,
+      codeHash: secretHashPrefix(body.code),
+      userAgent,
+    };
+    const tokenFail = (status: number, error: string, description: string) => {
+      logOauthFlow(request.log, 'token', {
+        ...tokenLogBase,
+        outcome: { kind: 'error', code: error },
+      });
+      return oauthError(reply, status, error, description);
+    };
     const stored = await getStoredOauthMcpSettings(app.database);
     const urls = await resourceContext(app);
     const material = readOauthSigningKey(app.env.OAUTH_JWT_PRIVATE_KEY);
     if (!isOauthMcpEffectivelyEnabled(stored, app.env) || !material) {
-      return oauthError(reply, 400, 'invalid_client', 'OAuth MCP resource is disabled');
+      return tokenFail(400, 'invalid_client', 'OAuth MCP resource is disabled');
     }
     if (body.resource !== urls.resourceUrl) {
-      return oauthError(reply, 400, 'invalid_target', 'resource does not match this MCP server');
+      return tokenFail(400, 'invalid_target', 'resource does not match this MCP server');
     }
     if (!clientAllowed(body.client_id, stored.clientIdPrefixes)) {
-      return oauthError(reply, 400, 'invalid_client', 'client_id is not allowed');
+      return tokenFail(400, 'invalid_client', 'client_id is not allowed');
     }
 
     let grantId = '';
@@ -433,7 +504,7 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
     let refreshToken = '';
     if (body.grant_type === 'authorization_code') {
       if (!body.code || !body.redirect_uri || !body.code_verifier) {
-        return oauthError(reply, 400, 'invalid_request', 'code, redirect_uri, and code_verifier are required');
+        return tokenFail(400, 'invalid_request', 'code, redirect_uri, and code_verifier are required');
       }
       const consumed = await consumeAuthorizationCode(app.database, {
         code: body.code,
@@ -444,7 +515,7 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
         refreshTtlSeconds: app.env.OAUTH_REFRESH_TOKEN_TTL_SECONDS,
       });
       if (!consumed) {
-        return oauthError(reply, 400, 'invalid_grant', 'Authorization code is invalid or expired');
+        return tokenFail(400, 'invalid_grant', 'Authorization code is invalid or expired');
       }
       grantId = consumed.grant.id;
       userId = consumed.grant.userId;
@@ -452,7 +523,7 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
       refreshToken = consumed.refreshToken;
     } else if (body.grant_type === 'refresh_token') {
       if (!body.refresh_token) {
-        return oauthError(reply, 400, 'invalid_request', 'refresh_token is required');
+        return tokenFail(400, 'invalid_request', 'refresh_token is required');
       }
       const rotated = await rotateRefreshToken(app.database, {
         refreshToken: body.refresh_token,
@@ -461,14 +532,14 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
         refreshTtlSeconds: app.env.OAUTH_REFRESH_TOKEN_TTL_SECONDS,
       });
       if (!rotated) {
-        return oauthError(reply, 400, 'invalid_grant', 'Refresh token is invalid or expired');
+        return tokenFail(400, 'invalid_grant', 'Refresh token is invalid or expired');
       }
       grantId = rotated.grant.id;
       userId = rotated.grant.userId;
       scopes = rotated.grant.scopes;
       refreshToken = rotated.refreshToken;
     } else {
-      return oauthError(reply, 400, 'unsupported_grant_type', 'Unsupported grant_type');
+      return tokenFail(400, 'unsupported_grant_type', 'Unsupported grant_type');
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -482,6 +553,10 @@ export async function registerOauthMcpRoutes(app: FastifyInstance): Promise<void
       scope: [...scopes, 'offline_access'].join(' '),
       grant_id: grantId,
       client_id: body.client_id,
+    });
+    logOauthFlow(request.log, 'token', {
+      ...tokenLogBase,
+      outcome: { kind: 'success' },
     });
     reply.header('cache-control', 'no-store');
     return {
