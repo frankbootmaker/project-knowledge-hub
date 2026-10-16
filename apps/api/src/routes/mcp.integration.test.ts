@@ -326,9 +326,29 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(workspacesBody.result?.isError).toBeFalsy();
     const workspaceList = JSON.parse(
       workspacesBody.result?.content?.[0]?.text ?? '{}',
-    ) as { workspaces?: Array<{ id: string; name: string; slug: string }> };
+    ) as {
+      workspaces?: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        organization: { id: string; name: string; slug: string };
+        writesAllowed: boolean;
+        role: string | null;
+      }>;
+    };
     expect(workspaceList.workspaces).toEqual([
-      { id: workspaceId, name: workspaceName, slug: workspaceSlug },
+      {
+        id: workspaceId,
+        name: workspaceName,
+        slug: workspaceSlug,
+        organization: {
+          id: organizationId,
+          name: expect.any(String),
+          slug: expect.any(String),
+        },
+        writesAllowed: true,
+        role: null,
+      },
     ]);
 
     const projectsCall = await mcpCall(app!, readToken, 5, 'tools/call', {
@@ -643,16 +663,13 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
       if (pageCount === 0) {
         expect(record?.contentOffset).toBe(0);
         expect(record?.contentTruncated).toBe(true);
-        expect(record?.contentMarkdown.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(true);
+        expect(record?.contentMarkdown.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
         expect(record?.tags).toEqual(['Paging']);
       } else {
         expect(record?.contentMarkdown.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
         expect(record?.tags).toBeUndefined();
       }
-      joined += source.slice(
-        record!.contentOffset,
-        record!.contentOffset + record!.returnedChars,
-      );
+      joined += record!.contentMarkdown;
       pageCount += 1;
       if (record?.nextOffset == null) break;
       expect(record.nextOffset).toBeGreaterThan(offset);

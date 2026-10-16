@@ -36,6 +36,8 @@ type Project = {
   slug: string;
   status: string;
   summary: string | null;
+  createdVia?: string | null;
+  generatedByModel?: string | null;
   tags: Array<{ name: string }>;
   updatedAt: string;
   overallRag?: 'green' | 'amber' | 'red';

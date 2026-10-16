@@ -197,6 +197,12 @@ const projectBaselineResult = {
         'initialBudget',
         'approvedBudget',
         'keyPrefix',
+        'methodology',
+        'createdVia',
+        'createdByApiClientId',
+        'createdByUserId',
+        'generatedByModel',
+        'url',
       ],
       properties: {
         id: uuidProp('Project id'),
@@ -255,6 +261,38 @@ const projectBaselineResult = {
           type: 'string',
           nullable: true,
           description: 'Issue key prefix AAA or AA0',
+        },
+        methodology: {
+          type: 'string',
+          nullable: true,
+          enum: ['scrum', 'kanban', 'waterfall', 'hybrid'],
+          description: 'Delivery approach. Null when unset.',
+        },
+        createdVia: {
+          type: 'string',
+          nullable: true,
+          enum: ['mcp'],
+          description: 'mcp when an agent created the project. Null for a human-created project.',
+        },
+        createdByApiClientId: {
+          type: 'string',
+          nullable: true,
+          description: 'API client id when created via MCP.',
+        },
+        createdByUserId: {
+          type: 'string',
+          nullable: true,
+          description: 'Acting user id when created via MCP.',
+        },
+        generatedByModel: {
+          type: 'string',
+          nullable: true,
+          description: 'Model id supplied at MCP create. Null when unset.',
+        },
+        url: {
+          type: 'string',
+          nullable: true,
+          description: 'Hub URL for the project.',
         },
       },
     },
@@ -404,6 +442,18 @@ const dependencyLinkResult = {
   },
 };
 
+const projectMethodology = {
+  type: 'string',
+  enum: ['scrum', 'kanban', 'waterfall', 'hybrid'],
+  description: 'scrum, kanban, waterfall, or hybrid',
+};
+
+const projectStage = {
+  type: 'string',
+  enum: ['idea', 'planned', 'active', 'maintenance', 'paused', 'completed', 'archived'],
+  description: 'Lifecycle stage. MCP creates are idea until a human promotes them.',
+};
+
 /** Paged list_project_tasks result. nextCursor is null on the last page. */
 const taskListPageResult = {
   type: 'object',
@@ -431,14 +481,19 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   // —— Knowledge / catalogue (OpenAPI first-class) ——
   {
     name: 'list_projects',
-    description: 'List accessible projects in allowed workspaces',
+    description:
+      'List accessible projects. Filter by status or stage (idea, planned, active, maintenance, paused, completed, archived).',
     scope: 'projects:read',
     openApi: true,
     defaults: { limit: 50 },
     body: {
       type: 'object',
+      additionalProperties: false,
       properties: {
         workspaceId: uuidProp('Optional workspace filter'),
+        workspaceSlug: stringProp('Optional workspace slug', { maxLength: 64 }),
+        status: projectStage,
+        stage: projectStage,
         limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
       },
     },
@@ -462,7 +517,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project',
     description:
-      'Get a project by id. projectId (UUID) is required. Returns baseline, working calendar (hoursPerWorkday, workdaysPerWeek, nonWorkingDays), calculated finishDate and durationWorkingDays, definitionOfDone, keyPrefix, and budgets.',
+      'Get a project by id. projectId (UUID) is required. Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, and MCP provenance (createdVia, createdByApiClientId, createdByUserId, generatedByModel).',
     scope: 'projects:read',
     openApi: true,
     output: projectBaselineResult,
@@ -531,7 +586,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown). Tags and media are on the first page only. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key.',
+      'Get a knowledge record (paged markdown). Tags and media are on the first page only. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key.',
     scope: 'knowledge:read',
     openApi: true,
     body: {
@@ -1221,9 +1276,74 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_workspaces',
     description:
-      'List workspaces this client can access (id, name, slug). Via call_hub_tool on ChatGPT. Requires projects:read.',
+      'List workspaces this client can access: id, name, slug, organization, writesAllowed, and the acting user role. writesAllowed is true only when the workspace is on the client allow-list. Via call_hub_tool on ChatGPT. Requires projects:read.',
     scope: 'projects:read',
-    body: { type: 'object', properties: {} },
+    body: { type: 'object', additionalProperties: false, properties: {} },
+  },
+  {
+    name: 'list_project_metadata',
+    description:
+      'Field guide for create_project and update_project: stages, methodologies, key prefixes, and the idea-stage rule. Call before create_project. Requires projects:read. Via call_hub_tool on ChatGPT.',
+    scope: 'projects:read',
+    body: { type: 'object', additionalProperties: false, properties: {} },
+  },
+  {
+    name: 'create_project',
+    description:
+      'Create a project in an allowlisted workspace. Always stage idea; a human promotes it to active. Returns id, keyPrefix, and url. Requires projects:write. Via call_hub_tool on ChatGPT.',
+    scope: 'projects:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId', 'name'],
+      properties: {
+        workspaceId: uuidProp('Workspace id from list_workspaces'),
+        name: stringProp('Project name', { minLength: 1, maxLength: 160 }),
+        description: { type: 'string', nullable: true, maxLength: 10000 },
+        keyPrefix: {
+          type: 'string',
+          description: 'AAA or AA0. Omit to auto-assign. Taken prefixes return a suggestion.',
+        },
+        currency: stringProp('Currency, default EUR'),
+        methodology: { ...projectMethodology, nullable: true },
+        confirmDuplicateName: {
+          type: 'boolean',
+          description: 'Required when a similar project name already exists.',
+        },
+        generatedByModel: {
+          type: 'string',
+          nullable: true,
+          maxLength: 200,
+          description: 'Optional model id stored as provenance.',
+        },
+      },
+    },
+  },
+  {
+    name: 'update_project',
+    description:
+      'Update name, description, methodology, or currency. Stage changes cannot promote idea to active. Requires projects:write. Writes an audit entry. Via call_hub_tool on ChatGPT.',
+    scope: 'projects:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['projectId'],
+      properties: {
+        projectId: uuidProp('Project id'),
+        name: stringProp('Project name', { minLength: 1, maxLength: 160 }),
+        description: { type: 'string', nullable: true, maxLength: 10000 },
+        methodology: { ...projectMethodology, nullable: true },
+        currency: stringProp('Project currency'),
+        status: projectStage,
+        stage: projectStage,
+        confirmDuplicateName: {
+          type: 'boolean',
+          description: 'Required when the new name is similar to another project.',
+        },
+      },
+    },
   },
   {
     name: 'create_system',
@@ -2657,7 +2777,8 @@ export async function invokeNamedHubTool(
     const includeWrite =
       hasMcpScope(scopes, 'knowledge:write')
       || hasMcpScope(scopes, 'pm:write')
-      || hasMcpScope(scopes, 'catalogue:write');
+      || hasMcpScope(scopes, 'catalogue:write')
+      || hasMcpScope(scopes, 'projects:write');
     return { tools: listHubToolSummaries(includeWrite) };
   }
 

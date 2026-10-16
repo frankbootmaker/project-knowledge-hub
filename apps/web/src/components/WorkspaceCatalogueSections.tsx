@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Badge, Button, Input, LinkButton, Select, lifecycleLabel } from './ui';
+import { ProjectAiCreatedBadge, ProjectStageBadge } from './ProjectStageBadge';
+import { isProjectStage } from '../lib/project-stage';
 import { LocalDateTime } from './LocalDateTime';
 import { ImportTypePickerButton } from './ImportTypePickerButton';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -30,6 +32,8 @@ export type WorkspaceCatalogueProject = {
   slug: string;
   status: string;
   summary: string | null;
+  createdVia?: string | null;
+  generatedByModel?: string | null;
   tags: Array<{ name: string }>;
   updatedAt: string;
   overallRag?: 'green' | 'amber' | 'red';
@@ -207,8 +211,14 @@ export function WorkspaceCatalogueSections({
   );
 
   const projectStatusOptions = useMemo(
-    () => collectEnumOptions(projects, (project) => project.status, (value) => value, locale),
-    [locale, projects],
+    () =>
+      collectEnumOptions(
+        projects,
+        (project) => project.status,
+        (value) => (isProjectStage(value) ? tProjects(`stage.${value}`) : value),
+        locale,
+      ),
+    [locale, projects, tProjects],
   );
   const projectRagOptions = useMemo(
     () =>
@@ -419,7 +429,7 @@ export function WorkspaceCatalogueSections({
     () => [
       {
         id: 'status',
-        header: t('colStatus'),
+        header: tProjects('stageLabel'),
         type: 'enum',
         options: projectStatusOptions,
       },
@@ -528,7 +538,13 @@ export function WorkspaceCatalogueSections({
                     </h3>
                     <p>{project.summary || t('noDescription')}</p>
                     <div className="kh-ops-project-card-foot">
-                      <span>{project.status}</span>
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        <ProjectStageBadge status={project.status} />
+                        <ProjectAiCreatedBadge
+                          createdVia={project.createdVia}
+                          generatedByModel={project.generatedByModel}
+                        />
+                      </span>
                       <span>
                         <LocalDateTime value={project.updatedAt} dateOnly locale={locale} />
                       </span>

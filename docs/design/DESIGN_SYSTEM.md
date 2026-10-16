@@ -250,7 +250,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-16
 
 * **Parent date fields** — In the epic and story dialog, a start or end that comes from included children is a disabled read-only date with the hint `datesFromChildren`. A side with no child date stays editable. Milestone due dates stay editable.
-
+* **Project stage badge** — Catalogue project cards and the project header show the lifecycle stage as a `Badge` (`ProjectStageBadge`). Idea is the warn tone, active is success. MCP-created projects add an “AI draft” badge (`ProjectAiCreatedBadge`) with the provenance hint. The catalogue project filter is labeled Stage and uses the translated stage names.
 * **Gantt milestone rows** — Dated milestones are inserted into the work list by calendar date and leave the WBS cell empty. Undated milestones stay in the “Milestones without dates” group. Epic and story titles (`.kh-ops-gantt-title-btn` / `.kh-ops-gantt-title-text`) are bold; milestone titles are italic, with 1px of trailing padding so the glyph is not clipped. Other rows stay regular IBM Plex Sans 13px.
 
 ### 2026-10-15
