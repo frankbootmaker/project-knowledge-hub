@@ -1,10 +1,11 @@
 /**
  * Read-only delivery Gantt math (PRO-T-62).
  *
- * Outline numbers follow the work-breakdown tree: milestones, then epics,
- * stories, and tasks or bugs. Parent start and end use the child rollup
- * from PRO-T-73. Duration and non-working days use the project calendar.
- * Predecessor text is a human key or a WBS number, never a UUID.
+ * Outline numbers follow the work-breakdown tree: epics, stories, and tasks
+ * or bugs. Dated milestones sit in that list by date and have no WBS number.
+ * Undated milestones stay in their own group. Parent start and end use the
+ * child rollup from PRO-T-73. Duration and non-working days use the project
+ * calendar. Predecessor text is a human key or a WBS number, never a UUID.
  */
 
 import {
@@ -82,7 +83,7 @@ export type GanttPredecessorMode = 'key' | 'wbs';
 export type GanttItemKind = 'group' | 'milestone' | 'epic' | 'story' | 'task' | 'bug';
 
 export type GanttLabelKey =
-  | 'milestoneTimeOrder'
+  | 'milestonesWithoutDates'
   | 'treeUngroupedStories'
   | 'treeUngroupedTasks';
 
@@ -172,6 +173,8 @@ type Draft = {
   start: string | null;
   end: string | null;
   percent: number | null;
+  /** False for milestones, which are not part of the WBS outline. */
+  outline: boolean;
   children: Draft[];
 };
 
@@ -230,6 +233,7 @@ function leafDraft(
     start,
     end,
     percent: percent ?? null,
+    outline: kind !== 'milestone',
     children: [],
   };
 }
@@ -247,14 +251,19 @@ function groupDraft(id: string, labelKey: GanttLabelKey, children: Draft[]): Dra
     start: null,
     end: null,
     percent: null,
+    outline: labelKey !== 'milestonesWithoutDates',
     children,
   };
 }
 
 function flatten(nodes: Draft[], parentId: string | null, depth: number, prefix: string): GanttRow[] {
   const rows: GanttRow[] = [];
-  nodes.forEach((node, index) => {
-    const wbs = prefix ? `${prefix}.${index + 1}` : String(index + 1);
+  let outlineIndex = 0;
+  nodes.forEach((node) => {
+    const wbs = node.outline
+      ? (prefix ? `${prefix}.${outlineIndex + 1}` : String(outlineIndex + 1))
+      : '';
+    if (node.outline) outlineIndex += 1;
     rows.push({
       id: node.id,
       parentId,
@@ -278,9 +287,10 @@ function flatten(nodes: Draft[], parentId: string | null, depth: number, prefix:
 }
 
 /**
- * Tree order: milestone group, epics (stories, then tasks and bugs),
- * stories with no epic, then tasks with no story. WBS is assigned on the
- * full outline, including rows a collapsed parent hides.
+ * Tree order: epics (stories, then tasks and bugs), stories with no epic,
+ * then tasks with no story. A dated milestone is inserted where that date
+ * falls in the list and has no WBS number. Undated milestones stay grouped.
+ * WBS is assigned on the full outline, including rows a collapsed parent hides.
  */
 export function buildGanttRows(input: {
   epics: readonly GanttEpicInput[];
@@ -352,25 +362,6 @@ export function buildGanttRows(input: {
   }
 
   const roots: Draft[] = [];
-  const milestones = [...input.milestones].sort(compareMilestones);
-  if (milestones.length > 0) {
-    roots.push(groupDraft(
-      GANTT_MILESTONES_ID,
-      'milestoneTimeOrder',
-      milestones.map((milestone) => leafDraft(
-        `milestone:${milestone.id}`,
-        'milestone',
-        milestone.id,
-        milestone.title,
-        milestone.humanKey,
-        milestone.status,
-        null,
-        milestone.startDate,
-        milestone.targetDate,
-        milestone.percent,
-      )),
-    ));
-  }
 
   for (const epic of [...input.epics].sort(bySortThenTitle)) {
     const stories = (storiesByEpic.get(epic.id) ?? []).map(storyDraft);
@@ -424,11 +415,100 @@ export function buildGanttRows(input: {
     ));
   }
 
-  return flatten(roots, null, 0, '');
+  const rows = flatten(roots, null, 0, '');
+  const dated: GanttMilestoneInput[] = [];
+  const undated: GanttMilestoneInput[] = [];
+  for (const milestone of [...input.milestones].sort(compareMilestones)) {
+    if (milestonePoint(milestone)) dated.push(milestone);
+    else undated.push(milestone);
+  }
+  dated.sort((a, b) => {
+    const left = milestonePoint(a) ?? '';
+    const right = milestonePoint(b) ?? '';
+    return left < right ? -1 : left > right ? 1 : a.title.localeCompare(b.title);
+  });
+  for (const milestone of dated) {
+    insertDatedMilestone(rows, milestone);
+  }
+  if (undated.length > 0) {
+    const children = undated
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map((milestone) => milestoneDraft(milestone));
+    rows.push(...flatten(
+      [groupDraft(GANTT_MILESTONES_ID, 'milestonesWithoutDates', children)],
+      null,
+      0,
+      '',
+    ));
+  }
+  return rows;
+}
+
+function milestonePoint(milestone: GanttMilestoneInput): string | null {
+  if (validYmd(milestone.targetDate)) return milestone.targetDate;
+  if (validYmd(milestone.startDate)) return milestone.startDate;
+  return null;
+}
+
+function milestoneDraft(milestone: GanttMilestoneInput): Draft {
+  return leafDraft(
+    `milestone:${milestone.id}`,
+    'milestone',
+    milestone.id,
+    milestone.title,
+    milestone.humanKey,
+    milestone.status,
+    null,
+    milestone.startDate,
+    milestone.targetDate,
+    milestone.percent,
+  );
+}
+
+/** Where this row sits on the calendar. Milestones use the diamond date. */
+function placementDate(row: GanttRow): string | null {
+  if (row.kind === 'milestone') {
+    return validYmd(row.end) ? row.end : validYmd(row.start) ? row.start : null;
+  }
+  return validYmd(row.start) ? row.start : validYmd(row.end) ? row.end : null;
+}
+
+function insertDatedMilestone(rows: GanttRow[], milestone: GanttMilestoneInput): void {
+  const date = milestonePoint(milestone);
+  if (!date) return;
+  const draft = milestoneDraft(milestone);
+  let index = rows.length;
+  for (let cursor = 0; cursor < rows.length; cursor += 1) {
+    const row = rows[cursor];
+    if (!row) continue;
+    const point = placementDate(row);
+    if (point && point > date) {
+      index = cursor;
+      break;
+    }
+  }
+  const neighbor = rows[index] ?? null;
+  rows.splice(index, 0, {
+    id: draft.id,
+    parentId: neighbor?.parentId ?? null,
+    depth: neighbor?.depth ?? 0,
+    kind: draft.kind,
+    entityId: draft.entityId,
+    title: draft.title,
+    labelKey: null,
+    humanKey: draft.humanKey,
+    status: draft.status,
+    owner: draft.owner,
+    start: draft.start,
+    end: draft.end,
+    percent: draft.percent,
+    wbs: '',
+    hasChildren: false,
+  });
 }
 
 export function ganttWbsById(rows: readonly GanttRow[]): Map<string, string> {
-  return new Map(rows.map((row) => [row.id, row.wbs]));
+  return new Map(rows.flatMap((row) => (row.wbs ? [[row.id, row.wbs] as const] : [])));
 }
 
 export function visibleGanttRows(
