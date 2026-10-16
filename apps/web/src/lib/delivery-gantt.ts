@@ -479,7 +479,9 @@ function insertDatedMilestone(rows: GanttRow[], milestone: GanttMilestoneInput):
   const draft = milestoneDraft(milestone);
   let index = rows.length;
   for (let cursor = 0; cursor < rows.length; cursor += 1) {
-    const point = placementDate(rows[cursor]);
+    const row = rows[cursor];
+    if (!row) continue;
+    const point = placementDate(row);
     if (point && point > date) {
       index = cursor;
       break;
