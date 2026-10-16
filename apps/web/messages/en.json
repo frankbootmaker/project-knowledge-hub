@@ -2237,6 +2237,7 @@
     "viewGrid": "Grid",
     "viewList": "List",
     "copyUrl": "Copy URL",
+    "actionDetails": "Details",
     "copiedUrl": "URL copied",
     "copiedMarkdown": "Markdown copied",
     "copyFailed": "Could not copy",

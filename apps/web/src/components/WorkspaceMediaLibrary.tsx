@@ -478,6 +478,7 @@ export function WorkspaceMediaLibrary(props: {
         <Button
           type="button"
           variant="secondary"
+          title={tRecords('mediaInsertExisting')}
           onClick={() => void copyText(item.markdownSnippet, t('copiedMarkdown'))}
         >
           {tRecords('mediaInsertExisting')}
@@ -492,9 +493,11 @@ export function WorkspaceMediaLibrary(props: {
         <Button
           type="button"
           variant="secondary"
+          aria-label={tRecords('showMoreDetails')}
+          title={tRecords('showMoreDetails')}
           onClick={() => setDetailsId(item.id)}
         >
-          {tRecords('showMoreDetails')}
+          {t('actionDetails')}
         </Button>
         {props.canMutate ? (
           confirmId === item.id ? (
@@ -569,7 +572,7 @@ export function WorkspaceMediaLibrary(props: {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className="kh-ops-type-chip"
+            className="kh-ops-type-chip kh-ops-view-toggle"
             aria-pressed={view === 'grid'}
             onClick={() => setView('grid')}
           >
@@ -577,7 +580,7 @@ export function WorkspaceMediaLibrary(props: {
           </button>
           <button
             type="button"
-            className="kh-ops-type-chip"
+            className="kh-ops-type-chip kh-ops-view-toggle"
             aria-pressed={view === 'list'}
             onClick={() => setView('list')}
           >
