@@ -1142,6 +1142,17 @@ function knowledgeRecordTagNames(
     .sort((left, right) => left.localeCompare(right));
 }
 
+/** Budget columns are JSON numbers. A numeric driver string is coerced. */
+function mcpMoney(value: number | string | null | undefined): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function toMcpProject(
   project: typeof projects.$inferSelect,
   pinned: Awaited<ReturnType<typeof loadPinnedRecords>>,
@@ -1178,10 +1189,11 @@ function toMcpProject(
     initialPlanRecord: project.initialPlanRecordId
       ? (pinned.get(project.initialPlanRecordId) ?? null)
       : null,
-    definitionOfDone: project.definitionOfDone,
+    definitionOfDone:
+      typeof project.definitionOfDone === 'string' ? project.definitionOfDone : null,
     currency: projectCurrencySchema.parse(project.currency),
-    initialBudget: project.initialBudget,
-    approvedBudget: project.approvedBudget,
+    initialBudget: mcpMoney(project.initialBudget),
+    approvedBudget: mcpMoney(project.approvedBudget),
     keyPrefix: project.keyPrefix,
   };
 }

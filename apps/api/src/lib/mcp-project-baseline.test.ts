@@ -25,8 +25,8 @@ type ProjectRow = {
   initialPlanRecordId: string | null;
   definitionOfDone: string | null;
   currency: string;
-  initialBudget: number | null;
-  approvedBudget: number | null;
+  initialBudget: number | string | null;
+  approvedBudget: number | string | null;
   keyPrefix: string | null;
   issueCounters: Record<string, number>;
   metadataJson: null;
@@ -185,5 +185,28 @@ describe('MCP project baseline definitionOfDone', () => {
     expect(read).toEqual({
       project: expect.objectContaining({ definitionOfDone: null }),
     });
+  });
+
+  it('returns definitionOfDone as a string and budgets as numbers', async () => {
+    const row = projectRow('- Tests pass');
+    row.initialBudget = '1000.50';
+    row.approvedBudget = '2000.00';
+    const { app } = mockApp(row);
+    const handlers = createMcpToolHandlers(app, testClient());
+
+    const read = (await handlers.getProject({ projectId })) as {
+      project: {
+        definitionOfDone: unknown;
+        initialBudget: unknown;
+        approvedBudget: unknown;
+      };
+    };
+    const project = read.project;
+    expect(project.definitionOfDone).toBe('- Tests pass');
+    expect(project.initialBudget).toBe(1000.5);
+    expect(project.approvedBudget).toBe(2000);
+    expect(typeof project.definitionOfDone).toBe('string');
+    expect(typeof project.initialBudget).toBe('number');
+    expect(typeof project.approvedBudget).toBe('number');
   });
 });

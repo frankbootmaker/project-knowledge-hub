@@ -106,7 +106,25 @@ describe('llm-client-schemas', () => {
       const schema = operation.post.responses['200'].content['application/json'].schema;
       if (path.endsWith('/get_project')) {
         expect(schema.$ref).toBeUndefined();
-        expect(JSON.stringify(schema)).toContain('definitionOfDone');
+        const encoded = JSON.stringify(schema);
+        expect(encoded).toContain('definitionOfDone');
+        expect(encoded).toContain('workspaceName');
+        const project = (
+          schema as {
+            properties?: {
+              project?: {
+                properties?: {
+                  definitionOfDone?: { type?: string };
+                  initialBudget?: { type?: string };
+                  approvedBudget?: { type?: string };
+                };
+              };
+            };
+          }
+        ).properties?.project?.properties;
+        expect(project?.definitionOfDone?.type).toBe('string');
+        expect(project?.initialBudget?.type).toBe('number');
+        expect(project?.approvedBudget?.type).toBe('number');
       } else if (path.endsWith('/list_project_tasks')) {
         expect(schema.$ref).toBeUndefined();
         expect(JSON.stringify(schema)).toContain('nextCursor');
@@ -117,10 +135,14 @@ describe('llm-client-schemas', () => {
 
     const taskList = findLlmTool('list_project_tasks');
     const taskListProps = (
-      taskList?.body as { properties?: Record<string, unknown> }
+      taskList?.body as {
+        properties?: Record<string, { type?: string; description?: string; maximum?: number }>;
+      }
     ).properties;
-    expect(taskListProps?.limit).toBeTruthy();
-    expect(taskListProps?.cursor).toBeTruthy();
+    expect(taskListProps?.limit).toMatchObject({ type: 'integer', maximum: 25 });
+    expect(taskListProps?.limit?.description).toMatch(/25/);
+    expect(taskListProps?.cursor).toMatchObject({ type: 'string' });
+    expect(taskListProps?.cursor?.description).toMatch(/nextCursor/);
     expect(taskList?.description).toMatch(/limit/);
     expect(taskList?.description).toMatch(/cursor/);
     expect(JSON.stringify(taskList?.output)).toContain('nextCursor');
