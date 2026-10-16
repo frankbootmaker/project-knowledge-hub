@@ -1,6 +1,8 @@
+import { createServer, type Server } from 'node:http';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { inlineImageDataUris } from './docx-document.js';
 import {
   buildExportHtmlDocument,
   buildKnowledgeMarkdownExport,
@@ -71,6 +73,47 @@ describe('knowledge-export', () => {
     expect(html).toContain('<table>');
     expect(html).toContain('<th>');
     expect(html).toMatch(/language-ts|hljs/);
+  });
+
+  describe('PDF export image inlining (PRO-B-14)', () => {
+    let mediaServer: Server;
+    let mediaOrigin = '';
+
+    beforeAll(async () => {
+      mediaServer = createServer((request, response) => {
+        if (request.headers.cookie !== 'kh_session=export-test') {
+          response.writeHead(401).end();
+          return;
+        }
+        response
+          .writeHead(200, { 'content-type': 'image/png' })
+          .end(Buffer.from('89504e470d0a1a0a', 'hex'));
+      });
+      await new Promise<void>((resolve) =>
+        mediaServer.listen(0, '127.0.0.1', resolve),
+      );
+      const address = mediaServer.address();
+      mediaOrigin = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+    });
+
+    afterAll(() => {
+      mediaServer.close();
+    });
+
+    it('embeds workspace media server-side so Chromium needs no session cookies', async () => {
+      const html = await buildExportHtmlDocument({
+        ...sample,
+        webUrl: mediaOrigin,
+        contentMarkdown: '![Quarterly chart](/api/v1/media/record-image)',
+      });
+      const pdfHtml = await inlineImageDataUris(html, {
+        cookieHeader: 'kh_session=export-test',
+        unresolved: 'alt',
+      });
+
+      expect(pdfHtml).toContain('src="data:image/png;base64,');
+      expect(pdfHtml).not.toMatch(/src="https?:\/\/[^"]*\/api\/v1\/media\//);
+    });
   });
 
   it('builds a formatted DOCX that mirrors the rendered markdown', async () => {

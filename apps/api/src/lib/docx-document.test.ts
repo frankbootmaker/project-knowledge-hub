@@ -217,4 +217,15 @@ describe('inlineImageDataUris', () => {
 
     expect(html).toContain(`src="${origin}/a.png"`);
   });
+
+  it('shows alt text when unresolved and alt fallback is requested', async () => {
+    const html = await inlineImageDataUris(
+      `<p><img src="${origin}/missing.png" alt="Quarterly chart"></p>`,
+      { unresolved: 'alt' },
+    );
+
+    expect(html).toContain('class="export-image-alt"');
+    expect(html).toContain('Quarterly chart');
+    expect(html).not.toContain(`${origin}/missing.png`);
+  });
 });

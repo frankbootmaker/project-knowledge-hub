@@ -41,6 +41,7 @@ const nextConfig = {
     proxyTimeout: 600_000,
   },
   transpilePackages: [
+    '@project-knowledge-hub/auth',
     '@project-knowledge-hub/markdown',
     '@project-knowledge-hub/mcp',
   ],

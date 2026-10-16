@@ -197,3 +197,34 @@ describe('missing projectId on hub tools', () => {
     expect(setProps.projectId?.description).toBe('Required project id (UUID).');
   });
 });
+
+describe('update_knowledge_record slug', () => {
+  it('passes an optional slug through and keeps the description short', async () => {
+    const tool = findLlmTool('update_knowledge_record');
+    const properties = tool?.body.properties as Record<string, { description?: string }>;
+    expect(properties.slug?.description).toBe(
+      'URL slug (lowercase a-z, 0-9, hyphens)',
+    );
+    expect(tool?.description).toContain('Optional slug');
+    expect(tool?.description.length ?? 0).toBeLessThan(500);
+
+    const updateKnowledgeRecord = vi.fn(async () => ({ ok: true }));
+    await invokeNamedHubTool(
+      { updateKnowledgeRecord },
+      ['knowledge:write'],
+      'update_knowledge_record',
+      {
+        recordId: 'HL1-VIS-2',
+        changeMessage: 'rename',
+        slug: 'ai-lawyer-notes',
+      },
+    );
+    expect(updateKnowledgeRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordId: 'HL1-VIS-2',
+        changeMessage: 'rename',
+        slug: 'ai-lawyer-notes',
+      }),
+    );
+  });
+});

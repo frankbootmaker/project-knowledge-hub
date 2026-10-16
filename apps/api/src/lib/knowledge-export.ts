@@ -539,19 +539,17 @@ async function buildKnowledgeRecordPdfWithPuppeteer(
   input: KnowledgeExportInput,
 ): Promise<Buffer> {
   const exportedAt = input.exportedAt ?? new Date();
-  const html = await buildExportHtmlDocument(input);
+  let html = await buildExportHtmlDocument(input);
+  html = await inlineImageDataUris(html, {
+    cookieHeader: input.cookieHeader,
+    unresolved: 'alt',
+  });
   const landscape = widestTableColumnCount(input.contentMarkdown) > 8;
   const pack = isCustomStylePack(input.stylePack) ? input.stylePack : null;
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
     await page.setViewport({ width: 900, height: 1200, deviceScaleFactor: 2 });
-    if (input.webUrl && input.cookieHeader) {
-      const cookies = parseCookieHeader(input.cookieHeader, input.webUrl);
-      if (cookies.length > 0) {
-        await page.setCookie(...cookies);
-      }
-    }
     await page.setContent(html, {
       waitUntil: 'load',
       timeout: 60_000,

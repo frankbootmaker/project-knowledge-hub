@@ -394,6 +394,23 @@ export const KNOWLEDGE_SOURCE_TYPES = [
 export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
 export const knowledgeSourceTypeSchema = z.enum(KNOWLEDGE_SOURCE_TYPES);
 
+/** Explicit record slug on update. Must match auth SLUG_MAX_LENGTH. */
+export const KNOWLEDGE_RECORD_SLUG_MAX = 96;
+
+/**
+ * Lowercase a-z, digits, and hyphens. No leading, trailing, or doubled hyphen.
+ * Update validates this; it does not transliterate. Create still runs slugify.
+ */
+export const KNOWLEDGE_RECORD_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function isKnowledgeRecordSlug(value: string): boolean {
+  return (
+    value.length >= 1 &&
+    value.length <= KNOWLEDGE_RECORD_SLUG_MAX &&
+    KNOWLEDGE_RECORD_SLUG_PATTERN.test(value)
+  );
+}
+
 export type FieldRequirement = 'required' | 'optional' | 'ignored_on_mcp_write';
 
 export type KnowledgeRecordFieldGuide = {
@@ -524,6 +541,13 @@ const UPDATE_FIELDS: KnowledgeRecordFieldGuide[] = [
     name: 'title',
     requirement: 'optional',
     description: 'Human-readable title (1–300 chars).',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'slug',
+    requirement: 'optional',
+    description:
+      'URL slug (lowercase a-z, 0-9, hyphens). Title edits do not change it.',
     appliesTo: ['update'],
   },
   {
@@ -674,6 +698,12 @@ export const updateKnowledgeRecordInputSchema = z.object({
     .max(300)
     .optional()
     .describe('Human-readable title (1–300 chars).'),
+  slug: z
+    .string()
+    .min(1)
+    .max(KNOWLEDGE_RECORD_SLUG_MAX)
+    .optional()
+    .describe('URL slug (lowercase a-z, 0-9, hyphens).'),
   summary: z
     .string()
     .max(1000)
@@ -828,6 +858,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
       requiredFields: ['recordId', 'changeMessage'],
       optionalFields: [
         'title',
+        'slug',
         'summary',
         'recordType',
         'contentMarkdown',

@@ -1,3 +1,4 @@
+import { slugify as toSlug } from '@project-knowledge-hub/auth/slug';
 import type {
   DisplayPrefs,
   ReportDiagramPrefs,
@@ -119,12 +120,9 @@ function downloadMarkdown(filename: string, markdown: string) {
   URL.revokeObjectURL(url);
 }
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 64) || 'project';
+/** Download filename slug. Same transliteration as auth slugify, capped at 64. */
+export function projectReportFileSlug(value: string): string {
+  return toSlug(value).slice(0, 64) || 'project';
 }
 
 function formatIndex(value: number | null | undefined): string {
@@ -1504,5 +1502,5 @@ export function downloadProjectReport(
   markdown: string,
 ) {
   const stamp = todayYmd();
-  downloadMarkdown(`${slugify(projectName)}-${kind}-${stamp}.md`, markdown);
+  downloadMarkdown(`${projectReportFileSlug(projectName)}-${kind}-${stamp}.md`, markdown);
 }
