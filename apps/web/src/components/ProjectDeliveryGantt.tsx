@@ -1058,6 +1058,11 @@ function GanttGridRow({
       );
     }
     if (column === 'duration') {
+      if (row.kind === 'milestone') {
+        return t('ganttDurationValue', {
+          days: formatStableNumber(0, locale),
+        });
+      }
       if (!duration) return '—';
       return (
         <span
@@ -1074,7 +1079,10 @@ function GanttGridRow({
     }
     if (column === 'predecessors') return predecessors || '—';
     if (column === 'owner') return row.owner || '—';
-    if (column === 'start') return row.start ? formatLocaleDate(row.start, locale) : '—';
+    if (column === 'start') {
+      if (row.kind === 'milestone' || !row.start) return '—';
+      return formatLocaleDate(row.start, locale);
+    }
     return row.end ? formatLocaleDate(row.end, locale) : '—';
   }
 

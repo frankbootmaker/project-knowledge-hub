@@ -110,7 +110,11 @@ describe('gantt WBS numbering', () => {
 
   it('numbers the tree outline, including a compact 3.4 under the third epic', () => {
     const wbs = new Map(rows.map((row) => [row.id, row.wbs]));
-    expect(rows.find((row) => row.id === 'milestone:m1')?.wbs).toBe('');
+    expect(rows.find((row) => row.id === 'milestone:m1')).toMatchObject({
+      wbs: '4',
+      start: null,
+      end: '2026-10-20',
+    });
     expect(wbs.get('epic:e1')).toBe('1');
     expect(wbs.get('epic:e3')).toBe('3');
     expect(wbs.get('story:s1')).toBe('3.1');
@@ -140,7 +144,7 @@ describe('gantt WBS numbering', () => {
           id: 'open',
           title: 'Open',
           status: 'planned',
-          startDate: null,
+          startDate: '2026-01-01',
           targetDate: null,
         },
       ],
@@ -149,10 +153,13 @@ describe('gantt WBS numbering', () => {
     expect(ids.indexOf('milestone:mid')).toBeGreaterThan(ids.indexOf('story:soon'));
     expect(ids.indexOf('milestone:mid')).toBeLessThan(ids.indexOf('epic:later'));
     expect(placed.find((row) => row.id === 'milestone:mid')).toMatchObject({
-      wbs: '',
+      wbs: '2',
       parentId: null,
       depth: 0,
+      start: null,
+      end: '2026-10-10',
     });
+    expect(placed.find((row) => row.id === 'epic:later')?.wbs).toBe('3');
     const group = placed.find((row) => row.id === 'delivery-tree-milestones');
     expect(group).toMatchObject({
       labelKey: 'milestonesWithoutDates',

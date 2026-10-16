@@ -37,7 +37,10 @@ import {
   saveItemMediaLinks,
   type ItemMediaDraft,
 } from './DeliveryMediaEditor';
-import { DeliveryDependenciesEditor } from './DeliveryDependenciesEditor';
+import {
+  DeliveryDependenciesEditor,
+  type DeliveryPredecessorRef,
+} from './DeliveryDependenciesEditor';
 import {
   MilestoneLinkedItemsEditor,
   milestoneLinkKey,
@@ -168,6 +171,7 @@ export function ProjectAgileManageModal({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [targetDate, setTargetDate] = useState('');
+  const [predecessorRefs, setPredecessorRefs] = useState<DeliveryPredecessorRef[]>([]);
   const [humanKey, setHumanKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -271,10 +275,53 @@ export function ProjectAgileManageModal({
         completionPercent: raw?.percent ?? null,
       });
     }
+    for (const ref of predecessorRefs) {
+      if (ref.entityType === 'task') {
+        const task = tasks.find((item) => item.id === ref.id);
+        links.push({
+          kind: 'task',
+          status: task?.status ?? ref.status ?? 'planned',
+          completionPercent: task?.completionPercent ?? null,
+        });
+        continue;
+      }
+      if (ref.entityType === 'epic' || ref.entityType === 'user_story') {
+        const row = ref.entityType === 'epic'
+          ? epics.find((item) => item.id === ref.id)
+          : stories.find((item) => item.id === ref.id);
+        const raw = ref.entityType === 'epic'
+          ? index.byEpicId.get(ref.id)
+          : index.byStoryId.get(ref.id);
+        const status = row?.status ?? ref.status ?? 'planned';
+        links.push({
+          kind: 'parent',
+          status,
+          completionPercent: status === 'done' ? 100 : raw?.percent ?? 0,
+        });
+        continue;
+      }
+      if (ref.entityType === 'sprint') {
+        links.push(ref.status === 'cancelled'
+          ? { kind: 'task', status: 'cancelled', completionPercent: 0 }
+          : ref.status === 'completed'
+            ? { kind: 'task', status: 'done', completionPercent: 100 }
+            : { kind: 'task', status: 'in_progress', completionPercent: 0 });
+        continue;
+      }
+      const milestone = milestones.find((item) => item.id === ref.id);
+      const status = milestone?.status ?? ref.status ?? 'planned';
+      links.push({
+        kind: 'parent',
+        status,
+        completionPercent: status === 'done' || milestone?.completionPercent === 100
+          ? 100
+          : 0,
+      });
+    }
     const rollup = milestoneCompletion(links);
     if (!rollup) return '—';
     return formatPercentLabel(rollup.percent, locale);
-  }, [kind, linkChoices, linkedItemIds, locale, tasks]);
+  }, [epics, kind, linkChoices, linkedItemIds, locale, milestones, predecessorRefs, stories, tasks]);
 
   useEffect(() => {
     if (!open) return;
@@ -288,6 +335,10 @@ export function ProjectAgileManageModal({
       })
       .catch(() => setWorkspaceId(null));
   }, [open, projectId]);
+
+  useEffect(() => {
+    setPredecessorRefs([]);
+  }, [itemId, open]);
 
   useEffect(() => {
     if (!open || !kind || !itemId) {
@@ -941,6 +992,7 @@ export function ProjectAgileManageModal({
             }
             entityId={itemId}
             canEdit={canMutate && !pending && !confirmDelete}
+            onPredecessors={setPredecessorRefs}
             onScheduled={(write) => {
               if (write) {
                 setStartDate(write.startDate ?? '');

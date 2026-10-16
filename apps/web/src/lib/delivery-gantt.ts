@@ -1,10 +1,12 @@
 /**
  * Read-only delivery Gantt math (PRO-T-62).
  *
- * Outline numbers follow the work-breakdown tree: epics, stories, and tasks
- * or bugs. Dated milestones sit in that list by date and have no WBS number.
- * Undated milestones stay in their own group. Parent start and end use the
- * child rollup from PRO-T-73. Duration and non-working days use the project
+ * Outline numbers follow the work-breakdown tree: epics, stories, tasks,
+ * bugs, and milestones that have a due date. A dated milestone is numbered
+ * where that due date sits, so later siblings shift. Milestones without a
+ * due date stay in their own group and do not consume a number. A milestone
+ * is a marker: no start, and duration 0. Parent start and end use the child
+ * rollup from PRO-T-73. Duration and non-working days use the project
  * calendar. Predecessor text is a human key or a WBS number, never a UUID.
  */
 
@@ -288,9 +290,10 @@ function flatten(nodes: Draft[], parentId: string | null, depth: number, prefix:
 
 /**
  * Tree order: epics (stories, then tasks and bugs), stories with no epic,
- * then tasks with no story. A dated milestone is inserted where that date
- * falls in the list and has no WBS number. Undated milestones stay grouped.
- * WBS is assigned on the full outline, including rows a collapsed parent hides.
+ * then tasks with no story. A milestone with a due date is inserted where
+ * that date falls and then numbered with its siblings. Milestones without a
+ * due date stay grouped and unnumbered. WBS is assigned on the full outline,
+ * including rows a collapsed parent hides.
  */
 export function buildGanttRows(input: {
   epics: readonly GanttEpicInput[];
@@ -441,13 +444,12 @@ export function buildGanttRows(input: {
       '',
     ));
   }
+  assignOutlineNumbers(rows);
   return rows;
 }
 
 function milestonePoint(milestone: GanttMilestoneInput): string | null {
-  if (validYmd(milestone.targetDate)) return milestone.targetDate;
-  if (validYmd(milestone.startDate)) return milestone.startDate;
-  return null;
+  return validYmd(milestone.targetDate) ? milestone.targetDate : null;
 }
 
 function milestoneDraft(milestone: GanttMilestoneInput): Draft {
@@ -459,8 +461,8 @@ function milestoneDraft(milestone: GanttMilestoneInput): Draft {
     milestone.humanKey,
     milestone.status,
     null,
-    milestone.startDate,
-    milestone.targetDate,
+    null,
+    milestonePoint(milestone),
     milestone.percent,
   );
 }
@@ -505,6 +507,24 @@ function insertDatedMilestone(rows: GanttRow[], milestone: GanttMilestoneInput):
     wbs: '',
     hasChildren: false,
   });
+}
+
+/** Number the visible order. The undated milestone group does not count. */
+function assignOutlineNumbers(rows: GanttRow[]): void {
+  const counters = new Map<string, number>();
+  const wbsById = new Map<string, string>();
+  for (const row of rows) {
+    if (row.id === GANTT_MILESTONES_ID || row.parentId === GANTT_MILESTONES_ID) {
+      row.wbs = '';
+      continue;
+    }
+    const parentKey = row.parentId ?? '';
+    const next = (counters.get(parentKey) ?? 0) + 1;
+    counters.set(parentKey, next);
+    const parentWbs = row.parentId ? (wbsById.get(row.parentId) ?? '') : '';
+    row.wbs = parentWbs ? `${parentWbs}.${next}` : String(next);
+    wbsById.set(row.id, row.wbs);
+  }
 }
 
 export function ganttWbsById(rows: readonly GanttRow[]): Map<string, string> {

@@ -119,19 +119,6 @@ async function writeEpicDates(
   }
 }
 
-async function writeMilestoneDates(
-  database: Database,
-  changes: Array<{ id: string; start: string | null; end: string | null }>,
-): Promise<void> {
-  const updatedAt = new Date();
-  for (const change of changes) {
-    await database.db
-      .update(projectMilestones)
-      .set({ startDate: change.start, targetDate: change.end, updatedAt })
-      .where(eq(projectMilestones.id, change.id));
-  }
-}
-
 function rememberDates(
   into: Map<string, ParentDateSpan>,
   changes: RecomputedParentStatuses['dateChanges'],
@@ -527,23 +514,15 @@ async function recomputeMilestones(
   const storyById = new Map(storyRows.map((row) => [row.id, row]));
   const taskById = new Map(taskRows.map((row) => [row.id, row]));
   const linksByMilestone = new Map<string, MilestoneLinkCompletion[]>();
-  const datesByMilestone = new Map<string, ParentDateSource[]>();
   for (const link of linkRows) {
     const completion = linkCompletion(link, epicById, storyById, taskById, rollup);
-    if (completion) {
-      const list = linksByMilestone.get(link.milestoneId) ?? [];
-      list.push(completion);
-      linksByMilestone.set(link.milestoneId, list);
-    }
-    const dated = linkDateSource(link, epicById, storyById, taskById);
-    if (!dated) continue;
-    const list = datesByMilestone.get(link.milestoneId) ?? [];
-    list.push(dated);
-    datesByMilestone.set(link.milestoneId, list);
+    if (!completion) continue;
+    const list = linksByMilestone.get(link.milestoneId) ?? [];
+    list.push(completion);
+    linksByMilestone.set(link.milestoneId, list);
   }
 
   const changes: Array<{ id: string; status: string }> = [];
-  const dateWrites: Array<{ id: string; start: string | null; end: string | null }> = [];
   for (const milestone of milestoneRows) {
     const derived = derivedParentStatus(
       (linksByMilestone.get(milestone.id) ?? []).map((link) => ({
@@ -556,48 +535,8 @@ async function recomputeMilestones(
     if (derived != null && derived !== milestone.status) {
       changes.push({ id: milestone.id, status: derived });
     }
-    const span = derivedParentDates(
-      { start: milestone.startDate, end: milestone.targetDate },
-      datesByMilestone.get(milestone.id) ?? [],
-    );
-    rememberDates(
-      into.dates.milestones,
-      into.dateChanges,
-      'milestone',
-      milestone.id,
-      { start: milestone.startDate, end: milestone.targetDate },
-      span,
-    );
-    if (span.start !== milestone.startDate || span.end !== milestone.targetDate) {
-      dateWrites.push({ id: milestone.id, start: span.start, end: span.end });
-    }
   }
   await writeStatus(database, projectMilestones, changes);
-  await writeMilestoneDates(database, dateWrites);
-}
-
-function linkDateSource(
-  link: { entityType: string; entityId: string },
-  epics: Map<string, { status: string; startDate: string | null; endDate: string | null }>,
-  stories: Map<string, { status: string; startDate: string | null; endDate: string | null }>,
-  tasks: Map<string, { status: string; startDate: string | null; dueDate: string | null }>,
-): ParentDateSource | null {
-  if (link.entityType === 'task') {
-    const task = tasks.get(link.entityId);
-    if (!task) return null;
-    return { status: task.status, start: task.startDate, end: task.dueDate };
-  }
-  if (link.entityType === 'user_story') {
-    const story = stories.get(link.entityId);
-    if (!story) return null;
-    return { status: story.status, start: story.startDate, end: story.endDate };
-  }
-  if (link.entityType === 'epic') {
-    const epic = epics.get(link.entityId);
-    if (!epic) return null;
-    return { status: epic.status, start: epic.startDate, end: epic.endDate };
-  }
-  return null;
 }
 
 function linkCompletion(
@@ -643,7 +582,7 @@ export async function rollupLockedParentKeys(
   projectId: string,
 ): Promise<Set<string>> {
   const keys = new Set<string>();
-  const [stories, epics, taskLinks, storyLinks, epicLinks] = await Promise.all([
+  const [stories, epics] = await Promise.all([
     database.db
       .select({ id: projectTasks.userStoryId })
       .from(projectTasks)
@@ -670,80 +609,10 @@ export async function rollupLockedParentKeys(
           ),
         ),
       ),
-    database.db
-      .select({ id: projectMilestoneItemLinks.milestoneId })
-      .from(projectMilestoneItemLinks)
-      .innerJoin(
-        projectTasks,
-        and(
-          eq(projectMilestoneItemLinks.entityType, 'task'),
-          eq(projectMilestoneItemLinks.entityId, projectTasks.id),
-        ),
-      )
-      .innerJoin(
-        projectMilestones,
-        eq(projectMilestones.id, projectMilestoneItemLinks.milestoneId),
-      )
-      .where(
-        and(
-          eq(projectMilestones.projectId, projectId),
-          eq(projectTasks.projectId, projectId),
-          ne(projectTasks.status, 'cancelled'),
-          or(isNotNull(projectTasks.startDate), isNotNull(projectTasks.dueDate)),
-        ),
-      ),
-    database.db
-      .select({ id: projectMilestoneItemLinks.milestoneId })
-      .from(projectMilestoneItemLinks)
-      .innerJoin(
-        projectUserStories,
-        and(
-          eq(projectMilestoneItemLinks.entityType, 'user_story'),
-          eq(projectMilestoneItemLinks.entityId, projectUserStories.id),
-        ),
-      )
-      .innerJoin(
-        projectMilestones,
-        eq(projectMilestones.id, projectMilestoneItemLinks.milestoneId),
-      )
-      .where(
-        and(
-          eq(projectMilestones.projectId, projectId),
-          ne(projectUserStories.status, 'cancelled'),
-          or(
-            isNotNull(projectUserStories.startDate),
-            isNotNull(projectUserStories.endDate),
-          ),
-        ),
-      ),
-    database.db
-      .select({ id: projectMilestoneItemLinks.milestoneId })
-      .from(projectMilestoneItemLinks)
-      .innerJoin(
-        projectEpics,
-        and(
-          eq(projectMilestoneItemLinks.entityType, 'epic'),
-          eq(projectMilestoneItemLinks.entityId, projectEpics.id),
-        ),
-      )
-      .innerJoin(
-        projectMilestones,
-        eq(projectMilestones.id, projectMilestoneItemLinks.milestoneId),
-      )
-      .where(
-        and(
-          eq(projectMilestones.projectId, projectId),
-          ne(projectEpics.status, 'cancelled'),
-          or(isNotNull(projectEpics.startDate), isNotNull(projectEpics.endDate)),
-        ),
-      ),
   ]);
   for (const row of stories) {
     if (row.id) keys.add(deliveryItemKey('user_story', row.id));
   }
   for (const row of epics) keys.add(deliveryItemKey('epic', row.id));
-  for (const row of [...taskLinks, ...storyLinks, ...epicLinks]) {
-    keys.add(deliveryItemKey('milestone', row.id));
-  }
   return keys;
 }

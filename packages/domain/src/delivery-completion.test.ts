@@ -261,7 +261,7 @@ describe('milestoneCompletion', () => {
         { kind: 'parent', status: 'active', completionPercent: 25 },
         { kind: 'parent', status: 'planned', completionPercent: null },
       ]),
-    ).toEqual({ percent: 58, done: 1.75, total: 3 });
+    ).toEqual({ percent: 0, done: 0, total: 3 });
   });
 
   it('is complete only when every included link is 100', () => {

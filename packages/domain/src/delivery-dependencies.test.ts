@@ -152,6 +152,29 @@ describe('dependency cycles and schedule', () => {
     expect(changed[0]?.finish).toBe('2026-10-14');
   });
 
+  it('moves a milestone due date to the predecessor finish and keeps duration at 0', () => {
+    const changed = scheduleDeliveryGraph({
+      nodes: [
+        node('task:a', 'task', '2026-10-01', '2026-10-06', 5),
+        node('milestone:m', 'milestone', '2026-10-01', '2026-10-20', null),
+      ],
+      links: [
+        {
+          predecessorKey: 'task:a',
+          successorKey: 'milestone:m',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+      ],
+      seeds: ['milestone:m'],
+    });
+    expect(changed[0]).toMatchObject({
+      start: null,
+      finish: '2026-10-06',
+      durationDays: 0,
+    });
+  });
+
   it('applies finish-to-finish by backing the start up by duration', () => {
     const changed = scheduleDeliveryGraph({
       nodes: [

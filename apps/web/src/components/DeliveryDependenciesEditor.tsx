@@ -38,6 +38,12 @@ export type DeliveryScheduleWrite = {
   durationDays: number | null;
 };
 
+export type DeliveryPredecessorRef = {
+  entityType: EntityType;
+  id: string;
+  status: string | null;
+};
+
 async function readError(response: Response, fallback: string): Promise<string> {
   const payload = (await response.json().catch(() => ({}))) as {
     error?: { message?: string };
@@ -73,6 +79,7 @@ export function DeliveryDependenciesEditor({
   canEdit,
   onScheduleDriven,
   onScheduled,
+  onPredecessors,
 }: {
   projectId: string;
   entityType: EntityType;
@@ -80,6 +87,7 @@ export function DeliveryDependenciesEditor({
   canEdit: boolean;
   onScheduleDriven?: (driven: boolean) => void;
   onScheduled?: (write: DeliveryScheduleWrite | null) => void;
+  onPredecessors?: (items: DeliveryPredecessorRef[]) => void;
 }) {
   const t = useTranslations('delivery');
   const tRaid = useTranslations('raid');
@@ -175,6 +183,21 @@ export function DeliveryDependenciesEditor({
     }
     setCatalog(next.sort((a, b) => a.title.localeCompare(b.title)));
   }, [projectId]);
+
+  useEffect(() => {
+    if (!onPredecessors) return;
+    onPredecessors(predecessors.map((link) => {
+      const match = catalog.find((item) => item.id === itemKey(
+        link.predecessor.entityType,
+        link.predecessor.id,
+      ));
+      return {
+        entityType: link.predecessor.entityType,
+        id: link.predecessor.id,
+        status: match?.status ?? null,
+      };
+    }));
+  }, [catalog, onPredecessors, predecessors]);
 
   useEffect(() => {
     let cancelled = false;

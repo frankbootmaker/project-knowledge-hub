@@ -428,9 +428,7 @@ export function ProjectDeliveryPanel({
   const shownDelivery = useMemo(() => {
     const tasksByStory = new Map<string, Task[]>();
     const tasksByEpic = new Map<string, Task[]>();
-    const taskById = new Map<string, Task>();
     for (const task of tasks) {
-      taskById.set(task.id, task);
       if (task.userStoryId) {
         const list = tasksByStory.get(task.userStoryId) ?? [];
         list.push(task);
@@ -459,7 +457,6 @@ export function ProjectDeliveryPanel({
         endDate: dates.end,
       };
     });
-    const storyById = new Map(derivedStories.map((story) => [story.id, story]));
     const derivedEpics = epics.map((epic) => {
       const dates = derivedParentDates(
         { start: epic.startDate, end: epic.endDate },
@@ -478,41 +475,13 @@ export function ProjectDeliveryPanel({
         endDate: dates.end,
       };
     });
-    const epicById = new Map(derivedEpics.map((epic) => [epic.id, epic]));
     return {
       epics: derivedEpics,
       stories: derivedStories,
-      milestones: milestones.map((milestone) => {
-        const linkDates = (milestone.linkedItems ?? []).flatMap((link) => {
-          if (link.entityType === 'task') {
-            const task = taskById.get(link.entityId);
-            if (!task) return [];
-            return [{
-              status: task.status,
-              start: task.startDate ?? null,
-              end: task.dueDate,
-            }];
-          }
-          if (link.entityType === 'user_story') {
-            const story = storyById.get(link.entityId);
-            if (!story) return [];
-            return [{ status: story.status, start: story.startDate, end: story.endDate }];
-          }
-          const epic = epicById.get(link.entityId);
-          if (!epic) return [];
-          return [{ status: epic.status, start: epic.startDate, end: epic.endDate }];
-        });
-        const dates = derivedParentDates(
-          { start: milestone.startDate, end: milestone.targetDate },
-          linkDates,
-        );
-        return {
-          ...milestone,
-          status: displayedMilestoneStatus(milestone.status, milestone.linkedItems ?? []),
-          startDate: dates.start,
-          targetDate: dates.end,
-        };
-      }),
+      milestones: milestones.map((milestone) => ({
+        ...milestone,
+        status: displayedMilestoneStatus(milestone.status, milestone.linkedItems ?? []),
+      })),
     };
   }, [epics, milestones, stories, tasks]);
   const listRows: DeliveryListRow[] = useMemo(() => {

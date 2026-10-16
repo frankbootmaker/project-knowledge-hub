@@ -1,8 +1,11 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
+  projectDeliveryDependencies,
   projectEpics,
   projectMilestoneItemLinks,
+  projectMilestones,
+  projectSprints,
   projectTasks,
   projectUserStories,
 } from '@project-knowledge-hub/database';
@@ -103,6 +106,7 @@ export async function withMilestoneLinks<T extends { id: string }>(
     .where(inArray(projectMilestoneItemLinks.milestoneId, milestoneIds));
 
   const sources = await loadLinkSources(database, projectId, keyPrefix, linkRows);
+  const predecessorPoints = await loadPredecessorPoints(database, projectId, milestoneIds);
   const byMilestone = new Map<string, PublicMilestoneLink[]>();
   const rollupByMilestone = new Map<string, MilestoneLinkCompletion[]>();
   for (const row of linkRows) {
@@ -133,7 +137,10 @@ export async function withMilestoneLinks<T extends { id: string }>(
     return {
       ...milestone,
       linkedItems,
-      ...rollupFields(milestoneCompletion(rollupByMilestone.get(milestone.id) ?? [])),
+      ...rollupFields(milestoneCompletion([
+        ...(rollupByMilestone.get(milestone.id) ?? []),
+        ...(predecessorPoints.get(milestone.id) ?? []),
+      ])),
     };
   });
 }
@@ -277,6 +284,160 @@ async function loadLinkSources(
     });
   }
   return sources;
+}
+
+function predecessorPoint(
+  status: string,
+  completionPercent: number | null,
+): MilestoneLinkCompletion {
+  if (status === 'cancelled') {
+    return { kind: 'task', status: 'cancelled', completionPercent: 0 };
+  }
+  if (status === 'done' || status === 'completed' || completionPercent === 100) {
+    return { kind: 'task', status: 'done', completionPercent: 100 };
+  }
+  return { kind: 'task', status: 'in_progress', completionPercent: 0 };
+}
+
+/** Predecessor dependencies count toward the 0-or-100 milestone percent. */
+async function loadPredecessorPoints(
+  database: Database,
+  projectId: string,
+  milestoneIds: string[],
+): Promise<Map<string, MilestoneLinkCompletion[]>> {
+  const deps = await database.db
+    .select({
+      successorId: projectDeliveryDependencies.successorId,
+      predecessorType: projectDeliveryDependencies.predecessorType,
+      predecessorId: projectDeliveryDependencies.predecessorId,
+    })
+    .from(projectDeliveryDependencies)
+    .where(
+      and(
+        eq(projectDeliveryDependencies.projectId, projectId),
+        eq(projectDeliveryDependencies.successorType, 'milestone'),
+        inArray(projectDeliveryDependencies.successorId, milestoneIds),
+      ),
+    );
+  const byMilestone = new Map<string, MilestoneLinkCompletion[]>();
+  if (deps.length === 0) return byMilestone;
+
+  const idsFor = (entityType: string) => [
+    ...new Set(
+      deps
+        .filter((row) => row.predecessorType === entityType)
+        .map((row) => row.predecessorId),
+    ),
+  ];
+  const taskIds = idsFor('task');
+  const epicIds = idsFor('epic');
+  const storyIds = idsFor('user_story');
+  const milestonePredIds = idsFor('milestone');
+  const sprintIds = idsFor('sprint');
+  const needsParents = epicIds.length > 0 || storyIds.length > 0;
+
+  const [tasks, epics, stories, milestoneRows, sprints, childTasks] = await Promise.all([
+    taskIds.length === 0
+      ? Promise.resolve([])
+      : database.db
+          .select({
+            id: projectTasks.id,
+            status: projectTasks.status,
+            completionPercent: projectTasks.completionPercent,
+          })
+          .from(projectTasks)
+          .where(and(eq(projectTasks.projectId, projectId), inArray(projectTasks.id, taskIds))),
+    epicIds.length === 0
+      ? Promise.resolve([])
+      : database.db
+          .select({ id: projectEpics.id, status: projectEpics.status })
+          .from(projectEpics)
+          .where(and(eq(projectEpics.projectId, projectId), inArray(projectEpics.id, epicIds))),
+    storyIds.length === 0
+      ? Promise.resolve([])
+      : database.db
+          .select({ id: projectUserStories.id, status: projectUserStories.status })
+          .from(projectUserStories)
+          .where(
+            and(
+              eq(projectUserStories.projectId, projectId),
+              inArray(projectUserStories.id, storyIds),
+            ),
+          ),
+    milestonePredIds.length === 0
+      ? Promise.resolve([])
+      : database.db
+          .select({ id: projectMilestones.id, status: projectMilestones.status })
+          .from(projectMilestones)
+          .where(
+            and(
+              eq(projectMilestones.projectId, projectId),
+              inArray(projectMilestones.id, milestonePredIds),
+            ),
+          ),
+    sprintIds.length === 0
+      ? Promise.resolve([])
+      : database.db
+          .select({ id: projectSprints.id, status: projectSprints.status })
+          .from(projectSprints)
+          .where(
+            and(eq(projectSprints.projectId, projectId), inArray(projectSprints.id, sprintIds)),
+          ),
+    needsParents
+      ? database.db
+          .select({
+            status: projectTasks.status,
+            completionPercent: projectTasks.completionPercent,
+            userStoryId: projectTasks.userStoryId,
+            epicId: projectUserStories.epicId,
+          })
+          .from(projectTasks)
+          .leftJoin(projectUserStories, eq(projectTasks.userStoryId, projectUserStories.id))
+          .where(and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)))
+      : Promise.resolve([]),
+  ]);
+
+  const index = deliveryCompletionIndex(childTasks);
+  const known = new Map<string, { status: string; completionPercent: number | null }>();
+  for (const task of tasks) {
+    known.set(`task:${task.id}`, {
+      status: task.status,
+      completionPercent: task.completionPercent,
+    });
+  }
+  for (const epic of epics) {
+    known.set(`epic:${epic.id}`, {
+      status: epic.status,
+      completionPercent: index.byEpicId.get(epic.id)?.percent ?? null,
+    });
+  }
+  for (const story of stories) {
+    known.set(`user_story:${story.id}`, {
+      status: story.status,
+      completionPercent: index.byStoryId.get(story.id)?.percent ?? null,
+    });
+  }
+  for (const milestone of milestoneRows) {
+    known.set(`milestone:${milestone.id}`, {
+      status: milestone.status,
+      completionPercent: milestone.status === 'done' ? 100 : 0,
+    });
+  }
+  for (const sprint of sprints) {
+    known.set(`sprint:${sprint.id}`, {
+      status: sprint.status,
+      completionPercent: sprint.status === 'completed' ? 100 : 0,
+    });
+  }
+
+  for (const dep of deps) {
+    const item = known.get(`${dep.predecessorType}:${dep.predecessorId}`);
+    if (!item) continue;
+    const list = byMilestone.get(dep.successorId) ?? [];
+    list.push(predecessorPoint(item.status, item.completionPercent));
+    byMilestone.set(dep.successorId, list);
+  }
+  return byMilestone;
 }
 
 export async function setMilestoneItemLinks(
