@@ -14,6 +14,7 @@ import {
 export type ShellCrumbLabels = {
   projectName: string | null;
   recordTitle: string | null;
+  pageTitle: string | null;
 };
 
 type ShellCrumbActions = {
@@ -24,6 +25,7 @@ type ShellCrumbActions = {
 const emptyLabels: ShellCrumbLabels = {
   projectName: null,
   recordTitle: null,
+  pageTitle: null,
 };
 
 const LabelsContext = createContext<ShellCrumbLabels>(emptyLabels);
@@ -67,17 +69,19 @@ export function useShellCrumbLabels(): ShellCrumbLabels {
 export function RegisterShellCrumbs({
   projectName = null,
   recordTitle = null,
+  pageTitle = null,
 }: {
   projectName?: string | null;
   recordTitle?: string | null;
+  pageTitle?: string | null;
 }) {
   const actions = useContext(ActionsContext);
   useEffect(() => {
     if (!actions) {
       return;
     }
-    const token = actions.publish({ projectName, recordTitle });
+    const token = actions.publish({ projectName, recordTitle, pageTitle });
     return () => actions.clear(token);
-  }, [actions, projectName, recordTitle]);
+  }, [actions, projectName, recordTitle, pageTitle]);
   return null;
 }

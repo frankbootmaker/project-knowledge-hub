@@ -3,6 +3,7 @@
 import type { DragEvent, FormEvent, KeyboardEvent } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { PanelBackLink } from './PanelBackLink';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   DOCUMENT_IMPORT_OCR_ENGINES,
@@ -298,6 +299,9 @@ export function DocumentImportForm(props: {
           </Button>
         </div>
       </form>
+      <PanelBackLink href={`/workspaces/${props.workspaceSlug}`}>
+        {t('backToWorkspace')}
+      </PanelBackLink>
     </section>
   );
 }

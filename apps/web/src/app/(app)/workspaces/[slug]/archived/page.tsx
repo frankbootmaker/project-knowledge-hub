@@ -1,8 +1,15 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { ArchiveEntityButton } from '../../../../../components/ArchiveEntityButton';
-import { Badge, Page, PageHeader } from '../../../../../components/ui';
+import { LocalDateTime } from '../../../../../components/LocalDateTime';
+import { Badge, Page, PageHeader, lifecycleLabel } from '../../../../../components/ui';
+import {
+  knowledgeRecordAppearsInArchive,
+  projectAppearsInArchive,
+  systemAppearsInArchive,
+} from '../../../../../lib/archive-listings';
+import { recordHref } from '../../../../../lib/record-href';
 import { apiFetch, requireSession } from '../../../../../lib/session';
 
 type Workspace = {
@@ -16,6 +23,7 @@ type Project = {
   id: string;
   name: string;
   slug: string;
+  status?: string | null;
   archivedAt: string | null;
   updatedAt: string;
 };
@@ -24,6 +32,8 @@ type System = {
   id: string;
   name: string;
   slug: string;
+  status?: string | null;
+  projectId: string | null;
   archivedAt: string | null;
   updatedAt: string;
 };
@@ -32,7 +42,10 @@ type RecordRow = {
   id: string;
   title: string;
   slug: string;
+  recordType: string;
   humanKey?: string | null;
+  language?: string | null;
+  lifecycleStatus?: string | null;
   archivedAt: string | null;
   updatedAt: string;
 };
@@ -43,8 +56,10 @@ export default async function WorkspaceArchivedPage({
   params: Promise<{ slug: string }>;
 }) {
   const session = await requireSession();
+  const locale = await getLocale();
   const t = await getTranslations('archive');
   const tWorkspaces = await getTranslations('workspaces');
+  const tRecords = await getTranslations('records');
   const { slug } = await params;
 
   const listResponse = await apiFetch('/api/v1/workspaces');
@@ -74,19 +89,19 @@ export default async function WorkspaceArchivedPage({
   ]);
 
   const projects = projectsRes.ok
-    ? ((await projectsRes.json()) as { projects: Project[] }).projects.filter(
-        (item) => item.archivedAt,
+    ? ((await projectsRes.json()) as { projects: Project[] }).projects.filter((item) =>
+        projectAppearsInArchive(item),
       )
     : [];
   const systems = systemsRes.ok
-    ? ((await systemsRes.json()) as { systems: System[] }).systems.filter(
-        (item) => item.archivedAt,
+    ? ((await systemsRes.json()) as { systems: System[] }).systems.filter((item) =>
+        systemAppearsInArchive(item),
       )
     : [];
   const records = recordsRes.ok
     ? (
         (await recordsRes.json()) as { knowledgeRecords: RecordRow[] }
-      ).knowledgeRecords.filter((item) => item.archivedAt)
+      ).knowledgeRecords.filter((item) => knowledgeRecordAppearsInArchive(item))
     : [];
 
   return (
@@ -116,9 +131,9 @@ export default async function WorkspaceArchivedPage({
               <table className="kh-ops-data-table">
                 <thead>
                   <tr>
-                    <th>{t('colItem')}</th>
-                    <th>{t('colKind')}</th>
-                    <th>{t('colDate')}</th>
+                    <th>{tWorkspaces('colName')}</th>
+                    <th>{tWorkspaces('colStatus')}</th>
+                    <th>{tWorkspaces('colUpdated')}</th>
                     <th>{t('colRestore')}</th>
                   </tr>
                 </thead>
@@ -133,10 +148,10 @@ export default async function WorkspaceArchivedPage({
                           {project.name}
                         </Link>
                       </td>
+                      <td>{project.status}</td>
                       <td>
-                        <span className="kh-ops-type-chip">{t('kindProject')}</span>
+                        <LocalDateTime value={project.updatedAt} dateOnly locale={locale} />
                       </td>
-                      <td>{new Date(project.updatedAt).toLocaleString()}</td>
                       <td>
                         {canManage ? (
                           <ArchiveEntityButton
@@ -168,9 +183,10 @@ export default async function WorkspaceArchivedPage({
               <table className="kh-ops-data-table">
                 <thead>
                   <tr>
-                    <th>{t('colItem')}</th>
-                    <th>{t('colKind')}</th>
-                    <th>{t('colDate')}</th>
+                    <th>{tWorkspaces('colName')}</th>
+                    <th>{tWorkspaces('colStatus')}</th>
+                    <th>{tWorkspaces('colLink')}</th>
+                    <th>{tWorkspaces('colUpdated')}</th>
                     <th>{t('colRestore')}</th>
                   </tr>
                 </thead>
@@ -186,9 +202,16 @@ export default async function WorkspaceArchivedPage({
                         </Link>
                       </td>
                       <td>
-                        <span className="kh-ops-type-chip">{t('kindSystem')}</span>
+                        <span className="kh-ops-type-chip">{system.status}</span>
                       </td>
-                      <td>{new Date(system.updatedAt).toLocaleString()}</td>
+                      <td>
+                        {system.projectId
+                          ? tWorkspaces('linkedToProject')
+                          : tWorkspaces('independent')}
+                      </td>
+                      <td>
+                        <LocalDateTime value={system.updatedAt} dateOnly locale={locale} />
+                      </td>
                       <td>
                         {canManage ? (
                           <ArchiveEntityButton
@@ -220,46 +243,60 @@ export default async function WorkspaceArchivedPage({
               <table className="kh-ops-data-table">
                 <thead>
                   <tr>
-                    <th>{t('colItem')}</th>
-                    <th>{t('colKind')}</th>
-                    <th>{t('colDate')}</th>
+                    <th>{tWorkspaces('colKey')}</th>
+                    <th>{tWorkspaces('colTitle')}</th>
+                    <th>{tWorkspaces('colType')}</th>
+                    <th>{tWorkspaces('colLanguage')}</th>
+                    <th>{tWorkspaces('colLifecycle')}</th>
+                    <th>{tWorkspaces('colUpdated')}</th>
                     <th>{t('colRestore')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((record) => (
-                    <tr key={record.id}>
-                      <td className="kh-ops-primary-cell">
-                        {record.humanKey ? (
-                          <span className="kh-ops-type-chip mr-2">
-                            {record.humanKey}
-                          </span>
-                        ) : null}
-                        <Link
-                          href={`/workspaces/${workspace.slug}/records/${record.slug}`}
-                          className="no-underline"
-                        >
-                          {record.title}
-                        </Link>
-                      </td>
-                      <td>
-                        <span className="kh-ops-type-chip">{t('kindRecord')}</span>
-                      </td>
-                      <td>{new Date(record.updatedAt).toLocaleString()}</td>
-                      <td>
-                        {canManage ? (
-                          <ArchiveEntityButton
-                            kind="record"
-                            entityId={record.id}
-                            entityName={record.title}
-                            archived
-                          />
-                        ) : (
-                          <Badge tone="warn">{t('archivedBadge')}</Badge>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {records.map((record) => {
+                    const recordPath = recordHref({
+                      workspaceSlug: workspace.slug,
+                      recordSlug: record.slug,
+                    });
+                    const key = record.humanKey;
+                    return (
+                      <tr key={record.id}>
+                        <td>
+                          <Link
+                            href={recordPath}
+                            className={key ? 'kh-ops-key-badge' : 'kh-ops-type-chip'}
+                          >
+                            {key ?? record.recordType}
+                          </Link>
+                        </td>
+                        <td className="kh-ops-primary-cell">
+                          <Link href={recordPath} className="no-underline">
+                            {record.title}
+                          </Link>
+                        </td>
+                        <td>{record.recordType}</td>
+                        <td>{record.language ?? '—'}</td>
+                        <td>
+                          {lifecycleLabel(record.lifecycleStatus ?? 'draft', tRecords)}
+                        </td>
+                        <td>
+                          <LocalDateTime value={record.updatedAt} dateOnly locale={locale} />
+                        </td>
+                        <td>
+                          {canManage ? (
+                            <ArchiveEntityButton
+                              kind="record"
+                              entityId={record.id}
+                              entityName={record.title}
+                              archived
+                            />
+                          ) : (
+                            <Badge tone="warn">{t('archivedBadge')}</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -47,15 +47,27 @@ export default async function NewConversationImportPage({
 
   return (
     <Page narrow>
-      <PageHeader title={t('createTitle')} description={t('createHelp')} />
-      <p className="mt-0 mb-6">
-        <Link
-          href={`/workspaces/${workspace.slug}`}
-          className="text-sm text-ink-muted no-underline hover:text-ink"
-        >
-          {t('backToWorkspace')}
-        </Link>
-      </p>
+      <PageHeader
+        eyebrow={
+          <>
+            <Link
+              href={`/workspaces/${workspace.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {workspace.name}
+            </Link>
+            {' / '}
+            <Link
+              href={`/workspaces/${workspace.slug}/imports`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {t('title')}
+            </Link>
+          </>
+        }
+        title={t('createTitle')}
+        description={t('createHelp')}
+      />
       <ConversationImportForm
         workspaceId={workspace.id}
         workspaceSlug={workspace.slug}

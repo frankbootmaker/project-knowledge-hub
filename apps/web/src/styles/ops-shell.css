@@ -4108,6 +4108,21 @@ a.kh-ops-record-link:hover {
   font-size: 10px;
 }
 
+/* Catalogue pager uses the rail menu type, not the mono card footer. */
+.kh-ops-catalogue-pager,
+.kh-ops-catalogue-pager .kh-btn,
+.kh-ops-catalogue-pager .kh-input,
+.kh-ops-catalogue-pager .kh-page-num-active {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  letter-spacing: normal;
+}
+
+.kh-ops-catalogue-pager {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .kh-ops-action-line {
   display: flex;
   flex-wrap: wrap;

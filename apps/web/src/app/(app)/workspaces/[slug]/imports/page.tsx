@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ImportTypePickerButton } from '../../../../../components/ImportTypePickerButton';
+import { PanelBackLink } from '../../../../../components/PanelBackLink';
 import { OpsCountStrip } from '../../../../../components/ops/OpsCountStrip';
 import {
   Badge,
@@ -62,6 +63,18 @@ export default async function WorkspaceImportsPage({
   return (
     <Page wide>
       <PageHeader
+        eyebrow={
+          <>
+            <Link
+              href={`/workspaces/${workspace.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {workspace.name}
+            </Link>
+            {' / '}
+            {t('title')}
+          </>
+        }
         title={t('title')}
         description={t('subtitle', { workspace: workspace.name })}
         actions={
@@ -70,14 +83,6 @@ export default async function WorkspaceImportsPage({
           ) : null
         }
       />
-      <p className="mt-0 mb-3">
-        <Link
-          href={`/workspaces/${workspace.slug}`}
-          className="text-xs text-ink-muted no-underline hover:text-ink"
-        >
-          {t('backToWorkspace')}
-        </Link>
-      </p>
       <OpsCountStrip
         items={[
           { label: t('countTotal'), value: imports.length },
@@ -139,6 +144,9 @@ export default async function WorkspaceImportsPage({
           </div>
         )}
       </section>
+      <PanelBackLink href={`/workspaces/${workspace.slug}`} divided={false} className="px-0">
+        {t('backToWorkspace')}
+      </PanelBackLink>
     </Page>
   );
 }

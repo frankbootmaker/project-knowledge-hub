@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ConversationImportDetail } from '../../../../../../components/ConversationImportDetail';
 import { ConversationImportManageMenu } from '../../../../../../components/ConversationImportManageMenu';
+import { PanelBackLink } from '../../../../../../components/PanelBackLink';
+import { RegisterShellCrumbs } from '../../../../../../components/ops/ShellCrumbContext';
 import { Page, PageHeader } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
@@ -85,7 +87,25 @@ export default async function ConversationImportDetailPage({
 
   return (
     <Page wide>
+      <RegisterShellCrumbs pageTitle={conversationImport.title} />
       <PageHeader
+        eyebrow={
+          <>
+            <Link
+              href={`/workspaces/${summary.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {summary.name}
+            </Link>
+            {' / '}
+            <Link
+              href={`/workspaces/${summary.slug}/imports`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {t('title')}
+            </Link>
+          </>
+        }
         title={conversationImport.title}
         description={t('detailSubtitle')}
         actions={
@@ -107,19 +127,16 @@ export default async function ConversationImportDetailPage({
           />
         }
       />
-      <p className="mt-0 mb-6">
-        <Link
-          href={`/workspaces/${summary.slug}/imports`}
-          className="text-sm text-ink-muted no-underline hover:text-ink"
-        >
-          {t('backToList')}
-        </Link>
-      </p>
       <ConversationImportDetail
         workspaceSlug={summary.slug}
         conversationImport={conversationImport}
         canMutate={canMutate}
       />
+      <section className="kh-ops-panel mt-4">
+        <PanelBackLink href={`/workspaces/${summary.slug}/imports`} divided={false}>
+          {t('backToList')}
+        </PanelBackLink>
+      </section>
     </Page>
   );
 }

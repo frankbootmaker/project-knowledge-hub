@@ -38,7 +38,9 @@ export async function KnowledgeRecordVersionView({
     ? await requireProjectBySlug(workspace.id, projectContext.projectSlug)
     : null;
 
-  const listResponse = await apiFetch(`/api/v1/knowledge-records?workspaceId=${workspace.id}`);
+  const listResponse = await apiFetch(
+    `/api/v1/knowledge-records?workspaceId=${workspace.id}&includeArchived=true`,
+  );
   if (!listResponse.ok) {
     notFound();
   }

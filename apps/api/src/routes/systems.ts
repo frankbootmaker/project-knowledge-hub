@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { systems, workspaces } from '@project-knowledge-hub/database';
 import {
@@ -100,6 +100,7 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
     const filters = [eq(systems.workspaceId, query.workspaceId)];
     if (!query.includeArchived) {
       filters.push(isNull(systems.archivedAt));
+      filters.push(ne(systems.status, 'archived'));
     }
     if (query.projectId) {
       filters.push(eq(systems.projectId, query.projectId));
