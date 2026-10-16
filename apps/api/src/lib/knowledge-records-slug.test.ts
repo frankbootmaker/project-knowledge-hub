@@ -21,4 +21,12 @@ describe('translationSlug', () => {
     expect(next.endsWith('-hu')).toBe(true);
     expect(slugify(next)).toBe(next);
   });
+
+  it('keeps a legacy stored slug when deriving a translation slug', () => {
+    const legacy = 'ai-lawyer-nyitott-k-rd-sek-jogi-tn-z-se';
+    expect(slugify(legacy)).toBe(legacy);
+    const next = translationSlug(legacy, 'de');
+    expect(next).toBe(`${legacy}-de`);
+    expect(next).not.toContain('kerdesek');
+  });
 });

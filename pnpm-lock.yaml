@@ -139,6 +139,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@project-knowledge-hub/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@project-knowledge-hub/document-import':
         specifier: workspace:*
         version: link:../../packages/document-import

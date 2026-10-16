@@ -42,13 +42,4 @@ export const createAuthToken = createSessionToken;
 export const hashAuthToken = hashSessionToken;
 
 /** Must match knowledge-record / MCP slug max and allocateUniqueRecordSlug. */
-export const SLUG_MAX_LENGTH = 96;
-
-export function slugify(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, SLUG_MAX_LENGTH);
-}
+export { SLUG_MAX_LENGTH, slugify } from './slug.js';
