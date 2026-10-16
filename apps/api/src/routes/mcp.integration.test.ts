@@ -643,16 +643,13 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
       if (pageCount === 0) {
         expect(record?.contentOffset).toBe(0);
         expect(record?.contentTruncated).toBe(true);
-        expect(record?.contentMarkdown.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(true);
+        expect(record?.contentMarkdown.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
         expect(record?.tags).toEqual(['Paging']);
       } else {
         expect(record?.contentMarkdown.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
         expect(record?.tags).toBeUndefined();
       }
-      joined += source.slice(
-        record!.contentOffset,
-        record!.contentOffset + record!.returnedChars,
-      );
+      joined += record!.contentMarkdown;
       pageCount += 1;
       if (record?.nextOffset == null) break;
       expect(record.nextOffset).toBeGreaterThan(offset);

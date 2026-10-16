@@ -2041,11 +2041,18 @@ export function createMcpToolHandlers(
           },
         };
       };
+      const legacyFirstPageTruncation =
+        contentOffset === undefined && contentLimit === undefined;
       let fitted;
       try {
         fitted = sliceContentToFit(
           record.contentMarkdown,
-          { offset: contentOffset, limit: contentLimit, boundary },
+          {
+            offset: contentOffset,
+            limit: contentLimit,
+            boundary,
+            legacyFirstPageTruncation,
+          },
           (candidate) => serializedResponseBytes(toPayload(candidate)),
         );
       } catch (error) {

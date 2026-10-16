@@ -24,7 +24,7 @@ export const MCP_MAX_LIST_LIMIT = 25;
 /** Soft cap on serialized JSON tool result size (bytes). */
 export const MCP_MAX_RESPONSE_BYTES = 200_000;
 
-/** Appended to the first page when more markdown remains. Later pages omit it. */
+/** Appended to the default unpaged first page when more markdown remains. Omitted when paging. */
 export const MCP_CONTENT_TRUNCATION_SUFFIX = '\n\n…[truncated]';
 
 export class ContentOffsetError extends Error {
@@ -44,7 +44,7 @@ export type ContentPage = {
   nextOffset: number | null;
   /** Source characters in this page, excluding the first-page truncation marker. */
   returnedChars: number;
-  /** Approximate 0-based page index (`floor(offset / limit)`). */
+  /** 0-based page index for this read (`ceil(offset/limit)` when offset > 0). */
   chunkIndex: number;
   /** Approximate page count (`ceil(contentLength / limit)`). */
   totalChunks: number;
@@ -83,7 +83,7 @@ function chunkMeta(offset: number, limit: number, contentLength: number): {
   totalChunks: number;
 } {
   return {
-    chunkIndex: Math.floor(offset / limit),
+    chunkIndex: offset === 0 ? 0 : Math.ceil(offset / limit),
     totalChunks: contentLength === 0 ? 1 : Math.ceil(contentLength / limit),
   };
 }
@@ -121,10 +121,20 @@ function openFenceAt(content: string, end: number): number | null {
 
 export function sliceContent(
   content: string,
-  options?: { offset?: number; limit?: number; boundary?: ContentBoundary },
+  options?: {
+    offset?: number;
+    limit?: number;
+    boundary?: ContentBoundary;
+    /** Default unpaged read only; ignored when contentOffset/contentLimit are used. */
+    legacyFirstPageTruncation?: boolean;
+  },
 ): ContentPage {
   const contentLength = content.length;
   const offset = options?.offset ?? 0;
+  const explicitPaging =
+    options?.offset !== undefined || options?.limit !== undefined;
+  const legacyFirstPageTruncation =
+    options?.legacyFirstPageTruncation ?? !explicitPaging;
   if (!Number.isInteger(offset) || offset < 0) {
     throw new ContentOffsetError('contentOffset must be a non-negative integer');
   }
@@ -160,7 +170,11 @@ export function sliceContent(
   }
 
   let slice = fitUtf8(content.slice(start, start + limit), MCP_MAX_CONTENT_BYTES);
-  if (start === 0 && start + slice.length < contentLength) {
+  if (
+    legacyFirstPageTruncation &&
+    start === 0 &&
+    start + slice.length < contentLength
+  ) {
     const suffixBytes = Buffer.byteLength(MCP_CONTENT_TRUNCATION_SUFFIX, 'utf8');
     slice = fitUtf8(
       content.slice(start, start + limit),
@@ -182,7 +196,10 @@ export function sliceContent(
   }
 
   const truncated = end < contentLength;
-  const marker = start === 0 && truncated ? MCP_CONTENT_TRUNCATION_SUFFIX : '';
+  const marker =
+    legacyFirstPageTruncation && start === 0 && truncated
+      ? MCP_CONTENT_TRUNCATION_SUFFIX
+      : '';
   return {
     content: `${slice}${marker}`,
     contentLength,
@@ -224,7 +241,11 @@ export function truncateContent(content: string, max = MCP_MAX_CONTENT_CHARS): {
   content: string;
   truncated: boolean;
 } {
-  const page = sliceContent(content, { offset: 0, limit: max });
+  const page = sliceContent(content, {
+    offset: 0,
+    limit: max,
+    legacyFirstPageTruncation: true,
+  });
   return { content: page.content, truncated: page.contentTruncated };
 }
 
