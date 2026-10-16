@@ -1,6 +1,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
 import { invokeNamedHubTool } from './llm-tool-catalog.js';
 import {
   createKnowledgeHubMcpServer,
@@ -245,14 +246,54 @@ function baselineProject(definitionOfDone: string | null) {
   };
 }
 
+const CHARTER_ID = '33333333-3333-4333-8333-333333333333';
+
+/** Budget, baseline dates, calendar, pinned charter, and Definition of Done. */
+function realisticProject() {
+  return {
+    id: PROJECT_ID,
+    workspaceId: '22222222-2222-4222-8222-222222222222',
+    workspaceName: 'Lab',
+    workspaceSlug: 'lab',
+    name: 'Demo',
+    slug: 'demo',
+    status: 'active',
+    summary: 'Kickoff baseline',
+    description: 'Working calendar and budgets',
+    startDate: '2026-01-06',
+    endDate: '2026-12-18',
+    hoursPerWorkday: 7.5,
+    workdaysPerWeek: 5,
+    nonWorkingDays: ['2026-01-01', '2026-12-25'],
+    finishDate: '2026-11-30',
+    durationWorkingDays: 220,
+    charterRecordId: CHARTER_ID,
+    charterRecord: {
+      id: CHARTER_ID,
+      title: 'Charter',
+      slug: 'charter',
+      recordType: 'project-charter',
+    },
+    initialPlanRecordId: null,
+    initialPlanRecord: null,
+    definitionOfDone: '- Tests pass\n- Reviewed',
+    currency: 'EUR',
+    initialBudget: 48000,
+    approvedBudget: 50000.5,
+    keyPrefix: 'DEM',
+  };
+}
+
 async function withMcpClient(
   scopes: string[],
   handlers: Partial<McpToolHandlers>,
   run: (client: Client) => Promise<void>,
+  options?: Parameters<typeof createKnowledgeHubMcpServer>[2],
 ) {
   const server = createKnowledgeHubMcpServer(
     testClient(scopes),
     handlers as McpToolHandlers,
+    options,
   );
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'dod-test', version: '0.0.0' });
@@ -365,6 +406,115 @@ describe('definitionOfDone on project baseline tools', () => {
       });
       expect(toolText(read)).not.toContain('Output validation error');
     });
+  });
+
+  test('a realistic project matches the declared output schema', async () => {
+    const project = realisticProject();
+    const getProject = vi.fn(async () => ({
+      project: {
+        ...project,
+        ownerUserId: '44444444-4444-4444-8444-444444444444',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        tags: ['lab'],
+        charterRecord: { ...project.charterRecord, contentMarkdown: '# extra' },
+      },
+    }));
+
+    await withMcpClient(['projects:read'], { getProject }, async (client) => {
+      const listed = await client.listTools();
+      const tool = listed.tools.find((item) => item.name === 'get_project');
+      const output = tool?.outputSchema as {
+        properties?: { project?: object };
+      };
+      expect(JSON.stringify(output)).not.toContain('"$ref"');
+      const projectSchema = output.properties?.project;
+      expect(projectSchema).toBeTruthy();
+
+      const validator = new AjvJsonSchemaValidator();
+      const isolated = validator.getValidator(projectSchema as object);
+      const read = await client.callTool({
+        name: 'get_project',
+        arguments: { projectId: PROJECT_ID },
+      });
+      expect(read.isError).not.toBe(true);
+      const body = JSON.parse(toolText(read)) as {
+        project: {
+          definitionOfDone: unknown;
+          initialBudget: unknown;
+          approvedBudget: unknown;
+          ownerUserId?: unknown;
+          charterRecord: { contentMarkdown?: unknown };
+        };
+      };
+      expect(body.project.definitionOfDone).toBe('- Tests pass\n- Reviewed');
+      expect(body.project.initialBudget).toBe(48000);
+      expect(body.project.approvedBudget).toBe(50000.5);
+      expect(typeof body.project.definitionOfDone).toBe('string');
+      expect(typeof body.project.initialBudget).toBe('number');
+      expect(typeof body.project.approvedBudget).toBe('number');
+      expect(body.project.ownerUserId).toBeUndefined();
+      expect(body.project.charterRecord.contentMarkdown).toBeUndefined();
+      expect(isolated(body.project).valid).toBe(true);
+      expect(validator.getValidator(tool!.outputSchema as object)(body).valid).toBe(true);
+      expect(read.structuredContent).toEqual(body);
+    });
+  });
+});
+
+const OUTPUT_SAMPLES: Record<string, unknown> = {
+  get_project: { project: realisticProject() },
+  update_project_baseline: { project: realisticProject() },
+  list_project_tasks: {
+    tasks: [
+      {
+        id: 'task-1',
+        title: 'Write the brief',
+        completionPercent: 25,
+        forecastHours: 3,
+        mediaLinkCount: 0,
+      },
+    ],
+    total: 1,
+    limit: 25,
+    nextCursor: null,
+    hasMore: false,
+  },
+  get_profile: {
+    id: '55555555-5555-4555-8555-555555555555',
+    name: 'Ada',
+    email: 'ada@example.com',
+  },
+};
+
+describe('MCP output schemas accept their sample results', () => {
+  test('every tool with an outputSchema validates its sample', async () => {
+    const validator = new AjvJsonSchemaValidator();
+    const assertSamples = async (client: Client) => {
+      const listed = await client.listTools();
+      const declared = listed.tools.filter((tool) => tool.outputSchema);
+      expect(declared.length).toBeGreaterThan(0);
+      for (const tool of declared) {
+        const sample = OUTPUT_SAMPLES[tool.name];
+        expect(sample, `${tool.name} sample`).toBeTruthy();
+        const result = validator.getValidator(tool.outputSchema as object)(sample);
+        expect(result.valid, `${tool.name}: ${result.errorMessage ?? ''}`).toBe(true);
+      }
+    };
+
+    await withMcpClient(['projects:read', 'pm:read', 'pm:write'], {}, assertSamples);
+    await withMcpClient(
+      ['projects:read'],
+      {},
+      assertSamples,
+      {
+        oauth: {
+          resourceMetadataUrl:
+            'https://knowledge.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+          profile: { id: 'user-1', name: 'Ada', email: 'ada@example.com' },
+        },
+      },
+    );
   });
 });
 
@@ -499,12 +649,27 @@ describe('strict tool arguments', () => {
 });
 
 describe('list_project_tasks paging schema', () => {
-  test('input schema and description include limit and cursor, output includes nextCursor', async () => {
+  test('input schema keeps limit and cursor (PRO-T-88)', async () => {
     await withMcpClient(['pm:read'], {}, async (client) => {
       const listed = await client.listTools();
       const tool = listed.tools.find((item) => item.name === 'list_project_tasks');
-      const input = tool?.inputSchema as { properties?: Record<string, { description?: string }> };
+      const input = tool?.inputSchema as {
+        properties?: Record<string, {
+          type?: string;
+          description?: string;
+          minimum?: number;
+          maximum?: number;
+        }>;
+        additionalProperties?: boolean;
+      };
+      expect(input.additionalProperties).toBe(false);
+      expect(input.properties?.limit).toMatchObject({
+        type: 'integer',
+        minimum: 1,
+        maximum: 25,
+      });
       expect(input.properties?.limit?.description).toMatch(/25/);
+      expect(input.properties?.cursor).toMatchObject({ type: 'string' });
       expect(input.properties?.cursor?.description).toMatch(/nextCursor/);
       expect(tool?.description).toMatch(/limit/);
       expect(tool?.description).toMatch(/cursor/);

@@ -64,6 +64,13 @@ const money = {
   description: 'Money or hours amount',
 };
 
+/** Read models return money as a JSON number (PRO-T-6). Inputs may still accept a string. */
+const moneyNumber = {
+  type: 'number',
+  nullable: true,
+  description: 'Money amount as a JSON number. Null when unset.',
+};
+
 const taskStatus = {
   type: 'string',
   enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
@@ -147,6 +154,7 @@ const nullableString = { type: 'string', nullable: true };
 const pinnedRecordOutput = {
   type: 'object',
   nullable: true,
+  additionalProperties: false,
   required: ['id', 'title', 'slug', 'recordType'],
   properties: {
     id: uuidProp('Pinned knowledge record id'),
@@ -160,9 +168,11 @@ const pinnedRecordOutput = {
 const projectBaselineResult = {
   type: 'object',
   required: ['project'],
+  additionalProperties: false,
   properties: {
     project: {
       type: 'object',
+      additionalProperties: false,
       required: [
         'id',
         'workspaceId',
@@ -191,6 +201,8 @@ const projectBaselineResult = {
       properties: {
         id: uuidProp('Project id'),
         workspaceId: uuidProp('Workspace id'),
+        workspaceName: { type: 'string', nullable: true, description: 'Workspace name' },
+        workspaceSlug: { type: 'string', nullable: true, description: 'Workspace slug' },
         name: stringProp('Project name'),
         slug: stringProp('Project slug'),
         status: stringProp('Project status'),
@@ -237,8 +249,8 @@ const projectBaselineResult = {
           description: 'Scrum Definition of Done. Null when unset.',
         },
         currency: stringProp('Project currency'),
-        initialBudget: money,
-        approvedBudget: money,
+        initialBudget: moneyNumber,
+        approvedBudget: moneyNumber,
         keyPrefix: {
           type: 'string',
           nullable: true,

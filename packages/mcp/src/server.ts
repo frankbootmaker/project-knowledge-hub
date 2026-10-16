@@ -836,19 +836,26 @@ function textResult(data: unknown) {
  * Result for tools that declare an outputSchema. structuredContent is what
  * the SDK validates. An oversized payload does not match that schema, so it
  * is returned as text with isError set, which skips output validation.
+ *
+ * Within the size limit, objects are reduced to the declared shape first.
+ * The client validates the raw structuredContent against a schema that
+ * rejects additional properties, while the server's Zod parse only strips
+ * those keys. Sending the reduced object keeps that validation in place.
  */
-function structuredTextResult(data: unknown) {
+function structuredTextResult(data: unknown, outputShape?: z.ZodRawShape) {
   const sized = enforceResponseSize(data);
-  const text = JSON.stringify(sized, null, 2);
   if (sized !== data) {
+    const text = JSON.stringify(sized, null, 2);
     return {
       isError: true as const,
       content: [{ type: 'text' as const, text }],
     };
   }
+  const shaped = outputShape ? stripToSchema(z.object(outputShape), data) : data;
+  const text = JSON.stringify(shaped, null, 2);
   return {
     content: [{ type: 'text' as const, text }],
-    structuredContent: sized as Record<string, unknown>,
+    structuredContent: shaped as Record<string, unknown>,
   };
 }
 
@@ -1211,15 +1218,19 @@ export function createKnowledgeHubMcpServer(
     'AUD',
     'JPY',
   ]);
-  const nullableText = z.string().nullable();
-  const pinnedRecordOutput = z
-    .object({
-      id: z.string(),
-      title: z.string(),
-      slug: z.string(),
-      recordType: z.string(),
-    })
-    .nullable();
+  // Fresh instances. A shared Zod object is emitted as $ref, and a client
+  // that validates the project object alone cannot resolve those pointers.
+  // Unresolved properties then fail as additional properties.
+  const nullableOutputText = () => z.string().nullable();
+  const pinnedRecordOutput = () =>
+    z
+      .object({
+        id: z.string(),
+        title: z.string(),
+        slug: z.string(),
+        recordType: z.string(),
+      })
+      .nullable();
   const projectBaselineOutput = {
     project: z.object({
       id: z.string(),
@@ -1229,26 +1240,26 @@ export function createKnowledgeHubMcpServer(
       name: z.string(),
       slug: z.string(),
       status: z.string(),
-      summary: nullableText,
-      description: nullableText,
-      startDate: nullableText,
-      endDate: nullableText,
+      summary: nullableOutputText(),
+      description: nullableOutputText(),
+      startDate: nullableOutputText(),
+      endDate: nullableOutputText(),
       hoursPerWorkday: z.number(),
       workdaysPerWeek: z.number().int(),
       nonWorkingDays: z.array(z.string()),
-      finishDate: nullableText,
+      finishDate: nullableOutputText(),
       durationWorkingDays: z.number().int().nullable(),
-      charterRecordId: nullableText,
-      charterRecord: pinnedRecordOutput,
-      initialPlanRecordId: nullableText,
-      initialPlanRecord: pinnedRecordOutput,
-      definitionOfDone: nullableText.describe(
+      charterRecordId: nullableOutputText(),
+      charterRecord: pinnedRecordOutput(),
+      initialPlanRecordId: nullableOutputText(),
+      initialPlanRecord: pinnedRecordOutput(),
+      definitionOfDone: nullableOutputText().describe(
         'Scrum Definition of Done. Null when unset.',
       ),
       currency: projectCurrencyEnum,
       initialBudget: z.number().nullable(),
       approvedBudget: z.number().nullable(),
-      keyPrefix: nullableText,
+      keyPrefix: nullableOutputText(),
     }),
   };
 
@@ -1271,7 +1282,7 @@ export function createKnowledgeHubMcpServer(
         'projects:read',
         () => handlers.getProject(args),
         { projectId: args.projectId },
-        structuredTextResult,
+        (data) => structuredTextResult(data, projectBaselineOutput),
       )(),
   );
 
@@ -1310,7 +1321,7 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.updateProjectBaseline(args),
         { projectId: args.projectId },
-        structuredTextResult,
+        (data) => structuredTextResult(data, projectBaselineOutput),
       )(),
   );
 
@@ -1836,7 +1847,7 @@ export function createKnowledgeHubMcpServer(
         'pm:read',
         () => handlers.listProjectTasks(args),
         { projectId: args.projectId },
-        structuredTextResult,
+        (data) => structuredTextResult(data, taskListOutput),
       )(),
   );
 
@@ -3122,6 +3133,45 @@ function zodDef(schema: z.ZodTypeAny): ZodDef {
   const def = (schema as unknown as { _def?: ZodDef })._def;
   if (!def) return {};
   return def;
+}
+
+/**
+ * Drop keys the output schema does not declare. Passthrough objects, such as
+ * task rows, keep their extra fields. Types are left for output validation.
+ */
+function stripToSchema(schema: z.ZodTypeAny, value: unknown): unknown {
+  let current = schema;
+  let def = zodDef(current);
+  while (
+    def.typeName === 'ZodOptional'
+    || def.typeName === 'ZodNullable'
+    || def.typeName === 'ZodDefault'
+  ) {
+    if (value == null) return value;
+    if (!def.innerType) break;
+    current = def.innerType;
+    def = zodDef(current);
+  }
+  if (def.typeName === 'ZodArray' && Array.isArray(value) && def.type) {
+    return value.map((item) => stripToSchema(def.type as z.ZodTypeAny, item));
+  }
+  if (
+    def.typeName === 'ZodObject'
+    && value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+  ) {
+    const shape = (current as z.ZodObject<z.ZodRawShape>).shape;
+    const record = value as Record<string, unknown>;
+    const next: Record<string, unknown> = def.unknownKeys === 'passthrough'
+      ? { ...record }
+      : {};
+    for (const [key, field] of Object.entries(shape)) {
+      if (key in record) next[key] = stripToSchema(field, record[key]);
+    }
+    return next;
+  }
+  return value;
 }
 
 function isUuidField(field: z.ZodTypeAny): boolean {
