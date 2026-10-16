@@ -200,6 +200,7 @@ const projectBaselineResult = {
         'methodology',
         'createdVia',
         'createdByApiClientId',
+        'createdByOauthGrantId',
         'createdByUserId',
         'generatedByModel',
         'url',
@@ -277,7 +278,14 @@ const projectBaselineResult = {
         createdByApiClientId: {
           type: 'string',
           nullable: true,
-          description: 'API client id when created via MCP.',
+          description:
+            'Bearer API client id when that client created the project. Null for OAuth grants.',
+        },
+        createdByOauthGrantId: {
+          type: 'string',
+          nullable: true,
+          description:
+            'OAuth grant id when ChatGPT created the project. Null for bearer clients.',
         },
         createdByUserId: {
           type: 'string',
@@ -630,7 +638,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project',
     description:
-      'Get a project by id. projectId (UUID) is required. Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, and MCP provenance (createdVia, createdByApiClientId, createdByUserId, generatedByModel).',
+      'Get a project by id. projectId (UUID) is required. Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
     scope: 'projects:read',
     openApi: true,
     output: projectBaselineResult,
