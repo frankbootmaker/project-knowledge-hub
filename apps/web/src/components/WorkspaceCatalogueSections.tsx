@@ -1,13 +1,21 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { Badge, Input, LinkButton, lifecycleLabel } from './ui';
+import { Badge, Button, Input, LinkButton, Select, lifecycleLabel } from './ui';
 import { LocalDateTime } from './LocalDateTime';
 import { ImportTypePickerButton } from './ImportTypePickerButton';
 import { CollapsibleSection } from './CollapsibleSection';
+import { TableFilterControl, type TableFilterField } from './ui/TableFilterControl';
 import { recordHref } from '../lib/record-href';
+import {
+  applyTableView,
+  collectEnumOptions,
+  compareText,
+  type TableColumnSpec,
+} from '../lib/data-table';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import {
   groupRecordsByTranslationFamily,
   normalizeContentLanguage,
@@ -52,12 +60,110 @@ export type WorkspaceCatalogueRecord = {
   updatedAt: string;
 };
 
+type RecordFamily = {
+  family: WorkspaceCatalogueRecord[];
+  preferred: WorkspaceCatalogueRecord;
+  languages: string[];
+};
+
+const DEFAULT_PAGE_SIZE = 5;
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
+type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
+
+function isPageSizeOption(value: number): value is PageSizeOption {
+  return (PAGE_SIZE_OPTIONS as readonly number[]).includes(value);
+}
+
 function ragTone(
   rag: 'green' | 'amber' | 'red',
 ): 'success' | 'warn' | 'danger' {
   if (rag === 'red') return 'danger';
   if (rag === 'amber') return 'warn';
   return 'success';
+}
+
+function pageSlice<T>(items: T[], page: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize) || 1);
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  return {
+    pageItems: items.slice(pageStart, pageStart + pageSize),
+    currentPage,
+    totalPages,
+    rangeFrom: items.length === 0 ? 0 : pageStart + 1,
+    rangeTo: Math.min(pageStart + pageSize, items.length),
+  };
+}
+
+function SectionPager({
+  title,
+  total,
+  page,
+  pageSize,
+  onPage,
+  onPageSize,
+}: {
+  title: string;
+  total: number;
+  page: number;
+  pageSize: PageSizeOption;
+  onPage: (page: number) => void;
+  onPageSize: (size: PageSizeOption) => void;
+}) {
+  const t = useTranslations('workspaces');
+  if (total === 0) return null;
+  const { currentPage, totalPages, rangeFrom, rangeTo } = pageSlice(
+    Array.from({ length: total }),
+    page,
+    pageSize,
+  );
+  return (
+    <div className="kh-ops-card-foot kh-ops-catalogue-pager">
+      <p className="m-0 text-ink-muted">
+        {t('sectionShowing', { from: rangeFrom, to: rangeTo, total })}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={String(pageSize)}
+          onChange={(event) => {
+            const parsed = Number(event.target.value);
+            onPageSize(isPageSizeOption(parsed) ? parsed : DEFAULT_PAGE_SIZE);
+          }}
+          aria-label={t('sectionPageSize')}
+          className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5"
+        >
+          {PAGE_SIZE_OPTIONS.map((size) => (
+            <option key={size} value={String(size)}>
+              {t('sectionPageSizeOption', { count: size })}
+            </option>
+          ))}
+        </Select>
+        {totalPages > 1 ? (
+          <nav className="flex flex-wrap items-center gap-2" aria-label={title}>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={currentPage <= 1}
+              onClick={() => onPage(Math.max(1, currentPage - 1))}
+            >
+              {t('sectionPrevPage')}
+            </Button>
+            <span className="kh-page-num-active" aria-current="page">
+              {currentPage} / {totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={currentPage >= totalPages}
+              onClick={() => onPage(Math.min(totalPages, currentPage + 1))}
+            >
+              {t('sectionNextPage')}
+            </Button>
+          </nav>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function WorkspaceCatalogueSections({
@@ -76,62 +182,288 @@ export function WorkspaceCatalogueSections({
   const t = useTranslations('workspaces');
   const tProjects = useTranslations('projects');
   const tRecords = useTranslations('records');
+  const tTable = useTranslations('table');
   const locale = useLocale();
-  const [projectQuery, setProjectQuery] = useState('');
-  const [systemQuery, setSystemQuery] = useState('');
-  const [recordQuery, setRecordQuery] = useState('');
+  const projectsTable = useTableState({ namespace: 'wproj', defaultSortKey: null });
+  const systemsTable = useTableState({ namespace: 'wsys', defaultSortKey: null });
+  const recordsTable = useTableState({ namespace: 'wrec', defaultSortKey: null });
+  const [projectPage, setProjectPage] = useState(1);
+  const [systemPage, setSystemPage] = useState(1);
+  const [recordPage, setRecordPage] = useState(1);
+  const [projectPageSize, setProjectPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
+  const [systemPageSize, setSystemPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
+  const [recordPageSize, setRecordPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
 
-  const filteredProjects = useMemo(() => {
-    const needle = projectQuery.trim().toLowerCase();
-    if (!needle) return projects;
-    return projects.filter((project) =>
-      [project.name, project.slug, project.summary ?? '', project.status]
-        .join(' ')
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [projectQuery, projects]);
-
-  const filteredSystems = useMemo(() => {
-    const needle = systemQuery.trim().toLowerCase();
-    if (!needle) return systems;
-    return systems.filter((system) =>
-      [system.name, system.slug, system.summary ?? '', system.status]
-        .join(' ')
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [systemQuery, systems]);
-
-  const recordFamilies = useMemo(
+  const recordFamilies = useMemo<RecordFamily[]>(
     () =>
       groupRecordsByTranslationFamily(records).map((family) => {
         const preferred = pickPreferredRecord(family, locale);
-        return { family, preferred };
+        const languages = [
+          ...new Set(family.map((record) => normalizeContentLanguage(record.language))),
+        ].sort((a, b) => a.localeCompare(b));
+        return { family, preferred, languages };
       }),
     [locale, records],
   );
 
-  const filteredRecords = useMemo(() => {
-    const needle = recordQuery.trim().toLowerCase();
-    if (!needle) return recordFamilies;
-    return recordFamilies.filter(({ family, preferred }) =>
-      family
-        .flatMap((record) => [
-          record.title,
-          record.slug,
-          record.recordType,
-          record.humanKey ?? '',
-          record.lifecycleStatus,
-          normalizeContentLanguage(record.language),
-          record.summary ?? '',
-          preferred.title,
-        ])
-        .join(' ')
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [recordFamilies, recordQuery]);
+  const projectStatusOptions = useMemo(
+    () => collectEnumOptions(projects, (project) => project.status, (value) => value, locale),
+    [locale, projects],
+  );
+  const projectRagOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        projects,
+        (project) => project.overallRag ?? 'green',
+        (value) => tProjects(`rag.${value as 'green' | 'amber' | 'red'}`),
+        locale,
+      ),
+    [locale, projects, tProjects],
+  );
+  const systemStatusOptions = useMemo(
+    () => collectEnumOptions(systems, (system) => system.status, (value) => value, locale),
+    [locale, systems],
+  );
+  const systemLinkOptions = useMemo(
+    () => [
+      { value: 'linked', label: t('linkedToProject') },
+      { value: 'independent', label: t('independent') },
+    ],
+    [t],
+  );
+  const typeOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        recordFamilies,
+        (row) => row.preferred.recordType,
+        (value) => value,
+        locale,
+      ),
+    [locale, recordFamilies],
+  );
+  const languageOptions = useMemo(
+    () => collectEnumOptions(recordFamilies, (row) => row.languages, (value) => value, locale),
+    [locale, recordFamilies],
+  );
+  const lifecycleOptions = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const row of recordFamilies) {
+      const status = row.preferred.lifecycleStatus;
+      if (!labels.has(status)) labels.set(status, lifecycleLabel(status, tRecords));
+    }
+    return [...labels.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => compareText(a.label, b.label, locale));
+  }, [locale, recordFamilies, tRecords]);
+
+  const projectColumns = useMemo<Array<TableColumnSpec<WorkspaceCatalogueProject>>>(
+    () => [
+      {
+        id: 'status',
+        filter: {
+          type: 'enum',
+          getValue: (project) => project.status,
+          options: projectStatusOptions,
+        },
+      },
+      {
+        id: 'rag',
+        filter: {
+          type: 'enum',
+          getValue: (project) => project.overallRag ?? 'green',
+          options: projectRagOptions,
+        },
+      },
+    ],
+    [projectRagOptions, projectStatusOptions],
+  );
+  const systemColumns = useMemo<Array<TableColumnSpec<WorkspaceCatalogueSystem>>>(
+    () => [
+      {
+        id: 'status',
+        filter: {
+          type: 'enum',
+          getValue: (system) => system.status,
+          options: systemStatusOptions,
+        },
+      },
+      {
+        id: 'link',
+        filter: {
+          type: 'enum',
+          getValue: (system) => (system.projectId ? 'linked' : 'independent'),
+          options: systemLinkOptions,
+        },
+      },
+    ],
+    [systemLinkOptions, systemStatusOptions],
+  );
+  const recordColumns = useMemo<Array<TableColumnSpec<RecordFamily>>>(
+    () => [
+      {
+        id: 'type',
+        filter: {
+          type: 'enum',
+          getValue: (row) => row.preferred.recordType,
+          options: typeOptions,
+        },
+      },
+      {
+        id: 'language',
+        filter: {
+          type: 'enum',
+          getValue: (row) => row.languages,
+          options: languageOptions,
+        },
+      },
+      {
+        id: 'lifecycle',
+        filter: {
+          type: 'enum',
+          getValue: (row) => row.preferred.lifecycleStatus,
+          options: lifecycleOptions,
+        },
+      },
+    ],
+    [languageOptions, lifecycleOptions, typeOptions],
+  );
+  useSyncEnumFilters(projectsTable.filters, projectColumns, projectsTable.setEnumFilter);
+  useSyncEnumFilters(systemsTable.filters, systemColumns, systemsTable.setEnumFilter);
+  useSyncEnumFilters(recordsTable.filters, recordColumns, recordsTable.setEnumFilter);
+
+  const filteredProjects = useMemo(
+    () =>
+      applyTableView({
+        rows: projects,
+        locale,
+        query: projectsTable.query,
+        search: (project, needle) =>
+          [project.name, project.slug, project.summary ?? '', project.status]
+            .join(' ')
+            .toLowerCase()
+            .includes(needle),
+        sortKey: null,
+        sortDir: 'asc',
+        filters: projectsTable.filters,
+        textFilters: projectsTable.textFilters,
+        columns: projectColumns,
+      }),
+    [locale, projectColumns, projects, projectsTable.filters, projectsTable.query, projectsTable.textFilters],
+  );
+  const filteredSystems = useMemo(
+    () =>
+      applyTableView({
+        rows: systems,
+        locale,
+        query: systemsTable.query,
+        search: (system, needle) =>
+          [system.name, system.slug, system.summary ?? '', system.status]
+            .join(' ')
+            .toLowerCase()
+            .includes(needle),
+        sortKey: null,
+        sortDir: 'asc',
+        filters: systemsTable.filters,
+        textFilters: systemsTable.textFilters,
+        columns: systemColumns,
+      }),
+    [locale, systemColumns, systems, systemsTable.filters, systemsTable.query, systemsTable.textFilters],
+  );
+  const filteredRecords = useMemo(
+    () =>
+      applyTableView({
+        rows: recordFamilies,
+        locale,
+        query: recordsTable.query,
+        search: (row, needle) =>
+          row.family
+            .flatMap((record) => [
+              record.title,
+              record.slug,
+              record.recordType,
+              record.humanKey ?? '',
+              record.lifecycleStatus,
+              normalizeContentLanguage(record.language),
+              record.summary ?? '',
+            ])
+            .join(' ')
+            .toLowerCase()
+            .includes(needle),
+        sortKey: null,
+        sortDir: 'asc',
+        filters: recordsTable.filters,
+        textFilters: recordsTable.textFilters,
+        columns: recordColumns,
+      }),
+    [
+      locale,
+      recordColumns,
+      recordFamilies,
+      recordsTable.filters,
+      recordsTable.query,
+      recordsTable.textFilters,
+    ],
+  );
+
+  useEffect(() => {
+    setProjectPage(1);
+  }, [projectsTable.filters, projectsTable.query, projectsTable.textFilters]);
+  useEffect(() => {
+    setSystemPage(1);
+  }, [systemsTable.filters, systemsTable.query, systemsTable.textFilters]);
+  useEffect(() => {
+    setRecordPage(1);
+  }, [recordsTable.filters, recordsTable.query, recordsTable.textFilters]);
+
+  const projectFields = useMemo<TableFilterField[]>(
+    () => [
+      {
+        id: 'status',
+        header: t('colStatus'),
+        type: 'enum',
+        options: projectStatusOptions,
+      },
+      {
+        id: 'rag',
+        header: tProjects('ragLabel'),
+        type: 'enum',
+        options: projectRagOptions,
+      },
+    ],
+    [projectRagOptions, projectStatusOptions, t, tProjects],
+  );
+  const systemFields = useMemo<TableFilterField[]>(
+    () => [
+      { id: 'status', header: t('colStatus'), type: 'enum', options: systemStatusOptions },
+      { id: 'link', header: t('colLink'), type: 'enum', options: systemLinkOptions },
+    ],
+    [systemLinkOptions, systemStatusOptions, t],
+  );
+  const recordFields = useMemo<TableFilterField[]>(
+    () => [
+      { id: 'type', header: t('colType'), type: 'enum', options: typeOptions },
+      { id: 'language', header: t('colLanguage'), type: 'enum', options: languageOptions },
+      { id: 'lifecycle', header: t('colLifecycle'), type: 'enum', options: lifecycleOptions },
+    ],
+    [languageOptions, lifecycleOptions, t, typeOptions],
+  );
+
+  const projectSlice = pageSlice(filteredProjects, projectPage, projectPageSize);
+  const systemSlice = pageSlice(filteredSystems, systemPage, systemPageSize);
+  const recordSlice = pageSlice(filteredRecords, recordPage, recordPageSize);
+
+  function changeProjectPageSize(size: PageSizeOption) {
+    setProjectPageSize(size);
+    setProjectPage(1);
+  }
+  function changeSystemPageSize(size: PageSizeOption) {
+    setSystemPageSize(size);
+    setSystemPage(1);
+  }
+  function changeRecordPageSize(size: PageSizeOption) {
+    setRecordPageSize(size);
+    setRecordPage(1);
+  }
 
   return (
     <>
@@ -144,11 +476,30 @@ export function WorkspaceCatalogueSections({
           <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
             <Input
               type="search"
-              value={projectQuery}
-              onChange={(event) => setProjectQuery(event.target.value)}
+              value={projectsTable.query}
+              onChange={(event) => projectsTable.setQuery(event.target.value)}
               placeholder={t('sectionSearchProjects')}
               className="h-10 min-h-10 min-w-[220px] flex-1 py-1.5 text-xs"
             />
+            <TableFilterControl
+              fields={projectFields}
+              enumFilters={projectsTable.filters}
+              textFilters={projectsTable.textFilters}
+              onEnumFilter={projectsTable.setEnumFilter}
+              onTextFilter={projectsTable.setTextFilter}
+              onClearFilters={projectsTable.clearFilters}
+              filtersActive={projectsTable.filtersActive}
+            />
+            {projectsTable.filtersActive ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+                onClick={projectsTable.clearFilters}
+              >
+                {tTable('clearFilters')}
+              </Button>
+            ) : null}
             {canMutate ? (
               <LinkButton href={`/workspaces/${workspaceSlug}/projects/new`}>
                 {t('newProject')}
@@ -157,11 +508,13 @@ export function WorkspaceCatalogueSections({
           </div>
           {filteredProjects.length === 0 ? (
             <p className="kh-ops-empty">
-              {projectQuery.trim() ? t('sectionEmptyFiltered') : t('noProjects')}
+              {projectsTable.query.trim() || projectsTable.filtersActive
+                ? t('sectionEmptyFiltered')
+                : t('noProjects')}
             </p>
           ) : (
             <div className="kh-ops-project-grid">
-              {filteredProjects.map((project) => {
+              {projectSlice.pageItems.map((project) => {
                 const overallRag = project.overallRag ?? 'green';
                 return (
                   <article key={project.id} className="kh-ops-project-card">
@@ -169,9 +522,7 @@ export function WorkspaceCatalogueSections({
                       {tProjects(`rag.${overallRag}`)}
                     </Badge>
                     <h3>
-                      <Link
-                        href={`/workspaces/${workspaceSlug}/projects/${project.slug}`}
-                      >
+                      <Link href={`/workspaces/${workspaceSlug}/projects/${project.slug}`}>
                         {project.name}
                       </Link>
                     </h3>
@@ -187,6 +538,14 @@ export function WorkspaceCatalogueSections({
               })}
             </div>
           )}
+          <SectionPager
+            title={t('projects')}
+            total={filteredProjects.length}
+            page={projectPage}
+            pageSize={projectPageSize}
+            onPage={setProjectPage}
+            onPageSize={changeProjectPageSize}
+          />
         </section>
       </CollapsibleSection>
       <CollapsibleSection
@@ -198,11 +557,30 @@ export function WorkspaceCatalogueSections({
           <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
             <Input
               type="search"
-              value={systemQuery}
-              onChange={(event) => setSystemQuery(event.target.value)}
+              value={systemsTable.query}
+              onChange={(event) => systemsTable.setQuery(event.target.value)}
               placeholder={t('sectionSearchSystems')}
               className="h-10 min-h-10 min-w-[220px] flex-1 py-1.5 text-xs"
             />
+            <TableFilterControl
+              fields={systemFields}
+              enumFilters={systemsTable.filters}
+              textFilters={systemsTable.textFilters}
+              onEnumFilter={systemsTable.setEnumFilter}
+              onTextFilter={systemsTable.setTextFilter}
+              onClearFilters={systemsTable.clearFilters}
+              filtersActive={systemsTable.filtersActive}
+            />
+            {systemsTable.filtersActive ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+                onClick={systemsTable.clearFilters}
+              >
+                {tTable('clearFilters')}
+              </Button>
+            ) : null}
             {canMutate ? (
               <LinkButton href={`/workspaces/${workspaceSlug}/systems/new`}>
                 {t('newSystem')}
@@ -211,7 +589,9 @@ export function WorkspaceCatalogueSections({
           </div>
           {filteredSystems.length === 0 ? (
             <p className="kh-ops-empty">
-              {systemQuery.trim() ? t('sectionEmptyFiltered') : t('noSystems')}
+              {systemsTable.query.trim() || systemsTable.filtersActive
+                ? t('sectionEmptyFiltered')
+                : t('noSystems')}
             </p>
           ) : (
             <div className="kh-ops-table-wrap">
@@ -225,7 +605,7 @@ export function WorkspaceCatalogueSections({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSystems.map((system) => (
+                  {systemSlice.pageItems.map((system) => (
                     <tr key={system.id}>
                       <td className="kh-ops-primary-cell">
                         <Link
@@ -250,6 +630,14 @@ export function WorkspaceCatalogueSections({
               </table>
             </div>
           )}
+          <SectionPager
+            title={t('systems')}
+            total={filteredSystems.length}
+            page={systemPage}
+            pageSize={systemPageSize}
+            onPage={setSystemPage}
+            onPageSize={changeSystemPageSize}
+          />
         </section>
       </CollapsibleSection>
       <CollapsibleSection
@@ -261,11 +649,30 @@ export function WorkspaceCatalogueSections({
           <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
             <Input
               type="search"
-              value={recordQuery}
-              onChange={(event) => setRecordQuery(event.target.value)}
+              value={recordsTable.query}
+              onChange={(event) => recordsTable.setQuery(event.target.value)}
               placeholder={t('sectionSearchRecords')}
               className="h-10 min-h-10 min-w-[220px] flex-1 py-1.5 text-xs"
             />
+            <TableFilterControl
+              fields={recordFields}
+              enumFilters={recordsTable.filters}
+              textFilters={recordsTable.textFilters}
+              onEnumFilter={recordsTable.setEnumFilter}
+              onTextFilter={recordsTable.setTextFilter}
+              onClearFilters={recordsTable.clearFilters}
+              filtersActive={recordsTable.filtersActive}
+            />
+            {recordsTable.filtersActive ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+                onClick={recordsTable.clearFilters}
+              >
+                {tTable('clearFilters')}
+              </Button>
+            ) : null}
             {canMutate ? (
               <LinkButton href={`/workspaces/${workspaceSlug}/records/new`}>
                 {t('newRecord')}
@@ -274,7 +681,9 @@ export function WorkspaceCatalogueSections({
           </div>
           {filteredRecords.length === 0 ? (
             <p className="kh-ops-empty">
-              {recordQuery.trim() ? t('sectionEmptyFiltered') : t('noRecords')}
+              {recordsTable.query.trim() || recordsTable.filtersActive
+                ? t('sectionEmptyFiltered')
+                : t('noRecords')}
             </p>
           ) : (
             <div className="kh-ops-table-wrap">
@@ -290,14 +699,7 @@ export function WorkspaceCatalogueSections({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRecords.map(({ family, preferred }) => {
-                    const languages = [
-                      ...new Set(
-                        family.map((record) =>
-                          normalizeContentLanguage(record.language),
-                        ),
-                      ),
-                    ].sort((a, b) => a.localeCompare(b));
+                  {recordSlice.pageItems.map(({ preferred, languages }) => {
                     const recordPath = recordHref({
                       workspaceSlug,
                       recordSlug: preferred.slug,
@@ -321,9 +723,7 @@ export function WorkspaceCatalogueSections({
                         </td>
                         <td>{preferred.recordType}</td>
                         <td>{languages.join(', ')}</td>
-                        <td>
-                          {lifecycleLabel(preferred.lifecycleStatus, tRecords)}
-                        </td>
+                        <td>{lifecycleLabel(preferred.lifecycleStatus, tRecords)}</td>
                         <td>
                           <LocalDateTime value={preferred.updatedAt} dateOnly locale={locale} />
                         </td>
@@ -334,6 +734,14 @@ export function WorkspaceCatalogueSections({
               </table>
             </div>
           )}
+          <SectionPager
+            title={t('knowledgeRecords')}
+            total={filteredRecords.length}
+            page={recordPage}
+            pageSize={recordPageSize}
+            onPage={setRecordPage}
+            onPageSize={changeRecordPageSize}
+          />
         </section>
       </CollapsibleSection>
       <CollapsibleSection
@@ -342,25 +750,16 @@ export function WorkspaceCatalogueSections({
         defaultOpen
         action={
           canMutate ? (
-            <ImportTypePickerButton
-              workspaceSlug={workspaceSlug}
-              label={t('newImport')}
-            />
+            <ImportTypePickerButton workspaceSlug={workspaceSlug} label={t('newImport')} />
           ) : (
-            <LinkButton
-              href={`/workspaces/${workspaceSlug}/imports`}
-              variant="secondary"
-            >
+            <LinkButton href={`/workspaces/${workspaceSlug}/imports`} variant="secondary">
               {t('imports')}
             </LinkButton>
           )
         }
       >
         <p className="m-0 text-sm text-ink-muted">
-          <Link
-            href={`/workspaces/${workspaceSlug}/imports`}
-            className="kh-text-link"
-          >
+          <Link href={`/workspaces/${workspaceSlug}/imports`} className="kh-text-link">
             {t('viewImports')}
           </Link>
         </p>
