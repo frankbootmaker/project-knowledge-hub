@@ -54,14 +54,17 @@ export type DashboardWorkspace = {
 export type DashboardRecentItem = {
   kind: 'project' | 'system' | 'record';
   id: string;
+  humanKey: string | null;
   title: string;
   href: string;
   workspaceName: string;
+  status: string;
   updatedAt: string;
 };
 
 export type DashboardAssignedTask = {
   id: string;
+  humanKey: string | null;
   title: string;
   description: string | null;
   status: string;
@@ -119,6 +122,10 @@ type CountedEntity = {
   title?: string;
   slug: string;
   updatedAt: string;
+  status?: string;
+  lifecycleStatus?: string;
+  keyPrefix?: string | null;
+  humanKey?: string | null;
 };
 
 function membershipRole(
@@ -200,25 +207,31 @@ export async function loadDashboardData(
       ...projects.map((project) => ({
         kind: 'project' as const,
         id: project.id,
+        humanKey: project.keyPrefix?.trim() ? project.keyPrefix : null,
         title: project.name ?? project.slug,
         href: `/workspaces/${workspace.slug}/projects/${project.slug}`,
         workspaceName: workspace.name,
+        status: project.status ?? '',
         updatedAt: project.updatedAt,
       })),
       ...systems.map((system) => ({
         kind: 'system' as const,
         id: system.id,
+        humanKey: null,
         title: system.name ?? system.slug,
         href: `/workspaces/${workspace.slug}/systems/${system.slug}`,
         workspaceName: workspace.name,
+        status: system.status ?? '',
         updatedAt: system.updatedAt,
       })),
       ...records.map((record) => ({
         kind: 'record' as const,
         id: record.id,
+        humanKey: record.humanKey?.trim() ? record.humanKey : null,
         title: record.title ?? record.slug,
         href: `/workspaces/${workspace.slug}/records/${record.slug}`,
         workspaceName: workspace.name,
+        status: record.lifecycleStatus ?? '',
         updatedAt: record.updatedAt,
       })),
     ])

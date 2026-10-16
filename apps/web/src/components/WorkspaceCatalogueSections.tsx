@@ -518,7 +518,7 @@ export function WorkspaceCatalogueSections({
                 const overallRag = project.overallRag ?? 'green';
                 return (
                   <article key={project.id} className="kh-ops-project-card">
-                    <Badge tone={ragTone(overallRag)}>
+                    <Badge tone={ragTone(overallRag)} className="kh-ops-card-corner">
                       {tProjects(`rag.${overallRag}`)}
                     </Badge>
                     <h3>

@@ -2376,6 +2376,12 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   position: relative;
 }
 
+.kh-ops-view-toggle {
+  box-sizing: border-box;
+  height: 2.0475rem;
+  padding: 0 0.7rem;
+}
+
 .kh-ops-filter-dot {
   position: absolute;
   top: 4px;
@@ -3594,6 +3600,17 @@ a.kh-ops-choice {
   background: var(--kh-surface);
 }
 
+.kh-ops-project-card:has(> .kh-ops-card-corner) {
+  grid-template-rows: max-content max-content minmax(0, 1fr) max-content;
+}
+
+.kh-ops-project-card > .kh-ops-card-corner {
+  justify-self: end;
+  align-self: start;
+  width: max-content;
+  max-width: 100%;
+}
+
 .kh-ops-project-card h3 {
   margin: 0;
   font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;
@@ -4544,6 +4561,7 @@ a.kh-ops-admin-link-card {
 
 .kh-ops-media-card {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   border: 1px solid var(--kh-line);
   background: var(--kh-surface);
@@ -4553,6 +4571,7 @@ a.kh-ops-admin-link-card {
   position: relative;
   display: flex;
   align-items: flex-end;
+  min-width: 0;
   height: 130px;
   padding: 10px;
   overflow: hidden;
@@ -4569,6 +4588,7 @@ a.kh-ops-admin-link-card {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: top center;
 }
 
 .kh-ops-media-preview .kh-ops-type-chip {
@@ -4584,6 +4604,7 @@ a.kh-ops-admin-link-card {
 }
 
 .kh-ops-media-info {
+  min-width: 0;
   padding: 10px;
 }
 
@@ -4659,6 +4680,54 @@ a.kh-ops-admin-link-card {
   width: 100%;
 }
 
+.kh-ops-media-card .kh-ops-card-foot {
+  min-width: 0;
+  padding: 8px;
+}
+
+.kh-ops-media-card .kh-ops-media-card-actions {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 3px;
+}
+
+.kh-ops-media-card .kh-ops-media-card-actions > .kh-btn {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.25rem 0.3rem;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.kh-ops-media-card .kh-ops-media-card-actions > .kh-ops-confirm {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.kh-ops-media-library .kh-ops-data-table .kh-ops-media-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 72px);
+  gap: 4px;
+  width: max-content;
+}
+
+.kh-ops-media-library .kh-ops-data-table .kh-ops-media-card-actions > .kh-btn {
+  width: 72px;
+  min-width: 72px;
+  height: 23.4px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.kh-ops-media-library .kh-ops-data-table .kh-ops-media-card-actions > .kh-ops-confirm {
+  grid-column: 1 / -1;
+}
+
 .kh-ops-media-select-bar {
   display: flex;
   flex-wrap: wrap;
@@ -4705,6 +4774,29 @@ a.kh-ops-admin-link-card {
 
 .kh-ops-media-library .kh-ops-data-table tr[data-selected='true'] td {
   background: var(--kh-selected-bg);
+}
+
+.kh-ops-media-list-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kh-ops-media-list-thumb {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 40px;
+  object-fit: cover;
+  object-position: top center;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-bg);
+}
+
+.kh-ops-media-list-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kh-ops-media-library .kh-ops-media-linked {
@@ -4964,7 +5056,7 @@ button.kh-ops-stage-card:disabled {
   margin-top: 0.05rem;
 }
 
-.kh-ops-media-preview {
+img.kh-ops-media-preview {
   display: block;
   max-width: 100%;
   max-height: 70vh;
