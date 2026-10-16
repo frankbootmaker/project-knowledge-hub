@@ -38,7 +38,30 @@ export type McpToolHandlers = {
   listProjects: (input: {
     workspaceId?: string;
     workspaceSlug?: string;
+    status?: string;
+    stage?: string;
     limit: number;
+  }) => Promise<unknown>;
+  listProjectMetadata: () => Promise<unknown>;
+  createProject: (input: {
+    workspaceId: string;
+    name: string;
+    description?: string | null;
+    keyPrefix?: string;
+    currency?: string;
+    methodology?: string | null;
+    confirmDuplicateName?: boolean;
+    generatedByModel?: string | null;
+  }) => Promise<unknown>;
+  updateProject: (input: {
+    projectId: string;
+    name?: string;
+    description?: string | null;
+    methodology?: string | null;
+    currency?: string;
+    status?: string;
+    stage?: string;
+    confirmDuplicateName?: boolean;
   }) => Promise<unknown>;
   listSystems: (input: {
     workspaceId?: string;
@@ -970,7 +993,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspaces',
-    'List workspaces this client can access (id, name, slug). Requires projects:read.',
+    'List workspaces this client can access. Each row has id, name, slug, organization (id, name, slug), writesAllowed (true only when the workspace is on this client allow-list), and role (acting user membership, or system_admin). Requires projects:read. Call this before create_project.',
     {},
     async () =>
       wrap('list_workspaces', 'projects:read', () => handlers.listWorkspaces())(),
@@ -978,20 +1001,39 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_projects',
-    'List accessible projects in allowed workspaces. Each project includes workspaceName and workspaceSlug.',
+    'List accessible projects in allowed workspaces. Each project includes workspaceName, workspaceSlug, and status (the lifecycle stage). Filter with status or stage (idea, planned, active, maintenance, paused, completed, archived).',
     {
       workspaceId: z.string().uuid().optional(),
       workspaceSlug: z.string().min(1).max(64).optional(),
+      status: z.string().min(1).max(40).optional(),
+      stage: z.string().min(1).max(40).optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
     },
-    async (args) =>
-      wrap('list_projects', 'projects:read', () =>
+    async (args) => {
+      if (args.status && args.stage && args.status !== args.stage) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'status and stage must be the same value when both are sent.',
+          statusCode: 400,
+        });
+      }
+      return wrap('list_projects', 'projects:read', () =>
         handlers.listProjects({
           workspaceId: args.workspaceId,
           workspaceSlug: args.workspaceSlug,
+          status: args.status ?? args.stage,
           limit: args.limit ?? MCP_MAX_LIST_LIMIT,
         }),
-      )(),
+      )();
+    },
+  );
+
+  server.tool(
+    'list_project_metadata',
+    'Field guide for create_project and update_project: stages, methodologies, key prefix rules, and the idea-stage constraint. Call this before create_project. Requires projects:read.',
+    {},
+    async () =>
+      wrap('list_project_metadata', 'projects:read', () => handlers.listProjectMetadata())(),
   );
 
   const moneyInput = z.union([z.number(), z.string()]).nullable();
@@ -1260,6 +1302,42 @@ export function createKnowledgeHubMcpServer(
       initialBudget: z.number().nullable(),
       approvedBudget: z.number().nullable(),
       keyPrefix: nullableOutputText(),
+      methodology: z.enum(['scrum', 'kanban', 'waterfall', 'hybrid']).nullable(),
+      createdVia: z.enum(['mcp']).nullable().describe(
+        'mcp when an agent created the project. Null for a human-created project.',
+      ),
+      createdByApiClientId: nullableOutputText().describe(
+        'API client id when created via MCP. Null otherwise.',
+      ),
+      createdByUserId: nullableOutputText().describe(
+        'Acting user id when created via MCP. Null otherwise.',
+      ),
+      generatedByModel: nullableOutputText().describe(
+        'Optional model id supplied at MCP create. Null when unset.',
+      ),
+      url: nullableOutputText().describe(
+        'Hub URL for the project. Null when the workspace slug is unknown.',
+      ),
+    }),
+  };
+  const projectMethodologyEnum = z.enum(['scrum', 'kanban', 'waterfall', 'hybrid']);
+  const createProjectOutput = {
+    project: z.object({
+      id: z.string(),
+      name: z.string(),
+      slug: z.string(),
+      workspaceId: z.string(),
+      status: z.literal('idea'),
+      keyPrefix: z.string(),
+      url: z.string(),
+      methodology: projectMethodologyEnum.nullable(),
+      currency: projectCurrencyEnum,
+      description: nullableOutputText(),
+      createdVia: z.literal('mcp'),
+      createdByApiClientId: z.string(),
+      createdByUserId: z.string(),
+      generatedByModel: nullableOutputText(),
+      warning: nullableOutputText(),
     }),
   };
 
@@ -1267,7 +1345,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id, or by projectSlug plus workspaceSlug when the slug is shared. Returns workspaceName, workspaceSlug, baseline dates, the working calendar (hoursPerWorkday, workdaysPerWeek, nonWorkingDays), plan finishDate and durationWorkingDays, pinned charter/plan, keyPrefix, budgets, and definitionOfDone (string or null). finishDate is the latest scheduled delivery end and durationWorkingDays counts working days from the earliest scheduled start to that finish. Money fields (initialBudget, approvedBudget) are JSON numbers.',
+        'Get a project by id, or by projectSlug plus workspaceSlug when the slug is shared. Returns workspaceName, workspaceSlug, status (lifecycle stage), methodology, baseline dates, the working calendar, plan finishDate and durationWorkingDays, pinned charter/plan, keyPrefix, budgets, definitionOfDone, url, and MCP provenance (createdVia, createdByApiClientId, createdByUserId, generatedByModel). createdVia is mcp or null. finishDate is calculated. Money fields are JSON numbers.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
@@ -1322,6 +1400,71 @@ export function createKnowledgeHubMcpServer(
         () => handlers.updateProjectBaseline(args),
         { projectId: args.projectId },
         (data) => structuredTextResult(data, projectBaselineOutput),
+      )(),
+  );
+
+  const updateProjectOutput = {
+    project: projectBaselineOutput.project,
+    warning: z.string().nullable().describe(
+      'Set when a rename was confirmed despite a similar existing name. Otherwise null.',
+    ),
+  };
+
+  server.registerTool(
+    'create_project',
+    {
+      description:
+        'Create a project in an allowlisted workspace. Requires projects:write and an acting user who is maintainer, workspace_admin, or system_admin. Call list_workspaces, then list_project_metadata. The project is always created in stage idea; a human promotes it to active. keyPrefix is AAA or AA0 — omit it to auto-assign, or read the suggested prefix when the value is taken. A similar name is rejected unless confirmDuplicateName is true. Returns id, keyPrefix, and url. generatedByModel is stored as provenance.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        name: z.string().min(1).max(160),
+        description: z.string().max(10000).nullable().optional(),
+        keyPrefix: z
+          .string()
+          .trim()
+          .regex(/^([A-Za-z]{3}|[A-Za-z]{2}[0-9])$/)
+          .optional(),
+        currency: projectCurrencyEnum.optional(),
+        methodology: projectMethodologyEnum.nullable().optional(),
+        confirmDuplicateName: z.boolean().optional(),
+        generatedByModel: z.string().max(200).nullable().optional(),
+      },
+      outputSchema: createProjectOutput,
+    },
+    async (args) =>
+      wrap(
+        'create_project',
+        'projects:write',
+        () => handlers.createProject(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, createProjectOutput),
+      )(),
+  );
+
+  server.registerTool(
+    'update_project',
+    {
+      description:
+        'Update a project name, description, methodology, or currency. Requires projects:write and an acting user who can create projects in that workspace. status (alias stage) may change only within MCP transitions. Promoting idea to active is rejected — a human does that in the hub. A similar new name needs confirmDuplicateName. Writes an audit entry. Returns the project, including provenance.',
+      inputSchema: {
+        projectId: z.string().uuid(),
+        name: z.string().min(1).max(160).optional(),
+        description: z.string().max(10000).nullable().optional(),
+        methodology: projectMethodologyEnum.nullable().optional(),
+        currency: projectCurrencyEnum.optional(),
+        status: z.string().min(1).max(40).optional(),
+        stage: z.string().min(1).max(40).optional(),
+        confirmDuplicateName: z.boolean().optional(),
+      },
+      outputSchema: updateProjectOutput,
+    },
+    async (args) =>
+      wrap(
+        'update_project',
+        'projects:write',
+        () => handlers.updateProject(args),
+        { projectId: args.projectId },
+        (data) => structuredTextResult(data, updateProjectOutput),
       )(),
   );
 

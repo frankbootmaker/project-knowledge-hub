@@ -21,6 +21,7 @@ describe('mcp scopes and limits', () => {
     expect(DEFAULT_MCP_SCOPES).not.toContain('pm:read');
     expect(DEFAULT_MCP_SCOPES).not.toContain('pm:write');
     expect(DEFAULT_MCP_SCOPES).not.toContain('catalogue:write');
+    expect(DEFAULT_MCP_SCOPES).not.toContain('projects:write');
     expect(DEFAULT_MCP_SCOPES).not.toContain('monitoring:read');
     expect(hasMcpScope(DEFAULT_MCP_SCOPES, 'projects:read')).toBe(true);
     expect(hasMcpScope(['projects:read'], 'knowledge:read')).toBe(false);

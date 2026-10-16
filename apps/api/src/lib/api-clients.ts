@@ -104,7 +104,8 @@ export function assertWriteClientConfig(input: {
   const needsWriteGate =
     input.scopes.includes('knowledge:write') ||
     input.scopes.includes('pm:write') ||
-    input.scopes.includes('catalogue:write');
+    input.scopes.includes('catalogue:write') ||
+    input.scopes.includes('projects:write');
   if (!needsWriteGate) {
     return;
   }
@@ -112,7 +113,7 @@ export function assertWriteClientConfig(input: {
     throw new AppError({
       code: 'ACTING_USER_REQUIRED',
       message:
-        'actingUserId is required when scopes include knowledge:write, pm:write, or catalogue:write',
+        'actingUserId is required when scopes include knowledge:write, pm:write, catalogue:write, or projects:write',
       statusCode: 400,
     });
   }
@@ -120,7 +121,7 @@ export function assertWriteClientConfig(input: {
     throw new AppError({
       code: 'WORKSPACE_ALLOWLIST_REQUIRED',
       message:
-        'allowedWorkspaceIds must be non-empty when scopes include knowledge:write, pm:write, or catalogue:write',
+        'allowedWorkspaceIds must be non-empty when scopes include knowledge:write, pm:write, catalogue:write, or projects:write',
       statusCode: 400,
     });
   }

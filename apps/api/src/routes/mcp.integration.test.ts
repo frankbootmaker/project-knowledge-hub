@@ -326,9 +326,29 @@ describe.skipIf(!hasIntegrationEnv)('MCP (read + draft write)', () => {
     expect(workspacesBody.result?.isError).toBeFalsy();
     const workspaceList = JSON.parse(
       workspacesBody.result?.content?.[0]?.text ?? '{}',
-    ) as { workspaces?: Array<{ id: string; name: string; slug: string }> };
+    ) as {
+      workspaces?: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        organization: { id: string; name: string; slug: string };
+        writesAllowed: boolean;
+        role: string | null;
+      }>;
+    };
     expect(workspaceList.workspaces).toEqual([
-      { id: workspaceId, name: workspaceName, slug: workspaceSlug },
+      {
+        id: workspaceId,
+        name: workspaceName,
+        slug: workspaceSlug,
+        organization: {
+          id: organizationId,
+          name: expect.any(String),
+          slug: expect.any(String),
+        },
+        writesAllowed: true,
+        role: null,
+      },
     ]);
 
     const projectsCall = await mcpCall(app!, readToken, 5, 'tools/call', {
