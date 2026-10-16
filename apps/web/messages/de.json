@@ -2547,6 +2547,8 @@
     "durationDays": "Dauer (Tage)",
     "durationHint": "Das Fälligkeitsdatum ist das Startdatum plus diese Anzahl Kalendertage.",
     "startComputed": "Das Startdatum wird aus den Vorgängern berechnet.",
+    "datesFromChildren": "Dieses Datum folgt den enthaltenen Kindern und ist schreibgeschützt.",
+    "datesFromChildren": "Dieses Datum folgt den enthaltenen Kindern und ist schreibgeschützt.",
     "linkType": {
       "FS": "Ende-Anfang (FS)",
       "SS": "Anfang-Anfang (SS)",

@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Delivery schedule on the API (PRO-T-94):** Epics and user stories return `targetPercent` (how far today is through start and end: 0 on the start day, 100 on the end day, null when the window is missing). Tasks and milestones return `targetPercent: null`, matching the list. `startDateDerived` and `endDateDerived` are true when that side is the child rollup from PRO-T-73; a write to that side is rejected and the dialog shows it read-only. A side with no child date stays stored and writable. Milestone `startDate` and `targetDate` stay stored and writable. `set_delivery_dependency` takes optional integer `lagDays`, and `list_delivery_dependencies` returns it. MCP list, get, create, and update tools for these items declare the fields on their output schemas.
+
 * **Record linked items (PRO-T-19, PRO-T-69):** A knowledge record’s More details lists the delivery items, RAID items, and change items that point at it. `GET /api/v1/knowledge-records/:id/linked-items` is that read. Archived rows are omitted, and links outside the record’s project are omitted. `get_knowledge_record` includes `linkedItems` (`deliveryLinks`, `raidLinks`, `changeItems`) on the first page. `create_project_raid_item` accepts optional `recordIds`. `list_project_raid_items` documents `records[]`.
 
 * **Delivery Gantt search:** The Gantt uses the same search box and filter as List and Tree: status, owner, sprint, task or bug, title, and only open. Matching rows stay visible with their ancestors dimmed, and dependency arrows are drawn only between rows that remain on the chart.

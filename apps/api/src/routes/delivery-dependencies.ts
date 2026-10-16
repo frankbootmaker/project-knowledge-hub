@@ -5,6 +5,7 @@ import { workspaces } from '@project-knowledge-hub/database';
 import {
   DELIVERY_DEPENDENCY_ENTITY_TYPES,
   DELIVERY_DEPENDENCY_LINK_TYPES,
+  dependencyLagDaysSchema,
 } from '@project-knowledge-hub/domain';
 import {
   requireWorkspaceMaintainer,
@@ -94,7 +95,7 @@ export async function registerDeliveryDependencyRoutes(
         successorId: refSchema,
         successorType: entityTypeSchema.optional(),
         linkType: linkTypeSchema,
-        lagDays: z.number().int().min(-3650).max(3650).optional(),
+        lagDays: dependencyLagDaysSchema.optional(),
       });
       const body = z
         .union([
@@ -169,7 +170,7 @@ export async function registerDeliveryDependencyRoutes(
       const body = z
         .object({
           linkType: linkTypeSchema.optional(),
-          lagDays: z.number().int().min(-3650).max(3650).optional(),
+          lagDays: dependencyLagDaysSchema.optional(),
         })
         .refine((value) => value.linkType !== undefined || value.lagDays !== undefined)
         .parse(request.body);
