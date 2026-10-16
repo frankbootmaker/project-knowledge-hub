@@ -158,6 +158,32 @@ async function assertCanWriteProject(
   return client.actingUserId;
 }
 
+/**
+ * Bearer clients are api_clients rows. OAuth grants are not, so their id must
+ * not be stored in created_by_api_client_id.
+ */
+function projectProvenance(client: McpClientContext): {
+  createdByApiClientId: string | null;
+  createdByOauthGrantId: string | null;
+  actorType: 'api_client' | 'oauth_grant';
+  actorId: string;
+} {
+  if (client.oauthGrantId) {
+    return {
+      createdByApiClientId: null,
+      createdByOauthGrantId: client.oauthGrantId,
+      actorType: 'oauth_grant',
+      actorId: client.oauthGrantId,
+    };
+  }
+  return {
+    createdByApiClientId: client.id,
+    createdByOauthGrantId: null,
+    actorType: 'api_client',
+    actorId: client.id,
+  };
+}
+
 function assertProjectAllowlistOpen(client: McpClientContext): void {
   if (client.allowedProjectIds.length === 0) return;
   throw new AppError({
@@ -326,6 +352,7 @@ export async function createProjectViaMcp(
     ...(input.keyPrefix ? { keyPrefix: input.keyPrefix } : {}),
   });
   const generatedByModel = input.generatedByModel?.trim() || null;
+  const provenance = projectProvenance(client);
   const [created] = await app.database.db
     .insert(projects)
     .values({
@@ -340,7 +367,8 @@ export async function createProjectViaMcp(
       keyPrefix: key.keyPrefix,
       issueCounters: {},
       createdVia: 'mcp',
-      createdByApiClientId: client.id,
+      createdByApiClientId: provenance.createdByApiClientId,
+      createdByOauthGrantId: provenance.createdByOauthGrantId,
       createdByUserId: actingUserId,
       generatedByModel,
       updatedAt: new Date(),
@@ -355,15 +383,17 @@ export async function createProjectViaMcp(
   }
   await writeAuditEvent(app.database, {
     organizationId: workspace.organizationId,
-    actorType: 'api_client',
-    actorId: client.id,
+    actorType: provenance.actorType,
+    actorId: provenance.actorId,
     action: 'project.create',
     entityType: 'project',
     entityId: created.id,
     metadata: {
       via: 'mcp',
       actingUserId,
-      apiClientId: client.id,
+      ...(provenance.createdByOauthGrantId
+        ? { oauthGrantId: provenance.createdByOauthGrantId }
+        : { apiClientId: provenance.createdByApiClientId }),
       generatedByModel,
       status: 'idea',
       name: created.name,
@@ -390,7 +420,8 @@ export async function createProjectViaMcp(
       currency: projectCurrencySchema.parse(created.currency),
       description: created.description,
       createdVia: 'mcp' as const,
-      createdByApiClientId: client.id,
+      createdByApiClientId: provenance.createdByApiClientId,
+      createdByOauthGrantId: provenance.createdByOauthGrantId,
       createdByUserId: actingUserId,
       generatedByModel,
       warning: warnings.length > 0 ? warnings.join(' ') : null,
@@ -431,6 +462,7 @@ export async function updateProjectViaMcp(
     });
   }
   const actingUserId = await assertCanWriteProject(app, client, workspace);
+  const provenance = projectProvenance(client);
   const nextName = input.name === undefined ? project.name : input.name.trim();
   if (!nextName) {
     throw new AppError({
@@ -479,15 +511,17 @@ export async function updateProjectViaMcp(
   }
   await writeAuditEvent(app.database, {
     organizationId: workspace.organizationId,
-    actorType: 'api_client',
-    actorId: client.id,
+    actorType: provenance.actorType,
+    actorId: provenance.actorId,
     action: 'project.update',
     entityType: 'project',
     entityId: project.id,
     metadata: {
       via: 'mcp',
       actingUserId,
-      apiClientId: client.id,
+      ...(provenance.createdByOauthGrantId
+        ? { oauthGrantId: provenance.createdByOauthGrantId }
+        : { apiClientId: provenance.createdByApiClientId }),
       name: nextName,
       status: nextStatus,
       methodology,

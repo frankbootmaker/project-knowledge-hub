@@ -199,6 +199,11 @@ export const projects = pgTable(
       (): AnyPgColumn => apiClients.id,
       { onDelete: 'set null' },
     ),
+    /** Set when ChatGPT (or another OAuth grant) created the project. Not an api_clients id. */
+    createdByOauthGrantId: uuid('created_by_oauth_grant_id').references(
+      (): AnyPgColumn => oauthGrants.id,
+      { onDelete: 'set null' },
+    ),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),

@@ -416,6 +416,7 @@ export async function loadActiveGrantForAccessToken(
       allowedWorkspaceIds: grant.allowedWorkspaceIds,
       allowedProjectIds: grant.allowedProjectIds,
       actingUserId: grant.userId,
+      oauthGrantId: grant.id,
     },
     profile: {
       id: user.id,

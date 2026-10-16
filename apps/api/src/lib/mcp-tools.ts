@@ -1216,6 +1216,7 @@ function toMcpProject(
         : null,
     createdVia: project.createdVia === 'mcp' ? 'mcp' : null,
     createdByApiClientId: project.createdByApiClientId,
+    createdByOauthGrantId: project.createdByOauthGrantId,
     createdByUserId: project.createdByUserId,
     generatedByModel: project.generatedByModel,
     url:

@@ -33,6 +33,11 @@ export type McpClientContext = {
   allowedWorkspaceIds: string[];
   allowedProjectIds: string[];
   actingUserId: string | null;
+  /**
+   * Set for an OAuth grant. `id` is then the grant id, not an api_clients row,
+   * and must not be written to created_by_api_client_id.
+   */
+  oauthGrantId?: string | null;
 };
 
 export type McpToolHandlers = {
@@ -1320,6 +1325,9 @@ export function createKnowledgeHubMcpServer(
       createdByApiClientId: nullableOutputText().describe(
         'API client id when created via MCP. Null otherwise.',
       ),
+      createdByOauthGrantId: nullableOutputText().describe(
+        'OAuth grant id. Null otherwise.',
+      ),
       createdByUserId: nullableOutputText().describe(
         'Acting user id when created via MCP. Null otherwise.',
       ),
@@ -1345,7 +1353,12 @@ export function createKnowledgeHubMcpServer(
       currency: projectCurrencyEnum,
       description: nullableOutputText(),
       createdVia: z.literal('mcp'),
-      createdByApiClientId: z.string(),
+      createdByApiClientId: nullableOutputText().describe(
+        'Bearer API client id. Null when an OAuth grant created the project.',
+      ),
+      createdByOauthGrantId: nullableOutputText().describe(
+        'OAuth grant id when ChatGPT created the project. Null for a bearer API client.',
+      ),
       createdByUserId: z.string(),
       generatedByModel: nullableOutputText(),
       warning: nullableOutputText(),
