@@ -20,6 +20,9 @@ export {
   milestoneStatusFromLinks,
   parentStatusFromChildren,
   derivedParentDates,
+  parentDateDetail,
+  plannedTargetPercent,
+  type ParentDateDetail,
   type DeliveryCompletionChild as DeliveryCompletionTask,
   type DeliveryCompletionRollup as DeliveryCompletion,
   type MilestoneLinkCompletion,
@@ -78,35 +81,6 @@ export function localDateIso(now = new Date()): string {
 /** UTC calendar day. Stable across the server and the first client paint. */
 export function utcDateIso(now = new Date()): string {
   return now.toISOString().slice(0, 10);
-}
-
-function utcDay(isoDate: string): number {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
-  if (!match) return Number.NaN;
-  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-}
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Share of a start–end window that should be finished today.
- * The start day is 0. The end day, and every day after it, is 100.
- * A missing or reversed window has no target.
- */
-export function plannedTargetPercent(
-  start: string | null | undefined,
-  end: string | null | undefined,
-  today: string,
-): number | null {
-  if (!start || !end || !ISO_DATE.test(start) || !ISO_DATE.test(end) || !ISO_DATE.test(today)) {
-    return null;
-  }
-  if (end < start) return null;
-  if (today <= start) return 0;
-  if (today >= end) return 100;
-  const span = utcDay(end) - utcDay(start);
-  if (span <= 0) return 100;
-  return Math.round(((utcDay(today) - utcDay(start)) / span) * 100);
 }
 
 /** Behind the straight-line plan, or still short after the end date. */

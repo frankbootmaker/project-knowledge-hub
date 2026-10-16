@@ -136,7 +136,15 @@ describe('llm-client-schemas', () => {
         expect(encoded).toContain('raidLinks');
         expect(encoded).toContain('changeItems');
       } else {
-        expect(schema.$ref).toBe('#/components/schemas/ToolResult');
+        const toolName = path.split('/').pop() ?? '';
+        const declared = findLlmTool(toolName)?.output;
+        if (declared) {
+          expect(schema.$ref).toBeUndefined();
+          expect(schema).toEqual(declared);
+          expect(JSON.stringify(schema)).not.toContain('"additionalProperties":true');
+        } else {
+          expect(schema.$ref).toBe('#/components/schemas/ToolResult');
+        }
       }
     }
 

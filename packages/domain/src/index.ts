@@ -375,6 +375,18 @@ export type ParentDateSpan = {
   end: string | null;
 };
 
+/** A side is derived when an included child supplies that date. */
+export type ParentDateDetail = ParentDateSpan & {
+  startDerived: boolean;
+  endDerived: boolean;
+};
+
+/** Planned target percent shown beside completion. Integer 0–100, or null. */
+export const targetPercentSchema = z.number().int().min(0).max(100);
+
+/** Dependency lag in working days. Negative is a lead. */
+export const dependencyLagDaysSchema = z.number().int().min(-3650).max(3650);
+
 function earliestDate(values: readonly string[]): string | null {
   if (values.length === 0) return null;
   return values.reduce((min, value) => (value < min ? value : min));
@@ -387,12 +399,13 @@ function latestDate(values: readonly string[]): string | null {
 
 /**
  * Start is the earliest included child start. End is the latest included end.
- * Cancelled children are excluded. A side with no child date keeps the manual value.
+ * Cancelled children are excluded. A side with no child date keeps the manual
+ * value and stays writable. A side taken from children is read-only.
  */
-export function derivedParentDates(
+export function parentDateDetail(
   manual: ParentDateSpan,
   children: readonly ParentDateSource[],
-): ParentDateSpan {
+): ParentDateDetail {
   const included = children.filter((child) => child.status !== 'cancelled');
   const starts = included
     .map((child) => child.start)
@@ -403,9 +416,66 @@ export function derivedParentDates(
   const start = earliestDate(starts);
   const end = latestDate(ends);
   return {
-    start: start ?? manual.start,
-    end: end ?? manual.end,
+    start: start ?? manual.start ?? null,
+    end: end ?? manual.end ?? null,
+    startDerived: start != null,
+    endDerived: end != null,
   };
+}
+
+/**
+ * Start is the earliest included child start. End is the latest included end.
+ * Cancelled children are excluded. A side with no child date keeps the manual value.
+ */
+export function derivedParentDates(
+  manual: ParentDateSpan,
+  children: readonly ParentDateSource[],
+): ParentDateSpan {
+  const detail = parentDateDetail(manual, children);
+  return { start: detail.start, end: detail.end };
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function utcDay(isoDate: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return Number.NaN;
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+/**
+ * Share of a start–end window that should be finished on `today`.
+ * The start day is 0. The end day, and every day after it, is 100.
+ * A missing or reversed window has no target. The result is an integer 0–100.
+ */
+export function plannedTargetPercent(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  today: string,
+): number | null {
+  if (!start || !end || !ISO_DATE.test(start) || !ISO_DATE.test(end) || !ISO_DATE.test(today)) {
+    return null;
+  }
+  if (end < start) return null;
+  if (today <= start) return 0;
+  if (today >= end) return 100;
+  const span = utcDay(end) - utcDay(start);
+  if (span <= 0) return 100;
+  return Math.round(((utcDay(today) - utcDay(start)) / span) * 100);
+}
+
+/**
+ * Names a date the caller tried to write after children already own that side.
+ * Undefined patch fields are omitted, so a read that does not send the date is fine.
+ */
+export function derivedDateWriteField(input: {
+  detail: ParentDateDetail;
+  startDate?: string | null;
+  endDate?: string | null;
+}): 'startDate' | 'endDate' | null {
+  if (input.detail.startDerived && input.startDate !== undefined) return 'startDate';
+  if (input.detail.endDerived && input.endDate !== undefined) return 'endDate';
+  return null;
 }
 
 /**

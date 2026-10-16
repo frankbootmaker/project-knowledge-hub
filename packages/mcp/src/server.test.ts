@@ -476,6 +476,48 @@ describe('definitionOfDone on project baseline tools', () => {
   });
 });
 
+const parentScheduleSample = {
+  id: 'item-1',
+  startDate: '2026-10-01',
+  endDate: '2026-10-11',
+  startDateDerived: false,
+  endDateDerived: true,
+  targetPercent: 50,
+};
+
+const pageSample = {
+  total: 1,
+  limit: 25,
+  nextCursor: null,
+  hasMore: false,
+};
+
+const taskSample = {
+  id: 'task-1',
+  title: 'Write the brief',
+  startDate: '2026-10-01',
+  completionPercent: 25,
+  targetPercent: null,
+  forecastHours: 3,
+  mediaLinkCount: 0,
+};
+
+const milestoneSample = {
+  id: 'milestone-1',
+  title: 'Gate',
+  startDate: '2026-10-01',
+  targetDate: '2026-10-11',
+  targetPercent: null,
+};
+
+const dependencySample = {
+  id: 'link-1',
+  linkType: 'FS',
+  lagDays: 2,
+  predecessor: { id: 'task-1', humanKey: 'PRO-T-1' },
+  successor: { id: 'task-2', humanKey: 'PRO-T-2' },
+};
+
 const OUTPUT_SAMPLES: Record<string, unknown> = {
   get_project: { project: realisticProject() },
   update_project_baseline: { project: realisticProject() },
@@ -503,19 +545,39 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
     warning: null,
   },
   list_project_tasks: {
-    tasks: [
-      {
-        id: 'task-1',
-        title: 'Write the brief',
-        completionPercent: 25,
-        forecastHours: 3,
-        mediaLinkCount: 0,
-      },
-    ],
-    total: 1,
-    limit: 25,
-    nextCursor: null,
-    hasMore: false,
+    tasks: [taskSample],
+    ...pageSample,
+  },
+  get_project_task: { task: taskSample },
+  create_project_task: { task: taskSample },
+  update_project_task: { task: taskSample },
+  list_project_milestones: {
+    milestones: [milestoneSample],
+    ...pageSample,
+  },
+  create_project_milestone: { milestone: milestoneSample },
+  update_project_milestone: { milestone: milestoneSample },
+  get_project_milestone: { milestone: milestoneSample },
+  list_project_epics: {
+    epics: [parentScheduleSample],
+    ...pageSample,
+  },
+  create_project_epic: { epic: parentScheduleSample },
+  update_project_epic: { epic: parentScheduleSample },
+  list_project_user_stories: {
+    userStories: [parentScheduleSample],
+    ...pageSample,
+  },
+  create_project_user_story: { userStory: parentScheduleSample },
+  update_project_user_story: { userStory: parentScheduleSample },
+  list_delivery_dependencies: {
+    predecessors: [dependencySample],
+    successors: [],
+    scheduleDriven: false,
+  },
+  set_delivery_dependency: {
+    dependency: dependencySample,
+    schedule: [{ id: 'task-2', startDate: '2026-10-13', finishDate: '2026-10-14' }],
   },
   get_profile: {
     id: '55555555-5555-4555-8555-555555555555',
@@ -644,6 +706,128 @@ describe('MCP output schemas accept their sample results', () => {
             'https://knowledge.example.com/.well-known/oauth-protected-resource/mcp/oauth',
           profile: { id: 'user-1', name: 'Ada', email: 'ada@example.com' },
         },
+      },
+    );
+  });
+});
+
+describe('delivery schedule fields (PRO-T-94)', () => {
+  test('target percent stays in 0-100 and lag must be an integer', async () => {
+    const validator = new AjvJsonSchemaValidator();
+    await withMcpClient(['pm:read', 'pm:write'], {}, async (client) => {
+      const listed = await client.listTools();
+      const epic = listed.tools.find((tool) => tool.name === 'list_project_epics');
+      const set = listed.tools.find((tool) => tool.name === 'set_delivery_dependency');
+      const epicSchema = epic?.outputSchema as {
+        properties?: { epics?: { items?: object } };
+      };
+      const itemSchema = epicSchema.properties?.epics?.items;
+      expect(itemSchema).toBeTruthy();
+      const check = validator.getValidator(itemSchema as object);
+      expect(check({ ...parentScheduleSample, targetPercent: 0 }).valid).toBe(true);
+      expect(check({ ...parentScheduleSample, targetPercent: 100 }).valid).toBe(true);
+      expect(check({ ...parentScheduleSample, targetPercent: null }).valid).toBe(true);
+      expect(check({ ...parentScheduleSample, targetPercent: 101 }).valid).toBe(false);
+      expect(check({ ...parentScheduleSample, targetPercent: -1 }).valid).toBe(false);
+      expect(check({ ...parentScheduleSample, targetPercent: 1.5 }).valid).toBe(false);
+
+      const lag = (set?.inputSchema as {
+        properties?: { lagDays?: object; links?: { items?: { properties?: { lagDays?: object } } } };
+      }).properties?.lagDays;
+      const lagCheck = validator.getValidator(lag as object);
+      expect(lagCheck(2).valid).toBe(true);
+      expect(lagCheck(-3).valid).toBe(true);
+      expect(lagCheck(1.5).valid).toBe(false);
+      const linkLag = (set?.inputSchema as {
+        properties?: { links?: { items?: { properties?: { lagDays?: object } } } };
+      }).properties?.links?.items?.properties?.lagDays;
+      expect(validator.getValidator(linkLag as object)(1.5).valid).toBe(false);
+    });
+  });
+
+  test('a non-integer lag is rejected before the handler', async () => {
+    const setDeliveryDependency = vi.fn();
+    await withMcpClient(['pm:write'], { setDeliveryDependency }, async (client) => {
+      const result = await client.callTool({
+        name: 'set_delivery_dependency',
+        arguments: {
+          projectId: PROJECT_ID,
+          predecessorId: 'PRO-T-1',
+          successorId: 'PRO-T-2',
+          linkType: 'FS',
+          lagDays: 1.5,
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(setDeliveryDependency).not.toHaveBeenCalled();
+    });
+  });
+
+  test('startDate and lagDays round-trip and match the output schema', async () => {
+    const validator = new AjvJsonSchemaValidator();
+    const epic = {
+      ...parentScheduleSample,
+      id: 'epic-1',
+      startDate: '2026-10-08',
+      startDateDerived: false,
+      endDateDerived: false,
+      targetPercent: 0,
+    };
+    const createProjectEpic = vi.fn(async (args: { startDate?: string | null }) => ({
+      epic: { ...epic, startDate: args.startDate ?? null },
+    }));
+    const setDeliveryDependency = vi.fn(async (args: { lagDays?: number }) => ({
+      dependency: { ...dependencySample, lagDays: args.lagDays ?? 0 },
+      schedule: [{ id: 'task-2', startDate: '2026-10-13', finishDate: null }],
+    }));
+    await withMcpClient(
+      ['pm:write'],
+      { createProjectEpic, setDeliveryDependency },
+      async (client) => {
+        const listed = await client.listTools();
+        const created = await client.callTool({
+          name: 'create_project_epic',
+          arguments: {
+            projectId: PROJECT_ID,
+            title: 'Rollout',
+            startDate: '2026-10-08',
+          },
+        });
+        expect(created.isError).not.toBe(true);
+        const createdBody = JSON.parse(toolText(created)) as {
+          epic: { startDate: string };
+        };
+        expect(createdBody.epic.startDate).toBe('2026-10-08');
+        const createSchema = listed.tools.find(
+          (tool) => tool.name === 'create_project_epic',
+        )?.outputSchema;
+        expect(
+          validator.getValidator(createSchema as object)(createdBody).valid,
+        ).toBe(true);
+        expect(created.structuredContent).toEqual(createdBody);
+
+        const linked = await client.callTool({
+          name: 'set_delivery_dependency',
+          arguments: {
+            projectId: PROJECT_ID,
+            predecessorId: 'PRO-T-1',
+            successorId: 'PRO-T-2',
+            linkType: 'FS',
+            lagDays: 4,
+          },
+        });
+        expect(linked.isError).not.toBe(true);
+        const linkedBody = JSON.parse(toolText(linked)) as {
+          dependency: { lagDays: number };
+        };
+        expect(linkedBody.dependency.lagDays).toBe(4);
+        const setSchema = listed.tools.find(
+          (tool) => tool.name === 'set_delivery_dependency',
+        )?.outputSchema;
+        expect(validator.getValidator(setSchema as object)(linkedBody).valid).toBe(true);
+        expect(setDeliveryDependency).toHaveBeenCalledWith(
+          expect.objectContaining({ lagDays: 4 }),
+        );
       },
     );
   });
