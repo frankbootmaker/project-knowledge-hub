@@ -5,8 +5,41 @@ import {
   buildKnowledgeRecordMetadata,
   recordTypeSchema,
   createKnowledgeRecordInputSchema,
+  isKnowledgeRecordSlug,
   updateKnowledgeRecordInputSchema,
 } from './record-types.js';
+
+describe('knowledge record slug format', () => {
+  it('accepts lowercase slugs and rejects other characters', () => {
+    expect(isKnowledgeRecordSlug('ai-lawyer-nyitott-kerdesek-jogi-atnezese')).toBe(
+      true,
+    );
+    expect(isKnowledgeRecordSlug('a')).toBe(true);
+    expect(isKnowledgeRecordSlug('AI-Lawyer')).toBe(false);
+    expect(isKnowledgeRecordSlug('kerdesek átnézése')).toBe(false);
+    expect(isKnowledgeRecordSlug('kérdések')).toBe(false);
+    expect(isKnowledgeRecordSlug('-leading')).toBe(false);
+    expect(isKnowledgeRecordSlug('trailing-')).toBe(false);
+    expect(isKnowledgeRecordSlug('double--hyphen')).toBe(false);
+    expect(isKnowledgeRecordSlug('')).toBe(false);
+  });
+
+  it('accepts an optional slug on update and leaves title-only updates alone', () => {
+    expect(
+      updateKnowledgeRecordInputSchema.safeParse({
+        recordId: 'HL1-VIS-2',
+        changeMessage: 'rename',
+        slug: 'ai-lawyer-notes',
+      }).success,
+    ).toBe(true);
+    const titleOnly = updateKnowledgeRecordInputSchema.parse({
+      recordId: 'HL1-VIS-2',
+      changeMessage: 'retitle',
+      title: 'AI Lawyer – nyitott kérdések jogi átnézése',
+    });
+    expect(titleOnly.slug).toBeUndefined();
+  });
+});
 
 describe('record types catalog', () => {
   it('includes ledger planning types', () => {
@@ -91,6 +124,7 @@ describe('record types catalog', () => {
     
     // PRO-T-4: update guide should include archived in optional fields
     expect(meta.updateKnowledgeRecord.optionalFields).toContain('archived');
+    expect(meta.updateKnowledgeRecord.optionalFields).toContain('slug');
     
     // PRO-T-4: recordId should be documented in fields
     const recordIdField = meta.updateKnowledgeRecord.fields.find(

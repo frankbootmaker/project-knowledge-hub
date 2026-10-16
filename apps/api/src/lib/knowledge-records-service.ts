@@ -13,6 +13,8 @@ import {
 import {
   AppError,
   getDocKeyCode,
+  isKnowledgeRecordSlug,
+  KNOWLEDGE_RECORD_SLUG_MAX,
   knowledgeSourceTypeSchema,
   lifecycleStatusSchema,
   recordTypeSchema,
@@ -73,6 +75,7 @@ export const createRecordInputSchema = z.object({
 
 export const updateRecordInputSchema = z.object({
   title: z.string().min(1).max(300).optional(),
+  slug: z.string().min(1).max(KNOWLEDGE_RECORD_SLUG_MAX).optional(),
   summary: z.string().max(1000).nullable().optional(),
   recordType: recordTypeSchema.optional(),
   lifecycleStatus: lifecycleStatusSchema.optional(),
@@ -672,6 +675,13 @@ export async function updateKnowledgeRecord(
   ipAddress?: string | null,
 ) {
   const body = updateRecordInputSchema.parse(input);
+  if (body.slug !== undefined && !isKnowledgeRecordSlug(body.slug)) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'Slug must be lowercase a-z, digits, and hyphens',
+      statusCode: 400,
+    });
+  }
 
   const [record] = await app.database.db
     .select()
@@ -714,6 +724,28 @@ export async function updateKnowledgeRecord(
   if (!restoringSoftDelete) {
     await assertProjectInWorkspace(app.database, record.workspaceId, nextProjectId);
     await assertSystemInWorkspace(app.database, record.workspaceId, nextSystemId);
+  }
+
+  // Slug changes only when the caller sends one. Title edits keep the stored slug.
+  const nextSlug = body.slug ?? record.slug;
+  if (body.slug !== undefined && body.slug !== record.slug) {
+    const [conflict] = await app.database.db
+      .select({ id: knowledgeRecords.id })
+      .from(knowledgeRecords)
+      .where(
+        and(
+          eq(knowledgeRecords.workspaceId, record.workspaceId),
+          eq(knowledgeRecords.slug, body.slug),
+        ),
+      )
+      .limit(1);
+    if (conflict) {
+      throw new AppError({
+        code: 'KNOWLEDGE_RECORD_SLUG_CONFLICT',
+        message: 'A knowledge record with this slug already exists in the workspace',
+        statusCode: 409,
+      });
+    }
   }
 
   const nextTitle = body.title ?? record.title;
@@ -791,6 +823,7 @@ export async function updateKnowledgeRecord(
         .update(knowledgeRecords)
         .set({
           title: nextTitle,
+          slug: nextSlug,
           summary: nextSummary,
           recordType: nextRecordType,
           documentKeyType: allocated.issueKeyType,
@@ -839,6 +872,7 @@ export async function updateKnowledgeRecord(
       .update(knowledgeRecords)
       .set({
         title: nextTitle,
+        slug: nextSlug,
         summary: nextSummary,
         recordType: nextRecordType,
         documentKeyType: nextDocumentKeyType,
@@ -943,6 +977,9 @@ export async function updateKnowledgeRecord(
       versionNumber: finalRecord.currentVersionNumber,
       versioned: shouldVersion,
       fields: Object.keys(body),
+      ...(body.slug !== undefined && body.slug !== record.slug
+        ? { previousSlug: record.slug, slug: finalRecord.slug }
+        : {}),
       ...(body.lifecycleStatus === 'verified' && reviewedByUser
         ? {
             approvedBy: {

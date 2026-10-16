@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { and, eq } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { hashPassword } from '@project-knowledge-hub/auth';
 import { loadEnv } from '@project-knowledge-hub/config';
 import {
+  auditEvents,
   createDatabase,
   memberships,
   organizations,
@@ -201,6 +203,149 @@ describe.skipIf(!hasIntegrationEnv)('Knowledge records', () => {
     expect(verified.knowledgeRecord.verifiedAt).toBeTruthy();
     expect(verified.knowledgeRecord.reviewedByUser?.displayName).toBeTruthy();
     expect(verified.knowledgeRecord.metadata?.approvedBy?.displayName).toBeTruthy();
+  });
+
+  it('transliterates new slugs and renames only when slug is sent', async () => {
+    const headers = { cookie: adminCookie, origin: 'http://localhost:3100' };
+    const title = 'AI Lawyer – nyitott kérdések jogi átnézése';
+    const legacySlug = 'ai-lawyer-nyitott-k-rd-sek-jogi-tn-z-se';
+
+    const created = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge-records',
+      headers,
+      payload: {
+        workspaceId,
+        title,
+        recordType: 'note',
+        contentMarkdown: '# Notes',
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const fresh = created.json() as {
+      knowledgeRecord: { id: string; slug: string };
+    };
+    expect(fresh.knowledgeRecord.slug).toBe(
+      'ai-lawyer-nyitott-kerdesek-jogi-atnezese',
+    );
+
+    const legacy = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge-records',
+      headers,
+      payload: {
+        workspaceId,
+        title,
+        slug: legacySlug,
+        recordType: 'note',
+        contentMarkdown: '# Legacy',
+      },
+    });
+    expect(legacy.statusCode).toBe(200);
+    const stored = legacy.json() as {
+      knowledgeRecord: { id: string; slug: string };
+    };
+    expect(stored.knowledgeRecord.slug).toBe(legacySlug);
+
+    const renamedTitle = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/knowledge-records/${stored.knowledgeRecord.id}`,
+      headers,
+      payload: { title: `${title} (updated)` },
+    });
+    expect(renamedTitle.statusCode).toBe(200);
+    const afterTitle = renamedTitle.json() as {
+      knowledgeRecord: { slug: string; title: string };
+    };
+    expect(afterTitle.knowledgeRecord.title).toContain('updated');
+    expect(afterTitle.knowledgeRecord.slug).toBe(legacySlug);
+
+    const listed = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/knowledge-records?workspaceId=${workspaceId}`,
+      headers: { cookie: adminCookie },
+    });
+    expect(listed.statusCode).toBe(200);
+    const rows = listed.json() as {
+      knowledgeRecords: Array<{ id: string; slug: string }>;
+    };
+    expect(
+      rows.knowledgeRecords.find((row) => row.id === stored.knowledgeRecord.id)?.slug,
+    ).toBe(legacySlug);
+
+    const duplicate = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge-records',
+      headers,
+      payload: {
+        workspaceId,
+        title: 'Another',
+        slug: legacySlug,
+        recordType: 'note',
+      },
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({
+      error: { code: 'KNOWLEDGE_RECORD_SLUG_CONFLICT' },
+    });
+
+    const invalid = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/knowledge-records/${fresh.knowledgeRecord.id}`,
+      headers,
+      payload: { slug: 'Not A Slug' },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Slug must be lowercase a-z, digits, and hyphens',
+      },
+    });
+
+    const renamed = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/knowledge-records/${fresh.knowledgeRecord.id}`,
+      headers,
+      payload: { slug: 'ai-lawyer-notes', changeMessage: 'Rename slug' },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(
+      (renamed.json() as { knowledgeRecord: { slug: string } }).knowledgeRecord.slug,
+    ).toBe('ai-lawyer-notes');
+
+    const conflict = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/knowledge-records/${stored.knowledgeRecord.id}`,
+      headers,
+      payload: { slug: 'ai-lawyer-notes' },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({
+      error: {
+        code: 'KNOWLEDGE_RECORD_SLUG_CONFLICT',
+        message: 'A knowledge record with this slug already exists in the workspace',
+      },
+    });
+
+    const audits = await app!.database.db
+      .select({ metadata: auditEvents.metadataJson })
+      .from(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.entityId, fresh.knowledgeRecord.id),
+          eq(auditEvents.action, 'knowledge_record.update'),
+        ),
+      );
+    expect(
+      audits.some((row) => {
+        const meta = row.metadata as { previousSlug?: string; slug?: string } | null;
+        return (
+          meta?.previousSlug === 'ai-lawyer-nyitott-kerdesek-jogi-atnezese' &&
+          meta.slug === 'ai-lawyer-notes'
+        );
+      }),
+    ).toBe(true);
   });
 
   it('blocks reader mutations and allows reader views', async () => {

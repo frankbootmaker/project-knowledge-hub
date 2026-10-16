@@ -2474,13 +2474,15 @@ export function createMcpToolHandlers(
         input.systemId === undefined &&
         input.tags === undefined &&
         input.language === undefined &&
-        input.translationGroupId === undefined;
+        input.translationGroupId === undefined &&
+        input.slug === undefined;
 
       const result = await updateKnowledgeRecord(
         app,
         resolvedId,
         {
           title: input.title,
+          slug: input.slug,
           summary: input.summary,
           recordType,
           contentMarkdown: input.contentMarkdown,

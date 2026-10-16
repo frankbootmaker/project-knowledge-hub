@@ -230,6 +230,8 @@ export type McpToolHandlers = {
     translationGroupId?: string | null;
     generatedByModel?: string;
     sourceTitle?: string;
+    /** Explicit URL slug. Lowercase a-z, digits, and hyphens. */
+    slug?: string;
     /** Soft-archive (true) or restore (false). */
     archived?: boolean;
   }) => Promise<unknown>;
@@ -1889,7 +1891,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_knowledge_record',
-    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Send the full markdown body: a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. Set archived=true to soft-archive (or false to restore). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Send the full markdown body: a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. Set archived=true to soft-archive (or false to restore). Optional slug renames the URL (lowercase a-z, 0-9, hyphens). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     updateKnowledgeRecordInputSchema.shape,
     async (args) =>
       wrap('update_knowledge_record', 'knowledge:write', () =>

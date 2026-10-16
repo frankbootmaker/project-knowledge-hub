@@ -824,7 +824,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_knowledge_record',
     description:
-      'Update a knowledge record. Content edits stay draft. Send the full markdown body; a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. archived=true sets archivedAt and leaves lifecycleStatus unchanged. Requires knowledge:write.',
+      'Update a knowledge record. Content edits stay draft. Send the full markdown body; a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. archived=true sets archivedAt and leaves lifecycleStatus unchanged. Optional slug renames the URL (lowercase a-z, 0-9, hyphens). Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     openApi: true,
@@ -838,6 +838,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           maxLength: 500,
         }),
         title: stringProp('Title', { minLength: 1, maxLength: 300 }),
+        slug: stringProp('URL slug (lowercase a-z, 0-9, hyphens)', {
+          minLength: 1,
+          maxLength: 96,
+        }),
         summary: { type: 'string', nullable: true, maxLength: 1000 },
         recordType: { type: 'string', enum: [...RECORD_TYPES] },
         contentMarkdown: stringProp('Markdown body', { maxLength: 500_000 }),
