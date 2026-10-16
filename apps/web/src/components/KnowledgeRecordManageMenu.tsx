@@ -744,7 +744,11 @@ export function KnowledgeRecordManageMenu(props: {
               />
               <ManageDetailRow
                 label={t('lifecycleStatus')}
-                value={lifecycleLabel(props.record.lifecycleStatus, t)}
+                value={
+                  props.record.archivedAt
+                    ? `${lifecycleLabel(props.record.lifecycleStatus, t)} · ${tArchive('archivedBadge')}`
+                    : lifecycleLabel(props.record.lifecycleStatus, t)
+                }
               />
               <ManageDetailRow
                 label={t('sourceOfTruth')}

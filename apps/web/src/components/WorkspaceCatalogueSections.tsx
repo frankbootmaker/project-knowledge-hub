@@ -7,6 +7,7 @@ import { Badge, Input, LinkButton, lifecycleLabel } from './ui';
 import { LocalDateTime } from './LocalDateTime';
 import { ImportTypePickerButton } from './ImportTypePickerButton';
 import { CollapsibleSection } from './CollapsibleSection';
+import { recordHref } from '../lib/record-href';
 import {
   groupRecordsByTranslationFamily,
   normalizeContentLanguage,
@@ -297,20 +298,24 @@ export function WorkspaceCatalogueSections({
                         ),
                       ),
                     ].sort((a, b) => a.localeCompare(b));
+                    const recordPath = recordHref({
+                      workspaceSlug,
+                      recordSlug: preferred.slug,
+                    });
                     return (
                       <tr key={preferred.translationGroupId ?? preferred.id}>
                         <td>
-                          {preferred.humanKey ? (
-                            <span className="kh-ops-key-badge">{preferred.humanKey}</span>
-                          ) : (
-                            <span className="kh-ops-type-chip">{preferred.recordType}</span>
-                          )}
+                          <Link
+                            href={recordPath}
+                            className={
+                              preferred.humanKey ? 'kh-ops-key-badge' : 'kh-ops-type-chip'
+                            }
+                          >
+                            {preferred.humanKey ?? preferred.recordType}
+                          </Link>
                         </td>
                         <td className="kh-ops-primary-cell">
-                          <Link
-                            href={`/workspaces/${workspaceSlug}/records/${preferred.slug}`}
-                            className="no-underline"
-                          >
+                          <Link href={recordPath} className="no-underline">
                             {preferred.title}
                           </Link>
                         </td>

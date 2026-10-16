@@ -333,7 +333,12 @@ export async function KnowledgeRecordDetailView({
             </div>
             <dl className="kh-ops-keyvals">
               <dt>{t('lifecycleStatus')}</dt>
-              <dd>{lifecycleLabel(record.lifecycleStatus, t)}</dd>
+              <dd>
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  {lifecycleLabel(record.lifecycleStatus, t)}
+                  {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
+                </span>
+              </dd>
               <dt>{t('sourceOfTruth')}</dt>
               <dd>{record.sourceOfTruthMode}</dd>
               <dt>{t('contentLanguage')}</dt>

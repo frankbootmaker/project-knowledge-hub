@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { slugify } from '@project-knowledge-hub/auth';
 import { projects, workspaces } from '@project-knowledge-hub/database';
@@ -199,7 +199,11 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       .where(
         query.includeArchived
           ? eq(projects.workspaceId, query.workspaceId)
-          : and(eq(projects.workspaceId, query.workspaceId), isNull(projects.archivedAt)),
+          : and(
+              eq(projects.workspaceId, query.workspaceId),
+              isNull(projects.archivedAt),
+              ne(projects.status, 'archived'),
+            ),
       );
 
     const projectIds = rows.map((row) => row.id);
@@ -556,7 +560,11 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         name: body.name ?? project.name,
         summary: body.summary === undefined ? project.summary : body.summary,
         description: body.description === undefined ? project.description : body.description,
-        status: body.status ?? project.status,
+        status:
+          body.status ??
+          (body.archived === false && project.status === 'archived'
+            ? 'active'
+            : project.status),
         ownerUserId: body.ownerUserId === undefined ? project.ownerUserId : body.ownerUserId,
         businessDomain:
           body.businessDomain === undefined ? project.businessDomain : body.businessDomain,

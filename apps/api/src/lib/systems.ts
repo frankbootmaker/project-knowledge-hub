@@ -451,7 +451,9 @@ export async function updateSystem(
         input.systemType === undefined ? system.systemType : input.systemType,
       status: input.status
         ? systemStatusSchema.parse(input.status)
-        : system.status,
+        : input.archived === false && system.status === 'archived'
+          ? 'active'
+          : system.status,
       ownerUserId:
         input.ownerUserId === undefined
           ? system.ownerUserId

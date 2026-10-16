@@ -7,6 +7,7 @@ import {
   canRestoreWorkspace,
   type ArchivedListings,
 } from '../lib/archive-listings';
+import { recordHref } from '../lib/record-href';
 import type { SessionPayload } from '../lib/session';
 
 function formatDate(value: string | null): string {
@@ -117,7 +118,8 @@ export async function ArchivedItemsSections({
                     </td>
                     <td>{formatDate(project.archivedAt ?? project.updatedAt)}</td>
                     <td>
-                      {canRestoreCatalogue(session, project.workspaceId) ? (
+                      {project.archivedAt &&
+                      canRestoreCatalogue(session, project.workspaceId) ? (
                         <ArchiveEntityButton
                           kind="project"
                           entityId={project.id}
@@ -172,7 +174,8 @@ export async function ArchivedItemsSections({
                     </td>
                     <td>{formatDate(system.archivedAt ?? system.updatedAt)}</td>
                     <td>
-                      {canRestoreCatalogue(session, system.workspaceId) ? (
+                      {system.archivedAt &&
+                      canRestoreCatalogue(session, system.workspaceId) ? (
                         <ArchiveEntityButton
                           kind="system"
                           entityId={system.id}
@@ -209,18 +212,20 @@ export async function ArchivedItemsSections({
                 </tr>
               </thead>
               <tbody>
-                {listings.records.map((record) => (
+                {listings.records.map((record) => {
+                  const recordPath = recordHref({
+                    workspaceSlug: record.workspaceSlug,
+                    recordSlug: record.slug,
+                  });
+                  return (
                   <tr key={record.id}>
                     <td className="kh-ops-primary-cell">
                       {record.humanKey ? (
-                        <span className="kh-ops-type-chip mr-2">
+                        <Link href={recordPath} className="kh-ops-key-badge mr-2">
                           {record.humanKey}
-                        </span>
+                        </Link>
                       ) : null}
-                      <Link
-                        href={`/workspaces/${record.workspaceSlug}/records/${record.slug}`}
-                        className="no-underline"
-                      >
+                      <Link href={recordPath} className="no-underline">
                         {record.title}
                       </Link>
                       <div className="text-[11px] font-normal text-ink-muted">
@@ -231,20 +236,22 @@ export async function ArchivedItemsSections({
                       <span className="kh-ops-type-chip">{t('kindRecord')}</span>
                     </td>
                     <td>{formatDate(record.archivedAt ?? record.updatedAt)}</td>
-                    <td>
-                      {canRestoreCatalogue(session, record.workspaceId) ? (
-                        <ArchiveEntityButton
-                          kind="record"
-                          entityId={record.id}
-                          entityName={record.title}
-                          archived
-                        />
-                      ) : (
-                        <Badge tone="warn">{t('archivedBadge')}</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      <td>
+                        {record.archivedAt &&
+                        canRestoreCatalogue(session, record.workspaceId) ? (
+                          <ArchiveEntityButton
+                            kind="record"
+                            entityId={record.id}
+                            entityName={record.title}
+                            archived
+                          />
+                        ) : (
+                          <Badge tone="warn">{t('archivedBadge')}</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
