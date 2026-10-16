@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { DocumentImportDetail } from '../../../../../../components/DocumentImportDetail';
+import { PanelBackLink } from '../../../../../../components/PanelBackLink';
+import { RegisterShellCrumbs } from '../../../../../../components/ops/ShellCrumbContext';
 import { Page, PageHeader } from '../../../../../../components/ui';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
@@ -51,6 +53,7 @@ export default async function DocumentImportDetailPage({
 }) {
   const session = await requireSession();
   const t = await getTranslations('documentImports');
+  const tImports = await getTranslations('imports');
   const { slug, importId } = await params;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -79,20 +82,38 @@ export default async function DocumentImportDetailPage({
 
   return (
     <Page narrow>
-      <PageHeader title={documentImport.title} description={t('detailHelp')} />
-      <p className="mt-0 mb-6">
-        <Link
-          href={`/workspaces/${workspace.slug}`}
-          className="text-sm text-ink-muted no-underline hover:text-ink"
-        >
-          {t('backToWorkspace')}
-        </Link>
-      </p>
+      <RegisterShellCrumbs pageTitle={documentImport.title} />
+      <PageHeader
+        eyebrow={
+          <>
+            <Link
+              href={`/workspaces/${workspace.slug}`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {workspace.name}
+            </Link>
+            {' / '}
+            <Link
+              href={`/workspaces/${workspace.slug}/imports`}
+              className="text-brand no-underline hover:text-brand-hover"
+            >
+              {tImports('title')}
+            </Link>
+          </>
+        }
+        title={documentImport.title}
+        description={t('detailHelp')}
+      />
       <DocumentImportDetail
         workspaceSlug={workspace.slug}
         documentImport={documentImport}
         canMutate={canMutate}
       />
+      <section className="kh-ops-panel mt-4">
+        <PanelBackLink href={`/workspaces/${workspace.slug}`} divided={false}>
+          {t('backToWorkspace')}
+        </PanelBackLink>
+      </section>
     </Page>
   );
 }

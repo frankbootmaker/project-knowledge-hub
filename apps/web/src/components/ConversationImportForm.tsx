@@ -3,6 +3,7 @@
 import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { PanelBackLink } from './PanelBackLink';
 import { useTranslations } from 'next-intl';
 import {
   Button,
@@ -179,6 +180,9 @@ export function ConversationImportForm(props: {
           </Button>
         </div>
       </form>
+      <PanelBackLink href={`/workspaces/${props.workspaceSlug}`}>
+        {t('backToWorkspace')}
+      </PanelBackLink>
     </section>
   );
 }

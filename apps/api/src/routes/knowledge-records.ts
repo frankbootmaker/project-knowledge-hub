@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   knowledgeRecords,
@@ -93,6 +93,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     const conditions = [eq(knowledgeRecords.workspaceId, query.workspaceId)];
     if (!query.includeArchived) {
       conditions.push(isNull(knowledgeRecords.archivedAt));
+      conditions.push(ne(knowledgeRecords.lifecycleStatus, 'archived'));
     }
     if (query.projectId) {
       conditions.push(eq(knowledgeRecords.projectId, query.projectId));

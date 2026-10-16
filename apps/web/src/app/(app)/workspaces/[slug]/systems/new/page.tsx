@@ -2,9 +2,9 @@
 
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { BackLink } from '../../../../../../components/PanelBackLink';
 import { parseOptionalNumber } from '../../../../../../lib/project-currency';
 import {
   Button,
@@ -153,12 +153,7 @@ export default function NewSystemPage() {
     <Page>
       <PageHeader title={t('createTitle')} />
       <p className="mt-0 mb-4">
-        <Link
-          href={`/workspaces/${workspaceSlug}`}
-          className="text-sm text-ink-muted no-underline hover:text-ink"
-        >
-          {t('backToWorkspace')}
-        </Link>
+        <BackLink href={`/workspaces/${workspaceSlug}`}>{t('backToWorkspace')}</BackLink>
       </p>
       <section className="kh-ops-panel">
         <form onSubmit={onSubmit}>

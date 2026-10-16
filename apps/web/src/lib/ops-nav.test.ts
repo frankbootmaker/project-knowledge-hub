@@ -568,4 +568,60 @@ describe('ops nav', () => {
       { href: '/workspaces/platform/projects/renewal', label: 'Renewal' },
     ]);
   });
+
+  it('adds an imports trail in the workspace header', () => {
+    expect(
+      headerCrumbs('/workspaces/platform/imports', { workspaceName: 'Platform' }),
+    ).toEqual([
+      { href: '/workspaces/platform', label: 'Platform' },
+      {
+        href: '/workspaces/platform/imports',
+        label: 'Imports',
+        labelKey: 'imports',
+      },
+    ]);
+    expect(
+      headerCrumbs('/workspaces/platform/imports/new', { workspaceName: 'Platform' }),
+    ).toEqual([
+      { href: '/workspaces/platform', label: 'Platform' },
+      {
+        href: '/workspaces/platform/imports',
+        label: 'Imports',
+        labelKey: 'imports',
+      },
+      {
+        href: '/workspaces/platform/imports/new',
+        label: 'New import',
+        labelKey: 'newImport',
+      },
+    ]);
+    expect(
+      headerCrumbs('/workspaces/platform/imports/paste-1', {
+        workspaceName: 'Platform',
+        pageTitle: 'Chat paste',
+      }),
+    ).toEqual([
+      { href: '/workspaces/platform', label: 'Platform' },
+      {
+        href: '/workspaces/platform/imports',
+        label: 'Imports',
+        labelKey: 'imports',
+      },
+      { href: '/workspaces/platform/imports/paste-1', label: 'Chat paste' },
+    ]);
+    expect(
+      headerCrumbs('/workspaces/platform/document-imports/new', {
+        workspaceName: 'Platform',
+        pageTitle: 'Import document',
+      }),
+    ).toEqual([
+      { href: '/workspaces/platform', label: 'Platform' },
+      {
+        href: '/workspaces/platform/imports',
+        label: 'Imports',
+        labelKey: 'imports',
+      },
+      { href: '/workspaces/platform/document-imports/new', label: 'Import document' },
+    ]);
+  });
 });

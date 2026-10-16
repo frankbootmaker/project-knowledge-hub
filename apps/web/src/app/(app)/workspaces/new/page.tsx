@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { BackLink } from '../../../../components/PanelBackLink';
 import { WorkspaceColorPicker } from '../../../../components/WorkspaceColorPicker';
 import {
   Button,
@@ -62,6 +63,9 @@ export default function NewWorkspacePage() {
   return (
     <Page>
       <PageHeader title={t('createTitle')} />
+      <p className="mt-0 mb-4">
+        <BackLink href="/workspaces">{t('backToWorkspaces')}</BackLink>
+      </p>
       <section className="kh-ops-panel kh-ops-narrow-form">
         <form onSubmit={onSubmit}>
           <div className="kh-ops-card-body">

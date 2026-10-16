@@ -12,6 +12,7 @@ export type ArchivedProject = {
   id: string;
   name: string;
   slug: string;
+  status?: string | null;
   workspaceId: string;
   workspaceSlug: string;
   workspaceName: string;
@@ -23,6 +24,7 @@ export type ArchivedSystem = {
   id: string;
   name: string;
   slug: string;
+  status?: string | null;
   workspaceId: string;
   workspaceSlug: string;
   workspaceName: string;
@@ -35,12 +37,37 @@ export type ArchivedRecord = {
   title: string;
   slug: string;
   humanKey?: string | null;
+  lifecycleStatus?: string | null;
   workspaceId: string;
   workspaceSlug: string;
   workspaceName: string;
   archivedAt: string | null;
   updatedAt: string;
 };
+
+/** Soft-deleted records and records whose lifecycle is Archived. */
+export function knowledgeRecordAppearsInArchive(record: {
+  archivedAt: string | null;
+  lifecycleStatus?: string | null;
+}): boolean {
+  return Boolean(record.archivedAt) || record.lifecycleStatus === 'archived';
+}
+
+/** Soft-deleted projects and projects whose status is Archived. */
+export function projectAppearsInArchive(project: {
+  archivedAt: string | null;
+  status?: string | null;
+}): boolean {
+  return Boolean(project.archivedAt) || project.status === 'archived';
+}
+
+/** Soft-deleted systems and systems whose status is Archived. */
+export function systemAppearsInArchive(system: {
+  archivedAt: string | null;
+  status?: string | null;
+}): boolean {
+  return Boolean(system.archivedAt) || system.status === 'archived';
+}
 
 export type ArchivedListings = {
   workspaces: ArchivedWorkspace[];
@@ -54,6 +81,7 @@ type ProjectRow = {
   id: string;
   name: string;
   slug: string;
+  status?: string | null;
   workspaceId: string;
   archivedAt: string | null;
   updatedAt: string;
@@ -62,6 +90,7 @@ type SystemRow = {
   id: string;
   name: string;
   slug: string;
+  status?: string | null;
   workspaceId: string;
   archivedAt: string | null;
   updatedAt: string;
@@ -71,6 +100,7 @@ type RecordRow = {
   title: string;
   slug: string;
   humanKey?: string | null;
+  lifecycleStatus?: string | null;
   workspaceId: string;
   archivedAt: string | null;
   updatedAt: string;
@@ -127,18 +157,18 @@ export async function loadArchivedListings(): Promise<ArchivedListings> {
       ]);
       const projects = projectsRes.ok
         ? ((await projectsRes.json()) as { projects: ProjectRow[] }).projects.filter(
-            (item) => item.archivedAt,
+            (item) => projectAppearsInArchive(item),
           )
         : [];
       const systems = systemsRes.ok
         ? ((await systemsRes.json()) as { systems: SystemRow[] }).systems.filter(
-            (item) => item.archivedAt,
+            (item) => systemAppearsInArchive(item),
           )
         : [];
       const records = recordsRes.ok
         ? (
             (await recordsRes.json()) as { knowledgeRecords: RecordRow[] }
-          ).knowledgeRecords.filter((item) => item.archivedAt)
+          ).knowledgeRecords.filter((item) => knowledgeRecordAppearsInArchive(item))
         : [];
       return { workspace, projects, systems, records };
     }),
