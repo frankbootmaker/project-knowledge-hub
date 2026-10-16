@@ -110,15 +110,59 @@ describe('gantt WBS numbering', () => {
 
   it('numbers the tree outline, including a compact 3.4 under the third epic', () => {
     const wbs = new Map(rows.map((row) => [row.id, row.wbs]));
-    expect(wbs.get('delivery-tree-milestones')).toBe('1');
-    expect(wbs.get('milestone:m1')).toBe('1.1');
-    expect(wbs.get('epic:e1')).toBe('2');
-    expect(wbs.get('epic:e3')).toBe('4');
-    expect(wbs.get('story:s1')).toBe('4.1');
-    expect(wbs.get('task:bug')).toBe('4.1.1');
+    expect(rows.find((row) => row.id === 'milestone:m1')?.wbs).toBe('');
+    expect(wbs.get('epic:e1')).toBe('1');
+    expect(wbs.get('epic:e3')).toBe('3');
+    expect(wbs.get('story:s1')).toBe('3.1');
+    expect(wbs.get('task:bug')).toBe('3.1.1');
     expect(rows.find((row) => row.id === 'task:bug')?.kind).toBe('bug');
-    expect(wbs.get('story:s4')).toBe('4.4');
-    expect(wbs.get('task:task')).toBe('4.4.1');
+    expect(wbs.get('story:s4')).toBe('3.4');
+    expect(wbs.get('task:task')).toBe('3.4.1');
+  });
+
+  it('places dated milestones by date and groups milestones without dates', () => {
+    const placed = buildGanttRows({
+      epics: [epic('early', 1, 'Early'), epic('later', 2, 'Later')],
+      stories: [
+        story('soon', 'early', 1, { startDate: '2026-10-02', endDate: '2026-10-04' }),
+        story('after', 'later', 1, { startDate: '2026-10-20', endDate: '2026-10-22' }),
+      ],
+      tasks: [],
+      milestones: [
+        {
+          id: 'mid',
+          title: 'Mid',
+          status: 'planned',
+          startDate: null,
+          targetDate: '2026-10-10',
+        },
+        {
+          id: 'open',
+          title: 'Open',
+          status: 'planned',
+          startDate: null,
+          targetDate: null,
+        },
+      ],
+    });
+    const ids = placed.map((row) => row.id);
+    expect(ids.indexOf('milestone:mid')).toBeGreaterThan(ids.indexOf('story:soon'));
+    expect(ids.indexOf('milestone:mid')).toBeLessThan(ids.indexOf('epic:later'));
+    expect(placed.find((row) => row.id === 'milestone:mid')).toMatchObject({
+      wbs: '',
+      parentId: null,
+      depth: 0,
+    });
+    const group = placed.find((row) => row.id === 'delivery-tree-milestones');
+    expect(group).toMatchObject({
+      labelKey: 'milestonesWithoutDates',
+      wbs: '',
+    });
+    expect(ids.indexOf('delivery-tree-milestones')).toBeGreaterThan(ids.indexOf('story:after'));
+    expect(placed.find((row) => row.id === 'milestone:open')).toMatchObject({
+      wbs: '',
+      parentId: 'delivery-tree-milestones',
+    });
   });
 
   it('keeps 3.4 when milestones are absent and collapse does not renumber', () => {

@@ -2473,6 +2473,7 @@
     "tabLinkedItems": "Verknüpfte Elemente",
     "milestoneNote": "Notiz",
     "milestoneTimeOrder": "Meilensteine nach Fälligkeit",
+    "milestonesWithoutDates": "Meilensteine ohne Datum",
     "milestoneNoDue": "Kein Fälligkeitsdatum",
     "dependenciesHint": "Ein Vorgänger muss je nach Verknüpfung enden oder starten, bevor dieses Element beginnt. Das Startdatum wird aus diesen Verknüpfungen berechnet. Nachfolger sind Elemente, die dieses Element als Vorgänger nennen.",
     "dependenciesFailed": "Abhängigkeiten konnten nicht aktualisiert werden",
