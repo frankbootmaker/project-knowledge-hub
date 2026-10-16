@@ -271,7 +271,8 @@ export function ProjectDeliveryGantt({
       humanKey: milestone.humanKey,
       percent: milestone.completionPercent ?? null,
     })),
-  }), [completion, epics, milestones, stories, tasks]);
+    dependencies: links,
+  }), [completion, epics, links, milestones, stories, tasks]);
 
   const statusOptions = useMemo(
     () =>

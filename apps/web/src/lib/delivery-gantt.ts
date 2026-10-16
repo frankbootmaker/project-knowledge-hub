@@ -2,8 +2,9 @@
  * Read-only delivery Gantt math (PRO-T-62).
  *
  * Outline numbers follow the work-breakdown tree: epics, stories, tasks,
- * bugs, and milestones that have a due date. A dated milestone is numbered
- * where that due date sits, so later siblings shift. Milestones without a
+ * bugs, and milestones that have a due date. A dated milestone with a
+ * predecessor sits immediately after that item. Otherwise it is numbered
+ * where its due date falls, and later siblings shift. Milestones without a
  * due date stay in their own group and do not consume a number. A milestone
  * is a marker: no start, and duration 0. Parent start and end use the child
  * rollup from PRO-T-73. Duration and non-working days use the project
@@ -290,8 +291,9 @@ function flatten(nodes: Draft[], parentId: string | null, depth: number, prefix:
 
 /**
  * Tree order: epics (stories, then tasks and bugs), stories with no epic,
- * then tasks with no story. A milestone with a due date is inserted where
- * that date falls and then numbered with its siblings. Milestones without a
+ * then tasks with no story. A dated milestone that depends on a visible
+ * item is inserted immediately after that item, as its sibling. Other dated
+ * milestones are inserted where the due date falls. Milestones without a
  * due date stay grouped and unnumbered. WBS is assigned on the full outline,
  * including rows a collapsed parent hides.
  */
@@ -300,6 +302,7 @@ export function buildGanttRows(input: {
   stories: readonly GanttStoryInput[];
   tasks: readonly GanttTaskInput[];
   milestones: readonly GanttMilestoneInput[];
+  dependencies?: readonly GanttDependency[];
 }): GanttRow[] {
   const epicIds = new Set(input.epics.map((epic) => epic.id));
   const storyIds = new Set(input.stories.map((story) => story.id));
@@ -430,8 +433,35 @@ export function buildGanttRows(input: {
     const right = milestonePoint(b) ?? '';
     return left < right ? -1 : left > right ? 1 : a.title.localeCompare(b.title);
   });
-  for (const milestone of dated) {
-    insertDatedMilestone(rows, milestone);
+  const dependencies = input.dependencies ?? [];
+  const pending = [...dated];
+  while (pending.length > 0) {
+    const ready: Array<{ milestone: GanttMilestoneInput; predecessorIndex: number }> = [];
+    const waiting: GanttMilestoneInput[] = [];
+    for (const milestone of pending) {
+      const predecessorIndex = latestPredecessorIndex(rows, milestone.id, dependencies);
+      if (predecessorIndex == null) waiting.push(milestone);
+      else ready.push({ milestone, predecessorIndex });
+    }
+    if (ready.length > 0) {
+      ready.sort((a, b) => (
+        b.predecessorIndex - a.predecessorIndex
+        || compareMilestones(b.milestone, a.milestone)
+      ));
+      for (const entry of ready) {
+        insertAfterPredecessor(rows, entry.milestone, entry.predecessorIndex);
+      }
+      pending.splice(0, pending.length, ...waiting);
+      continue;
+    }
+    const next = waiting.find((milestone) => !waitsForPendingMilestone(
+      milestone.id,
+      waiting,
+      dependencies,
+    )) ?? waiting[0];
+    if (!next) break;
+    insertDatedMilestone(rows, next);
+    pending.splice(pending.indexOf(next), 1);
   }
   if (undated.length > 0) {
     const children = undated
@@ -475,25 +505,69 @@ function placementDate(row: GanttRow): string | null {
   return validYmd(row.start) ? row.start : validYmd(row.end) ? row.end : null;
 }
 
-function insertDatedMilestone(rows: GanttRow[], milestone: GanttMilestoneInput): void {
-  const date = milestonePoint(milestone);
-  if (!date) return;
-  const draft = milestoneDraft(milestone);
-  let index = rows.length;
-  for (let cursor = 0; cursor < rows.length; cursor += 1) {
-    const row = rows[cursor];
-    if (!row) continue;
-    const point = placementDate(row);
-    if (point && point > date) {
-      index = cursor;
-      break;
-    }
+function waitsForPendingMilestone(
+  milestoneId: string,
+  waiting: readonly GanttMilestoneInput[],
+  dependencies: readonly GanttDependency[],
+): boolean {
+  const waitingIds = new Set(waiting.map((milestone) => milestone.id));
+  return dependencies.some((link) => (
+    link.successorType === 'milestone'
+    && link.successorId === milestoneId
+    && link.predecessorType === 'milestone'
+    && waitingIds.has(link.predecessorId)
+    && link.predecessorId !== milestoneId
+  ));
+}
+
+function latestPredecessorIndex(
+  rows: readonly GanttRow[],
+  milestoneId: string,
+  dependencies: readonly GanttDependency[],
+): number | null {
+  let index: number | null = null;
+  for (const link of dependencies) {
+    if (link.successorType !== 'milestone' || link.successorId !== milestoneId) continue;
+    const rowId = ganttRowId(link.predecessorType, link.predecessorId);
+    const found = rows.findIndex((row) => row.id === rowId);
+    if (found < 0) continue;
+    if (index == null || found > index) index = found;
   }
-  const neighbor = rows[index] ?? null;
-  rows.splice(index, 0, {
+  return index;
+}
+
+function isDescendantOf(rows: readonly GanttRow[], row: GanttRow, ancestorId: string): boolean {
+  const byId = new Map(rows.map((item) => [item.id, item]));
+  let parentId = row.parentId;
+  const seen = new Set<string>();
+  while (parentId) {
+    if (parentId === ancestorId) return true;
+    if (seen.has(parentId)) return false;
+    seen.add(parentId);
+    const parent = byId.get(parentId);
+    parentId = parent?.parentId ?? null;
+  }
+  return false;
+}
+
+function subtreeEndIndex(rows: readonly GanttRow[], start: number): number {
+  const root = rows[start];
+  if (!root) return start;
+  let end = start;
+  for (let cursor = start + 1; cursor < rows.length; cursor += 1) {
+    const row = rows[cursor];
+    if (!row || !isDescendantOf(rows, row, root.id)) break;
+    end = cursor;
+  }
+  return end;
+}
+
+function milestoneRow(milestone: GanttMilestoneInput, parent: GanttRow | null): GanttRow {
+  const draft = milestoneDraft(milestone);
+  return {
     id: draft.id,
-    parentId: neighbor?.parentId ?? null,
-    depth: neighbor?.depth ?? 0,
+    parentId: parent?.parentId ?? null,
+    depth: parent?.depth ?? 0,
     kind: draft.kind,
     entityId: draft.entityId,
     title: draft.title,
@@ -506,7 +580,36 @@ function insertDatedMilestone(rows: GanttRow[], milestone: GanttMilestoneInput):
     percent: draft.percent,
     wbs: '',
     hasChildren: false,
-  });
+  };
+}
+
+/** Sibling of the predecessor, after that item and its children. */
+function insertAfterPredecessor(
+  rows: GanttRow[],
+  milestone: GanttMilestoneInput,
+  predecessorIndex: number,
+): void {
+  const predecessor = rows[predecessorIndex];
+  if (!predecessor) return;
+  const index = subtreeEndIndex(rows, predecessorIndex) + 1;
+  rows.splice(index, 0, milestoneRow(milestone, predecessor));
+}
+
+function insertDatedMilestone(rows: GanttRow[], milestone: GanttMilestoneInput): void {
+  const date = milestonePoint(milestone);
+  if (!date) return;
+  let index = rows.length;
+  for (let cursor = 0; cursor < rows.length; cursor += 1) {
+    const row = rows[cursor];
+    if (!row) continue;
+    const point = placementDate(row);
+    if (point && point > date) {
+      index = cursor;
+      break;
+    }
+  }
+  const neighbor = rows[index] ?? null;
+  rows.splice(index, 0, milestoneRow(milestone, neighbor));
 }
 
 /** Number the visible order. The undated milestone group does not count. */

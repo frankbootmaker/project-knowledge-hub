@@ -172,6 +172,105 @@ describe('gantt WBS numbering', () => {
     });
   });
 
+  it('places a dependent milestone immediately after its predecessor', () => {
+    const dependency = {
+      predecessorType: 'task',
+      predecessorId: 'gate',
+      predecessorKey: 'T-1',
+      successorType: 'milestone',
+      successorId: 'm',
+      linkType: 'FS',
+      lagDays: 0,
+    };
+    const placed = buildGanttRows({
+      epics: [epic('e', 1, 'Epic')],
+      stories: [
+        story('first', 'e', 1, { startDate: '2026-10-10', endDate: '2026-10-10' }),
+        story('later', 'e', 2, { startDate: '2026-10-10', endDate: '2026-10-12' }),
+      ],
+      tasks: [
+        {
+          id: 'gate',
+          title: 'Gate',
+          status: 'done',
+          userStoryId: 'first',
+          startDate: '2026-10-10',
+          dueDate: '2026-10-10',
+          itemType: 'task',
+        },
+        {
+          id: 'other',
+          title: 'Other',
+          status: 'todo',
+          userStoryId: 'later',
+          startDate: '2026-10-10',
+          dueDate: '2026-10-10',
+          itemType: 'task',
+        },
+      ],
+      milestones: [
+        {
+          id: 'm',
+          title: 'Gate passed',
+          status: 'planned',
+          startDate: null,
+          targetDate: '2026-10-10',
+        },
+      ],
+      dependencies: [dependency],
+    });
+    const ids = placed.map((row) => row.id);
+    expect(ids.indexOf('milestone:m')).toBe(ids.indexOf('task:gate') + 1);
+    expect(ids.indexOf('milestone:m')).toBeLessThan(ids.indexOf('story:later'));
+    expect(placed.find((row) => row.id === 'milestone:m')).toMatchObject({
+      parentId: 'story:first',
+      depth: placed.find((row) => row.id === 'task:gate')?.depth,
+      wbs: '1.1.2',
+    });
+    expect(placed.find((row) => row.id === 'task:gate')?.wbs).toBe('1.1.1');
+  });
+
+  it('places a milestone after another milestone it depends on', () => {
+    const placed = buildGanttRows({
+      epics: [epic('e', 1, 'Epic')],
+      stories: [
+        story('first', 'e', 1, { startDate: '2026-10-01', endDate: '2026-10-04' }),
+        story('later', 'e', 2, { startDate: '2026-10-20', endDate: '2026-10-22' }),
+      ],
+      tasks: [],
+      milestones: [
+        {
+          id: 'early',
+          title: 'Early',
+          status: 'planned',
+          startDate: null,
+          targetDate: '2026-10-10',
+        },
+        {
+          id: 'next',
+          title: 'Next',
+          status: 'planned',
+          startDate: null,
+          targetDate: '2026-10-10',
+        },
+      ],
+      dependencies: [
+        {
+          predecessorType: 'milestone',
+          predecessorId: 'early',
+          predecessorKey: 'M-1',
+          successorType: 'milestone',
+          successorId: 'next',
+          linkType: 'FS',
+          lagDays: 0,
+        },
+      ],
+    });
+    const ids = placed.map((row) => row.id);
+    expect(ids.indexOf('milestone:next')).toBe(ids.indexOf('milestone:early') + 1);
+    expect(ids.indexOf('milestone:next')).toBeLessThan(ids.indexOf('story:later'));
+  });
+
   it('keeps 3.4 when milestones are absent and collapse does not renumber', () => {
     const plain = buildGanttRows({
       epics: [epic('e1', 1), epic('e2', 2), epic('e3', 3)],
