@@ -1337,3 +1337,15 @@ export class AppError extends Error {
     this.details = options.details;
   }
 }
+
+export {
+  PROJECT_METHODOLOGIES,
+  assertMcpProjectStageChange,
+  buildProjectMetadata,
+  normalizeProjectName,
+  parseProjectMethodology,
+  projectNamesAreSimilar,
+  type ProjectAgentMetadata,
+  type ProjectFieldGuide,
+  type ProjectMethodology,
+} from './project-agent.js';

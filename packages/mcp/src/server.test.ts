@@ -243,6 +243,12 @@ function baselineProject(definitionOfDone: string | null) {
     initialBudget: 100,
     approvedBudget: null,
     keyPrefix: 'DEM',
+    methodology: null,
+    createdVia: null,
+    createdByApiClientId: null,
+    createdByUserId: null,
+    generatedByModel: null,
+    url: null,
   };
 }
 
@@ -281,6 +287,12 @@ function realisticProject() {
     initialBudget: 48000,
     approvedBudget: 50000.5,
     keyPrefix: 'DEM',
+    methodology: 'scrum',
+    createdVia: 'mcp',
+    createdByApiClientId: '66666666-6666-4666-8666-666666666666',
+    createdByUserId: '55555555-5555-4555-8555-555555555555',
+    generatedByModel: 'gpt-4.1',
+    url: 'https://knowledge.example.com/workspaces/lab/projects/demo',
   };
 }
 
@@ -322,6 +334,8 @@ describe('definitionOfDone on project baseline tools', () => {
         const tool = listed.tools.find((item) => item.name === name);
         expect(tool?.description).toContain('definitionOfDone');
         expect(JSON.stringify(tool?.outputSchema)).toContain('definitionOfDone');
+        expect(JSON.stringify(tool?.outputSchema)).toContain('createdVia');
+        expect(JSON.stringify(tool?.outputSchema)).toContain('generatedByModel');
         expect(JSON.stringify(tool?.outputSchema)).toContain('finishDate');
         expect(JSON.stringify(tool?.outputSchema)).toContain('durationWorkingDays');
         expect(JSON.stringify(tool?.inputSchema)).toContain('projectId');
@@ -465,6 +479,29 @@ describe('definitionOfDone on project baseline tools', () => {
 const OUTPUT_SAMPLES: Record<string, unknown> = {
   get_project: { project: realisticProject() },
   update_project_baseline: { project: realisticProject() },
+  create_project: {
+    project: {
+      id: PROJECT_ID,
+      name: 'Demo',
+      slug: 'demo',
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      status: 'idea',
+      keyPrefix: 'DEM',
+      url: 'https://knowledge.example.com/workspaces/lab/projects/demo',
+      methodology: 'kanban',
+      currency: 'EUR',
+      description: 'Proposal',
+      createdVia: 'mcp',
+      createdByApiClientId: '66666666-6666-4666-8666-666666666666',
+      createdByUserId: '55555555-5555-4555-8555-555555555555',
+      generatedByModel: 'gpt-4.1',
+      warning: null,
+    },
+  },
+  update_project: {
+    project: realisticProject(),
+    warning: null,
+  },
   list_project_tasks: {
     tasks: [
       {
@@ -487,8 +524,24 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
   },
   get_knowledge_record: {
     knowledgeRecord: {
-      id: '11111111-1111-4111-8111-111111111111',
-      title: 'Architecture',
+      id: '66666666-6666-4666-8666-666666666666',
+      title: 'Charter',
+      contentMarkdown: '# Charter',
+      linkedItems: {
+        deliveryLinks: [
+          {
+            id: '77777777-7777-4777-8777-777777777777',
+            humanKey: 'HL1-T-1',
+            title: 'Write the brief',
+            type: 'task',
+            kind: 'task',
+            projectId: '11111111-1111-4111-8111-111111111111',
+            projectSlug: 'renewal',
+          },
+        ],
+        raidLinks: [],
+        changeItems: [],
+      },
       recordRelations: {
         outboundCount: 1,
         inboundCount: 0,
@@ -538,6 +591,32 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
     lifecyclePredecessor: null,
   },
 };
+
+describe('create_project and update_project schemas', () => {
+  test('descriptions keep idea-stage creates and projects:write', async () => {
+    await withMcpClient(['projects:read', 'projects:write'], {}, async (client) => {
+      const listed = await client.listTools();
+      const create = listed.tools.find((tool) => tool.name === 'create_project');
+      const update = listed.tools.find((tool) => tool.name === 'update_project');
+      const guide = listed.tools.find((tool) => tool.name === 'list_project_metadata');
+      expect(create?.description).toContain('idea');
+      expect(create?.description).toContain('projects:write');
+      expect(update?.description).toContain('idea');
+      expect(guide?.description).toContain('idea');
+      const validator = new AjvJsonSchemaValidator();
+      expect(
+        validator.getValidator(create!.outputSchema as object)(OUTPUT_SAMPLES.create_project).valid,
+      ).toBe(true);
+      const promoted = {
+        project: {
+          ...(OUTPUT_SAMPLES.create_project as { project: object }).project,
+          status: 'active',
+        },
+      };
+      expect(validator.getValidator(create!.outputSchema as object)(promoted).valid).toBe(false);
+    });
+  });
+});
 
 describe('MCP output schemas accept their sample results', () => {
   test('every tool with an outputSchema validates its sample', async () => {
@@ -695,7 +774,119 @@ describe('strict tool arguments', () => {
       expect(byName.get('list_project_user_stories')).toMatch(/mediaLinks/);
       expect(byName.get('list_project_epics')).toMatch(/mediaLinks/);
       expect(byName.get('list_project_raid_items')).toMatch(/mediaLinks/);
+      expect(byName.get('list_project_raid_items')).toMatch(/records\[\]/);
       expect(byName.get('list_project_change_items')).toMatch(/mediaLinks/);
+      expect(byName.get('get_knowledge_record')).toMatch(/linkedItems/);
+      expect(byName.get('create_project_raid_item')).toMatch(/recordIds/);
+    });
+  });
+});
+
+describe('knowledge record linked items and RAID recordIds', () => {
+  test('get_knowledge_record output schema names linkedItems', async () => {
+    await withMcpClient(['knowledge:read'], {}, async (client) => {
+      const listed = await client.listTools();
+      const tool = listed.tools.find((item) => item.name === 'get_knowledge_record');
+      const output = JSON.stringify(tool?.outputSchema);
+      expect(output).toContain('linkedItems');
+      expect(output).toContain('deliveryLinks');
+      expect(output).toContain('raidLinks');
+      expect(output).toContain('changeItems');
+    });
+  });
+
+  test('create_project_raid_item accepts recordIds and rejects unknown fields', async () => {
+    const createProjectRaidItem = vi.fn(async () => ({ raidItem: { id: 'raid-1' } }));
+    await withMcpClient(['pm:write'], { createProjectRaidItem }, async (client) => {
+      const listed = await client.listTools();
+      const tool = listed.tools.find((item) => item.name === 'create_project_raid_item');
+      const input = tool?.inputSchema as {
+        properties?: Record<string, { description?: string; maxItems?: number }>;
+      };
+      expect(input.properties?.recordIds).toBeTruthy();
+      expect(input.properties?.recordIds?.description).toMatch(/record/i);
+      const created = await client.callTool({
+        name: 'create_project_raid_item',
+        arguments: {
+          projectId: PROJECT_ID,
+          kind: 'risk',
+          title: 'Supplier delay',
+          recordIds: ['HL1-VIS-2'],
+        },
+      });
+      expect(created.isError).not.toBe(true);
+      expect(createProjectRaidItem).toHaveBeenCalledWith({
+        projectId: PROJECT_ID,
+        kind: 'risk',
+        title: 'Supplier delay',
+        recordIds: ['HL1-VIS-2'],
+      });
+      const rejected = await client.callTool({
+        name: 'create_project_raid_item',
+        arguments: {
+          projectId: PROJECT_ID,
+          kind: 'risk',
+          title: 'Supplier delay',
+          recordIds: ['HL1-VIS-2'],
+          nope: true,
+        },
+      });
+      expect(rejected.isError).toBe(true);
+      expect(toolText(rejected)).toContain('nope');
+    });
+  });
+
+  test('get_knowledge_record keeps linkedItems on the first page', async () => {
+    const linkedItems = {
+      deliveryLinks: [
+        {
+          id: '77777777-7777-4777-8777-777777777777',
+          humanKey: 'HL1-T-1',
+          title: 'Write the brief',
+          type: 'task',
+          kind: 'bug',
+          projectId: PROJECT_ID,
+          projectSlug: 'renewal',
+        },
+      ],
+      raidLinks: [],
+      changeItems: [],
+    };
+    const getKnowledgeRecord = vi.fn(async () => ({
+      knowledgeRecord: {
+        id: '66666666-6666-4666-8666-666666666666',
+        title: 'Charter',
+        contentMarkdown: '# Charter',
+        extraField: 'kept',
+        linkedItems,
+        recordRelations: {
+          outboundCount: 0,
+          inboundCount: 0,
+          cap: 20,
+          truncated: false,
+          items: [],
+        },
+      },
+    }));
+    await withMcpClient(['knowledge:read'], { getKnowledgeRecord }, async (client) => {
+      const read = await client.callTool({
+        name: 'get_knowledge_record',
+        arguments: { recordId: 'HL1-VIS-2' },
+      });
+      expect(read.isError).not.toBe(true);
+      const body = JSON.parse(toolText(read)) as {
+        knowledgeRecord: {
+          title: string;
+          extraField?: string;
+          linkedItems: typeof linkedItems;
+          recordRelations?: { outboundCount: number };
+        };
+      };
+      expect(body.knowledgeRecord.title).toBe('Charter');
+      expect(body.knowledgeRecord.extraField).toBe('kept');
+      expect(body.knowledgeRecord.linkedItems).toEqual(linkedItems);
+      expect(body.knowledgeRecord.recordRelations?.outboundCount).toBe(0);
+      expect(read.structuredContent).toEqual(body);
     });
   });
 });

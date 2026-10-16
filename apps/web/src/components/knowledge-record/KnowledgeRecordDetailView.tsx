@@ -3,6 +3,10 @@ import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { LocalDateTime } from '../LocalDateTime';
 import { KnowledgeRecordDetailActions } from '../KnowledgeRecordDetailActions';
+import {
+  KnowledgeRecordLinkedItems,
+  type KnowledgeRecordLinkedItemsPayload,
+} from '../KnowledgeRecordLinkedItems';
 import { KnowledgeRecordMoreDetails } from '../KnowledgeRecordMoreDetails';
 import { MarkdownDocument } from '../MarkdownDocument';
 import { PanelBackLink } from '../PanelBackLink';
@@ -161,10 +165,18 @@ export async function KnowledgeRecordDetailView({
     : `/workspaces/${workspace.slug}`;
   const knowledgeListLabel = knowledgeProject?.name ?? t('eyebrow');
 
-  const [translationsResponse, relationsResponse] = await Promise.all([
+  const [translationsResponse, relationsResponse, linksResponse] = await Promise.all([
     apiFetch(`/api/v1/knowledge-records/${record.id}/translations`),
     apiFetch(`/api/v1/knowledge-records/${record.id}/relations`),
+    apiFetch(`/api/v1/knowledge-records/${record.id}/linked-items`),
   ]);
+  const linkedItems: KnowledgeRecordLinkedItemsPayload = linksResponse.ok
+    ? (
+        (await linksResponse.json()) as {
+          linkedItems: KnowledgeRecordLinkedItemsPayload;
+        }
+      ).linkedItems
+    : { deliveryLinks: [], raidLinks: [], changeItems: [] };
   const translations = translationsResponse.ok
     ? (
         (await translationsResponse.json()) as {
@@ -399,6 +411,12 @@ export async function KnowledgeRecordDetailView({
           ) : null}
           <KnowledgeRecordMoreDetails
             summary={<p className="m-0">{record.summary || tCommon('noSummary')}</p>}
+            linkedItems={
+              <KnowledgeRecordLinkedItems
+                workspaceSlug={workspace.slug}
+                linkedItems={linkedItems}
+              />
+            }
             links={
               <>
                 {project ? (

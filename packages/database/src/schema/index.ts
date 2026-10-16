@@ -153,7 +153,7 @@ export const projects = pgTable(
     slug: text('slug').notNull(),
     summary: text('summary'),
     description: text('description'),
-    status: text('status').notNull().default('idea'),
+    status: text('status').notNull().default('active'),
     ownerUserId: uuid('owner_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
@@ -191,6 +191,18 @@ export const projects = pgTable(
     approvedBudget: numeric('approved_budget', { precision: 14, scale: 2, mode: 'number' }),
     /** Workspace-unique 3-char prefix for human issue keys (AAA or AA0). */
     keyPrefix: text('key_prefix'),
+    /** scrum | kanban | waterfall | hybrid. Null when unset. */
+    methodology: text('methodology'),
+    /** mcp when an agent created the project. Null for human creates. */
+    createdVia: text('created_via'),
+    createdByApiClientId: uuid('created_by_api_client_id').references(
+      (): AnyPgColumn => apiClients.id,
+      { onDelete: 'set null' },
+    ),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    generatedByModel: text('generated_by_model'),
     /** Per issue-key-type counters: { "T": 12, "RR": 3, ... }. */
     issueCounters: jsonb('issue_counters')
       .$type<Record<string, number>>()

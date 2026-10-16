@@ -10,6 +10,11 @@ export const MCP_SCOPES = [
    * ADR-014 Tier B ships as direct tools first; propose/commit later.
    */
   'catalogue:write',
+  /**
+   * Create and update projects. Opt-in; not in DEFAULT_MCP_SCOPES.
+   * MCP creates stay in the idea stage until a human promotes them.
+   */
+  'projects:write',
   /** Project Delivery milestones/tasks/RACI (NF-018). Opt-in; not in DEFAULT_MCP_SCOPES. */
   'pm:read',
   'pm:write',

@@ -454,7 +454,14 @@
       "idx": 64,
       "version": "7",
       "when": 1792886400000,
-      "tag": "0064_knowledge_record_relations",
+      "tag": "0064_project_mcp_create",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1792972800000,
+      "tag": "0065_knowledge_record_relations",
       "breakpoints": true
     }
   ]
