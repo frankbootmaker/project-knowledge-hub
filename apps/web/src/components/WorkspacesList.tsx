@@ -101,9 +101,13 @@ export function WorkspacesList({
                 )}`}
               >
                 {archived ? (
-                  <Badge tone="neutral">{t('statusArchived')}</Badge>
+                  <Badge tone="neutral" className="kh-ops-card-corner">
+                    {t('statusArchived')}
+                  </Badge>
                 ) : (
-                  <Badge tone="success">{t('statusHealthy')}</Badge>
+                  <Badge tone="success" className="kh-ops-card-corner">
+                    {t('statusHealthy')}
+                  </Badge>
                 )}
                 <h3>
                   <Link href={`/workspaces/${workspace.slug}`}>

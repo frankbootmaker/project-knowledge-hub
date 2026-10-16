@@ -3,8 +3,9 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { DataTable, type DataColumn } from './ui/DataTable';
+import { DataTable, dataTableFilterFields, type DataColumn } from './ui/DataTable';
 import { Badge, Button, Input, Select } from './ui';
+import { TableFilterControl } from './ui/TableFilterControl';
 import { cn } from '../lib/cn';
 import {
   applyTableView,
@@ -114,6 +115,20 @@ export function DashboardMyTasks({
 
   const columns = useMemo<Array<DataColumn<DashboardAssignedTask>>>(() => [
     {
+      id: 'key',
+      header: tDelivery('colId'),
+      kind: 'data',
+      sort: { type: 'text', getValue: (task) => task.humanKey ?? '' },
+      cell: (task) => {
+        if (!task.humanKey) return <span className="text-ink-muted">—</span>;
+        return (
+          <Link href={taskHref(task)} className="kh-ops-key-badge no-underline">
+            {task.humanKey}
+          </Link>
+        );
+      },
+    },
+    {
       id: 'title',
       header: t('colWorkItem'),
       kind: 'text',
@@ -195,21 +210,9 @@ export function DashboardMyTasks({
         getValue: (task) => task.status,
         options: statusOptions,
       },
-      cell: (task) => {
-        const scheduleTone = deliveryScheduleTone({
-          status: task.status,
-          date: task.dueDate,
-          today,
-        });
-        return (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge>{tDelivery(`taskStatus.${task.status}`)}</Badge>
-            <span className="kh-ops-type-chip" data-tone={scheduleTone}>
-              {tDelivery(`scheduleToneShort.${scheduleTone}`)}
-            </span>
-          </div>
-        );
-      },
+      cell: (task) => (
+        <Badge>{tDelivery(`taskStatus.${task.status}`)}</Badge>
+      ),
     },
   ], [roleOptions, statusOptions, t, tDelivery, today]);
   useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
@@ -221,6 +224,7 @@ export function DashboardMyTasks({
     search: (task, needle) =>
       [
         task.title,
+        task.humanKey ?? '',
         task.projectName,
         task.workspaceName,
         task.status,
@@ -281,18 +285,37 @@ export function DashboardMyTasks({
             className="h-10 min-h-10 py-1.5 text-xs"
           />
         </label>
-        <Select
-          value={String(pageSize)}
-          onChange={(event) => updatePageSize(event.target.value)}
-          aria-label={t('pageSize')}
-          className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
-        >
-          {PAGE_SIZE_OPTIONS.map((size) => (
-            <option key={size} value={String(size)}>
-              {t('pageSizeOption', { count: size })}
-            </option>
-          ))}
-        </Select>
+        <TableFilterControl
+          fields={dataTableFilterFields(columns)}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={(key, values) => {
+            table.setEnumFilter(key, values);
+            resetPage();
+          }}
+          onTextFilter={(key, value) => {
+            table.setTextFilter(key, value);
+            resetPage();
+          }}
+          onClearFilters={() => {
+            table.clearFilters();
+            resetPage();
+          }}
+          filtersActive={table.filtersActive}
+        />
+        {table.filtersActive ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+            onClick={() => {
+              table.clearFilters();
+              resetPage();
+            }}
+          >
+            {tTable('clearFilters')}
+          </Button>
+        ) : null}
       </div>
       {bareEmpty ? (
         <p className="kh-ops-empty">{t('myTasksEmpty')}</p>
@@ -319,6 +342,7 @@ export function DashboardMyTasks({
             resetPage();
           }}
           filtersActive={table.filtersActive}
+          hideHeaderFilter
           tableClassName="kh-ops-delivery-list"
           empty={
             <>
@@ -328,46 +352,60 @@ export function DashboardMyTasks({
           }
           footer={
             filtered.length > 0 ? (
-              <div className="kh-ops-card-foot">
-                <p className="m-0 text-xs text-ink-muted">
+              <div className="kh-ops-card-foot kh-ops-catalogue-pager">
+                <p className="m-0 text-ink-muted">
                   {t('showing', {
                     from: rangeFrom,
                     to: rangeTo,
                     total: filtered.length,
                   })}
                 </p>
-                {totalPages > 1 ? (
-                  <nav
-                    className="flex flex-wrap items-center gap-2"
-                    aria-label={t('queueTitle')}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={String(pageSize)}
+                    onChange={(event) => updatePageSize(event.target.value)}
+                    aria-label={t('pageSize')}
+                    className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5"
                   >
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={currentPage <= 1}
-                      onClick={() => {
-                        const next = Math.max(1, currentPage - 1);
-                        table.setExtra('page', next <= 1 ? '' : String(next));
-                      }}
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={String(size)}>
+                        {t('pageSizeOption', { count: size })}
+                      </option>
+                    ))}
+                  </Select>
+                  {totalPages > 1 ? (
+                    <nav
+                      className="flex flex-wrap items-center gap-2"
+                      aria-label={t('queueTitle')}
                     >
-                      {t('prevPage')}
-                    </Button>
-                    <span className="kh-page-num-active" aria-current="page">
-                      {currentPage} / {totalPages}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={currentPage >= totalPages}
-                      onClick={() => {
-                        const next = Math.min(totalPages, currentPage + 1);
-                        table.setExtra('page', next <= 1 ? '' : String(next));
-                      }}
-                    >
-                      {t('nextPage')}
-                    </Button>
-                  </nav>
-                ) : null}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={currentPage <= 1}
+                        onClick={() => {
+                          const next = Math.max(1, currentPage - 1);
+                          table.setExtra('page', next <= 1 ? '' : String(next));
+                        }}
+                      >
+                        {t('prevPage')}
+                      </Button>
+                      <span className="kh-page-num-active" aria-current="page">
+                        {currentPage} / {totalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={currentPage >= totalPages}
+                        onClick={() => {
+                          const next = Math.min(totalPages, currentPage + 1);
+                          table.setExtra('page', next <= 1 ? '' : String(next));
+                        }}
+                      >
+                        {t('nextPage')}
+                      </Button>
+                    </nav>
+                  ) : null}
+                </div>
               </div>
             ) : null
           }

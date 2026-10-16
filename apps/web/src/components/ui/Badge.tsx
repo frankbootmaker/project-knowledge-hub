@@ -26,7 +26,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'kh-ops-menu-type inline-flex items-center rounded-sm border border-current/25 px-1.5',
+        'kh-badge kh-ops-menu-type inline-flex items-center rounded-sm border border-current/25 px-1.5',
         matchControlHeight ? 'kh-badge-control py-0' : 'py-0.5',
         tones[tone],
         className,

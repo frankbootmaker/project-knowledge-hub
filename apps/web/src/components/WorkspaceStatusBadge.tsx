@@ -35,7 +35,11 @@ export function WorkspaceStatusBadge(props: {
   }
 
   const badge = (
-    <Badge tone={toneFor(status)} className={cn(props.className)}>
+    <Badge
+      tone={toneFor(status)}
+      matchControlHeight
+      className={cn(props.className)}
+    >
       {label}
     </Badge>
   );

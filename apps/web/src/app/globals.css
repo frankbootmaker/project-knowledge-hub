@@ -252,7 +252,18 @@
 
   .kh-badge-control {
     box-sizing: border-box;
+    height: var(--kh-button-height);
     min-height: var(--kh-button-height);
+    white-space: nowrap;
+  }
+
+  /* Header badges beside a right-side button match that button. */
+  .kh-ops-view-intro-actions:has(.kh-btn) .kh-badge {
+    box-sizing: border-box;
+    height: var(--kh-button-height);
+    padding-top: 0;
+    padding-bottom: 0;
+    white-space: nowrap;
   }
 
   .kh-btn {

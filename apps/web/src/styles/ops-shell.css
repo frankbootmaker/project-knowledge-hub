@@ -3600,6 +3600,17 @@ a.kh-ops-choice {
   background: var(--kh-surface);
 }
 
+.kh-ops-project-card:has(> .kh-ops-card-corner) {
+  grid-template-rows: max-content max-content minmax(0, 1fr) max-content;
+}
+
+.kh-ops-project-card > .kh-ops-card-corner {
+  justify-self: end;
+  align-self: start;
+  width: max-content;
+  max-width: 100%;
+}
+
 .kh-ops-project-card h3 {
   margin: 0;
   font-family: var(--font-display), var(--font-ibm-plex-sans-condensed), sans-serif;

@@ -200,7 +200,7 @@ export function MonitoringDashboard({
         description={description}
         actions={
           <>
-            <Badge tone={overallOk ? 'success' : 'danger'}>
+            <Badge matchControlHeight tone={overallOk ? 'success' : 'danger'}>
               {overallOk ? t('monitoringHealthy') : t('monitoringDegraded')}
             </Badge>
             <Button
