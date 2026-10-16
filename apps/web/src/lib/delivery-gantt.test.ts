@@ -395,11 +395,11 @@ describe('gantt predecessor labels', () => {
       wbsById,
       keyById,
     });
-    expect(byKey).toBe('3.4 FS, MIL-T-15 SS+2, PRO-SP-1 FF');
-    expect(byWbs).toBe('3.4 FS, 3.4.1 SS+2, PRO-SP-1 FF');
+    expect(byKey).toEqual(['3.4 FS', 'MIL-T-15 SS+2', 'PRO-SP-1 FF']);
+    expect(byWbs).toEqual(['3.4 FS', '3.4.1 SS+2', 'PRO-SP-1 FF']);
     expect(byKey).not.toContain(uuid);
     expect(byWbs).not.toContain(uuid);
-    expect(byKey).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    expect(byKey.join(' ')).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
   });
 });
 
@@ -584,8 +584,8 @@ describe('gantt column presets and copy', () => {
     ]);
     expect(GANTT_COLUMNS.compact).toEqual(['wbs', 'title', 'percent']);
     expect(ganttColumnOffsets('default').get('wbs')).toBe(0);
-    expect(ganttColumnOffsets('default').get('predecessors')).toBe(700);
-    expect(ganttColumnOffsets('compact').get('percent')).toBe(344);
+    expect(ganttColumnOffsets('default').get('predecessors')).toBe(820);
+    expect(ganttColumnOffsets('compact').get('percent')).toBe(464);
     expect(GANTT_COLUMNS.planning).toEqual([
       'wbs',
       'title',

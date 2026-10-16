@@ -61,11 +61,11 @@ export type GanttColumnId = (typeof GANTT_COLUMN_IDS)[number];
 /** Title is the widest grid column. WBS stays a narrow frozen track. */
 export const GANTT_COLUMN_WIDTH: Record<GanttColumnId, number> = {
   wbs: 64,
-  title: 280,
+  title: 400,
   status: 120,
   percent: 128,
   duration: 108,
-  predecessors: 160,
+  predecessors: 112,
   owner: 132,
   start: 108,
   due: 108,
@@ -684,7 +684,7 @@ export function predecessorLabels(input: {
   mode: GanttPredecessorMode;
   wbsById: ReadonlyMap<string, string>;
   keyById?: ReadonlyMap<string, string | null>;
-}): string {
+}): string[] {
   const parts: { token: string; text: string }[] = [];
   for (const link of input.links) {
     if (ganttRowId(link.successorType, link.successorId) !== input.successorId) continue;
@@ -700,7 +700,7 @@ export function predecessorLabels(input: {
     });
   }
   parts.sort((a, b) => a.token.localeCompare(b.token) || a.text.localeCompare(b.text));
-  return parts.map((part) => part.text).join(', ');
+  return parts.map((part) => part.text);
 }
 
 export function ganttDurationWorkingDays(
@@ -971,6 +971,8 @@ export function ganttDependencyArrows(input: {
   rangeStart: string;
   pxPerDay: number;
   rowHeight: number;
+  /** Vertical center of each row. Falls back to a uniform row height. */
+  rowCenters?: readonly number[];
 }): GanttArrow[] {
   const indexById = new Map(input.rows.map((row, index) => [row.id, index]));
   const arrows: GanttArrow[] = [];
@@ -1005,8 +1007,8 @@ export function ganttDependencyArrows(input: {
     const fromX = endpointX(fromLayout, ends.from);
     const toX = endpointX(toLayout, ends.to);
     if (fromX == null || toX == null) continue;
-    const fromY = (fromIndex + 0.5) * input.rowHeight;
-    const toY = (toIndex + 0.5) * input.rowHeight;
+    const fromY = input.rowCenters?.[fromIndex] ?? (fromIndex + 0.5) * input.rowHeight;
+    const toY = input.rowCenters?.[toIndex] ?? (toIndex + 0.5) * input.rowHeight;
     arrows.push({
       key: `${fromId}->${toId}:${link.linkType}`,
       linkType: link.linkType,

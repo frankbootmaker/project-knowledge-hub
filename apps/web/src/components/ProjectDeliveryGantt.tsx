@@ -1,6 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   coerceProjectCalendar,
@@ -478,14 +487,41 @@ export function ProjectDeliveryGantt({
     [calendar, pxPerDay, range],
   );
   const todayX = ganttTodayX(today, range, pxPerDay);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [rowMetrics, setRowMetrics] = useState({
+    centers: [] as number[],
+    height: visible.length * GANTT_ROW_HEIGHT,
+  });
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const bodyTop = body.getBoundingClientRect().top;
+    const measured = [...body.querySelectorAll<HTMLElement>('.kh-ops-gantt-row')];
+    const centers = measured.map((row) => {
+      const box = row.getBoundingClientRect();
+      return box.top - bodyTop + box.height / 2;
+    });
+    const height = measured.reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
+    setRowMetrics((current) => {
+      const sameHeight = current.height === height;
+      const sameCenters = current.centers.length === centers.length
+        && current.centers.every((value, index) => value === centers[index]);
+      if (sameHeight && sameCenters) return current;
+      return {
+        centers,
+        height: height || visible.length * GANTT_ROW_HEIGHT,
+      };
+    });
+  }, [columnView, visible]);
   const arrows = useMemo(() => ganttDependencyArrows({
     rows: visible,
     links,
     rangeStart: range.start,
     pxPerDay,
     rowHeight: GANTT_ROW_HEIGHT,
-  }), [links, pxPerDay, range.start, visible]);
-  const bodyHeight = visible.length * GANTT_ROW_HEIGHT;
+    rowCenters: rowMetrics.centers,
+  }), [links, pxPerDay, range.start, rowMetrics.centers, visible]);
+  const bodyHeight = rowMetrics.height;
 
   function openRow(row: GanttRow) {
     if (!row.entityId) return;
@@ -764,7 +800,7 @@ export function ProjectDeliveryGantt({
               ) : null}
             </div>
           </div>
-          <div className="kh-ops-gantt-body">
+          <div className="kh-ops-gantt-body" ref={bodyRef}>
             <svg
               className="kh-ops-gantt-shade"
               width={chartWidth}
@@ -977,7 +1013,7 @@ function GanttGridRow({
   onToggle: () => void;
   label: string;
   statusLabel: string;
-  predecessors: string;
+  predecessors: readonly string[];
   calendar: ProjectWorkingCalendar;
   locale: string;
   rangeStart: string;
@@ -1078,7 +1114,16 @@ function GanttGridRow({
         </span>
       );
     }
-    if (column === 'predecessors') return predecessors || '—';
+    if (column === 'predecessors') {
+      if (predecessors.length === 0) return '—';
+      return (
+        <span className="kh-ops-gantt-preds">
+          {predecessors.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </span>
+      );
+    }
     if (column === 'owner') return row.owner || '—';
     if (column === 'start') {
       if (row.kind === 'milestone' || !row.start) return '—';
@@ -1101,9 +1146,15 @@ function GanttGridRow({
           <div
             key={column}
             role="gridcell"
-            className={frozen.className}
+            className={
+              column === 'predecessors'
+                ? `${frozen.className} kh-ops-gantt-preds-cell`
+                : frozen.className
+            }
             style={frozen.style}
-            title={column === 'predecessors' && predecessors ? predecessors : undefined}
+            title={predecessors.length > 0 && column === 'predecessors'
+              ? predecessors.join(', ')
+              : undefined}
           >
             {cell(column)}
           </div>
