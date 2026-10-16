@@ -449,6 +449,13 @@
       "when": 1792800000000,
       "tag": "0063_project_working_calendar",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1792886400000,
+      "tag": "0064_knowledge_record_relations",
+      "breakpoints": true
     }
   ]
 }

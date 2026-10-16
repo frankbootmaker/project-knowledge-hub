@@ -249,6 +249,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-16
 
+* **Related records** — Knowledge record detail adds a `.kh-ops-related-records` section under the record head and above the markdown. Group labels use the 13px menu type. Rows reuse `.kh-ops-linked-row`, `.kh-ops-key-badge`, and `Badge`. Maintainers add a relation with `Modal` (`wide`), `Select`, `Input`, and `Button`. The superseded banner adds a secondary `LinkButton`, “Superseded by {key}”, when a lifecycle successor exists.
+
 * **Gantt milestone rows** — Dated milestones are inserted into the work list by calendar date and leave the WBS cell empty. Undated milestones stay in the “Milestones without dates” group. Epic and story titles (`.kh-ops-gantt-title-btn` / `.kh-ops-gantt-title-text`) are bold; milestone titles are italic, with 1px of trailing padding so the glyph is not clipped. Other rows stay regular IBM Plex Sans 13px.
 
 ### 2026-10-15

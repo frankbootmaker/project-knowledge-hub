@@ -1,6 +1,6 @@
 # ADR-025: Typed many-to-many relations between knowledge records
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-16
 - **Task:** PRO-T-24
 - **Related:** [ADR-006](ADR-006-explicit-verification-lifecycle.md), [ADR-013](ADR-013-draft-only-write-mcp.md), [ADR-016](ADR-016-project-raid-and-delivery-links.md), [ADR-023](ADR-023-knowledge-document-keys.md)

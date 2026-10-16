@@ -485,6 +485,58 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
     name: 'Ada',
     email: 'ada@example.com',
   },
+  get_knowledge_record: {
+    knowledgeRecord: {
+      id: '11111111-1111-4111-8111-111111111111',
+      title: 'Architecture',
+      recordRelations: {
+        outboundCount: 1,
+        inboundCount: 0,
+        cap: 20,
+        truncated: false,
+        items: [
+          {
+            direction: 'outbound',
+            relationType: 'depends_on',
+            record: {
+              id: '22222222-2222-4222-8222-222222222222',
+              humanKey: 'REL-ARCH-1',
+              title: 'Upstream',
+              recordType: 'architecture',
+              lifecycleStatus: 'current',
+              archivedAt: null,
+            },
+          },
+        ],
+      },
+    },
+  },
+  get_knowledge_record_relations: {
+    relations: {
+      outbound: [
+        {
+          relationType: 'depends_on',
+          record: {
+            id: '22222222-2222-4222-8222-222222222222',
+            humanKey: 'REL-ARCH-1',
+            title: 'Upstream',
+            slug: 'upstream',
+            recordType: 'architecture',
+            lifecycleStatus: 'current',
+            archivedAt: null,
+          },
+        },
+      ],
+      inbound: [],
+    },
+    lifecycleSuccessor: null,
+    lifecyclePredecessor: null,
+  },
+  set_knowledge_record_relations: {
+    relations: { outbound: [], inbound: [] },
+    lifecycleSuccessor: null,
+    lifecyclePredecessor: null,
+  },
 };
 
 describe('MCP output schemas accept their sample results', () => {

@@ -44,6 +44,7 @@ import {
   updateRecordInputSchema,
   withApprovedByMetadata,
 } from '../lib/knowledge-records-service.js';
+import { compactRecordRelationsForRecords } from '../lib/knowledge-record-relations.js';
 import { resolveKnowledgeRecordId } from '../lib/project-issue-keys.js';
 import {
   auditKnowledgeView,
@@ -85,6 +86,10 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
           .enum(['true', 'false'])
           .optional()
           .transform((value) => value === 'true'),
+        includeRecordRelations: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((value) => value === 'true'),
       })
       .parse(request.query);
 
@@ -118,13 +123,22 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
       app.database,
       rows.map((row) => row.projectId),
     );
+    const relationMap = query.includeRecordRelations
+      ? await compactRecordRelationsForRecords(
+          app.database,
+          rows.map((row) => row.id),
+        )
+      : null;
 
     return {
-      knowledgeRecords: rows.map((row) =>
-        toPublicRecord(row, tagMap.get(row.id) ?? [], null, {
+      knowledgeRecords: rows.map((row) => ({
+        ...toPublicRecord(row, tagMap.get(row.id) ?? [], null, {
           keyPrefix: row.projectId ? keyPrefixMap.get(row.projectId) ?? null : null,
         }),
-      ),
+        ...(relationMap
+          ? { recordRelations: relationMap.get(row.id) }
+          : {}),
+      })),
     };
   });
 
@@ -151,6 +165,14 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
   app.get('/api/v1/knowledge-records/:recordId', async (request) => {
     const principal = requireAuthenticated(request);
     const params = z.object({ recordId: recordRefSchema }).parse(request.params);
+    const query = z
+      .object({
+        includeRecordRelations: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((value) => value === 'true'),
+      })
+      .parse(request.query);
     const recordId = await resolveRecordIdParam(app, params.recordId, principal);
     const [record] = await app.database.db
       .select()
@@ -193,17 +215,25 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     const keyPrefixMap = await loadProjectKeyPrefixMap(app.database, [
       record.projectId,
     ]);
+    const recordRelations = query.includeRecordRelations
+      ? (await compactRecordRelationsForRecords(app.database, [record.id])).get(
+          record.id,
+        )
+      : undefined;
     return {
-      knowledgeRecord: toPublicRecord(record, tagMap.get(record.id) ?? [], source, {
-        includeHtml: true,
-        includeToc: true,
-        html: rendered.html,
-        toc: rendered.toc,
-        reviewedByUser,
-        keyPrefix: record.projectId
-          ? keyPrefixMap.get(record.projectId) ?? null
-          : null,
-      }),
+      knowledgeRecord: {
+        ...toPublicRecord(record, tagMap.get(record.id) ?? [], source, {
+          includeHtml: true,
+          includeToc: true,
+          html: rendered.html,
+          toc: rendered.toc,
+          reviewedByUser,
+          keyPrefix: record.projectId
+            ? keyPrefixMap.get(record.projectId) ?? null
+            : null,
+        }),
+        ...(recordRelations ? { recordRelations } : {}),
+      },
     };
   });
 

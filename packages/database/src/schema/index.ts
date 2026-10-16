@@ -1790,6 +1790,44 @@ export const knowledgeRecordDeliveryLinks = pgTable(
 );
 
 /**
+ * Typed record↔record edges (ADR-025). Symmetric types are stored once
+ * with from_knowledge_record_id < to_knowledge_record_id.
+ */
+export const knowledgeRecordRelations = pgTable(
+  'knowledge_record_relations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    fromKnowledgeRecordId: uuid('from_knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    toKnowledgeRecordId: uuid('to_knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    relationType: text('relation_type').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('knowledge_record_relations_uidx').on(
+      table.fromKnowledgeRecordId,
+      table.toKnowledgeRecordId,
+      table.relationType,
+    ),
+    index('knowledge_record_relations_from_idx').on(table.fromKnowledgeRecordId),
+    index('knowledge_record_relations_to_idx').on(table.toKnowledgeRecordId),
+    index('knowledge_record_relations_workspace_idx').on(table.workspaceId),
+    index('knowledge_record_relations_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/**
  * Links a delivery, RAID, or change item to workspace media or an external URL.
  * Media rows are soft-archived, so the FK does not cascade and a deleted file
  * can still render as a placeholder.

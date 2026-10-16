@@ -17,6 +17,7 @@ MCP server factory (Streamable HTTP) for Project Knowledge Hub.
 * `list_my_project_tasks` / `get_my_dashboard_insights` — acting-user My tasks + dashboard rollups (`pm:read` + `actingUserId`)
 * `list_project_delivery_document_links` — knowledge ↔ delivery index for a project
 * `get_knowledge_record_delivery_links` — epic/story/task/**sprint** links for a knowledge record (`knowledge:read`; record id may be UUID or document key)
+* `get_knowledge_record_relations` — typed record↔record relations plus lifecycle successor/predecessor (`knowledge:read`; record id may be UUID or document key). `get_knowledge_record` also returns compact `recordRelations` unless `includeRecordRelations` is false
 
 Also available as REST: `GET /api/v1/platform/status` with the same scope.
 
@@ -30,6 +31,7 @@ workspace allowlist, and `actingUserId`:
 * `create_knowledge_record` — always creates a **draft** with `ai_generated_draft` provenance
 * `update_knowledge_record` — updates as **draft**; requires `changeMessage`
 * `set_knowledge_record_delivery_links` — replace epic/story/task/**sprint** links (record must be project-scoped; entity ids may be human keys)
+* `set_knowledge_record_relations` — replace relations stored from a record (`relates_to`, `depends_on`, `refines`, `derived_from`, `contradicts`). Does not change lifecycle. Rejects cycles on `depends_on` and `refines`
 * `begin_workspace_media_upload` / `append_workspace_media_upload` / `finalize_workspace_media_upload` — Redis-backed chunked base64 upload (**preferred for ChatGPT Actions**; ~8 KB chunks). Optional `targetEntityType` + `targetEntityId` (UUID or human key) links the image on finalize and also requires `pm:write`
 * `upload_workspace_media` — single-shot JPEG/PNG/WebP/GIF base64 upload; returns `media.markdownSnippet`; optional `insertIntoRecord`; optional target item (same `pm:write` rule)
 * `delete_workspace_media` — soft-delete media + remove bytes
@@ -69,6 +71,6 @@ Do **not** put `data:image/...;base64,...` URIs in `contentMarkdown`. Instead:
 2. **Single-shot (small files):** `upload_workspace_media` with `workspaceId`, `contentType`, and raw `contentBase64` (no `data:` prefix).
 3. Either paste `media.markdownSnippet` (e.g. `![chart](/api/v1/media/{id})`) into `create_knowledge_record` / `update_knowledge_record`, **or** pass `knowledgeRecordId` + `insertIntoRecord: true` on begin/upload to append it automatically.
 4. To attach the image to a delivery item in the same step, pass `targetEntityType` + `targetEntityId` on begin (or on the single-shot upload). That also requires `pm:write`. PDF and Office files are documents, not media.
-5. `get_knowledge_record` and `list_knowledge_records` return `tags` as a string array of tag names (same shape as `search_knowledge`). `get_knowledge_record` also returns linked `media[]` metadata for that record.
+5. `get_knowledge_record` and `list_knowledge_records` return `tags` as a string array of tag names (same shape as `search_knowledge`). `get_knowledge_record` also returns linked `media[]` metadata for that record, and compact `recordRelations` (counts plus up to 20 summaries) on every page unless `includeRecordRelations` is false.
 
 Mounted by the API at `POST|GET|DELETE /mcp` with bearer API client tokens.

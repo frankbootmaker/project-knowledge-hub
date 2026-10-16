@@ -196,6 +196,12 @@ import {
   listDeliveryLinksForRecord,
   setDeliveryLinksForRecord,
 } from './knowledge-delivery-links.js';
+import {
+  compactRecordRelationsForRecords,
+  getKnowledgeRecordRelations,
+  relationAuditMetadata,
+  setKnowledgeRecordRelations,
+} from './knowledge-record-relations.js';
 import { getDashboardInsights } from './dashboard-insights.js';
 import {
   getSprintPointBurndown,
@@ -1946,6 +1952,7 @@ export function createMcpToolHandlers(
       contentLimit,
       boundary,
       expectSha256,
+      includeRecordRelations = true,
     }) {
       const workspaceIds = client.allowedWorkspaceIds.length > 0 
         ? client.allowedWorkspaceIds 
@@ -1999,6 +2006,11 @@ export function createMcpToolHandlers(
       const tagMap = loadSidecars
         ? await getKnowledgeRecordTags(app.database, [record.id])
         : new Map<string, Array<{ name: string }>>();
+      const recordRelations = includeRecordRelations
+        ? (await compactRecordRelationsForRecords(app.database, [record.id])).get(
+            record.id,
+          )
+        : undefined;
       const toPayload = (candidate: ContentPage) => {
         const isFirst = candidate.contentOffset === 0;
         return {
@@ -2032,6 +2044,7 @@ export function createMcpToolHandlers(
             reviewedBy: record.reviewedBy,
             reviewedByUser,
             updatedAt: record.updatedAt.toISOString(),
+            ...(recordRelations ? { recordRelations } : {}),
             ...(isFirst
               ? {
                   tags: knowledgeRecordTagNames(tagMap, record.id),
@@ -5201,6 +5214,85 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { deliveryLinks };
+    },
+
+    async getKnowledgeRecordRelations(input: { recordId: string }) {
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+        includeArchived: true,
+      });
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        recordId,
+      );
+      assertWorkspaceAllowed(client, record.workspaceId);
+      assertProjectAllowed(client, record.projectId);
+      return getKnowledgeRecordRelations(app.database, recordId);
+    },
+
+    async setKnowledgeRecordRelations(input: {
+      recordId: string;
+      links: Array<{ targetRecordId: string; relationType: string }>;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+        includeArchived: true,
+      });
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        recordId,
+      );
+      assertWriteWorkspaceAllowed(client, record.workspaceId);
+      assertProjectAllowed(client, record.projectId);
+      if (record.projectId) {
+        const { project } = await requireProjectContext(
+          app.database,
+          record.projectId,
+        );
+        assertProjectNotArchived(project);
+      }
+      const links = await Promise.all(
+        input.links.map(async (link) => ({
+          targetRecordId: await resolveKnowledgeRecordId(app.database, {
+            idOrKey: link.targetRecordId,
+            workspaceIds,
+            includeArchived: true,
+          }),
+          relationType: link.relationType,
+        })),
+      );
+      const relations = await setKnowledgeRecordRelations(app.database, {
+        anchorId: recordId,
+        links,
+        createdBy: actingUserId,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'knowledge.record_relations_set',
+        entityType: 'knowledge_record',
+        entityId: recordId,
+        metadata: {
+          ...relationAuditMetadata({
+            projectId: record.projectId,
+            links,
+          }),
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return relations;
     },
 
     async onToolCall(toolName, ok, context) {
