@@ -13,7 +13,11 @@ import { PanelBackLink } from '../PanelBackLink';
 import { RecordLifecycleActions } from '../RecordLifecycleActions';
 import { RecordTranslationSwitcher } from '../RecordTranslationSwitcher';
 import { RegisterShellCrumbs } from '../ops/ShellCrumbContext';
-import { Badge, Page, PageHeader, lifecycleLabel, lifecycleTone } from '../ui';
+import { Badge, LinkButton, Page, PageHeader, lifecycleLabel, lifecycleTone } from '../ui';
+import {
+  KnowledgeRecordRelationsPanel,
+  type KnowledgeRecordRelationsPayload,
+} from './KnowledgeRecordRelationsPanel';
 import { recordHref } from '../../lib/record-href';
 import {
   canMutateWorkspace,
@@ -93,7 +97,16 @@ export async function KnowledgeRecordDetailView({
     notFound();
   }
   const listPayload = (await listResponse.json()) as {
-    knowledgeRecords: Array<{ id: string; slug: string }>;
+    knowledgeRecords: Array<{
+      id: string;
+      slug: string;
+      title: string;
+      humanKey?: string | null;
+      recordType: string;
+      lifecycleStatus: string;
+      projectId: string | null;
+      archivedAt: string | null;
+    }>;
   };
   const summary = listPayload.knowledgeRecords.find((item) => item.slug === recordSlug);
   if (!summary) {
@@ -152,8 +165,9 @@ export async function KnowledgeRecordDetailView({
     : `/workspaces/${workspace.slug}`;
   const knowledgeListLabel = knowledgeProject?.name ?? t('eyebrow');
 
-  const [translationsResponse, linksResponse] = await Promise.all([
+  const [translationsResponse, relationsResponse, linksResponse] = await Promise.all([
     apiFetch(`/api/v1/knowledge-records/${record.id}/translations`),
+    apiFetch(`/api/v1/knowledge-records/${record.id}/relations`),
     apiFetch(`/api/v1/knowledge-records/${record.id}/linked-items`),
   ]);
   const linkedItems: KnowledgeRecordLinkedItemsPayload = linksResponse.ok
@@ -176,6 +190,17 @@ export async function KnowledgeRecordDetailView({
         }
       ).translations
     : [];
+  const relations = relationsResponse.ok
+    ? ((await relationsResponse.json()) as KnowledgeRecordRelationsPayload)
+    : null;
+  const successor = relations?.lifecycleSuccessor ?? null;
+  const successorHref = successor
+    ? recordHref({
+        workspaceSlug: workspace.slug,
+        projectSlug: routeProject?.slug ?? project?.slug,
+        recordSlug: successor.slug,
+      })
+    : null;
 
   const dash = tCommon('emDash');
 
@@ -214,9 +239,18 @@ export async function KnowledgeRecordDetailView({
         }
       />
       {record.lifecycleStatus === 'superseded' ? (
-        <p className="kh-ops-status-row mb-3" data-tone="danger">
-          {t('supersededWarning')}
-        </p>
+        <div className="mb-3 grid gap-2">
+          <p className="kh-ops-status-row" data-tone="danger">
+            {t('supersededWarning')}
+          </p>
+          {successorHref ? (
+            <LinkButton href={successorHref} variant="secondary">
+              {t('supersededBy', {
+                key: successor?.humanKey ?? successor?.title ?? '',
+              })}
+            </LinkButton>
+          ) : null}
+        </div>
       ) : null}
       <div className="kh-ops-detail-grid">
         <div className="min-w-0">
@@ -306,6 +340,13 @@ export async function KnowledgeRecordDetailView({
               />
             </div>
           </div>
+          <KnowledgeRecordRelationsPanel
+            recordId={record.id}
+            projectId={record.projectId}
+            canEdit={canMutate && !isArchived}
+            initial={relations}
+            catalogue={listPayload.knowledgeRecords}
+          />
           <MarkdownDocument
             html={record.contentHtml ?? ''}
             toc={record.toc ?? []}

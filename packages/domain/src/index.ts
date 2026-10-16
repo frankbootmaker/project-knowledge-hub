@@ -1321,6 +1321,28 @@ export {
 } from './delivery-dependencies.js';
 
 export {
+  CYCLE_CHECKED_KNOWLEDGE_RECORD_RELATION_TYPES,
+  KNOWLEDGE_RECORD_RELATION_INVERSE,
+  KNOWLEDGE_RECORD_RELATION_TYPES,
+  MAX_KNOWLEDGE_RECORD_RELATIONS,
+  RECORD_RELATIONS_COMPACT_CAP,
+  SYMMETRIC_KNOWLEDGE_RECORD_RELATION_TYPES,
+  canonicalRecordPair,
+  graphAfterRelationReplace,
+  inverseKnowledgeRecordRelation,
+  isCycleCheckedKnowledgeRecordRelation,
+  isSymmetricKnowledgeRecordRelation,
+  knowledgeRecordRelationTypeSchema,
+  normalizeStoredRelation,
+  relationCyclePath,
+  relationEdgeKey,
+  relationReplacePlan,
+  type KnowledgeRecordRelationInverse,
+  type KnowledgeRecordRelationType,
+  type StoredRelationEdge,
+} from './knowledge-record-relations.js';
+
+export {
   DEFAULT_PROJECT_CALENDAR,
   EVERY_DAY_CALENDAR,
   HOURS_PER_WORKDAY_MAX,

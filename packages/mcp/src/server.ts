@@ -16,6 +16,7 @@ import {
   dependencyLagDaysSchema,
   hoursPerWorkdaySchema,
   isoDateNullableSchema,
+  knowledgeRecordRelationTypeSchema,
   nonWorkingDaysSchema,
   workdaysPerWeekSchema,
   sanitizeError,
@@ -179,6 +180,7 @@ export type McpToolHandlers = {
     contentLimit?: number;
     boundary?: 'none' | 'paragraph' | 'line';
     expectSha256?: string;
+    includeRecordRelations?: boolean;
   }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
   listRecordTranslations: (input: { recordId: string }) => Promise<unknown>;
@@ -765,6 +767,13 @@ export type McpToolHandlers = {
   setKnowledgeRecordDeliveryLinks: (input: {
     recordId: string;
     links: Array<{ entityType: string; entityId: string }>;
+  }) => Promise<unknown>;
+  getKnowledgeRecordRelations: (input: {
+    recordId: string;
+  }) => Promise<unknown>;
+  setKnowledgeRecordRelations: (input: {
+    recordId: string;
+    links: Array<{ targetRecordId: string; relationType: string }>;
   }) => Promise<unknown>;
   onToolCall?: (
     toolName: string,
@@ -1628,6 +1637,29 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  const compactRelationRecordOutput = () =>
+    z.object({
+      id: z.string(),
+      humanKey: z.string().nullable(),
+      title: z.string(),
+      recordType: z.string(),
+      lifecycleStatus: z.string(),
+      archivedAt: z.string().nullable(),
+    });
+  const compactRecordRelationsOutput = () =>
+    z.object({
+      outboundCount: z.number().int(),
+      inboundCount: z.number().int(),
+      cap: z.number().int(),
+      truncated: z.boolean(),
+      items: z.array(
+        z.object({
+          direction: z.enum(['outbound', 'inbound']),
+          relationType: z.string(),
+          record: compactRelationRecordOutput(),
+        }),
+      ),
+    });
   const recordLinkedItemOutput = z.object({
     id: z.string(),
     humanKey: z.string().nullable(),
@@ -1659,6 +1691,11 @@ export function createKnowledgeHubMcpServer(
           .describe(
             'Reverse links in the record project. First page only. Archived RAID, change, and delivery items are omitted.',
           ),
+        recordRelations: compactRecordRelationsOutput()
+          .optional()
+          .describe(
+            'Counts plus up to cap related records. Omitted when includeRecordRelations is false.',
+          ),
       })
       .passthrough(),
   };
@@ -1667,13 +1704,19 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record',
     {
       description:
-        'Retrieve a knowledge record including markdown content. Tags, linked workspace media, and linkedItems are included on the first page only. linkedItems has deliveryLinks (epic, user story, milestone, task including bugs, sprint), raidLinks, and changeItems for the same project. Each item has id, humanKey, title, type, and kind. Archived RAID, change, and delivery items are omitted. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex (0-based page index: 0 on the first page, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). When you pass contentOffset or contentLimit, each page is a raw slice (concatenate contentMarkdown across pages). The default call with neither parameter still appends …[truncated] on the first page when more remains. boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+        'Retrieve a knowledge record including markdown content. Tags, linked workspace media, and linkedItems are included on the first page only. linkedItems has deliveryLinks (epic, user story, milestone, task including bugs, sprint), raidLinks, and changeItems for the same project. Each item has id, humanKey, title, type, and kind. Archived RAID, change, and delivery items are omitted. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex (0-based page index: 0 on the first page, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). When you pass contentOffset or contentLimit, each page is a raw slice (concatenate contentMarkdown across pages). The default call with neither parameter still appends …[truncated] on the first page when more remains. boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2). recordRelations is included on every page (counts and up to 20 summaries: id, humanKey, title, recordType, lifecycleStatus, archivedAt) unless includeRecordRelations is false.',
       inputSchema: {
         recordId: z.string().min(1).max(80),
         contentOffset: z.number().int().min(0).optional(),
         contentLimit: z.number().int().min(1).max(MCP_MAX_CONTENT_CHARS).optional(),
         boundary: z.enum(['none', 'paragraph', 'line']).optional(),
         expectSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+        includeRecordRelations: z
+          .boolean()
+          .optional()
+          .describe(
+            'Include compact recordRelations. Defaults to true. Set false to omit them.',
+          ),
       },
       outputSchema: knowledgeRecordOutput,
     },
@@ -3370,6 +3413,76 @@ export function createKnowledgeHubMcpServer(
         'knowledge:write',
         () => handlers.setKnowledgeRecordDeliveryLinks(args),
         { recordId: args.recordId },
+      )(),
+  );
+
+  const relationRecordOutput = () =>
+    z.object({
+      id: z.string(),
+      humanKey: z.string().nullable(),
+      title: z.string(),
+      slug: z.string(),
+      recordType: z.string(),
+      lifecycleStatus: z.string(),
+      archivedAt: z.string().nullable(),
+    });
+  const relationEdgeOutput = () =>
+    z.object({
+      relationType: z.string(),
+      record: relationRecordOutput(),
+    });
+  const knowledgeRecordRelationsOutput = {
+    relations: z.object({
+      outbound: z.array(relationEdgeOutput()),
+      inbound: z.array(relationEdgeOutput()),
+    }),
+    lifecycleSuccessor: relationRecordOutput().nullable(),
+    lifecyclePredecessor: relationRecordOutput().nullable(),
+  };
+
+  server.registerTool(
+    'get_knowledge_record_relations',
+    {
+      description:
+        'List typed relations for a knowledge record (relates_to, depends_on, refines, derived_from, contradicts) plus the lifecycle successor and predecessor from supersedes_record_id. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are symmetric. recordId may be a UUID or document key. Requires knowledge:read.',
+      inputSchema: { recordId: entityRef },
+      outputSchema: knowledgeRecordRelationsOutput,
+    },
+    async (args) =>
+      wrap(
+        'get_knowledge_record_relations',
+        'knowledge:read',
+        () => handlers.getKnowledgeRecordRelations(args),
+        { recordId: args.recordId },
+        (data) => structuredTextResult(data, knowledgeRecordRelationsOutput),
+      )(),
+  );
+
+  server.registerTool(
+    'set_knowledge_record_relations',
+    {
+      description:
+        'Replace relations stored from this record. Directed types are depends_on, refines, and derived_from. relates_to and contradicts are stored once with canonical uuid order. Inbound edges owned by the other record are kept. Rejects self-links, cross-workspace or cross-project targets, cycles for depends_on and refines, and changes that touch an archived record. recordId and targetRecordId may be UUID or document key. Does not change lifecycle. Requires knowledge:write.',
+      inputSchema: {
+        recordId: entityRef,
+        links: z
+          .array(
+            z.object({
+              targetRecordId: entityRef,
+              relationType: knowledgeRecordRelationTypeSchema,
+            }),
+          )
+          .max(200),
+      },
+      outputSchema: knowledgeRecordRelationsOutput,
+    },
+    async (args) =>
+      wrap(
+        'set_knowledge_record_relations',
+        'knowledge:write',
+        () => handlers.setKnowledgeRecordRelations(args),
+        { recordId: args.recordId },
+        (data) => structuredTextResult(data, knowledgeRecordRelationsOutput),
       )(),
   );
 

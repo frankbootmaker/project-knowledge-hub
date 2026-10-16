@@ -8,6 +8,7 @@ import {
   documentImports,
   gitRepositoryConnections,
   knowledgeRecordChunks,
+  knowledgeRecordRelations,
   knowledgeRecordTags,
   knowledgeRecords,
   memberships,
@@ -827,6 +828,15 @@ export async function moveProjectToWorkspace(
           .update(knowledgeRecordChunks)
           .set({ workspaceId: targetWorkspace.id, updatedAt: new Date() })
           .where(inArray(knowledgeRecordChunks.knowledgeRecordId, recordIds));
+        await tx
+          .update(knowledgeRecordRelations)
+          .set({ workspaceId: targetWorkspace.id })
+          .where(
+            and(
+              inArray(knowledgeRecordRelations.fromKnowledgeRecordId, recordIds),
+              inArray(knowledgeRecordRelations.toKnowledgeRecordId, recordIds),
+            ),
+          );
       }
       if (graph.gitRows.length > 0) {
         await tx

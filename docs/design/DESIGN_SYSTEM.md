@@ -249,6 +249,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-16
 
+* **Related records** — Knowledge record detail adds a `.kh-ops-related-records` section under the record head and above the markdown. Group labels use the 13px menu type. Rows reuse `.kh-ops-linked-row`, `.kh-ops-key-badge`, and `Badge`. Maintainers add a relation with `Modal` (`wide`), `Select`, `Input`, and `Button`. The superseded banner adds a secondary `LinkButton`, “Superseded by {key}”, when a lifecycle successor exists.
 * **Parent date fields** — In the epic and story dialog, a start or end that comes from included children is a disabled read-only date with the hint `datesFromChildren`. A side with no child date stays editable. Milestone due dates stay editable.
 * **Record linked items** — Knowledge record More details adds a read-only Linked items block. Groups use `.kh-ops-panel-meta`. Each row is one `Link` (`.kh-text-link`) with the human key on `.kh-ops-key-badge` and the title beside it. An empty record uses `.kh-ops-empty`.
 * **Project stage badge** — Catalogue project cards and the project header show the lifecycle stage as a `Badge` (`ProjectStageBadge`). Idea is the warn tone, active is success. MCP-created projects add an “AI draft” badge (`ProjectAiCreatedBadge`) with the provenance hint. The catalogue project filter is labeled Stage and uses the translated stage names.

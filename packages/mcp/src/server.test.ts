@@ -604,7 +604,53 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
         raidLinks: [],
         changeItems: [],
       },
+      recordRelations: {
+        outboundCount: 1,
+        inboundCount: 0,
+        cap: 20,
+        truncated: false,
+        items: [
+          {
+            direction: 'outbound',
+            relationType: 'depends_on',
+            record: {
+              id: '22222222-2222-4222-8222-222222222222',
+              humanKey: 'REL-ARCH-1',
+              title: 'Upstream',
+              recordType: 'architecture',
+              lifecycleStatus: 'current',
+              archivedAt: null,
+            },
+          },
+        ],
+      },
     },
+  },
+  get_knowledge_record_relations: {
+    relations: {
+      outbound: [
+        {
+          relationType: 'depends_on',
+          record: {
+            id: '22222222-2222-4222-8222-222222222222',
+            humanKey: 'REL-ARCH-1',
+            title: 'Upstream',
+            slug: 'upstream',
+            recordType: 'architecture',
+            lifecycleStatus: 'current',
+            archivedAt: null,
+          },
+        },
+      ],
+      inbound: [],
+    },
+    lifecycleSuccessor: null,
+    lifecyclePredecessor: null,
+  },
+  set_knowledge_record_relations: {
+    relations: { outbound: [], inbound: [] },
+    lifecycleSuccessor: null,
+    lifecyclePredecessor: null,
   },
 };
 
@@ -997,6 +1043,13 @@ describe('knowledge record linked items and RAID recordIds', () => {
         contentMarkdown: '# Charter',
         extraField: 'kept',
         linkedItems,
+        recordRelations: {
+          outboundCount: 0,
+          inboundCount: 0,
+          cap: 20,
+          truncated: false,
+          items: [],
+        },
       },
     }));
     await withMcpClient(['knowledge:read'], { getKnowledgeRecord }, async (client) => {
@@ -1010,11 +1063,13 @@ describe('knowledge record linked items and RAID recordIds', () => {
           title: string;
           extraField?: string;
           linkedItems: typeof linkedItems;
+          recordRelations?: { outboundCount: number };
         };
       };
       expect(body.knowledgeRecord.title).toBe('Charter');
       expect(body.knowledgeRecord.extraField).toBe('kept');
       expect(body.knowledgeRecord.linkedItems).toEqual(linkedItems);
+      expect(body.knowledgeRecord.recordRelations?.outboundCount).toBe(0);
       expect(read.structuredContent).toEqual(body);
     });
   });

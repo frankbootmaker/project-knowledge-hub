@@ -1643,6 +1643,22 @@ a.kh-ops-health-card:hover {
   border-bottom: 1px solid var(--kh-line);
 }
 
+.kh-ops-related-records {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--kh-line);
+}
+
+.kh-ops-related-records h2,
+.kh-ops-related-records h3 {
+  margin: 0;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
 .kh-ops-record-head .kh-ops-history-meta {
   margin-bottom: 4px;
 }

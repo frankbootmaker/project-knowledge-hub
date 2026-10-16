@@ -503,7 +503,7 @@ const recordLinkedItem = {
   },
 };
 
-/** First page of get_knowledge_record. Later pages omit linkedItems. */
+/** get_knowledge_record output. Later pages omit linkedItems. recordRelations stays on every page. */
 const knowledgeRecordResult = {
   type: 'object',
   required: ['knowledgeRecord'],
@@ -515,6 +515,51 @@ const knowledgeRecordResult = {
       additionalProperties: true,
       properties: {
         id: uuidProp('Knowledge record id'),
+        recordRelations: {
+          type: 'object',
+          additionalProperties: false,
+          description:
+            'Counts plus up to cap related records. Present on every page unless includeRecordRelations is false.',
+          required: ['outboundCount', 'inboundCount', 'cap', 'truncated', 'items'],
+          properties: {
+            outboundCount: { type: 'integer' },
+            inboundCount: { type: 'integer' },
+            cap: { type: 'integer' },
+            truncated: { type: 'boolean' },
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['direction', 'relationType', 'record'],
+                properties: {
+                  direction: { type: 'string', enum: ['outbound', 'inbound'] },
+                  relationType: { type: 'string' },
+                  record: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: [
+                      'id',
+                      'humanKey',
+                      'title',
+                      'recordType',
+                      'lifecycleStatus',
+                      'archivedAt',
+                    ],
+                    properties: {
+                      id: { type: 'string' },
+                      humanKey: { type: 'string', nullable: true },
+                      title: { type: 'string' },
+                      recordType: { type: 'string' },
+                      lifecycleStatus: { type: 'string' },
+                      archivedAt: { type: 'string', nullable: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
         linkedItems: {
           type: 'object',
           additionalProperties: false,
@@ -654,7 +699,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key.',
+      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
     scope: 'knowledge:read',
     openApi: true,
     output: knowledgeRecordResult,
@@ -685,6 +730,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           minLength: 64,
           maxLength: 64,
           description: 'SHA-256 hex of the full body. 409 CONTENT_CHANGED when it does not match.',
+        },
+        includeRecordRelations: {
+          type: 'boolean',
+          description:
+            'Include compact recordRelations. Defaults to true. Set false to omit them.',
         },
       },
     },
@@ -2449,6 +2499,91 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
             },
           },
         },
+      },
+    },
+  },
+  {
+    name: 'get_knowledge_record_relations',
+    description:
+      'List typed relations for a knowledge record plus lifecycle successor and predecessor. Inbound edges use inverse labels (required_by, refined_by, source_for). recordId may be a UUID or document key. Requires knowledge:read.',
+    scope: 'knowledge:read',
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['recordId'],
+      properties: { recordId: entityRefProp('Knowledge record id') },
+    },
+    output: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['relations', 'lifecycleSuccessor', 'lifecyclePredecessor'],
+      properties: {
+        relations: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['outbound', 'inbound'],
+          properties: {
+            outbound: { type: 'array', items: { type: 'object' } },
+            inbound: { type: 'array', items: { type: 'object' } },
+          },
+        },
+        lifecycleSuccessor: { type: 'object', nullable: true },
+        lifecyclePredecessor: { type: 'object', nullable: true },
+      },
+    },
+  },
+  {
+    name: 'set_knowledge_record_relations',
+    description:
+      'Replace relations stored from this record. Types: relates_to, depends_on, refines, derived_from, contradicts. Symmetric types are stored once. Inbound edges stay. Rejects self-links, cross-project targets, depends_on and refines cycles, and archived endpoints. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['recordId', 'links'],
+      properties: {
+        recordId: entityRefProp('Knowledge record id'),
+        links: {
+          type: 'array',
+          maxItems: 200,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['targetRecordId', 'relationType'],
+            properties: {
+              targetRecordId: entityRefProp('Related record id'),
+              relationType: {
+                type: 'string',
+                enum: [
+                  'relates_to',
+                  'depends_on',
+                  'refines',
+                  'derived_from',
+                  'contradicts',
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+    output: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['relations', 'lifecycleSuccessor', 'lifecyclePredecessor'],
+      properties: {
+        relations: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['outbound', 'inbound'],
+          properties: {
+            outbound: { type: 'array', items: { type: 'object' } },
+            inbound: { type: 'array', items: { type: 'object' } },
+          },
+        },
+        lifecycleSuccessor: { type: 'object', nullable: true },
+        lifecyclePredecessor: { type: 'object', nullable: true },
       },
     },
   },
