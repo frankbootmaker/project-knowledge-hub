@@ -1637,29 +1637,6 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  const compactRelationRecordOutput = () =>
-    z.object({
-      id: z.string(),
-      humanKey: z.string().nullable(),
-      title: z.string(),
-      recordType: z.string(),
-      lifecycleStatus: z.string(),
-      archivedAt: z.string().nullable(),
-    });
-  const compactRecordRelationsOutput = () =>
-    z.object({
-      outboundCount: z.number().int(),
-      inboundCount: z.number().int(),
-      cap: z.number().int(),
-      truncated: z.boolean(),
-      items: z.array(
-        z.object({
-          direction: z.enum(['outbound', 'inbound']),
-          relationType: z.string(),
-          record: compactRelationRecordOutput(),
-        }),
-      ),
-    });
   const recordLinkedItemOutput = z.object({
     id: z.string(),
     humanKey: z.string().nullable(),
@@ -1691,11 +1668,10 @@ export function createKnowledgeHubMcpServer(
           .describe(
             'Reverse links in the record project. First page only. Archived RAID, change, and delivery items are omitted.',
           ),
-        recordRelations: compactRecordRelationsOutput()
+        recordRelations: z
+          .any()
           .optional()
-          .describe(
-            'Counts plus up to cap related records. Omitted when includeRecordRelations is false.',
-          ),
+          .describe('Counts and summaries on every page unless includeRecordRelations is false.'),
       })
       .passthrough(),
   };
@@ -1704,7 +1680,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record',
     {
       description:
-        'Retrieve a knowledge record including markdown content. Tags, linked workspace media, and linkedItems are included on the first page only. linkedItems has deliveryLinks (epic, user story, milestone, task including bugs, sprint), raidLinks, and changeItems for the same project. Each item has id, humanKey, title, type, and kind. Archived RAID, change, and delivery items are omitted. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex (0-based page index: 0 on the first page, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). When you pass contentOffset or contentLimit, each page is a raw slice (concatenate contentMarkdown across pages). The default call with neither parameter still appends …[truncated] on the first page when more remains. boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2). recordRelations is included on every page (counts and up to 20 summaries: id, humanKey, title, recordType, lifecycleStatus, archivedAt) unless includeRecordRelations is false.',
+        'Retrieve a knowledge record including markdown content. Tags, linked workspace media, and linkedItems are included on the first page only. linkedItems has deliveryLinks (epic, user story, milestone, task including bugs, sprint), raidLinks, and changeItems for the same project. Each item has id, humanKey, title, type, and kind. Archived RAID, change, and delivery items are omitted. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex (0-based page index: 0 on the first page, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). When you pass contentOffset or contentLimit, each page is a raw slice (concatenate contentMarkdown across pages). The default call with neither parameter still appends …[truncated] on the first page when more remains. boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
       inputSchema: {
         recordId: z.string().min(1).max(80),
         contentOffset: z.number().int().min(0).optional(),
@@ -1714,9 +1690,7 @@ export function createKnowledgeHubMcpServer(
         includeRecordRelations: z
           .boolean()
           .optional()
-          .describe(
-            'Include compact recordRelations. Defaults to true. Set false to omit them.',
-          ),
+          .describe('Include recordRelations. Default true.'),
       },
       outputSchema: knowledgeRecordOutput,
     },
