@@ -4,6 +4,7 @@ import {
   knowledgeRecords,
   knowledgeSources,
   memberships,
+  organizations,
   projectEpics,
   projectMilestones,
   projectSprints,
@@ -18,6 +19,7 @@ import {
   AppError,
   assertDateRange,
   buildKnowledgeRecordMetadata,
+  buildProjectMetadata,
   changeDeliveryEntityTypeSchema,
   changeKindSchema,
   changeStatusSchema,
@@ -40,6 +42,7 @@ import {
   normalizeKeyPrefix,
   parseHumanKey,
   projectCurrencySchema,
+  projectStatusSchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
   stakeholderCompetenciesSchema,
@@ -229,6 +232,7 @@ import {
 } from './project-budget.js';
 import { moveProjectToWorkspace } from './project-move.js';
 import { getKnowledgeRecordTags } from './tags.js';
+import { createProjectViaMcp, updateProjectViaMcp } from './mcp-project-write.js';
 
 function workspaceAllowlistMessage(workspace: {
   id: string;
@@ -418,7 +422,7 @@ function requireActingUserId(client: McpClientContext): string {
     throw new AppError({
       code: 'ACTING_USER_REQUIRED',
       message:
-        'API client is missing actingUserId required for knowledge:write, catalogue:write, pm:write, or personal pm:read tools',
+        'API client is missing actingUserId required for knowledge:write, catalogue:write, projects:write, pm:write, or personal pm:read tools',
       statusCode: 403,
     });
   }
@@ -1159,6 +1163,7 @@ function toMcpProject(
   pinned: Awaited<ReturnType<typeof loadPinnedRecords>>,
   workspace: WorkspaceLabel | null,
   facts?: ProjectScheduleFacts,
+  webUrl?: string,
 ) {
   const calendar = coerceProjectCalendar({
     hoursPerWorkday: project.hoursPerWorkday,
@@ -1196,6 +1201,21 @@ function toMcpProject(
     initialBudget: mcpMoney(project.initialBudget),
     approvedBudget: mcpMoney(project.approvedBudget),
     keyPrefix: project.keyPrefix,
+    methodology:
+      project.methodology === 'scrum' ||
+      project.methodology === 'kanban' ||
+      project.methodology === 'waterfall' ||
+      project.methodology === 'hybrid'
+        ? project.methodology
+        : null,
+    createdVia: project.createdVia === 'mcp' ? 'mcp' : null,
+    createdByApiClientId: project.createdByApiClientId,
+    createdByUserId: project.createdByUserId,
+    generatedByModel: project.generatedByModel,
+    url:
+      webUrl && workspace?.slug
+        ? `${webUrl.replace(/\/$/, '')}/workspaces/${workspace.slug}/projects/${project.slug}`
+        : null,
   };
 }
 
@@ -1252,14 +1272,55 @@ export function createMcpToolHandlers(
           id: workspaces.id,
           name: workspaces.name,
           slug: workspaces.slug,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+          organizationSlug: organizations.slug,
         })
         .from(workspaces)
+        .innerJoin(organizations, eq(workspaces.organizationId, organizations.id))
         .where(and(inArray(workspaces.id, workspaceIds), isNull(workspaces.archivedAt)))
         .orderBy(asc(workspaces.name));
-      return { workspaces: rows };
+      const roleByWorkspace = new Map<string, string>();
+      let systemAdmin = false;
+      if (client.actingUserId) {
+        const [actor] = await app.database.db
+          .select({ isSystemAdmin: users.isSystemAdmin })
+          .from(users)
+          .where(eq(users.id, client.actingUserId))
+          .limit(1);
+        systemAdmin = Boolean(actor?.isSystemAdmin);
+        const membershipRows = await app.database.db
+          .select({ workspaceId: memberships.workspaceId, role: memberships.role })
+          .from(memberships)
+          .where(
+            and(
+              eq(memberships.userId, client.actingUserId),
+              inArray(memberships.workspaceId, workspaceIds),
+            ),
+          );
+        for (const membership of membershipRows) {
+          roleByWorkspace.set(membership.workspaceId, membership.role);
+        }
+      }
+      return {
+        workspaces: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          organization: {
+            id: row.organizationId,
+            name: row.organizationName,
+            slug: row.organizationSlug,
+          },
+          writesAllowed: client.allowedWorkspaceIds.includes(row.id),
+          role: systemAdmin
+            ? 'system_admin'
+            : roleByWorkspace.get(row.id) ?? null,
+        })),
+      };
     },
 
-    async listProjects({ workspaceId, workspaceSlug, limit }) {
+    async listProjects({ workspaceId, workspaceSlug, limit, status, stage }) {
       const selectedWorkspaceId = await resolveWorkspaceId(app, client, {
         workspaceId,
         workspaceSlug,
@@ -1321,8 +1382,29 @@ export function createMcpToolHandlers(
         }
         accessible.push(row);
       }
+      if (status && stage && status !== stage) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'status and stage must be the same value when both are sent.',
+          statusCode: 400,
+        });
+      }
+      const stageFilter = (status ?? stage)?.trim();
+      let staged = accessible;
+      if (stageFilter) {
+        const parsed = projectStatusSchema.safeParse(stageFilter);
+        if (!parsed.success) {
+          throw new AppError({
+            code: 'VALIDATION_ERROR',
+            message:
+              `Invalid project stage "${stageFilter}". Allowed stages: ${projectStatusSchema.options.join(', ')}.`,
+            statusCode: 400,
+          });
+        }
+        staged = accessible.filter((row) => row.status === parsed.data);
+      }
       const page =
-        typeof limit === 'number' ? accessible.slice(0, limit) : accessible;
+        typeof limit === 'number' ? staged.slice(0, limit) : staged;
       const labels = await loadWorkspaceLabels(app, [
         ...page.map((row) => row.workspaceId),
         ...inaccessible.map((item) => item.row.workspaceId),
@@ -1343,6 +1425,37 @@ export function createMcpToolHandlers(
           ...toSummary(item.row),
           reason: item.reason,
         })),
+      };
+    },
+
+    async listProjectMetadata() {
+      return buildProjectMetadata();
+    },
+
+    async createProject(input) {
+      return createProjectViaMcp(app, client, input, ipAddress);
+    },
+
+    async updateProject(input) {
+      const updated = await updateProjectViaMcp(app, client, input, ipAddress);
+      const pinned = await loadPinnedRecords(app.database, [
+        updated.project.charterRecordId,
+        updated.project.initialPlanRecordId,
+      ]);
+      const facts = await loadProjectScheduleFacts(app.database, [updated.project]);
+      return {
+        project: toMcpProject(
+          updated.project,
+          pinned,
+          {
+            id: updated.workspace.id,
+            name: updated.workspace.name,
+            slug: updated.workspace.slug,
+          },
+          facts.get(updated.project.id),
+          app.env?.WEB_URL,
+        ),
+        warning: updated.duplicateWarning,
       };
     },
 
@@ -1533,6 +1646,7 @@ export function createMcpToolHandlers(
           pinned,
           labels.get(project.workspaceId) ?? null,
           facts.get(project.id),
+          app.env?.WEB_URL,
         ),
       };
     },
@@ -1679,6 +1793,7 @@ export function createMcpToolHandlers(
           pinned,
           labels.get(updated.workspaceId) ?? null,
           facts.get(updated.id),
+          app.env?.WEB_URL,
         ),
       };
     },
@@ -2046,11 +2161,18 @@ export function createMcpToolHandlers(
           },
         };
       };
+      const legacyFirstPageTruncation =
+        contentOffset === undefined && contentLimit === undefined;
       let fitted;
       try {
         fitted = sliceContentToFit(
           record.contentMarkdown,
-          { offset: contentOffset, limit: contentLimit, boundary },
+          {
+            offset: contentOffset,
+            limit: contentLimit,
+            boundary,
+            legacyFirstPageTruncation,
+          },
           (candidate) => serializedResponseBytes(toPayload(candidate)),
         );
       } catch (error) {

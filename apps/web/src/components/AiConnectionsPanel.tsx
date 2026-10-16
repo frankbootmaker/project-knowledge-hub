@@ -487,6 +487,7 @@ export function AiConnectionsPanel({
                   ...MCP_READ_SCOPES,
                   'knowledge:write',
                   'catalogue:write',
+                  'projects:write',
                   'pm:read',
                   'pm:write',
                 ].map((scope) => (
@@ -521,6 +522,7 @@ export function AiConnectionsPanel({
               </div>
               {approveScopes.includes('knowledge:write') ||
               approveScopes.includes('catalogue:write') ||
+              approveScopes.includes('projects:write') ||
               approveScopes.includes('pm:write') ? (
                 <p className="m-0 text-xs text-ink-muted">{t('writeNeedsWorkspace')}</p>
               ) : null}

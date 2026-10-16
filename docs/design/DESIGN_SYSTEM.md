@@ -250,6 +250,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-16
 
 * **Record linked items** — Knowledge record More details adds a read-only Linked items block. Groups use `.kh-ops-panel-meta`. Each row is one `Link` (`.kh-text-link`) with the human key on `.kh-ops-key-badge` and the title beside it. An empty record uses `.kh-ops-empty`.
+* **Project stage badge** — Catalogue project cards and the project header show the lifecycle stage as a `Badge` (`ProjectStageBadge`). Idea is the warn tone, active is success. MCP-created projects add an “AI draft” badge (`ProjectAiCreatedBadge`) with the provenance hint. The catalogue project filter is labeled Stage and uses the translated stage names.
 * **Gantt milestone rows** — Dated milestones are inserted into the work list by calendar date and leave the WBS cell empty. Undated milestones stay in the “Milestones without dates” group. Epic and story titles (`.kh-ops-gantt-title-btn` / `.kh-ops-gantt-title-text`) are bold; milestone titles are italic, with 1px of trailing padding so the glyph is not clipped. Other rows stay regular IBM Plex Sans 13px.
 
 ### 2026-10-15
