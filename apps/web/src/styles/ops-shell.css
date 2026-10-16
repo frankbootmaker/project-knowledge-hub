@@ -4695,6 +4695,28 @@ a.kh-ops-admin-link-card {
   min-width: 0;
 }
 
+.kh-ops-media-library .kh-ops-data-table .kh-ops-media-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 72px);
+  gap: 4px;
+  width: max-content;
+}
+
+.kh-ops-media-library .kh-ops-data-table .kh-ops-media-card-actions > .kh-btn {
+  width: 72px;
+  min-width: 72px;
+  height: 23.4px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.kh-ops-media-library .kh-ops-data-table .kh-ops-media-card-actions > .kh-ops-confirm {
+  grid-column: 1 / -1;
+}
+
 .kh-ops-media-select-bar {
   display: flex;
   flex-wrap: wrap;
@@ -4741,6 +4763,29 @@ a.kh-ops-admin-link-card {
 
 .kh-ops-media-library .kh-ops-data-table tr[data-selected='true'] td {
   background: var(--kh-selected-bg);
+}
+
+.kh-ops-media-list-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kh-ops-media-list-thumb {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 40px;
+  object-fit: cover;
+  object-position: top center;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-bg);
+}
+
+.kh-ops-media-list-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kh-ops-media-library .kh-ops-media-linked {

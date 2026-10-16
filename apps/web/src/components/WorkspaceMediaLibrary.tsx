@@ -720,7 +720,16 @@ export function WorkspaceMediaLibrary(props: {
                     data-selected={selected.has(item.id) ? 'true' : undefined}
                   >
                     {props.canMutate ? <td>{selectControl(item)}</td> : null}
-                    <td className="kh-ops-primary-cell">{mediaName(item)}</td>
+                    <td className="kh-ops-primary-cell">
+                      <span className="kh-ops-media-list-name">
+                        <img
+                          className="kh-ops-media-list-thumb"
+                          src={item.url}
+                          alt=""
+                        />
+                        <span>{mediaName(item)}</span>
+                      </span>
+                    </td>
                     <td>
                       <span className="kh-ops-type-chip">
                         {typeLabel(item.contentType)}
