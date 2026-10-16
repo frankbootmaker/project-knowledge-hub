@@ -105,6 +105,11 @@ export type PublicMilestone = {
   updatedAt: string;
   /** Derived from linked items. 100 when every included link is complete. */
   completionPercent: number | null;
+  /**
+   * Planned percent. Milestones have no target column in the list, so this
+   * stays null. startDate and targetDate remain the stored dates.
+   */
+  targetPercent: number | null;
   completion: { percent: number; done: number; total: number } | null;
   linkedItems: Array<{
     entityType: 'epic' | 'user_story' | 'task';
@@ -146,6 +151,11 @@ export type PublicTask = {
   actualHours: number | null;
   storyPoints: number | null;
   completionPercent: number | null;
+  /**
+   * Planned percent. Tasks show their own completion and no target, so this
+   * stays null. startDate is the stored start and is writable.
+   */
+  targetPercent: number | null;
   tokensUsed: number | null;
   tokensInput: number | null;
   tokensOutput: number | null;
@@ -214,6 +224,7 @@ function toPublicMilestone(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     completionPercent: null,
+    targetPercent: null,
     completion: null,
     linkedItems: [],
   };
@@ -266,6 +277,7 @@ function toPublicTask(
       row.status,
       row.completionPercent,
     ),
+    targetPercent: null,
     tokensUsed: row.tokensUsed ?? null,
     tokensInput: row.tokensInput ?? null,
     tokensOutput: row.tokensOutput ?? null,

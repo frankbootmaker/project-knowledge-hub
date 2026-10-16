@@ -153,7 +153,7 @@ export const projects = pgTable(
     slug: text('slug').notNull(),
     summary: text('summary'),
     description: text('description'),
-    status: text('status').notNull().default('idea'),
+    status: text('status').notNull().default('active'),
     ownerUserId: uuid('owner_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
@@ -191,6 +191,18 @@ export const projects = pgTable(
     approvedBudget: numeric('approved_budget', { precision: 14, scale: 2, mode: 'number' }),
     /** Workspace-unique 3-char prefix for human issue keys (AAA or AA0). */
     keyPrefix: text('key_prefix'),
+    /** scrum | kanban | waterfall | hybrid. Null when unset. */
+    methodology: text('methodology'),
+    /** mcp when an agent created the project. Null for human creates. */
+    createdVia: text('created_via'),
+    createdByApiClientId: uuid('created_by_api_client_id').references(
+      (): AnyPgColumn => apiClients.id,
+      { onDelete: 'set null' },
+    ),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    generatedByModel: text('generated_by_model'),
     /** Per issue-key-type counters: { "T": 12, "RR": 3, ... }. */
     issueCounters: jsonb('issue_counters')
       .$type<Record<string, number>>()
@@ -1786,6 +1798,44 @@ export const knowledgeRecordDeliveryLinks = pgTable(
     ),
     index('knowledge_record_delivery_links_record_idx').on(table.knowledgeRecordId),
     index('knowledge_record_delivery_links_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/**
+ * Typed record↔record edges (ADR-025). Symmetric types are stored once
+ * with from_knowledge_record_id < to_knowledge_record_id.
+ */
+export const knowledgeRecordRelations = pgTable(
+  'knowledge_record_relations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    fromKnowledgeRecordId: uuid('from_knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    toKnowledgeRecordId: uuid('to_knowledge_record_id')
+      .notNull()
+      .references(() => knowledgeRecords.id, { onDelete: 'cascade' }),
+    relationType: text('relation_type').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('knowledge_record_relations_uidx').on(
+      table.fromKnowledgeRecordId,
+      table.toKnowledgeRecordId,
+      table.relationType,
+    ),
+    index('knowledge_record_relations_from_idx').on(table.fromKnowledgeRecordId),
+    index('knowledge_record_relations_to_idx').on(table.toKnowledgeRecordId),
+    index('knowledge_record_relations_workspace_idx').on(table.workspaceId),
+    index('knowledge_record_relations_created_by_idx').on(table.createdBy),
   ],
 );
 

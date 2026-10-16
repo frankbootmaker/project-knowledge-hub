@@ -83,6 +83,7 @@ export function UserMcpSetupWizard({
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const [includePm, setIncludePm] = useState(false);
   const [includeCatalogue, setIncludeCatalogue] = useState(false);
+  const [includeProjects, setIncludeProjects] = useState(false);
   const [includeMonitoring, setIncludeMonitoring] = useState(false);
   const [name, setName] = useState(defaultClientName('cursor'));
   const [workspaceIds, setWorkspaceIds] = useState<string[]>(
@@ -169,6 +170,7 @@ export function UserMcpSetupWizard({
             mode,
             includePm,
             includeCatalogue,
+            includeProjects,
             includeMonitoring,
           }),
           allowedWorkspaceIds: workspaceIds,
@@ -401,6 +403,21 @@ export function UserMcpSetupWizard({
                     <span className="font-medium">{t('mcpWizardIncludeCatalogue')}</span>
                     <span className="mt-0.5 block text-xs text-ink-muted">
                       {t('mcpWizardIncludeCatalogueHint')}
+                    </span>
+                  </span>
+                </label>
+              ) : null}
+              {mode === 'write' ? (
+                <label className="kh-ops-scope-check kh-ops-field-span">
+                  <input
+                    type="checkbox"
+                    checked={includeProjects}
+                    onChange={(e) => setIncludeProjects(e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-medium">{t('mcpWizardIncludeProjects')}</span>
+                    <span className="mt-0.5 block text-xs text-ink-muted">
+                      {t('mcpWizardIncludeProjectsHint')}
                     </span>
                   </span>
                 </label>

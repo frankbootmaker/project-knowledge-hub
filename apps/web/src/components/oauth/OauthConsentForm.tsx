@@ -14,7 +14,12 @@ type ConsentRequest = {
   systemUser: boolean;
 };
 
-const WRITE_SCOPES = new Set(['knowledge:write', 'pm:write', 'catalogue:write']);
+const WRITE_SCOPES = new Set([
+  'knowledge:write',
+  'pm:write',
+  'catalogue:write',
+  'projects:write',
+]);
 
 export function OauthConsentForm() {
   const t = useTranslations('oauthConsent');

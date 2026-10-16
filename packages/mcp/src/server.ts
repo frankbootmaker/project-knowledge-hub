@@ -13,8 +13,10 @@ import {
   MCP_MAX_LIST_LIMIT,
 } from './limits.js';
 import {
+  dependencyLagDaysSchema,
   hoursPerWorkdaySchema,
   isoDateNullableSchema,
+  knowledgeRecordRelationTypeSchema,
   nonWorkingDaysSchema,
   workdaysPerWeekSchema,
   sanitizeError,
@@ -38,7 +40,30 @@ export type McpToolHandlers = {
   listProjects: (input: {
     workspaceId?: string;
     workspaceSlug?: string;
+    status?: string;
+    stage?: string;
     limit: number;
+  }) => Promise<unknown>;
+  listProjectMetadata: () => Promise<unknown>;
+  createProject: (input: {
+    workspaceId: string;
+    name: string;
+    description?: string | null;
+    keyPrefix?: string;
+    currency?: string;
+    methodology?: string | null;
+    confirmDuplicateName?: boolean;
+    generatedByModel?: string | null;
+  }) => Promise<unknown>;
+  updateProject: (input: {
+    projectId: string;
+    name?: string;
+    description?: string | null;
+    methodology?: string | null;
+    currency?: string;
+    status?: string;
+    stage?: string;
+    confirmDuplicateName?: boolean;
   }) => Promise<unknown>;
   listSystems: (input: {
     workspaceId?: string;
@@ -155,6 +180,7 @@ export type McpToolHandlers = {
     contentLimit?: number;
     boundary?: 'none' | 'paragraph' | 'line';
     expectSha256?: string;
+    includeRecordRelations?: boolean;
   }) => Promise<unknown>;
   getRecordProvenance: (input: { recordId: string }) => Promise<unknown>;
   listRecordTranslations: (input: { recordId: string }) => Promise<unknown>;
@@ -657,6 +683,7 @@ export type McpToolHandlers = {
     dueDate?: string | null;
     sortOrder?: number;
     taskIds?: string[];
+    recordIds?: string[];
   }) => Promise<unknown>;
   updateProjectRaidItem: (input: {
     raidItemId: string;
@@ -740,6 +767,13 @@ export type McpToolHandlers = {
   setKnowledgeRecordDeliveryLinks: (input: {
     recordId: string;
     links: Array<{ entityType: string; entityId: string }>;
+  }) => Promise<unknown>;
+  getKnowledgeRecordRelations: (input: {
+    recordId: string;
+  }) => Promise<unknown>;
+  setKnowledgeRecordRelations: (input: {
+    recordId: string;
+    links: Array<{ targetRecordId: string; relationType: string }>;
   }) => Promise<unknown>;
   onToolCall?: (
     toolName: string,
@@ -970,7 +1004,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspaces',
-    'List workspaces this client can access (id, name, slug). Requires projects:read.',
+    'List workspaces this client can access. Each row has id, name, slug, organization (id, name, slug), writesAllowed (true only when the workspace is on this client allow-list), and role (acting user membership, or system_admin). Requires projects:read. Call this before create_project.',
     {},
     async () =>
       wrap('list_workspaces', 'projects:read', () => handlers.listWorkspaces())(),
@@ -978,20 +1012,39 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_projects',
-    'List accessible projects in allowed workspaces. Each project includes workspaceName and workspaceSlug.',
+    'List accessible projects in allowed workspaces. Each project includes workspaceName, workspaceSlug, and status (the lifecycle stage). Filter with status or stage (idea, planned, active, maintenance, paused, completed, archived).',
     {
       workspaceId: z.string().uuid().optional(),
       workspaceSlug: z.string().min(1).max(64).optional(),
+      status: z.string().min(1).max(40).optional(),
+      stage: z.string().min(1).max(40).optional(),
       limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
     },
-    async (args) =>
-      wrap('list_projects', 'projects:read', () =>
+    async (args) => {
+      if (args.status && args.stage && args.status !== args.stage) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'status and stage must be the same value when both are sent.',
+          statusCode: 400,
+        });
+      }
+      return wrap('list_projects', 'projects:read', () =>
         handlers.listProjects({
           workspaceId: args.workspaceId,
           workspaceSlug: args.workspaceSlug,
+          status: args.status ?? args.stage,
           limit: args.limit ?? MCP_MAX_LIST_LIMIT,
         }),
-      )(),
+      )();
+    },
+  );
+
+  server.tool(
+    'list_project_metadata',
+    'Field guide for create_project and update_project: stages, methodologies, key prefix rules, and the idea-stage constraint. Call this before create_project. Requires projects:read.',
+    {},
+    async () =>
+      wrap('list_project_metadata', 'projects:read', () => handlers.listProjectMetadata())(),
   );
 
   const moneyInput = z.union([z.number(), z.string()]).nullable();
@@ -1260,6 +1313,42 @@ export function createKnowledgeHubMcpServer(
       initialBudget: z.number().nullable(),
       approvedBudget: z.number().nullable(),
       keyPrefix: nullableOutputText(),
+      methodology: z.enum(['scrum', 'kanban', 'waterfall', 'hybrid']).nullable(),
+      createdVia: z.enum(['mcp']).nullable().describe(
+        'mcp when an agent created the project. Null for a human-created project.',
+      ),
+      createdByApiClientId: nullableOutputText().describe(
+        'API client id when created via MCP. Null otherwise.',
+      ),
+      createdByUserId: nullableOutputText().describe(
+        'Acting user id when created via MCP. Null otherwise.',
+      ),
+      generatedByModel: nullableOutputText().describe(
+        'Optional model id supplied at MCP create. Null when unset.',
+      ),
+      url: nullableOutputText().describe(
+        'Hub URL for the project. Null when the workspace slug is unknown.',
+      ),
+    }),
+  };
+  const projectMethodologyEnum = z.enum(['scrum', 'kanban', 'waterfall', 'hybrid']);
+  const createProjectOutput = {
+    project: z.object({
+      id: z.string(),
+      name: z.string(),
+      slug: z.string(),
+      workspaceId: z.string(),
+      status: z.literal('idea'),
+      keyPrefix: z.string(),
+      url: z.string(),
+      methodology: projectMethodologyEnum.nullable(),
+      currency: projectCurrencyEnum,
+      description: nullableOutputText(),
+      createdVia: z.literal('mcp'),
+      createdByApiClientId: z.string(),
+      createdByUserId: z.string(),
+      generatedByModel: nullableOutputText(),
+      warning: nullableOutputText(),
     }),
   };
 
@@ -1267,7 +1356,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id, or by projectSlug plus workspaceSlug when the slug is shared. Returns workspaceName, workspaceSlug, baseline dates, the working calendar (hoursPerWorkday, workdaysPerWeek, nonWorkingDays), plan finishDate and durationWorkingDays, pinned charter/plan, keyPrefix, budgets, and definitionOfDone (string or null). finishDate is the latest scheduled delivery end and durationWorkingDays counts working days from the earliest scheduled start to that finish. Money fields (initialBudget, approvedBudget) are JSON numbers.',
+        'Get a project by id, or by projectSlug plus workspaceSlug when the slug is shared. Returns workspaceName, workspaceSlug, status (lifecycle stage), methodology, baseline dates, the working calendar, plan finishDate and durationWorkingDays, pinned charter/plan, keyPrefix, budgets, definitionOfDone, url, and MCP provenance (createdVia, createdByApiClientId, createdByUserId, generatedByModel). createdVia is mcp or null. finishDate is calculated. Money fields are JSON numbers.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
@@ -1322,6 +1411,71 @@ export function createKnowledgeHubMcpServer(
         () => handlers.updateProjectBaseline(args),
         { projectId: args.projectId },
         (data) => structuredTextResult(data, projectBaselineOutput),
+      )(),
+  );
+
+  const updateProjectOutput = {
+    project: projectBaselineOutput.project,
+    warning: z.string().nullable().describe(
+      'Set when a rename was confirmed despite a similar existing name. Otherwise null.',
+    ),
+  };
+
+  server.registerTool(
+    'create_project',
+    {
+      description:
+        'Create a project in an allowlisted workspace. Requires projects:write and an acting user who is maintainer, workspace_admin, or system_admin. Call list_workspaces, then list_project_metadata. The project is always created in stage idea; a human promotes it to active. keyPrefix is AAA or AA0 — omit it to auto-assign, or read the suggested prefix when the value is taken. A similar name is rejected unless confirmDuplicateName is true. Returns id, keyPrefix, and url. generatedByModel is stored as provenance.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        name: z.string().min(1).max(160),
+        description: z.string().max(10000).nullable().optional(),
+        keyPrefix: z
+          .string()
+          .trim()
+          .regex(/^([A-Za-z]{3}|[A-Za-z]{2}[0-9])$/)
+          .optional(),
+        currency: projectCurrencyEnum.optional(),
+        methodology: projectMethodologyEnum.nullable().optional(),
+        confirmDuplicateName: z.boolean().optional(),
+        generatedByModel: z.string().max(200).nullable().optional(),
+      },
+      outputSchema: createProjectOutput,
+    },
+    async (args) =>
+      wrap(
+        'create_project',
+        'projects:write',
+        () => handlers.createProject(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, createProjectOutput),
+      )(),
+  );
+
+  server.registerTool(
+    'update_project',
+    {
+      description:
+        'Update a project name, description, methodology, or currency. Requires projects:write and an acting user who can create projects in that workspace. status (alias stage) may change only within MCP transitions. Promoting idea to active is rejected — a human does that in the hub. A similar new name needs confirmDuplicateName. Writes an audit entry. Returns the project, including provenance.',
+      inputSchema: {
+        projectId: z.string().uuid(),
+        name: z.string().min(1).max(160).optional(),
+        description: z.string().max(10000).nullable().optional(),
+        methodology: projectMethodologyEnum.nullable().optional(),
+        currency: projectCurrencyEnum.optional(),
+        status: z.string().min(1).max(40).optional(),
+        stage: z.string().min(1).max(40).optional(),
+        confirmDuplicateName: z.boolean().optional(),
+      },
+      outputSchema: updateProjectOutput,
+    },
+    async (args) =>
+      wrap(
+        'update_project',
+        'projects:write',
+        () => handlers.updateProject(args),
+        { projectId: args.projectId },
+        (data) => structuredTextResult(data, updateProjectOutput),
       )(),
   );
 
@@ -1483,15 +1637,88 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  server.tool(
+  const compactRelationRecordOutput = () =>
+    z.object({
+      id: z.string(),
+      humanKey: z.string().nullable(),
+      title: z.string(),
+      recordType: z.string(),
+      lifecycleStatus: z.string(),
+      archivedAt: z.string().nullable(),
+    });
+  const compactRecordRelationsOutput = () =>
+    z.object({
+      outboundCount: z.number().int(),
+      inboundCount: z.number().int(),
+      cap: z.number().int(),
+      truncated: z.boolean(),
+      items: z.array(
+        z.object({
+          direction: z.enum(['outbound', 'inbound']),
+          relationType: z.string(),
+          record: compactRelationRecordOutput(),
+        }),
+      ),
+    });
+  const recordLinkedItemOutput = z.object({
+    id: z.string(),
+    humanKey: z.string().nullable(),
+    title: z.string(),
+    type: z.enum([
+      'epic',
+      'user_story',
+      'milestone',
+      'task',
+      'sprint',
+      'raid',
+      'change',
+    ]),
+    kind: z.string().nullable(),
+    projectId: z.string(),
+    projectSlug: z.string(),
+  });
+  const knowledgeRecordOutput = {
+    knowledgeRecord: z
+      .object({
+        id: z.string(),
+        linkedItems: z
+          .object({
+            deliveryLinks: z.array(recordLinkedItemOutput),
+            raidLinks: z.array(recordLinkedItemOutput),
+            changeItems: z.array(recordLinkedItemOutput),
+          })
+          .optional()
+          .describe(
+            'Reverse links in the record project. First page only. Archived RAID, change, and delivery items are omitted.',
+          ),
+        recordRelations: compactRecordRelationsOutput()
+          .optional()
+          .describe(
+            'Counts plus up to cap related records. Omitted when includeRecordRelations is false.',
+          ),
+      })
+      .passthrough(),
+  };
+
+  server.registerTool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including markdown content. Tags and linked workspace media are included on the first page only. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex, and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     {
-      recordId: z.string().min(1).max(80),
-      contentOffset: z.number().int().min(0).optional(),
-      contentLimit: z.number().int().min(1).max(MCP_MAX_CONTENT_CHARS).optional(),
-      boundary: z.enum(['none', 'paragraph', 'line']).optional(),
-      expectSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      description:
+        'Retrieve a knowledge record including markdown content. Tags, linked workspace media, and linkedItems are included on the first page only. linkedItems has deliveryLinks (epic, user story, milestone, task including bugs, sprint), raidLinks, and changeItems for the same project. Each item has id, humanKey, title, type, and kind. Archived RAID, change, and delivery items are omitted. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex (0-based page index: 0 on the first page, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). When you pass contentOffset or contentLimit, each page is a raw slice (concatenate contentMarkdown across pages). The default call with neither parameter still appends …[truncated] on the first page when more remains. boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2). recordRelations is included on every page (counts and up to 20 summaries: id, humanKey, title, recordType, lifecycleStatus, archivedAt) unless includeRecordRelations is false.',
+      inputSchema: {
+        recordId: z.string().min(1).max(80),
+        contentOffset: z.number().int().min(0).optional(),
+        contentLimit: z.number().int().min(1).max(MCP_MAX_CONTENT_CHARS).optional(),
+        boundary: z.enum(['none', 'paragraph', 'line']).optional(),
+        expectSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+        includeRecordRelations: z
+          .boolean()
+          .optional()
+          .describe(
+            'Include compact recordRelations. Defaults to true. Set false to omit them.',
+          ),
+      },
+      outputSchema: knowledgeRecordOutput,
     },
     async (args) =>
       wrap(
@@ -1499,6 +1726,7 @@ export function createKnowledgeHubMcpServer(
         'knowledge:read',
         () => handlers.getKnowledgeRecord(args),
         { recordId: args.recordId },
+        (data) => structuredTextResult(data, knowledgeRecordOutput),
       )(),
   );
 
@@ -1769,40 +1997,44 @@ export function createKnowledgeHubMcpServer(
     cursor: z.string().min(1).max(200).optional(),
   };
 
-  server.tool(
-    'list_project_milestones',
-    'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (0 or 100 from linked items and predecessor dependencies: 100 only when every included item is done or 100 percent, cancelled items are left out, otherwise 0; no included items leaves it null), linkedItems, and mediaLinks plus mediaLinkCount for the Media tab. Status follows those same links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. targetDate is the due date and is not derived from linked items. A predecessor moves that due date. Duration is always 0. Requires pm:read.',
-    {
-      projectId: z.string().uuid(),
-      includeArchived: z.boolean().optional(),
-      ...listPage,
-    },
-    async (args) =>
-      wrap(
-        'list_project_milestones',
-        'pm:read',
-        () => handlers.listProjectMilestones(args),
-        { projectId: args.projectId },
-      )(),
-  );
-
+  const targetPercentOutput = z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .nullable()
+    .describe(
+      'Planned percent from the start through the end. 0 on the start day, 100 on the end day. Null when the window is missing. Read-only.',
+    );
+  const taskRowOutput = z
+    .object({
+      startDate: z
+        .string()
+        .nullable()
+        .describe('Stored start date (YYYY-MM-DD). Writable on create and update.')
+        .optional(),
+      completionPercent: z
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .nullable()
+        .describe(
+          'Displayed percent. Done is 100, cancelled is 0, otherwise the stored step.',
+        )
+        .optional(),
+      targetPercent: z
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .nullable()
+        .describe('Tasks have no planned target. Always null.')
+        .optional(),
+    })
+    .passthrough();
   const taskListOutput = {
-    tasks: z.array(
-      z
-        .object({
-          completionPercent: z
-            .number()
-            .int()
-            .min(0)
-            .max(100)
-            .nullable()
-            .describe(
-              'Displayed percent. Done is 100, cancelled is 0, otherwise the stored step.',
-            )
-            .optional(),
-        })
-        .passthrough(),
-    ),
+    tasks: z.array(taskRowOutput),
     total: z.number().int(),
     limit: z.number().int(),
     nextCursor: z
@@ -1811,12 +2043,122 @@ export function createKnowledgeHubMcpServer(
       .describe('Pass as cursor for the next page. Null when hasMore is false.'),
     hasMore: z.boolean(),
   };
+  const taskResultOutput = { task: taskRowOutput };
+  const parentScheduleOutput = {
+    startDate: z
+      .string()
+      .nullable()
+      .describe(
+        'YYYY-MM-DD. The earliest included child start when startDateDerived is true; otherwise the stored date.',
+      ),
+    endDate: z
+      .string()
+      .nullable()
+      .describe(
+        'YYYY-MM-DD. The latest included child end when endDateDerived is true; otherwise the stored date.',
+      ),
+    startDateDerived: z
+      .boolean()
+      .describe('True when startDate comes from included children. That side is read-only.'),
+    endDateDerived: z
+      .boolean()
+      .describe('True when endDate comes from included children. That side is read-only.'),
+    targetPercent: targetPercentOutput,
+  };
+  const epicRowOutput = z.object({ id: z.string(), ...parentScheduleOutput }).passthrough();
+  const storyRowOutput = z.object({ id: z.string(), ...parentScheduleOutput }).passthrough();
+  const milestoneRowOutput = z
+    .object({
+      id: z.string(),
+      startDate: z
+        .string()
+        .nullable()
+        .describe('Stored start date (YYYY-MM-DD). Writable. Not derived from linked items.'),
+      targetDate: z
+        .string()
+        .nullable()
+        .describe('Stored due date (YYYY-MM-DD). Writable. Not derived from linked items.'),
+      targetPercent: z
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .nullable()
+        .describe('Milestones have no planned target. Always null.'),
+    })
+    .passthrough();
+  const listPageFields = {
+    total: z.number().int(),
+    limit: z.number().int(),
+    nextCursor: z
+      .string()
+      .nullable()
+      .describe('Pass as cursor for the next page. Null when hasMore is false.'),
+    hasMore: z.boolean(),
+  };
+  const epicListOutput = { epics: z.array(epicRowOutput), ...listPageFields };
+  const storyListOutput = { userStories: z.array(storyRowOutput), ...listPageFields };
+  const milestoneListOutput = {
+    milestones: z.array(milestoneRowOutput),
+    ...listPageFields,
+  };
+  const dependencyLinkOutput = z
+    .object({
+      id: z.string(),
+      linkType: z.enum(['FS', 'SS', 'FF', 'SF']),
+      lagDays: dependencyLagDaysSchema.describe(
+        'Lag in working days. Negative is a lead. Whole days only.',
+      ),
+    })
+    .passthrough();
+  const dependencyListOutput = {
+    predecessors: z.array(dependencyLinkOutput),
+    successors: z.array(dependencyLinkOutput),
+    scheduleDriven: z.boolean(),
+  };
+  const dependencyWriteOutput = {
+    dependency: dependencyLinkOutput.optional(),
+    dependencies: z.array(dependencyLinkOutput).optional(),
+    schedule: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            startDate: z.string().nullable(),
+            finishDate: z.string().nullable(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  };
+
+  server.registerTool(
+    'list_project_milestones',
+    {
+      description:
+        'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (0 or 100 from linked items and predecessor dependencies: 100 only when every included item is done or 100 percent, cancelled items are left out, otherwise 0; no included items leaves it null), linkedItems, and mediaLinks plus mediaLinkCount for the Media tab. Status follows those same links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate and targetDate are the stored start and due date. They are writable and are not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Requires pm:read.',
+      inputSchema: {
+        projectId: z.string().uuid(),
+        includeArchived: z.boolean().optional(),
+        ...listPage,
+      },
+      outputSchema: milestoneListOutput,
+    },
+    async (args) =>
+      wrap(
+        'list_project_milestones',
+        'pm:read',
+        () => handlers.listProjectMilestones(args),
+        { projectId: args.projectId },
+        (data) => structuredTextResult(data, milestoneListOutput),
+      )(),
+  );
 
   server.registerTool(
     'list_project_tasks',
     {
       description:
-        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. Each task includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
+        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. Each task includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
       inputSchema: {
         projectId: z.string().uuid(),
         milestoneId: entityRef.optional(),
@@ -1851,27 +2193,41 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'get_project_task',
-    'Get one project task or bug with RACI. The raci array is the current standing set (userId and role R/A/C/I) and includes the latest set_project_task_raci replacement. Hour fields (forecastHours, actualHours) returned as JSON numbers. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
-    { taskId: entityRef },
+    {
+      description:
+        'Get one project task or bug with RACI. The raci array is the current standing set (userId and role R/A/C/I) and includes the latest set_project_task_raci replacement. Hour fields (forecastHours, actualHours) returned as JSON numbers. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
+      inputSchema: { taskId: entityRef },
+      outputSchema: taskResultOutput,
+    },
     async (args) =>
-      wrap('get_project_task', 'pm:read', () => handlers.getProjectTask(args))(),
+      wrap(
+        'get_project_task',
+        'pm:read',
+        () => handlers.getProjectTask(args),
+        undefined,
+        (data) => structuredTextResult(data, taskResultOutput),
+      )(),
   );
 
   const ymdDate = isoDateNullableSchema;
 
-  server.tool(
+  server.registerTool(
     'create_project_milestone',
-    'Create a project milestone (live state). description is the note. targetDate is the due date. startDate is accepted for older clients and is not shown in the form. Requires pm:write.',
     {
-      projectId: z.string().uuid(),
-      title: z.string().min(1).max(200),
-      description: z.string().max(5000).nullable().optional(),
-      status: milestoneStatusSchema.optional(),
-      startDate: ymdDate.optional(),
-      targetDate: ymdDate.optional(),
-      sortOrder: z.number().int().min(0).max(100000).optional(),
+      description:
+        'Create a project milestone (live state). description is the note. targetDate is the due date. startDate is the stored start, writable, and not shown in the form. Neither date is derived from linked items. targetPercent is null. Requires pm:write.',
+      inputSchema: {
+        projectId: z.string().uuid(),
+        title: z.string().min(1).max(200),
+        description: z.string().max(5000).nullable().optional(),
+        status: milestoneStatusSchema.optional(),
+        startDate: ymdDate.optional(),
+        targetDate: ymdDate.optional(),
+        sortOrder: z.number().int().min(0).max(100000).optional(),
+      },
+      outputSchema: { milestone: milestoneRowOutput },
     },
     async (args) =>
       wrap(
@@ -1879,35 +2235,52 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.createProjectMilestone(args),
         { projectId: args.projectId },
+        (data) => structuredTextResult(data, { milestone: milestoneRowOutput }),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'update_project_milestone',
-    'Update a project milestone (live state). milestoneId may be UUID or human key (e.g. HL1-M-1). description is the note. targetDate is the due date. Omitting startDate leaves a stored start date unchanged. When included links remain, status is replaced by the status derived from those links. A milestone with no included links keeps the status you set. Requires pm:write.',
     {
-      milestoneId: entityRef,
-      title: z.string().min(1).max(200).optional(),
-      description: z.string().max(5000).nullable().optional(),
-      status: milestoneStatusSchema.optional(),
-      startDate: ymdDate.optional(),
-      targetDate: ymdDate.optional(),
-      sortOrder: z.number().int().min(0).max(100000).optional(),
-      archived: z.boolean().optional(),
+      description:
+        'Update a project milestone (live state). milestoneId may be UUID or human key (e.g. HL1-M-1). description is the note. targetDate is the due date. startDate is the stored start. Omitting either date leaves it unchanged. Dates are not derived from linked items. targetPercent is null. When included links remain, status is replaced by the status derived from those links. A milestone with no included links keeps the status you set. Requires pm:write.',
+      inputSchema: {
+        milestoneId: entityRef,
+        title: z.string().min(1).max(200).optional(),
+        description: z.string().max(5000).nullable().optional(),
+        status: milestoneStatusSchema.optional(),
+        startDate: ymdDate.optional(),
+        targetDate: ymdDate.optional(),
+        sortOrder: z.number().int().min(0).max(100000).optional(),
+        archived: z.boolean().optional(),
+      },
+      outputSchema: { milestone: milestoneRowOutput },
     },
     async (args) =>
-      wrap('update_project_milestone', 'pm:write', () =>
-        handlers.updateProjectMilestone(args),
+      wrap(
+        'update_project_milestone',
+        'pm:write',
+        () => handlers.updateProjectMilestone(args),
+        undefined,
+        (data) => structuredTextResult(data, { milestone: milestoneRowOutput }),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'get_project_milestone',
-    'Get one milestone with its note (description), due date (targetDate), completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 only when every included linked item and every predecessor dependency is done or 100 percent. Cancelled items are left out. Anything else included is 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. targetDate is the stored due date. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
-    { milestoneId: entityRef },
+    {
+      description:
+        'Get one milestone with its note (description), start date (startDate), due date (targetDate), completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 only when every included linked item and every predecessor dependency is done or 100 percent. Cancelled items are left out. Anything else included is 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
+      inputSchema: { milestoneId: entityRef },
+      outputSchema: { milestone: milestoneRowOutput },
+    },
     async (args) =>
-      wrap('get_project_milestone', 'pm:read', () =>
-        handlers.getProjectMilestone(args),
+      wrap(
+        'get_project_milestone',
+        'pm:read',
+        () => handlers.getProjectMilestone(args),
+        undefined,
+        (data) => structuredTextResult(data, { milestone: milestoneRowOutput }),
       )(),
   );
 
@@ -2068,10 +2441,12 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'create_project_task',
-    'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
     {
+      description:
+        'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+      inputSchema: {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
       description: z.string().max(10000).nullable().optional(),
@@ -2134,6 +2509,8 @@ export function createKnowledgeHubMcpServer(
         )
         .max(50)
         .optional(),
+      },
+      outputSchema: taskResultOutput,
     },
     async (args) =>
       wrap(
@@ -2141,13 +2518,16 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.createProjectTask(args),
         { projectId: args.projectId },
+        (data) => structuredTextResult(data, taskResultOutput),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'update_project_task',
-    'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     {
+      description:
+        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+      inputSchema: {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
       description: z.string().max(10000).nullable().optional(),
@@ -2202,9 +2582,17 @@ export function createKnowledgeHubMcpServer(
       regression: z.boolean().nullable().optional(),
       affectedSystemId: z.string().uuid().nullable().optional(),
       duplicateOfTaskId: entityRef.nullable().optional(),
+      },
+      outputSchema: taskResultOutput,
     },
     async (args) =>
-      wrap('update_project_task', 'pm:write', () => handlers.updateProjectTask(args))(),
+      wrap(
+        'update_project_task',
+        'pm:write',
+        () => handlers.updateProjectTask(args),
+        undefined,
+        (data) => structuredTextResult(data, taskResultOutput),
+      )(),
   );
 
   server.tool(
@@ -2258,17 +2646,21 @@ export function createKnowledgeHubMcpServer(
   const dependencyLinkType = z.enum(['FS', 'SS', 'FF', 'SF']);
   const dependencyRef = z.string().trim().min(1).max(80);
 
-  server.tool(
+  server.registerTool(
     'list_delivery_dependencies',
-    'List every predecessor link on one delivery item and the successors derived from other items that name it as a predecessor. An item may have many predecessors. The successor start is the latest constraint across them (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). projectId (UUID) and entityId are required. entityId is a UUID or human key (PRO-T-1, PRO-B-1, PRO-E-1, PRO-S-1, PRO-M-1, PRO-SP-1). entityType is required for a UUID and optional when the key encodes the type (B is a bug and uses entity type task). scheduleDriven is true when a predecessor date currently sets this item’s start. Requires pm:read.',
     {
-      projectId: z.string().uuid().describe('Required project id (UUID).'),
-      entityId: dependencyRef.describe(
-        'Required delivery item id (UUID or human key such as PRO-T-1 or PRO-B-1).',
-      ),
-      entityType: dependencyEntityType.optional().describe(
-        'Required when entityId is a UUID. Optional when the human key encodes the type.',
-      ),
+      description:
+        'List every predecessor link on one delivery item and the successors derived from other items that name it as a predecessor. An item may have many predecessors. Each link includes lagDays, a whole number of working days (negative is a lead). The successor start is the latest constraint across them (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). projectId (UUID) and entityId are required. entityId is a UUID or human key (PRO-T-1, PRO-B-1, PRO-E-1, PRO-S-1, PRO-M-1, PRO-SP-1). entityType is required for a UUID and optional when the key encodes the type (B is a bug and uses entity type task). scheduleDriven is true when a predecessor date currently sets this item’s start. Requires pm:read.',
+      inputSchema: {
+        projectId: z.string().uuid().describe('Required project id (UUID).'),
+        entityId: dependencyRef.describe(
+          'Required delivery item id (UUID or human key such as PRO-T-1 or PRO-B-1).',
+        ),
+        entityType: dependencyEntityType.optional().describe(
+          'Required when entityId is a UUID. Optional when the human key encodes the type.',
+        ),
+      },
+      outputSchema: dependencyListOutput,
     },
     async (args) =>
       wrap(
@@ -2276,8 +2668,12 @@ export function createKnowledgeHubMcpServer(
         'pm:read',
         () => handlers.listDeliveryDependencies(args),
         { projectId: args.projectId },
+        (data) => structuredTextResult(data, dependencyListOutput),
       )(),
   );
+
+  const lagDaysInput = (description: string) =>
+    dependencyLagDaysSchema.describe(description).optional();
 
   const dependencyLink = z.object({
     predecessorId: dependencyRef,
@@ -2285,21 +2681,25 @@ export function createKnowledgeHubMcpServer(
     successorId: dependencyRef,
     successorType: dependencyEntityType.optional(),
     linkType: dependencyLinkType,
-    lagDays: z.number().int().min(-3650).max(3650).optional(),
+    lagDays: lagDaysInput('Whole days on this link. Negative is a lead. Defaults to 0.'),
   });
 
-  server.tool(
+  server.registerTool(
     'set_delivery_dependency',
-    'Add predecessor links between delivery items in the same project. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several at once. An item may have many predecessors; each ordered pair is stored once. linkType is FS, SS, FF, or SF. lagDays defaults to 0, is counted in working days, and may be negative (lead). Non-working days are skipped. The successor start is the latest constraint across its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. Ids are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass a type when the id is a UUID. Requires pm:write.',
     {
-      projectId: z.string().uuid().describe('Required project id (UUID).'),
-      predecessorId: dependencyRef.optional(),
-      predecessorType: dependencyEntityType.optional(),
-      successorId: dependencyRef.optional(),
-      successorType: dependencyEntityType.optional(),
-      linkType: dependencyLinkType.optional(),
-      lagDays: z.number().int().min(-3650).max(3650).optional(),
-      links: z.array(dependencyLink).min(1).max(50).optional(),
+      description:
+        'Add predecessor links between delivery items in the same project. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several at once. An item may have many predecessors; each ordered pair is stored once. linkType is FS, SS, FF, or SF. lagDays is optional, defaults to 0, must be an integer from -3650 to 3650, is counted in working days, and may be negative (lead). The saved link returns lagDays. Non-working days are skipped. The successor start is the latest constraint across its predecessors. For a task or bug, due date is start plus durationDays. Successors are not entered separately. Rejects self-links, cross-project links, a second link on the same ordered pair, and cycles. Ids are UUIDs or human keys (PRO-T-1, PRO-B-1). Pass a type when the id is a UUID. Requires pm:write.',
+      inputSchema: {
+        projectId: z.string().uuid().describe('Required project id (UUID).'),
+        predecessorId: dependencyRef.optional(),
+        predecessorType: dependencyEntityType.optional(),
+        successorId: dependencyRef.optional(),
+        successorType: dependencyEntityType.optional(),
+        linkType: dependencyLinkType.optional(),
+        lagDays: lagDaysInput('Whole days. Negative is a lead. Defaults to 0.'),
+        links: z.array(dependencyLink).min(1).max(50).optional(),
+      },
+      outputSchema: dependencyWriteOutput,
     },
     async (args) =>
       wrap(
@@ -2307,6 +2707,7 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.setDeliveryDependency(args),
         { projectId: args.projectId },
+        (data) => structuredTextResult(data, dependencyWriteOutput),
       )(),
   );
 
@@ -2332,13 +2733,20 @@ export function createKnowledgeHubMcpServer(
 
   const epicStatusEnum = epicStatusSchema;
 
-  server.tool(
+  const parentDateNote =
+    'targetPercent is the planned percent from start through end (0 on the start day, 100 on the end day, null when the window is missing) and is read-only. startDateDerived and endDateDerived are true when that side comes from included children. A write to a derived side is rejected. A side with no child date stays the stored date and is writable.';
+
+  server.registerTool(
     'list_project_epics',
-    'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each epic includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Status is derived from those children: all done is done, a non-done blocked child is blocked, completion above 0 or any started child is in progress, and nothing started is planned. Cancelled children are left out. An epic with no included children keeps its stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. Each epic includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
-      projectId: z.string().uuid(),
-      includeArchived: z.boolean().optional(),
-      ...listPage,
+      description:
+        `List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each epic includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Status is derived from those children: all done is done, a non-done blocked child is blocked, completion above 0 or any started child is in progress, and nothing started is planned. Cancelled children are left out. An epic with no included children keeps its stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. ${parentDateNote} Each epic includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.`,
+      inputSchema: {
+        projectId: z.string().uuid(),
+        includeArchived: z.boolean().optional(),
+        ...listPage,
+      },
+      outputSchema: epicListOutput,
     },
     async (args) =>
       wrap(
@@ -2346,20 +2754,25 @@ export function createKnowledgeHubMcpServer(
         'pm:read',
         () => handlers.listProjectEpics(args),
         { projectId: args.projectId },
+        (data) => structuredTextResult(data, epicListOutput),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'create_project_epic',
-    'Create a project epic. Requires pm:write.',
     {
-      projectId: z.string().uuid(),
-      title: z.string().min(1).max(200),
-      description: z.string().max(5000).nullable().optional(),
-      status: epicStatusEnum.optional(),
-      startDate: ymdDate.optional(),
-      endDate: ymdDate.optional(),
-      sortOrder: z.number().int().min(0).max(100000).optional(),
+      description:
+        `Create a project epic. startDate and endDate are writable until included children supply that side. ${parentDateNote} Requires pm:write.`,
+      inputSchema: {
+        projectId: z.string().uuid(),
+        title: z.string().min(1).max(200),
+        description: z.string().max(5000).nullable().optional(),
+        status: epicStatusEnum.optional(),
+        startDate: ymdDate.optional(),
+        endDate: ymdDate.optional(),
+        sortOrder: z.number().int().min(0).max(100000).optional(),
+      },
+      outputSchema: { epic: epicRowOutput },
     },
     async (args) =>
       wrap(
@@ -2367,34 +2780,49 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.createProjectEpic(args),
         { projectId: args.projectId },
+        (data) => structuredTextResult(data, { epic: epicRowOutput }),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'update_project_epic',
-    'Update a project epic. When the epic has included child tasks or bugs, status is replaced by the derived status (done, blocked, in progress, or planned). An epic with no included children keeps the status you set. Requires pm:write.',
     {
-      epicId: entityRef,
-      title: z.string().min(1).max(200).optional(),
-      description: z.string().max(5000).nullable().optional(),
-      status: epicStatusEnum.optional(),
-      startDate: ymdDate.optional(),
-      endDate: ymdDate.optional(),
-      sortOrder: z.number().int().min(0).max(100000).optional(),
-      archived: z.boolean().optional(),
+      description:
+        `Update a project epic. When the epic has included child tasks or bugs, status is replaced by the derived status (done, blocked, in progress, or planned). An epic with no included children keeps the status you set. ${parentDateNote} Requires pm:write.`,
+      inputSchema: {
+        epicId: entityRef,
+        title: z.string().min(1).max(200).optional(),
+        description: z.string().max(5000).nullable().optional(),
+        status: epicStatusEnum.optional(),
+        startDate: ymdDate.optional(),
+        endDate: ymdDate.optional(),
+        sortOrder: z.number().int().min(0).max(100000).optional(),
+        archived: z.boolean().optional(),
+      },
+      outputSchema: { epic: epicRowOutput },
     },
     async (args) =>
-      wrap('update_project_epic', 'pm:write', () => handlers.updateProjectEpic(args))(),
+      wrap(
+        'update_project_epic',
+        'pm:write',
+        () => handlers.updateProjectEpic(args),
+        undefined,
+        (data) => structuredTextResult(data, { epic: epicRowOutput }),
+      )(),
   );
 
-  server.tool(
+  server.registerTool(
     'list_project_user_stories',
-    'List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each story includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Status is derived from those children: all done is done, a non-done blocked child is blocked, completion above 0 or any started child is in progress, and nothing started is planned. Cancelled children are left out. A story with no included children keeps its stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. Each story includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
-      projectId: z.string().uuid(),
-      epicId: entityRef.optional(),
-      includeArchived: z.boolean().optional(),
-      ...listPage,
+      description:
+        `List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each story includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Status is derived from those children: all done is done, a non-done blocked child is blocked, completion above 0 or any started child is in progress, and nothing started is planned. Cancelled children are left out. A story with no included children keeps its stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. ${parentDateNote} Each story includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.`,
+      inputSchema: {
+        projectId: z.string().uuid(),
+        epicId: entityRef.optional(),
+        includeArchived: z.boolean().optional(),
+        ...listPage,
+      },
+      outputSchema: storyListOutput,
     },
     async (args) =>
       wrap(
@@ -2402,21 +2830,26 @@ export function createKnowledgeHubMcpServer(
         'pm:read',
         () => handlers.listProjectUserStories(args),
         { projectId: args.projectId },
+        (data) => structuredTextResult(data, storyListOutput),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'create_project_user_story',
-    'Create a user story under an epic. epicId must belong to the given project. Requires pm:write.',
     {
-      projectId: z.string().uuid(),
-      epicId: entityRef,
-      title: z.string().min(1).max(200),
-      description: z.string().max(5000).nullable().optional(),
-      status: epicStatusEnum.optional(),
-      startDate: ymdDate.optional(),
-      endDate: ymdDate.optional(),
-      sortOrder: z.number().int().min(0).max(100000).optional(),
+      description:
+        `Create a user story under an epic. epicId must belong to the given project. startDate and endDate are writable until included children supply that side. ${parentDateNote} Requires pm:write.`,
+      inputSchema: {
+        projectId: z.string().uuid(),
+        epicId: entityRef,
+        title: z.string().min(1).max(200),
+        description: z.string().max(5000).nullable().optional(),
+        status: epicStatusEnum.optional(),
+        startDate: ymdDate.optional(),
+        endDate: ymdDate.optional(),
+        sortOrder: z.number().int().min(0).max(100000).optional(),
+      },
+      outputSchema: { userStory: storyRowOutput },
     },
     async (args) =>
       wrap(
@@ -2424,26 +2857,35 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.createProjectUserStory(args),
         { projectId: args.projectId },
+        (data) => structuredTextResult(data, { userStory: storyRowOutput }),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'update_project_user_story',
-    'Update a user story. epicId must belong to the story\'s project. Moving the story recomputes the old and new epic. When the story has included child tasks or bugs, status is replaced by the derived status. A story with no included children keeps the status you set. Requires pm:write.',
     {
-      storyId: entityRef,
-      title: z.string().min(1).max(200).optional(),
-      description: z.string().max(5000).nullable().optional(),
-      status: epicStatusEnum.optional(),
-      epicId: entityRef.optional(),
-      startDate: ymdDate.optional(),
-      endDate: ymdDate.optional(),
-      sortOrder: z.number().int().min(0).max(100000).optional(),
-      archived: z.boolean().optional(),
+      description:
+        `Update a user story. epicId must belong to the story's project. Moving the story recomputes the old and new epic. When the story has included child tasks or bugs, status is replaced by the derived status. A story with no included children keeps the status you set. ${parentDateNote} Requires pm:write.`,
+      inputSchema: {
+        storyId: entityRef,
+        title: z.string().min(1).max(200).optional(),
+        description: z.string().max(5000).nullable().optional(),
+        status: epicStatusEnum.optional(),
+        epicId: entityRef.optional(),
+        startDate: ymdDate.optional(),
+        endDate: ymdDate.optional(),
+        sortOrder: z.number().int().min(0).max(100000).optional(),
+        archived: z.boolean().optional(),
+      },
+      outputSchema: { userStory: storyRowOutput },
     },
     async (args) =>
-      wrap('update_project_user_story', 'pm:write', () =>
-        handlers.updateProjectUserStory(args),
+      wrap(
+        'update_project_user_story',
+        'pm:write',
+        () => handlers.updateProjectUserStory(args),
+        undefined,
+        (data) => structuredTextResult(data, { userStory: storyRowOutput }),
       )(),
   );
 
@@ -2675,7 +3117,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_raid_items',
-    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each item includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
+    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each item includes records[] (linked knowledge records: id, title, slug, recordType, humanKey) plus mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -2692,7 +3134,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_raid_item',
-    'Create a RAID register item and optionally link delivery tasks. Requires pm:write.',
+    'Create a RAID register item. Optional taskIds link delivery tasks. Optional recordIds link knowledge records in the same project (UUID or human key). A record from another project is rejected. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       kind: raidKindEnum,
@@ -2706,6 +3148,13 @@ export function createKnowledgeHubMcpServer(
       dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       taskIds: z.array(entityRef).max(100).optional(),
+      recordIds: z
+        .array(entityRef)
+        .max(100)
+        .optional()
+        .describe(
+          'Optional knowledge record ids in the same project. UUID or human key.',
+        ),
     },
     async (args) =>
       wrap(
@@ -2964,6 +3413,76 @@ export function createKnowledgeHubMcpServer(
         'knowledge:write',
         () => handlers.setKnowledgeRecordDeliveryLinks(args),
         { recordId: args.recordId },
+      )(),
+  );
+
+  const relationRecordOutput = () =>
+    z.object({
+      id: z.string(),
+      humanKey: z.string().nullable(),
+      title: z.string(),
+      slug: z.string(),
+      recordType: z.string(),
+      lifecycleStatus: z.string(),
+      archivedAt: z.string().nullable(),
+    });
+  const relationEdgeOutput = () =>
+    z.object({
+      relationType: z.string(),
+      record: relationRecordOutput(),
+    });
+  const knowledgeRecordRelationsOutput = {
+    relations: z.object({
+      outbound: z.array(relationEdgeOutput()),
+      inbound: z.array(relationEdgeOutput()),
+    }),
+    lifecycleSuccessor: relationRecordOutput().nullable(),
+    lifecyclePredecessor: relationRecordOutput().nullable(),
+  };
+
+  server.registerTool(
+    'get_knowledge_record_relations',
+    {
+      description:
+        'List typed relations for a knowledge record (relates_to, depends_on, refines, derived_from, contradicts) plus the lifecycle successor and predecessor from supersedes_record_id. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are symmetric. recordId may be a UUID or document key. Requires knowledge:read.',
+      inputSchema: { recordId: entityRef },
+      outputSchema: knowledgeRecordRelationsOutput,
+    },
+    async (args) =>
+      wrap(
+        'get_knowledge_record_relations',
+        'knowledge:read',
+        () => handlers.getKnowledgeRecordRelations(args),
+        { recordId: args.recordId },
+        (data) => structuredTextResult(data, knowledgeRecordRelationsOutput),
+      )(),
+  );
+
+  server.registerTool(
+    'set_knowledge_record_relations',
+    {
+      description:
+        'Replace relations stored from this record. Directed types are depends_on, refines, and derived_from. relates_to and contradicts are stored once with canonical uuid order. Inbound edges owned by the other record are kept. Rejects self-links, cross-workspace or cross-project targets, cycles for depends_on and refines, and changes that touch an archived record. recordId and targetRecordId may be UUID or document key. Does not change lifecycle. Requires knowledge:write.',
+      inputSchema: {
+        recordId: entityRef,
+        links: z
+          .array(
+            z.object({
+              targetRecordId: entityRef,
+              relationType: knowledgeRecordRelationTypeSchema,
+            }),
+          )
+          .max(200),
+      },
+      outputSchema: knowledgeRecordRelationsOutput,
+    },
+    async (args) =>
+      wrap(
+        'set_knowledge_record_relations',
+        'knowledge:write',
+        () => handlers.setKnowledgeRecordRelations(args),
+        { recordId: args.recordId },
+        (data) => structuredTextResult(data, knowledgeRecordRelationsOutput),
       )(),
   );
 

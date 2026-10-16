@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MCP_SCOPES, hasMcpScope } from './scopes.js';
 import {
+  contentSha256,
   ContentOffsetError,
   enforceResponseSize,
   isTruncatedReadback,
@@ -20,6 +21,7 @@ describe('mcp scopes and limits', () => {
     expect(DEFAULT_MCP_SCOPES).not.toContain('pm:read');
     expect(DEFAULT_MCP_SCOPES).not.toContain('pm:write');
     expect(DEFAULT_MCP_SCOPES).not.toContain('catalogue:write');
+    expect(DEFAULT_MCP_SCOPES).not.toContain('projects:write');
     expect(DEFAULT_MCP_SCOPES).not.toContain('monitoring:read');
     expect(hasMcpScope(DEFAULT_MCP_SCOPES, 'projects:read')).toBe(true);
     expect(hasMcpScope(['projects:read'], 'knowledge:read')).toBe(false);
@@ -42,7 +44,8 @@ describe('mcp scopes and limits', () => {
     expect(first.contentLength).toBe(source.length);
     expect(first.contentOffset).toBe(0);
     expect(first.contentTruncated).toBe(true);
-    expect(first.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(true);
+    expect(first.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
+    expect(first.content).toBe('abcd');
     expect(first.nextOffset).toBe(4);
 
     const second = sliceContent(source, { offset: first.nextOffset ?? 0, limit: 4 });
@@ -55,22 +58,18 @@ describe('mcp scopes and limits', () => {
     expect(third.contentTruncated).toBe(false);
     expect(third.nextOffset).toBeNull();
 
-    const joined = [
-      first.content.slice(0, first.nextOffset ?? first.content.length),
-      second.content,
-      third.content,
-    ].join('');
+    const joined = [first.content, second.content, third.content].join('');
     expect(joined).toBe(source);
   });
 
   it('stops a page at the UTF-8 byte cap and continues from the characters returned', () => {
     const source = '😀'.repeat(40_000);
     const page = sliceContent(source, { offset: 0, limit: 50_000 });
-    const body = page.content.slice(0, page.content.length - MCP_CONTENT_TRUNCATION_SUFFIX.length);
     expect(Buffer.byteLength(page.content, 'utf8')).toBeLessThanOrEqual(MCP_MAX_CONTENT_BYTES);
-    expect(page.nextOffset).toBe(body.length);
+    expect(page.nextOffset).toBe(page.returnedChars);
     expect(page.contentTruncated).toBe(true);
     expect(page.contentLength).toBe(source.length);
+    expect(page.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
 
     const rest = sliceContent(source, { offset: page.nextOffset ?? 0, limit: 50_000 });
     expect(rest.contentOffset).toBe(page.nextOffset);
@@ -87,7 +86,7 @@ describe('mcp scopes and limits', () => {
   });
 
   it('treats a body that ends with the truncation marker as a truncated readback', () => {
-    const page = sliceContent('abcdefghij', { offset: 0, limit: 4 });
+    const page = sliceContent('x'.repeat(60_000), { legacyFirstPageTruncation: true });
     expect(isTruncatedReadback(page.content)).toBe(true);
     expect(isTruncatedReadback('abcdefghij')).toBe(false);
     expect(isTruncatedReadback(`notes ${MCP_CONTENT_TRUNCATION_SUFFIX} and more`)).toBe(false);
@@ -246,5 +245,52 @@ describe('mcp scopes and limits', () => {
       offset = page.nextOffset;
     }
     throw new Error('paging did not finish');
+  });
+
+  it('omits the legacy marker when paging and increments chunkIndex 0, 1, 2', () => {
+    const unit = 'word ';
+    const source = unit.repeat(20_000);
+    const limit = 40_000;
+    let offset = 0;
+    const indices: number[] = [];
+    for (let guard = 0; guard < 10; guard += 1) {
+      const page = sliceContent(source, { offset, limit, boundary: 'paragraph' });
+      expect(page.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
+      indices.push(page.chunkIndex);
+      if (page.nextOffset === null) break;
+      offset = page.nextOffset;
+    }
+    expect(indices.slice(0, 3)).toEqual([0, 1, 2]);
+    const at39998 = sliceContent(source, { offset: 39_998, limit });
+    expect(at39998.chunkIndex).toBe(1);
+  });
+
+  it('pages a >100k record for each boundary and joins to the original hash', () => {
+    const boundaries = ['none', 'paragraph', 'line'] as const;
+    const source = `${'block\n\n'.repeat(8_000)}tail-line\nend`;
+    const hash = contentSha256(source);
+    const limit = 40_000;
+    for (const boundary of boundaries) {
+      let offset = 0;
+      let joined = '';
+      for (let guard = 0; guard < 30; guard += 1) {
+        const page = sliceContent(source, { offset, limit, boundary });
+        expect(page.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
+        joined += page.content;
+        if (page.nextOffset === null) break;
+        offset = page.nextOffset;
+      }
+      expect(joined).toBe(source);
+      expect(contentSha256(joined)).toBe(hash);
+    }
+  });
+
+  it('keeps the legacy marker only on the default unpaged read', () => {
+    const source = 'x'.repeat(60_000);
+    const legacy = sliceContent(source);
+    expect(legacy.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(true);
+    const paged = sliceContent(source, { offset: 0, limit: 40_000 });
+    expect(paged.content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX)).toBe(false);
+    expect(paged.content).toBe(source.slice(0, paged.returnedChars));
   });
 });

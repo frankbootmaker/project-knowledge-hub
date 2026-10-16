@@ -4,6 +4,7 @@ import {
   knowledgeRecords,
   knowledgeSources,
   memberships,
+  organizations,
   projectEpics,
   projectMilestones,
   projectSprints,
@@ -18,6 +19,7 @@ import {
   AppError,
   assertDateRange,
   buildKnowledgeRecordMetadata,
+  buildProjectMetadata,
   changeDeliveryEntityTypeSchema,
   changeKindSchema,
   changeStatusSchema,
@@ -40,6 +42,7 @@ import {
   normalizeKeyPrefix,
   parseHumanKey,
   projectCurrencySchema,
+  projectStatusSchema,
   projectStakeholderRoleSchema,
   raciRoleSchema,
   stakeholderCompetenciesSchema,
@@ -196,6 +199,13 @@ import {
   listDeliveryLinksForRecord,
   setDeliveryLinksForRecord,
 } from './knowledge-delivery-links.js';
+import {
+  compactRecordRelationsForRecords,
+  getKnowledgeRecordRelations,
+  relationAuditMetadata,
+  setKnowledgeRecordRelations,
+} from './knowledge-record-relations.js';
+import { listKnowledgeRecordLinkedItems } from './knowledge-record-linked-items.js';
 import { getDashboardInsights } from './dashboard-insights.js';
 import {
   getSprintPointBurndown,
@@ -228,6 +238,7 @@ import {
 } from './project-budget.js';
 import { moveProjectToWorkspace } from './project-move.js';
 import { getKnowledgeRecordTags } from './tags.js';
+import { createProjectViaMcp, updateProjectViaMcp } from './mcp-project-write.js';
 
 function workspaceAllowlistMessage(workspace: {
   id: string;
@@ -417,7 +428,7 @@ function requireActingUserId(client: McpClientContext): string {
     throw new AppError({
       code: 'ACTING_USER_REQUIRED',
       message:
-        'API client is missing actingUserId required for knowledge:write, catalogue:write, pm:write, or personal pm:read tools',
+        'API client is missing actingUserId required for knowledge:write, catalogue:write, projects:write, pm:write, or personal pm:read tools',
       statusCode: 403,
     });
   }
@@ -1158,6 +1169,7 @@ function toMcpProject(
   pinned: Awaited<ReturnType<typeof loadPinnedRecords>>,
   workspace: WorkspaceLabel | null,
   facts?: ProjectScheduleFacts,
+  webUrl?: string,
 ) {
   const calendar = coerceProjectCalendar({
     hoursPerWorkday: project.hoursPerWorkday,
@@ -1195,6 +1207,21 @@ function toMcpProject(
     initialBudget: mcpMoney(project.initialBudget),
     approvedBudget: mcpMoney(project.approvedBudget),
     keyPrefix: project.keyPrefix,
+    methodology:
+      project.methodology === 'scrum' ||
+      project.methodology === 'kanban' ||
+      project.methodology === 'waterfall' ||
+      project.methodology === 'hybrid'
+        ? project.methodology
+        : null,
+    createdVia: project.createdVia === 'mcp' ? 'mcp' : null,
+    createdByApiClientId: project.createdByApiClientId,
+    createdByUserId: project.createdByUserId,
+    generatedByModel: project.generatedByModel,
+    url:
+      webUrl && workspace?.slug
+        ? `${webUrl.replace(/\/$/, '')}/workspaces/${workspace.slug}/projects/${project.slug}`
+        : null,
   };
 }
 
@@ -1251,14 +1278,55 @@ export function createMcpToolHandlers(
           id: workspaces.id,
           name: workspaces.name,
           slug: workspaces.slug,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+          organizationSlug: organizations.slug,
         })
         .from(workspaces)
+        .innerJoin(organizations, eq(workspaces.organizationId, organizations.id))
         .where(and(inArray(workspaces.id, workspaceIds), isNull(workspaces.archivedAt)))
         .orderBy(asc(workspaces.name));
-      return { workspaces: rows };
+      const roleByWorkspace = new Map<string, string>();
+      let systemAdmin = false;
+      if (client.actingUserId) {
+        const [actor] = await app.database.db
+          .select({ isSystemAdmin: users.isSystemAdmin })
+          .from(users)
+          .where(eq(users.id, client.actingUserId))
+          .limit(1);
+        systemAdmin = Boolean(actor?.isSystemAdmin);
+        const membershipRows = await app.database.db
+          .select({ workspaceId: memberships.workspaceId, role: memberships.role })
+          .from(memberships)
+          .where(
+            and(
+              eq(memberships.userId, client.actingUserId),
+              inArray(memberships.workspaceId, workspaceIds),
+            ),
+          );
+        for (const membership of membershipRows) {
+          roleByWorkspace.set(membership.workspaceId, membership.role);
+        }
+      }
+      return {
+        workspaces: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          organization: {
+            id: row.organizationId,
+            name: row.organizationName,
+            slug: row.organizationSlug,
+          },
+          writesAllowed: client.allowedWorkspaceIds.includes(row.id),
+          role: systemAdmin
+            ? 'system_admin'
+            : roleByWorkspace.get(row.id) ?? null,
+        })),
+      };
     },
 
-    async listProjects({ workspaceId, workspaceSlug, limit }) {
+    async listProjects({ workspaceId, workspaceSlug, limit, status, stage }) {
       const selectedWorkspaceId = await resolveWorkspaceId(app, client, {
         workspaceId,
         workspaceSlug,
@@ -1320,8 +1388,29 @@ export function createMcpToolHandlers(
         }
         accessible.push(row);
       }
+      if (status && stage && status !== stage) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: 'status and stage must be the same value when both are sent.',
+          statusCode: 400,
+        });
+      }
+      const stageFilter = (status ?? stage)?.trim();
+      let staged = accessible;
+      if (stageFilter) {
+        const parsed = projectStatusSchema.safeParse(stageFilter);
+        if (!parsed.success) {
+          throw new AppError({
+            code: 'VALIDATION_ERROR',
+            message:
+              `Invalid project stage "${stageFilter}". Allowed stages: ${projectStatusSchema.options.join(', ')}.`,
+            statusCode: 400,
+          });
+        }
+        staged = accessible.filter((row) => row.status === parsed.data);
+      }
       const page =
-        typeof limit === 'number' ? accessible.slice(0, limit) : accessible;
+        typeof limit === 'number' ? staged.slice(0, limit) : staged;
       const labels = await loadWorkspaceLabels(app, [
         ...page.map((row) => row.workspaceId),
         ...inaccessible.map((item) => item.row.workspaceId),
@@ -1342,6 +1431,37 @@ export function createMcpToolHandlers(
           ...toSummary(item.row),
           reason: item.reason,
         })),
+      };
+    },
+
+    async listProjectMetadata() {
+      return buildProjectMetadata();
+    },
+
+    async createProject(input) {
+      return createProjectViaMcp(app, client, input, ipAddress);
+    },
+
+    async updateProject(input) {
+      const updated = await updateProjectViaMcp(app, client, input, ipAddress);
+      const pinned = await loadPinnedRecords(app.database, [
+        updated.project.charterRecordId,
+        updated.project.initialPlanRecordId,
+      ]);
+      const facts = await loadProjectScheduleFacts(app.database, [updated.project]);
+      return {
+        project: toMcpProject(
+          updated.project,
+          pinned,
+          {
+            id: updated.workspace.id,
+            name: updated.workspace.name,
+            slug: updated.workspace.slug,
+          },
+          facts.get(updated.project.id),
+          app.env?.WEB_URL,
+        ),
+        warning: updated.duplicateWarning,
       };
     },
 
@@ -1532,6 +1652,7 @@ export function createMcpToolHandlers(
           pinned,
           labels.get(project.workspaceId) ?? null,
           facts.get(project.id),
+          app.env?.WEB_URL,
         ),
       };
     },
@@ -1678,6 +1799,7 @@ export function createMcpToolHandlers(
           pinned,
           labels.get(updated.workspaceId) ?? null,
           facts.get(updated.id),
+          app.env?.WEB_URL,
         ),
       };
     },
@@ -1946,6 +2068,7 @@ export function createMcpToolHandlers(
       contentLimit,
       boundary,
       expectSha256,
+      includeRecordRelations = true,
     }) {
       const workspaceIds = client.allowedWorkspaceIds.length > 0 
         ? client.allowedWorkspaceIds 
@@ -1999,6 +2122,14 @@ export function createMcpToolHandlers(
       const tagMap = loadSidecars
         ? await getKnowledgeRecordTags(app.database, [record.id])
         : new Map<string, Array<{ name: string }>>();
+      const recordRelations = includeRecordRelations
+        ? (await compactRecordRelationsForRecords(app.database, [record.id])).get(
+            record.id,
+          )
+        : undefined;
+      const linkedItems = loadSidecars
+        ? await listKnowledgeRecordLinkedItems(app.database, record.id)
+        : null;
       const toPayload = (candidate: ContentPage) => {
         const isFirst = candidate.contentOffset === 0;
         return {
@@ -2032,20 +2163,29 @@ export function createMcpToolHandlers(
             reviewedBy: record.reviewedBy,
             reviewedByUser,
             updatedAt: record.updatedAt.toISOString(),
+            ...(recordRelations ? { recordRelations } : {}),
             ...(isFirst
               ? {
                   tags: knowledgeRecordTagNames(tagMap, record.id),
                   media: mediaRows.map(toPublicMedia),
+                  linkedItems,
                 }
               : {}),
           },
         };
       };
+      const legacyFirstPageTruncation =
+        contentOffset === undefined && contentLimit === undefined;
       let fitted;
       try {
         fitted = sliceContentToFit(
           record.contentMarkdown,
-          { offset: contentOffset, limit: contentLimit, boundary },
+          {
+            offset: contentOffset,
+            limit: contentLimit,
+            boundary,
+            legacyFirstPageTruncation,
+          },
           (candidate) => serializedResponseBytes(toPayload(candidate)),
         );
       } catch (error) {
@@ -4582,6 +4722,21 @@ export function createMcpToolHandlers(
             ),
           )
         : undefined;
+      const workspaceIds =
+        client.allowedWorkspaceIds.length > 0
+          ? client.allowedWorkspaceIds
+          : undefined;
+      const recordIds = input.recordIds
+        ? await Promise.all(
+            input.recordIds.map((idOrKey) =>
+              resolveKnowledgeRecordId(app.database, {
+                idOrKey,
+                workspaceIds,
+                projectId: project.id,
+              }),
+            ),
+          )
+        : undefined;
       const raidItem = await createRaidItem(app.database, {
         projectId: project.id,
         workspaceId: project.workspaceId,
@@ -4610,6 +4765,7 @@ export function createMcpToolHandlers(
         dueDate: input.dueDate,
         sortOrder: input.sortOrder,
         taskIds,
+        recordIds,
         createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {
@@ -5201,6 +5357,85 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { deliveryLinks };
+    },
+
+    async getKnowledgeRecordRelations(input: { recordId: string }) {
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+        includeArchived: true,
+      });
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        recordId,
+      );
+      assertWorkspaceAllowed(client, record.workspaceId);
+      assertProjectAllowed(client, record.projectId);
+      return getKnowledgeRecordRelations(app.database, recordId);
+    },
+
+    async setKnowledgeRecordRelations(input: {
+      recordId: string;
+      links: Array<{ targetRecordId: string; relationType: string }>;
+    }) {
+      const actingUserId = requireActingUserId(client);
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const recordId = await resolveKnowledgeRecordId(app.database, {
+        idOrKey: input.recordId,
+        workspaceIds,
+        includeArchived: true,
+      });
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        recordId,
+      );
+      assertWriteWorkspaceAllowed(client, record.workspaceId);
+      assertProjectAllowed(client, record.projectId);
+      if (record.projectId) {
+        const { project } = await requireProjectContext(
+          app.database,
+          record.projectId,
+        );
+        assertProjectNotArchived(project);
+      }
+      const links = await Promise.all(
+        input.links.map(async (link) => ({
+          targetRecordId: await resolveKnowledgeRecordId(app.database, {
+            idOrKey: link.targetRecordId,
+            workspaceIds,
+            includeArchived: true,
+          }),
+          relationType: link.relationType,
+        })),
+      );
+      const relations = await setKnowledgeRecordRelations(app.database, {
+        anchorId: recordId,
+        links,
+        createdBy: actingUserId,
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'knowledge.record_relations_set',
+        entityType: 'knowledge_record',
+        entityId: recordId,
+        metadata: {
+          ...relationAuditMetadata({
+            projectId: record.projectId,
+            links,
+          }),
+          via: 'mcp',
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return relations;
     },
 
     async onToolCall(toolName, ok, context) {

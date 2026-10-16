@@ -84,37 +84,47 @@ describe('date range validation wiring', () => {
   });
 
   describe('updateEpic', () => {
-    it('rejects updating only endDate to before stored startDate', async () => {
-      const mockDatabase = {
+    const epicRow = {
+      id: '00000000-0000-4000-8000-000000000002',
+      projectId: '00000000-0000-4000-8000-000000000001',
+      title: 'Test Epic',
+      description: null,
+      status: 'planned',
+      startDate: '2026-06-01',
+      endDate: '2026-12-31',
+      sortOrder: 0,
+      issueKeyType: 'E',
+      issueNumber: 1,
+      archivedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    function epicDatabase(stories: unknown[] = []) {
+      let selects = 0;
+      return {
         db: {
           select: vi.fn(() => ({
             from: vi.fn(() => ({
-              where: vi.fn(() => ({
-                limit: vi.fn(() =>
-                  Promise.resolve([
-                    {
-                      id: '00000000-0000-4000-8000-000000000002',
-                      projectId: '00000000-0000-4000-8000-000000000001',
-                      title: 'Test Epic',
-                      description: null,
-                      status: 'planned',
-                      startDate: '2026-06-01',
-                      endDate: '2026-12-31',
-                      sortOrder: 0,
-                      issueKeyType: 'E',
-                      issueNumber: 1,
-                      archivedAt: null,
-                      createdAt: new Date(),
-                      updatedAt: new Date(),
-                    },
-                  ]),
-                ),
-              })),
+              where: vi.fn(() => {
+                selects += 1;
+                if (selects === 1) {
+                  return {
+                    limit: vi.fn(() => Promise.resolve([epicRow])),
+                  };
+                }
+                // Task rows, then story rows, for the parent date rollup.
+                return Promise.resolve(selects === 2 ? [] : stories);
+              }),
             })),
           })),
           update: vi.fn(),
         },
       } as unknown as Database;
+    }
+
+    it('rejects updating only endDate to before stored startDate', async () => {
+      const mockDatabase = epicDatabase();
 
       await expect(
         updateEpic(mockDatabase, '00000000-0000-4000-8000-000000000002', {
@@ -126,6 +136,30 @@ describe('date range validation wiring', () => {
       });
 
       // Verify the update was not attempted
+      expect(mockDatabase.db.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a start date write when a child story already supplies it', async () => {
+      const mockDatabase = epicDatabase([
+        {
+          id: '00000000-0000-4000-8000-000000000010',
+          epicId: '00000000-0000-4000-8000-000000000002',
+          status: 'planned',
+          startDate: '2026-06-15',
+          endDate: null,
+          archivedAt: null,
+        },
+      ]);
+
+      await expect(
+        updateEpic(mockDatabase, '00000000-0000-4000-8000-000000000002', {
+          startDate: '2026-07-01',
+        }),
+      ).rejects.toMatchObject({
+        code: 'DATE_DERIVED',
+        statusCode: 400,
+      });
+
       expect(mockDatabase.db.update).not.toHaveBeenCalled();
     });
   });

@@ -17,13 +17,18 @@ import {
   AppError,
   assertDateRange,
   deliveryCompletionIndex,
+  derivedDateWriteField,
   displayedParentCompletion,
   effectiveDateRange,
   epicStatusSchema,
+  parentDateDetail,
+  plannedTargetPercent,
   taskActivityTypeSchema,
   userStoryStatusSchema,
   type DeliveryCompletionRollup,
   type EpicStatus,
+  type ParentDateDetail,
+  type ParentDateSource,
   type TaskActivityType,
   type UserStoryStatus,
 } from '@project-knowledge-hub/domain';
@@ -66,6 +71,15 @@ export type PublicEpic = {
    * non-cancelled child tasks and bugs. Null when an open epic has none left.
    */
   completionPercent: number | null;
+  /**
+   * Planned percent from start through end. 0 on the start day, 100 on the
+   * end day. Null when the window is missing. Read-only.
+   */
+  targetPercent: number | null;
+  /** True when startDate is the earliest included child start. Read-only. */
+  startDateDerived: boolean;
+  /** True when endDate is the latest included child end. Read-only. */
+  endDateDerived: boolean;
   mediaLinkCount?: number;
   mediaLinks?: PublicItemMediaLink[];
 };
@@ -91,6 +105,15 @@ export type PublicUserStory = {
    * non-cancelled child tasks and bugs. Null when an open story has none left.
    */
   completionPercent: number | null;
+  /**
+   * Planned percent from start through end. 0 on the start day, 100 on the
+   * end day. Null when the window is missing. Read-only.
+   */
+  targetPercent: number | null;
+  /** True when startDate is the earliest included child start. Read-only. */
+  startDateDerived: boolean;
+  /** True when endDate is the latest included child end. Read-only. */
+  endDateDerived: boolean;
   mediaLinkCount?: number;
   mediaLinks?: PublicItemMediaLink[];
 };
@@ -156,6 +179,9 @@ function toPublicEpic(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     completionPercent,
+    targetPercent: null,
+    startDateDerived: false,
+    endDateDerived: false,
   };
 }
 
@@ -182,7 +208,145 @@ function toPublicUserStory(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     completionPercent,
+    targetPercent: null,
+    startDateDerived: false,
+    endDateDerived: false,
   };
+}
+
+function scheduleToday(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+type ParentSchedule = {
+  storyDetails: Map<string, ParentDateDetail>;
+  epicChildren: Map<string, ParentDateSource[]>;
+};
+
+async function loadParentSchedule(
+  database: Database,
+  projectId: string,
+): Promise<ParentSchedule> {
+  const [taskRows, storyRows] = await Promise.all([
+    database.db
+      .select({
+        status: projectTasks.status,
+        startDate: projectTasks.startDate,
+        dueDate: projectTasks.dueDate,
+        userStoryId: projectTasks.userStoryId,
+      })
+      .from(projectTasks)
+      .where(
+        and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)),
+      ),
+    database.db
+      .select({
+        id: projectUserStories.id,
+        epicId: projectUserStories.epicId,
+        status: projectUserStories.status,
+        startDate: projectUserStories.startDate,
+        endDate: projectUserStories.endDate,
+        archivedAt: projectUserStories.archivedAt,
+      })
+      .from(projectUserStories)
+      .where(eq(projectUserStories.projectId, projectId)),
+  ]);
+  const tasksByStory = new Map<string, ParentDateSource[]>();
+  for (const task of taskRows) {
+    if (!task.userStoryId) continue;
+    const list = tasksByStory.get(task.userStoryId) ?? [];
+    list.push({ status: task.status, start: task.startDate, end: task.dueDate });
+    tasksByStory.set(task.userStoryId, list);
+  }
+  const storyDetails = new Map<string, ParentDateDetail>();
+  const epicChildren = new Map<string, ParentDateSource[]>();
+  for (const story of storyRows) {
+    const detail = parentDateDetail(
+      { start: story.startDate, end: story.endDate },
+      tasksByStory.get(story.id) ?? [],
+    );
+    storyDetails.set(story.id, detail);
+    if (story.archivedAt) continue;
+    const list = epicChildren.get(story.epicId) ?? [];
+    list.push({ status: story.status, start: detail.start, end: detail.end });
+    epicChildren.set(story.epicId, list);
+  }
+  return { storyDetails, epicChildren };
+}
+
+function applyParentSchedule<T extends {
+  startDate: string | null;
+  endDate: string | null;
+}>(
+  item: T,
+  detail: ParentDateDetail,
+  today: string,
+): T {
+  const startDate = detail.startDerived ? detail.start : item.startDate;
+  const endDate = detail.endDerived ? detail.end : item.endDate;
+  return {
+    ...item,
+    startDate,
+    endDate,
+    startDateDerived: detail.startDerived,
+    endDateDerived: detail.endDerived,
+    targetPercent: plannedTargetPercent(startDate, endDate, today),
+  };
+}
+
+function assertParentDatesWritable(
+  detail: ParentDateDetail,
+  input: { startDate?: string | null; endDate?: string | null },
+): void {
+  const field = derivedDateWriteField({
+    detail,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  });
+  if (!field) return;
+  throw new AppError({
+    code: 'DATE_DERIVED',
+    message: `${field} is derived from included children and is read-only`,
+    statusCode: 400,
+  });
+}
+
+async function presentEpics(
+  database: Database,
+  projectId: string,
+  epics: PublicEpic[],
+): Promise<PublicEpic[]> {
+  if (epics.length === 0) return [];
+  const schedule = await loadParentSchedule(database, projectId);
+  const today = scheduleToday();
+  return epics.map((epic) =>
+    applyParentSchedule(
+      epic,
+      parentDateDetail(
+        { start: epic.startDate, end: epic.endDate },
+        schedule.epicChildren.get(epic.id) ?? [],
+      ),
+      today,
+    ),
+  );
+}
+
+async function presentStories(
+  database: Database,
+  projectId: string,
+  stories: PublicUserStory[],
+): Promise<PublicUserStory[]> {
+  if (stories.length === 0) return [];
+  const schedule = await loadParentSchedule(database, projectId);
+  const today = scheduleToday();
+  return stories.map((story) =>
+    applyParentSchedule(
+      story,
+      schedule.storyDetails.get(story.id) ??
+        parentDateDetail({ start: story.startDate, end: story.endDate }, []),
+      today,
+    ),
+  );
 }
 
 async function assertWorkspaceMembers(
@@ -228,7 +392,7 @@ export async function listEpics(
     .orderBy(asc(projectEpics.sortOrder), asc(projectEpics.title));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
   const maps = await completionMaps(database, projectId);
-  return withMediaLinkCounts(
+  const epics = await withMediaLinkCounts(
     database,
     'epic',
     rows.map((row) =>
@@ -239,6 +403,7 @@ export async function listEpics(
       ),
     ),
   );
+  return presentEpics(database, projectId, epics);
 }
 
 export async function getEpic(
@@ -259,7 +424,7 @@ export async function getEpic(
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const maps = await completionMaps(database, row.projectId);
-  return withMediaLinks(
+  const epic = await withMediaLinks(
     database,
     'epic',
     toPublicEpic(
@@ -268,6 +433,8 @@ export async function getEpic(
       parentCompletionPercent(row.status, maps.byEpicId.get(row.id)),
     ),
   );
+  const [presented] = await presentEpics(database, row.projectId, [epic]);
+  return presented ?? epic;
 }
 
 export async function createEpic(
@@ -311,7 +478,7 @@ export async function createEpic(
     return { row, keyPrefix: allocated.keyPrefix };
   });
   const maps = await completionMaps(database, result.row.projectId);
-  return withMediaLinks(
+  const epic = await withMediaLinks(
     database,
     'epic',
     toPublicEpic(
@@ -320,6 +487,8 @@ export async function createEpic(
       parentCompletionPercent(result.row.status, maps.byEpicId.get(result.row.id)),
     ),
   );
+  const [presented] = await presentEpics(database, result.row.projectId, [epic]);
+  return presented ?? epic;
 }
 
 export async function updateEpic(
@@ -347,6 +516,15 @@ export async function updateEpic(
       statusCode: 404,
     });
   }
+
+  const schedule = await loadParentSchedule(database, existing.projectId);
+  assertParentDatesWritable(
+    parentDateDetail(
+      { start: existing.startDate, end: existing.endDate },
+      schedule.epicChildren.get(existing.id) ?? [],
+    ),
+    input,
+  );
 
   const effectiveDates = effectiveDateRange({
     stored: { start: existing.startDate, end: existing.endDate },
@@ -398,7 +576,7 @@ export async function updateEpic(
     { entityType: 'epic', id: row.id },
     ...applied.dateChanges,
   ]);
-  return withMediaLinks(
+  const epic = await withMediaLinks(
     database,
     'epic',
     overlaySchedule(
@@ -412,6 +590,8 @@ export async function updateEpic(
       'endDate',
     ),
   );
+  const [presented] = await presentEpics(database, row.projectId, [epic]);
+  return presented ?? epic;
 }
 
 export async function listUserStories(
@@ -433,7 +613,7 @@ export async function listUserStories(
     .orderBy(asc(projectUserStories.sortOrder), asc(projectUserStories.title));
   const keyPrefix = await getProjectKeyPrefix(database, projectId);
   const maps = await completionMaps(database, projectId);
-  return withMediaLinkCounts(
+  const stories = await withMediaLinkCounts(
     database,
     'user_story',
     rows.map((row) =>
@@ -444,6 +624,7 @@ export async function listUserStories(
       ),
     ),
   );
+  return presentStories(database, projectId, stories);
 }
 
 export async function getUserStory(
@@ -464,7 +645,7 @@ export async function getUserStory(
   }
   const keyPrefix = await getProjectKeyPrefix(database, row.projectId);
   const maps = await completionMaps(database, row.projectId);
-  return withMediaLinks(
+  const story = await withMediaLinks(
     database,
     'user_story',
     toPublicUserStory(
@@ -473,6 +654,8 @@ export async function getUserStory(
       parentCompletionPercent(row.status, maps.byStoryId.get(row.id)),
     ),
   );
+  const [presented] = await presentStories(database, row.projectId, [story]);
+  return presented ?? story;
 }
 
 async function assertEpicInProject(
@@ -540,7 +723,7 @@ export async function createUserStory(
     return { row, keyPrefix: allocated.keyPrefix };
   });
   const maps = await completionMaps(database, result.row.projectId);
-  return withMediaLinks(
+  const story = await withMediaLinks(
     database,
     'user_story',
     toPublicUserStory(
@@ -549,6 +732,8 @@ export async function createUserStory(
       parentCompletionPercent(result.row.status, maps.byStoryId.get(result.row.id)),
     ),
   );
+  const [presented] = await presentStories(database, result.row.projectId, [story]);
+  return presented ?? story;
 }
 
 export async function updateUserStory(
@@ -580,6 +765,13 @@ export async function updateUserStory(
   if (input.epicId !== undefined) {
     await assertEpicInProject(database, existing.projectId, input.epicId);
   }
+
+  const schedule = await loadParentSchedule(database, existing.projectId);
+  assertParentDatesWritable(
+    schedule.storyDetails.get(existing.id) ??
+      parentDateDetail({ start: existing.startDate, end: existing.endDate }, []),
+    input,
+  );
 
   const effectiveDates = effectiveDateRange({
     stored: { start: existing.startDate, end: existing.endDate },
@@ -633,7 +825,7 @@ export async function updateUserStory(
     { entityType: 'user_story', id: row.id },
     ...applied.dateChanges,
   ]);
-  return withMediaLinks(
+  const story = await withMediaLinks(
     database,
     'user_story',
     overlaySchedule(
@@ -647,6 +839,8 @@ export async function updateUserStory(
       'endDate',
     ),
   );
+  const [presented] = await presentStories(database, row.projectId, [story]);
+  return presented ?? story;
 }
 
 export async function deleteEpic(

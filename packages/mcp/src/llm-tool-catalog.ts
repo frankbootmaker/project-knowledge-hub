@@ -197,6 +197,12 @@ const projectBaselineResult = {
         'initialBudget',
         'approvedBudget',
         'keyPrefix',
+        'methodology',
+        'createdVia',
+        'createdByApiClientId',
+        'createdByUserId',
+        'generatedByModel',
+        'url',
       ],
       properties: {
         id: uuidProp('Project id'),
@@ -256,9 +262,196 @@ const projectBaselineResult = {
           nullable: true,
           description: 'Issue key prefix AAA or AA0',
         },
+        methodology: {
+          type: 'string',
+          nullable: true,
+          enum: ['scrum', 'kanban', 'waterfall', 'hybrid'],
+          description: 'Delivery approach. Null when unset.',
+        },
+        createdVia: {
+          type: 'string',
+          nullable: true,
+          enum: ['mcp'],
+          description: 'mcp when an agent created the project. Null for a human-created project.',
+        },
+        createdByApiClientId: {
+          type: 'string',
+          nullable: true,
+          description: 'API client id when created via MCP.',
+        },
+        createdByUserId: {
+          type: 'string',
+          nullable: true,
+          description: 'Acting user id when created via MCP.',
+        },
+        generatedByModel: {
+          type: 'string',
+          nullable: true,
+          description: 'Model id supplied at MCP create. Null when unset.',
+        },
+        url: {
+          type: 'string',
+          nullable: true,
+          description: 'Hub URL for the project.',
+        },
       },
     },
   },
+};
+
+const targetPercentProp = {
+  type: 'integer',
+  minimum: 0,
+  maximum: 100,
+  nullable: true,
+  description:
+    'Planned percent from start through end. 0 on the start day, 100 on the end day. Null when the window is missing. Read-only.',
+};
+
+const parentScheduleProps = {
+  startDate: {
+    ...ymd,
+    nullable: true,
+    description: 'YYYY-MM-DD. Child rollup when startDateDerived is true.',
+  },
+  endDate: {
+    ...ymd,
+    nullable: true,
+    description: 'YYYY-MM-DD. Child rollup when endDateDerived is true.',
+  },
+  startDateDerived: {
+    type: 'boolean',
+    description: 'True when startDate comes from included children. Read-only.',
+  },
+  endDateDerived: {
+    type: 'boolean',
+    description: 'True when endDate comes from included children. Read-only.',
+  },
+  targetPercent: targetPercentProp,
+};
+
+const pageProps = {
+  total: { type: 'integer', description: 'Total rows matching the filter.' },
+  limit: { type: 'integer', description: 'Page size used for this response.' },
+  nextCursor: {
+    type: 'string',
+    nullable: true,
+    description: 'Pass as cursor to read the next page. Null when hasMore is false.',
+  },
+  hasMore: { type: 'boolean' },
+};
+
+function pagedResult(rowKey: string, item: Record<string, unknown>) {
+  return {
+    type: 'object',
+    required: [rowKey, 'total', 'limit', 'nextCursor', 'hasMore'],
+    properties: {
+      [rowKey]: { type: 'array', items: item },
+      ...pageProps,
+    },
+  };
+}
+
+function wrappedResult(key: string, item: Record<string, unknown>) {
+  return {
+    type: 'object',
+    required: [key],
+    properties: { [key]: item },
+  };
+}
+
+const taskRowResult = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    startDate: {
+      ...ymd,
+      nullable: true,
+      description: 'Stored start date. Writable.',
+    },
+    completionPercent: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      nullable: true,
+      description: 'Displayed percent. Done is 100, cancelled is 0.',
+    },
+    targetPercent: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      nullable: true,
+      description: 'Tasks have no planned target. Always null.',
+    },
+  },
+};
+
+const parentRowResult = {
+  type: 'object',
+  required: [
+    'id',
+    'startDate',
+    'endDate',
+    'startDateDerived',
+    'endDateDerived',
+    'targetPercent',
+  ],
+  properties: {
+    id: { type: 'string' },
+    ...parentScheduleProps,
+  },
+};
+
+const milestoneRowResult = {
+  type: 'object',
+  required: ['id', 'startDate', 'targetDate', 'targetPercent'],
+  properties: {
+    id: { type: 'string' },
+    startDate: {
+      ...ymd,
+      nullable: true,
+      description: 'Stored start date. Writable. Not derived from linked items.',
+    },
+    targetDate: {
+      ...ymd,
+      nullable: true,
+      description: 'Stored due date. Writable. Not derived from linked items.',
+    },
+    targetPercent: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      nullable: true,
+      description: 'Milestones have no planned target. Always null.',
+    },
+  },
+};
+
+const dependencyLinkResult = {
+  type: 'object',
+  required: ['id', 'linkType', 'lagDays'],
+  properties: {
+    id: { type: 'string' },
+    linkType: { type: 'string', enum: ['FS', 'SS', 'FF', 'SF'] },
+    lagDays: {
+      type: 'integer',
+      minimum: -3650,
+      maximum: 3650,
+      description: 'Whole days. Negative is a lead.',
+    },
+  },
+};
+
+const projectMethodology = {
+  type: 'string',
+  enum: ['scrum', 'kanban', 'waterfall', 'hybrid'],
+  description: 'scrum, kanban, waterfall, or hybrid',
+};
+
+const projectStage = {
+  type: 'string',
+  enum: ['idea', 'planned', 'active', 'maintenance', 'paused', 'completed', 'archived'],
+  description: 'Lifecycle stage. MCP creates are idea until a human promotes them.',
 };
 
 /** Paged list_project_tasks result. nextCursor is null on the last page. */
@@ -268,8 +461,9 @@ const taskListPageResult = {
   properties: {
     tasks: {
       type: 'array',
-      description: 'Task or bug rows. Descriptions and bug notes are excerpts.',
-      items: { type: 'object' },
+      description:
+        'Task or bug rows. Descriptions and bug notes are excerpts. startDate is writable. targetPercent is null.',
+      items: taskRowResult,
     },
     total: { type: 'integer', description: 'Total rows matching the filter.' },
     limit: { type: 'integer', description: 'Page size used for this response.' },
@@ -282,19 +476,137 @@ const taskListPageResult = {
   },
 };
 
+const recordLinkedItem = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['id', 'humanKey', 'title', 'type', 'kind', 'projectId', 'projectSlug'],
+  properties: {
+    id: uuidProp('Item id'),
+    humanKey: {
+      type: 'string',
+      nullable: true,
+      description: 'Human key such as HL1-T-1',
+    },
+    title: stringProp('Item title'),
+    type: {
+      type: 'string',
+      enum: ['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'],
+      description: 'Bugs stay type task. kind is bug.',
+    },
+    kind: {
+      type: 'string',
+      nullable: true,
+      description: 'Task item type, RAID kind, or change kind. Null for other delivery types.',
+    },
+    projectId: uuidProp('Project id'),
+    projectSlug: stringProp('Project slug'),
+  },
+};
+
+/** get_knowledge_record output. Later pages omit linkedItems. recordRelations stays on every page. */
+const knowledgeRecordResult = {
+  type: 'object',
+  required: ['knowledgeRecord'],
+  additionalProperties: false,
+  properties: {
+    knowledgeRecord: {
+      type: 'object',
+      required: ['id'],
+      additionalProperties: true,
+      properties: {
+        id: uuidProp('Knowledge record id'),
+        recordRelations: {
+          type: 'object',
+          additionalProperties: false,
+          description:
+            'Counts plus up to cap related records. Present on every page unless includeRecordRelations is false.',
+          required: ['outboundCount', 'inboundCount', 'cap', 'truncated', 'items'],
+          properties: {
+            outboundCount: { type: 'integer' },
+            inboundCount: { type: 'integer' },
+            cap: { type: 'integer' },
+            truncated: { type: 'boolean' },
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['direction', 'relationType', 'record'],
+                properties: {
+                  direction: { type: 'string', enum: ['outbound', 'inbound'] },
+                  relationType: { type: 'string' },
+                  record: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: [
+                      'id',
+                      'humanKey',
+                      'title',
+                      'recordType',
+                      'lifecycleStatus',
+                      'archivedAt',
+                    ],
+                    properties: {
+                      id: { type: 'string' },
+                      humanKey: { type: 'string', nullable: true },
+                      title: { type: 'string' },
+                      recordType: { type: 'string' },
+                      lifecycleStatus: { type: 'string' },
+                      archivedAt: { type: 'string', nullable: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        linkedItems: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['deliveryLinks', 'raidLinks', 'changeItems'],
+          description:
+            'Same-project reverse links. Present on the first page only. Archived items are omitted.',
+          properties: {
+            deliveryLinks: {
+              type: 'array',
+              items: recordLinkedItem,
+              description: 'Epics, stories, milestones, tasks, bugs, and sprints.',
+            },
+            raidLinks: {
+              type: 'array',
+              items: recordLinkedItem,
+              description: 'RAID items. Archived rows are omitted.',
+            },
+            changeItems: {
+              type: 'array',
+              items: recordLinkedItem,
+              description: 'Change items linked through project_change_record_links.',
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 /** Full tool surface for Gemini + call_hub_tool. */
 export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   // —— Knowledge / catalogue (OpenAPI first-class) ——
   {
     name: 'list_projects',
-    description: 'List accessible projects in allowed workspaces',
+    description:
+      'List accessible projects. Filter by status or stage (idea, planned, active, maintenance, paused, completed, archived).',
     scope: 'projects:read',
     openApi: true,
     defaults: { limit: 50 },
     body: {
       type: 'object',
+      additionalProperties: false,
       properties: {
         workspaceId: uuidProp('Optional workspace filter'),
+        workspaceSlug: stringProp('Optional workspace slug', { maxLength: 64 }),
+        status: projectStage,
+        stage: projectStage,
         limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Max results' },
       },
     },
@@ -318,7 +630,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project',
     description:
-      'Get a project by id. projectId (UUID) is required. Returns baseline, working calendar (hoursPerWorkday, workdaysPerWeek, nonWorkingDays), calculated finishDate and durationWorkingDays, definitionOfDone, keyPrefix, and budgets.',
+      'Get a project by id. projectId (UUID) is required. Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, and MCP provenance (createdVia, createdByApiClientId, createdByUserId, generatedByModel).',
     scope: 'projects:read',
     openApi: true,
     output: projectBaselineResult,
@@ -387,9 +699,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown). Tags and media are on the first page only. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key.',
+      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
     scope: 'knowledge:read',
     openApi: true,
+    output: knowledgeRecordResult,
     body: {
       type: 'object',
       required: ['recordId'],
@@ -417,6 +730,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           minLength: 64,
           maxLength: 64,
           description: 'SHA-256 hex of the full body. 409 CONTENT_CHANGED when it does not match.',
+        },
+        includeRecordRelations: {
+          type: 'boolean',
+          description:
+            'Include compact recordRelations. Defaults to true. Set false to omit them.',
         },
       },
     },
@@ -643,7 +961,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_tasks',
     description:
-      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. startDate is the stored start and is writable. targetPercent is null. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: taskListPageResult,
@@ -673,9 +991,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_task',
     description:
-      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. startDate is the stored start and is writable. targetPercent is null. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: wrappedResult('task', taskRowResult),
     body: {
       type: 'object',
       required: ['taskId'],
@@ -685,10 +1004,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task or bug (itemType, default task). Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). startDate is stored and returned. targetPercent is null. Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('task', taskRowResult),
     body: {
       type: 'object',
       required: ['projectId', 'title'],
@@ -747,10 +1067,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('task', taskRowResult),
     body: {
       type: 'object',
       required: ['taskId'],
@@ -798,9 +1119,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_milestones',
     description:
-      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is 0 or 100 from linked items and predecessor dependencies. 100 only when every included item is done or 100 percent. Cancelled items are left out. Otherwise 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. targetDate is the stored due date. A predecessor moves that due date. Duration is always 0. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is 0 or 100 from linked items and predecessor dependencies. 100 only when every included item is done or 100 percent. Cancelled items are left out. Otherwise 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: pagedResult('milestones', milestoneRowResult),
     body: {
       type: 'object',
       required: ['projectId'],
@@ -815,10 +1137,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_milestone',
     description:
-      'Create a live milestone. description is the note. targetDate is the due date. startDate is legacy. Requires pm:write.',
+      'Create a live milestone. description is the note. targetDate is the due date. startDate is the stored start and is writable. Dates are not derived from linked items. targetPercent is null. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('milestone', milestoneRowResult),
     body: {
       type: 'object',
       required: ['projectId', 'title'],
@@ -836,9 +1159,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_milestone',
     description:
-      'Update a milestone. milestoneId may be UUID or HL1-M-1. description is the note. targetDate is the due date. Requires pm:write.',
+      'Update a milestone. milestoneId may be UUID or HL1-M-1. description is the note. startDate and targetDate are stored and writable. Dates are not derived from linked items. targetPercent is null. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    output: wrappedResult('milestone', milestoneRowResult),
     body: {
       type: 'object',
       required: ['milestoneId'],
@@ -857,8 +1181,9 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_milestone',
     description:
-      'Get one milestone with its note, due date, completionPercent, linkedItems, and status derived from those links. No included links keeps the stored status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'Get one milestone with its note, start date, due date, completionPercent, linkedItems, and status derived from those links. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. No included links keeps the stored status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
+    output: wrappedResult('milestone', milestoneRowResult),
     body: {
       type: 'object',
       required: ['milestoneId'],
@@ -899,9 +1224,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_epics',
     description:
-      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. Each epic includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. startDateDerived and endDateDerived mark a read-only child rollup. targetPercent is the planned percent and is read-only. Each epic includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: pagedResult('epics', parentRowResult),
     body: {
       type: 'object',
       required: ['projectId'],
@@ -915,10 +1241,12 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_epic',
-    description: 'Create an epic. Requires pm:write.',
+    description:
+      'Create an epic. startDate and endDate are writable until included children supply that side. A derived side is read-only. targetPercent is the planned percent and is read-only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('epic', parentRowResult),
     body: {
       type: 'object',
       required: ['projectId', 'title'],
@@ -936,9 +1264,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_user_stories',
     description:
-      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. Each story includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. startDateDerived and endDateDerived mark a read-only child rollup. targetPercent is the planned percent and is read-only. Each story includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: pagedResult('userStories', parentRowResult),
     body: {
       type: 'object',
       required: ['projectId'],
@@ -953,10 +1282,12 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_user_story',
-    description: 'Create a user story under an epic. Requires pm:write.',
+    description:
+      'Create a user story under an epic. startDate and endDate are writable until included children supply that side. A derived side is read-only. targetPercent is the planned percent and is read-only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('userStory', parentRowResult),
     body: {
       type: 'object',
       required: ['projectId', 'epicId', 'title'],
@@ -1064,9 +1395,74 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_workspaces',
     description:
-      'List workspaces this client can access (id, name, slug). Via call_hub_tool on ChatGPT. Requires projects:read.',
+      'List workspaces this client can access: id, name, slug, organization, writesAllowed, and the acting user role. writesAllowed is true only when the workspace is on the client allow-list. Via call_hub_tool on ChatGPT. Requires projects:read.',
     scope: 'projects:read',
-    body: { type: 'object', properties: {} },
+    body: { type: 'object', additionalProperties: false, properties: {} },
+  },
+  {
+    name: 'list_project_metadata',
+    description:
+      'Field guide for create_project and update_project: stages, methodologies, key prefixes, and the idea-stage rule. Call before create_project. Requires projects:read. Via call_hub_tool on ChatGPT.',
+    scope: 'projects:read',
+    body: { type: 'object', additionalProperties: false, properties: {} },
+  },
+  {
+    name: 'create_project',
+    description:
+      'Create a project in an allowlisted workspace. Always stage idea; a human promotes it to active. Returns id, keyPrefix, and url. Requires projects:write. Via call_hub_tool on ChatGPT.',
+    scope: 'projects:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId', 'name'],
+      properties: {
+        workspaceId: uuidProp('Workspace id from list_workspaces'),
+        name: stringProp('Project name', { minLength: 1, maxLength: 160 }),
+        description: { type: 'string', nullable: true, maxLength: 10000 },
+        keyPrefix: {
+          type: 'string',
+          description: 'AAA or AA0. Omit to auto-assign. Taken prefixes return a suggestion.',
+        },
+        currency: stringProp('Currency, default EUR'),
+        methodology: { ...projectMethodology, nullable: true },
+        confirmDuplicateName: {
+          type: 'boolean',
+          description: 'Required when a similar project name already exists.',
+        },
+        generatedByModel: {
+          type: 'string',
+          nullable: true,
+          maxLength: 200,
+          description: 'Optional model id stored as provenance.',
+        },
+      },
+    },
+  },
+  {
+    name: 'update_project',
+    description:
+      'Update name, description, methodology, or currency. Stage changes cannot promote idea to active. Requires projects:write. Writes an audit entry. Via call_hub_tool on ChatGPT.',
+    scope: 'projects:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['projectId'],
+      properties: {
+        projectId: uuidProp('Project id'),
+        name: stringProp('Project name', { minLength: 1, maxLength: 160 }),
+        description: { type: 'string', nullable: true, maxLength: 10000 },
+        methodology: { ...projectMethodology, nullable: true },
+        currency: stringProp('Project currency'),
+        status: projectStage,
+        stage: projectStage,
+        confirmDuplicateName: {
+          type: 'boolean',
+          description: 'Required when the new name is similar to another project.',
+        },
+      },
+    },
   },
   {
     name: 'create_system',
@@ -1257,9 +1653,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'update_project_epic',
-    description: 'Update an epic. Requires pm:write.',
+    description:
+      'Update an epic. startDate and endDate are writable only when that side is not derived from included children. A derived side is read-only and a write is rejected. targetPercent is the planned percent and is read-only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    output: wrappedResult('epic', parentRowResult),
     body: {
       type: 'object',
       required: ['epicId'],
@@ -1277,9 +1675,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'update_project_user_story',
-    description: 'Update a user story. Requires pm:write.',
+    description:
+      'Update a user story. startDate and endDate are writable only when that side is not derived from included children. A derived side is read-only and a write is rejected. targetPercent is the planned percent and is read-only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    output: wrappedResult('userStory', parentRowResult),
     body: {
       type: 'object',
       required: ['storyId'],
@@ -1299,8 +1699,17 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_delivery_dependencies',
     description:
-      'List every predecessor link on one delivery item and the successors derived from them. An item may have many predecessors. The successor start is the latest constraint (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). projectId (UUID) and entityId are required. entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'List every predecessor link on one delivery item and the successors derived from them. Each link includes lagDays, a whole number of days (negative is a lead). An item may have many predecessors. The successor start is the latest constraint (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). projectId (UUID) and entityId are required. entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
+    output: {
+      type: 'object',
+      required: ['predecessors', 'successors', 'scheduleDriven'],
+      properties: {
+        predecessors: { type: 'array', items: dependencyLinkResult },
+        successors: { type: 'array', items: dependencyLinkResult },
+        scheduleDriven: { type: 'boolean' },
+      },
+    },
     body: {
       type: 'object',
       additionalProperties: false,
@@ -1319,9 +1728,27 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_delivery_dependency',
     description:
-      'Add predecessor links (FS, SS, FF, or SF) with optional lagDays counted in working days. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The successor start is the latest constraint. Non-working days are skipped. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
+      'Add predecessor links (FS, SS, FF, or SF) with optional integer lagDays counted in working days. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The saved link returns lagDays. The successor start is the latest constraint. Non-working days are skipped. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
     scope: 'pm:write',
     write: true,
+    output: {
+      type: 'object',
+      properties: {
+        dependency: dependencyLinkResult,
+        dependencies: { type: 'array', items: dependencyLinkResult },
+        schedule: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              startDate: { type: 'string', nullable: true },
+              finishDate: { type: 'string', nullable: true },
+            },
+          },
+        },
+      },
+    },
     body: {
       type: 'object',
       additionalProperties: false,
@@ -1347,7 +1774,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           type: 'integer',
           minimum: -3650,
           maximum: 3650,
-          description: 'Calendar days. Negative is a lead. Defaults to 0.',
+          description: 'Whole days. Negative is a lead. Defaults to 0.',
         },
         links: {
           type: 'array',
@@ -1376,6 +1803,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
                 type: 'integer',
                 minimum: -3650,
                 maximum: 3650,
+                description: 'Whole days. Negative is a lead. Defaults to 0.',
               },
             },
           },
@@ -1741,7 +2169,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_raid_items',
     description:
-      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each item includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each item includes records[] (id, title, slug, recordType, humanKey) plus mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1756,7 +2184,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_raid_item',
-    description: 'Create a RAID item (risk/assumption/issue/dependency). Requires pm:write.',
+    description:
+      'Create a RAID item (risk/assumption/issue/dependency). Optional recordIds link same-project knowledge records (UUID or human key). A record from another project is rejected. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -1792,6 +2221,12 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           type: 'array',
           maxItems: 100,
           items: entityRefProp('Linked task'),
+        },
+        recordIds: {
+          type: 'array',
+          maxItems: 100,
+          description: 'Knowledge records in the same project. UUID or human key.',
+          items: entityRefProp('Linked knowledge record'),
         },
       },
     },
@@ -2064,6 +2499,91 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
             },
           },
         },
+      },
+    },
+  },
+  {
+    name: 'get_knowledge_record_relations',
+    description:
+      'List typed relations for a knowledge record plus lifecycle successor and predecessor. Inbound edges use inverse labels (required_by, refined_by, source_for). recordId may be a UUID or document key. Requires knowledge:read.',
+    scope: 'knowledge:read',
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['recordId'],
+      properties: { recordId: entityRefProp('Knowledge record id') },
+    },
+    output: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['relations', 'lifecycleSuccessor', 'lifecyclePredecessor'],
+      properties: {
+        relations: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['outbound', 'inbound'],
+          properties: {
+            outbound: { type: 'array', items: { type: 'object' } },
+            inbound: { type: 'array', items: { type: 'object' } },
+          },
+        },
+        lifecycleSuccessor: { type: 'object', nullable: true },
+        lifecyclePredecessor: { type: 'object', nullable: true },
+      },
+    },
+  },
+  {
+    name: 'set_knowledge_record_relations',
+    description:
+      'Replace relations stored from this record. Types: relates_to, depends_on, refines, derived_from, contradicts. Symmetric types are stored once. Inbound edges stay. Rejects self-links, cross-project targets, depends_on and refines cycles, and archived endpoints. Requires knowledge:write.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['recordId', 'links'],
+      properties: {
+        recordId: entityRefProp('Knowledge record id'),
+        links: {
+          type: 'array',
+          maxItems: 200,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['targetRecordId', 'relationType'],
+            properties: {
+              targetRecordId: entityRefProp('Related record id'),
+              relationType: {
+                type: 'string',
+                enum: [
+                  'relates_to',
+                  'depends_on',
+                  'refines',
+                  'derived_from',
+                  'contradicts',
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+    output: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['relations', 'lifecycleSuccessor', 'lifecyclePredecessor'],
+      properties: {
+        relations: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['outbound', 'inbound'],
+          properties: {
+            outbound: { type: 'array', items: { type: 'object' } },
+            inbound: { type: 'array', items: { type: 'object' } },
+          },
+        },
+        lifecycleSuccessor: { type: 'object', nullable: true },
+        lifecyclePredecessor: { type: 'object', nullable: true },
       },
     },
   },
@@ -2468,7 +2988,8 @@ export async function invokeNamedHubTool(
     const includeWrite =
       hasMcpScope(scopes, 'knowledge:write')
       || hasMcpScope(scopes, 'pm:write')
-      || hasMcpScope(scopes, 'catalogue:write');
+      || hasMcpScope(scopes, 'catalogue:write')
+      || hasMcpScope(scopes, 'projects:write');
     return { tools: listHubToolSummaries(includeWrite) };
   }
 

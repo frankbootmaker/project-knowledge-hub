@@ -128,8 +128,23 @@ describe('llm-client-schemas', () => {
       } else if (path.endsWith('/list_project_tasks')) {
         expect(schema.$ref).toBeUndefined();
         expect(JSON.stringify(schema)).toContain('nextCursor');
+      } else if (path.endsWith('/get_knowledge_record')) {
+        expect(schema.$ref).toBeUndefined();
+        const encoded = JSON.stringify(schema);
+        expect(encoded).toContain('linkedItems');
+        expect(encoded).toContain('deliveryLinks');
+        expect(encoded).toContain('raidLinks');
+        expect(encoded).toContain('changeItems');
       } else {
-        expect(schema.$ref).toBe('#/components/schemas/ToolResult');
+        const toolName = path.split('/').pop() ?? '';
+        const declared = findLlmTool(toolName)?.output;
+        if (declared) {
+          expect(schema.$ref).toBeUndefined();
+          expect(schema).toEqual(declared);
+          expect(JSON.stringify(schema)).not.toContain('"additionalProperties":true');
+        } else {
+          expect(schema.$ref).toBe('#/components/schemas/ToolResult');
+        }
       }
     }
 

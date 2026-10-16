@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   childCompletionPoints,
   deliveryCompletionIndex,
+  dependencyLagDaysSchema,
+  derivedDateWriteField,
   derivedParentDates,
   derivedParentStatus,
   displayedParentCompletion,
@@ -9,7 +11,10 @@ import {
   milestoneCompletion,
   milestoneLinkPoints,
   milestoneStatusFromLinks,
+  parentDateDetail,
   parentStatusFromChildren,
+  plannedTargetPercent,
+  targetPercentSchema,
   type DeliveryCompletionChild,
 } from './index.js';
 
@@ -240,6 +245,63 @@ describe('derivedParentDates', () => {
         { status: 'cancelled', start: '2026-01-01', end: '2026-12-31' },
       ]),
     ).toEqual({ start: '2026-02-01', end: '2026-04-20' });
+  });
+});
+
+describe('parentDateDetail', () => {
+  const manual = { start: '2026-01-01', end: '2026-01-31' };
+
+  it('keeps manual dates writable when children have none', () => {
+    expect(parentDateDetail(manual, [])).toEqual({
+      ...manual,
+      startDerived: false,
+      endDerived: false,
+    });
+    expect(
+      parentDateDetail(manual, [{ status: 'todo', start: null, end: '2026-04-01' }]),
+    ).toEqual({
+      start: '2026-01-01',
+      end: '2026-04-01',
+      startDerived: false,
+      endDerived: true,
+    });
+  });
+
+  it('marks a side read-only when a child supplies it', () => {
+    const detail = parentDateDetail(manual, [
+      { status: 'todo', start: '2026-03-10', end: '2026-03-12' },
+      { status: 'cancelled', start: '2026-01-01', end: '2026-12-31' },
+    ]);
+    expect(detail).toEqual({
+      start: '2026-03-10',
+      end: '2026-03-12',
+      startDerived: true,
+      endDerived: true,
+    });
+    expect(derivedDateWriteField({ detail, startDate: '2026-01-01' })).toBe('startDate');
+    expect(derivedDateWriteField({ detail, endDate: '2026-03-12' })).toBe('endDate');
+    expect(derivedDateWriteField({ detail })).toBeNull();
+  });
+});
+
+describe('planned target percent and lag', () => {
+  it('stays inside 0-100 and rejects a bad window', () => {
+    expect(plannedTargetPercent('2026-10-01', '2026-10-11', '2026-10-06')).toBe(50);
+    expect(plannedTargetPercent('2026-10-01', '2026-10-11', '2026-09-30')).toBe(0);
+    expect(plannedTargetPercent('2026-10-01', '2026-10-11', '2026-10-20')).toBe(100);
+    expect(plannedTargetPercent(null, '2026-10-11', '2026-10-06')).toBeNull();
+    expect(targetPercentSchema.safeParse(0).success).toBe(true);
+    expect(targetPercentSchema.safeParse(100).success).toBe(true);
+    expect(targetPercentSchema.safeParse(101).success).toBe(false);
+    expect(targetPercentSchema.safeParse(-1).success).toBe(false);
+    expect(targetPercentSchema.safeParse(1.5).success).toBe(false);
+  });
+
+  it('requires lag to be an integer', () => {
+    expect(dependencyLagDaysSchema.safeParse(0).success).toBe(true);
+    expect(dependencyLagDaysSchema.safeParse(-3).success).toBe(true);
+    expect(dependencyLagDaysSchema.safeParse(1.5).success).toBe(false);
+    expect(dependencyLagDaysSchema.safeParse(3651).success).toBe(false);
   });
 });
 

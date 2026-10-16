@@ -13,6 +13,7 @@ const OAUTH_SCOPES = [
   'provenance:read',
   'knowledge:write',
   'catalogue:write',
+  'projects:write',
   'pm:read',
   'pm:write',
   'monitoring:read',

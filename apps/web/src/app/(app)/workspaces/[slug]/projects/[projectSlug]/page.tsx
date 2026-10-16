@@ -34,6 +34,10 @@ import {
   PageHeader,
 } from '../../../../../../components/ui';
 import {
+  ProjectAiCreatedBadge,
+  ProjectStageBadge,
+} from '../../../../../../components/ProjectStageBadge';
+import {
   projectDeliveryRag,
   type ProjectRagStatus,
 } from '../../../../../../lib/delivery-schedule';
@@ -96,6 +100,11 @@ type Project = {
   } | null;
   definitionOfDone?: string | null;
   keyPrefix?: string | null;
+  methodology?: string | null;
+  createdVia?: string | null;
+  createdByApiClientId?: string | null;
+  createdByUserId?: string | null;
+  generatedByModel?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -429,7 +438,11 @@ export default async function ProjectDetailPage({
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
             <span>{project.summary || project.slug}</span>
-            <Badge tone="brand">{project.status}</Badge>
+            <ProjectStageBadge status={project.status} />
+            <ProjectAiCreatedBadge
+              createdVia={project.createdVia}
+              generatedByModel={project.generatedByModel}
+            />
             {isArchived ? <Badge tone="warn">{tArchive('archivedBadge')}</Badge> : null}
           </span>
         }

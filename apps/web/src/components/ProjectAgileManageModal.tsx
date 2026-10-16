@@ -25,6 +25,7 @@ import {
   displayedParentCompletion,
   formatPercentLabel,
   milestoneCompletion,
+  parentDateDetail,
   type MilestoneLinkCompletion,
 } from '../lib/delivery-completion';
 import {
@@ -65,6 +66,8 @@ type EffortTask = {
   forecastHours: string | number | null;
   actualHours: string | number | null;
   completionPercent?: number | null;
+  startDate?: string | null;
+  dueDate?: string | null;
   currentOwnerUserId: string | null;
   humanKey?: string | null;
   itemType?: 'task' | 'bug' | null;
@@ -163,6 +166,34 @@ export function ProjectAgileManageModal({
   const tArchive = useTranslations('archive');
   const locale = useLocale();
   const { pushToast } = useToast();
+  const dateLocks = useMemo(() => {
+    if (!itemId || (kind !== 'epic' && kind !== 'story')) {
+      return { start: false, end: false };
+    }
+    const taskSources = (storyId: string) =>
+      tasks
+        .filter((task) => task.userStoryId === storyId)
+        .map((task) => ({
+          status: task.status,
+          start: task.startDate ?? null,
+          end: task.dueDate ?? null,
+        }));
+    if (kind === 'story') {
+      const detail = parentDateDetail({ start: null, end: null }, taskSources(itemId));
+      return { start: detail.startDerived, end: detail.endDerived };
+    }
+    const children = stories
+      .filter((story) => story.epicId === itemId)
+      .map((story) => {
+        const detail = parentDateDetail(
+          { start: story.startDate ?? null, end: story.endDate ?? null },
+          taskSources(story.id),
+        );
+        return { status: story.status, start: detail.start, end: detail.end };
+      });
+    const detail = parentDateDetail({ start: null, end: null }, children);
+    return { start: detail.startDerived, end: detail.endDerived };
+  }, [itemId, kind, stories, tasks]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -430,14 +461,17 @@ export function ProjectAgileManageModal({
           : kind === 'story'
             ? `/api/v1/project-user-stories/${itemId}`
             : `/api/v1/project-milestones/${itemId}`;
+      const writableDates = {
+        ...(dateLocks.start ? {} : { startDate: startDate || null }),
+        ...(dateLocks.end ? {} : { endDate: endDate || null }),
+      };
       const body =
         kind === 'epic'
           ? {
               title: title.trim(),
               description: description.trim() || null,
               status,
-              startDate: startDate || null,
-              endDate: endDate || null,
+              ...writableDates,
             }
           : kind === 'story'
             ? {
@@ -445,8 +479,7 @@ export function ProjectAgileManageModal({
                 description: description.trim() || null,
                 status,
                 epicId,
-                startDate: startDate || null,
-                endDate: endDate || null,
+                ...writableDates,
               }
             : {
                 title: title.trim(),
@@ -912,7 +945,8 @@ export function ProjectAgileManageModal({
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                disabled={pending || !canMutate || confirmDelete}
+                disabled={pending || !canMutate || confirmDelete || dateLocks.start}
+                readOnly={dateLocks.start}
               />
             </Field>
             <Field label={t('endDate')}>
@@ -920,9 +954,15 @@ export function ProjectAgileManageModal({
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                disabled={pending || !canMutate || confirmDelete}
+                disabled={pending || !canMutate || confirmDelete || dateLocks.end}
+                readOnly={dateLocks.end}
               />
             </Field>
+            {dateLocks.start || dateLocks.end ? (
+              <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
+                {t('datesFromChildren')}
+              </p>
+            ) : null}
           </>
         )}
         <Field
