@@ -129,7 +129,15 @@ describe('llm-client-schemas', () => {
         expect(schema.$ref).toBeUndefined();
         expect(JSON.stringify(schema)).toContain('nextCursor');
       } else {
-        expect(schema.$ref).toBe('#/components/schemas/ToolResult');
+        const toolName = path.split('/').pop() ?? '';
+        const declared = findLlmTool(toolName)?.output;
+        if (declared) {
+          expect(schema.$ref).toBeUndefined();
+          expect(schema).toEqual(declared);
+          expect(JSON.stringify(schema)).not.toContain('"additionalProperties":true');
+        } else {
+          expect(schema.$ref).toBe('#/components/schemas/ToolResult');
+        }
       }
     }
 

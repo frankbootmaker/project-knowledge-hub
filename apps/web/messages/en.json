@@ -2539,6 +2539,7 @@
     "durationDays": "Duration (days)",
     "durationHint": "Due date is the start date plus this many calendar days.",
     "startComputed": "Start date is computed from predecessors.",
+    "datesFromChildren": "This date follows included children and is read-only.",
     "linkType": {
       "FS": "Finish to start (FS)",
       "SS": "Start to start (SS)",

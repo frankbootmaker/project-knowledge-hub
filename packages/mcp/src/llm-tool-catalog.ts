@@ -261,6 +261,149 @@ const projectBaselineResult = {
   },
 };
 
+const targetPercentProp = {
+  type: 'integer',
+  minimum: 0,
+  maximum: 100,
+  nullable: true,
+  description:
+    'Planned percent from start through end. 0 on the start day, 100 on the end day. Null when the window is missing. Read-only.',
+};
+
+const parentScheduleProps = {
+  startDate: {
+    ...ymd,
+    nullable: true,
+    description: 'YYYY-MM-DD. Child rollup when startDateDerived is true.',
+  },
+  endDate: {
+    ...ymd,
+    nullable: true,
+    description: 'YYYY-MM-DD. Child rollup when endDateDerived is true.',
+  },
+  startDateDerived: {
+    type: 'boolean',
+    description: 'True when startDate comes from included children. Read-only.',
+  },
+  endDateDerived: {
+    type: 'boolean',
+    description: 'True when endDate comes from included children. Read-only.',
+  },
+  targetPercent: targetPercentProp,
+};
+
+const pageProps = {
+  total: { type: 'integer', description: 'Total rows matching the filter.' },
+  limit: { type: 'integer', description: 'Page size used for this response.' },
+  nextCursor: {
+    type: 'string',
+    nullable: true,
+    description: 'Pass as cursor to read the next page. Null when hasMore is false.',
+  },
+  hasMore: { type: 'boolean' },
+};
+
+function pagedResult(rowKey: string, item: Record<string, unknown>) {
+  return {
+    type: 'object',
+    required: [rowKey, 'total', 'limit', 'nextCursor', 'hasMore'],
+    properties: {
+      [rowKey]: { type: 'array', items: item },
+      ...pageProps,
+    },
+  };
+}
+
+function wrappedResult(key: string, item: Record<string, unknown>) {
+  return {
+    type: 'object',
+    required: [key],
+    properties: { [key]: item },
+  };
+}
+
+const taskRowResult = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    startDate: {
+      ...ymd,
+      nullable: true,
+      description: 'Stored start date. Writable.',
+    },
+    completionPercent: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      nullable: true,
+      description: 'Displayed percent. Done is 100, cancelled is 0.',
+    },
+    targetPercent: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      nullable: true,
+      description: 'Tasks have no planned target. Always null.',
+    },
+  },
+};
+
+const parentRowResult = {
+  type: 'object',
+  required: [
+    'id',
+    'startDate',
+    'endDate',
+    'startDateDerived',
+    'endDateDerived',
+    'targetPercent',
+  ],
+  properties: {
+    id: { type: 'string' },
+    ...parentScheduleProps,
+  },
+};
+
+const milestoneRowResult = {
+  type: 'object',
+  required: ['id', 'startDate', 'targetDate', 'targetPercent'],
+  properties: {
+    id: { type: 'string' },
+    startDate: {
+      ...ymd,
+      nullable: true,
+      description: 'Stored start date. Writable. Not derived from linked items.',
+    },
+    targetDate: {
+      ...ymd,
+      nullable: true,
+      description: 'Stored due date. Writable. Not derived from linked items.',
+    },
+    targetPercent: {
+      type: 'integer',
+      minimum: 0,
+      maximum: 100,
+      nullable: true,
+      description: 'Milestones have no planned target. Always null.',
+    },
+  },
+};
+
+const dependencyLinkResult = {
+  type: 'object',
+  required: ['id', 'linkType', 'lagDays'],
+  properties: {
+    id: { type: 'string' },
+    linkType: { type: 'string', enum: ['FS', 'SS', 'FF', 'SF'] },
+    lagDays: {
+      type: 'integer',
+      minimum: -3650,
+      maximum: 3650,
+      description: 'Whole days. Negative is a lead.',
+    },
+  },
+};
+
 /** Paged list_project_tasks result. nextCursor is null on the last page. */
 const taskListPageResult = {
   type: 'object',
@@ -268,8 +411,9 @@ const taskListPageResult = {
   properties: {
     tasks: {
       type: 'array',
-      description: 'Task or bug rows. Descriptions and bug notes are excerpts.',
-      items: { type: 'object' },
+      description:
+        'Task or bug rows. Descriptions and bug notes are excerpts. startDate is writable. targetPercent is null.',
+      items: taskRowResult,
     },
     total: { type: 'integer', description: 'Total rows matching the filter.' },
     limit: { type: 'integer', description: 'Page size used for this response.' },
@@ -643,7 +787,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_tasks',
     description:
-      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. startDate is the stored start and is writable. targetPercent is null. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: taskListPageResult,
@@ -673,9 +817,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_task',
     description:
-      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. startDate is the stored start and is writable. targetPercent is null. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: wrappedResult('task', taskRowResult),
     body: {
       type: 'object',
       required: ['taskId'],
@@ -685,10 +830,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task or bug (itemType, default task). Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). startDate is stored and returned. targetPercent is null. Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('task', taskRowResult),
     body: {
       type: 'object',
       required: ['projectId', 'title'],
@@ -747,10 +893,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('task', taskRowResult),
     body: {
       type: 'object',
       required: ['taskId'],
@@ -798,9 +945,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_milestones',
     description:
-      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is 0 or 100 from linked items and predecessor dependencies. 100 only when every included item is done or 100 percent. Cancelled items are left out. Otherwise 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. targetDate is the stored due date. A predecessor moves that due date. Duration is always 0. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is 0 or 100 from linked items and predecessor dependencies. 100 only when every included item is done or 100 percent. Cancelled items are left out. Otherwise 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: pagedResult('milestones', milestoneRowResult),
     body: {
       type: 'object',
       required: ['projectId'],
@@ -815,10 +963,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_milestone',
     description:
-      'Create a live milestone. description is the note. targetDate is the due date. startDate is legacy. Requires pm:write.',
+      'Create a live milestone. description is the note. targetDate is the due date. startDate is the stored start and is writable. Dates are not derived from linked items. targetPercent is null. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('milestone', milestoneRowResult),
     body: {
       type: 'object',
       required: ['projectId', 'title'],
@@ -836,9 +985,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_milestone',
     description:
-      'Update a milestone. milestoneId may be UUID or HL1-M-1. description is the note. targetDate is the due date. Requires pm:write.',
+      'Update a milestone. milestoneId may be UUID or HL1-M-1. description is the note. startDate and targetDate are stored and writable. Dates are not derived from linked items. targetPercent is null. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    output: wrappedResult('milestone', milestoneRowResult),
     body: {
       type: 'object',
       required: ['milestoneId'],
@@ -857,8 +1007,9 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_milestone',
     description:
-      'Get one milestone with its note, due date, completionPercent, linkedItems, and status derived from those links. No included links keeps the stored status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'Get one milestone with its note, start date, due date, completionPercent, linkedItems, and status derived from those links. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. No included links keeps the stored status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
+    output: wrappedResult('milestone', milestoneRowResult),
     body: {
       type: 'object',
       required: ['milestoneId'],
@@ -899,9 +1050,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_epics',
     description:
-      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. Each epic includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. startDateDerived and endDateDerived mark a read-only child rollup. targetPercent is the planned percent and is read-only. Each epic includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: pagedResult('epics', parentRowResult),
     body: {
       type: 'object',
       required: ['projectId'],
@@ -915,10 +1067,12 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_epic',
-    description: 'Create an epic. Requires pm:write.',
+    description:
+      'Create an epic. startDate and endDate are writable until included children supply that side. A derived side is read-only. targetPercent is the planned percent and is read-only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('epic', parentRowResult),
     body: {
       type: 'object',
       required: ['projectId', 'title'],
@@ -936,9 +1090,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_user_stories',
     description:
-      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. Each story includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List user stories (optional epic filter). Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. completionPercent is 100 when done, 0 when cancelled, otherwise the average of non-cancelled children, or null. Status follows those children: all done, blocked when a non-done child is blocked, in progress when completion is above 0 or a child has started, otherwise planned. No included children keeps the stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. startDateDerived and endDateDerived mark a read-only child rollup. targetPercent is the planned percent and is read-only. Each story includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
+    output: pagedResult('userStories', parentRowResult),
     body: {
       type: 'object',
       required: ['projectId'],
@@ -953,10 +1108,12 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_user_story',
-    description: 'Create a user story under an epic. Requires pm:write.',
+    description:
+      'Create a user story under an epic. startDate and endDate are writable until included children supply that side. A derived side is read-only. targetPercent is the planned percent and is read-only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
+    output: wrappedResult('userStory', parentRowResult),
     body: {
       type: 'object',
       required: ['projectId', 'epicId', 'title'],
@@ -1257,9 +1414,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'update_project_epic',
-    description: 'Update an epic. Requires pm:write.',
+    description:
+      'Update an epic. startDate and endDate are writable only when that side is not derived from included children. A derived side is read-only and a write is rejected. targetPercent is the planned percent and is read-only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    output: wrappedResult('epic', parentRowResult),
     body: {
       type: 'object',
       required: ['epicId'],
@@ -1277,9 +1436,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'update_project_user_story',
-    description: 'Update a user story. Requires pm:write.',
+    description:
+      'Update a user story. startDate and endDate are writable only when that side is not derived from included children. A derived side is read-only and a write is rejected. targetPercent is the planned percent and is read-only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
+    output: wrappedResult('userStory', parentRowResult),
     body: {
       type: 'object',
       required: ['storyId'],
@@ -1299,8 +1460,17 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_delivery_dependencies',
     description:
-      'List every predecessor link on one delivery item and the successors derived from them. An item may have many predecessors. The successor start is the latest constraint (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). projectId (UUID) and entityId are required. entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'List every predecessor link on one delivery item and the successors derived from them. Each link includes lagDays, a whole number of days (negative is a lead). An item may have many predecessors. The successor start is the latest constraint (FS uses predecessor finish, SS predecessor start, FF predecessor finish minus duration, SF predecessor start minus duration, each plus lag). projectId (UUID) and entityId are required. entityId is a UUID or human key (PRO-T-1, PRO-B-1). entityType is required for a UUID. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
+    output: {
+      type: 'object',
+      required: ['predecessors', 'successors', 'scheduleDriven'],
+      properties: {
+        predecessors: { type: 'array', items: dependencyLinkResult },
+        successors: { type: 'array', items: dependencyLinkResult },
+        scheduleDriven: { type: 'boolean' },
+      },
+    },
     body: {
       type: 'object',
       additionalProperties: false,
@@ -1319,9 +1489,27 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_delivery_dependency',
     description:
-      'Add predecessor links (FS, SS, FF, or SF) with optional lagDays counted in working days. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The successor start is the latest constraint. Non-working days are skipped. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
+      'Add predecessor links (FS, SS, FF, or SF) with optional integer lagDays counted in working days. projectId (UUID) is required. Pass predecessorId, successorId, and linkType for one link, or links (1–50) to add several. An item may have many predecessors; each ordered pair is stored once. The saved link returns lagDays. The successor start is the latest constraint. Non-working days are skipped. Rejects self-links, cross-project links, duplicates, and cycles. Ids are UUIDs or human keys such as PRO-T-1 and PRO-B-1. Requires pm:write. Via call_hub_tool on ChatGPT.',
     scope: 'pm:write',
     write: true,
+    output: {
+      type: 'object',
+      properties: {
+        dependency: dependencyLinkResult,
+        dependencies: { type: 'array', items: dependencyLinkResult },
+        schedule: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              startDate: { type: 'string', nullable: true },
+              finishDate: { type: 'string', nullable: true },
+            },
+          },
+        },
+      },
+    },
     body: {
       type: 'object',
       additionalProperties: false,
@@ -1347,7 +1535,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           type: 'integer',
           minimum: -3650,
           maximum: 3650,
-          description: 'Calendar days. Negative is a lead. Defaults to 0.',
+          description: 'Whole days. Negative is a lead. Defaults to 0.',
         },
         links: {
           type: 'array',
@@ -1376,6 +1564,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
                 type: 'integer',
                 minimum: -3650,
                 maximum: 3650,
+                description: 'Whole days. Negative is a lead. Defaults to 0.',
               },
             },
           },

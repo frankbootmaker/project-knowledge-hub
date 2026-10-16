@@ -2520,6 +2520,7 @@
     "durationDays": "Időtartam (nap)",
     "durationHint": "A határidő a kezdés dátuma plusz ennyi naptári nap.",
     "startComputed": "A kezdés dátuma az előzményekből számolódik.",
+    "datesFromChildren": "Ez a dátum a beletartozó gyerekekből jön, és csak olvasható.",
     "linkType": {
       "FS": "Befejezés-kezdés (FS)",
       "SS": "Kezdés-kezdés (SS)",

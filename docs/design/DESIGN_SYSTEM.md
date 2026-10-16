@@ -249,6 +249,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-16
 
+* **Parent date fields** — In the epic and story dialog, a start or end that comes from included children is a disabled read-only date with the hint `datesFromChildren`. A side with no child date stays editable. Milestone due dates stay editable.
+
 * **Gantt milestone rows** — Dated milestones are inserted into the work list by calendar date and leave the WBS cell empty. Undated milestones stay in the “Milestones without dates” group. Epic and story titles (`.kh-ops-gantt-title-btn` / `.kh-ops-gantt-title-text`) are bold; milestone titles are italic, with 1px of trailing padding so the glyph is not clipped. Other rows stay regular IBM Plex Sans 13px.
 
 ### 2026-10-15
