@@ -681,6 +681,7 @@ export type McpToolHandlers = {
     dueDate?: string | null;
     sortOrder?: number;
     taskIds?: string[];
+    recordIds?: string[];
   }) => Promise<unknown>;
   updateProjectRaidItem: (input: {
     raidItemId: string;
@@ -1627,15 +1628,54 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  server.tool(
+  const recordLinkedItemOutput = z.object({
+    id: z.string(),
+    humanKey: z.string().nullable(),
+    title: z.string(),
+    type: z.enum([
+      'epic',
+      'user_story',
+      'milestone',
+      'task',
+      'sprint',
+      'raid',
+      'change',
+    ]),
+    kind: z.string().nullable(),
+    projectId: z.string(),
+    projectSlug: z.string(),
+  });
+  const knowledgeRecordOutput = {
+    knowledgeRecord: z
+      .object({
+        id: z.string(),
+        linkedItems: z
+          .object({
+            deliveryLinks: z.array(recordLinkedItemOutput),
+            raidLinks: z.array(recordLinkedItemOutput),
+            changeItems: z.array(recordLinkedItemOutput),
+          })
+          .optional()
+          .describe(
+            'Reverse links in the record project. First page only. Archived RAID, change, and delivery items are omitted.',
+          ),
+      })
+      .passthrough(),
+  };
+
+  server.registerTool(
     'get_knowledge_record',
-    'Retrieve a knowledge record including markdown content. Tags and linked workspace media are included on the first page only. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex (0-based page index: 0 on the first page, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). When you pass contentOffset or contentLimit, each page is a raw slice (concatenate contentMarkdown across pages). The default call with neither parameter still appends …[truncated] on the first page when more remains. boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
     {
-      recordId: z.string().min(1).max(80),
-      contentOffset: z.number().int().min(0).optional(),
-      contentLimit: z.number().int().min(1).max(MCP_MAX_CONTENT_CHARS).optional(),
-      boundary: z.enum(['none', 'paragraph', 'line']).optional(),
-      expectSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      description:
+        'Retrieve a knowledge record including markdown content. Tags, linked workspace media, and linkedItems are included on the first page only. linkedItems has deliveryLinks (epic, user story, milestone, task including bugs, sprint), raidLinks, and changeItems for the same project. Each item has id, humanKey, title, type, and kind. Archived RAID, change, and delivery items are omitted. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex (0-based page index: 0 on the first page, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). When you pass contentOffset or contentLimit, each page is a raw slice (concatenate contentMarkdown across pages). The default call with neither parameter still appends …[truncated] on the first page when more remains. boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+      inputSchema: {
+        recordId: z.string().min(1).max(80),
+        contentOffset: z.number().int().min(0).optional(),
+        contentLimit: z.number().int().min(1).max(MCP_MAX_CONTENT_CHARS).optional(),
+        boundary: z.enum(['none', 'paragraph', 'line']).optional(),
+        expectSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      },
+      outputSchema: knowledgeRecordOutput,
     },
     async (args) =>
       wrap(
@@ -1643,6 +1683,7 @@ export function createKnowledgeHubMcpServer(
         'knowledge:read',
         () => handlers.getKnowledgeRecord(args),
         { recordId: args.recordId },
+        (data) => structuredTextResult(data, knowledgeRecordOutput),
       )(),
   );
 
@@ -3033,7 +3074,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_raid_items',
-    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each item includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
+    'List RAID register items (risks, assumptions, issues, dependencies) for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each item includes records[] (linked knowledge records: id, title, slug, recordType, humanKey) plus mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
     {
       projectId: z.string().uuid(),
       includeArchived: z.boolean().optional(),
@@ -3050,7 +3091,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_raid_item',
-    'Create a RAID register item and optionally link delivery tasks. Requires pm:write.',
+    'Create a RAID register item. Optional taskIds link delivery tasks. Optional recordIds link knowledge records in the same project (UUID or human key). A record from another project is rejected. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       kind: raidKindEnum,
@@ -3064,6 +3105,13 @@ export function createKnowledgeHubMcpServer(
       dueDate: isoDateNullableSchema.optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       taskIds: z.array(entityRef).max(100).optional(),
+      recordIds: z
+        .array(entityRef)
+        .max(100)
+        .optional()
+        .describe(
+          'Optional knowledge record ids in the same project. UUID or human key.',
+        ),
     },
     async (args) =>
       wrap(

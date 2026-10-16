@@ -1092,6 +1092,18 @@
     "changeMessageLabel": "Változásüzenet: {message}",
     "sourceAndVerification": "Forrás és jóváhagyás",
     "summaryAndLinks": "Összefoglaló és hivatkozások",
+    "linkedItems": "Kapcsolt elemek",
+    "linkedItemsEmpty": "Nincs kapcsolt elem.",
+    "linkedItemTypes": {
+      "epic": "Epik",
+      "user_story": "Story",
+      "milestone": "Mérföldkő",
+      "task": "Feladat",
+      "bug": "Bug",
+      "sprint": "Sprint",
+      "raid": "RAID",
+      "change": "Változás"
+    },
     "showMoreDetails": "További részletek",
     "hideMoreDetails": "Részletek elrejtése",
     "sourceType": "Forrástípus",

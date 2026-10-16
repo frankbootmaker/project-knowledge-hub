@@ -23,6 +23,7 @@ import {
   setDeliveryLinksForRecord,
   setDocumentLinksForEntity,
 } from '../lib/knowledge-delivery-links.js';
+import { listKnowledgeRecordLinkedItems } from '../lib/knowledge-record-linked-items.js';
 
 async function workspaceOrgId(
   app: FastifyInstance,
@@ -50,6 +51,27 @@ const replaceLinksSchema = z.object({
 export async function registerKnowledgeDeliveryLinkRoutes(
   app: FastifyInstance,
 ): Promise<void> {
+  app.get(
+    '/api/v1/knowledge-records/:recordId/linked-items',
+    async (request) => {
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ recordId: z.string().uuid() })
+        .parse(request.params);
+      const record = await getKnowledgeRecordProjectContext(
+        app.database,
+        params.recordId,
+      );
+      requireWorkspaceView(principal, record.workspaceId);
+      return {
+        linkedItems: await listKnowledgeRecordLinkedItems(
+          app.database,
+          params.recordId,
+        ),
+      };
+    },
+  );
+
   app.get(
     '/api/v1/knowledge-records/:recordId/delivery-links',
     async (request) => {
