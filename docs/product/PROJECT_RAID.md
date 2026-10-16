@@ -69,6 +69,7 @@ Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID R
 * `GET /api/v1/project-tasks/:taskId/raid-items`
 * `GET/PUT /api/v1/knowledge-records/:id/raid-items`
 * `GET/PUT /api/v1/knowledge-records/:id/delivery-links`
+* `GET /api/v1/knowledge-records/:id/linked-items` — delivery, RAID, and change items that point at the record (same project; archived rows omitted)
 * `GET/PUT /api/v1/projects/:projectId/delivery-document-links` (replace the records linked to one epic, story, milestone, task, or sprint)
 
 ## UI
@@ -78,4 +79,5 @@ Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID R
 * Task, epic, story, and milestone manage: Documents tab adds and removes delivery links; they are stored when the item is saved. Bugs use the task tab.
 * Sprint panel: the same Documents editor stores links as soon as Add or Remove is confirmed
 * Task manage: read-only linked RAID chips
+* Knowledge record More details: read-only Linked items (key, title, type). RAID opens `?raid=<id>#project-raid`. Tasks and bugs open `?task=<id>#project-delivery`. Sprints open the scrum view. Epics, stories, and milestones open Delivery. Change items open `#project-change`.
 * Knowledge editor (edit + project selected): delivery-link multi-select

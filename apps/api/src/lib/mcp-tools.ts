@@ -199,6 +199,7 @@ import {
   listDeliveryLinksForRecord,
   setDeliveryLinksForRecord,
 } from './knowledge-delivery-links.js';
+import { listKnowledgeRecordLinkedItems } from './knowledge-record-linked-items.js';
 import { getDashboardInsights } from './dashboard-insights.js';
 import {
   getSprintPointBurndown,
@@ -2114,6 +2115,9 @@ export function createMcpToolHandlers(
       const tagMap = loadSidecars
         ? await getKnowledgeRecordTags(app.database, [record.id])
         : new Map<string, Array<{ name: string }>>();
+      const linkedItems = loadSidecars
+        ? await listKnowledgeRecordLinkedItems(app.database, record.id)
+        : null;
       const toPayload = (candidate: ContentPage) => {
         const isFirst = candidate.contentOffset === 0;
         return {
@@ -2151,6 +2155,7 @@ export function createMcpToolHandlers(
               ? {
                   tags: knowledgeRecordTagNames(tagMap, record.id),
                   media: mediaRows.map(toPublicMedia),
+                  linkedItems,
                 }
               : {}),
           },
@@ -4704,6 +4709,21 @@ export function createMcpToolHandlers(
             ),
           )
         : undefined;
+      const workspaceIds =
+        client.allowedWorkspaceIds.length > 0
+          ? client.allowedWorkspaceIds
+          : undefined;
+      const recordIds = input.recordIds
+        ? await Promise.all(
+            input.recordIds.map((idOrKey) =>
+              resolveKnowledgeRecordId(app.database, {
+                idOrKey,
+                workspaceIds,
+                projectId: project.id,
+              }),
+            ),
+          )
+        : undefined;
       const raidItem = await createRaidItem(app.database, {
         projectId: project.id,
         workspaceId: project.workspaceId,
@@ -4732,6 +4752,7 @@ export function createMcpToolHandlers(
         dueDate: input.dueDate,
         sortOrder: input.sortOrder,
         taskIds,
+        recordIds,
         createdBy: actingUserId,
       });
       await writeAuditEvent(app.database, {

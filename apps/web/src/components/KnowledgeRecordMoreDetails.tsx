@@ -13,6 +13,7 @@ export function KnowledgeRecordMoreDetails({
   trailing,
   summary,
   links,
+  linkedItems,
   sourceRows,
 }: {
   /** Status badges / lifecycle actions on the same row, after the disclosure. */
@@ -21,6 +22,8 @@ export function KnowledgeRecordMoreDetails({
   trailing?: ReactNode;
   summary: ReactNode;
   links?: ReactNode;
+  /** Read-only delivery, RAID, and change items linked to this record. */
+  linkedItems?: ReactNode;
   sourceRows: Array<{ label: string; value: ReactNode }>;
 }) {
   const t = useTranslations('records');
@@ -43,9 +46,7 @@ export function KnowledgeRecordMoreDetails({
             <div className="flex min-w-0 flex-wrap items-center gap-2">{leading}</div>
           ) : null}
           {trailing ? (
-            <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
-              {trailing}
-            </div>
+            <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">{trailing}</div>
           ) : null}
         </div>
       ) : (
@@ -67,11 +68,10 @@ export function KnowledgeRecordMoreDetails({
             <h2 className="kh-ops-panel-title m-0">{t('summaryAndLinks')}</h2>
             <div className="grid gap-2 text-sm">{summary}</div>
             {links ? <div className="grid gap-2 text-sm">{links}</div> : null}
+            {linkedItems}
           </div>
           <div>
-            <h2 className="kh-ops-panel-title mt-0 mb-2">
-              {t('sourceAndVerification')}
-            </h2>
+            <h2 className="kh-ops-panel-title mt-0 mb-2">{t('sourceAndVerification')}</h2>
             <dl className="kh-ops-keyvals">
               {sourceRows.map((row) => (
                 <div key={row.label} className="contents">

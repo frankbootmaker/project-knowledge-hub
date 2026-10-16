@@ -223,7 +223,15 @@ export function serializedResponseBytes(payload: unknown): number {
  */
 export function sliceContentToFit(
   content: string,
-  options: { offset?: number; limit?: number; boundary?: ContentBoundary } | undefined,
+  options:
+    | {
+        offset?: number;
+        limit?: number;
+        boundary?: ContentBoundary;
+        /** Default unpaged read only; ignored when contentOffset/contentLimit are used. */
+        legacyFirstPageTruncation?: boolean;
+      }
+    | undefined,
   measure: (page: ContentPage) => number,
 ): ContentPage {
   let limit = Math.min(options?.limit ?? MCP_MAX_CONTENT_CHARS, MCP_MAX_CONTENT_CHARS);

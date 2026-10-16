@@ -332,6 +332,74 @@ const taskListPageResult = {
   },
 };
 
+const recordLinkedItem = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['id', 'humanKey', 'title', 'type', 'kind', 'projectId', 'projectSlug'],
+  properties: {
+    id: uuidProp('Item id'),
+    humanKey: {
+      type: 'string',
+      nullable: true,
+      description: 'Human key such as HL1-T-1',
+    },
+    title: stringProp('Item title'),
+    type: {
+      type: 'string',
+      enum: ['epic', 'user_story', 'milestone', 'task', 'sprint', 'raid', 'change'],
+      description: 'Bugs stay type task. kind is bug.',
+    },
+    kind: {
+      type: 'string',
+      nullable: true,
+      description: 'Task item type, RAID kind, or change kind. Null for other delivery types.',
+    },
+    projectId: uuidProp('Project id'),
+    projectSlug: stringProp('Project slug'),
+  },
+};
+
+/** First page of get_knowledge_record. Later pages omit linkedItems. */
+const knowledgeRecordResult = {
+  type: 'object',
+  required: ['knowledgeRecord'],
+  additionalProperties: false,
+  properties: {
+    knowledgeRecord: {
+      type: 'object',
+      required: ['id'],
+      additionalProperties: true,
+      properties: {
+        id: uuidProp('Knowledge record id'),
+        linkedItems: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['deliveryLinks', 'raidLinks', 'changeItems'],
+          description:
+            'Same-project reverse links. Present on the first page only. Archived items are omitted.',
+          properties: {
+            deliveryLinks: {
+              type: 'array',
+              items: recordLinkedItem,
+              description: 'Epics, stories, milestones, tasks, bugs, and sprints.',
+            },
+            raidLinks: {
+              type: 'array',
+              items: recordLinkedItem,
+              description: 'RAID items. Archived rows are omitted.',
+            },
+            changeItems: {
+              type: 'array',
+              items: recordLinkedItem,
+              description: 'Change items linked through project_change_record_links.',
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 /** Full tool surface for Gemini + call_hub_tool. */
 export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   // —— Knowledge / catalogue (OpenAPI first-class) ——
@@ -442,9 +510,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown). Tags and media are on the first page only. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key.',
+      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key.',
     scope: 'knowledge:read',
     openApi: true,
+    output: knowledgeRecordResult,
     body: {
       type: 'object',
       required: ['recordId'],
@@ -1861,7 +1930,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_raid_items',
     description:
-      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each item includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each item includes records[] (id, title, slug, recordType, humanKey) plus mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -1876,7 +1945,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_raid_item',
-    description: 'Create a RAID item (risk/assumption/issue/dependency). Requires pm:write.',
+    description:
+      'Create a RAID item (risk/assumption/issue/dependency). Optional recordIds link same-project knowledge records (UUID or human key). A record from another project is rejected. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -1912,6 +1982,12 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           type: 'array',
           maxItems: 100,
           items: entityRefProp('Linked task'),
+        },
+        recordIds: {
+          type: 'array',
+          maxItems: 100,
+          description: 'Knowledge records in the same project. UUID or human key.',
+          items: entityRefProp('Linked knowledge record'),
         },
       },
     },
