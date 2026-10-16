@@ -718,6 +718,8 @@ export function resolveActiveNavItem(
 export type HeaderCrumb = {
   href: string;
   label: string;
+  /** Shell translates this instead of `label`. Used for section names. */
+  labelKey?: 'imports' | 'newImport';
 };
 
 export function headerCrumbs(
@@ -726,6 +728,7 @@ export function headerCrumbs(
     workspaceName?: string | null;
     projectName?: string | null;
     recordTitle?: string | null;
+    pageTitle?: string | null;
   },
 ): HeaderCrumb[] {
   const { workspaceSlug, projectSlug } = parseAppPath(pathname);
@@ -752,6 +755,11 @@ export function headerCrumbs(
       label: names.workspaceName || workspaceSlug,
     });
   }
+  const importTrail = workspaceImportCrumbs(pathname, names.pageTitle);
+  if (importTrail) {
+    crumbs.push(...importTrail);
+    return crumbs;
+  }
   const recordSlug = projectSlug ? projectRecordSlug(pathname) : null;
   if (projectSlug) {
     const projectHref = `/workspaces/${workspaceSlug}/projects/${projectSlug}`;
@@ -768,6 +776,41 @@ export function headerCrumbs(
   }
   if (crumbs.length === 0) {
     crumbs.push({ href: '/workspaces', label: 'Workspaces' });
+  }
+  return crumbs;
+}
+
+/** Workspace / Imports / (new or the open import) for the sticky header. */
+function workspaceImportCrumbs(
+  pathname: string,
+  pageTitle?: string | null,
+): HeaderCrumb[] | null {
+  const match = pathname.match(
+    /^\/workspaces\/([^/]+)\/(imports|document-imports)(?:\/([^/]+))?\/?$/,
+  );
+  if (!match) return null;
+  const workspaceSlug = match[1];
+  const area = match[2];
+  const segment = match[3];
+  const crumbs: HeaderCrumb[] = [
+    {
+      href: `/workspaces/${workspaceSlug}/imports`,
+      label: 'Imports',
+      labelKey: 'imports',
+    },
+  ];
+  if (segment === 'new') {
+    const href = `/workspaces/${workspaceSlug}/${area}/new`;
+    crumbs.push(
+      pageTitle
+        ? { href, label: pageTitle }
+        : { href, label: 'New import', labelKey: 'newImport' },
+    );
+  } else if (segment) {
+    crumbs.push({
+      href: `/workspaces/${workspaceSlug}/${area}/${segment}`,
+      label: pageTitle || segment,
+    });
   }
   return crumbs;
 }

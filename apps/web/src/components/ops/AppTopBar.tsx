@@ -33,6 +33,7 @@ export function AppTopBar({
 }) {
   const t = useTranslations('nav');
   const tCommon = useTranslations('common');
+  const tImports = useTranslations('imports');
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { activeAnchor } = useProjectRail();
@@ -118,6 +119,7 @@ export function AppTopBar({
     workspaceName: workspace?.name,
     projectName: crumbLabels.projectName,
     recordTitle: crumbLabels.recordTitle,
+    pageTitle: crumbLabels.pageTitle,
   });
   const title = activeItem ? t(activeItem.labelKey) : tCommon('appName');
 
@@ -148,7 +150,13 @@ export function AppTopBar({
             {crumbs.map((crumb, index) => (
               <span key={crumb.href}>
                 {index > 0 ? ' / ' : null}
-                <Link href={crumb.href}>{crumb.label}</Link>
+                <Link href={crumb.href}>
+                  {crumb.labelKey === 'imports'
+                    ? tImports('title')
+                    : crumb.labelKey === 'newImport'
+                      ? tImports('new')
+                      : crumb.label}
+                </Link>
               </span>
             ))}
           </div>

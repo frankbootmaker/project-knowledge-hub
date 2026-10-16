@@ -5,6 +5,7 @@ import { LocalDateTime } from '../LocalDateTime';
 import { KnowledgeRecordDetailActions } from '../KnowledgeRecordDetailActions';
 import { KnowledgeRecordMoreDetails } from '../KnowledgeRecordMoreDetails';
 import { MarkdownDocument } from '../MarkdownDocument';
+import { PanelBackLink } from '../PanelBackLink';
 import { RecordLifecycleActions } from '../RecordLifecycleActions';
 import { RecordTranslationSwitcher } from '../RecordTranslationSwitcher';
 import { RegisterShellCrumbs } from '../ops/ShellCrumbContext';
@@ -206,6 +207,7 @@ export async function KnowledgeRecordDetailView({
         </p>
       ) : null}
       <div className="kh-ops-detail-grid">
+        <div className="min-w-0">
         <article className="kh-ops-panel min-w-0 overflow-hidden">
           <div className="kh-ops-record-head">
             <div className="kh-ops-history-meta">
@@ -297,28 +299,11 @@ export async function KnowledgeRecordDetailView({
             toc={record.toc ?? []}
             title={record.title}
           />
-          <div className="border-t border-line px-5 py-4">
-            <Link
-              href={knowledgeListHref}
-              className="kh-ops-text-btn inline-flex items-center gap-2 no-underline"
-            >
-              <svg
-                viewBox="0 0 16 16"
-                width="16"
-                height="16"
-                aria-hidden="true"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M10 3L5 8l5 5" />
-              </svg>
-              {t('backToList')}
-            </Link>
-          </div>
         </article>
+        <PanelBackLink href={knowledgeListHref} divided={false} className="px-0">
+          {t('backToList')}
+        </PanelBackLink>
+        </div>
 
         <aside className="kh-ops-editor-stack">
           <RecordTranslationSwitcher

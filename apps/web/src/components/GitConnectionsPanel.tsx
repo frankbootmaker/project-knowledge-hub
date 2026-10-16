@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { TableFilterControl, type TableFilterField } from './ui/TableFilterControl';
+import {
+  applyTableView,
+  collectEnumOptions,
+  type TableColumnSpec,
+} from '../lib/data-table';
+import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
 import {
   SYNC_PROVIDER_CATALOG,
   isSyncProviderSupported,
@@ -87,30 +94,118 @@ function providerLabelKey(provider: string): `provider_${SyncProvider}` | 'provi
   return 'provider_unknown';
 }
 
+const DEFAULT_PAGE_SIZE = 5;
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
+type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
+
+function isPageSizeOption(value: number): value is PageSizeOption {
+  return (PAGE_SIZE_OPTIONS as readonly number[]).includes(value);
+}
+
+function pageSlice<T>(items: T[], page: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize) || 1);
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  return {
+    pageItems: items.slice(pageStart, pageStart + pageSize),
+    currentPage,
+    totalPages,
+    rangeFrom: items.length === 0 ? 0 : pageStart + 1,
+    rangeTo: Math.min(pageStart + pageSize, items.length),
+  };
+}
+
+function ConnectionPager({
+  title,
+  total,
+  page,
+  pageSize,
+  onPage,
+  onPageSize,
+}: {
+  title: string;
+  total: number;
+  page: number;
+  pageSize: PageSizeOption;
+  onPage: (page: number) => void;
+  onPageSize: (size: PageSizeOption) => void;
+}) {
+  const t = useTranslations('gitSync');
+  if (total === 0) return null;
+  const { currentPage, totalPages, rangeFrom, rangeTo } = pageSlice(
+    Array.from({ length: total }),
+    page,
+    pageSize,
+  );
+  return (
+    <div className="kh-ops-card-foot kh-ops-catalogue-pager">
+      <p className="m-0 text-ink-muted">
+        {t('sectionShowing', { from: rangeFrom, to: rangeTo, total })}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={String(pageSize)}
+          onChange={(event) => {
+            const parsed = Number(event.target.value);
+            onPageSize(isPageSizeOption(parsed) ? parsed : DEFAULT_PAGE_SIZE);
+          }}
+          aria-label={t('sectionPageSize')}
+          className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5"
+        >
+          {PAGE_SIZE_OPTIONS.map((size) => (
+            <option key={size} value={String(size)}>
+              {t('sectionPageSizeOption', { count: size })}
+            </option>
+          ))}
+        </Select>
+        {totalPages > 1 ? (
+          <nav className="flex flex-wrap items-center gap-2" aria-label={title}>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={currentPage <= 1}
+              onClick={() => onPage(Math.max(1, currentPage - 1))}
+            >
+              {t('sectionPrevPage')}
+            </Button>
+            <span className="kh-page-num-active" aria-current="page">
+              {currentPage} / {totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={currentPage >= totalPages}
+              onClick={() => onPage(Math.min(totalPages, currentPage + 1))}
+            >
+              {t('sectionNextPage')}
+            </Button>
+          </nav>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function GitConnectionsPanel(props: {
   workspaceId: string;
   projects: ProjectOption[];
   initialConnections: Connection[];
   canManage: boolean;
-  addOpen?: boolean;
-  onAddOpenChange?: (open: boolean) => void;
 }) {
   const t = useTranslations('gitSync');
   const tCommon = useTranslations('common');
+  const tTable = useTranslations('table');
+  const locale = useLocale();
   const router = useRouter();
   const [connections, setConnections] = useState(props.initialConnections);
   const [runsByConnection, setRunsByConnection] = useState<Record<string, SyncRun[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const table = useTableState({ namespace: 'wsync', defaultSortKey: null });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(DEFAULT_PAGE_SIZE);
 
-  const [addOpenInternal, setAddOpenInternal] = useState(false);
-  const addOpen = props.addOpen ?? addOpenInternal;
-  function setAddOpen(open: boolean) {
-    props.onAddOpenChange?.(open);
-    if (props.addOpen === undefined) {
-      setAddOpenInternal(open);
-    }
-  }
+  const [addOpen, setAddOpen] = useState(false);
 
   const [addStep, setAddStep] = useState<'provider' | 'form'>('provider');
   const [selectedProvider, setSelectedProvider] = useState<SyncProvider | null>(null);
@@ -380,6 +475,147 @@ export function GitConnectionsPanel(props: {
     return t(`${field}Placeholder_${provider}`);
   }
 
+  const providerOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        connections,
+        (connection) => connection.provider,
+        (value) => t(providerLabelKey(value)),
+        locale,
+      ),
+    [connections, locale, t],
+  );
+  const healthOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        connections,
+        (connection) => connection.syncHealth?.status ?? null,
+        (value) => t(`health_${value as SyncHealthStatus}`),
+        locale,
+      ),
+    [connections, locale, t],
+  );
+  const statusOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        connections,
+        (connection) => connection.status,
+        (value) =>
+          value === 'paused'
+            ? t('statusPaused')
+            : value === 'active'
+              ? t('statusActive')
+              : value,
+        locale,
+      ),
+    [connections, locale, t],
+  );
+  const connectionColumns = useMemo<Array<TableColumnSpec<Connection>>>(
+    () => [
+      {
+        id: 'provider',
+        filter: {
+          type: 'enum',
+          getValue: (connection) => connection.provider,
+          options: providerOptions,
+        },
+      },
+      {
+        id: 'health',
+        filter: {
+          type: 'enum',
+          getValue: (connection) => connection.syncHealth?.status ?? null,
+          options: healthOptions,
+        },
+      },
+      {
+        id: 'status',
+        filter: {
+          type: 'enum',
+          getValue: (connection) => connection.status,
+          options: statusOptions,
+        },
+      },
+    ],
+    [healthOptions, providerOptions, statusOptions],
+  );
+  useSyncEnumFilters(table.filters, connectionColumns, table.setEnumFilter);
+
+  const filteredConnections = useMemo(
+    () =>
+      applyTableView({
+        rows: connections,
+        locale,
+        query: table.query,
+        search: (connection, needle) =>
+          [
+            connection.owner,
+            connection.repo,
+            `${connection.owner}/${connection.repo}`,
+            connection.branch,
+            t(providerLabelKey(connection.provider)),
+            connection.status === 'paused'
+              ? t('statusPaused')
+              : connection.status === 'active'
+                ? t('statusActive')
+                : connection.status,
+            connection.syncHealth
+              ? t(`health_${connection.syncHealth.status}`)
+              : '',
+          ]
+            .join(' ')
+            .toLowerCase()
+            .includes(needle),
+        sortKey: null,
+        sortDir: 'asc',
+        filters: table.filters,
+        textFilters: table.textFilters,
+        columns: connectionColumns,
+      }),
+    [
+      connectionColumns,
+      connections,
+      locale,
+      t,
+      table.filters,
+      table.query,
+      table.textFilters,
+    ],
+  );
+  const connectionFields = useMemo<TableFilterField[]>(
+    () => [
+      {
+        id: 'provider',
+        header: t('colProvider'),
+        type: 'enum',
+        options: providerOptions,
+      },
+      {
+        id: 'health',
+        header: t('overallHealth'),
+        type: 'enum',
+        options: healthOptions,
+      },
+      {
+        id: 'status',
+        header: t('colStatus'),
+        type: 'enum',
+        options: statusOptions,
+      },
+    ],
+    [healthOptions, providerOptions, statusOptions, t],
+  );
+  const connectionSlice = pageSlice(filteredConnections, page, pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [table.filters, table.query, table.textFilters]);
+
+  function changePageSize(size: PageSizeOption) {
+    setPageSize(size);
+    setPage(1);
+  }
+
   const addFormReady =
     Boolean(selectedProvider) &&
     owner.trim().length > 0 &&
@@ -393,20 +629,44 @@ export function GitConnectionsPanel(props: {
     <div className="grid gap-6">
       {error && !addOpen && !manageConnection ? <ErrorText>{error}</ErrorText> : null}
 
-      {props.canManage && props.addOpen === undefined ? (
-        <div className="flex justify-end">
-          <Button type="button" onClick={openAdd}>
-            {t('add')}
-          </Button>
-        </div>
-      ) : null}
-
       <section className="kh-ops-panel">
-        <div className="kh-ops-panel-head">
-          <h2 className="kh-ops-panel-title">{t('connectionsTitle')}</h2>
+        <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
+          <Input
+            type="search"
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
+            placeholder={t('searchPlaceholder')}
+            className="h-10 min-h-10 min-w-[220px] flex-1 py-1.5 text-xs"
+          />
+          <TableFilterControl
+            fields={connectionFields}
+            enumFilters={table.filters}
+            textFilters={table.textFilters}
+            onEnumFilter={table.setEnumFilter}
+            onTextFilter={table.setTextFilter}
+            onClearFilters={table.clearFilters}
+            filtersActive={table.filtersActive}
+          />
+          {table.filtersActive ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+              onClick={table.clearFilters}
+            >
+              {tTable('clearFilters')}
+            </Button>
+          ) : null}
+          {props.canManage ? (
+            <Button type="button" onClick={openAdd}>
+              {t('new')}
+            </Button>
+          ) : null}
         </div>
-        {connections.length === 0 ? (
-          <p className="kh-ops-empty">{t('empty')}</p>
+        {filteredConnections.length === 0 ? (
+          <p className="kh-ops-empty">
+            {table.query.trim() || table.filtersActive ? t('emptyFiltered') : t('empty')}
+          </p>
         ) : (
           <div className="kh-ops-table-wrap">
             <table className="kh-ops-data-table">
@@ -421,7 +681,7 @@ export function GitConnectionsPanel(props: {
                 </tr>
               </thead>
               <tbody>
-                {connections.map((connection) => {
+                {connectionSlice.pageItems.map((connection) => {
                   const canSync = isSyncProviderSupported(connection.provider);
                   return (
                     <tr key={connection.id}>
@@ -480,6 +740,14 @@ export function GitConnectionsPanel(props: {
             </table>
           </div>
         )}
+        <ConnectionPager
+          title={t('connectionsTitle')}
+          total={filteredConnections.length}
+          page={page}
+          pageSize={pageSize}
+          onPage={setPage}
+          onPageSize={changePageSize}
+        />
       </section>
 
       <Modal
@@ -827,14 +1095,5 @@ export function GitConnectionsPanel(props: {
         ) : null}
       </Modal>
     </div>
-  );
-}
-
-export function GitConnectionsAddButton(props: { onClick: () => void }) {
-  const t = useTranslations('gitSync');
-  return (
-    <Button type="button" onClick={props.onClick}>
-      {t('add')}
-    </Button>
   );
 }

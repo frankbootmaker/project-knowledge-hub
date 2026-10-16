@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { GitConnectionsAddButton, GitConnectionsPanel } from './GitConnectionsPanel';
+import { GitConnectionsPanel } from './GitConnectionsPanel';
+import { PanelBackLink } from './PanelBackLink';
 import { OpsCountStrip } from './ops/OpsCountStrip';
 import { Badge, Page, PageHeader } from './ui';
 
@@ -21,7 +20,6 @@ export function WorkspaceSyncPage(props: {
   overallHealth: string | null;
 }) {
   const t = useTranslations('gitSync');
-  const [addOpen, setAddOpen] = useState(false);
   const healthy = props.connections.filter(
     (connection) => connection.syncHealth?.status === 'healthy',
   ).length;
@@ -44,30 +42,19 @@ export function WorkspaceSyncPage(props: {
         title={t('title')}
         description={t('subtitle', { workspace: props.workspaceName })}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {props.overallHealth ? (
-              <Badge
-                tone={
-                  props.overallHealth === 'healthy'
-                    ? 'success'
-                    : props.overallHealth === 'error'
-                      ? 'danger'
-                      : 'warn'
-                }
-              >
-                {t(`health_${props.overallHealth}`)}
-              </Badge>
-            ) : null}
-            {props.canManage ? (
-              <GitConnectionsAddButton onClick={() => setAddOpen(true)} />
-            ) : null}
-            <Link
-              href={`/workspaces/${props.workspaceSlug}`}
-              className="text-sm text-brand no-underline"
+          props.overallHealth ? (
+            <Badge
+              tone={
+                props.overallHealth === 'healthy'
+                  ? 'success'
+                  : props.overallHealth === 'error'
+                    ? 'danger'
+                    : 'warn'
+              }
             >
-              {t('backToWorkspace')}
-            </Link>
-          </div>
+              {t(`health_${props.overallHealth}`)}
+            </Badge>
+          ) : undefined
         }
       />
       <OpsCountStrip
@@ -84,9 +71,14 @@ export function WorkspaceSyncPage(props: {
         projects={props.projects}
         initialConnections={props.connections}
         canManage={props.canManage}
-        addOpen={addOpen}
-        onAddOpenChange={setAddOpen}
       />
+      <PanelBackLink
+        href={`/workspaces/${props.workspaceSlug}`}
+        divided={false}
+        className="px-0"
+      >
+        {t('backToWorkspace')}
+      </PanelBackLink>
     </Page>
   );
 }
