@@ -84,7 +84,15 @@ describe('Cursor usage CSV mapping', () => {
     ).toBe(553306);
   });
 
-  it('hashes Date + Cloud Agent ID + Model + Total Tokens', () => {
+  it('hashes Date + Cloud Agent ID + Model + Total Tokens with SHA-256', () => {
+    expect(usageRowHash({
+      occurredAtKey: '',
+      cloudAgentId: '',
+      model: '',
+      tokensTotal: 0,
+    })).toBe(
+      '8c1f7b0704f8858e8ccf4611e5d97241f07649d88411906a334a817fe7610d0a',
+    );
     const parsed = parseCursorUsageCsv(SAMPLE);
     const row = parsed.rows[2]!;
     expect(row.rowHash).toBe(
