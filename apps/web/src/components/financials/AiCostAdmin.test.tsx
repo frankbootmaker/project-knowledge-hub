@@ -97,6 +97,11 @@ describe('AiCostAdmin cost entry form', () => {
     });
     const dates = [...document.body.querySelectorAll('input[type="date"]')];
     expect(dates).toHaveLength(2);
+    const saveClosed = [...document.body.querySelectorAll('button')].find(
+      (button) => button.textContent === 'save',
+    );
+    expect(saveClosed?.disabled).toBe(true);
+    expect(document.body.textContent).toContain('serviceDatesRequired');
     expect(document.body.textContent).toContain('workspacePool');
     expect(document.body.textContent).toContain('workspacePoolHelp');
     setControl(dates[0] as HTMLInputElement, '2026-10-12');
@@ -107,6 +112,24 @@ describe('AiCostAdmin cost entry form', () => {
     expect(document.body.textContent).toContain('2026-11');
     expect(document.body.textContent).toContain('€20.00');
     expect(document.body.textContent).toContain('€11.00');
+    const system = [...document.body.querySelectorAll('select')].find((select) =>
+      [...select.options].some((option) => option.textContent === 'workspacePool'),
+    );
+    expect(system?.closest('label')?.className).toContain('kh-ops-field-span');
+    const plan = [...document.body.querySelectorAll('input')].find(
+      (input) => input.getAttribute('placeholder') === 'planPlaceholder',
+    );
+    expect(plan?.tagName).toBe('INPUT');
+    const paidAt = document.body.querySelector(
+      'input[type="datetime-local"]',
+    ) as HTMLInputElement;
+    expect(paidAt.value).toBe('');
+    expect(paidAt.required).toBe(false);
+    const save = [...document.body.querySelectorAll('button')].find(
+      (button) => button.textContent === 'save',
+    );
+    expect(save?.disabled).toBe(false);
+    expect(document.body.textContent).not.toContain('serviceDatesRequired');
     setControl(dates[1] as HTMLInputElement, '2026-10-01');
     expect(document.body.textContent).toContain('serviceRangeInvalid');
     expect(document.body.textContent).not.toContain('€20.00');

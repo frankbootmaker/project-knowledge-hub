@@ -118,6 +118,25 @@ function providerName(draft: EntryDraft): string {
   return draft.providerChoice;
 }
 
+/** Paid at, plan, note, external ref, and AI system are optional. */
+function saveBlocker(
+  draft: EntryDraft | null,
+  rangeInvalid: boolean,
+):
+  | 'serviceDatesRequired'
+  | 'serviceRangeInvalid'
+  | 'providerRequired'
+  | 'amountRequired'
+  | null {
+  if (!draft?.servicePeriodStart || !draft.servicePeriodEnd) {
+    return 'serviceDatesRequired';
+  }
+  if (rangeInvalid) return 'serviceRangeInvalid';
+  if (!providerName(draft)) return 'providerRequired';
+  if (draft.amount.trim() === '') return 'amountRequired';
+  return null;
+}
+
 function emptyDraft(currency: ProjectCurrency): EntryDraft {
   return {
     id: null,
@@ -193,6 +212,7 @@ export function AiCostAdmin({
       draft.servicePeriodEnd &&
       draft.servicePeriodEnd < draft.servicePeriodStart,
   );
+  const blocker = draft ? saveBlocker(draft, rangeInvalid) : null;
   const splitPreview = useMemo(() => {
     if (!draft?.servicePeriodStart || !draft.servicePeriodEnd || rangeInvalid) return [];
     const amount = parseOptionalNumber(draft.amount);
@@ -731,19 +751,15 @@ export function AiCostAdmin({
         description={t('entryHint')}
         footer={
           <>
+            {blocker ? (
+              <p className="m-0 text-[13px] text-ink-muted sm:mr-auto">{t(blocker)}</p>
+            ) : null}
             <Button type="button" variant="secondary" onClick={() => setDraft(null)}>
               {tCommon('cancel')}
             </Button>
             <Button
               type="button"
-              disabled={
-                pending ||
-                !draft?.servicePeriodStart ||
-                !draft.servicePeriodEnd ||
-                rangeInvalid ||
-                !providerName(draft) ||
-                draft.amount.trim() === ''
-              }
+              disabled={pending || blocker != null}
               onClick={() => void saveEntry()}
             >
               {pending ? tCommon('saving') : t('save')}
@@ -836,7 +852,7 @@ export function AiCostAdmin({
                 />
               </Field>
             ) : null}
-            <Field label={t('system')}>
+            <Field label={t('system')} className="kh-ops-field-span">
               <Select
                 value={draft.aiSystemId}
                 disabled={pending}
