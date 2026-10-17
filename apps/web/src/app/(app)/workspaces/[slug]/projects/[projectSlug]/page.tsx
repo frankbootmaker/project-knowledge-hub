@@ -283,6 +283,7 @@ export default async function ProjectDetailPage({
           description: string | null;
           status: string;
           completionPercent?: number | null;
+          sortOrder?: number;
           dueDate: string | null;
           forecastHours: string | null;
           actualHours: string | null;

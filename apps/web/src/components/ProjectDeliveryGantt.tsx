@@ -105,6 +105,7 @@ type GanttTask = {
   id: string;
   title: string;
   status: string;
+  sortOrder?: number;
   dueDate: string | null;
   startDate?: string | null;
   userStoryId: string | null;
@@ -263,6 +264,7 @@ export function ProjectDeliveryGantt({
       id: task.id,
       title: task.title,
       status: task.status,
+      sortOrder: task.sortOrder,
       startDate: task.startDate ?? null,
       dueDate: task.dueDate,
       userStoryId: task.userStoryId,

@@ -27,6 +27,7 @@ import {
   type DeliveryTreeCollapsed,
   type DeliveryTreeCollapseNode,
 } from './delivery-tree-collapse';
+import { sortDeliverySiblings } from './delivery-sibling-order';
 
 export const GANTT_MILESTONES_ID = 'delivery-tree-milestones';
 
@@ -117,6 +118,7 @@ export type GanttTaskInput = {
   id: string;
   title: string;
   status: string;
+  sortOrder?: number;
   startDate?: string | null;
   dueDate: string | null;
   userStoryId: string | null;
@@ -197,10 +199,6 @@ export function ganttRollupDates(
   children: readonly { status: string; start: string | null; end: string | null }[],
 ): { start: string | null; end: string | null } {
   return derivedParentDates(manual, children);
-}
-
-function bySortThenTitle<T extends { sortOrder: number; title: string }>(a: T, b: T): number {
-  return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title);
 }
 
 function compareMilestones(a: GanttMilestoneInput, b: GanttMilestoneInput): number {
@@ -308,7 +306,7 @@ export function buildGanttRows(input: {
   const storyIds = new Set(input.stories.map((story) => story.id));
   const storiesByEpic = new Map<string, GanttStoryInput[]>();
   const orphanStories: GanttStoryInput[] = [];
-  for (const story of [...input.stories].sort(bySortThenTitle)) {
+  for (const story of sortDeliverySiblings(input.stories)) {
     if (!epicIds.has(story.epicId)) {
       orphanStories.push(story);
       continue;
@@ -320,7 +318,7 @@ export function buildGanttRows(input: {
 
   const tasksByStory = new Map<string, GanttTaskInput[]>();
   const ungroupedTasks: GanttTaskInput[] = [];
-  for (const task of [...input.tasks].sort((a, b) => a.title.localeCompare(b.title))) {
+  for (const task of sortDeliverySiblings(input.tasks)) {
     if (!task.userStoryId || !storyIds.has(task.userStoryId)) {
       if (!task.userStoryId) ungroupedTasks.push(task);
       continue;
@@ -369,7 +367,7 @@ export function buildGanttRows(input: {
 
   const roots: Draft[] = [];
 
-  for (const epic of [...input.epics].sort(bySortThenTitle)) {
+  for (const epic of sortDeliverySiblings(input.epics)) {
     const stories = (storiesByEpic.get(epic.id) ?? []).map(storyDraft);
     const dates = ganttRollupDates(
       { start: epic.startDate, end: epic.endDate },
@@ -464,8 +462,8 @@ export function buildGanttRows(input: {
     pending.splice(pending.indexOf(next), 1);
   }
   if (undated.length > 0) {
-    const children = undated
-      .sort((a, b) => a.title.localeCompare(b.title))
+    const children = [...undated]
+      .sort(compareMilestones)
       .map((milestone) => milestoneDraft(milestone));
     rows.push(...flatten(
       [groupDraft(GANTT_MILESTONES_ID, 'milestonesWithoutDates', children)],

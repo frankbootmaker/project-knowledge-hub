@@ -46,6 +46,7 @@ import {
   type MilestoneMarker,
 } from './MilestoneTimeMarkers';
 import { DeliveryItemIdButton } from './DeliveryItemIdButton';
+import { sortDeliverySiblings } from '../lib/delivery-sibling-order';
 
 const DELIVERY_TREE_MILESTONES = 'delivery-tree-milestones';
 
@@ -74,6 +75,8 @@ type TreeTask = {
   id: string;
   title: string;
   status: string;
+  sortOrder?: number;
+  startDate?: string | null;
   dueDate: string | null;
   userStoryId: string | null;
   epicId: string | null;
@@ -451,9 +454,7 @@ export function ProjectDeliveryTree({
     const epicIds = new Set(epics.map((epic) => epic.id));
     const nodes: DeliveryTreeFilterNode[] = [];
 
-    for (const story of [...stories].sort(
-      (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
-    )) {
+    for (const story of sortDeliverySiblings(stories)) {
       if (!epicIds.has(story.epicId)) {
         orphanStories.push(story);
         continue;
@@ -465,7 +466,7 @@ export function ProjectDeliveryTree({
 
     const tasksByStory = new Map<string, TreeTask[]>();
     const ungroupedTasks: TreeTask[] = [];
-    for (const task of [...tasks].sort((a, b) => a.title.localeCompare(b.title))) {
+    for (const task of sortDeliverySiblings(tasks)) {
       if (!task.userStoryId) {
         ungroupedTasks.push(task);
         continue;
@@ -475,9 +476,7 @@ export function ProjectDeliveryTree({
       tasksByStory.set(task.userStoryId, list);
     }
 
-    const sortedEpics = [...epics].sort(
-      (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
-    );
+    const sortedEpics = sortDeliverySiblings(epics);
 
     for (const epic of sortedEpics) {
       nodes.push({
