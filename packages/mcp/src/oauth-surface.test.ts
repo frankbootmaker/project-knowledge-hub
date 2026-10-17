@@ -68,6 +68,10 @@ describe('oauth tool surface', () => {
       'list_workspaces',
       'search_knowledge',
     ]);
+    expect(names).not.toContain('get_workspace_media');
+    const record = listed.tools.find((tool) => tool.name === 'get_knowledge_record');
+    expect(record?.description).toMatch(/get_workspace_media/);
+    expect(record?.description).toMatch(/call_hub_tool/);
     expect(JSON.stringify(listed.tools).length).toBeLessThan(12_000);
     await mcp.close();
   });
