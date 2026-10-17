@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import type { ProjectHealth, ProjectRagStatus } from '@project-knowledge-hub/domain';
 import {
   ProjectBaselinePanel,
   type InitialStakeholder,
@@ -37,16 +38,8 @@ import {
   ProjectAiCreatedBadge,
   ProjectStageBadge,
 } from '../../../../../../components/ProjectStageBadge';
-import {
-  projectDeliveryRag,
-  type ProjectRagStatus,
-} from '../../../../../../lib/delivery-schedule';
 import type { ProjectSectionStatuses } from '../../../../../../lib/project-sections';
-import {
-  computeChangeRag,
-  computeRiskRag,
-  worstProjectRag,
-} from '../../../../../../lib/project-health';
+import { computeChangeRag } from '../../../../../../lib/project-health';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 function ragBadgeTone(
@@ -108,6 +101,7 @@ type Project = {
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
+  health?: ProjectHealth;
 };
 type System = {
   id: string;
@@ -381,16 +375,17 @@ export default async function ProjectDetailPage({
     ? ((await budgetResponse.json()) as { budget: ProjectBudgetSummary }).budget
     : null;
 
-  const timelineRag = projectDeliveryRag([
-    ...milestones.map((row) => ({ status: row.status, date: row.targetDate })),
-    ...tasks.map((row) => ({ status: row.status, date: row.dueDate })),
-  ]);
-  const riskRag = computeRiskRag(raidItems);
-  const financialRag = budgetSummary?.financialRag ?? null;
+  const health: ProjectHealth = project.health ?? {
+    overall: 'green',
+    timeline: 'green',
+    risk: 'green',
+    financial: null,
+  };
+  const timelineRag = health.timeline;
+  const riskRag = health.risk;
+  const financialRag = health.financial;
   const changeRag = computeChangeRag(changeItems);
-  const overallRag = worstProjectRag(
-    financialRag ? [timelineRag, riskRag, financialRag] : [timelineRag, riskRag],
-  );
+  const overallRag = health.overall;
   const sectionStatuses: ProjectSectionStatuses = {
     timeline: timelineRag,
     financial: financialRag ?? 'none',

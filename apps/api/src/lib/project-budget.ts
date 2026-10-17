@@ -14,17 +14,20 @@ import {
 import {
   AppError,
   aiCostModeSchema,
+  computeFinancialRag,
+  computeRiskRag,
   projectCurrencySchema,
   systemItCostModeSchema,
   usageHasTokenBreakdown,
   type AiCostMode,
   type ProjectCurrency,
+  type ProjectRagStatus,
   type SystemItCostMode,
 } from '@project-knowledge-hub/domain';
+
+export { computeFinancialRag, computeRiskRag, type ProjectRagStatus };
 import { requireProjectContext } from './project-delivery.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
-
-export type ProjectRagStatus = 'red' | 'amber' | 'green';
 
 export type BudgetTaskCost = {
   taskId: string;
@@ -145,32 +148,6 @@ export function computeLinearPv(
   if (now >= end) return bac;
   const ratio = (now - start) / (end - start);
   return Math.round(bac * ratio * 100) / 100;
-}
-
-export function computeFinancialRag(input: {
-  bac: number | null;
-  ac: number;
-  cpi: number | null;
-}): ProjectRagStatus {
-  if (input.bac == null) return 'green';
-  if (input.ac > input.bac || (input.cpi != null && input.cpi < 0.9)) {
-    return 'red';
-  }
-  if (input.ac > input.bac * 0.85 || (input.cpi != null && input.cpi < 1)) {
-    return 'amber';
-  }
-  return 'green';
-}
-
-export function computeRiskRag(
-  items: Array<{ kind: string; status: string; severity: string }>,
-): ProjectRagStatus {
-  const open = items.filter(
-    (item) => item.status === 'open' || item.status === 'mitigating',
-  );
-  if (open.some((item) => item.severity === 'critical')) return 'red';
-  if (open.some((item) => item.severity === 'high')) return 'amber';
-  return 'green';
 }
 
 const AVG_DAYS_PER_MONTH = 30.437;

@@ -2,14 +2,14 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   memberships,
-  projectMilestones,
   projectRaidItems,
-  projectTasks,
   projects,
   workspaces,
 } from '@project-knowledge-hub/database';
+import { addDaysYmd, todayYmd } from '@project-knowledge-hub/domain';
 import { getProjectBudgetSummary } from './project-budget.js';
 import { listAssignedTasksForUser } from './project-delivery.js';
+import { listProjectHealth } from './project-overall-rag.js';
 
 export type DashboardInsights = {
   tasksByDue: {
@@ -40,43 +40,6 @@ export type DashboardInsights = {
     financialRag: 'green' | 'amber' | 'red';
   }>;
 };
-
-function todayYmd(now = new Date()): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function addDaysYmd(ymd: string, days: number): string {
-  const date = new Date(`${ymd}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return todayYmd(date);
-}
-
-function scheduleTone(
-  status: string,
-  date: string | null | undefined,
-  today: string,
-): 'overdue' | 'atRisk' | 'ok' {
-  if (status === 'done' || status === 'cancelled' || !date) return 'ok';
-  if (date < today) return 'overdue';
-  if (date <= addDaysYmd(today, 7)) return 'atRisk';
-  return 'ok';
-}
-
-function worstRag(
-  items: Array<{ status: string; date: string | null | undefined }>,
-  today: string,
-): 'green' | 'amber' | 'red' {
-  let worst: 'green' | 'amber' | 'red' = 'green';
-  for (const item of items) {
-    const tone = scheduleTone(item.status, item.date, today);
-    if (tone === 'overdue') return 'red';
-    if (tone === 'atRisk') worst = 'amber';
-  }
-  return worst;
-}
 
 async function accessibleWorkspaceIds(
   database: Database,
@@ -172,39 +135,11 @@ export async function getDashboardInsights(
 
   const projectIds = projectRows.map((row) => row.id);
 
-  const [milestoneRows, taskRows, raidRows] = await Promise.all([
+  const [raidRows, healthById] = await Promise.all([
     database.db
       .select({
-        projectId: projectMilestones.projectId,
-        status: projectMilestones.status,
-        targetDate: projectMilestones.targetDate,
-      })
-      .from(projectMilestones)
-      .where(
-        and(
-          inArray(projectMilestones.projectId, projectIds),
-          isNull(projectMilestones.archivedAt),
-        ),
-      ),
-    database.db
-      .select({
-        projectId: projectTasks.projectId,
-        status: projectTasks.status,
-        dueDate: projectTasks.dueDate,
-      })
-      .from(projectTasks)
-      .where(
-        and(
-          inArray(projectTasks.projectId, projectIds),
-          isNull(projectTasks.archivedAt),
-        ),
-      ),
-    database.db
-      .select({
-        projectId: projectRaidItems.projectId,
         kind: projectRaidItems.kind,
         status: projectRaidItems.status,
-        severity: projectRaidItems.severity,
       })
       .from(projectRaidItems)
       .where(
@@ -213,27 +148,9 @@ export async function getDashboardInsights(
           isNull(projectRaidItems.archivedAt),
         ),
       ),
+    listProjectHealth(database, projectIds, today),
   ]);
 
-  const scheduleByProject = new Map<
-    string,
-    Array<{ status: string; date: string | null }>
-  >();
-  for (const row of milestoneRows) {
-    const list = scheduleByProject.get(row.projectId) ?? [];
-    list.push({ status: row.status, date: row.targetDate });
-    scheduleByProject.set(row.projectId, list);
-  }
-  for (const row of taskRows) {
-    const list = scheduleByProject.get(row.projectId) ?? [];
-    list.push({ status: row.status, date: row.dueDate });
-    scheduleByProject.set(row.projectId, list);
-  }
-
-  const openRaidByProject = new Map<
-    string,
-    Array<{ kind: string; status: string; severity: string }>
-  >();
   const openRaid = {
     risks: 0,
     issues: 0,
@@ -248,25 +165,12 @@ export async function getDashboardInsights(
     else if (row.kind === 'issue') openRaid.issues += 1;
     else if (row.kind === 'assumption') openRaid.assumptions += 1;
     else if (row.kind === 'dependency') openRaid.dependencies += 1;
-    const list = openRaidByProject.get(row.projectId) ?? [];
-    list.push(row);
-    openRaidByProject.set(row.projectId, list);
   }
 
   const projectHealthRag = { green: 0, amber: 0, red: 0 };
   for (const project of projectRows) {
-    const timeline = worstRag(scheduleByProject.get(project.id) ?? [], today);
-    const open = openRaidByProject.get(project.id) ?? [];
-    let risk: 'green' | 'amber' | 'red' = 'green';
-    if (open.some((item) => item.severity === 'critical')) risk = 'red';
-    else if (open.some((item) => item.severity === 'high')) risk = 'amber';
-    const combined =
-      timeline === 'red' || risk === 'red'
-        ? 'red'
-        : timeline === 'amber' || risk === 'amber'
-          ? 'amber'
-          : 'green';
-    projectHealthRag[combined] += 1;
+    const overall = healthById.get(project.id)?.overall ?? 'green';
+    projectHealthRag[overall] += 1;
   }
 
   const budgetCandidates = projectRows.slice(0, 16);

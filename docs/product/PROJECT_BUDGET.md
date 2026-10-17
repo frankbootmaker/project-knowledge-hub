@@ -82,7 +82,11 @@ project_cost_snapshots
 | AC > 0.85×BAC or CPI < 1.0 | amber |
 | else | green |
 
-Risk RAG uses open/mitigating RAID (`critical` → red, `high` → amber). Timeline RAG reuses delivery schedule rules.
+Risk RAG uses open/mitigating RAID (`critical` → red, `high` → amber). That rule lives in one function (`computeRiskRag`); a later change (PRO-T-98) can make it due-date-aware without copying it.
+
+Timeline RAG uses one window, `TIMELINE_AT_RISK_DAYS` (7 calendar days, inclusive). An open task or milestone that is overdue is red; one due within 7 days is amber; otherwise green. Done, cancelled, and undated items do not move it. Overall RAG is the worst of timeline, risk, and financial. If the budget summary fails, financial is null and overall falls back to the timeline RAG only.
+
+The same backend result (`health: { overall, timeline, risk, financial }`) feeds the project header, catalogue cards (`overallRag` = `health.overall`), dashboard health counts, REST project GET/list, and MCP `get_project` / `list_projects`. `status` remains the lifecycle stage. Delivery board, calendar, and export item colours stay on a separate 3-day at-risk tone and are not this signal.
 
 Resource RAG (utilization): aggregate planned demand vs capacity → amber when over capacity, red when &gt;1.1×.
 

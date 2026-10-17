@@ -1,7 +1,18 @@
 /** Schedule health for delivery board/calendar color coding. */
 
+import {
+  timelineRag,
+  type ProjectRagStatus,
+} from '@project-knowledge-hub/domain';
+
+export type { ProjectRagStatus };
+
 export type DeliveryScheduleTone = 'onTrack' | 'atRisk' | 'overdue' | 'completed' | 'neutral';
 
+/**
+ * Card and calendar tone only. Project health uses TIMELINE_AT_RISK_DAYS (7)
+ * via timelineRag / projectDeliveryRag, not this window.
+ */
 const AT_RISK_DAYS = 3;
 
 export function todayYmd(now = new Date()): string {
@@ -81,27 +92,14 @@ export function deliveryScheduleSurfaceClass(tone: DeliveryScheduleTone): string
   }
 }
 
-/** Project-level Red / Amber / Green from open delivery items. */
-export type ProjectRagStatus = 'red' | 'amber' | 'green';
-
 /**
- * Worst open schedule tone across tasks/milestones:
- * overdue → red, at-risk → amber, otherwise green (incl. all done / empty).
+ * Project timeline RAG. Uses the shared 7-day window (TIMELINE_AT_RISK_DAYS),
+ * not the 3-day card tone from deliveryScheduleTone.
+ * Overdue → red, due within 7 days → amber, otherwise green.
  */
 export function projectDeliveryRag(
   items: Array<{ status: string; date: string | null | undefined }>,
   today?: string,
 ): ProjectRagStatus {
-  const day = today ?? todayYmd();
-  let worst: ProjectRagStatus = 'green';
-  for (const item of items) {
-    const tone = deliveryScheduleTone({
-      status: item.status,
-      date: item.date,
-      today: day,
-    });
-    if (tone === 'overdue') return 'red';
-    if (tone === 'atRisk') worst = 'amber';
-  }
-  return worst;
+  return timelineRag(items, today);
 }

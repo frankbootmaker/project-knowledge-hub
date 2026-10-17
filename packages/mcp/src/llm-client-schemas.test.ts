@@ -109,6 +109,8 @@ describe('llm-client-schemas', () => {
         const encoded = JSON.stringify(schema);
         expect(encoded).toContain('definitionOfDone');
         expect(encoded).toContain('workspaceName');
+        expect(encoded).toContain('health');
+        expect(encoded).toContain('health.overall');
         const project = (
           schema as {
             properties?: {
