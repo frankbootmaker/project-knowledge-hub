@@ -247,6 +247,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-17
+
+* **Schedule slip** — Project baseline adds a `Switch` for auto RAID risks, a number field for the working-day threshold, and checkboxes for task, story, epic, and milestone. The RAID title cell shows a warn `Badge` labeled auto. Gantt and Tree titles show `.kh-ops-schedule-slip` (warn token, “!”) on a slipping item.
+
 ### 2026-10-16
 
 * **Related records** — Knowledge record detail adds a `.kh-ops-related-records` section under the record head and above the markdown. Group labels use the 13px menu type. Rows reuse `.kh-ops-linked-row`, `.kh-ops-key-badge`, and `Badge`. Maintainers add a relation with `Modal` (`wide`), `Select`, `Input`, and `Button`. The superseded banner adds a secondary `LinkButton`, “Superseded by {key}”, when a lifecycle successor exists.

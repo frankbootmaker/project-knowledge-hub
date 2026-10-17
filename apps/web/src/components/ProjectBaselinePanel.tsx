@@ -22,6 +22,7 @@ import {
   Input,
   Modal,
   Select,
+  Switch,
   Textarea,
   useToast,
 } from './ui';
@@ -62,6 +63,9 @@ export type BaselineProject = {
   initialBudget?: string | number | null;
   approvedBudget?: string | number | null;
   keyPrefix?: string | null;
+  scheduleSlipRiskEnabled?: boolean;
+  scheduleSlipThresholdDays?: number;
+  scheduleSlipItemTypes?: string[];
 };
 
 type Member = {
@@ -93,6 +97,8 @@ type DraftStakeholder = {
   userId: string;
   projectRole: string;
 };
+
+const SLIP_TYPES = ['task', 'user_story', 'epic', 'milestone'] as const;
 
 export function ProjectBaselinePanel({
   projectId,
@@ -154,6 +160,15 @@ export function ProjectBaselinePanel({
   const [definitionOfDone, setDefinitionOfDone] = useState(
     project.definitionOfDone ?? '',
   );
+  const [slipEnabled, setSlipEnabled] = useState(
+    project.scheduleSlipRiskEnabled === true,
+  );
+  const [slipThreshold, setSlipThreshold] = useState(
+    String(project.scheduleSlipThresholdDays ?? 2),
+  );
+  const [slipTypes, setSlipTypes] = useState<string[]>(
+    project.scheduleSlipItemTypes ?? [...SLIP_TYPES],
+  );
   const [draftStakeholders, setDraftStakeholders] = useState<DraftStakeholder[]>(
     [],
   );
@@ -190,6 +205,9 @@ export function ProjectBaselinePanel({
         suggestKeyPrefix(project.slug || project.name || 'PRJ')).toUpperCase(),
     );
     setDefinitionOfDone(project.definitionOfDone ?? '');
+    setSlipEnabled(project.scheduleSlipRiskEnabled === true);
+    setSlipThreshold(String(project.scheduleSlipThresholdDays ?? 2));
+    setSlipTypes(project.scheduleSlipItemTypes ?? [...SLIP_TYPES]);
     setDraftStakeholders(
       stakeholders.map((row) => ({
         userId: row.userId,
@@ -233,6 +251,11 @@ export function ProjectBaselinePanel({
 
   async function save() {
     if (!canMutate) return;
+    const thresholdDays = Number(slipThreshold);
+    if (!Number.isInteger(thresholdDays) || thresholdDays < 1 || thresholdDays > 3650) {
+      setError(t('scheduleSlipThreshold'));
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -254,6 +277,9 @@ export function ProjectBaselinePanel({
           initialBudget: parseOptionalNumber(initialBudget) ?? null,
           keyPrefix: keyPrefix.trim().toUpperCase(),
           definitionOfDone: definitionOfDone.trim() || null,
+          scheduleSlipRiskEnabled: slipEnabled,
+          scheduleSlipThresholdDays: thresholdDays,
+          scheduleSlipItemTypes: slipTypes,
         }),
       });
       const patchPayload = (await patchResponse.json().catch(() => ({}))) as {
@@ -389,6 +415,24 @@ export function ProjectBaselinePanel({
               <div className="kh-ops-field-cell">
                 <small>{t('keyPrefix')}</small>
                 <strong>{project.keyPrefix || tCommon('none')}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('scheduleSlipTitle')}</small>
+                <strong>
+                  {project.scheduleSlipRiskEnabled ? t('scheduleSlipOn') : t('scheduleSlipOff')}
+                </strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('scheduleSlipThreshold')}</small>
+                <strong>{project.scheduleSlipThresholdDays ?? 2}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('scheduleSlipTypes')}</small>
+                <strong>
+                  {(project.scheduleSlipItemTypes ?? [...SLIP_TYPES])
+                    .map((type) => t(`scheduleSlipType.${type}`))
+                    .join(', ') || tCommon('none')}
+                </strong>
               </div>
             </div>
             <div className="border-t border-line">
@@ -589,6 +633,44 @@ export function ProjectBaselinePanel({
                 ))}
               </Select>
             </Field>
+          </div>
+          <div className="grid gap-2">
+            <Switch
+              checked={slipEnabled}
+              onCheckedChange={setSlipEnabled}
+              label={t('scheduleSlipEnabled')}
+              disabled={pending}
+            />
+            <Field label={t('scheduleSlipThreshold')}>
+              <Input
+                type="number"
+                min="1"
+                max="3650"
+                step="1"
+                value={slipThreshold}
+                onChange={(event) => setSlipThreshold(event.target.value)}
+                disabled={pending || !slipEnabled}
+              />
+            </Field>
+            <fieldset className="m-0 grid gap-1 border-0 p-0" disabled={pending || !slipEnabled}>
+              <legend className="kh-ops-menu-type mb-1">{t('scheduleSlipTypes')}</legend>
+              {SLIP_TYPES.map((type) => (
+                <label key={type} className="kh-ops-menu-type flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={slipTypes.includes(type)}
+                    onChange={() => {
+                      setSlipTypes((current) => (
+                        current.includes(type)
+                          ? current.filter((item) => item !== type)
+                          : [...current, type]
+                      ));
+                    }}
+                  />
+                  {t(`scheduleSlipType.${type}`)}
+                </label>
+              ))}
+            </fieldset>
           </div>
           <Field label={t('nonWorkingDays')}>
             <div className="grid gap-2">

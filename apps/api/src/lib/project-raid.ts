@@ -16,6 +16,7 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  SCHEDULE_SLIP_SOURCE,
   formatHumanKey,
   raidKindSchema,
   raidKindToIssueKeyType,
@@ -103,6 +104,11 @@ export type PublicRaidItem = {
   transferredToHumanKey: string | null;
   transferredFromHumanKey: string | null;
   archivedAt: string | null;
+  source: string | null;
+  /** True when the hub raised this risk from a schedule slip. */
+  auto: boolean;
+  closureSuggested: boolean;
+  slipWorkingDays: number | null;
   createdAt: string;
   updatedAt: string;
   tasks: PublicRaidTaskLink[];
@@ -158,6 +164,10 @@ function toPublicRaidItem(
     transferredToHumanKey: transferKeys?.transferredToHumanKey ?? null,
     transferredFromHumanKey: transferKeys?.transferredFromHumanKey ?? null,
     archivedAt: row.archivedAt?.toISOString() ?? null,
+    source: row.source,
+    auto: row.source === SCHEDULE_SLIP_SOURCE,
+    closureSuggested: row.closureSuggested,
+    slipWorkingDays: row.slipWorkingDays,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     tasks,

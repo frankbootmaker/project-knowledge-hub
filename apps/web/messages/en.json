@@ -2773,6 +2773,7 @@
     "ganttFreezeTable": "Freeze table",
     "ganttScale": "Timeline",
     "ganttToday": "Today",
+    "scheduleSlip": "Schedule slip",
     "ganttEmpty": "No delivery items to chart yet.",
     "ganttDurationValue": "{days}d",
     "ganttEffortTitle": "{days} working days, {hours}h",
@@ -3327,6 +3328,7 @@
       "closed": "Closed",
       "cancelled": "Cancelled"
     },
+    "autoBadge": "auto",
     "severity": {
       "low": "Low",
       "medium": "Medium",
@@ -3381,7 +3383,19 @@
     "updated": "Baseline updated.",
     "failedUpdate": "Failed to update baseline",
     "hint": "Baseline is the planned kickoff snapshot. Live Stakeholders below can change without altering this list. Approved budget is edited under Budgeting.",
-    "readOnlyHint": "You can view the baseline; maintainers and admins can edit."
+    "readOnlyHint": "You can view the baseline; maintainers and admins can edit.",
+    "scheduleSlipTitle": "Schedule slip risks",
+    "scheduleSlipEnabled": "Raise a RAID risk when a delivery item slips",
+    "scheduleSlipThreshold": "Minimum slip (working days)",
+    "scheduleSlipTypes": "Item types",
+    "scheduleSlipOn": "On",
+    "scheduleSlipOff": "Off",
+    "scheduleSlipType": {
+      "task": "Tasks",
+      "user_story": "User stories",
+      "epic": "Epics",
+      "milestone": "Milestones"
+    }
   },
   "budget": {
     "title": "Budgeting",

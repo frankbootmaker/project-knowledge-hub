@@ -38,6 +38,11 @@ import {
   plannedTargetPercent,
   taskDeliveryCompletion,
 } from '../lib/delivery-completion';
+import {
+  coerceProjectCalendar,
+  evaluateDeliveryScheduleSlips,
+  scheduleSlipSettingsFromRow,
+} from '@project-knowledge-hub/domain';
 import { useLocalToday } from '../lib/use-local-today';
 import {
   Button,
@@ -77,6 +82,7 @@ type Milestone = {
   status: string;
   startDate: string | null;
   targetDate: string | null;
+  baselineFinishDate?: string | null;
   sortOrder: number;
   humanKey?: string | null;
   completionPercent?: number | null;
@@ -93,6 +99,7 @@ type Epic = {
   status: string;
   startDate: string | null;
   endDate: string | null;
+  baselineFinishDate?: string | null;
   sortOrder: number;
   humanKey?: string | null;
   createdAt?: string;
@@ -107,6 +114,7 @@ type UserStory = {
   status: string;
   startDate: string | null;
   endDate: string | null;
+  baselineFinishDate?: string | null;
   sortOrder: number;
   humanKey?: string | null;
   createdAt?: string;
@@ -135,6 +143,7 @@ type Task = {
   status: string;
   sortOrder?: number;
   dueDate: string | null;
+  baselineFinishDate?: string | null;
   startDate?: string | null;
   forecastHours: string | null;
   actualHours: string | null;
@@ -198,6 +207,7 @@ export function ProjectDeliveryPanel({
   projectEndDate = null,
   workingCalendar,
   definitionOfDone = null,
+  scheduleSlip,
   initialEpics,
   initialStories,
   initialMilestones,
@@ -221,6 +231,11 @@ export function ProjectDeliveryPanel({
     nonWorkingDays?: readonly string[] | null;
   };
   definitionOfDone?: string | null;
+  scheduleSlip?: {
+    enabled?: boolean;
+    thresholdWorkingDays?: number;
+    itemTypes?: string[];
+  };
   initialEpics: Epic[];
   initialStories: UserStory[];
   initialMilestones: Milestone[];
@@ -485,6 +500,62 @@ export function ProjectDeliveryPanel({
       })),
     };
   }, [epics, milestones, stories, tasks]);
+  const scheduleSlipIds = useMemo(() => {
+    const settings = scheduleSlipSettingsFromRow({
+      enabled: scheduleSlip?.enabled,
+      thresholdWorkingDays: scheduleSlip?.thresholdWorkingDays,
+      itemTypes: scheduleSlip?.itemTypes,
+    });
+    const hits = evaluateDeliveryScheduleSlips({
+      settings,
+      today,
+      calendar: coerceProjectCalendar(workingCalendar ?? {}),
+      tasks: tasks.map((task) => ({
+        id: task.id,
+        itemType: task.itemType,
+        status: task.status,
+        dueDate: task.dueDate,
+        baselineFinishDate: task.baselineFinishDate,
+        userStoryId: task.userStoryId,
+      })),
+      stories: stories.map((story) => ({
+        id: story.id,
+        epicId: story.epicId,
+        status: story.status,
+        endDate: story.endDate,
+        baselineFinishDate: story.baselineFinishDate,
+      })),
+      epics: epics.map((epic) => ({
+        id: epic.id,
+        status: epic.status,
+        endDate: epic.endDate,
+        baselineFinishDate: epic.baselineFinishDate,
+      })),
+      milestones: milestones.map((milestone) => ({
+        id: milestone.id,
+        status: milestone.status,
+        targetDate: milestone.targetDate,
+        baselineFinishDate: milestone.baselineFinishDate,
+        links: (milestone.linkedItems ?? [])
+          .filter((link) => (
+            link.entityType === 'task'
+            || link.entityType === 'user_story'
+            || link.entityType === 'epic'
+          ))
+          .map((link) => ({
+            entityType: link.entityType,
+            entityId: link.entityId,
+          })),
+      })),
+    });
+    const ids = new Set<string>();
+    for (const hit of hits.values()) {
+      if (!hit.evaluation.slipping) continue;
+      const prefix = hit.type === 'user_story' ? 'story' : hit.type;
+      ids.add(`${prefix}:${hit.id}`);
+    }
+    return ids;
+  }, [epics, milestones, scheduleSlip, stories, tasks, today, workingCalendar]);
   const listRows: DeliveryListRow[] = useMemo(() => {
     const completion = deliveryCompletionIndex(tasks);
     const epicRows: DeliveryListRow[] = shownDelivery.epics.map((epic) => ({
@@ -1184,6 +1255,7 @@ export function ProjectDeliveryPanel({
               ? (sprintTitleById.get(task.sprintId) ?? null)
               : null,
           }))}
+          scheduleSlipIds={scheduleSlipIds}
           onManageTask={(taskId) => setManageTaskId(taskId)}
           onManageEpic={(epicId) => setManageAgile({ kind: 'epic', id: epicId })}
           onManageStory={(storyId) =>
@@ -1208,6 +1280,7 @@ export function ProjectDeliveryPanel({
               ? (sprintTitleById.get(task.sprintId) ?? null)
               : null,
           }))}
+          scheduleSlipIds={scheduleSlipIds}
           workingCalendar={workingCalendar}
           sprintsLoaded={sprintsLoaded}
           onManageTask={(taskId) => setManageTaskId(taskId)}

@@ -2755,6 +2755,7 @@
     "ganttFreezeTable": "Tabelle fixieren",
     "ganttScale": "Zeitskala",
     "ganttToday": "Heute",
+    "scheduleSlip": "Terminverzug",
     "ganttEmpty": "Noch keine Umsetzungseinträge für das Diagramm.",
     "ganttDurationValue": "{days} T",
     "ganttEffortTitle": "{days} Arbeitstage, {hours} Std.",
@@ -3328,6 +3329,7 @@
       "closed": "Geschlossen",
       "cancelled": "Abgebrochen"
     },
+    "autoBadge": "auto",
     "severity": {
       "low": "Niedrig",
       "medium": "Mittel",
@@ -3376,6 +3378,18 @@
     "failedUpdate": "Baseline konnte nicht aktualisiert werden",
     "hint": "Die Baseline ist der Kickoff-Snapshot. Live-Stakeholder können sich ändern. Das genehmigte Budget bearbeitest du unter Budgetierung.",
     "readOnlyHint": "Baseline ist sichtbar; Maintainer und Admins können bearbeiten.",
+    "scheduleSlipTitle": "Terminverzug-Risiken",
+    "scheduleSlipEnabled": "RAID-Risiko anlegen, wenn ein Liefergegenstand im Plan rutscht",
+    "scheduleSlipThreshold": "Mindestverzug (Arbeitstage)",
+    "scheduleSlipTypes": "Gegenstandstypen",
+    "scheduleSlipOn": "An",
+    "scheduleSlipOff": "Aus",
+    "scheduleSlipType": {
+      "task": "Aufgaben",
+      "user_story": "User Stories",
+      "epic": "Epics",
+      "milestone": "Meilensteine"
+    },
     "currency": "Währung",
     "initialBudget": "Initialbudget",
     "keyPrefix": "Issue-Key-Präfix",

@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNotNull, isNull, ne, or, type SQL } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
+  preservedBaselineFinish,
   projectEpics,
   projectMilestoneItemLinks,
   projectMilestones,
@@ -101,7 +102,16 @@ async function writeStoryDates(
   for (const change of changes) {
     await database.db
       .update(projectUserStories)
-      .set({ startDate: change.start, endDate: change.end, updatedAt })
+      .set({
+        startDate: change.start,
+        endDate: change.end,
+        baselineFinishDate: preservedBaselineFinish(
+          projectUserStories.baselineFinishDate,
+          projectUserStories.endDate,
+          change.end,
+        ),
+        updatedAt,
+      })
       .where(eq(projectUserStories.id, change.id));
   }
 }
@@ -114,7 +124,16 @@ async function writeEpicDates(
   for (const change of changes) {
     await database.db
       .update(projectEpics)
-      .set({ startDate: change.start, endDate: change.end, updatedAt })
+      .set({
+        startDate: change.start,
+        endDate: change.end,
+        baselineFinishDate: preservedBaselineFinish(
+          projectEpics.baselineFinishDate,
+          projectEpics.endDate,
+          change.end,
+        ),
+        updatedAt,
+      })
       .where(eq(projectEpics.id, change.id));
   }
 }

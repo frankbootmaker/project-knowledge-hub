@@ -10,6 +10,7 @@ import {
   createDatabase,
   gitRepositoryConnections,
   knowledgeRecords,
+  syncEnabledScheduleSlipRisks,
 } from '@project-knowledge-hub/database';
 import {
   createEmbeddingProvider,
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
   let signupEscalateTimer: ReturnType<typeof setInterval> | null = null;
   let backupStaleAlertTimer: ReturnType<typeof setInterval> | null = null;
   let auditRetentionTimer: ReturnType<typeof setInterval> | null = null;
+  let scheduleSlipTimer: ReturnType<typeof setInterval> | null = null;
   const gitSyncQueue = createGitSyncQueue(env.REDIS_URL);
   const embeddingQueue = createEmbeddingReindexQueue(env.REDIS_URL);
   const documentImportQueue = createDocumentImportConvertQueue(env.REDIS_URL);
@@ -91,6 +93,9 @@ async function main(): Promise<void> {
       }
       if (auditRetentionTimer) {
         clearInterval(auditRetentionTimer);
+      }
+      if (scheduleSlipTimer) {
+        clearInterval(scheduleSlipTimer);
       }
       if (gitWorker) {
         await gitWorker.close();
@@ -425,6 +430,23 @@ async function main(): Promise<void> {
     auditRetentionTimer = setInterval(() => {
       void runAuditRetention();
     }, env.AUDIT_RETENTION_INTERVAL_MS);
+  }
+
+  if (env.SCHEDULE_SLIP_INTERVAL_MS > 0) {
+    const runScheduleSlip = async () => {
+      try {
+        const result = await syncEnabledScheduleSlipRisks(database);
+        if (result.created > 0 || result.updated > 0 || result.failed.length > 0) {
+          logger.info(result, 'Synced schedule-slip RAID risks');
+        }
+      } catch (error) {
+        logger.error({ err: error }, 'Schedule-slip RAID sweep failed');
+      }
+    };
+    void runScheduleSlip();
+    scheduleSlipTimer = setInterval(() => {
+      void runScheduleSlip();
+    }, env.SCHEDULE_SLIP_INTERVAL_MS);
   }
 
   logger.info(

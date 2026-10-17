@@ -1454,7 +1454,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project',
     description:
-      'Update name, description, methodology, or currency. Stage changes cannot promote idea to active. Requires projects:write. Writes an audit entry. Via call_hub_tool on ChatGPT.',
+      'Update name, description, methodology, currency, or schedule-slip risk settings. Stage changes cannot promote idea to active. Requires projects:write. Writes an audit entry. Via call_hub_tool on ChatGPT.',
     scope: 'projects:write',
     write: true,
     body: {
@@ -1472,6 +1472,16 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         confirmDuplicateName: {
           type: 'boolean',
           description: 'Required when the new name is similar to another project.',
+        },
+        scheduleSlipRiskEnabled: { type: 'boolean' },
+        scheduleSlipThresholdDays: { type: 'integer', minimum: 1, maximum: 3650 },
+        scheduleSlipItemTypes: {
+          type: 'array',
+          maxItems: 4,
+          items: {
+            type: 'string',
+            enum: ['task', 'user_story', 'epic', 'milestone'],
+          },
         },
       },
     },
@@ -2181,7 +2191,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_raid_items',
     description:
-      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each item includes records[] (id, title, slug, recordType, humanKey) plus mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List RAID register items. Pages at 25. Descriptions are excerpts. Pass cursor until hasMore is false. Each item includes records[] (id, title, slug, recordType, humanKey) plus mediaLinks and mediaLinkCount for the Media tab. auto is true on schedule-slip risks. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',

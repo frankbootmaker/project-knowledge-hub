@@ -52,6 +52,7 @@ import {
   systemItDetailsSchema,
   systemItDetailsPatchSchema,
   systemStatusSchema,
+  scheduleSlipSettingsFromRow,
   raidKindSchema,
   raidSeveritySchema,
   raidStatusSchema,
@@ -1176,6 +1177,11 @@ function toMcpProject(
     workdaysPerWeek: project.workdaysPerWeek,
     nonWorkingDays: facts?.nonWorkingDays ?? [],
   });
+  const slip = scheduleSlipSettingsFromRow({
+    enabled: project.scheduleSlipRiskEnabled,
+    thresholdWorkingDays: project.scheduleSlipThresholdDays,
+    itemTypes: project.scheduleSlipItemTypes,
+  });
   return {
     id: project.id,
     workspaceId: project.workspaceId,
@@ -1219,6 +1225,9 @@ function toMcpProject(
     createdByOauthGrantId: project.createdByOauthGrantId,
     createdByUserId: project.createdByUserId,
     generatedByModel: project.generatedByModel,
+    scheduleSlipRiskEnabled: slip.enabled,
+    scheduleSlipThresholdDays: slip.thresholdWorkingDays,
+    scheduleSlipItemTypes: slip.itemTypes,
     url:
       webUrl && workspace?.slug
         ? `${webUrl.replace(/\/$/, '')}/workspaces/${workspace.slug}/projects/${project.slug}`

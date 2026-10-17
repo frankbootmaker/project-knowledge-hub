@@ -470,6 +470,13 @@
       "when": 1793059200000,
       "tag": "0066_project_oauth_grant_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793145600000,
+      "tag": "0067_schedule_slip_risks",
+      "breakpoints": true
     }
   ]
 }
