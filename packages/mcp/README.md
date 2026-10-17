@@ -74,3 +74,8 @@ Do **not** put `data:image/...;base64,...` URIs in `contentMarkdown`. Instead:
 5. `get_knowledge_record` and `list_knowledge_records` return `tags` as a string array of tag names (same shape as `search_knowledge`). `get_knowledge_record` also returns linked `media[]` metadata and, on the first page, `linkedItems` (`deliveryLinks`, `raidLinks`, `changeItems`) for the same project. Archived rows are omitted. Compact `recordRelations` (counts plus up to 20 summaries) is included on every page unless `includeRecordRelations` is false.
 
 Mounted by the API at `POST|GET|DELETE /mcp` with bearer API client tokens.
+
+## MCP schema conventions
+
+* **Tool inputs** — strict JSON Schema (`additionalProperties: false` at each object). Unknown argument keys are rejected before handlers run.
+* **Tool outputs** — open JSON Schema at every object depth so clients that cache `tools/list` keep validating responses after deploys add fields. The server still strips `structuredContent` to the declared Zod output shape via `stripToSchema`.
