@@ -2952,7 +2952,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'list_ai_billing_entries',
     description:
-      'List workspace AI billing entries. Paid cost for a month is the sum. Requires pm:read.',
+      'List workspace AI cost entries. Paid cost for a month is the sum. Requires pm:read.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -2973,7 +2973,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'create_ai_billing_entry',
     description:
-      'Add a paid AI fee (subscription, plan_change, or on_demand) for a workspace month. plan_change may be negative. Requires pm:write.',
+      'Add a paid AI cost entry (subscription, plan_change, or on_demand) for a workspace month. plan_change may be negative. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3010,7 +3010,7 @@ const EXTRA_HUB_TOOLS: Array<{
   },
   {
     name: 'update_ai_billing_entry',
-    description: 'Update one AI billing entry. Requires pm:write.',
+    description: 'Update one AI cost entry. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3018,7 +3018,7 @@ const EXTRA_HUB_TOOLS: Array<{
       additionalProperties: false,
       required: ['entryId'],
       properties: {
-        entryId: uuidProp('Billing entry id'),
+        entryId: uuidProp('Cost entry id'),
         period: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' },
         provider: stringProp('Provider name', { minLength: 1, maxLength: 80 }),
         type: {
@@ -3037,14 +3037,14 @@ const EXTRA_HUB_TOOLS: Array<{
   },
   {
     name: 'delete_ai_billing_entry',
-    description: 'Delete one AI billing entry. Requires pm:write.',
+    description: 'Delete one AI cost entry. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
       type: 'object',
       additionalProperties: false,
       required: ['entryId'],
-      properties: { entryId: uuidProp('Billing entry id') },
+      properties: { entryId: uuidProp('Cost entry id') },
     },
   },
 ];

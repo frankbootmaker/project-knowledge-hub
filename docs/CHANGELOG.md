@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **AI Cost labels:** Financials and the project budget copy say “cost entry” (HU költségtétel, DE Kostenposten). Tool names stay `ai_billing_entry`.
+
 * **Delivery search toolbar:** List and Tree place the filter control on the same line as the search field, matching the Gantt.
 
 * **Timeline cards:** Start and due dates stack on two lines, each with its own icon, and the card narrows to the longer date so both stay fully visible.
