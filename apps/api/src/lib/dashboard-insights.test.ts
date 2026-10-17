@@ -61,6 +61,7 @@ describe('dashboard project health', () => {
       timeline: 'green',
       risk: 'green',
       financial: 'red',
+      riskReasons: [],
     };
     vi.mocked(listProjectHealth).mockResolvedValue(new Map([['p-1', health]]));
     const insights = await getDashboardInsights(
@@ -92,6 +93,7 @@ describe('dashboard project health', () => {
             timeline: 'amber',
             risk: 'green',
             financial: 'green',
+            riskReasons: [],
           },
         ],
       ]),

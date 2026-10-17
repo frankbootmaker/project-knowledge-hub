@@ -258,6 +258,7 @@ function baselineProject(definitionOfDone: string | null) {
       timeline: 'green',
       risk: 'green',
       financial: 'green',
+      riskReasons: [],
     },
   };
 }
@@ -312,6 +313,7 @@ function realisticProject() {
       timeline: 'amber',
       risk: 'green',
       financial: 'green',
+      riskReasons: [],
     },
   };
 }
@@ -736,6 +738,84 @@ describe('MCP output schemas accept their sample results', () => {
         },
       },
     );
+  });
+});
+
+describe('due-date risk RAG on MCP project tools (PRO-T-98)', () => {
+  test('get_project structured output accepts riskReasons and rejects extras', async () => {
+    const validator = new AjvJsonSchemaValidator();
+    await withMcpClient(['projects:read', 'pm:read'], {}, async (client) => {
+      const listed = await client.listTools();
+      const tool = listed.tools.find((item) => item.name === 'get_project');
+      const schema = tool?.outputSchema as {
+        properties?: {
+          project?: {
+            properties?: {
+              health?: {
+                additionalProperties?: boolean;
+                required?: string[];
+                properties?: {
+                  riskReasons?: {
+                    type?: string;
+                    items?: { additionalProperties?: boolean; required?: string[] };
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+      const health = schema.properties?.project?.properties?.health;
+      expect(health?.additionalProperties).toBe(false);
+      expect(health?.required).toEqual(
+        expect.arrayContaining(['overall', 'timeline', 'risk', 'financial', 'riskReasons']),
+      );
+      expect(health?.properties?.riskReasons?.type).toBe('array');
+      expect(health?.properties?.riskReasons?.items?.additionalProperties).toBe(false);
+      expect(health?.properties?.riskReasons?.items?.required).toEqual(
+        expect.arrayContaining(['count', 'severity', 'kind', 'cause']),
+      );
+
+      const withReasons = {
+        project: {
+          ...realisticProject(),
+          health: {
+            overall: 'red',
+            timeline: 'green',
+            risk: 'red',
+            financial: 'green',
+            riskReasons: [
+              {
+                count: 1,
+                severity: 'critical',
+                kind: 'risk',
+                cause: 'due_soon',
+                dueInDays: 2,
+              },
+            ],
+          },
+        },
+      };
+      expect(validator.getValidator(tool!.outputSchema as object)(withReasons).valid).toBe(true);
+
+      const extra = {
+        project: {
+          ...realisticProject(),
+          health: {
+            ...realisticProject().health,
+            unexplained: true,
+          },
+        },
+      };
+      expect(validator.getValidator(tool!.outputSchema as object)(extra).valid).toBe(false);
+
+      const budget = listed.tools.find((item) => item.name === 'get_project_budget_summary');
+      expect(budget?.description).toMatch(/riskRag/);
+      expect(budget?.description).toMatch(/7-day/);
+      expect(budget?.description).toMatch(/kind issue/);
+      expect(budget?.description).toMatch(/overdue/);
+      expect(budget?.description).toMatch(/riskReasons/);
+    });
   });
 });
 

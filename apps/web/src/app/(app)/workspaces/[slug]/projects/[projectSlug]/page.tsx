@@ -39,7 +39,7 @@ import {
   ProjectStageBadge,
 } from '../../../../../../components/ProjectStageBadge';
 import type { ProjectSectionStatuses } from '../../../../../../lib/project-sections';
-import { computeChangeRag } from '../../../../../../lib/project-health';
+import { computeChangeRag, formatRiskReasons } from '../../../../../../lib/project-health';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 function ragBadgeTone(
@@ -383,7 +383,12 @@ export default async function ProjectDetailPage({
     timeline: 'green',
     risk: 'green',
     financial: null,
+    riskReasons: [],
   };
+  const riskReasonText = formatRiskReasons(
+    health.riskReasons,
+    t as (key: string, values?: Record<string, string | number>) => string,
+  );
   const timelineRag = health.timeline;
   const riskRag = health.risk;
   const financialRag = health.financial;
@@ -452,7 +457,7 @@ export default async function ProjectDetailPage({
               tone={ragBadgeTone(overallRag)}
               title={[
                 `${t('ragTimeline')}: ${t(`rag.${timelineRag}`)}`,
-                `${t('ragRisks')}: ${t(`rag.${riskRag}`)}`,
+                `${t('ragRisks')}: ${t(`rag.${riskRag}`)}${riskReasonText ? ` — ${riskReasonText}` : ''}`,
                 `${t('ragFinancials')}: ${t(financialRag ? `rag.${financialRag}` : 'rag.none')}`,
               ].join(' · ')}
               aria-label={`${t('ragOverall')}: ${t(`rag.${overallRag}`)}`}

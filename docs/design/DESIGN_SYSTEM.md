@@ -146,6 +146,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack / dashboard workspace / account brand cards; `button.kh-ops-project-card` for report launchers and brand schemes. Workspace colour is a 3px inset stripe (`kh-workspace-tile`), not a wash. Selected brand uses `.selected` (ink border + 3px accent inset). |
 | `.kh-ops-menu-type` / `.kh-ops-key-badge` | Rail menu type for metadata, labels, kickers, eyebrows, table cells, owners, dates, and status values: IBM Plex Sans, 13px, regular. `.kh-ops-key-badge` keeps monospace for item keys (PRO-T-21). Code stays monospace |
 | `.kh-ops-media-library` / `.kh-ops-media-grid` / `.kh-ops-media-card` / `.kh-ops-media-preview` / `.kh-ops-media-info` / `.kh-ops-media-card-actions` / `.kh-ops-media-link-list` / `.kh-ops-media-select` / `.kh-ops-media-select-bar` / `.kh-ops-media-url` | Workspace media catalogue (4 / 3 / 1 columns). Catalogue text, the page kicker, and file-type overlay chips use the rail menu type. More details section headings stay the bold card title. Linked keys use `.kh-ops-key-badge`. The URL is truncated text beside a copy button. Toolbar filters match the delivery list. Maintainers can select and bulk-delete. Card actions are `Button`. Linking stays on the target item |
+| `.kh-media-lightbox` / `.kh-media-lightbox__*` / `.kh-ops-media-preview-btn` | Full-resolution image lightbox for delivery item Media and the workspace media library. Dark backdrop, original `/api/v1/media/{id}` bytes at up to 90vw × 90vh (`object-fit: contain`, no upscale). Prev/next, Esc, backdrop, and close. Card and list thumbnails use `.kh-ops-media-preview-btn` (not `.kh-ops-media-preview` on the `<img>`) |
 | `.kh-ops-form-grid` / `.kh-ops-field-span` / `.kh-ops-field-row-start` | Dense two-column modal and admin forms. `field-span` takes the whole row; `field-row-start` begins the next row so a date pair stays side by side. Inputs, selects, and textareas are 13px regular, same as the menu type |
 | `.kh-ops-card-body` / `.kh-ops-card-foot` / `.kh-ops-action-line` | Panel interior padding, card footer, save/test action row |
 | `.kh-ops-setup-grid` / `.kh-ops-setup-card` / `.kh-ops-setup-step` | MCP / AI client setup cards |
@@ -249,6 +250,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-17
 
+* **Media lightbox** — `MediaLightbox` (`.kh-media-lightbox`) shows linked and library images at full resolution. Delivery Media and the workspace catalogue open it from `.kh-ops-media-preview-btn` on thumbnails instead of reusing the card preview class on a modal `<img>`.
+* **RAID due-date colour** — The RAID list due-date cell uses `text-danger` when the date is before today and `text-warn` when it falls on today or within the 7-day project-health window. Later and empty dates stay the default ink. The project header health `Badge` tooltip appends the risk reason after the Risks label.
 * **Schedule slip** — Project baseline adds a `Switch` for auto RAID risks, a number field for the working-day threshold, and checkboxes for task, story, epic, and milestone. The RAID title cell shows a warn `Badge` labeled auto. Gantt and Tree titles show `.kh-ops-schedule-slip` (warn token, “!”) on a slipping item.
 
 ### 2026-10-16

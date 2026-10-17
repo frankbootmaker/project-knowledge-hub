@@ -1289,13 +1289,28 @@ export function createKnowledgeHubMcpServer(
   // These fields have no .describe(): ChatGPT's tool list must stay under 12,000
   // characters. status vs health.overall is stated on the tool descriptions.
   const ragStatus = () => z.enum(['green', 'amber', 'red']);
+  // Fresh objects. A shared Zod schema is emitted as $ref, which clients
+  // that validate one project cannot resolve.
+  const riskReasonOutput = () =>
+    z
+      .object({
+        count: z.number().int(),
+        severity: z.string(),
+        kind: z.string(),
+        cause: z.enum(['issue', 'overdue', 'due_soon', 'severity']),
+        dueInDays: z.number().int().optional(),
+      })
+      .strict();
   const projectHealthOutput = () =>
-    z.object({
-      overall: ragStatus(),
-      timeline: ragStatus(),
-      risk: ragStatus(),
-      financial: ragStatus().nullable(),
-    });
+    z
+      .object({
+        overall: ragStatus(),
+        timeline: ragStatus(),
+        risk: ragStatus(),
+        financial: ragStatus().nullable(),
+        riskReasons: z.array(riskReasonOutput()),
+      })
+      .strict();
   const pinnedRecordOutput = () =>
     z
       .object({
@@ -1526,7 +1541,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financial/risk RAG, burndown snapshots, and epic cost rollups. Includes person vs AI vs IT-system OpEx, plus aiFlatAc and aiTokenAc. Mixed AI AC is the flat fee accrued over the project dates plus token cost. All money/budget fields returned as JSON numbers. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx, plus aiFlatAc and aiTokenAc. Mixed AI AC is the flat fee accrued over the project dates plus token cost. All money/budget fields returned as JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -1707,7 +1722,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record',
     {
       description:
-        'Retrieve a knowledge record including markdown content. Tags, linked workspace media, and linkedItems are included on the first page only. linkedItems has deliveryLinks (epic, user story, milestone, task including bugs, sprint), raidLinks, and changeItems for the same project. Each item has id, humanKey, title, type, and kind. Archived RAID, change, and delivery items are omitted. Content is paged at 50,000 characters: contentLength is the full length, contentSha256 is the hash of the full body, contentTruncated is true when this page is not the end, and nextOffset is the contentOffset for the next call (null when the page reaches the end). returnedChars, chunkIndex (0-based page index: 0 on the first page, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (chunk counts are approximate when a page is shorter than the limit). When you pass contentOffset or contentLimit, each page is a raw slice (concatenate contentMarkdown across pages). The default call with neither parameter still appends …[truncated] on the first page when more remains. boundary paragraph or line snaps the cut to a break in the second half of the window; the default is a hard cut. inCodeFence is true when the page ends inside a code fence. Pass expectSha256 to reject with 409 when the stored body changed. Omit contentOffset for the first page. Call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. Images use ![alt](/api/v1/media/{id}) — never data: URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
+        'Get a knowledge record with markdown. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. returnedChars, chunkIndex (0, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (approximate if short). contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
       inputSchema: {
         recordId: z.string().min(1).max(80),
         contentOffset: z.number().int().min(0).optional(),

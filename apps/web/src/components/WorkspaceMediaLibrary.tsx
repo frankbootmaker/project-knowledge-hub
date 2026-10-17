@@ -9,6 +9,8 @@ import {
   type MediaFilterQuery,
 } from '../lib/media-library-filter';
 import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
+import { isImageContentType } from '../lib/media-image';
+import { MediaLightbox, type MediaLightboxItem } from './MediaLightbox';
 import { OpsCountStrip } from './ops/OpsCountStrip';
 import {
   Button,
@@ -153,6 +155,7 @@ export function WorkspaceMediaLibrary(props: {
   const [uploadName, setUploadName] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
 
   const linkedCount = items.filter((item) => isLinked(item)).length;
   const createdFrom = table.extras.from ?? '';
@@ -254,6 +257,22 @@ export function WorkspaceMediaLibrary(props: {
     [filterQuery, items],
   );
   const details = items.find((item) => item.id === detailsId) ?? null;
+  const imageLightboxItems = useMemo<MediaLightboxItem[]>(
+    () =>
+      visible
+        .filter((item) => isImageContentType(item.contentType))
+        .map((item) => ({
+          id: item.id,
+          url: item.url,
+          title: mediaName(item),
+          alt: item.altText ?? item.originalFilename,
+        })),
+    [visible],
+  );
+  const lightboxIndex =
+    lightboxId === null
+      ? -1
+      : imageLightboxItems.findIndex((item) => item.id === lightboxId);
   const visibleIds = useMemo(() => visible.map((item) => item.id), [visible]);
   const allVisibleSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
@@ -680,7 +699,31 @@ export function WorkspaceMediaLibrary(props: {
             >
               <div className="kh-ops-media-preview">
                 {selectControl(item)}
-                <img src={item.url} alt={item.altText ?? item.originalFilename ?? ''} />
+                {isImageContentType(item.contentType) ? (
+                  <button
+                    type="button"
+                    className="kh-ops-media-preview-btn"
+                    aria-label={t('lightboxOpen', { name: mediaName(item) })}
+                    onClick={() => setLightboxId(item.id)}
+                  >
+                    <img
+                      src={item.url}
+                      alt={item.altText ?? item.originalFilename ?? ''}
+                    />
+                  </button>
+                ) : (
+                  <a
+                    href={absoluteUrl(item.url)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="kh-ops-media-preview-btn"
+                  >
+                    <img
+                      src={item.url}
+                      alt={item.altText ?? item.originalFilename ?? ''}
+                    />
+                  </a>
+                )}
                 <span className="kh-ops-type-chip">{typeLabel(item.contentType)}</span>
               </div>
               <div className="kh-ops-media-info">
@@ -722,11 +765,33 @@ export function WorkspaceMediaLibrary(props: {
                     {props.canMutate ? <td>{selectControl(item)}</td> : null}
                     <td className="kh-ops-primary-cell">
                       <span className="kh-ops-media-list-name">
-                        <img
-                          className="kh-ops-media-list-thumb"
-                          src={item.url}
-                          alt=""
-                        />
+                        {isImageContentType(item.contentType) ? (
+                          <button
+                            type="button"
+                            className="kh-ops-media-list-thumb-btn"
+                            aria-label={t('lightboxOpen', { name: mediaName(item) })}
+                            onClick={() => setLightboxId(item.id)}
+                          >
+                            <img
+                              className="kh-ops-media-list-thumb"
+                              src={item.url}
+                              alt=""
+                            />
+                          </button>
+                        ) : (
+                          <a
+                            href={absoluteUrl(item.url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="kh-ops-media-list-thumb-btn"
+                          >
+                            <img
+                              className="kh-ops-media-list-thumb"
+                              src={item.url}
+                              alt=""
+                            />
+                          </a>
+                        )}
                         <span>{mediaName(item)}</span>
                       </span>
                     </td>
@@ -834,6 +899,17 @@ export function WorkspaceMediaLibrary(props: {
           </div>
         ) : null}
       </Modal>
+
+      <MediaLightbox
+        open={lightboxIndex >= 0}
+        items={imageLightboxItems}
+        index={lightboxIndex >= 0 ? lightboxIndex : 0}
+        onClose={() => setLightboxId(null)}
+        onIndexChange={(next) => {
+          const target = imageLightboxItems[next];
+          if (target) setLightboxId(target.id);
+        }}
+      />
 
       <Modal
         open={bulkOpen}

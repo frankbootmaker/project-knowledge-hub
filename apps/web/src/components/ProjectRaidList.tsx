@@ -10,6 +10,7 @@ import {
   compareText,
 } from '../lib/data-table';
 import { useSyncEnumFilters, useTableState } from '../lib/use-table-state';
+import { raidDueDateTone } from '../lib/project-health';
 import type { RaidItem } from './ProjectRaidPanel';
 
 const KINDS = ['risk', 'assumption', 'issue', 'dependency'] as const;
@@ -239,7 +240,22 @@ export function ProjectRaidList({
         getValue: (item) => item.dueDate ?? '',
         defaultDir: 'desc',
       },
-      cell: (item) => item.dueDate ?? '—',
+      cell: (item) => {
+        const tone = raidDueDateTone(item.dueDate);
+        if (!item.dueDate || !tone) return item.dueDate ?? '—';
+        return (
+          <span
+            className={
+              tone === 'overdue'
+                ? 'font-semibold text-danger'
+                : 'font-semibold text-warn'
+            }
+            title={t(tone === 'overdue' ? 'dueOverdue' : 'dueSoon')}
+          >
+            {item.dueDate}
+          </span>
+        );
+      },
     },
     {
       id: 'linked',

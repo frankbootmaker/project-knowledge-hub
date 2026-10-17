@@ -836,6 +836,23 @@
       "red": "Off track",
       "none": "No budget"
     },
+    "riskReasonIssue": "{count} {severity} {kind}",
+    "riskReasonOverdue": "{count} {severity} {kind} overdue",
+    "riskReasonDueSoon": "{count} {severity} {kind} due in {days, plural, one {# day} other {# days}}",
+    "riskReasonDueToday": "{count} {severity} {kind} due today",
+    "riskReasonOpen": "{count} {severity} {kind}",
+    "riskReasonSeverity": {
+      "critical": "critical",
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
+    },
+    "riskReasonKind": {
+      "risk": "{count, plural, one {risk} other {risks}}",
+      "assumption": "{count, plural, one {assumption} other {assumptions}}",
+      "issue": "{count, plural, one {issue} other {issues}}",
+      "dependency": "{count, plural, one {dependency} other {dependencies}}"
+    },
     "manageReports": "Reports",
     "manageReportsHint": "Preview status, delivery, or stakeholder reports, then export or print.",
     "reportStatus": "Project status report",
@@ -2340,7 +2357,13 @@
     "entity_task": "Task",
     "entity_sprint": "Sprint",
     "entity_raid": "RAID",
-    "entity_change": "Change"
+    "entity_change": "Change",
+    "lightboxOpen": "View full size: {name}",
+    "lightboxOpenOriginal": "Open original",
+    "lightboxLoading": "Loading image…",
+    "lightboxPrevious": "Previous",
+    "lightboxNext": "Next",
+    "lightboxUntitled": "Image"
   },
   "gitSync": {
     "title": "Synchronizations",
@@ -3231,6 +3254,8 @@
     "colStatus": "Status",
     "colOwner": "Owner",
     "colDue": "Review",
+    "dueOverdue": "Overdue",
+    "dueSoon": "Due within 7 days",
     "colLinked": "Linked work",
     "searchPlaceholder": "Search title, kind, owner, tasks…",
     "filterLabel": "Filter by kind and status",

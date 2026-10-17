@@ -20,9 +20,9 @@ export { emptyProjectHealth, type ProjectHealth };
  * Overall project health for many projects.
  *
  * Timeline uses TIMELINE_AT_RISK_DAYS (7). Risk and financial come from the
- * budget summary (computeRiskRag / computeFinancialRag). Overall is the worst
- * of the three. If the budget summary throws, overall is the timeline RAG
- * only and financial is null.
+ * budget summary (assessRiskRag / computeFinancialRag). Risk reasons travel
+ * with that same result. Overall is the worst of the three. If the budget
+ * summary throws, overall is the timeline RAG only and financial is null.
  *
  * Schedule rows are loaded in two queries. Budget summaries stay one call
  * per project, matching the previous list endpoint.
@@ -91,6 +91,7 @@ export async function listProjectHealth(
             budget: {
               risk: summary.riskRag,
               financial: summary.financialRag,
+              riskReasons: summary.riskReasons,
             },
           }),
         );
