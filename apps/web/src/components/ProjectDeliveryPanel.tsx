@@ -133,6 +133,7 @@ type Task = {
   title: string;
   description: string | null;
   status: string;
+  sortOrder?: number;
   dueDate: string | null;
   startDate?: string | null;
   forecastHours: string | null;
