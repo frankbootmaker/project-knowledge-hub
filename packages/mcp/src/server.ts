@@ -12,6 +12,7 @@ import {
   MCP_MAX_CONTENT_CHARS,
   MCP_MAX_LIST_LIMIT,
 } from './limits.js';
+import { openMcpToolOutputSchemas } from './open-output-schema.js';
 import {
   dependencyLagDaysSchema,
   hoursPerWorkdaySchema,
@@ -882,9 +883,8 @@ function textResult(data: unknown) {
  * is returned as text with isError set, which skips output validation.
  *
  * Within the size limit, objects are reduced to the declared shape first.
- * The client validates the raw structuredContent against a schema that
- * rejects additional properties, while the server's Zod parse only strips
- * those keys. Sending the reduced object keeps that validation in place.
+ * tools/list advertises open output schemas so stale clients accept new
+ * fields; structuredContent is still stripped to the declared Zod shape.
  */
 function structuredTextResult(data: unknown, outputShape?: z.ZodRawShape) {
   const sized = enforceResponseSize(data);
@@ -3621,6 +3621,7 @@ export function createKnowledgeHubMcpServer(
     stampOauthSecuritySchemes(server, client.scopes);
   }
 
+  openMcpToolOutputSchemas(server);
   rejectUnknownToolArguments(server);
   describeRequiredToolInputs(server);
   return server;
