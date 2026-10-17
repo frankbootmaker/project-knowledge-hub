@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildPlatformAiCost, roundAiMoney } from '@project-knowledge-hub/domain';
 import {
   entryMatchesBillingListFilter,
   monthPoolsFromBillingEntries,
@@ -50,6 +51,65 @@ describe('monthPoolsFromBillingEntries', () => {
     expect(pools.get('2026-10|sys-1|EUR')?.paidTotal).toBe(20);
     expect(pools.get('2026-11|sys-1|EUR')?.paidTotal).toBe(11);
     expect(pools.has('2026-10||EUR')).toBe(false);
+  });
+
+  it('shows a 12 Oct–11 Nov entry as 20/31 and 11/31 in the admin summary', () => {
+    const pools = monthPoolsFromBillingEntries([
+      {
+        period: '2026-10',
+        aiSystemId: null,
+        currency: 'EUR',
+        type: 'subscription',
+        amount: 31,
+        servicePeriodStart: '2026-10-12',
+        servicePeriodEnd: '2026-11-11',
+      },
+    ]);
+    const report = buildPlatformAiCost({
+      from: '2026-10',
+      to: '2026-11',
+      workspaces: [
+        {
+          workspaceId: 'ws-alpha',
+          name: 'Alpha',
+          slug: 'alpha',
+          chart: [...pools.values()].map((pool) => ({
+            period: pool.period,
+            currency: pool.currency,
+            subscription: roundAiMoney(pool.subscription),
+            planChange: roundAiMoney(pool.planChange),
+            onDemand: roundAiMoney(pool.onDemand),
+            theoreticalApiCost: 0,
+          })),
+          entries: [
+            {
+              id: 'span',
+              period: '2026-10',
+              servicePeriodStart: '2026-10-12',
+              servicePeriodEnd: '2026-11-11',
+              provider: 'Cursor',
+              plan: null,
+              type: 'subscription',
+              amount: 31,
+              currency: 'EUR',
+              paidAt: null,
+              note: null,
+              externalRef: null,
+              aiSystemId: null,
+            },
+          ],
+        },
+      ],
+    });
+    expect(report.totals.find((row) => row.period === '2026-10')).toMatchObject({
+      paidCost: 20,
+      subscription: 20,
+    });
+    expect(report.totals.find((row) => row.period === '2026-11')).toMatchObject({
+      paidCost: 11,
+      subscription: 11,
+    });
+    expect(report.entries.map((row) => row.id)).toEqual(['span']);
   });
 });
 

@@ -6,16 +6,19 @@ import {
   projectTasks,
   projects,
   systems,
+  workspaces,
 } from '@project-knowledge-hub/database';
 import {
   allocateAiBillingPool,
   assertAiBillingPeriod,
   assertAllocationPercent,
   assertServiceDate,
+  buildPlatformAiCost,
   isAiBillingActiveProject,
   type AiBillingAllocationMethod,
   parseUsageOccurredAt,
   projectCurrencySchema,
+  resolveAiBillingWindow,
   resolveBillingServiceWindow,
   roundAiMoney,
   scaleAiBillingTypes,
@@ -27,6 +30,8 @@ import {
   type AiCostUsageSlice,
   type AiFallbackSystem,
   type AiPaidPeriod,
+  type PlatformAiCostEntry,
+  type PlatformAiWorkspaceMonth,
   type ProjectCurrency,
   AppError,
 } from '@project-knowledge-hub/domain';
@@ -1215,5 +1220,81 @@ export async function loadWorkspaceAiCostOverview(
         a.currency.localeCompare(b.currency) ||
         (a.aiSystemName ?? '').localeCompare(b.aiSystemName ?? ''),
     ),
+  };
+}
+
+export type PlatformAiCostReport = {
+  from: string;
+  to: string;
+  periods: string[];
+  workspaces: Array<{ id: string; name: string; slug: string }>;
+  providers: string[];
+  months: PlatformAiWorkspaceMonth[];
+  totals: Array<{
+    period: string;
+    currency: string;
+    subscription: number;
+    planChange: number;
+    onDemand: number;
+    paidCost: number;
+    theoreticalApiCost: number;
+    difference: number;
+    ratio: number | null;
+  }>;
+  entries: PlatformAiCostEntry[];
+};
+
+/**
+ * Every workspace's AI Cost chart, summed per currency. The per-workspace
+ * months are that workspace's own chart points, not a second calculation.
+ */
+export async function loadPlatformAiCost(
+  database: Database,
+  query: {
+    from?: string;
+    to?: string;
+    workspaceId?: string;
+    provider?: string;
+    type?: AiBillingEntryType;
+    period?: string;
+  },
+  now = new Date(),
+): Promise<PlatformAiCostReport> {
+  const window = resolveAiBillingWindow({ from: query.from, to: query.to }, now);
+  if (query.period) assertAiBillingPeriod(query.period);
+  const workspaceRows = await database.db
+    .select({
+      id: workspaces.id,
+      name: workspaces.name,
+      slug: workspaces.slug,
+    })
+    .from(workspaces)
+    .orderBy(asc(workspaces.name), asc(workspaces.slug));
+  const overviews = await Promise.all(
+    workspaceRows.map(async (workspace) => ({
+      workspace,
+      overview: await loadWorkspaceAiCostOverview(database, workspace.id),
+    })),
+  );
+  const report = buildPlatformAiCost({
+    from: window.from,
+    to: window.to,
+    workspaces: overviews.map(({ workspace, overview }) => ({
+      workspaceId: workspace.id,
+      name: workspace.name,
+      slug: workspace.slug,
+      chart: overview.chart,
+      entries: overview.entries,
+    })),
+    entryFilter: {
+      ...(query.workspaceId ? { workspaceId: query.workspaceId } : {}),
+      ...(query.provider ? { provider: query.provider } : {}),
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.period ? { period: query.period } : {}),
+    },
+  });
+  return {
+    ...report,
+    workspaces: workspaceRows,
   };
 }

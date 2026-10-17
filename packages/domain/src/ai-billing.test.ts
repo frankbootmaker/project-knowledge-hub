@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   allocateAiBillingPool,
+  buildPlatformAiCost,
+  defaultAiBillingWindow,
   flatFeeMonthShares,
   resolveBillingServiceWindow,
   roundAiMoney,
@@ -9,6 +11,7 @@ import {
   splitAiMoney,
   splitBillingEntryByMonth,
   type AiBillingAllocationProject,
+  type AiBillingMonthParts,
 } from './ai-billing.js';
 
 function project(
@@ -330,6 +333,230 @@ describe('settleProjectAiCost', () => {
       usage: [],
     });
     expect(roundAiMoney(left.aiPaidAc + right.aiPaidAc)).toBe(20);
+  });
+});
+
+describe('buildPlatformAiCost', () => {
+  const now = new Date('2026-10-17T12:00:00.000Z');
+
+  function point(
+    period: string,
+    currency: string,
+    patch: Partial<AiBillingMonthParts> = {},
+  ): AiBillingMonthParts {
+    return {
+      period,
+      currency,
+      subscription: 0,
+      planChange: 0,
+      onDemand: 0,
+      theoreticalApiCost: 0,
+      ...patch,
+    };
+  }
+
+  it('defaults to the last 12 UTC months', () => {
+    expect(defaultAiBillingWindow(now)).toEqual({ from: '2025-11', to: '2026-10' });
+  });
+
+  it('sums each workspace month per currency, including a plan-change credit', () => {
+    const alpha = {
+      workspaceId: 'ws-alpha',
+      name: 'Alpha',
+      slug: 'alpha',
+      chart: [
+        point('2026-10', 'EUR', {
+          subscription: 100,
+          planChange: -20,
+          onDemand: 10,
+          theoreticalApiCost: 40,
+        }),
+        point('2026-10', 'USD', {
+          subscription: 5,
+          theoreticalApiCost: 2,
+        }),
+        point('2026-08', 'EUR', { subscription: 999 }),
+      ],
+      entries: [
+        {
+          id: 'e1',
+          period: '2026-10',
+          provider: 'Cursor',
+          plan: 'Pro',
+          type: 'subscription' as const,
+          amount: 100,
+          currency: 'EUR',
+          paidAt: null,
+          note: null,
+          externalRef: null,
+          aiSystemId: null,
+        },
+        {
+          id: 'e2',
+          period: '2026-10',
+          provider: 'Cursor',
+          plan: null,
+          type: 'plan_change' as const,
+          amount: -20,
+          currency: 'EUR',
+          paidAt: null,
+          note: 'downgrade credit',
+          externalRef: null,
+          aiSystemId: null,
+        },
+        {
+          id: 'e3',
+          period: '2026-08',
+          provider: 'Cursor',
+          plan: null,
+          type: 'subscription' as const,
+          amount: 999,
+          currency: 'EUR',
+          paidAt: null,
+          note: null,
+          externalRef: null,
+          aiSystemId: null,
+        },
+      ],
+    };
+    const beta = {
+      workspaceId: 'ws-beta',
+      name: 'Beta',
+      slug: 'beta',
+      chart: [
+        point('2026-10', 'EUR', {
+          subscription: 40,
+          onDemand: 8,
+          theoreticalApiCost: 12,
+        }),
+      ],
+      entries: [
+        {
+          id: 'e4',
+          period: '2026-10',
+          provider: 'OpenAI',
+          plan: null,
+          type: 'on_demand' as const,
+          amount: 8,
+          currency: 'EUR',
+          paidAt: null,
+          note: null,
+          externalRef: null,
+          aiSystemId: null,
+        },
+      ],
+    };
+
+    const report = buildPlatformAiCost({
+      from: '2026-09',
+      to: '2026-10',
+      workspaces: [alpha, beta],
+    });
+
+    const eurMonths = report.months.filter((row) => row.currency === 'EUR');
+    const eurTotal = report.totals.find(
+      (row) => row.currency === 'EUR' && row.period === '2026-10',
+    );
+    const usdTotal = report.totals.find((row) => row.currency === 'USD');
+    expect(eurMonths.map((row) => row.workspaceId).sort()).toEqual(['ws-alpha', 'ws-beta']);
+    expect(report.months.some((row) => row.period === '2026-08')).toBe(false);
+    expect(eurTotal).toMatchObject({
+      subscription: 140,
+      planChange: -20,
+      onDemand: 18,
+      paidCost: 138,
+      theoreticalApiCost: 52,
+      difference: 86,
+    });
+    expect(eurTotal?.paidCost).toBe(
+      roundAiMoney(eurMonths.reduce((sum, row) => sum + row.paidCost, 0)),
+    );
+    expect(eurTotal?.theoreticalApiCost).toBe(
+      roundAiMoney(eurMonths.reduce((sum, row) => sum + row.theoreticalApiCost, 0)),
+    );
+    expect(eurTotal?.difference).toBe(
+      roundAiMoney(eurMonths.reduce((sum, row) => sum + row.difference, 0)),
+    );
+    expect(eurTotal?.planChange).toBe(
+      roundAiMoney(eurMonths.reduce((sum, row) => sum + row.planChange, 0)),
+    );
+    expect(usdTotal).toMatchObject({
+      paidCost: 5,
+      theoreticalApiCost: 2,
+      difference: 3,
+    });
+    expect(usdTotal?.paidCost).not.toBe(eurTotal?.paidCost);
+    expect(report.totals.some((row) => row.currency === 'EUR+USD')).toBe(false);
+    expect(eurTotal?.ratio).toBeCloseTo(138 / 52, 3);
+    const ratioSum = eurMonths.reduce((sum, row) => sum + (row.ratio ?? 0), 0);
+    expect(eurTotal?.ratio).not.toBeCloseTo(ratioSum, 2);
+
+    const credits = buildPlatformAiCost({
+      from: '2026-09',
+      to: '2026-10',
+      workspaces: [alpha, beta],
+      entryFilter: {
+        workspaceId: 'ws-alpha',
+        provider: 'cursor',
+        type: 'plan_change',
+        period: '2026-10',
+      },
+    });
+    expect(credits.entries.map((row) => row.id)).toEqual(['e2']);
+    expect(credits.entries[0]?.workspaceSlug).toBe('alpha');
+    expect(credits.providers).toEqual(['Cursor', 'OpenAI']);
+  });
+
+  it('shows a 12 Oct–11 Nov entry as 20/31 and 11/31 in the admin summary', () => {
+    const slices = splitBillingEntryByMonth({
+      amount: 31,
+      period: '2026-10',
+      servicePeriodStart: '2026-10-12',
+      servicePeriodEnd: '2026-11-11',
+    });
+    const report = buildPlatformAiCost({
+      from: '2026-10',
+      to: '2026-11',
+      workspaces: [
+        {
+          workspaceId: 'ws-alpha',
+          name: 'Alpha',
+          slug: 'alpha',
+          chart: slices.map((slice) =>
+            point(slice.period, 'EUR', { subscription: slice.amount }),
+          ),
+          entries: [
+            {
+              id: 'span',
+              period: '2026-10',
+              servicePeriodStart: '2026-10-12',
+              servicePeriodEnd: '2026-11-11',
+              provider: 'Cursor',
+              plan: null,
+              type: 'subscription' as const,
+              amount: 31,
+              currency: 'EUR',
+              paidAt: null,
+              note: null,
+              externalRef: null,
+              aiSystemId: null,
+            },
+          ],
+        },
+      ],
+      entryFilter: { period: '2026-11' },
+    });
+    const october = report.totals.find((row) => row.period === '2026-10');
+    const november = report.totals.find((row) => row.period === '2026-11');
+    expect(slices.map((slice) => [slice.period, slice.days, slice.amount])).toEqual([
+      ['2026-10', 20, 20],
+      ['2026-11', 11, 11],
+    ]);
+    expect(october).toMatchObject({ paidCost: 20, subscription: 20 });
+    expect(november).toMatchObject({ paidCost: 11, subscription: 11 });
+    expect(october?.paidCost).toBeCloseTo((20 / 31) * 31, 2);
+    expect(november?.paidCost).toBeCloseTo((11 / 31) * 31, 2);
+    expect(report.entries.map((row) => row.id)).toEqual(['span']);
   });
 });
 

@@ -3783,6 +3783,26 @@
     "rateCacheWrite": "Cache-Schreiben",
     "saveRates": "Preise speichern",
     "ratesSaved": "Modellpreise gespeichert.",
-    "rateInvalid": "Ein Preis muss eine Zahl oder leer sein."
+    "rateInvalid": "Ein Preis muss eine Zahl oder leer sein.",
+    "platformBlurb": "Bezahlte und theoretische KI-Kosten über alle Arbeitsbereiche. Jede Währung wird für sich summiert.",
+    "overviewTitle": "Monatsübersicht",
+    "paid": "Bezahlt",
+    "difference": "Differenz",
+    "ratio": "Verhältnis",
+    "total": "Summe",
+    "workspace": "Arbeitsbereich",
+    "from": "Von",
+    "to": "Bis",
+    "apply": "Anwenden",
+    "month": "Monat",
+    "allWorkspaces": "Alle Arbeitsbereiche",
+    "allProviders": "Alle Anbieter",
+    "allTypes": "Alle Arten",
+    "allMonths": "Alle Monate",
+    "editInWorkspace": "Bearbeiten",
+    "entriesHint": "Nur lesen. Zum Ändern den Arbeitsbereich öffnen. Diese Filter gelten für die Liste. Die Summen bleiben der ganze Zeitraum.",
+    "entriesNone": "Keine Kostenposten passen zu diesen Filtern.",
+    "noMonths": "Keine KI-Kosten in diesem Zeitraum.",
+    "currenciesSeparate": "Summen bleiben je Währung getrennt."
   }
 }

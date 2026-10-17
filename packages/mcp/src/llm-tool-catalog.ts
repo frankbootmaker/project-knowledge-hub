@@ -3050,6 +3050,29 @@ const EXTRA_HUB_TOOLS: Array<{
     },
   },
   {
+    name: 'get_platform_ai_cost',
+    description:
+      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, per currency. Multi-month entries are prorated by days, the same split as a workspace chart. Currencies are not combined. Defaults to the last 12 months. System administrator only. Requires pm:read. Via call_hub_tool.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        from: {
+          type: 'string',
+          pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
+          description: 'First month YYYY-MM. Defaults to 11 months before to.',
+        },
+        to: {
+          type: 'string',
+          pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
+          description: 'Last month YYYY-MM. Defaults to the current UTC month.',
+        },
+      },
+    },
+  },
+  {
     name: 'list_ai_billing_entries',
     description:
       'List workspace AI cost entries. Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A span is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional service dates keep rows whose window overlaps that range. Requires pm:read.',

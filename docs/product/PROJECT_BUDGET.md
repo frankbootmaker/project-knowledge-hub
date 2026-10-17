@@ -47,6 +47,10 @@ Theoretical API cost is the same list-price math for every mode, including `toke
 
 Sprint rows on the summary are theoretical only. Paid fees stay on the calendar month.
 
+## Platform AI cost (PRO-T-102)
+
+System administrators open Admin → Financials → AI Cost (`/admin/financials`). The monthly paid totals (subscription, plan change, on-demand), theoretical API cost, difference, and ratio are the sum of each workspace's own AI Cost chart for that month. Another currency is a separate total. The default window is the last 12 months. The cost-entry list is read-only and links to that workspace's Financials → AI Cost tab, where the entry is edited. `get_platform_ai_cost` returns the same summary for a system administrator (`pm:read`, via `call_hub_tool`). Those monthly totals are the workspace charts, which split each entry with `splitBillingEntryByMonth` through `monthPoolsFromBillingEntries`. A 12 Oct–11 Nov row is 20/31 in October and 11/31 in November on the admin summary as well.
+
 ## Entities
 
 ```text

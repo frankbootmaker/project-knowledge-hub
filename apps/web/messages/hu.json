@@ -3782,6 +3782,26 @@
     "rateCacheWrite": "Cache-írás",
     "saveRates": "Árak mentése",
     "ratesSaved": "Modellárak mentve.",
-    "rateInvalid": "Az ár szám vagy üres legyen."
+    "rateInvalid": "Az ár szám vagy üres legyen.",
+    "platformBlurb": "Fizetett és elméleti AI-költség minden munkaterületen. A pénznemek összege külön marad.",
+    "overviewTitle": "Havi áttekintés",
+    "paid": "Fizetett",
+    "difference": "Különbség",
+    "ratio": "Arány",
+    "total": "Összesen",
+    "workspace": "Munkaterület",
+    "from": "Ettől",
+    "to": "Eddig",
+    "apply": "Alkalmaz",
+    "month": "Hónap",
+    "allWorkspaces": "Minden munkaterület",
+    "allProviders": "Minden szolgáltató",
+    "allTypes": "Minden típus",
+    "allMonths": "Minden hónap",
+    "editInWorkspace": "Szerkesztés",
+    "entriesHint": "Csak olvasható. A költségtétel módosításához nyisd meg a munkaterületet. A szűrők a listára vonatkoznak. Az összesítés a teljes időszak.",
+    "entriesNone": "Nincs a szűrőknek megfelelő költségtétel.",
+    "noMonths": "Nincs AI-költség ebben az időszakban.",
+    "currenciesSeparate": "Az összegek pénznemenként különülnek el."
   }
 }

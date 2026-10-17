@@ -8,6 +8,7 @@ import {
   projectCurrencySchema,
 } from '@project-knowledge-hub/domain';
 import {
+  requireSystemAdmin,
   requireWorkspaceMaintainer,
   requireWorkspaceView,
 } from '@project-knowledge-hub/permissions';
@@ -21,6 +22,7 @@ import {
   deleteAiBillingEntry,
   getAiBillingEntry,
   listAiBillingEntries,
+  loadPlatformAiCost,
   loadWorkspaceAiCostOverview,
   setAiBillingAllocation,
   updateAiBillingEntry,
@@ -79,9 +81,58 @@ async function refreshWorkspaceSnapshots(
   }
 }
 
+function blank(value: string | undefined): string | undefined {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export async function registerAiBillingRoutes(
   app: FastifyInstance,
 ): Promise<void> {
+  app.get('/api/v1/admin/ai-cost', async (request) => {
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const query = z
+      .object({
+        from: z.string().optional(),
+        to: z.string().optional(),
+        workspaceId: z.string().optional(),
+        provider: z.string().max(80).optional(),
+        type: z.string().optional(),
+        period: z.string().optional(),
+      })
+      .parse(request.query);
+    const workspaceId = blank(query.workspaceId);
+    if (workspaceId && !z.string().uuid().safeParse(workspaceId).success) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'workspaceId must be a UUID',
+        statusCode: 400,
+      });
+    }
+    const type = blank(query.type);
+    const parsedType = type ? entryType.safeParse(type) : null;
+    if (type && !parsedType?.success) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'type must be subscription, plan_change, or on_demand',
+        statusCode: 400,
+      });
+    }
+    const from = blank(query.from);
+    const to = blank(query.to);
+    const provider = blank(query.provider);
+    const period = blank(query.period);
+    return loadPlatformAiCost(app.database, {
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+      ...(workspaceId ? { workspaceId } : {}),
+      ...(provider ? { provider } : {}),
+      ...(parsedType?.success ? { type: parsedType.data } : {}),
+      ...(period ? { period } : {}),
+    });
+  });
+
   app.get(
     '/api/v1/workspaces/:workspaceId/ai-cost',
     async (request) => {

@@ -3782,6 +3782,26 @@
     "rateCacheWrite": "Cache write",
     "saveRates": "Save prices",
     "ratesSaved": "Model prices saved.",
-    "rateInvalid": "A price must be a number or empty."
+    "rateInvalid": "A price must be a number or empty.",
+    "platformBlurb": "Paid and theoretical AI cost for every workspace. Each currency is totaled on its own.",
+    "overviewTitle": "Monthly overview",
+    "paid": "Paid",
+    "difference": "Difference",
+    "ratio": "Ratio",
+    "total": "Total",
+    "workspace": "Workspace",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "month": "Month",
+    "allWorkspaces": "All workspaces",
+    "allProviders": "All providers",
+    "allTypes": "All types",
+    "allMonths": "All months",
+    "editInWorkspace": "Edit",
+    "entriesHint": "Read-only. Open a workspace to change a cost entry. These filters apply to the list. Totals stay the full period.",
+    "entriesNone": "No cost entries match these filters.",
+    "noMonths": "No AI cost in this period.",
+    "currenciesSeparate": "Totals stay separate for each currency."
   }
 }

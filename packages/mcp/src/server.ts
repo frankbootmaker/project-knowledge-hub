@@ -685,6 +685,10 @@ export type McpToolHandlers = {
     servicePeriodStart?: string;
     servicePeriodEnd?: string;
   }) => Promise<unknown>;
+  getPlatformAiCost: (input: {
+    from?: string;
+    to?: string;
+  }) => Promise<unknown>;
   createAiBillingEntry: (input: {
     workspaceId: string;
     period?: string;
@@ -3294,6 +3298,19 @@ export function createKnowledgeHubMcpServer(
   const listBillingOutput = { entries: z.array(billingEntryOutput()) };
   const createBillingOutput = { entry: billingEntryOutput() };
   const updateBillingOutput = { entry: billingEntryOutput() };
+
+  server.tool(
+    'get_platform_ai_cost',
+    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio. Multi-month entries are prorated by days. Currencies stay separate. Defaults to the last 12 months. System administrator only. Requires pm:read.',
+    {
+      from: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      to: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+    },
+    async (args) =>
+      wrap('get_platform_ai_cost', 'pm:read', () =>
+        handlers.getPlatformAiCost(args),
+      )(),
+  );
 
   server.registerTool(
     'list_ai_billing_entries',
