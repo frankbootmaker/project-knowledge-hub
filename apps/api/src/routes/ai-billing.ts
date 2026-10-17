@@ -34,7 +34,9 @@ const money = z.union([z.number(), z.string()]);
 
 const createSchema = z.object({
   aiSystemId: z.string().uuid().nullable().optional(),
-  period: z.string(),
+  period: z.string().optional(),
+  servicePeriodStart: z.string().nullable().optional(),
+  servicePeriodEnd: z.string().nullable().optional(),
   provider: z.string(),
   plan: z.string().nullable().optional(),
   type: entryType,
@@ -154,6 +156,8 @@ export async function registerAiBillingRoutes(
         .object({
           period: z.string().optional(),
           aiSystemId: z.string().uuid().optional(),
+          servicePeriodStart: z.string().optional(),
+          servicePeriodEnd: z.string().optional(),
         })
         .parse(request.query);
       requireWorkspaceView(principal, params.workspaceId);
