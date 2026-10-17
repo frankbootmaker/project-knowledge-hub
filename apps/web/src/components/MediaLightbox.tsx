@@ -10,7 +10,6 @@ import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { mediaAbsoluteUrl } from '../lib/media-image';
 import { cn } from '../lib/cn';
-import { headerControlSquareClassName } from './header-control';
 import { Button } from './ui/Button';
 
 export type MediaLightboxItem = {
@@ -148,6 +147,26 @@ export function MediaLightbox({
         aria-labelledby={titleId}
         className="kh-media-lightbox__panel"
       >
+        <button
+          type="button"
+          className="kh-media-lightbox__close"
+          aria-label={tCommon('closeDialog')}
+          onClick={() => onCloseRef.current()}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden
+            className="kh-media-lightbox__close-icon"
+            fill="none"
+          >
+            <path
+              d="M6 6l12 12M18 6L6 18"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
         <div className="kh-media-lightbox__toolbar">
           <p id={titleId} className="kh-media-lightbox__title">
             {item.title || t('lightboxUntitled')}
@@ -189,27 +208,6 @@ export function MediaLightbox({
             >
               {t('lightboxOpenOriginal')}
             </a>
-            <Button
-              type="button"
-              variant="ghost"
-              className={cn(headerControlSquareClassName, 'kh-media-lightbox__close')}
-              aria-label={tCommon('closeDialog')}
-              onClick={() => onCloseRef.current()}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                aria-hidden
-                className="size-5"
-                fill="none"
-              >
-                <path
-                  d="M6 6l12 12M18 6L6 18"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </Button>
           </div>
         </div>
         <div className="kh-media-lightbox__stage">
