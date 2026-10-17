@@ -4704,6 +4704,8 @@ export function createMcpToolHandlers(
       const entries = await listAiBillingEntries(app.database, input.workspaceId, {
         period: input.period,
         aiSystemId: input.aiSystemId,
+        servicePeriodStart: input.servicePeriodStart,
+        servicePeriodEnd: input.servicePeriodEnd,
       });
       return { entries };
     },

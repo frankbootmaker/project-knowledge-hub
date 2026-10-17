@@ -11,13 +11,16 @@ import {
   allocateAiBillingPool,
   assertAiBillingPeriod,
   assertAllocationPercent,
+  assertServiceDate,
   isAiBillingActiveProject,
   type AiBillingAllocationMethod,
   parseUsageOccurredAt,
   projectCurrencySchema,
+  resolveBillingServiceWindow,
   roundAiMoney,
   scaleAiBillingTypes,
   settleProjectAiCost,
+  splitBillingEntryByMonth,
   usageHasTokenBreakdown,
   type AiBillingEntryType,
   type AiBillingProjectShare,
@@ -47,6 +50,8 @@ export type PublicAiBillingEntry = {
   workspaceId: string;
   aiSystemId: string | null;
   period: string;
+  servicePeriodStart: string | null;
+  servicePeriodEnd: string | null;
   provider: string;
   plan: string | null;
   type: AiBillingEntryType;
@@ -61,7 +66,10 @@ export type PublicAiBillingEntry = {
 
 export type AiBillingEntryWrite = {
   aiSystemId?: string | null;
-  period: string;
+  /** YYYY-MM. Derived from servicePeriodStart when that date is set. */
+  period?: string;
+  servicePeriodStart?: string | null;
+  servicePeriodEnd?: string | null;
   provider: string;
   plan?: string | null;
   type: AiBillingEntryType;
@@ -98,6 +106,8 @@ function toPublicEntry(row: EntryRow): PublicAiBillingEntry {
     workspaceId: row.workspaceId,
     aiSystemId: row.aiSystemId,
     period: row.period,
+    servicePeriodStart: row.servicePeriodStart,
+    servicePeriodEnd: row.servicePeriodEnd,
     provider: row.provider,
     plan: row.plan,
     type: row.type as AiBillingEntryType,
@@ -199,19 +209,17 @@ async function assertAiSystemInWorkspace(
 export async function listAiBillingEntries(
   database: Database,
   workspaceId: string,
-  filter?: { period?: string; aiSystemId?: string },
+  filter?: BillingListFilter,
 ): Promise<PublicAiBillingEntry[]> {
+  assertBillingListFilter(filter);
   const rows = await database.db
     .select()
     .from(aiBillingEntries)
     .where(eq(aiBillingEntries.workspaceId, workspaceId))
     .orderBy(desc(aiBillingEntries.period), desc(aiBillingEntries.createdAt));
   return rows
-    .filter((row) => (filter?.period ? row.period === filter.period : true))
-    .filter((row) =>
-      filter?.aiSystemId ? row.aiSystemId === filter.aiSystemId : true,
-    )
-    .map(toPublicEntry);
+    .map(toPublicEntry)
+    .filter((entry) => entryMatchesBillingListFilter(entry, filter));
 }
 
 export async function createAiBillingEntry(
@@ -220,7 +228,11 @@ export async function createAiBillingEntry(
   input: AiBillingEntryWrite,
   createdBy: string | null,
 ): Promise<PublicAiBillingEntry> {
-  const period = assertAiBillingPeriod(input.period);
+  const window = resolveBillingServiceWindow({
+    period: input.period,
+    servicePeriodStart: input.servicePeriodStart,
+    servicePeriodEnd: input.servicePeriodEnd,
+  });
   const type = input.type;
   const amount = parseBillingAmount(type, input.amount);
   const currency = projectCurrencySchema.parse(input.currency);
@@ -232,7 +244,9 @@ export async function createAiBillingEntry(
     .values({
       workspaceId,
       aiSystemId,
-      period,
+      period: window.period,
+      servicePeriodStart: window.servicePeriodStart,
+      servicePeriodEnd: window.servicePeriodEnd,
       provider: parseLabel(input.provider, 'provider', PROVIDER_MAX, true) ?? '',
       plan: parseLabel(input.plan, 'plan', PLAN_MAX, false),
       type,
@@ -290,14 +304,24 @@ export async function updateAiBillingEntry(
     input.paidAt === undefined
       ? existing.paidAt
       : parseUsageOccurredAt(input.paidAt) ?? null;
+  const window = resolveBillingServiceWindow({
+    period: input.period === undefined ? existing.period : input.period,
+    servicePeriodStart:
+      input.servicePeriodStart === undefined
+        ? existing.servicePeriodStart
+        : input.servicePeriodStart,
+    servicePeriodEnd:
+      input.servicePeriodEnd === undefined
+        ? existing.servicePeriodEnd
+        : input.servicePeriodEnd,
+  });
   const [row] = await database.db
     .update(aiBillingEntries)
     .set({
       aiSystemId,
-      period:
-        input.period === undefined
-          ? existing.period
-          : assertAiBillingPeriod(input.period),
+      period: window.period,
+      servicePeriodStart: window.servicePeriodStart,
+      servicePeriodEnd: window.servicePeriodEnd,
       provider:
         input.provider === undefined
           ? existing.provider
@@ -481,6 +505,138 @@ function poolId(period: string, aiSystemId: string | null, currency: string): st
   return `${period}|${aiSystemId ?? ''}|${currency}`;
 }
 
+export type BillingMonthPool = {
+  period: string;
+  aiSystemId: string | null;
+  currency: string;
+  subscription: number;
+  planChange: number;
+  onDemand: number;
+  paidTotal: number;
+};
+
+/**
+ * Paid amount of each entry, split by `splitBillingEntryByMonth`, summed
+ * into month + system + currency pools.
+ */
+export function monthPoolsFromBillingEntries(
+  entries: readonly {
+    period: string;
+    aiSystemId: string | null;
+    currency: string;
+    type: string;
+    amount: number | string;
+    servicePeriodStart?: string | null;
+    servicePeriodEnd?: string | null;
+  }[],
+): Map<string, BillingMonthPool> {
+  const pools = new Map<string, BillingMonthPool>();
+  for (const entry of entries) {
+    const slices = splitBillingEntryByMonth({
+      amount: Number(entry.amount),
+      period: entry.period,
+      servicePeriodStart: entry.servicePeriodStart ?? null,
+      servicePeriodEnd: entry.servicePeriodEnd ?? null,
+    });
+    for (const slice of slices) {
+      const key = poolId(slice.period, entry.aiSystemId, entry.currency);
+      const pool = pools.get(key) ?? {
+        period: slice.period,
+        aiSystemId: entry.aiSystemId,
+        currency: entry.currency,
+        subscription: 0,
+        planChange: 0,
+        onDemand: 0,
+        paidTotal: 0,
+      };
+      pool.paidTotal += slice.amount;
+      if (entry.type === 'subscription') pool.subscription += slice.amount;
+      else if (entry.type === 'plan_change') pool.planChange += slice.amount;
+      else pool.onDemand += slice.amount;
+      pools.set(key, pool);
+    }
+  }
+  return pools;
+}
+
+export type BillingListFilter = {
+  period?: string;
+  aiSystemId?: string;
+  servicePeriodStart?: string;
+  servicePeriodEnd?: string;
+};
+
+function serviceBounds(entry: {
+  period: string;
+  servicePeriodStart: string | null;
+  servicePeriodEnd: string | null;
+}): { start: string; end: string } | null {
+  if (entry.servicePeriodStart && entry.servicePeriodEnd) {
+    return { start: entry.servicePeriodStart, end: entry.servicePeriodEnd };
+  }
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(entry.period);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    start: `${entry.period}-01`,
+    end: `${entry.period}-${String(last).padStart(2, '0')}`,
+  };
+}
+
+function assertBillingListFilter(filter: BillingListFilter | undefined): void {
+  if (!filter) return;
+  const start = filter.servicePeriodStart
+    ? assertServiceDate(filter.servicePeriodStart, 'servicePeriodStart')
+    : null;
+  const end = filter.servicePeriodEnd
+    ? assertServiceDate(filter.servicePeriodEnd, 'servicePeriodEnd')
+    : null;
+  if (start && end && end < start) {
+    throw new AppError({
+      code: 'INVALID_DATE_RANGE',
+      message: `servicePeriodEnd (${end}) must be on or after servicePeriodStart (${start})`,
+      statusCode: 400,
+    });
+  }
+}
+
+/** Period matches any month the entry contributes to, not only its start month. */
+export function entryMatchesBillingListFilter(
+  entry: {
+    period: string;
+    aiSystemId: string | null;
+    amount: number;
+    servicePeriodStart: string | null;
+    servicePeriodEnd: string | null;
+  },
+  filter?: BillingListFilter,
+): boolean {
+  if (!filter) return true;
+  if (filter.aiSystemId && entry.aiSystemId !== filter.aiSystemId) return false;
+  if (filter.period) {
+    const hit = splitBillingEntryByMonth({
+      amount: entry.amount,
+      period: entry.period,
+      servicePeriodStart: entry.servicePeriodStart,
+      servicePeriodEnd: entry.servicePeriodEnd,
+    }).some((slice) => slice.period === filter.period);
+    if (!hit) return false;
+  }
+  if (filter.servicePeriodStart || filter.servicePeriodEnd) {
+    const bounds = serviceBounds(entry);
+    if (!bounds) return false;
+    if (filter.servicePeriodStart && bounds.end < filter.servicePeriodStart) {
+      return false;
+    }
+    if (filter.servicePeriodEnd && bounds.start > filter.servicePeriodEnd) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Allocate the workspace ledger onto one project and compare it with the
  * theoretical API cost. With no applicable ledger entries, paid AC is the
@@ -607,34 +763,7 @@ export async function loadProjectPaidAi(
     assistantRows.map((row) => [row.id, row.projectId]),
   );
 
-  type Pool = {
-    period: string;
-    aiSystemId: string | null;
-    currency: string;
-    subscription: number;
-    planChange: number;
-    onDemand: number;
-    paidTotal: number;
-  };
-  const pools = new Map<string, Pool>();
-  for (const entry of entryRows) {
-    const key = poolId(entry.period, entry.aiSystemId, entry.currency);
-    const pool = pools.get(key) ?? {
-      period: entry.period,
-      aiSystemId: entry.aiSystemId,
-      currency: entry.currency,
-      subscription: 0,
-      planChange: 0,
-      onDemand: 0,
-      paidTotal: 0,
-    };
-    const amount = Number(entry.amount);
-    pool.paidTotal += amount;
-    if (entry.type === 'subscription') pool.subscription += amount;
-    else if (entry.type === 'plan_change') pool.planChange += amount;
-    else pool.onDemand += amount;
-    pools.set(key, pool);
-  }
+  const pools = monthPoolsFromBillingEntries(entryRows);
 
   const shares: AiBillingProjectShare[] = [];
   for (const pool of pools.values()) {
@@ -944,34 +1073,7 @@ export async function loadWorkspaceAiCostOverview(
       )
       .reduce((sum, row) => sum + row.tokens, 0);
 
-  type Pool = {
-    period: string;
-    aiSystemId: string | null;
-    currency: string;
-    subscription: number;
-    planChange: number;
-    onDemand: number;
-    paidTotal: number;
-  };
-  const pools = new Map<string, Pool>();
-  for (const entry of entryRows) {
-    const key = poolId(entry.period, entry.aiSystemId, entry.currency);
-    const pool = pools.get(key) ?? {
-      period: entry.period,
-      aiSystemId: entry.aiSystemId,
-      currency: entry.currency,
-      subscription: 0,
-      planChange: 0,
-      onDemand: 0,
-      paidTotal: 0,
-    };
-    const amount = Number(entry.amount);
-    pool.paidTotal += amount;
-    if (entry.type === 'subscription') pool.subscription += amount;
-    else if (entry.type === 'plan_change') pool.planChange += amount;
-    else pool.onDemand += amount;
-    pools.set(key, pool);
-  }
+  const pools = monthPoolsFromBillingEntries(entryRows);
 
   const chart = new Map<
     string,
