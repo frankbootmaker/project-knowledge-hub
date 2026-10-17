@@ -237,6 +237,13 @@ import {
   parseTokenRate,
   upsertProjectCostSnapshot,
 } from './project-budget.js';
+import {
+  createAiBillingEntry,
+  deleteAiBillingEntry,
+  getAiBillingEntry,
+  listAiBillingEntries,
+  updateAiBillingEntry,
+} from './ai-billing.js';
 import { moveProjectToWorkspace } from './project-move.js';
 import {
   emptyProjectHealth,
@@ -402,6 +409,7 @@ function mapMcpAiUsage(input: {
   tokensInput?: number | null;
   tokensOutput?: number | null;
   tokensCache?: number | null;
+  tokensCacheWrite?: number | null;
   modelId?: string | null;
   pricingTier?: string | null;
   usageOccurredAt?: string | null;
@@ -412,6 +420,7 @@ function mapMcpAiUsage(input: {
     tokensInput: input.tokensInput,
     tokensOutput: input.tokensOutput,
     tokensCache: input.tokensCache,
+    tokensCacheWrite: input.tokensCacheWrite,
     modelId:
       input.modelId === undefined ? undefined : parseAiModelId(input.modelId),
     pricingTier:
@@ -4688,6 +4697,115 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { stakeholder };
+    },
+
+    async listAiBillingEntries(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      const entries = await listAiBillingEntries(app.database, input.workspaceId, {
+        period: input.period,
+        aiSystemId: input.aiSystemId,
+      });
+      return { entries };
+    },
+
+    async createAiBillingEntry(input) {
+      const actingUserId = requireActingUserId(client);
+      assertWorkspaceAllowed(client, input.workspaceId);
+      assertWriteWorkspaceAllowed(client, input.workspaceId);
+      const entry = await createAiBillingEntry(
+        app.database,
+        input.workspaceId,
+        input,
+        actingUserId,
+      );
+      const projectRows = await app.database.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.workspaceId, input.workspaceId), isNull(projects.archivedAt)));
+      for (const row of projectRows) {
+        await upsertProjectCostSnapshot(app.database, row.id);
+      }
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'ai_billing_entry.created',
+        entityType: 'ai_billing_entry',
+        entityId: entry.id,
+        metadata: { workspaceId: input.workspaceId, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { entry };
+    },
+
+    async updateAiBillingEntry(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getAiBillingEntry(app.database, input.entryId);
+      if (!existing) {
+        throw new AppError({
+          code: 'BILLING_ENTRY_NOT_FOUND',
+          message: 'Billing entry not found',
+          statusCode: 404,
+        });
+      }
+      assertWorkspaceAllowed(client, existing.workspaceId);
+      assertWriteWorkspaceAllowed(client, existing.workspaceId);
+      const entry = await updateAiBillingEntry(app.database, input.entryId, input);
+      const projectRows = await app.database.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(
+          and(eq(projects.workspaceId, existing.workspaceId), isNull(projects.archivedAt)),
+        );
+      for (const row of projectRows) {
+        await upsertProjectCostSnapshot(app.database, row.id);
+      }
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'ai_billing_entry.updated',
+        entityType: 'ai_billing_entry',
+        entityId: entry.id,
+        metadata: { workspaceId: existing.workspaceId, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { entry };
+    },
+
+    async deleteAiBillingEntry(input) {
+      const actingUserId = requireActingUserId(client);
+      const existing = await getAiBillingEntry(app.database, input.entryId);
+      if (!existing) {
+        throw new AppError({
+          code: 'BILLING_ENTRY_NOT_FOUND',
+          message: 'Billing entry not found',
+          statusCode: 404,
+        });
+      }
+      assertWorkspaceAllowed(client, existing.workspaceId);
+      assertWriteWorkspaceAllowed(client, existing.workspaceId);
+      await deleteAiBillingEntry(app.database, input.entryId);
+      const projectRows = await app.database.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(
+          and(eq(projects.workspaceId, existing.workspaceId), isNull(projects.archivedAt)),
+        );
+      for (const row of projectRows) {
+        await upsertProjectCostSnapshot(app.database, row.id);
+      }
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'ai_billing_entry.deleted',
+        entityType: 'ai_billing_entry',
+        entityId: input.entryId,
+        metadata: { workspaceId: existing.workspaceId, via: 'mcp', actingUserId },
+        ipAddress: ipAddress ?? null,
+      });
+      return { deleted: true };
     },
 
     async deleteProjectStakeholder(input) {

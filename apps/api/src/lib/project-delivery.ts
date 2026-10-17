@@ -164,6 +164,7 @@ export type PublicTask = {
   tokensInput: number | null;
   tokensOutput: number | null;
   tokensCache: number | null;
+  tokensCacheWrite: number | null;
   modelId: string | null;
   pricingTier: string | null;
   usageOccurredAt: string | null;
@@ -288,6 +289,7 @@ function toPublicTask(
     tokensInput: row.tokensInput ?? null,
     tokensOutput: row.tokensOutput ?? null,
     tokensCache: row.tokensCache ?? null,
+    tokensCacheWrite: row.tokensCacheWrite ?? null,
     modelId: row.aiModelId ?? null,
     pricingTier: row.aiPricingTier ?? null,
     usageOccurredAt: row.usageOccurredAt?.toISOString() ?? null,
@@ -1184,6 +1186,7 @@ const EMPTY_AI_USAGE: StoredAiUsage = {
   tokensInput: null,
   tokensOutput: null,
   tokensCache: null,
+  tokensCacheWrite: null,
   modelId: null,
   pricingTier: null,
   usageOccurredAt: null,
@@ -1195,6 +1198,7 @@ function storedAiUsage(row: {
   tokensInput?: number | null;
   tokensOutput?: number | null;
   tokensCache?: number | null;
+  tokensCacheWrite?: number | null;
   aiModelId?: string | null;
   aiPricingTier?: string | null;
   usageOccurredAt?: Date | null;
@@ -1205,6 +1209,7 @@ function storedAiUsage(row: {
     tokensInput: row.tokensInput ?? null,
     tokensOutput: row.tokensOutput ?? null,
     tokensCache: row.tokensCache ?? null,
+    tokensCacheWrite: row.tokensCacheWrite ?? null,
     modelId: row.aiModelId ?? null,
     pricingTier: row.aiPricingTier ?? null,
     usageOccurredAt: row.usageOccurredAt ?? null,
@@ -1284,6 +1289,12 @@ function usageActivityDelta(
     before.tokensCache !== after.tokensCache,
   );
   consider(
+    'tokensCacheWrite',
+    input.tokensCacheWrite !== undefined,
+    before.tokensCacheWrite ?? null,
+    (before.tokensCacheWrite ?? null) !== (after.tokensCacheWrite ?? null),
+  );
+  consider(
     'modelId',
     input.modelId !== undefined,
     before.modelId,
@@ -1323,6 +1334,7 @@ export function taskTouchesCost(input: {
   tokensInput?: unknown;
   tokensOutput?: unknown;
   tokensCache?: unknown;
+  tokensCacheWrite?: unknown;
   modelId?: unknown;
   pricingTier?: unknown;
   usageOccurredAt?: unknown;
@@ -1555,6 +1567,7 @@ export async function createTask(
     tokensInput?: number | null;
     tokensOutput?: number | null;
     tokensCache?: number | null;
+    tokensCacheWrite?: number | null;
     modelId?: string | null;
     pricingTier?: string | null;
     usageOccurredAt?: Date | null;
@@ -1683,6 +1696,7 @@ export async function createTask(
         tokensInput: usage.tokensInput,
         tokensOutput: usage.tokensOutput,
         tokensCache: usage.tokensCache,
+        tokensCacheWrite: usage.tokensCacheWrite ?? null,
         aiModelId: usage.modelId,
         aiPricingTier: usage.pricingTier,
         usageOccurredAt: usage.usageOccurredAt,
@@ -1796,6 +1810,7 @@ export async function updateTask(
     tokensInput?: number | null;
     tokensOutput?: number | null;
     tokensCache?: number | null;
+    tokensCacheWrite?: number | null;
     modelId?: string | null;
     pricingTier?: string | null;
     usageOccurredAt?: Date | null;
@@ -1980,6 +1995,7 @@ export async function updateTask(
       tokensInput: usage.tokensInput,
       tokensOutput: usage.tokensOutput,
       tokensCache: usage.tokensCache,
+      tokensCacheWrite: usage.tokensCacheWrite ?? null,
       aiModelId: usage.modelId,
       aiPricingTier: usage.pricingTier,
       usageOccurredAt: usage.usageOccurredAt,

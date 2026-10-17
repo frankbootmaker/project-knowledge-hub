@@ -1,10 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { CollapsibleSection } from './CollapsibleSection';
 import { formatMoney, parseOptionalNumber } from '../lib/project-currency';
+import { AiBillingChart } from './AiBillingChart';
 import {
   Button,
   ErrorText,
@@ -54,7 +56,21 @@ type SystemItBudgetBreakdown = {
   overAllocation: boolean;
 };
 
+type AiPeriod = {
+  period: string;
+  paidCost: number;
+  subscription: number;
+  planChange: number;
+  onDemand: number;
+  legacyToken: number;
+  theoreticalApiCost: number;
+  difference: number;
+  ratio: number | null;
+  source: 'ledger' | 'fallback' | 'mixed';
+};
+
 export type ProjectBudgetSummary = {
+  workspaceId?: string;
   currency: string;
   initialBudget: number | null;
   approvedBudget: number | null;
@@ -66,6 +82,11 @@ export type ProjectBudgetSummary = {
   aiAc: number;
   aiFlatAc?: number;
   aiTokenAc?: number;
+  aiPaidAc?: number;
+  aiTheoreticalApiCost?: number;
+  aiCostDifference?: number;
+  aiCostRatio?: number | null;
+  aiPeriods?: AiPeriod[];
   systemAc: number;
   aiNoteOnlyTokens: number;
   aiSystems: AiBudgetBreakdown[];
@@ -238,10 +259,13 @@ function BurndownChart({
 export function ProjectBudgetPanel({
   projectId,
   canMutate,
+  financialsHref = null,
   initialSummary = null,
 }: {
   projectId: string;
   canMutate: boolean;
+  /** Set for workspace admins. Ledger editing lives on Financials, not here. */
+  financialsHref?: string | null;
   initialSummary?: ProjectBudgetSummary | null;
 }) {
   const t = useTranslations('budget');
@@ -338,6 +362,9 @@ export function ProjectBudgetPanel({
   }
 
   const currency = summary?.currency ?? 'EUR';
+  const aiPeriods = summary?.aiPeriods ?? [];
+  const paidAc = summary?.aiPaidAc ?? summary?.aiAc ?? 0;
+  const theoretical = summary?.aiTheoreticalApiCost ?? 0;
 
   return (
     <>
@@ -527,6 +554,102 @@ export function ProjectBudgetPanel({
               </div>
             </section>
           </div>
+
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{t('aiPaidTitle')}</h2>
+              {financialsHref ? (
+                <Link href={financialsHref} className="kh-text-link text-[13px]">
+                  {t('financialsLink')}
+                </Link>
+              ) : null}
+            </div>
+            <div className="kh-ops-stats">
+              <div className="kh-ops-stat">
+                <p className="kh-ops-stat-label m-0">{t('aiPaid')}</p>
+                <p className="kh-ops-stat-value">
+                  {formatMoney(paidAc, currency, locale)}
+                </p>
+              </div>
+              <div className="kh-ops-stat">
+                <p className="kh-ops-stat-label m-0">{t('aiTheoretical')}</p>
+                <p className="kh-ops-stat-value">
+                  {formatMoney(theoretical, currency, locale)}
+                </p>
+              </div>
+              <div className="kh-ops-stat">
+                <p className="kh-ops-stat-label m-0">{t('aiDifference')}</p>
+                <p className="kh-ops-stat-value">
+                  {formatMoney(paidAc - theoretical, currency, locale)}
+                </p>
+              </div>
+            </div>
+            <div className="kh-ops-chart-wrap">
+              <div className="kh-ops-chart-legend">
+                <span>
+                  <i className="kh-ops-ai-cost-sub" />
+                  {t('billingType.subscription')}
+                </span>
+                <span>
+                  <i className="kh-ops-ai-cost-change" />
+                  {t('billingType.plan_change')}
+                </span>
+                <span>
+                  <i className="kh-ops-ai-cost-demand" />
+                  {t('billingType.on_demand')}
+                </span>
+                <span>
+                  <i className="kh-ops-ai-cost-line" />
+                  {t('aiTheoretical')}
+                </span>
+              </div>
+              {aiPeriods.length === 0 ? (
+                <p className="kh-ops-empty">{t('aiPeriodsEmpty')}</p>
+              ) : (
+                <AiBillingChart
+                  periods={aiPeriods}
+                  ariaLabel={t('aiChartAria')}
+                />
+              )}
+            </div>
+            {aiPeriods.length > 0 ? (
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('aiPeriod')}</th>
+                      <th className="kh-ops-num">{t('aiPaid')}</th>
+                      <th className="kh-ops-num">{t('aiTheoretical')}</th>
+                      <th className="kh-ops-num">{t('aiDifference')}</th>
+                      <th className="kh-ops-num">{t('aiRatio')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiPeriods.map((period) => (
+                      <tr key={period.period}>
+                        <td>{period.period}</td>
+                        <td className="kh-ops-num">
+                          {formatMoney(period.paidCost, currency, locale)}
+                        </td>
+                        <td className="kh-ops-num">
+                          {formatMoney(period.theoreticalApiCost, currency, locale)}
+                        </td>
+                        <td className="kh-ops-num">
+                          {formatMoney(period.difference, currency, locale)}
+                        </td>
+                        <td className="kh-ops-num">
+                          {period.ratio == null ? '—' : period.ratio.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <p className="kh-ops-card-body m-0 text-[11px] text-ink-muted">
+              {t('aiPaidHint')}
+            </p>
+          </section>
 
           <section className="kh-ops-panel">
             <div className="kh-ops-panel-head">

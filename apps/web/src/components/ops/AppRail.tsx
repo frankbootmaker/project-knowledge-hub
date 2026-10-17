@@ -26,6 +26,7 @@ import {
   resolveActiveNavSection,
   visibleNavItems,
   visibleNavSections,
+  workspaceSwitchHref,
   type NavContext,
   type NavSectionId,
 } from '../../lib/ops-nav';
@@ -148,9 +149,20 @@ export function AppRail({
     session.user.isSystemAdmin,
   ]);
 
+  const canManageWorkspace = useMemo(() => {
+    if (session.user.isSystemAdmin) return true;
+    const slug = parseAppPath(pathname).workspaceSlug;
+    const workspace = slug ? workspaces.find((row) => row.slug === slug) : undefined;
+    if (!workspace) return false;
+    return session.memberships.some(
+      (membership) =>
+        membership.workspaceId === workspace.id &&
+        (membership.role === 'workspace_admin' || membership.role === 'maintainer'),
+    );
+  }, [pathname, session.memberships, session.user.isSystemAdmin, workspaces]);
   const availabilityCtx = useMemo(
-    () => navAvailabilityContext(pathname, session.user.isSystemAdmin),
-    [pathname, session.user.isSystemAdmin],
+    () => navAvailabilityContext(pathname, session.user.isSystemAdmin, canManageWorkspace),
+    [pathname, session.user.isSystemAdmin, canManageWorkspace],
   );
   const visibleSections = useMemo(() => visibleNavSections(availabilityCtx), [availabilityCtx]);
 
@@ -288,7 +300,7 @@ export function AppRail({
             {orderedWorkspaces.map((workspace) => (
               <Link
                 key={workspace.id}
-                href={`/workspaces/${workspace.slug}`}
+                href={workspaceSwitchHref(pathname, search, workspace.slug)}
                 className={workspace.slug === ctx.workspaceSlug ? 'active' : undefined}
                 onClick={() => {
                   writeLastWorkspace(workspace.slug);

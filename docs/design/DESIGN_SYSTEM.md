@@ -142,6 +142,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-empty-state` / `.kh-ops-empty-mark` | Empty delivery panes |
 | `.kh-ops-capacity-row` / `.kh-ops-capacity-track` | Utilization planned (ink) + burn (accent) bars |
 | `.kh-ops-budget-layout` / `.kh-ops-cost-split` / `.kh-ops-cost-part` | Budget burndown + people/AI/systems split |
+| `.kh-ops-ai-cost-chart` / `.kh-ops-ai-cost-sub` / `.kh-ops-ai-cost-change` / `.kh-ops-ai-cost-demand` / `.kh-ops-ai-cost-legacy` / `.kh-ops-ai-cost-credit` / `.kh-ops-ai-cost-line` | Paid AI bars stacked by subscription, plan change, and on-demand, with a theoretical API line. A downgrade credit sits below the axis |
 | `.kh-ops-baseline-grid` / `.kh-ops-field-cell` / `.kh-ops-pinned` | Baseline field cells and pinned records |
 | `.kh-ops-project-grid` / `.kh-ops-project-card` | Workspace / org / style-pack / dashboard workspace / account brand cards; `button.kh-ops-project-card` for report launchers and brand schemes. Workspace colour is a 3px inset stripe (`kh-workspace-tile`), not a wash. Selected brand uses `.selected` (ink border + 3px accent inset). |
 | `.kh-ops-menu-type` / `.kh-ops-key-badge` | Rail menu type for metadata, labels, kickers, eyebrows, table cells, owners, dates, and status values: IBM Plex Sans, 13px, regular. `.kh-ops-key-badge` keeps monospace for item keys (PRO-T-21). Code stays monospace |
@@ -250,6 +251,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-17
 
+* **Financials** — A top-level rail section, Financials, opens `/workspaces/{slug}/financials`. The page uses `.kh-ops-page-tabs`; the first tab is AI Cost. The workspace switcher stays on that path. AI Cost reuses the paid-versus-theoretical chart, the data table, and a `Modal` for a billing entry. The project budget panel keeps the allocated view and links admins here.
+* **Paid vs theoretical AI cost** — The budget section shows the project’s allocated paid cost beside theoretical API cost. Bars stack subscription, plan change, and on-demand (`.kh-ops-ai-cost-*`); a brand line is the theoretical API cost. Ledger editing is on Financials → AI Cost.
 * **Media lightbox** — `MediaLightbox` (`.kh-media-lightbox`) shows linked and library images at full resolution. Delivery Media and the workspace catalogue open it from `.kh-ops-media-preview-btn` on thumbnails instead of reusing the card preview class on a modal `<img>`. Chrome controls use light icons on semi-opaque ink pills (`.kh-media-lightbox__close`, `.kh-media-lightbox__nav`) so ghost button ink does not disappear on the dark backdrop.
 * **RAID due-date colour** — The RAID list due-date cell uses `text-danger` when the date is before today and `text-warn` when it falls on today or within the 7-day project-health window. Later and empty dates stay the default ink. The project header health `Badge` tooltip appends the risk reason after the Risks label.
 * **Schedule slip** — Project baseline adds a `Switch` for auto RAID risks, a number field for the working-day threshold, and checkboxes for task, story, epic, and milestone. The RAID title cell shows a warn `Badge` labeled auto. Gantt and Tree titles show `.kh-ops-schedule-slip` (warn token, “!”) on a slipping item.

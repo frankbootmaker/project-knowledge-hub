@@ -126,6 +126,28 @@ describe('AI token cost modes', () => {
     expect(cost).toBe(0);
   });
 
+  it('prices cache writes separately from cache reads', () => {
+    const cost = tokenCostForUsages(
+      [
+        {
+          tokensUsed: 4_000,
+          tokensInput: 1_000,
+          tokensOutput: 1_000,
+          tokensCache: 1_000,
+          tokensCacheWrite: 1_000,
+        },
+      ],
+      {
+        blendedPer1k: 9,
+        inputPer1k: 2,
+        outputPer1k: 6,
+        cachePer1k: 0.5,
+        cacheWritePer1k: 3,
+      },
+    );
+    expect(cost).toBe(11.5);
+  });
+
   it('records note_only tokens at zero cost', () => {
     const billed = billAiAssistantUsage({
       costMode: 'note_only',
@@ -164,6 +186,7 @@ describe('AI usage breakdown merge', () => {
       tokensInput: 10,
       tokensOutput: 4,
       tokensCache: 1,
+      tokensCacheWrite: null,
     });
   });
 
@@ -183,6 +206,7 @@ describe('AI usage breakdown merge', () => {
       tokensInput: null,
       tokensOutput: null,
       tokensCache: null,
+      tokensCacheWrite: null,
     });
   });
 

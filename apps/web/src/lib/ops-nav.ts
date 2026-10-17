@@ -10,6 +10,7 @@ export const NAV_SECTION_IDS = [
   'delivery-finance',
   'control',
   'knowledge',
+  'financials',
   'ops',
   'admin',
 ] as const;
@@ -23,6 +24,7 @@ export type NavIconName =
   | 'deliveryFinance'
   | 'control'
   | 'knowledge'
+  | 'financials'
   | 'ops'
   | 'admin'
   | 'myWork'
@@ -64,6 +66,8 @@ export type NavContext = {
   workspaceSlug: string | null;
   projectSlug: string | null;
   isAdmin: boolean;
+  /** Maintainer or workspace admin of the workspace in the current path. */
+  canManageWorkspace?: boolean;
 };
 
 export type NavItemId =
@@ -95,7 +99,8 @@ export type NavItemId =
   | 'admin-audit'
   | 'admin-email'
   | 'admin-templates'
-  | 'admin-archive';
+  | 'admin-archive'
+  | 'financials-ai-cost';
 
 /** Context needed before an item is offered in the rail. `project` implies workspace. */
 export type NavItemRequires = 'workspace' | 'project';
@@ -105,6 +110,8 @@ export type NavItemDef = {
   icon: NavIconName;
   labelKey: string;
   adminOnly?: boolean;
+  /** System admin, or a maintainer of the workspace in the path. */
+  manageWorkspace?: boolean;
   requires?: NavItemRequires;
   href: (ctx: NavContext) => string;
 };
@@ -270,6 +277,21 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     items: [],
   },
   {
+    id: 'financials',
+    icon: 'financials',
+    labelKey: 'sectionFinancials',
+    items: [
+      {
+        id: 'financials-ai-cost',
+        icon: 'budget',
+        labelKey: 'financialsAiCost',
+        manageWorkspace: true,
+        requires: 'workspace',
+        href: (ctx) => workspaceHref(ctx, '/financials'),
+      },
+    ],
+  },
+  {
     id: 'admin',
     icon: 'admin',
     labelKey: 'sectionAdmin',
@@ -353,6 +375,9 @@ export function isNavItemAvailable(item: NavItemDef, ctx: NavContext): boolean {
   if (item.adminOnly && !ctx.isAdmin) {
     return false;
   }
+  if (item.manageWorkspace && !ctx.isAdmin && !ctx.canManageWorkspace) {
+    return false;
+  }
   if (item.requires === 'project' && !isProjectSlug(ctx.projectSlug)) {
     return false;
   }
@@ -363,9 +388,23 @@ export function isNavItemAvailable(item: NavItemDef, ctx: NavContext): boolean {
 }
 
 /** Route-only context for which groups to show — ignores last-used prefs. */
-export function navAvailabilityContext(pathname: string, isAdmin: boolean): NavContext {
+export function navAvailabilityContext(
+  pathname: string,
+  isAdmin: boolean,
+  canManageWorkspace = false,
+): NavContext {
   const { workspaceSlug, projectSlug } = parseAppPath(pathname);
-  return { workspaceSlug, projectSlug, isAdmin };
+  return { workspaceSlug, projectSlug, isAdmin, canManageWorkspace };
+}
+
+/** Keep Financials when the rail workspace switcher changes workspace. */
+export function workspaceSwitchHref(pathname: string, search: string, slug: string): string {
+  const financials = pathname.match(/^\/workspaces\/[^/]+(\/financials\/?.*)$/);
+  if (!financials) {
+    return `/workspaces/${slug}`;
+  }
+  const query = search ? (search.startsWith('?') ? search : `?${search}`) : '';
+  return `/workspaces/${slug}${financials[1]}${query}`;
 }
 
 export function visibleNavItems(section: NavSectionDef, ctx: NavContext): NavItemDef[] {
@@ -444,6 +483,9 @@ function hashId(hash: string): string {
 export function inferNavSection(pathname: string, _hash = '', _search = ''): NavSectionId {
   if (pathname.startsWith('/admin')) {
     return 'admin';
+  }
+  if (/^\/workspaces\/[^/]+\/financials(\/|$)/.test(pathname)) {
+    return 'financials';
   }
   if (pathname.startsWith('/account')) {
     return 'personal';
@@ -558,6 +600,9 @@ export function matchNavItem(
   }
   if (item.id === 'admin-brand') {
     return pathname.startsWith('/admin/brand');
+  }
+  if (item.id === 'financials-ai-cost') {
+    return /^\/workspaces\/[^/]+\/financials(\/|$)/.test(pathname);
   }
 
   const params = readSearchParams(search);
@@ -754,6 +799,13 @@ export function headerCrumbs(
       href: `/workspaces/${workspaceSlug}`,
       label: names.workspaceName || workspaceSlug,
     });
+  }
+  if (workspaceSlug && /^\/workspaces\/[^/]+\/financials(\/|$)/.test(pathname)) {
+    crumbs.push({
+      href: `/workspaces/${workspaceSlug}/financials`,
+      label: names.pageTitle || 'Financials',
+    });
+    return crumbs;
   }
   const importTrail = workspaceImportCrumbs(pathname, names.pageTitle);
   if (importTrail) {

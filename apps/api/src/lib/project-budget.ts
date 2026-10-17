@@ -36,6 +36,8 @@ export {
 };
 import { requireProjectContext } from './project-delivery.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
+import { loadProjectPaidAi } from './ai-billing.js';
+import type { AiPaidPeriod, PublicAiBillingEntry } from './ai-billing.js';
 
 export type BudgetTaskCost = {
   taskId: string;
@@ -91,6 +93,7 @@ export type SystemItBudgetBreakdown = {
 };
 
 export type ProjectBudgetSummary = {
+  workspaceId: string;
   currency: ProjectCurrency;
   initialBudget: number | null;
   approvedBudget: number | null;
@@ -106,6 +109,23 @@ export type ProjectBudgetSummary = {
   aiFlatAc: number;
   /** Billable AI token cost (blended and split rates). */
   aiTokenAc: number;
+  /** Allocated paid AI cost. Equals aiAc. Legacy bill when the ledger is empty. */
+  aiPaidAc: number;
+  /** Tokens times API list prices. Not added to EVM AC. */
+  aiTheoreticalApiCost: number;
+  /** Paid minus theoretical. */
+  aiCostDifference: number;
+  /** Paid / theoretical when theoretical is positive. */
+  aiCostRatio: number | null;
+  /** Monthly paid vs theoretical. Sprint rows are theoretical only. */
+  aiPeriods: AiPaidPeriod[];
+  aiSprints: Array<{
+    sprintId: string;
+    theoreticalApiCost: number;
+    tokens: number;
+  }>;
+  /** Same-currency ledger rows for this workspace. */
+  aiBillingEntries: PublicAiBillingEntry[];
   /** Billable non-AI catalogue system OpEx. */
   systemAc: number;
   aiNoteOnlyTokens: number;
@@ -213,6 +233,8 @@ export type AiTokenRates = {
   inputPer1k: number | null;
   outputPer1k: number | null;
   cachePer1k: number | null;
+  /** Cache-write price per 1k. Null falls back to the blended rate. */
+  cacheWritePer1k?: number | null;
 };
 
 export type AiUsageForCost = {
@@ -220,6 +242,7 @@ export type AiUsageForCost = {
   tokensInput: number | null;
   tokensOutput: number | null;
   tokensCache: number | null;
+  tokensCacheWrite?: number | null;
 };
 
 function roundMoney(value: number): number {
@@ -251,7 +274,11 @@ function tokenCostForBreakdown(
     usage.tokensCache ?? 0,
     componentRate(rates.cachePer1k, rates.blendedPer1k),
   );
-  return roundMoney(input + output + cache);
+  const cacheWrite = tokenCostFromUsage(
+    usage.tokensCacheWrite ?? 0,
+    componentRate(rates.cacheWritePer1k ?? null, rates.blendedPer1k),
+  );
+  return roundMoney(input + output + cache + cacheWrite);
 }
 
 /**
@@ -343,6 +370,9 @@ export async function computeAiBudgetCosts(
   database: Database,
   projectId: string,
   project: {
+    id: string;
+    workspaceId: string;
+    currency: string;
     startDate: string | null;
     endDate: string | null;
   },
@@ -352,6 +382,13 @@ export async function computeAiBudgetCosts(
   aiNoteOnlyTokens: number;
   aiFlatAc: number;
   aiTokenAc: number;
+  aiPaidAc: number;
+  aiTheoreticalApiCost: number;
+  aiCostDifference: number;
+  aiCostRatio: number | null;
+  aiPeriods: AiPaidPeriod[];
+  aiSprints: ProjectBudgetSummary['aiSprints'];
+  aiBillingEntries: PublicAiBillingEntry[];
   aiSystems: AiBudgetBreakdown[];
 }> {
   const assistantRows = await database.db
@@ -364,6 +401,7 @@ export async function computeAiBudgetCosts(
       aiTokenRateInputPer1k: systems.aiTokenRateInputPer1k,
       aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
       aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
+      aiTokenRateCacheWritePer1k: systems.aiTokenRateCacheWritePer1k,
       aiBudgetAllocation: systems.aiBudgetAllocation,
     })
     .from(systems)
@@ -381,6 +419,7 @@ export async function computeAiBudgetCosts(
       tokensInput: projectTasks.tokensInput,
       tokensOutput: projectTasks.tokensOutput,
       tokensCache: projectTasks.tokensCache,
+      tokensCacheWrite: projectTasks.tokensCacheWrite,
       aiSystemId: projectTasks.aiSystemId,
       status: projectTasks.status,
     })
@@ -398,6 +437,7 @@ export async function computeAiBudgetCosts(
       tokensInput: task.tokensInput,
       tokensOutput: task.tokensOutput,
       tokensCache: task.tokensCache,
+      tokensCacheWrite: task.tokensCacheWrite,
     };
     const tokens = usageTokenTotal(usage);
     if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
@@ -411,7 +451,6 @@ export async function computeAiBudgetCosts(
   }
 
   const aiSystems: AiBudgetBreakdown[] = [];
-  let aiBillableCost = 0;
   let aiFlatAc = 0;
   let aiTokenAc = 0;
   let aiNoteOnlyTokens = orphanTokens;
@@ -430,6 +469,7 @@ export async function computeAiBudgetCosts(
         inputPer1k: parseNumeric(row.aiTokenRateInputPer1k),
         outputPer1k: parseNumeric(row.aiTokenRateOutputPer1k),
         cachePer1k: parseNumeric(row.aiTokenRateCachePer1k),
+        cacheWritePer1k: parseNumeric(row.aiTokenRateCacheWritePer1k),
       },
       usages: usagesBySystem.get(row.id) ?? [],
       startDate: project.startDate,
@@ -437,7 +477,6 @@ export async function computeAiBudgetCosts(
       today,
     });
 
-    aiBillableCost += billed.billableCost;
     aiFlatAc += billed.flatAccruedCost;
     aiTokenAc += billed.tokenCost;
     aiNoteOnlyTokens += billed.noteOnlyTokens;
@@ -456,10 +495,63 @@ export async function computeAiBudgetCosts(
     });
   }
 
+  const paid = await loadProjectPaidAi(
+    database,
+    {
+      id: project.id,
+      workspaceId: project.workspaceId,
+      currency: project.currency,
+      startDate: project.startDate,
+      endDate: project.endDate,
+    },
+    aiSystems.map((system) => {
+      const row = assistantRows.find((item) => item.id === system.systemId);
+      const flatMonthlyFee = parseNumeric(row?.aiFlatMonthlyFee) ?? 0;
+      return {
+        systemId: system.systemId,
+        costMode: system.costMode,
+        flatMonthlyFee:
+          system.costMode === 'flat' || system.costMode === 'mixed'
+            ? flatMonthlyFee
+            : 0,
+        legacyBillable: system.billableCost,
+        rates: {
+          blendedPer1k: parseNumeric(row?.aiTokenRatePer1k),
+          inputPer1k: parseNumeric(row?.aiTokenRateInputPer1k),
+          outputPer1k: parseNumeric(row?.aiTokenRateOutputPer1k),
+          cachePer1k: parseNumeric(row?.aiTokenRateCachePer1k),
+          cacheWritePer1k: parseNumeric(row?.aiTokenRateCacheWritePer1k),
+        },
+      };
+    }),
+    today,
+  );
+  const paidBySystem = new Map(
+    paid.systemPaid.map((row) => [row.systemId, row.amount]),
+  );
+  for (const system of aiSystems) {
+    const amount = paidBySystem.get(system.systemId) ?? system.billableCost;
+    system.billableCost = amount;
+    system.overAllocation =
+      system.budgetAllocation != null && amount > system.budgetAllocation;
+  }
+  const aiPaidAc = paid.aiPaidAc;
+  const aiTheoreticalApiCost = paid.aiTheoreticalApiCost;
+
   return {
-    aiBillableCost: roundMoney(aiBillableCost),
+    aiBillableCost: aiPaidAc,
     aiFlatAc: roundMoney(aiFlatAc),
     aiTokenAc: roundMoney(aiTokenAc),
+    aiPaidAc,
+    aiTheoreticalApiCost,
+    aiCostDifference: roundMoney(aiPaidAc - aiTheoreticalApiCost),
+    aiCostRatio:
+      aiTheoreticalApiCost > 0
+        ? Math.round((aiPaidAc / aiTheoreticalApiCost) * 1000) / 1000
+        : null,
+    aiPeriods: paid.periods,
+    aiSprints: paid.sprints,
+    aiBillingEntries: paid.entries,
     aiNoteOnlyTokens,
     aiSystems,
   };
@@ -873,8 +965,16 @@ export async function getProjectBudgetSummary(
 
   return {
     ...merged,
+    workspaceId: project.workspaceId,
     aiFlatAc: ai.aiFlatAc,
     aiTokenAc: ai.aiTokenAc,
+    aiPaidAc: ai.aiPaidAc,
+    aiTheoreticalApiCost: ai.aiTheoreticalApiCost,
+    aiCostDifference: ai.aiCostDifference,
+    aiCostRatio: ai.aiCostRatio,
+    aiPeriods: ai.aiPeriods,
+    aiSprints: ai.aiSprints,
+    aiBillingEntries: ai.aiBillingEntries,
     aiNoteOnlyTokens: ai.aiNoteOnlyTokens,
     aiSystems: ai.aiSystems,
     itSystems: it.itSystems,
