@@ -57,6 +57,7 @@ export type PublicSystem = {
   aiTokenRateInputPer1k: number | null;
   aiTokenRateOutputPer1k: number | null;
   aiTokenRateCachePer1k: number | null;
+  aiTokenRateCacheWritePer1k: number | null;
   aiCostNotes: string | null;
   aiBudgetAllocation: number | null;
   metadata: Record<string, unknown> | null;
@@ -111,6 +112,7 @@ export function toPublicSystem(
     aiTokenRateInputPer1k: system.aiTokenRateInputPer1k,
     aiTokenRateOutputPer1k: system.aiTokenRateOutputPer1k,
     aiTokenRateCachePer1k: system.aiTokenRateCachePer1k,
+    aiTokenRateCacheWritePer1k: system.aiTokenRateCacheWritePer1k,
     aiCostNotes: system.aiCostNotes,
     aiBudgetAllocation: system.aiBudgetAllocation,
     metadata: system.metadataJson,
@@ -354,6 +356,7 @@ export type UpdateSystemInput = {
   aiTokenRateInputPer1k?: number | string | null;
   aiTokenRateOutputPer1k?: number | string | null;
   aiTokenRateCachePer1k?: number | string | null;
+  aiTokenRateCacheWritePer1k?: number | string | null;
   aiCostNotes?: string | null;
   aiBudgetAllocation?: number | string | null;
 };
@@ -400,6 +403,10 @@ export async function updateSystem(
     input.aiTokenRateCachePer1k === undefined
       ? undefined
       : parseTokenRate(input.aiTokenRateCachePer1k) ?? null;
+  const nextCacheWriteRate =
+    input.aiTokenRateCacheWritePer1k === undefined
+      ? undefined
+      : parseTokenRate(input.aiTokenRateCacheWritePer1k) ?? null;
   const nextCostNotes =
     input.aiCostNotes === undefined
       ? undefined
@@ -501,6 +508,10 @@ export async function updateSystem(
         nextCacheRate === undefined
           ? system.aiTokenRateCachePer1k
           : nextCacheRate,
+      aiTokenRateCacheWritePer1k:
+        nextCacheWriteRate === undefined
+          ? system.aiTokenRateCacheWritePer1k
+          : nextCacheWriteRate,
       aiCostNotes:
         nextCostNotes === undefined ? system.aiCostNotes : nextCostNotes,
       aiBudgetAllocation:
@@ -547,6 +558,7 @@ export async function updateSystem(
     input.aiTokenRateInputPer1k !== undefined ||
     input.aiTokenRateOutputPer1k !== undefined ||
     input.aiTokenRateCachePer1k !== undefined ||
+    input.aiTokenRateCacheWritePer1k !== undefined ||
     input.aiCostNotes !== undefined ||
     input.aiBudgetAllocation !== undefined ||
     input.itCostMode !== undefined ||

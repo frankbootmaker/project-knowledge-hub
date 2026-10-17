@@ -313,6 +313,12 @@ export const systems = pgTable(
       scale: 4,
       mode: 'number',
     }),
+    /** Cache-write price per 1k. Null falls back to the blended rate. Distinct from cache read. */
+    aiTokenRateCacheWritePer1k: numeric('ai_token_rate_cache_write_per_1k', {
+      precision: 14,
+      scale: 4,
+      mode: 'number',
+    }),
     /** Short note, e.g. Cursor Pro+ flat plus on-demand. */
     aiCostNotes: text('ai_cost_notes'),
     aiBudgetAllocation: numeric('ai_budget_allocation', { precision: 14, scale: 2, mode: 'number' }),
@@ -332,6 +338,81 @@ export const systems = pgTable(
     index('systems_workspace_id_idx').on(table.workspaceId),
     index('systems_project_id_idx').on(table.projectId),
     index('systems_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/**
+ * Workspace-level AI invoices. Not per project: a period's paid total is
+ * allocated across projects (see docs/product/PROJECT_BUDGET.md).
+ */
+export const aiBillingEntries = pgTable(
+  'ai_billing_entries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** Null: workspace-wide pool (for example one Cursor subscription). */
+    aiSystemId: uuid('ai_system_id').references(() => systems.id, {
+      onDelete: 'set null',
+    }),
+    /** YYYY-MM. */
+    period: text('period').notNull(),
+    provider: text('provider').notNull(),
+    plan: text('plan'),
+    /** subscription | plan_change | on_demand. */
+    type: text('type').notNull(),
+    /** plan_change may be negative (downgrade credit). */
+    amount: numeric('amount', { precision: 14, scale: 2, mode: 'number' }).notNull(),
+    currency: text('currency').notNull(),
+    paidAt: timestamp('paid_at', { withTimezone: true, mode: 'date' }),
+    note: text('note'),
+    externalRef: text('external_ref'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    index('ai_billing_entries_workspace_period_idx').on(
+      table.workspaceId,
+      table.period,
+    ),
+    index('ai_billing_entries_system_idx').on(table.aiSystemId),
+    index('ai_billing_entries_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/**
+ * Optional percent of one billing pool assigned to a project.
+ * Null ai_system_id is the workspace-wide pool. Percents in a pool must
+ * sum to at most 100; the remainder follows the default allocation rule.
+ */
+export const aiBillingAllocationOverrides = pgTable(
+  'ai_billing_allocation_overrides',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    period: text('period').notNull(),
+    aiSystemId: uuid('ai_system_id').references(() => systems.id, {
+      onDelete: 'cascade',
+    }),
+    percent: numeric('percent', { precision: 6, scale: 3, mode: 'number' }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('ai_billing_allocation_overrides_uidx').on(
+      table.workspaceId,
+      table.projectId,
+      table.period,
+      sql`coalesce(${table.aiSystemId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+    ),
+    index('ai_billing_allocation_overrides_project_idx').on(table.projectId),
   ],
 );
 
@@ -1452,6 +1533,8 @@ export const projectTasks = pgTable(
     tokensInput: integer('tokens_input'),
     tokensOutput: integer('tokens_output'),
     tokensCache: integer('tokens_cache'),
+    /** Input tokens that wrote the cache. Null when the export has no cache-write column. */
+    tokensCacheWrite: integer('tokens_cache_write'),
     /** Model label for the latest usage report, e.g. grok-4.7. */
     aiModelId: text('ai_model_id'),
     /** Pricing tier label, e.g. standard or fast. */

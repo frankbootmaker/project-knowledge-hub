@@ -20,6 +20,7 @@ import {
   resolveActiveNavSection,
   visibleNavItems,
   visibleNavSections,
+  workspaceSwitchHref,
 } from './ops-nav';
 
 const ctx = {
@@ -51,6 +52,10 @@ describe('ops nav', () => {
   it('infers sections from routes', () => {
     expect(inferNavSection('/dashboard')).toBe('personal');
     expect(inferNavSection('/admin/users')).toBe('admin');
+    expect(inferNavSection('/workspaces/platform/financials')).toBe('financials');
+    expect(inferNavSection('/workspaces/platform/financials', '', '?tab=ai-cost')).toBe(
+      'financials',
+    );
     expect(inferNavSection('/account/ai-connections')).toBe('personal');
     expect(inferNavSection('/workspaces/platform/projects/renewal')).toBe('control');
     expect(inferNavSection('/workspaces/platform/projects/renewal', 'project-raid')).toBe(
@@ -272,8 +277,31 @@ describe('ops nav', () => {
 
   it('shows the project menu when a project is set, without the delivery rail', () => {
     const ids = visibleNavSections(ctx).map((section) => section.id);
-    expect(ids).toEqual(['personal', 'control', 'knowledge', 'admin']);
+    expect(ids).toEqual(['personal', 'control', 'knowledge', 'financials', 'admin']);
     expect(ids).not.toContain('delivery-finance');
+  });
+
+  it('shows financials to workspace maintainers and keeps the switcher on AI Cost', () => {
+    const maintainer = {
+      workspaceSlug: 'platform',
+      projectSlug: null,
+      isAdmin: false,
+      canManageWorkspace: true,
+    };
+    expect(visibleNavSections(maintainer).map((section) => section.id)).toContain('financials');
+    expect(
+      visibleNavSections({ ...maintainer, canManageWorkspace: false }).map(
+        (section) => section.id,
+      ),
+    ).not.toContain('financials');
+    const item = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (row) => row.id === 'financials-ai-cost',
+    )!;
+    expect(item.href(maintainer)).toBe('/workspaces/platform/financials');
+    expect(
+      workspaceSwitchHref('/workspaces/platform/financials', '?tab=ai-cost', 'other'),
+    ).toBe('/workspaces/other/financials?tab=ai-cost');
+    expect(workspaceSwitchHref('/workspaces/platform', '', 'other')).toBe('/workspaces/other');
   });
 
   it('hides admin for non-admins', () => {
@@ -471,21 +499,25 @@ describe('ops nav', () => {
       workspaceSlug: null,
       projectSlug: null,
       isAdmin: false,
+      canManageWorkspace: false,
     });
     expect(navAvailabilityContext('/workspaces/platform', false)).toEqual({
       workspaceSlug: 'platform',
       projectSlug: null,
       isAdmin: false,
+      canManageWorkspace: false,
     });
     expect(navAvailabilityContext('/workspaces/platform/projects/renewal', true)).toEqual({
       workspaceSlug: 'platform',
       projectSlug: 'renewal',
       isAdmin: true,
+      canManageWorkspace: false,
     });
     expect(navAvailabilityContext('/workspaces/platform/projects/new', false)).toEqual({
       workspaceSlug: 'platform',
       projectSlug: null,
       isAdmin: false,
+      canManageWorkspace: false,
     });
     expect(
       visibleNavSections(navAvailabilityContext('/workspaces/platform/projects/new', false)).map(
@@ -528,6 +560,7 @@ describe('ops nav', () => {
       workspaceSlug: 'platform',
       projectSlug: 'renewal',
       isAdmin: false,
+      canManageWorkspace: false,
     });
   });
 

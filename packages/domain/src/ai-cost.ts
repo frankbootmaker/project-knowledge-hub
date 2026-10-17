@@ -24,6 +24,8 @@ export type AiUsageCounts = {
   tokensInput: number | null;
   tokensOutput: number | null;
   tokensCache: number | null;
+  /** Input tokens that wrote the cache. Omitted on older rows. */
+  tokensCacheWrite?: number | null;
 };
 
 export type AiUsagePatch = {
@@ -31,6 +33,7 @@ export type AiUsagePatch = {
   tokensInput?: number | null;
   tokensOutput?: number | null;
   tokensCache?: number | null;
+  tokensCacheWrite?: number | null;
 };
 
 const COUNT_FIELDS = [
@@ -38,6 +41,7 @@ const COUNT_FIELDS = [
   'tokensInput',
   'tokensOutput',
   'tokensCache',
+  'tokensCacheWrite',
 ] as const;
 
 function assertTokenCount(
@@ -63,11 +67,13 @@ export function usageHasTokenBreakdown(usage: {
   tokensInput?: number | null;
   tokensOutput?: number | null;
   tokensCache?: number | null;
+  tokensCacheWrite?: number | null;
 }): boolean {
   return (
     usage.tokensInput != null ||
     usage.tokensOutput != null ||
-    usage.tokensCache != null
+    usage.tokensCache != null ||
+    usage.tokensCacheWrite != null
   );
 }
 
@@ -75,11 +81,13 @@ export function tokenBreakdownSum(usage: {
   tokensInput?: number | null;
   tokensOutput?: number | null;
   tokensCache?: number | null;
+  tokensCacheWrite?: number | null;
 }): number {
   const sum =
     (usage.tokensInput ?? 0) +
     (usage.tokensOutput ?? 0) +
-    (usage.tokensCache ?? 0);
+    (usage.tokensCache ?? 0) +
+    (usage.tokensCacheWrite ?? 0);
   if (sum > MAX_TOKEN_COUNT) {
     throw new AppError({
       code: 'TOKEN_COUNT_INVALID',
@@ -128,6 +136,10 @@ export function mergeAiUsage(
       patch.tokensCache !== undefined
         ? countOrNull(patch.tokensCache)
         : countOrNull(existing.tokensCache),
+    tokensCacheWrite:
+      patch.tokensCacheWrite !== undefined
+        ? countOrNull(patch.tokensCacheWrite)
+        : countOrNull(existing.tokensCacheWrite),
   };
 
   if (breakdownTouched && usageHasTokenBreakdown(next)) {
@@ -138,7 +150,7 @@ export function mergeAiUsage(
       throw new AppError({
         code: 'TOKEN_USAGE_MISMATCH',
         message:
-          'tokensUsed must equal tokensInput + tokensOutput + tokensCache',
+          'tokensUsed must equal tokensInput + tokensOutput + tokensCache + tokensCacheWrite',
         statusCode: 400,
       });
     }
@@ -149,6 +161,7 @@ export function mergeAiUsage(
     next.tokensInput = null;
     next.tokensOutput = null;
     next.tokensCache = null;
+    next.tokensCacheWrite = null;
   }
 
   return next;
