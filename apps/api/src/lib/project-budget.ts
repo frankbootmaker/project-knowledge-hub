@@ -14,6 +14,7 @@ import {
 import {
   AppError,
   aiCostModeSchema,
+  assessRiskRag,
   computeFinancialRag,
   computeRiskRag,
   projectCurrencySchema,
@@ -22,10 +23,17 @@ import {
   type AiCostMode,
   type ProjectCurrency,
   type ProjectRagStatus,
+  type RiskRagReason,
   type SystemItCostMode,
 } from '@project-knowledge-hub/domain';
 
-export { computeFinancialRag, computeRiskRag, type ProjectRagStatus };
+export {
+  assessRiskRag,
+  computeFinancialRag,
+  computeRiskRag,
+  type ProjectRagStatus,
+  type RiskRagReason,
+};
 import { requireProjectContext } from './project-delivery.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
 
@@ -107,6 +115,8 @@ export type ProjectBudgetSummary = {
   spi: number | null;
   financialRag: ProjectRagStatus;
   riskRag: ProjectRagStatus;
+  /** Why riskRag is amber or red. Empty when riskRag is green. */
+  riskReasons: RiskRagReason[];
   startDate: string | null;
   endDate: string | null;
   burndown: CostSnapshotPoint[];
@@ -832,6 +842,7 @@ export async function getProjectBudgetSummary(
       kind: projectRaidItems.kind,
       status: projectRaidItems.status,
       severity: projectRaidItems.severity,
+      dueDate: projectRaidItems.dueDate,
     })
     .from(projectRaidItems)
     .where(
@@ -858,6 +869,8 @@ export async function getProjectBudgetSummary(
     .where(eq(projectCostSnapshots.projectId, projectId))
     .orderBy(asc(projectCostSnapshots.capturedOn));
 
+  const risk = assessRiskRag(raidRows);
+
   return {
     ...merged,
     aiFlatAc: ai.aiFlatAc,
@@ -865,7 +878,8 @@ export async function getProjectBudgetSummary(
     aiNoteOnlyTokens: ai.aiNoteOnlyTokens,
     aiSystems: ai.aiSystems,
     itSystems: it.itSystems,
-    riskRag: computeRiskRag(raidRows),
+    riskRag: risk.status,
+    riskReasons: risk.reasons,
     startDate: project.startDate,
     endDate: project.endDate,
     burndown: snapshotRows.map((row) => ({
