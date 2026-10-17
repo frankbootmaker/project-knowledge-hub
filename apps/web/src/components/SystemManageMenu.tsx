@@ -243,7 +243,7 @@ export function SystemManageMenu(props: {
         router.push(`/workspaces/${props.workspaceSlug}/systems/${nextSlug}`);
       }
       router.refresh();
-      setSection('menu');
+      close();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedUpdate'));
     } finally {
