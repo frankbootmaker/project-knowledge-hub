@@ -77,6 +77,7 @@ const updateSystemSchema = z.object({
   aiTokenRateInputPer1k: moneySchema.optional(),
   aiTokenRateOutputPer1k: moneySchema.optional(),
   aiTokenRateCachePer1k: moneySchema.optional(),
+  aiTokenRateCacheWritePer1k: moneySchema.optional(),
   aiCostNotes: z.string().max(500).nullable().optional(),
   aiBudgetAllocation: moneySchema.optional(),
 });

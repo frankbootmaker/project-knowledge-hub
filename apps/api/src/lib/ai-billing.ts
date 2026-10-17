@@ -12,6 +12,7 @@ import {
   assertAiBillingPeriod,
   assertAllocationPercent,
   isAiBillingActiveProject,
+  type AiBillingAllocationMethod,
   parseUsageOccurredAt,
   projectCurrencySchema,
   roundAiMoney,
@@ -775,5 +776,342 @@ export async function loadProjectPaidAi(
         tokens: value.tokens,
       }))
       .sort((a, b) => a.sprintId.localeCompare(b.sprintId)),
+  };
+}
+
+export type WorkspaceAiAllocationProject = {
+  projectId: string;
+  name: string;
+  slug: string;
+  tokens: number;
+  overridePercent: number | null;
+  amount: number;
+  method: AiBillingAllocationMethod;
+};
+
+export type WorkspaceAiCostPool = {
+  period: string;
+  currency: ProjectCurrency;
+  aiSystemId: string | null;
+  aiSystemName: string | null;
+  paidTotal: number;
+  projects: WorkspaceAiAllocationProject[];
+};
+
+export type WorkspaceAiCostChartPoint = {
+  period: string;
+  currency: ProjectCurrency;
+  paidCost: number;
+  subscription: number;
+  planChange: number;
+  onDemand: number;
+  theoreticalApiCost: number;
+};
+
+export type WorkspaceAiCostOverview = {
+  entries: PublicAiBillingEntry[];
+  chart: WorkspaceAiCostChartPoint[];
+  pools: WorkspaceAiCostPool[];
+};
+
+/**
+ * Workspace view of the ledger: paid totals by month, the theoretical API
+ * line, and how each pool is split across projects.
+ */
+export async function loadWorkspaceAiCostOverview(
+  database: Database,
+  workspaceId: string,
+): Promise<WorkspaceAiCostOverview> {
+  const [entryRows, overrideRows, projectRows, assistantRows, taskRows] =
+    await Promise.all([
+      database.db
+        .select()
+        .from(aiBillingEntries)
+        .where(eq(aiBillingEntries.workspaceId, workspaceId))
+        .orderBy(desc(aiBillingEntries.period), desc(aiBillingEntries.createdAt)),
+      database.db
+        .select()
+        .from(aiBillingAllocationOverrides)
+        .where(eq(aiBillingAllocationOverrides.workspaceId, workspaceId)),
+      database.db
+        .select({
+          id: projects.id,
+          name: projects.name,
+          slug: projects.slug,
+          status: projects.status,
+          currency: projects.currency,
+          archivedAt: projects.archivedAt,
+        })
+        .from(projects)
+        .where(eq(projects.workspaceId, workspaceId)),
+      database.db
+        .select({
+          id: systems.id,
+          name: systems.name,
+          projectId: systems.projectId,
+          aiTokenRatePer1k: systems.aiTokenRatePer1k,
+          aiTokenRateInputPer1k: systems.aiTokenRateInputPer1k,
+          aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
+          aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
+          aiTokenRateCacheWritePer1k: systems.aiTokenRateCacheWritePer1k,
+        })
+        .from(systems)
+        .where(
+          and(
+            eq(systems.workspaceId, workspaceId),
+            eq(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
+            isNull(systems.archivedAt),
+          ),
+        ),
+      database.db
+        .select({
+          projectId: projectTasks.projectId,
+          aiSystemId: projectTasks.aiSystemId,
+          status: projectTasks.status,
+          tokensUsed: projectTasks.tokensUsed,
+          tokensInput: projectTasks.tokensInput,
+          tokensOutput: projectTasks.tokensOutput,
+          tokensCache: projectTasks.tokensCache,
+          tokensCacheWrite: projectTasks.tokensCacheWrite,
+          billingPeriod: projectTasks.billingPeriod,
+          usageOccurredAt: projectTasks.usageOccurredAt,
+        })
+        .from(projectTasks)
+        .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+        .where(
+          and(
+            eq(projects.workspaceId, workspaceId),
+            isNull(projectTasks.archivedAt),
+            isNull(projects.archivedAt),
+          ),
+        ),
+    ]);
+
+  const usages: TaskUsageRow[] = [];
+  for (const task of taskRows) {
+    if (task.status === 'cancelled') continue;
+    const usage: AiUsageForCost = {
+      tokensUsed: task.tokensUsed,
+      tokensInput: task.tokensInput,
+      tokensOutput: task.tokensOutput,
+      tokensCache: task.tokensCache,
+      tokensCacheWrite: task.tokensCacheWrite,
+    };
+    const tokens = usageTokenTotal(usage);
+    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
+    usages.push({
+      projectId: task.projectId,
+      aiSystemId: task.aiSystemId,
+      sprintId: null,
+      period: usagePeriod(task.billingPeriod, task.usageOccurredAt),
+      usage,
+      tokens,
+    });
+  }
+
+  const ratesBySystem = new Map(
+    assistantRows.map((row) => [
+      row.id,
+      {
+        blendedPer1k: row.aiTokenRatePer1k,
+        inputPer1k: row.aiTokenRateInputPer1k,
+        outputPer1k: row.aiTokenRateOutputPer1k,
+        cachePer1k: row.aiTokenRateCachePer1k,
+        cacheWritePer1k: row.aiTokenRateCacheWritePer1k,
+      },
+    ]),
+  );
+  const projectById = new Map(projectRows.map((row) => [row.id, row]));
+  const systemName = new Map(assistantRows.map((row) => [row.id, row.name]));
+  const systemProjectId = new Map(
+    assistantRows.map((row) => [row.id, row.projectId]),
+  );
+  const openProjects = projectRows.filter(
+    (row) => !row.archivedAt && row.status !== 'archived',
+  );
+
+  const tokensOf = (
+    projectId: string,
+    period: string,
+    aiSystemId: string | null,
+  ) =>
+    usages
+      .filter(
+        (row) =>
+          row.projectId === projectId &&
+          row.period === period &&
+          (aiSystemId == null || row.aiSystemId === aiSystemId),
+      )
+      .reduce((sum, row) => sum + row.tokens, 0);
+
+  type Pool = {
+    period: string;
+    aiSystemId: string | null;
+    currency: string;
+    subscription: number;
+    planChange: number;
+    onDemand: number;
+    paidTotal: number;
+  };
+  const pools = new Map<string, Pool>();
+  for (const entry of entryRows) {
+    const key = poolId(entry.period, entry.aiSystemId, entry.currency);
+    const pool = pools.get(key) ?? {
+      period: entry.period,
+      aiSystemId: entry.aiSystemId,
+      currency: entry.currency,
+      subscription: 0,
+      planChange: 0,
+      onDemand: 0,
+      paidTotal: 0,
+    };
+    const amount = Number(entry.amount);
+    pool.paidTotal += amount;
+    if (entry.type === 'subscription') pool.subscription += amount;
+    else if (entry.type === 'plan_change') pool.planChange += amount;
+    else pool.onDemand += amount;
+    pools.set(key, pool);
+  }
+
+  const chart = new Map<
+    string,
+    {
+      period: string;
+      currency: ProjectCurrency;
+      subscription: number;
+      planChange: number;
+      onDemand: number;
+      theoretical: number;
+    }
+  >();
+  const chartKey = (period: string, currency: string) => `${period}|${currency}`;
+  const ensureChart = (period: string, currency: ProjectCurrency) => {
+    const key = chartKey(period, currency);
+    const row = chart.get(key) ?? {
+      period,
+      currency,
+      subscription: 0,
+      planChange: 0,
+      onDemand: 0,
+      theoretical: 0,
+    };
+    chart.set(key, row);
+    return row;
+  };
+
+  const allocationPools: WorkspaceAiCostPool[] = [];
+  for (const pool of pools.values()) {
+    const currency = projectCurrencySchema.safeParse(pool.currency);
+    if (!currency.success) continue;
+    const bucket = ensureChart(pool.period, currency.data);
+    bucket.subscription += pool.subscription;
+    bucket.planChange += pool.planChange;
+    bucket.onDemand += pool.onDemand;
+    const candidates = openProjects.filter((row) => {
+      if (row.currency !== currency.data) return false;
+      if (pool.aiSystemId == null) return true;
+      const linked = systemProjectId.get(pool.aiSystemId) === row.id;
+      const used = tokensOf(row.id, pool.period, pool.aiSystemId) > 0;
+      const override = overrideRows.some(
+        (item) =>
+          item.projectId === row.id &&
+          item.period === pool.period &&
+          (item.aiSystemId ?? null) === pool.aiSystemId,
+      );
+      return linked || used || override;
+    });
+    const allocationProjects = candidates.map((row) => {
+      const override = overrideRows.find(
+        (item) =>
+          item.projectId === row.id &&
+          item.period === pool.period &&
+          (item.aiSystemId ?? null) === pool.aiSystemId,
+      );
+      return {
+        projectId: row.id,
+        tokens: tokensOf(row.id, pool.period, pool.aiSystemId),
+        active: isAiBillingActiveProject(row.status, row.archivedAt),
+        overridePercent: override ? Number(override.percent) : null,
+      };
+    });
+    const allocated = allocateAiBillingPool({
+      paidTotal: roundAiMoney(pool.paidTotal),
+      projects: allocationProjects,
+    });
+    allocationPools.push({
+      period: pool.period,
+      currency: currency.data,
+      aiSystemId: pool.aiSystemId,
+      aiSystemName: pool.aiSystemId
+        ? (systemName.get(pool.aiSystemId) ?? null)
+        : null,
+      paidTotal: roundAiMoney(pool.paidTotal),
+      projects: allocated.map((share) => {
+        const project = projectById.get(share.projectId);
+        const source = allocationProjects.find(
+          (row) => row.projectId === share.projectId,
+        );
+        return {
+          projectId: share.projectId,
+          name: project?.name ?? share.projectId,
+          slug: project?.slug ?? '',
+          tokens: source?.tokens ?? 0,
+          overridePercent: source?.overridePercent ?? null,
+          amount: share.amount,
+          method: share.method,
+        };
+      }),
+    });
+  }
+
+  const theoreticalGroups = new Map<
+    string,
+    { period: string; currency: ProjectCurrency; systemId: string; usages: AiUsageForCost[] }
+  >();
+  for (const row of usages) {
+    if (!row.period || !row.aiSystemId) continue;
+    const project = projectById.get(row.projectId);
+    const currency = project
+      ? projectCurrencySchema.safeParse(project.currency)
+      : null;
+    if (!currency?.success) continue;
+    const key = `${chartKey(row.period, currency.data)}|${row.aiSystemId}`;
+    const group = theoreticalGroups.get(key) ?? {
+      period: row.period,
+      currency: currency.data,
+      systemId: row.aiSystemId,
+      usages: [],
+    };
+    group.usages.push(row.usage);
+    theoreticalGroups.set(key, group);
+  }
+  for (const group of theoreticalGroups.values()) {
+    const rates = ratesBySystem.get(group.systemId);
+    if (!rates) continue;
+    ensureChart(group.period, group.currency).theoretical += tokenCostForUsages(
+      group.usages,
+      rates,
+    );
+  }
+
+  return {
+    entries: entryRows.map(toPublicEntry),
+    chart: [...chart.values()]
+      .map((row) => ({
+        period: row.period,
+        currency: row.currency,
+        subscription: roundAiMoney(row.subscription),
+        planChange: roundAiMoney(row.planChange),
+        onDemand: roundAiMoney(row.onDemand),
+        paidCost: roundAiMoney(row.subscription + row.planChange + row.onDemand),
+        theoreticalApiCost: roundAiMoney(row.theoretical),
+      }))
+      .sort((a, b) => a.period.localeCompare(b.period) || a.currency.localeCompare(b.currency)),
+    pools: allocationPools.sort(
+      (a, b) =>
+        b.period.localeCompare(a.period) ||
+        a.currency.localeCompare(b.currency) ||
+        (a.aiSystemName ?? '').localeCompare(b.aiSystemName ?? ''),
+    ),
   };
 }

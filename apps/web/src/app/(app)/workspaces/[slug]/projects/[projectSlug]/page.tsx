@@ -580,6 +580,9 @@ export default async function ProjectDetailPage({
       <ProjectBudgetPanel
         projectId={project.id}
         canMutate={canMutate && !isArchived}
+        financialsHref={
+          canMutate ? `/workspaces/${workspace.slug}/financials` : null
+        }
         initialSummary={budgetSummary}
       />
 

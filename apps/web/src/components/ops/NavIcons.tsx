@@ -19,6 +19,7 @@ const paths: Record<NavIconName, ReactNode> = {
     </>
   ),
   admin: <path d="M12 3l8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7z" />,
+  financials: <path d="M4 7h16v12H4zM7 7V5h10v2M8 12h8M8 15h5" />,
   myWork: <path d="M4 5h16v14H4zM8 9h8M8 13h5" />,
   workspace: <path d="M3 6h7l2 2h9v11H3z" />,
   search: (

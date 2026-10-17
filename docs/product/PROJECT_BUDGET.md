@@ -33,7 +33,7 @@ Track **project currency and BAC**, **stakeholder hourly rates and capacity**, *
 
 ## Paid AI allocation (PRO-T-39)
 
-Ledger rows live on the workspace (`ai_billing_entries`), optionally on one AI system. They are not stored per project.
+Ledger rows live on the workspace (`ai_billing_entries`), optionally on one AI system. They are not stored per project. Admins edit them under Financials → AI Cost. The project budget page shows only that project’s allocated share.
 
 1. Group rows by month, currency, and system (a null system is the workspace pool). The paid total is the sum. `plan_change` may be a credit.
 2. Manual percents (`ai_billing_allocation_overrides`) apply first and must sum to at most 100. Each percent is that share of the pool.

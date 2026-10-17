@@ -21,6 +21,7 @@ import {
   deleteAiBillingEntry,
   getAiBillingEntry,
   listAiBillingEntries,
+  loadWorkspaceAiCostOverview,
   setAiBillingAllocation,
   updateAiBillingEntry,
 } from '../lib/ai-billing.js';
@@ -79,6 +80,18 @@ async function refreshWorkspaceSnapshots(
 export async function registerAiBillingRoutes(
   app: FastifyInstance,
 ): Promise<void> {
+  app.get(
+    '/api/v1/workspaces/:workspaceId/ai-cost',
+    async (request) => {
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ workspaceId: z.string().uuid() })
+        .parse(request.params);
+      requireWorkspaceView(principal, params.workspaceId);
+      return loadWorkspaceAiCostOverview(app.database, params.workspaceId);
+    },
+  );
+
   app.get(
     '/api/v1/workspaces/:workspaceId/ai-billing-entries',
     async (request) => {
