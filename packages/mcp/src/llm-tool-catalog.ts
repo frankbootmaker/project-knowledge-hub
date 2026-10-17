@@ -71,6 +71,38 @@ const moneyNumber = {
   description: 'Money amount as a JSON number. Null when unset.',
 };
 
+const ragStatus = {
+  type: 'string',
+  enum: ['green', 'amber', 'red'],
+};
+
+const projectHealthOutput = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['overall', 'timeline', 'risk', 'financial'],
+  description:
+    'Delivery health. status is the lifecycle stage; health.overall is the RAG. financial is null when the budget summary failed.',
+  properties: {
+    overall: {
+      ...ragStatus,
+      description: 'Worst of timeline, risk, and financial.',
+    },
+    timeline: {
+      ...ragStatus,
+      description: 'Schedule RAG. Amber when due within 7 days.',
+    },
+    risk: {
+      ...ragStatus,
+      description: 'Open or mitigating RAID RAG.',
+    },
+    financial: {
+      ...ragStatus,
+      nullable: true,
+      description: 'Budget RAG. Null when the budget summary failed.',
+    },
+  },
+};
+
 const taskStatus = {
   type: 'string',
   enum: ['todo', 'in_progress', 'blocked', 'done', 'cancelled'],
@@ -203,7 +235,11 @@ const projectBaselineResult = {
         'createdByOauthGrantId',
         'createdByUserId',
         'generatedByModel',
+        'scheduleSlipRiskEnabled',
+        'scheduleSlipThresholdDays',
+        'scheduleSlipItemTypes',
         'url',
+        'health',
       ],
       properties: {
         id: uuidProp('Project id'),
@@ -212,7 +248,8 @@ const projectBaselineResult = {
         workspaceSlug: { type: 'string', nullable: true, description: 'Workspace slug' },
         name: stringProp('Project name'),
         slug: stringProp('Project slug'),
-        status: stringProp('Project status'),
+        status: stringProp('Lifecycle stage (idea, planned, active, …). Not the RAG.'),
+        health: projectHealthOutput,
         summary: nullableString,
         description: nullableString,
         startDate: { ...ymd, nullable: true },
@@ -296,6 +333,24 @@ const projectBaselineResult = {
           type: 'string',
           nullable: true,
           description: 'Model id supplied at MCP create. Null when unset.',
+        },
+        scheduleSlipRiskEnabled: {
+          type: 'boolean',
+          description: 'When true, a slipping delivery item raises one open RAID risk.',
+        },
+        scheduleSlipThresholdDays: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 3650,
+          description: 'Minimum working days of slip before that risk is raised.',
+        },
+        scheduleSlipItemTypes: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['task', 'user_story', 'epic', 'milestone'],
+          },
+          description: 'Delivery types watched for a schedule slip.',
         },
         url: {
           type: 'string',
@@ -603,7 +658,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_projects',
     description:
-      'List accessible projects. Filter by status or stage (idea, planned, active, maintenance, paused, completed, archived).',
+      'List accessible projects. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial). Filter by status or stage (idea, planned, active, maintenance, paused, completed, archived).',
     scope: 'projects:read',
     openApi: true,
     defaults: { limit: 50 },
@@ -638,7 +693,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project',
     description:
-      'Get a project by id. projectId (UUID) is required. Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
+      'Get a project by id. projectId (UUID) is required. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial; financial is null when the budget summary failed). Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, health, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
     scope: 'projects:read',
     openApi: true,
     output: projectBaselineResult,

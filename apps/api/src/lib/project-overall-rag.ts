@@ -5,73 +5,36 @@ import {
   projectTasks,
 } from '@project-knowledge-hub/database';
 import {
-  getProjectBudgetSummary,
+  emptyProjectHealth,
+  projectHealthFromBudget,
+  timelineRag,
+  todayYmd,
+  type ProjectHealth,
   type ProjectRagStatus,
-} from './project-budget.js';
+} from '@project-knowledge-hub/domain';
+import { getProjectBudgetSummary } from './project-budget.js';
 
-const RAG_RANK: Record<ProjectRagStatus, number> = {
-  green: 0,
-  amber: 1,
-  red: 2,
-};
-
-function worstRag(statuses: ProjectRagStatus[]): ProjectRagStatus {
-  let worst: ProjectRagStatus = 'green';
-  for (const status of statuses) {
-    if (RAG_RANK[status] > RAG_RANK[worst]) worst = status;
-  }
-  return worst;
-}
-
-function todayYmd(now = new Date()): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function addDaysYmd(ymd: string, days: number): string {
-  const date = new Date(`${ymd}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return todayYmd(date);
-}
-
-function scheduleTone(
-  status: string,
-  date: string | null | undefined,
-  today: string,
-): 'overdue' | 'atRisk' | 'ok' {
-  if (status === 'done' || status === 'cancelled' || !date) return 'ok';
-  if (date < today) return 'overdue';
-  if (date <= addDaysYmd(today, 7)) return 'atRisk';
-  return 'ok';
-}
-
-function timelineRag(
-  items: Array<{ status: string; date: string | null | undefined }>,
-  today: string,
-): ProjectRagStatus {
-  let worst: ProjectRagStatus = 'green';
-  for (const item of items) {
-    const tone = scheduleTone(item.status, item.date, today);
-    if (tone === 'overdue') return 'red';
-    if (tone === 'atRisk') worst = 'amber';
-  }
-  return worst;
-}
+export { emptyProjectHealth, type ProjectHealth };
 
 /**
- * Overall project health (worst of timeline / risks / financials) for many projects.
- * Matches the project page overall indicator.
+ * Overall project health for many projects.
+ *
+ * Timeline uses TIMELINE_AT_RISK_DAYS (7). Risk and financial come from the
+ * budget summary (computeRiskRag / computeFinancialRag). Overall is the worst
+ * of the three. If the budget summary throws, overall is the timeline RAG
+ * only and financial is null.
+ *
+ * Schedule rows are loaded in two queries. Budget summaries stay one call
+ * per project, matching the previous list endpoint.
  */
-export async function listProjectOverallRags(
+export async function listProjectHealth(
   database: Database,
   projectIds: string[],
-): Promise<Map<string, ProjectRagStatus>> {
-  const result = new Map<string, ProjectRagStatus>();
+  today = todayYmd(),
+): Promise<Map<string, ProjectHealth>> {
+  const result = new Map<string, ProjectHealth>();
   if (projectIds.length === 0) return result;
 
-  const today = todayYmd();
   const [milestoneRows, taskRows] = await Promise.all([
     database.db
       .select({
@@ -123,13 +86,32 @@ export async function listProjectOverallRags(
         const summary = await getProjectBudgetSummary(database, projectId);
         result.set(
           projectId,
-          worstRag([timeline, summary.riskRag, summary.financialRag]),
+          projectHealthFromBudget({
+            timeline,
+            budget: {
+              risk: summary.riskRag,
+              financial: summary.financialRag,
+            },
+          }),
         );
       } catch {
-        result.set(projectId, timeline);
+        result.set(projectId, projectHealthFromBudget({ timeline, budget: null }));
       }
     }),
   );
 
+  return result;
+}
+
+/** Overall RAG only. Prefer {@link listProjectHealth} when the breakdown is needed. */
+export async function listProjectOverallRags(
+  database: Database,
+  projectIds: string[],
+): Promise<Map<string, ProjectRagStatus>> {
+  const health = await listProjectHealth(database, projectIds);
+  const result = new Map<string, ProjectRagStatus>();
+  for (const [projectId, row] of health) {
+    result.set(projectId, row.overall);
+  }
   return result;
 }

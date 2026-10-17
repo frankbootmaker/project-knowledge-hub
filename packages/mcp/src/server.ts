@@ -1022,7 +1022,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_projects',
-    'List accessible projects in allowed workspaces. Each project includes workspaceName, workspaceSlug, and status (the lifecycle stage). Filter with status or stage (idea, planned, active, maintenance, paused, completed, archived).',
+    'List accessible projects in allowed workspaces. Each project includes workspaceName, workspaceSlug, status (lifecycle stage), and health. health.overall is the RAG. Filter with status or stage (idea, planned, active, maintenance, paused, completed, archived).',
     {
       workspaceId: z.string().uuid().optional(),
       workspaceSlug: z.string().min(1).max(64).optional(),
@@ -1285,6 +1285,17 @@ export function createKnowledgeHubMcpServer(
   // that validates the project object alone cannot resolve those pointers.
   // Unresolved properties then fail as additional properties.
   const nullableOutputText = () => z.string().nullable();
+  // Fresh enums. A shared Zod enum is emitted as $ref, which clients cannot resolve.
+  // These fields have no .describe(): ChatGPT's tool list must stay under 12,000
+  // characters. status vs health.overall is stated on the tool descriptions.
+  const ragStatus = () => z.enum(['green', 'amber', 'red']);
+  const projectHealthOutput = () =>
+    z.object({
+      overall: ragStatus(),
+      timeline: ragStatus(),
+      risk: ragStatus(),
+      financial: ragStatus().nullable(),
+    });
   const pinnedRecordOutput = () =>
     z
       .object({
@@ -1316,37 +1327,24 @@ export function createKnowledgeHubMcpServer(
       charterRecord: pinnedRecordOutput(),
       initialPlanRecordId: nullableOutputText(),
       initialPlanRecord: pinnedRecordOutput(),
-      definitionOfDone: nullableOutputText().describe(
-        'Scrum Definition of Done. Null when unset.',
-      ),
+      definitionOfDone: nullableOutputText(),
       currency: projectCurrencyEnum,
       initialBudget: z.number().nullable(),
       approvedBudget: z.number().nullable(),
       keyPrefix: nullableOutputText(),
       methodology: z.enum(['scrum', 'kanban', 'waterfall', 'hybrid']).nullable(),
-      createdVia: z.enum(['mcp']).nullable().describe(
-        'mcp when an agent created the project. Null for a human-created project.',
-      ),
-      createdByApiClientId: nullableOutputText().describe(
-        'API client id when created via MCP. Null otherwise.',
-      ),
-      createdByOauthGrantId: nullableOutputText().describe(
-        'OAuth grant id. Null otherwise.',
-      ),
-      createdByUserId: nullableOutputText().describe(
-        'Acting user id when created via MCP. Null otherwise.',
-      ),
-      generatedByModel: nullableOutputText().describe(
-        'Optional model id supplied at MCP create. Null when unset.',
-      ),
+      createdVia: z.enum(['mcp']).nullable(),
+      createdByApiClientId: nullableOutputText(),
+      createdByOauthGrantId: nullableOutputText(),
+      createdByUserId: nullableOutputText(),
+      generatedByModel: nullableOutputText(),
       scheduleSlipRiskEnabled: z.boolean(),
       scheduleSlipThresholdDays: z.number().int(),
       scheduleSlipItemTypes: z.array(
         z.enum(['task', 'user_story', 'epic', 'milestone']),
       ),
-      url: nullableOutputText().describe(
-        'Hub URL for the project. Null when the workspace slug is unknown.',
-      ),
+      url: nullableOutputText(),
+      health: projectHealthOutput(),
     }),
   };
   const projectMethodologyEnum = z.enum(['scrum', 'kanban', 'waterfall', 'hybrid']);
@@ -1379,7 +1377,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id or by projectSlug plus workspaceSlug. Returns status, methodology, baseline, calendar, finishDate, durationWorkingDays, charter/plan, keyPrefix, budgets, definitionOfDone, url, and MCP provenance. finishDate is calculated.',
+        'Get a project by id or projectSlug. Returns status (lifecycle stage), health (health.overall is the RAG), methodology, baseline, calendar, finishDate, durationWorkingDays, charter/plan, keyPrefix, budgets, definitionOfDone, url, and MCP provenance. health.financial is null when the budget summary failed.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),

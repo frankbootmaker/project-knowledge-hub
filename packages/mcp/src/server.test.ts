@@ -253,6 +253,12 @@ function baselineProject(definitionOfDone: string | null) {
     scheduleSlipThresholdDays: 2,
     scheduleSlipItemTypes: ['task', 'user_story', 'epic', 'milestone'],
     url: null,
+    health: {
+      overall: 'green',
+      timeline: 'green',
+      risk: 'green',
+      financial: 'green',
+    },
   };
 }
 
@@ -301,6 +307,12 @@ function realisticProject() {
     scheduleSlipThresholdDays: 2,
     scheduleSlipItemTypes: ['task', 'user_story', 'epic', 'milestone'],
     url: 'https://knowledge.example.com/workspaces/lab/projects/demo',
+    health: {
+      overall: 'amber',
+      timeline: 'amber',
+      risk: 'green',
+      financial: 'green',
+    },
   };
 }
 
@@ -342,12 +354,19 @@ describe('definitionOfDone on project baseline tools', () => {
         const tool = listed.tools.find((item) => item.name === name);
         expect(tool?.description).toContain('definitionOfDone');
         expect(JSON.stringify(tool?.outputSchema)).toContain('definitionOfDone');
+        expect(JSON.stringify(tool?.outputSchema)).toContain('health');
         expect(JSON.stringify(tool?.outputSchema)).toContain('createdVia');
         expect(JSON.stringify(tool?.outputSchema)).toContain('generatedByModel');
         expect(JSON.stringify(tool?.outputSchema)).toContain('finishDate');
         expect(JSON.stringify(tool?.outputSchema)).toContain('durationWorkingDays');
         expect(JSON.stringify(tool?.inputSchema)).toContain('projectId');
       }
+      const getProjectTool = listed.tools.find((item) => item.name === 'get_project');
+      expect(getProjectTool?.description).toContain('health.overall');
+      expect(getProjectTool?.description).toMatch(/lifecycle stage/);
+      const listProjects = listed.tools.find((item) => item.name === 'list_projects');
+      expect(listProjects?.description).toContain('health.overall');
+      expect(listProjects?.description).toMatch(/lifecycle stage/);
       const update = listed.tools.find((item) => item.name === 'update_project_baseline');
       const input = JSON.stringify(update?.inputSchema);
       expect(input).toContain('hoursPerWorkday');

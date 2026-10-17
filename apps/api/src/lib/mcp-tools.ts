@@ -238,6 +238,11 @@ import {
   upsertProjectCostSnapshot,
 } from './project-budget.js';
 import { moveProjectToWorkspace } from './project-move.js';
+import {
+  emptyProjectHealth,
+  listProjectHealth,
+  type ProjectHealth,
+} from './project-overall-rag.js';
 import { getKnowledgeRecordTags } from './tags.js';
 import { createProjectViaMcp, updateProjectViaMcp } from './mcp-project-write.js';
 
@@ -1169,8 +1174,9 @@ function toMcpProject(
   project: typeof projects.$inferSelect,
   pinned: Awaited<ReturnType<typeof loadPinnedRecords>>,
   workspace: WorkspaceLabel | null,
-  facts?: ProjectScheduleFacts,
-  webUrl?: string,
+  facts: ProjectScheduleFacts | undefined,
+  webUrl: string | undefined,
+  health: ProjectHealth,
 ) {
   const calendar = coerceProjectCalendar({
     hoursPerWorkday: project.hoursPerWorkday,
@@ -1232,7 +1238,16 @@ function toMcpProject(
       webUrl && workspace?.slug
         ? `${webUrl.replace(/\/$/, '')}/workspaces/${workspace.slug}/projects/${project.slug}`
         : null,
+    health,
   };
+}
+
+async function healthForProject(
+  database: FastifyInstance['database'],
+  projectId: string,
+): Promise<ProjectHealth> {
+  const health = await listProjectHealth(database, [projectId]);
+  return health.get(projectId) ?? emptyProjectHealth();
 }
 
 /**
@@ -1421,9 +1436,16 @@ export function createMcpToolHandlers(
       }
       const page =
         typeof limit === 'number' ? staged.slice(0, limit) : staged;
-      const labels = await loadWorkspaceLabels(app, [
-        ...page.map((row) => row.workspaceId),
-        ...inaccessible.map((item) => item.row.workspaceId),
+      const returnedIds = [
+        ...page.map((row) => row.id),
+        ...inaccessible.map((item) => item.row.id),
+      ];
+      const [labels, healthById] = await Promise.all([
+        loadWorkspaceLabels(app, [
+          ...page.map((row) => row.workspaceId),
+          ...inaccessible.map((item) => item.row.workspaceId),
+        ]),
+        listProjectHealth(app.database, returnedIds),
       ]);
       const toSummary = (row: (typeof rows)[number]) => ({
         id: row.id,
@@ -1434,6 +1456,7 @@ export function createMcpToolHandlers(
         status: row.status,
         summary: row.summary,
         keyPrefix: row.keyPrefix,
+        health: healthById.get(row.id) ?? emptyProjectHealth(),
       });
       return {
         projects: page.map(toSummary),
@@ -1454,11 +1477,14 @@ export function createMcpToolHandlers(
 
     async updateProject(input) {
       const updated = await updateProjectViaMcp(app, client, input, ipAddress);
-      const pinned = await loadPinnedRecords(app.database, [
-        updated.project.charterRecordId,
-        updated.project.initialPlanRecordId,
+      const [pinned, facts, health] = await Promise.all([
+        loadPinnedRecords(app.database, [
+          updated.project.charterRecordId,
+          updated.project.initialPlanRecordId,
+        ]),
+        loadProjectScheduleFacts(app.database, [updated.project]),
+        healthForProject(app.database, updated.project.id),
       ]);
-      const facts = await loadProjectScheduleFacts(app.database, [updated.project]);
       return {
         project: toMcpProject(
           updated.project,
@@ -1470,6 +1496,7 @@ export function createMcpToolHandlers(
           },
           facts.get(updated.project.id),
           app.env?.WEB_URL,
+          health,
         ),
         warning: updated.duplicateWarning,
       };
@@ -1650,12 +1677,15 @@ export function createMcpToolHandlers(
       workspaceSlug?: string;
     }) {
       const project = await resolveMcpProject(app, client, input);
-      const pinned = await loadPinnedRecords(app.database, [
-        project.charterRecordId,
-        project.initialPlanRecordId,
+      const [pinned, labels, facts, health] = await Promise.all([
+        loadPinnedRecords(app.database, [
+          project.charterRecordId,
+          project.initialPlanRecordId,
+        ]),
+        loadWorkspaceLabels(app, [project.workspaceId]),
+        loadProjectScheduleFacts(app.database, [project]),
+        healthForProject(app.database, project.id),
       ]);
-      const labels = await loadWorkspaceLabels(app, [project.workspaceId]);
-      const facts = await loadProjectScheduleFacts(app.database, [project]);
       return {
         project: toMcpProject(
           project,
@@ -1663,6 +1693,7 @@ export function createMcpToolHandlers(
           labels.get(project.workspaceId) ?? null,
           facts.get(project.id),
           app.env?.WEB_URL,
+          health,
         ),
       };
     },
@@ -1797,12 +1828,15 @@ export function createMcpToolHandlers(
         metadata: { via: 'mcp', actingUserId },
         ipAddress: ipAddress ?? null,
       });
-      const pinned = await loadPinnedRecords(app.database, [
-        updated.charterRecordId,
-        updated.initialPlanRecordId,
+      const [pinned, labels, facts, health] = await Promise.all([
+        loadPinnedRecords(app.database, [
+          updated.charterRecordId,
+          updated.initialPlanRecordId,
+        ]),
+        loadWorkspaceLabels(app, [updated.workspaceId]),
+        loadProjectScheduleFacts(app.database, [updated]),
+        healthForProject(app.database, updated.id),
       ]);
-      const labels = await loadWorkspaceLabels(app, [updated.workspaceId]);
-      const facts = await loadProjectScheduleFacts(app.database, [updated]);
       return {
         project: toMcpProject(
           updated,
@@ -1810,6 +1844,7 @@ export function createMcpToolHandlers(
           labels.get(updated.workspaceId) ?? null,
           facts.get(updated.id),
           app.env?.WEB_URL,
+          health,
         ),
       };
     },
