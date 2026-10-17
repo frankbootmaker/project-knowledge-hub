@@ -251,6 +251,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-17
 
 * **Media lightbox** — `MediaLightbox` (`.kh-media-lightbox`) shows linked and library images at full resolution. Delivery Media and the workspace catalogue open it from `.kh-ops-media-preview-btn` on thumbnails instead of reusing the card preview class on a modal `<img>`.
+* **RAID due-date colour** — The RAID list due-date cell uses `text-danger` when the date is before today and `text-warn` when it falls on today or within the 7-day project-health window. Later and empty dates stay the default ink. The project header health `Badge` tooltip appends the risk reason after the Risks label.
 * **Schedule slip** — Project baseline adds a `Switch` for auto RAID risks, a number field for the working-day threshold, and checkboxes for task, story, epic, and milestone. The RAID title cell shows a warn `Badge` labeled auto. Gantt and Tree titles show `.kh-ops-schedule-slip` (warn token, “!”) on a slipping item.
 
 ### 2026-10-16

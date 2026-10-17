@@ -58,7 +58,7 @@ knowledge_records
 | Linked RAID chips on task manage | Record-editor checkboxes for milestone and sprint (those links still persist) |
 | RAID Dependencies as register rows | Gantt / critical path (still out of Delivery v1) |
 
-Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID Risks.
+Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID Risks. Project risk health uses the 7-day window (PRO-T-98, [ADR-027](../adr/ADR-027-due-date-aware-raid-risk.md)): the due-date cell is red when overdue and amber within those 7 days. Severity badge stays as it is.
 
 A project can raise one open **risk** when a task, user story, epic, or milestone slips (PRO-T-63, [ADR-026](../adr/ADR-026-schedule-slip-raid.md)). The toggle, working-day threshold (default 2), and watched types live on the project and default off. The hub evaluates on save and once a day. The risk title is `Schedule slip: <KEY> +N days`, `source` is `auto_schedule_slip`, and the list shows an auto badge. A larger slip updates that same open risk. When the slip clears, the risk stays open and gains a closure note.
 

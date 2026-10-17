@@ -830,6 +830,23 @@
       "red": "Verzögert",
       "none": "Kein Budget"
     },
+    "riskReasonIssue": "{count} {kind} ({severity})",
+    "riskReasonOverdue": "{count} {kind} ({severity}) überfällig",
+    "riskReasonDueSoon": "{count} {kind} ({severity}) in {days, plural, one {# Tag} other {# Tagen}} fällig",
+    "riskReasonDueToday": "{count} {kind} ({severity}) heute fällig",
+    "riskReasonOpen": "{count} {kind} ({severity})",
+    "riskReasonSeverity": {
+      "critical": "kritisch",
+      "high": "hoch",
+      "medium": "mittel",
+      "low": "niedrig"
+    },
+    "riskReasonKind": {
+      "risk": "{count, plural, one {Risiko} other {Risiken}}",
+      "assumption": "{count, plural, one {Annahme} other {Annahmen}}",
+      "issue": "{count, plural, one {Issue} other {Issues}}",
+      "dependency": "{count, plural, one {Abhängigkeit} other {Abhängigkeiten}}"
+    },
     "manageReports": "Berichte",
     "manageReportsHint": "Status-, Umsetzungs- oder Stakeholder-Berichte ansehen, dann exportieren oder drucken.",
     "reportStatus": "Projektstatusbericht",
@@ -3238,6 +3255,8 @@
     "colStatus": "Status",
     "colOwner": "Owner",
     "colDue": "Review",
+    "dueOverdue": "Überfällig",
+    "dueSoon": "Innerhalb von 7 Tagen fällig",
     "colLinked": "Verknüpfte Arbeit",
     "searchPlaceholder": "Titel, Art, Owner, Aufgaben suchen…",
     "filterLabel": "Nach Art und Status filtern",

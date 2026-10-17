@@ -67,6 +67,8 @@ export type ReportRaidItem = {
   title: string;
   status: string;
   severity: string;
+  dueDate?: string | null;
+  archivedAt?: string | null;
 };
 
 export type ReportBudgetBurndownPoint = {
