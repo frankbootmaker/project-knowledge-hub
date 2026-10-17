@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **AI cost service period (PRO-T-104):** Financials → AI Cost replaces the month field with service start and end dates (`Input type="date"`). `ai_billing_entries` gains nullable `service_period_start` and `service_period_end` (migration `0069`); existing rows become the first and last day of their month. `period` stays `YYYY-MM` and is the start month. `splitBillingEntryByMonth` in `@project-knowledge-hub/domain` splits a span by days (12 Oct–11 Nov is 20/31 and 11/31) with largest-remainder cents. Allocation pools, allocation overrides, the paid-versus-theoretical chart, and `aiPaidAc` use that split. A row without service dates stays entirely in `period`. The provider control is a picklist (Cursor, OpenAI, Anthropic, Google (Gemini), GitHub Copilot, xAI, Mistral, Other) and the API still stores a free string. An empty AI system is labeled workspace-wide and that select spans the form row so the English, German, and Hungarian labels stay visible. Plan is a single-line field. Paid at is optional, so Save stays enabled once the service dates, provider, and amount are filled; the footer names whichever of those is still missing. MCP `list_ai_billing_entries`, `create_ai_billing_entry`, and `update_ai_billing_entry` accept and return `servicePeriodStart` and `servicePeriodEnd`.
+
+* **AI Cost labels:** Financials and the project budget copy say “cost entry” (HU költségtétel, DE Kostenposten). Tool names stay `ai_billing_entry`.
+
 * **Delivery search toolbar:** List and Tree place the filter control on the same line as the search field, matching the Gantt.
 
 * **Timeline cards:** Start and due dates stack on two lines, each with its own icon, and the card narrows to the longer date so both stay fully visible.

@@ -2072,7 +2072,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_budget_summary',
     description:
-      'EVM summary, financialRag, riskRag, riskReasons, burndown, and epic cost rollups. riskRag uses open or mitigating RAID only (closed, accepted, cancelled, and archived are ignored) and the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons lists that colour (count, severity, kind, cause, dueInDays) and is empty when green. aiPaidAc is the allocated paid AI cost (ledger, or flat-fee fallback when a month has no entries). aiTheoreticalApiCost is list-price token cost and is not added to AC. aiPeriods breaks that down by month. Requires pm:read.',
+      'EVM summary, financialRag, riskRag, riskReasons, burndown, and epic cost rollups. riskRag uses open or mitigating RAID only (closed, accepted, cancelled, and archived are ignored) and the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons lists that colour (count, severity, kind, cause, dueInDays) and is empty when green. aiPaidAc is the allocated paid AI cost (ledger, or flat-fee fallback when a month has no entries). A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is list-price token cost and is not added to AC. aiPeriods breaks that down by month. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -2879,12 +2879,77 @@ export function listHubToolSummaries(includeWriteTools: boolean): Array<{
   );
 }
 
+/** Cost entry row. Open object: no additionalProperties: false (PRO-T-101). */
+function billingEntryResult(): Record<string, unknown> {
+  return {
+    type: 'object',
+    required: [
+      'id',
+      'workspaceId',
+      'aiSystemId',
+      'period',
+      'servicePeriodStart',
+      'servicePeriodEnd',
+      'provider',
+      'plan',
+      'type',
+      'amount',
+      'currency',
+      'paidAt',
+      'note',
+      'externalRef',
+      'createdAt',
+      'updatedAt',
+    ],
+    properties: {
+      id: uuidProp('Cost entry id'),
+      workspaceId: uuidProp('Workspace id'),
+      aiSystemId: {
+        ...uuidProp('AI system id, or null when the entry is workspace-wide'),
+        nullable: true,
+      },
+      period: {
+        type: 'string',
+        description:
+          'Start month YYYY-MM. Derived from servicePeriodStart when that date is set.',
+      },
+      servicePeriodStart: {
+        ...ymd,
+        nullable: true,
+        description:
+          'Inclusive service start YYYY-MM-DD. Null keeps the whole amount in period.',
+      },
+      servicePeriodEnd: {
+        ...ymd,
+        nullable: true,
+        description:
+          'Inclusive service end YYYY-MM-DD. A span is split across months by days.',
+      },
+      provider: stringProp('Provider name'),
+      plan: { type: 'string', nullable: true },
+      type: {
+        type: 'string',
+        enum: ['subscription', 'plan_change', 'on_demand'],
+      },
+      amount: { type: 'number', description: 'Paid amount as a JSON number.' },
+      currency: stringProp('Currency code'),
+      paidAt: { type: 'string', nullable: true },
+      note: { type: 'string', nullable: true },
+      externalRef: { type: 'string', nullable: true },
+      createdAt: { type: 'string' },
+      updatedAt: { type: 'string' },
+    },
+  };
+}
+
 const EXTRA_HUB_TOOLS: Array<{
   name: string;
   description: string;
   scope: McpScope;
   write: boolean;
   body: ToolInputSchema;
+  /** Open JSON Schema. Do not set additionalProperties: false (PRO-T-101). */
+  output?: Record<string, unknown>;
 }> = [
   {
     name: 'update_project_change_item',
@@ -2972,7 +3037,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'list_ai_billing_entries',
     description:
-      'List workspace AI billing entries. Paid cost for a month is the sum. Requires pm:read.',
+      'List workspace AI cost entries. Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A span is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional service dates keep rows whose window overlaps that range. Requires pm:read.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -2984,28 +3049,57 @@ const EXTRA_HUB_TOOLS: Array<{
         period: {
           type: 'string',
           pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
-          description: 'Optional YYYY-MM filter',
+          description: 'Optional YYYY-MM filter. Matches any month the row contributes to.',
         },
         aiSystemId: uuidProp('Optional AI system id'),
+        servicePeriodStart: {
+          ...ymd,
+          description: 'Optional YYYY-MM-DD. Keep rows whose service window ends on or after this date.',
+        },
+        servicePeriodEnd: {
+          ...ymd,
+          description: 'Optional YYYY-MM-DD. Keep rows whose service window starts on or before this date.',
+        },
+      },
+    },
+    output: {
+      type: 'object',
+      required: ['entries'],
+      properties: {
+        entries: {
+          type: 'array',
+          items: billingEntryResult(),
+        },
       },
     },
   },
   {
     name: 'create_ai_billing_entry',
     description:
-      'Add a paid AI fee (subscription, plan_change, or on_demand) for a workspace month. plan_change may be negative. Requires pm:write.',
+      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD, inclusive) prorate the amount across months by days; period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
       type: 'object',
       additionalProperties: false,
-      required: ['workspaceId', 'period', 'provider', 'type', 'amount', 'currency'],
+      required: ['workspaceId', 'provider', 'type', 'amount', 'currency'],
       properties: {
         workspaceId: uuidProp('Workspace id'),
         period: {
           type: 'string',
           pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
-          description: 'Billing month YYYY-MM',
+          description:
+            'YYYY-MM. Required when service dates are omitted. When servicePeriodStart is set, period is that month.',
+        },
+        servicePeriodStart: {
+          ...ymd,
+          nullable: true,
+          description: 'Inclusive service start YYYY-MM-DD. Set with servicePeriodEnd.',
+        },
+        servicePeriodEnd: {
+          ...ymd,
+          nullable: true,
+          description: 'Inclusive service end YYYY-MM-DD. Must be on or after the start.',
         },
         provider: stringProp('Provider name, for example Cursor', {
           minLength: 1,
@@ -3020,17 +3114,23 @@ const EXTRA_HUB_TOOLS: Array<{
           description: 'Paid amount. Negative only for plan_change.',
         },
         currency: stringProp('Currency code', { minLength: 3, maxLength: 3 }),
-        aiSystemId: { ...uuidProp('AI system id, or null for the workspace pool'), nullable: true },
+        aiSystemId: { ...uuidProp('AI system id, or null for the workspace-wide pool'), nullable: true },
         plan: { type: 'string', maxLength: 80, nullable: true },
         paidAt: { type: 'string', maxLength: 40, nullable: true },
         note: { type: 'string', maxLength: 500, nullable: true },
         externalRef: { type: 'string', maxLength: 120, nullable: true },
       },
     },
+    output: {
+      type: 'object',
+      required: ['entry'],
+      properties: { entry: billingEntryResult() },
+    },
   },
   {
     name: 'update_ai_billing_entry',
-    description: 'Update one AI billing entry. Requires pm:write.',
+    description:
+      'Update one AI cost entry. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) replace the window; period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3038,8 +3138,18 @@ const EXTRA_HUB_TOOLS: Array<{
       additionalProperties: false,
       required: ['entryId'],
       properties: {
-        entryId: uuidProp('Billing entry id'),
+        entryId: uuidProp('Cost entry id'),
         period: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' },
+        servicePeriodStart: {
+          ...ymd,
+          nullable: true,
+          description: 'Inclusive service start YYYY-MM-DD.',
+        },
+        servicePeriodEnd: {
+          ...ymd,
+          nullable: true,
+          description: 'Inclusive service end YYYY-MM-DD.',
+        },
         provider: stringProp('Provider name', { minLength: 1, maxLength: 80 }),
         type: {
           type: 'string',
@@ -3054,17 +3164,22 @@ const EXTRA_HUB_TOOLS: Array<{
         externalRef: { type: 'string', maxLength: 120, nullable: true },
       },
     },
+    output: {
+      type: 'object',
+      required: ['entry'],
+      properties: { entry: billingEntryResult() },
+    },
   },
   {
     name: 'delete_ai_billing_entry',
-    description: 'Delete one AI billing entry. Requires pm:write.',
+    description: 'Delete one AI cost entry. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
       type: 'object',
       additionalProperties: false,
       required: ['entryId'],
-      properties: { entryId: uuidProp('Billing entry id') },
+      properties: { entryId: uuidProp('Cost entry id') },
     },
   },
 ];

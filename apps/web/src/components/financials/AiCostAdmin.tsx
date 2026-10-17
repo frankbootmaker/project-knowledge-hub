@@ -4,7 +4,11 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { projectCurrencySchema, type ProjectCurrency } from '@project-knowledge-hub/domain';
+import {
+  projectCurrencySchema,
+  splitBillingEntryByMonth,
+  type ProjectCurrency,
+} from '@project-knowledge-hub/domain';
 import { formatMoney, parseOptionalNumber } from '../../lib/project-currency';
 import { AiBillingChart } from '../AiBillingChart';
 import { Button, ErrorText, Field, Input, Modal, Select, useToast } from '../ui';
@@ -14,6 +18,8 @@ type BillingType = 'subscription' | 'plan_change' | 'on_demand';
 export type AiBillingEntryRow = {
   id: string;
   period: string;
+  servicePeriodStart: string | null;
+  servicePeriodEnd: string | null;
   provider: string;
   plan: string | null;
   type: BillingType;
@@ -68,8 +74,10 @@ export type AiSystemPrice = {
 
 type EntryDraft = {
   id: string | null;
-  period: string;
-  provider: string;
+  servicePeriodStart: string;
+  servicePeriodEnd: string;
+  providerChoice: string;
+  providerCustom: string;
   plan: string;
   type: BillingType;
   amount: string;
@@ -82,11 +90,60 @@ type EntryDraft = {
 
 const CURRENCIES = projectCurrencySchema.options;
 
+/** Stored as free text. "Other" is only a form choice. */
+const AI_COST_PROVIDERS = [
+  'Cursor',
+  'OpenAI',
+  'Anthropic',
+  'Google (Gemini)',
+  'GitHub Copilot',
+  'xAI',
+  'Mistral',
+] as const;
+
+const OTHER_PROVIDER = 'other';
+
+function providerFields(provider: string): {
+  providerChoice: string;
+  providerCustom: string;
+} {
+  if ((AI_COST_PROVIDERS as readonly string[]).includes(provider)) {
+    return { providerChoice: provider, providerCustom: '' };
+  }
+  return { providerChoice: OTHER_PROVIDER, providerCustom: provider };
+}
+
+function providerName(draft: EntryDraft): string {
+  if (draft.providerChoice === OTHER_PROVIDER) return draft.providerCustom.trim();
+  return draft.providerChoice;
+}
+
+/** Paid at, plan, note, external ref, and AI system are optional. */
+function saveBlocker(
+  draft: EntryDraft | null,
+  rangeInvalid: boolean,
+):
+  | 'serviceDatesRequired'
+  | 'serviceRangeInvalid'
+  | 'providerRequired'
+  | 'amountRequired'
+  | null {
+  if (!draft?.servicePeriodStart || !draft.servicePeriodEnd) {
+    return 'serviceDatesRequired';
+  }
+  if (rangeInvalid) return 'serviceRangeInvalid';
+  if (!providerName(draft)) return 'providerRequired';
+  if (draft.amount.trim() === '') return 'amountRequired';
+  return null;
+}
+
 function emptyDraft(currency: ProjectCurrency): EntryDraft {
   return {
     id: null,
-    period: '',
-    provider: 'Cursor',
+    servicePeriodStart: '',
+    servicePeriodEnd: '',
+    providerChoice: 'Cursor',
+    providerCustom: '',
     plan: '',
     type: 'subscription',
     amount: '',
@@ -150,6 +207,23 @@ export function AiCostAdmin({
   const visibleChart = chart.filter((row) => row.currency === currency);
   const visibleEntries = entries.filter((row) => row.currency === currency);
   const visiblePools = pools.filter((row) => row.currency === currency);
+  const rangeInvalid = Boolean(
+    draft?.servicePeriodStart &&
+      draft.servicePeriodEnd &&
+      draft.servicePeriodEnd < draft.servicePeriodStart,
+  );
+  const blocker = draft ? saveBlocker(draft, rangeInvalid) : null;
+  const splitPreview = useMemo(() => {
+    if (!draft?.servicePeriodStart || !draft.servicePeriodEnd || rangeInvalid) return [];
+    const amount = parseOptionalNumber(draft.amount);
+    if (amount == null) return [];
+    return splitBillingEntryByMonth({
+      amount,
+      period: draft.servicePeriodStart.slice(0, 7),
+      servicePeriodStart: draft.servicePeriodStart,
+      servicePeriodEnd: draft.servicePeriodEnd,
+    });
+  }, [draft, rangeInvalid]);
 
   async function reload() {
     router.refresh();
@@ -162,11 +236,26 @@ export function AiCostAdmin({
       setError(t('amountRequired'));
       return;
     }
+    if (!draft.servicePeriodStart || !draft.servicePeriodEnd) {
+      setError(t('serviceDatesRequired'));
+      return;
+    }
+    if (draft.servicePeriodEnd < draft.servicePeriodStart) {
+      setError(t('serviceRangeInvalid'));
+      return;
+    }
+    const provider = providerName(draft);
+    if (!provider) {
+      setError(t('providerRequired'));
+      return;
+    }
     setPending(true);
     setError(null);
     const body = {
-      period: draft.period,
-      provider: draft.provider,
+      period: draft.servicePeriodStart.slice(0, 7),
+      servicePeriodStart: draft.servicePeriodStart,
+      servicePeriodEnd: draft.servicePeriodEnd,
+      provider,
       plan: draft.plan.trim() || null,
       type: draft.type,
       amount,
@@ -339,8 +428,9 @@ export function AiCostAdmin({
     const parsed = projectCurrencySchema.safeParse(entry.currency);
     setDraft({
       id: entry.id,
-      period: entry.period,
-      provider: entry.provider,
+      servicePeriodStart: entry.servicePeriodStart ?? '',
+      servicePeriodEnd: entry.servicePeriodEnd ?? '',
+      ...providerFields(entry.provider),
       plan: entry.plan ?? '',
       type: entry.type,
       amount: String(entry.amount),
@@ -354,7 +444,7 @@ export function AiCostAdmin({
 
   return (
     <div className="grid gap-3">
-      {error ? <ErrorText>{error}</ErrorText> : null}
+      {error && !draft ? <ErrorText>{error}</ErrorText> : null}
       {currencies.length > 1 ? (
         <Field label={t('currency')} className="max-w-xs">
           <Select value={currency} onChange={(event) => setCurrency(event.target.value)}>
@@ -445,7 +535,11 @@ export function AiCostAdmin({
               <tbody>
                 {visibleEntries.map((entry) => (
                   <tr key={entry.id}>
-                    <td>{entry.period}</td>
+                    <td>
+                      {entry.servicePeriodStart && entry.servicePeriodEnd
+                        ? `${entry.servicePeriodStart} – ${entry.servicePeriodEnd}`
+                        : entry.period}
+                    </td>
                     <td>{entry.provider}</td>
                     <td>
                       {entry.aiSystemId
@@ -657,17 +751,15 @@ export function AiCostAdmin({
         description={t('entryHint')}
         footer={
           <>
+            {blocker ? (
+              <p className="m-0 text-[13px] text-ink-muted sm:mr-auto">{t(blocker)}</p>
+            ) : null}
             <Button type="button" variant="secondary" onClick={() => setDraft(null)}>
               {tCommon('cancel')}
             </Button>
             <Button
               type="button"
-              disabled={
-                pending ||
-                !draft?.period ||
-                !draft.provider.trim() ||
-                draft.amount.trim() === ''
-              }
+              disabled={pending || blocker != null}
               onClick={() => void saveEntry()}
             >
               {pending ? tCommon('saving') : t('save')}
@@ -677,14 +769,49 @@ export function AiCostAdmin({
       >
         {draft ? (
           <div className="kh-ops-form-grid">
-            <Field label={t('period')}>
+            {error ? <div className="kh-ops-field-span"><ErrorText>{error}</ErrorText></div> : null}
+            <Field label={t('serviceStart')}>
               <Input
-                type="month"
-                value={draft.period}
+                type="date"
+                value={draft.servicePeriodStart}
                 disabled={pending}
-                onChange={(event) => setDraft({ ...draft, period: event.target.value })}
+                onChange={(event) =>
+                  setDraft({ ...draft, servicePeriodStart: event.target.value })
+                }
               />
             </Field>
+            <Field label={t('serviceEnd')}>
+              <Input
+                type="date"
+                value={draft.servicePeriodEnd}
+                min={draft.servicePeriodStart || undefined}
+                disabled={pending}
+                onChange={(event) =>
+                  setDraft({ ...draft, servicePeriodEnd: event.target.value })
+                }
+              />
+            </Field>
+            {rangeInvalid ? (
+              <div className="kh-ops-field-span">
+                <ErrorText>{t('serviceRangeInvalid')}</ErrorText>
+              </div>
+            ) : null}
+            {splitPreview.length > 0 ? (
+              <div className="kh-ops-field-span">
+                <p className="m-0 text-[13px] text-ink-muted">{t('splitPreview')}</p>
+                <ul className="m-0 mt-1 list-none p-0 text-[13px]">
+                  {splitPreview.map((slice) => (
+                    <li key={slice.period}>
+                      {slice.period}
+                      {' · '}
+                      {formatMoney(slice.amount, draft.currency, locale)}
+                      {' · '}
+                      {t('splitDays', { days: slice.days })}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <Field label={t('typeLabel')}>
               <Select
                 value={draft.type}
@@ -699,13 +826,33 @@ export function AiCostAdmin({
               </Select>
             </Field>
             <Field label={t('provider')}>
-              <Input
-                value={draft.provider}
+              <Select
+                value={draft.providerChoice}
                 disabled={pending}
-                onChange={(event) => setDraft({ ...draft, provider: event.target.value })}
-              />
+                onChange={(event) =>
+                  setDraft({ ...draft, providerChoice: event.target.value })
+                }
+              >
+                {AI_COST_PROVIDERS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+                <option value={OTHER_PROVIDER}>{t('providerOther')}</option>
+              </Select>
             </Field>
-            <Field label={t('system')}>
+            {draft.providerChoice === OTHER_PROVIDER ? (
+              <Field label={t('providerCustom')}>
+                <Input
+                  value={draft.providerCustom}
+                  disabled={pending}
+                  onChange={(event) =>
+                    setDraft({ ...draft, providerCustom: event.target.value })
+                  }
+                />
+              </Field>
+            ) : null}
+            <Field label={t('system')} className="kh-ops-field-span">
               <Select
                 value={draft.aiSystemId}
                 disabled={pending}
@@ -718,6 +865,11 @@ export function AiCostAdmin({
                   </option>
                 ))}
               </Select>
+              {draft.aiSystemId === '' ? (
+                <span className="mt-1 block text-[13px] font-normal normal-case tracking-normal text-ink-muted">
+                  {t('workspacePoolHelp')}
+                </span>
+              ) : null}
             </Field>
             <Field label={t('plan')}>
               <Input
