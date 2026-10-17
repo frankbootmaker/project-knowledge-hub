@@ -251,6 +251,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-17
 
+* **Platform Financials** — Admin → Financials opens `/admin/financials` for system administrators. The page uses `.kh-ops-page-tabs`; the first tab is AI Cost. The chart reuses the paid-versus-theoretical bars. Tables use `.kh-ops-data-table`. Currencies are selected, not added. Cost entries are read-only and link to the workspace tab.
 * **Financials** — A top-level rail section, Financials, opens `/workspaces/{slug}/financials`. The page uses `.kh-ops-page-tabs`; the first tab is AI Cost. The workspace switcher stays on that path. AI Cost reuses the paid-versus-theoretical chart, the data table, and a `Modal` for a cost entry. The project budget panel keeps the allocated view and links admins here.
 * **Paid vs theoretical AI cost** — The budget section shows the project’s allocated paid cost beside theoretical API cost. Bars stack subscription, plan change, and on-demand (`.kh-ops-ai-cost-*`); a brand line is the theoretical API cost. Ledger editing is on Financials → AI Cost.
 * **Media lightbox** — `MediaLightbox` (`.kh-media-lightbox`) shows linked and library images at full resolution. Delivery Media and the workspace catalogue open it from `.kh-ops-media-preview-btn` on thumbnails instead of reusing the card preview class on a modal `<img>`. Chrome controls use light icons on semi-opaque ink pills (`.kh-media-lightbox__close`, `.kh-media-lightbox__nav`) so ghost button ink does not disappear on the dark backdrop.
@@ -311,7 +312,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-10
 
 * **Admin overview** — Admin → Dashboard shows the 24-hour health strip (API, Postgres, Redis, sessions, backup age), agent usage, and attention badges, then the organization, user, client, and workspace counts. The MCP, email, and SSO setup shortcuts are gone; those screens stay in the admin menu. Full charts stay on Monitoring.
-* **Admin menu order** — The admin rail runs overview, monitoring, audit, Identity, MCP setup, backups, email, brand, templates, then archive.
+* **Admin menu order** — The admin rail runs overview, Financials, monitoring, audit, Identity, MCP setup, backups, email, brand, templates, then archive.
 * **Identity admin tabs** — Admin → Identity uses `.kh-ops-page-tabs` for Organizations, Users, Memberships, and SSO. `/admin/organizations`, `/admin/users`, `/admin/memberships`, and `/admin/sso` redirect to those tabs.
 * **Backups admin tabs** — Admin → Backups & restore uses `.kh-ops-page-tabs` for Backups and Storage. `/admin/storage` redirects to the Storage tab. The admin rail no longer lists Storage separately.
 * **MCP admin tabs** — Admin → MCP setup uses `.kh-ops-page-tabs` (bold body sans, 15px) for Bearer tokens, OAuth, API clients, and AI providers. Bearer is the existing wizard and says it issues `kh_` tokens. OAuth holds the resource card and grant list. `/admin/api-clients` and `/admin/ai-providers` redirect to those tabs. `/admin/mcp-setup?tab=memberships` redirects to Identity → Memberships. The admin rail no longer lists those screens separately.

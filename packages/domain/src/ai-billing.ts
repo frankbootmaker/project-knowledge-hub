@@ -72,6 +72,65 @@ export function roundAiMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+export type AiBillingMonthParts = {
+  period: string;
+  currency: string;
+  subscription: number;
+  planChange: number;
+  onDemand: number;
+  theoreticalApiCost: number;
+};
+
+export type AiBillingMonthSummary = AiBillingMonthParts & {
+  paidCost: number;
+  difference: number;
+  ratio: number | null;
+};
+
+/** Paid cost is the sum of the three ledger types. `planChange` may be negative. */
+export function aiBillingPaidCost(
+  parts: Pick<AiBillingMonthParts, 'subscription' | 'planChange' | 'onDemand'>,
+): number {
+  return roundAiMoney(parts.subscription + parts.planChange + parts.onDemand);
+}
+
+/**
+ * Difference is paid minus theoretical. Ratio is paid / theoretical, to three
+ * decimals, and is null when theoretical is not positive.
+ */
+export function aiBillingCostComparison(
+  paidCost: number,
+  theoreticalApiCost: number,
+): { difference: number; ratio: number | null } {
+  const paid = roundAiMoney(paidCost);
+  const theoretical = roundAiMoney(theoreticalApiCost);
+  return {
+    difference: roundAiMoney(paid - theoretical),
+    ratio:
+      theoretical > 0 ? Math.round((paid / theoretical) * 1000) / 1000 : null,
+  };
+}
+
+export function summarizeAiBillingMonth(
+  parts: AiBillingMonthParts,
+): AiBillingMonthSummary {
+  const subscription = roundAiMoney(parts.subscription);
+  const planChange = roundAiMoney(parts.planChange);
+  const onDemand = roundAiMoney(parts.onDemand);
+  const theoreticalApiCost = roundAiMoney(parts.theoreticalApiCost);
+  const paidCost = aiBillingPaidCost({ subscription, planChange, onDemand });
+  return {
+    period: parts.period,
+    currency: parts.currency,
+    subscription,
+    planChange,
+    onDemand,
+    theoreticalApiCost,
+    paidCost,
+    ...aiBillingCostComparison(paidCost, theoreticalApiCost),
+  };
+}
+
 export function isAiBillingActiveProject(
   status: string,
   archivedAt: Date | string | null | undefined,
@@ -425,11 +484,6 @@ function periodCovered(row: MutablePeriod, systemId: string | null): boolean {
   return false;
 }
 
-function ratioFor(paid: number, theoretical: number): number | null {
-  if (!(theoretical > 0)) return null;
-  return Math.round((paid / theoretical) * 1000) / 1000;
-}
-
 function finishPeriod(row: MutablePeriod): AiPaidPeriod {
   const ledgerSubscription = roundAiMoney(row.subscription);
   const fallbackFlat = roundAiMoney(row.fallbackFlat);
@@ -441,6 +495,7 @@ function finishPeriod(row: MutablePeriod): AiPaidPeriod {
     subscription + planChange + onDemand + legacyToken,
   );
   const theoreticalApiCost = roundAiMoney(row.theoretical);
+  const comparison = aiBillingCostComparison(paidCost, theoreticalApiCost);
   const hasLedger = row.workspaceCovered || row.coveredSystems.size > 0;
   const hasFallback = Math.abs(fallbackFlat) > 0 || Math.abs(legacyToken) > 0;
   const source: AiPaidPeriodSource = row.workspaceCovered
@@ -458,8 +513,8 @@ function finishPeriod(row: MutablePeriod): AiPaidPeriod {
     onDemand,
     legacyToken,
     theoreticalApiCost,
-    difference: roundAiMoney(paidCost - theoreticalApiCost),
-    ratio: ratioFor(paidCost, theoreticalApiCost),
+    difference: comparison.difference,
+    ratio: comparison.ratio,
     source,
   };
 }
@@ -515,12 +570,13 @@ function lockPaidToLegacy(
   const last = periods[periods.length - 1]!;
   const subscription = roundAiMoney(last.subscription + delta);
   const paidCost = roundAiMoney(last.paidCost + delta);
+  const comparison = aiBillingCostComparison(paidCost, last.theoreticalApiCost);
   const next = {
     ...last,
     subscription,
     paidCost,
-    difference: roundAiMoney(paidCost - last.theoreticalApiCost),
-    ratio: ratioFor(paidCost, last.theoreticalApiCost),
+    difference: comparison.difference,
+    ratio: comparison.ratio,
   };
   return [...periods.slice(0, -1), next];
 }
@@ -684,5 +740,223 @@ export function settleProjectAiCost(
       systemId,
       amount: roundAiMoney(amount),
     })),
+  };
+}
+
+export function currentAiBillingPeriod(now = new Date()): string {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth() + 1;
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+/** Move a YYYY-MM period by whole months. */
+export function shiftAiBillingPeriod(period: string, deltaMonths: number): string {
+  const parsed = assertAiBillingPeriod(period);
+  const year = Number(parsed.slice(0, 4));
+  const month = Number(parsed.slice(5, 7));
+  const index = year * 12 + (month - 1) + deltaMonths;
+  const nextYear = Math.floor(index / 12);
+  const nextMonth = index - nextYear * 12 + 1;
+  return `${String(nextYear).padStart(4, '0')}-${String(nextMonth).padStart(2, '0')}`;
+}
+
+/** Last 12 calendar months, including the current UTC month. */
+export function defaultAiBillingWindow(now = new Date()): { from: string; to: string } {
+  const to = currentAiBillingPeriod(now);
+  return { from: shiftAiBillingPeriod(to, -11), to };
+}
+
+export function resolveAiBillingWindow(
+  input: { from?: string | null; to?: string | null },
+  now = new Date(),
+): { from: string; to: string } {
+  const fallback = defaultAiBillingWindow(now);
+  const from = input.from?.trim() ? assertAiBillingPeriod(input.from) : null;
+  const to = input.to?.trim() ? assertAiBillingPeriod(input.to) : null;
+  const resolved = {
+    from: from ?? (to ? shiftAiBillingPeriod(to, -11) : fallback.from),
+    to: to ?? (from && from > fallback.to ? from : fallback.to),
+  };
+  if (resolved.from > resolved.to) {
+    throw new AppError({
+      code: 'BILLING_PERIOD_INVALID',
+      message: 'from must be on or before to',
+      statusCode: 400,
+    });
+  }
+  return resolved;
+}
+
+export function aiBillingPeriodInWindow(period: string, from: string, to: string): boolean {
+  return period >= from && period <= to;
+}
+
+/** Inclusive month list, capped so a bad range cannot loop. */
+export function listAiBillingPeriods(from: string, to: string): string[] {
+  const start = assertAiBillingPeriod(from);
+  const end = assertAiBillingPeriod(to);
+  if (start > end) return [];
+  const periods: string[] = [];
+  let cursor = start;
+  while (cursor <= end && periods.length < 240) {
+    periods.push(cursor);
+    cursor = shiftAiBillingPeriod(cursor, 1);
+  }
+  return periods;
+}
+
+export type PlatformAiCostEntryInput = {
+  id: string;
+  period: string;
+  provider: string;
+  plan: string | null;
+  type: AiBillingEntryType;
+  amount: number;
+  currency: string;
+  paidAt: string | null;
+  note: string | null;
+  externalRef: string | null;
+  aiSystemId: string | null;
+};
+
+export type PlatformAiCostEntryFilter = {
+  workspaceId?: string;
+  provider?: string;
+  type?: AiBillingEntryType;
+  period?: string;
+};
+
+export type PlatformAiWorkspaceMonth = AiBillingMonthSummary & {
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
+};
+
+export type PlatformAiCostEntry = PlatformAiCostEntryInput & {
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
+};
+
+/**
+ * Platform view of workspace AI Cost charts. Totals sum each workspace's own
+ * monthly figures, and only within one currency.
+ */
+export function buildPlatformAiCost(input: {
+  from: string;
+  to: string;
+  workspaces: ReadonlyArray<{
+    workspaceId: string;
+    name: string;
+    slug: string;
+    chart: readonly AiBillingMonthParts[];
+    entries: readonly PlatformAiCostEntryInput[];
+  }>;
+  entryFilter?: PlatformAiCostEntryFilter;
+}): {
+  from: string;
+  to: string;
+  periods: string[];
+  months: PlatformAiWorkspaceMonth[];
+  totals: AiBillingMonthSummary[];
+  entries: PlatformAiCostEntry[];
+  providers: string[];
+} {
+  const from = assertAiBillingPeriod(input.from);
+  const to = assertAiBillingPeriod(input.to);
+  if (from > to) {
+    throw new AppError({
+      code: 'BILLING_PERIOD_INVALID',
+      message: 'from must be on or before to',
+      statusCode: 400,
+    });
+  }
+
+  const months: PlatformAiWorkspaceMonth[] = [];
+  const inWindow: AiBillingMonthSummary[] = [];
+  for (const workspace of input.workspaces) {
+    for (const point of workspace.chart) {
+      if (!aiBillingPeriodInWindow(point.period, from, to)) continue;
+      const summary = summarizeAiBillingMonth(point);
+      inWindow.push(summary);
+      months.push({
+        workspaceId: workspace.workspaceId,
+        workspaceName: workspace.name,
+        workspaceSlug: workspace.slug,
+        ...summary,
+      });
+    }
+  }
+  months.sort((a, b) => {
+    const period = b.period.localeCompare(a.period);
+    if (period !== 0) return period;
+    const currency = a.currency.localeCompare(b.currency);
+    if (currency !== 0) return currency;
+    return (
+      a.workspaceName.localeCompare(b.workspaceName) || a.workspaceId.localeCompare(b.workspaceId)
+    );
+  });
+
+  const grouped = new Map<string, AiBillingMonthParts>();
+  for (const point of inWindow) {
+    const key = `${point.period}|${point.currency}`;
+    const current = grouped.get(key) ?? {
+      period: point.period,
+      currency: point.currency,
+      subscription: 0,
+      planChange: 0,
+      onDemand: 0,
+      theoreticalApiCost: 0,
+    };
+    current.subscription += point.subscription;
+    current.planChange += point.planChange;
+    current.onDemand += point.onDemand;
+    current.theoreticalApiCost += point.theoreticalApiCost;
+    grouped.set(key, current);
+  }
+  const totals = [...grouped.values()]
+    .map((row) => summarizeAiBillingMonth(row))
+    .sort((a, b) => a.currency.localeCompare(b.currency) || b.period.localeCompare(a.period));
+
+  const filter = input.entryFilter;
+  const providerNeedle = filter?.provider?.trim().toLowerCase() ?? '';
+  const entries: PlatformAiCostEntry[] = [];
+  const providers = new Set<string>();
+  for (const workspace of input.workspaces) {
+    for (const entry of workspace.entries) {
+      if (!aiBillingPeriodInWindow(entry.period, from, to)) continue;
+      providers.add(entry.provider);
+      if (filter?.workspaceId && filter.workspaceId !== workspace.workspaceId) {
+        continue;
+      }
+      if (filter?.type && filter.type !== entry.type) continue;
+      if (filter?.period && filter.period !== entry.period) continue;
+      if (providerNeedle && entry.provider.trim().toLowerCase() !== providerNeedle) {
+        continue;
+      }
+      entries.push({
+        ...entry,
+        workspaceId: workspace.workspaceId,
+        workspaceName: workspace.name,
+        workspaceSlug: workspace.slug,
+      });
+    }
+  }
+  entries.sort((a, b) => {
+    const period = b.period.localeCompare(a.period);
+    if (period !== 0) return period;
+    const name = a.workspaceName.localeCompare(b.workspaceName);
+    if (name !== 0) return name;
+    return a.id.localeCompare(b.id);
+  });
+
+  return {
+    from,
+    to,
+    periods: listAiBillingPeriods(from, to),
+    months,
+    totals,
+    entries,
+    providers: [...providers].sort((a, b) => a.localeCompare(b)),
   };
 }

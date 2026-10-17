@@ -242,6 +242,7 @@ import {
   deleteAiBillingEntry,
   getAiBillingEntry,
   listAiBillingEntries,
+  loadPlatformAiCost,
   updateAiBillingEntry,
 } from './ai-billing.js';
 import { moveProjectToWorkspace } from './project-move.js';
@@ -317,6 +318,31 @@ function assertWriteWorkspaceAllowed(client: McpClientContext, workspaceId: stri
     throw new AppError({
       code: 'FORBIDDEN',
       message: workspaceAllowlistMessage({ id: workspaceId }),
+      statusCode: 403,
+    });
+  }
+}
+
+async function assertActingSystemAdmin(
+  app: FastifyInstance,
+  client: McpClientContext,
+): Promise<void> {
+  if (!client.actingUserId) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'System administrator privileges are required',
+      statusCode: 403,
+    });
+  }
+  const [user] = await app.database.db
+    .select({ isSystemAdmin: users.isSystemAdmin, status: users.status })
+    .from(users)
+    .where(eq(users.id, client.actingUserId))
+    .limit(1);
+  if (!user || user.status !== 'active' || !user.isSystemAdmin) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'System administrator privileges are required',
       statusCode: 403,
     });
   }
@@ -4706,6 +4732,20 @@ export function createMcpToolHandlers(
         aiSystemId: input.aiSystemId,
       });
       return { entries };
+    },
+
+    async getPlatformAiCost(input) {
+      await assertActingSystemAdmin(app, client);
+      const report = await loadPlatformAiCost(app.database, {
+        ...(input.from ? { from: input.from } : {}),
+        ...(input.to ? { to: input.to } : {}),
+      });
+      return {
+        from: report.from,
+        to: report.to,
+        months: report.months,
+        totals: report.totals,
+      };
     },
 
     async createAiBillingEntry(input) {

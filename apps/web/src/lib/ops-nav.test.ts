@@ -52,6 +52,8 @@ describe('ops nav', () => {
   it('infers sections from routes', () => {
     expect(inferNavSection('/dashboard')).toBe('personal');
     expect(inferNavSection('/admin/users')).toBe('admin');
+    expect(inferNavSection('/admin/financials')).toBe('admin');
+    expect(inferNavSection('/admin/financials', '', '?tab=ai-cost')).toBe('admin');
     expect(inferNavSection('/workspaces/platform/financials')).toBe('financials');
     expect(inferNavSection('/workspaces/platform/financials', '', '?tab=ai-cost')).toBe(
       'financials',
@@ -302,6 +304,31 @@ describe('ops nav', () => {
       workspaceSwitchHref('/workspaces/platform/financials', '?tab=ai-cost', 'other'),
     ).toBe('/workspaces/other/financials?tab=ai-cost');
     expect(workspaceSwitchHref('/workspaces/platform', '', 'other')).toBe('/workspaces/other');
+  });
+
+  it('shows platform Financials only to system admins', () => {
+    const item = NAV_SECTIONS.flatMap((section) => section.items).find(
+      (row) => row.id === 'admin-financials',
+    )!;
+    const admin = NAV_SECTIONS.find((section) => section.id === 'admin')!;
+    expect(admin.items.map((row) => row.id)).toContain('admin-financials');
+    expect(item.adminOnly).toBe(true);
+    expect(item.labelKey).toBe('sectionFinancials');
+    const adminCtx = {
+      workspaceSlug: null,
+      projectSlug: null,
+      isAdmin: true,
+    };
+    const memberCtx = { ...adminCtx, isAdmin: false };
+    expect(item.href(adminCtx)).toBe('/admin/financials');
+    expect(isNavItemAvailable(item, adminCtx)).toBe(true);
+    expect(isNavItemAvailable(item, memberCtx)).toBe(false);
+    expect(visibleNavSections(memberCtx).map((section) => section.id)).not.toContain('admin');
+    expect(
+      visibleNavItems(admin, adminCtx).map((row) => row.id),
+    ).toContain('admin-financials');
+    expect(matchNavItem(item, adminCtx, '/admin/financials', '', '?tab=ai-cost')).toBe(true);
+    expect(matchNavItem(item, adminCtx, '/admin')).toBe(false);
   });
 
   it('hides admin for non-admins', () => {
