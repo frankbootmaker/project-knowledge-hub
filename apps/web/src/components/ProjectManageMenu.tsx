@@ -216,7 +216,7 @@ export function ProjectManageMenu(props: {
         router.push(`/workspaces/${props.workspaceSlug}/projects/${nextSlug}`);
       }
       router.refresh();
-      setSection('menu');
+      close();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedUpdate'));
     } finally {
