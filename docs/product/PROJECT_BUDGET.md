@@ -85,7 +85,8 @@ project_tasks
   ├── tokens_input / tokens_output / tokens_cache / tokens_cache_write
   ├── ai_model_id / ai_pricing_tier
   ├── usage_occurred_at / billing_period   (audit only)
-  └── ai_system_id
+  ├── ai_system_id
+  └── cloud_agent_id   (links imported Cursor usage)
 
 project_cost_snapshots
   └── (project_id, captured_on) → bac, pv, ev, ac
@@ -99,6 +100,16 @@ ai_billing_entries (workspace)
 
 ai_billing_allocation_overrides (workspace)
   └── project, period, ai_system_id, percent
+
+ai_usage_imports (workspace)
+  └── source (csv; cursor_admin_api reserved), file, actor, row counts
+      (inserted, duplicate, linked, no token data, errors)
+
+ai_usage_events (workspace)
+  ├── occurred_at, cloud_agent_id, model, kind, max_mode, cost
+  ├── tokens_input / tokens_cache_write / tokens_cache / tokens_output / tokens_total
+  ├── row_hash unique per workspace (Date + Cloud Agent ID + Model + Total Tokens)
+  └── project_task_id null while unassigned
 ```
 
 ## Financial RAG
@@ -149,7 +160,8 @@ Resource RAG (utilization): aggregate planned demand vs capacity → amber when 
 * System create/update IT OpEx fields (`itCostMode`, `itFlatMonthlyFee`, `itOneTimeCost`, `itBudgetAllocation`)
 * `POST /api/v1/project-tasks/:id/ai-usage`
 * Stakeholder create/update include engagement/capacity/contract fields
-* MCP: `get_project_budget_summary`, `get_project_resource_utilization`, `update_project_ai_assistant_cost`, `report_project_task_ai_usage`, baseline/task/stakeholder money fields (`pm:read` / `pm:write`)
+* MCP: `get_project_budget_summary`, `get_project_resource_utilization`, `update_project_ai_assistant_cost`, `report_project_task_ai_usage`, `list_ai_usage_imports`, `import_ai_usage_csv`, baseline/task/stakeholder money fields (`pm:read` / `pm:write`)
+* Usage CSV: `POST /api/v1/workspaces/:id/ai-usage-imports/preview` and `POST /api/v1/workspaces/:id/ai-usage-imports` (workspace admin). `GET` the import log and `GET .../ai-usage-events/unassigned` follow the same read access as AI Cost. Set `cloudAgentId` on a task to link rows. The Cursor Admin API importer is not built; the `source` column already allows it.
 
 ## Out of scope
 

@@ -1553,6 +1553,8 @@ export const projectTasks = pgTable(
     aiSystemId: uuid('ai_system_id').references(() => systems.id, {
       onDelete: 'set null',
     }),
+    /** Cursor cloud agent id. Null when this task is not linked to imported usage. */
+    cloudAgentId: text('cloud_agent_id'),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
@@ -1575,6 +1577,100 @@ export const projectTasks = pgTable(
       table.issueKeyType,
       table.issueNumber,
     ),
+    uniqueIndex('project_tasks_cloud_agent_id_uidx').on(table.cloudAgentId),
+  ],
+);
+
+export type AiUsageImportErrorJson = {
+  rowNumber: number;
+  message: string;
+};
+
+/**
+ * One usage import. `source` is `csv` today. `cursor_admin_api` is reserved
+ * so a later source can share the event table.
+ */
+export const aiUsageImports = pgTable(
+  'ai_usage_imports',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    source: text('source').notNull(),
+    fileName: text('file_name'),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    rowCountTotal: integer('row_count_total').notNull().default(0),
+    rowCountInserted: integer('row_count_inserted').notNull().default(0),
+    rowCountDuplicate: integer('row_count_duplicate').notNull().default(0),
+    rowCountLinked: integer('row_count_linked').notNull().default(0),
+    rowCountErrors: integer('row_count_errors').notNull().default(0),
+    /** Rows with every token column empty. Skipped, not stored, not an error. */
+    rowCountNoTokens: integer('row_count_no_tokens').notNull().default(0),
+    errorsJson: jsonb('errors_json')
+      .$type<AiUsageImportErrorJson[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    ...timestamps,
+  },
+  (table) => [
+    index('ai_usage_imports_workspace_created_idx').on(
+      table.workspaceId,
+      table.createdAt,
+    ),
+  ],
+);
+
+/**
+ * Normalized usage from any source. The unique hash stops a re-import of
+ * the same or an overlapping file from inserting the row twice.
+ */
+export const aiUsageEvents = pgTable(
+  'ai_usage_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    importId: uuid('import_id').references(() => aiUsageImports.id, {
+      onDelete: 'set null',
+    }),
+    source: text('source').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' })
+      .notNull(),
+    occurredAtKey: text('occurred_at_key').notNull(),
+    cloudAgentId: text('cloud_agent_id'),
+    automationId: text('automation_id'),
+    kind: text('kind'),
+    model: text('model').notNull(),
+    maxMode: boolean('max_mode'),
+    tokensInput: integer('tokens_input').notNull(),
+    tokensCacheWrite: integer('tokens_cache_write').notNull(),
+    tokensCache: integer('tokens_cache').notNull(),
+    tokensOutput: integer('tokens_output').notNull(),
+    tokensTotal: integer('tokens_total').notNull(),
+    cost: text('cost'),
+    rowHash: text('row_hash').notNull(),
+    projectTaskId: uuid('project_task_id').references(() => projectTasks.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ai_usage_events_workspace_hash_uidx').on(
+      table.workspaceId,
+      table.rowHash,
+    ),
+    index('ai_usage_events_cloud_agent_idx').on(
+      table.workspaceId,
+      table.cloudAgentId,
+    ),
+    index('ai_usage_events_task_idx').on(table.projectTaskId),
+    index('ai_usage_events_import_idx').on(table.importId),
   ],
 );
 

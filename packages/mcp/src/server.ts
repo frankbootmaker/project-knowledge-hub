@@ -498,6 +498,7 @@ export type McpToolHandlers = {
     usageOccurredAt?: string | null;
     billingPeriod?: string | null;
     aiSystemId?: string | null;
+    cloudAgentId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     sprintId?: string | null;
@@ -530,11 +531,13 @@ export type McpToolHandlers = {
     tokensInput?: number | null;
     tokensOutput?: number | null;
     tokensCache?: number | null;
+    tokensCacheWrite?: number | null;
     modelId?: string | null;
     pricingTier?: string | null;
     usageOccurredAt?: string | null;
     billingPeriod?: string | null;
     aiSystemId?: string | null;
+    cloudAgentId?: string | null;
   }) => Promise<unknown>;
   setProjectTaskRaci: (input: {
     taskId: string;
@@ -713,6 +716,15 @@ export type McpToolHandlers = {
     externalRef?: string | null;
   }) => Promise<unknown>;
   deleteAiBillingEntry: (input: { entryId: string }) => Promise<unknown>;
+  listAiUsageImports: (input: {
+    workspaceId: string;
+    limit?: number;
+  }) => Promise<unknown>;
+  importAiUsageCsv: (input: {
+    workspaceId: string;
+    csv: string;
+    fileName?: string | null;
+  }) => Promise<unknown>;
   deleteProjectStakeholder: (input: {
     projectId?: string;
     stakeholderId: string;
@@ -2676,7 +2688,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_task',
     {
       description:
-        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
       inputSchema: {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -2699,6 +2711,7 @@ export function createKnowledgeHubMcpServer(
       usageOccurredAt: z.string().max(40).nullable().optional(),
       billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
+      cloudAgentId: z.string().max(80).nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
       sprintId: entityRef.nullable().optional(),
@@ -2748,7 +2761,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'report_project_task_ai_usage',
-    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. tokensUsed alone bills the blended aiTokenRatePer1k and clears any stored breakdown (legacy). tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite bill split rates; a null split rate falls back to the blended rate. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional modelId, pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. tokensUsed alone bills the blended aiTokenRatePer1k and clears any stored breakdown (legacy). tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite bill split rates; a null split rate falls back to the blended rate. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional modelId, pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId links imported Cursor usage with that id onto this task. Requires pm:write.',
     {
       taskId: entityRef,
       tokensUsed: tokenCountSchema.optional(),
@@ -2761,6 +2774,7 @@ export function createKnowledgeHubMcpServer(
       usageOccurredAt: z.string().max(40).nullable().optional(),
       billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
+      cloudAgentId: z.string().max(80).nullable().optional(),
     },
     async (args) =>
       wrap('report_project_task_ai_usage', 'pm:write', () =>
@@ -3376,6 +3390,79 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('delete_ai_billing_entry', 'pm:write', () =>
         handlers.deleteAiBillingEntry(args),
+      )(),
+  );
+
+  const usageImportRowOutput = z
+    .object({
+      id: z.string(),
+      workspaceId: z.string(),
+      source: z.string(),
+      fileName: z.string().nullable(),
+      createdAt: z.string(),
+      rowCountTotal: z.number().int(),
+      rowCountInserted: z.number().int(),
+      rowCountDuplicate: z.number().int(),
+      rowCountLinked: z.number().int(),
+      rowCountErrors: z.number().int(),
+      rowCountNoTokens: z.number().int(),
+    })
+    .passthrough();
+  const usageImportErrorOutput = z
+    .object({
+      rowNumber: z.number().int(),
+      message: z.string(),
+    })
+    .passthrough();
+  const listUsageImportsOutput = {
+    imports: z.array(usageImportRowOutput),
+  };
+  const importUsageOutput = {
+    import: usageImportRowOutput.extend({
+      errors: z.array(usageImportErrorOutput).optional(),
+    }),
+  };
+
+  server.registerTool(
+    'list_ai_usage_imports',
+    {
+      description:
+        'List workspace AI usage imports (CSV today). Each row records who imported it, the file name, source, and counts for total, inserted, duplicate, linked, error, and no-token rows. Rows with every token column empty are skipped, not stored, and not errors. Read-only. Requires pm:read. Workspace members can read; importing is workspace-admin only.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        limit: z.number().int().min(1).max(100).optional(),
+      },
+      outputSchema: listUsageImportsOutput,
+    },
+    async (args) =>
+      wrap(
+        'list_ai_usage_imports',
+        'pm:read',
+        () => handlers.listAiUsageImports(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, listUsageImportsOutput),
+      )(),
+  );
+
+  server.registerTool(
+    'import_ai_usage_csv',
+    {
+      description:
+        'Import a Cursor usage CSV into the workspace. Dedupes on Date + Cloud Agent ID + Model + Total Tokens. Rows with a Cloud Agent ID link to the task that stores that id. Rows with every token column empty are counted as no token data and are not inserted. Re-importing the same rows does not double count. csv is the file text. Workspace administrator only, plus pm:write. The Cursor Admin API source is not available on this tool.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        csv: z.string().min(1).max(8_000_000),
+        fileName: z.string().max(200).nullable().optional(),
+      },
+      outputSchema: importUsageOutput,
+    },
+    async (args) =>
+      wrap(
+        'import_ai_usage_csv',
+        'pm:write',
+        () => handlers.importAiUsageCsv(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, importUsageOutput),
       )(),
   );
 

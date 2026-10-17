@@ -1168,7 +1168,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1196,11 +1196,19 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         tokensInput: { type: 'integer', minimum: 0, nullable: true },
         tokensOutput: { type: 'integer', minimum: 0, nullable: true },
         tokensCache: { type: 'integer', minimum: 0, nullable: true },
+        tokensCacheWrite: { type: 'integer', minimum: 0, nullable: true },
         modelId: { type: 'string', maxLength: 80, nullable: true },
         pricingTier: { type: 'string', maxLength: 32, nullable: true },
         usageOccurredAt: { type: 'string', maxLength: 40, nullable: true },
         billingPeriod: { type: 'string', maxLength: 7, nullable: true },
         aiSystemId: { type: 'string', format: 'uuid', nullable: true },
+        cloudAgentId: {
+          type: 'string',
+          maxLength: 80,
+          nullable: true,
+          description:
+            'Cursor cloud agent id. Links imported usage onto this task. Null clears it.',
+        },
         milestoneId: { ...entityRefProp('Milestone'), nullable: true },
         userStoryId: { ...entityRefProp('User story'), nullable: true },
         sprintId: { ...entityRefProp('Sprint'), nullable: true },
@@ -2776,7 +2784,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'report_project_task_ai_usage',
     description:
-      'Record AI token usage on a task. tokensUsed alone uses the blended rate. Optional tokensInput/tokensOutput/tokensCache use split rates (null rate falls back to blended). Requires pm:write.',
+      'Record AI token usage on a task. tokensUsed alone uses the blended rate. Optional tokensInput/tokensOutput/tokensCache/tokensCacheWrite use split rates (null rate falls back to blended). Optional cloudAgentId links imported Cursor usage onto this task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -2788,11 +2796,18 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         tokensInput: { type: 'integer', minimum: 0, nullable: true },
         tokensOutput: { type: 'integer', minimum: 0, nullable: true },
         tokensCache: { type: 'integer', minimum: 0, nullable: true },
+        tokensCacheWrite: { type: 'integer', minimum: 0, nullable: true },
         modelId: { type: 'string', maxLength: 80, nullable: true },
         pricingTier: { type: 'string', maxLength: 32, nullable: true },
         usageOccurredAt: { type: 'string', maxLength: 40, nullable: true },
         billingPeriod: { type: 'string', maxLength: 7, nullable: true },
         aiSystemId: { type: 'string', format: 'uuid', nullable: true },
+        cloudAgentId: {
+          type: 'string',
+          maxLength: 80,
+          nullable: true,
+          description: 'Cursor cloud agent id. Links imported usage onto this task.',
+        },
       },
     },
   },
@@ -3180,6 +3195,39 @@ const EXTRA_HUB_TOOLS: Array<{
       additionalProperties: false,
       required: ['entryId'],
       properties: { entryId: uuidProp('Cost entry id') },
+    },
+  },
+  {
+    name: 'list_ai_usage_imports',
+    description:
+      'List workspace AI usage imports. Counts cover total, inserted, duplicate, linked, error, and no-token rows. Requires pm:read.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+    },
+  },
+  {
+    name: 'import_ai_usage_csv',
+    description:
+      'Import a Cursor usage CSV. Dedupes on Date, Cloud Agent ID, Model, and Total Tokens. Rows with every token column empty are skipped. Workspace administrator only. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId', 'csv'],
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        csv: stringProp('Cursor usage CSV text', { minLength: 1, maxLength: 8_000_000 }),
+        fileName: { type: 'string', maxLength: 200, nullable: true },
+      },
     },
   },
 ];
