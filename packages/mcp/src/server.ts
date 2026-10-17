@@ -287,6 +287,10 @@ export type McpToolHandlers = {
     entityId?: string;
     limit: number;
   }) => Promise<unknown>;
+  getWorkspaceMedia: (input: {
+    mediaId: string;
+    maxDimension?: number;
+  }) => Promise<unknown>;
   deleteWorkspaceMedia: (input: { mediaId: string }) => Promise<unknown>;
   /** NF-014 — redacted platform health snapshot (requires monitoring:read). */
   getPlatformStatus: () => Promise<unknown>;
@@ -913,7 +917,17 @@ export function toMcpErrorResult(
   };
 }
 
-function textResult(data: unknown) {
+type McpToolContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+
+type McpToolResult = {
+  content: McpToolContent[];
+  isError?: true;
+  structuredContent?: Record<string, unknown>;
+};
+
+function textResult(data: unknown): McpToolResult {
   const sized = enforceResponseSize(data);
   const text = JSON.stringify(sized, null, 2);
   if (sized !== data) {
@@ -936,7 +950,7 @@ function textResult(data: unknown) {
  * tools/list advertises open output schemas so stale clients accept new
  * fields; structuredContent is still stripped to the declared Zod shape.
  */
-function structuredTextResult(data: unknown, outputShape?: z.ZodRawShape) {
+function structuredTextResult(data: unknown, outputShape?: z.ZodRawShape): McpToolResult {
   const sized = enforceResponseSize(data);
   if (sized !== data) {
     const text = JSON.stringify(sized, null, 2);
@@ -950,6 +964,56 @@ function structuredTextResult(data: unknown, outputShape?: z.ZodRawShape) {
   return {
     content: [{ type: 'text' as const, text }],
     structuredContent: shaped as Record<string, unknown>,
+  };
+}
+
+const workspaceMediaReadOutput = {
+  media: z.object({
+    id: z.string(),
+    mediaId: z.string(),
+    workspaceId: z.string(),
+    knowledgeRecordId: z.string().nullable(),
+    contentType: z.string(),
+    byteSize: z.number(),
+    originalFilename: z.string().nullable(),
+    altText: z.string().nullable(),
+    url: z.string(),
+    markdownSnippet: z.string(),
+    width: z.number().int().nullable(),
+    height: z.number().int().nullable(),
+    resized: z.boolean(),
+    imageIncluded: z.boolean(),
+    hint: z.string(),
+  }),
+  signedUrl: z.string(),
+  expiresAt: z.string(),
+};
+
+function imageContentBlock(
+  image: unknown,
+): { type: 'image'; data: string; mimeType: string } | null {
+  if (!image || typeof image !== 'object') return null;
+  const row = image as { data?: unknown; mimeType?: unknown };
+  if (typeof row.data !== 'string' || row.data.length === 0) return null;
+  if (typeof row.mimeType !== 'string' || !row.mimeType.startsWith('image/')) return null;
+  if (row.mimeType === 'image/svg+xml') return null;
+  return { type: 'image', data: row.data, mimeType: row.mimeType };
+}
+
+/** Metadata stays in structuredContent. Pixels are an MCP image block, not JSON. */
+function presentWorkspaceMediaRead(data: unknown): McpToolResult {
+  const record = data && typeof data === 'object' && !Array.isArray(data)
+    ? { ...(data as Record<string, unknown>) }
+    : null;
+  const image = record?.imageContent;
+  if (record) delete record.imageContent;
+  const structured = structuredTextResult(record ?? data, workspaceMediaReadOutput);
+  if (structured.isError) return structured;
+  const block = imageContentBlock(image);
+  if (!block) return structured;
+  return {
+    content: [...structured.content, block],
+    structuredContent: structured.structuredContent,
   };
 }
 
@@ -1029,11 +1093,7 @@ export function createKnowledgeHubMcpServer(
       scope: McpScope,
       fn: () => Promise<unknown>,
       argContext?: McpToolCallContext,
-      present: (data: unknown) => {
-        content: Array<{ type: 'text'; text: string }>;
-        isError?: true;
-        structuredContent?: Record<string, unknown>;
-      } = textResult,
+      present: (data: unknown) => McpToolResult = textResult,
     ) =>
     async () => {
       try {
@@ -1772,7 +1832,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record',
     {
       description:
-        'Get a knowledge record with markdown. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. returnedChars, chunkIndex (0, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (approximate if short). contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
+        'Get a knowledge record with markdown. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. returnedChars, chunkIndex (0, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (approximate if short). contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. Read pixels with call_hub_tool get_workspace_media. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
       inputSchema: {
         recordId: z.string().min(1).max(80),
         contentOffset: z.number().int().min(0).optional(),
@@ -2016,7 +2076,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspace_media',
-    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls, markdown snippets, and a short usedBy list. Optional filename query. Optional entityType+entityId (both required together) filters to images linked to that item; entityId may be a UUID or human key and the item must be in workspaceId. Readers are read-only. Requires knowledge:read.',
+    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls, markdown snippets, and a short usedBy list. Each item includes mediaId. Call get_workspace_media to read image bytes (OAuth: call_hub_tool). Optional filename query. Optional entityType+entityId (both required together) filters to images linked to that item; entityId may be a UUID or human key and the item must be in workspaceId. Readers are read-only. Requires knowledge:read.',
     {
       workspaceId: z.string().uuid(),
       knowledgeRecordId: entityRef.optional(),
@@ -2033,6 +2093,41 @@ export function createKnowledgeHubMcpServer(
         'knowledge:read',
         () => handlers.listWorkspaceMedia(args),
         { workspaceId: args.workspaceId, recordId: args.knowledgeRecordId },
+      )(),
+  );
+
+  server.registerTool(
+    'get_workspace_media',
+    {
+      description:
+        'Read one workspace media file by mediaId. Raster images return MCP image content (longest side at most 1568 px and about 1 MB; never upscaled) plus metadata. SVG and non-images return metadata only. signedUrl is an absolute URL bound to this media and workspace for 10 minutes. Requires knowledge:read.',
+      inputSchema: {
+        mediaId: z.string().uuid(),
+        maxDimension: z
+          .number()
+          .int()
+          .min(1)
+          .max(1568)
+          .optional()
+          .describe(
+            'Optional longest-side cap in pixels. The server never exceeds 1568 or upscales.',
+          ),
+      },
+      outputSchema: workspaceMediaReadOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) =>
+      wrap(
+        'get_workspace_media',
+        'knowledge:read',
+        () => handlers.getWorkspaceMedia(args),
+        { mediaId: args.mediaId },
+        presentWorkspaceMediaRead,
       )(),
   );
 
@@ -2263,7 +2358,7 @@ export function createKnowledgeHubMcpServer(
     'get_project_task',
     {
       description:
-        'Get one project task or bug with RACI. The raci array is the current standing set (userId and role R/A/C/I) and includes the latest set_project_task_raci replacement. Hour fields (forecastHours, actualHours) returned as JSON numbers. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
+        'Get one project task or bug with RACI. The raci array is the current standing set (userId and role R/A/C/I) and includes the latest set_project_task_raci replacement. Hour fields (forecastHours, actualHours) returned as JSON numbers. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Each media link includes mediaId. Call get_workspace_media (OAuth: call_hub_tool) to read the image. Requires pm:read.',
       inputSchema: { taskId: entityRef },
       outputSchema: taskResultOutput,
     },
@@ -3870,11 +3965,16 @@ export function createKnowledgeHubMcpServer(
         arguments: z.record(z.string(), z.unknown()).optional(),
       },
       async (args) =>
-        wrap('call_hub_tool', 'projects:read', () =>
-          invokeNamedHubTool(handlers, client.scopes, 'call_hub_tool', {
-            toolName: args.toolName,
-            arguments: args.arguments ?? {},
-          }),
+        wrap(
+          'call_hub_tool',
+          'projects:read',
+          () =>
+            invokeNamedHubTool(handlers, client.scopes, 'call_hub_tool', {
+              toolName: args.toolName,
+              arguments: args.arguments ?? {},
+            }),
+          undefined,
+          args.toolName === 'get_workspace_media' ? presentWorkspaceMediaRead : textResult,
         )(),
     );
     limitOauthToolSurface(server);

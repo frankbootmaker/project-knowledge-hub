@@ -796,7 +796,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
+      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). Read pixels with call_hub_tool get_workspace_media. recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
     scope: 'knowledge:read',
     openApi: true,
     output: knowledgeRecordResult,
@@ -1092,7 +1092,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_task',
     description:
-      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. startDate is the stored start and is writable. targetPercent is null. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. startDate is the stored start and is writable. targetPercent is null. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Each media link includes mediaId. Call get_workspace_media (OAuth: call_hub_tool) to read the image. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: wrappedResult('task', taskRowResult),
@@ -1734,7 +1734,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_workspace_media',
     description:
-      'List recent workspace media with markdownSnippet and usedBy. Optional filename query. Optional entityType+entityId filters to images linked to that item in this workspace. Requires knowledge:read.',
+      'List recent workspace media with markdownSnippet, mediaId, and usedBy. Call get_workspace_media to read image bytes (OAuth: call_hub_tool). Optional filename query. Optional entityType+entityId filters to images linked to that item in this workspace. Requires knowledge:read.',
     scope: 'knowledge:read',
     defaults: { limit: 20 },
     body: {
@@ -1750,6 +1750,26 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         },
         entityId: entityRefProp('Optional item filter'),
         limit: { type: 'integer', minimum: 1, maximum: 50 },
+      },
+    },
+  },
+  {
+    name: 'get_workspace_media',
+    description:
+      'Read one workspace media file by mediaId. Raster images return MCP image content (longest side at most 1568 px and about 1 MB; never upscaled) plus metadata. SVG and non-images return metadata only. signedUrl is an absolute URL bound to this media and workspace for 10 minutes. Requires knowledge:read.',
+    scope: 'knowledge:read',
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['mediaId'],
+      properties: {
+        mediaId: uuidProp('Media id'),
+        maxDimension: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 1568,
+          description: 'Optional longest-side cap in pixels. Never upscales. Server cap is 1568.',
+        },
       },
     },
   },

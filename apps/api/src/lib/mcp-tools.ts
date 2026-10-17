@@ -105,10 +105,17 @@ import {
   createWorkspaceMedia,
   getWorkspaceMediaById,
   listWorkspaceMedia,
+  readMediaBytes,
   toPublicMedia,
   type PublicWorkspaceMedia,
 } from './workspace-media.js';
+import {
+  assertClientCanReadMediaWorkspace,
+  WORKSPACE_MEDIA_READ_HINT,
+} from './media-read-access.js';
+import { prepareWorkspaceMediaImage } from './media-read-image.js';
 import { getEffectiveMediaMaxBytes } from './media-max-bytes.js';
+import { buildSignedMediaUrl, mediaReadOrigin } from './media-signed-url.js';
 import {
   appendMediaLink,
   attachItemMediaLinks,
@@ -3129,8 +3136,104 @@ export function createMcpToolHandlers(
       return {
         media: rows.map((row) => ({
           ...toPublicMedia(row),
+          mediaId: row.id,
+          hint: WORKSPACE_MEDIA_READ_HINT,
           usedBy: usedBy.get(row.id) ?? [],
         })),
+      };
+    },
+
+    async getWorkspaceMedia(input) {
+      const row = await getWorkspaceMediaById(app.database, input.mediaId);
+      if (!row) {
+        throw new AppError({
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media not found',
+          statusCode: 404,
+        });
+      }
+      const [workspace] = await app.database.db
+        .select({ organizationId: workspaces.organizationId })
+        .from(workspaces)
+        .where(eq(workspaces.id, row.workspaceId))
+        .limit(1);
+      if (!workspace) {
+        throw new AppError({
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media not found',
+          statusCode: 404,
+        });
+      }
+      assertClientCanReadMediaWorkspace(client, {
+        id: row.workspaceId,
+        organizationId: workspace.organizationId,
+      });
+
+      const { store: blobStore } = await app.getBlobStore();
+      const bytes = await readMediaBytes(
+        app.env.MEDIA_UPLOAD_DIR,
+        row.workspaceId,
+        row.id,
+        { blobStore },
+      );
+      if (!bytes) {
+        throw new AppError({
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media bytes not found',
+          statusCode: 404,
+        });
+      }
+
+      const prepared = await prepareWorkspaceMediaImage(
+        bytes,
+        row.contentType,
+        input.maxDimension,
+      );
+      const signed = buildSignedMediaUrl({
+        origin: mediaReadOrigin(app.env),
+        secret: app.env.SESSION_SECRET,
+        mediaId: row.id,
+        workspaceId: row.workspaceId,
+      });
+      const publicMedia = toPublicMedia(row);
+
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'media.read',
+        entityType: 'workspace_media',
+        entityId: row.id,
+        metadata: {
+          workspaceId: row.workspaceId,
+          contentType: row.contentType,
+          imageIncluded: prepared.imageIncluded,
+          resized: prepared.imageIncluded ? prepared.resized : false,
+          via: 'mcp',
+        },
+        ipAddress: ipAddress ?? null,
+      });
+
+      return {
+        media: {
+          ...publicMedia,
+          mediaId: row.id,
+          width: prepared.imageIncluded ? prepared.width : null,
+          height: prepared.imageIncluded ? prepared.height : null,
+          resized: prepared.imageIncluded ? prepared.resized : false,
+          imageIncluded: prepared.imageIncluded,
+          hint: WORKSPACE_MEDIA_READ_HINT,
+        },
+        signedUrl: signed.signedUrl,
+        expiresAt: signed.expiresAt,
+        ...(prepared.imageIncluded
+          ? {
+              imageContent: {
+                data: prepared.buffer.toString('base64'),
+                mimeType: prepared.mimeType,
+              },
+            }
+          : {}),
       };
     },
 
