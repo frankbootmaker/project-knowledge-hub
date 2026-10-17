@@ -2,7 +2,7 @@ import { describe, test, expect, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
-import { invokeNamedHubTool } from './llm-tool-catalog.js';
+import { invokeNamedHubTool, listHubToolSummaries } from './llm-tool-catalog.js';
 import {
   createKnowledgeHubMcpServer,
   toMcpErrorResult,
@@ -705,6 +705,27 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
     lifecycleSuccessor: null,
     lifecyclePredecessor: null,
   },
+  get_workspace_media: {
+    media: {
+      id: '22222222-2222-4222-8222-222222222222',
+      mediaId: '22222222-2222-4222-8222-222222222222',
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      knowledgeRecordId: null,
+      contentType: 'image/png',
+      byteSize: 12,
+      originalFilename: 'shot.png',
+      altText: null,
+      url: '/api/v1/media/22222222-2222-4222-8222-222222222222',
+      markdownSnippet: '![shot](/api/v1/media/22222222-2222-4222-8222-222222222222)',
+      width: 1,
+      height: 1,
+      resized: false,
+      imageIncluded: true,
+      hint: 'Use get_workspace_media with mediaId to read the image.',
+    },
+    signedUrl: 'https://knowledge.example.com/api/v1/media/x?exp=1&sig=abc',
+    expiresAt: '2026-10-17T00:10:00.000Z',
+  },
 };
 
 describe('create_project and update_project schemas', () => {
@@ -1086,6 +1107,11 @@ describe('strict tool arguments', () => {
       expect(byName.get('begin_workspace_media_upload')).toMatch(/targetEntityId/);
       expect(byName.get('begin_workspace_media_upload')).toMatch(/pm:write/);
       expect(byName.get('list_workspace_media')).toMatch(/entityId/);
+      expect(byName.get('list_workspace_media')).toMatch(/get_workspace_media/);
+      expect(byName.get('list_workspace_media')).toMatch(/call_hub_tool/);
+      expect(byName.get('get_workspace_media')).toMatch(/knowledge:read/);
+      expect(byName.get('get_project_task')).toMatch(/call_hub_tool/);
+      expect(byName.get('get_knowledge_record')).toMatch(/get_workspace_media/);
       expect(byName.get('get_project_task')).toMatch(/mediaLinks/);
       expect(byName.get('list_project_tasks')).toMatch(/mediaLinkCount/);
       expect(byName.get('list_project_user_stories')).toMatch(/mediaLinks/);
@@ -1511,5 +1537,116 @@ describe('tools without an output schema', () => {
         suggestedLimit: 10,
       });
     });
+  });
+});
+
+const MEDIA_ID = '22222222-2222-4222-8222-222222222222';
+
+function mediaReadBody(imageIncluded: boolean) {
+  return {
+    media: {
+      id: MEDIA_ID,
+      mediaId: MEDIA_ID,
+      workspaceId: PROJECT_ID,
+      knowledgeRecordId: null,
+      contentType: imageIncluded ? 'image/png' : 'application/pdf',
+      byteSize: 12,
+      originalFilename: imageIncluded ? 'shot.png' : 'note.pdf',
+      altText: null,
+      url: `/api/v1/media/${MEDIA_ID}`,
+      markdownSnippet: `![shot](/api/v1/media/${MEDIA_ID})`,
+      width: imageIncluded ? 1 : null,
+      height: imageIncluded ? 1 : null,
+      resized: false,
+      imageIncluded,
+      hint: 'Use get_workspace_media with mediaId to read the image.',
+    },
+    signedUrl: `https://knowledge.example.com/api/v1/media/${MEDIA_ID}?exp=1&sig=abc`,
+    expiresAt: '2026-10-17T00:10:00.000Z',
+    ...(imageIncluded
+      ? { imageContent: { data: 'aGVsbG8=', mimeType: 'image/png' } }
+      : {}),
+  };
+}
+
+describe('get_workspace_media', () => {
+  test('list_hub_tools includes the read tool', () => {
+    const names = listHubToolSummaries(false).map((tool) => tool.name);
+    expect(names).toContain('get_workspace_media');
+  });
+
+  test('missing knowledge:read does not call the handler', async () => {
+    const getWorkspaceMedia = vi.fn();
+    await withMcpClient(['projects:read'], { getWorkspaceMedia }, async (client) => {
+      const result = await client.callTool({
+        name: 'get_workspace_media',
+        arguments: { mediaId: MEDIA_ID },
+      });
+      expect(result.isError).toBe(true);
+      expect(toolText(result)).toContain('knowledge:read');
+      expect(getWorkspaceMedia).not.toHaveBeenCalled();
+    });
+  });
+
+  test('image types return an MCP image block and metadata without the base64', async () => {
+    const getWorkspaceMedia = vi.fn(async () => mediaReadBody(true));
+    await withMcpClient(['knowledge:read'], { getWorkspaceMedia }, async (client) => {
+      const listed = await client.listTools();
+      const tool = listed.tools.find((item) => item.name === 'get_workspace_media');
+      expect(tool?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+      expect(jsonSchemaHasClosedObjects(tool?.outputSchema)).toBe(false);
+
+      const result = await client.callTool({
+        name: 'get_workspace_media',
+        arguments: { mediaId: MEDIA_ID },
+      });
+      expect(result.isError).not.toBe(true);
+      const image = result.content.find((block) => block.type === 'image');
+      expect(image).toMatchObject({ type: 'image', data: 'aGVsbG8=', mimeType: 'image/png' });
+      const structured = result.structuredContent as { media?: { mediaId?: string } };
+      expect(structured.media?.mediaId).toBe(MEDIA_ID);
+      expect(JSON.stringify(result.structuredContent)).not.toContain('aGVsbG8=');
+      expect(toolText(result)).not.toContain('aGVsbG8=');
+    });
+  });
+
+  test('non-image results are metadata only', async () => {
+    const getWorkspaceMedia = vi.fn(async () => mediaReadBody(false));
+    await withMcpClient(['knowledge:read'], { getWorkspaceMedia }, async (client) => {
+      const result = await client.callTool({
+        name: 'get_workspace_media',
+        arguments: { mediaId: MEDIA_ID },
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.content.some((block) => block.type === 'image')).toBe(false);
+      const structured = result.structuredContent as { media?: { imageIncluded?: boolean } };
+      expect(structured.media?.imageIncluded).toBe(false);
+    });
+  });
+
+  test('call_hub_tool returns the same image block', async () => {
+    const getWorkspaceMedia = vi.fn(async () => mediaReadBody(true));
+    await withMcpClient(
+      ['projects:read', 'knowledge:read'],
+      { getWorkspaceMedia },
+      async (client) => {
+        const result = await client.callTool({
+          name: 'call_hub_tool',
+          arguments: {
+            toolName: 'get_workspace_media',
+            arguments: { mediaId: MEDIA_ID },
+          },
+        });
+        expect(result.isError).not.toBe(true);
+        expect(result.content.some((block) => block.type === 'image')).toBe(true);
+        expect(toolText(result)).not.toContain('aGVsbG8=');
+      },
+      {
+        oauth: {
+          resourceMetadataUrl: 'https://knowledge.example.com/.well-known/oauth-protected-resource',
+          profile: { id: 'user-1', name: 'Ada' },
+        },
+      },
+    );
   });
 });
