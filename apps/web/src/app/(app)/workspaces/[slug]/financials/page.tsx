@@ -11,9 +11,17 @@ import {
   FinancialsTabs,
   parseFinancialsTab,
 } from '../../../../../components/financials/FinancialsTabs';
+import { UsageImportAdmin } from '../../../../../components/financials/UsageImportAdmin';
+import type {
+  UnassignedUsageGroup,
+  UsageImportRow,
+} from '../../../../../components/financials/UsageImportAdmin';
 import { RegisterShellCrumbs } from '../../../../../components/ops/ShellCrumbContext';
 import { Page, PageHeader } from '../../../../../components/ui';
-import { canMutateWorkspace } from '../../../../../lib/project-record-access';
+import {
+  canAdminWorkspace,
+  canMutateWorkspace,
+} from '../../../../../lib/project-record-access';
 import { apiFetch, requireSession } from '../../../../../lib/session';
 
 type Workspace = { id: string; slug: string; name: string };
@@ -37,20 +45,40 @@ export default async function WorkspaceFinancialsPage({
   const workspace = workspaces.find((item) => item.slug === slug);
   if (!workspace) notFound();
 
-  const [costResponse, systemsResponse] = await Promise.all([
-    apiFetch(`/api/v1/workspaces/${workspace.id}/ai-cost`),
-    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
-  ]);
-  const cost = costResponse.ok
+  const [costResponse, systemsResponse, importsResponse, unassignedResponse] =
+    await Promise.all([
+      tab === 'ai-cost'
+        ? apiFetch(`/api/v1/workspaces/${workspace.id}/ai-cost`)
+        : Promise.resolve(null),
+      tab === 'ai-cost'
+        ? apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`)
+        : Promise.resolve(null),
+      tab === 'usage-import'
+        ? apiFetch(`/api/v1/workspaces/${workspace.id}/ai-usage-imports`)
+        : Promise.resolve(null),
+      tab === 'usage-import'
+        ? apiFetch(`/api/v1/workspaces/${workspace.id}/ai-usage-events/unassigned`)
+        : Promise.resolve(null),
+    ]);
+  const cost = costResponse?.ok
     ? ((await costResponse.json()) as {
         entries: AiBillingEntryRow[];
         chart: AiCostChartPoint[];
         pools: AiCostPool[];
       })
     : { entries: [], chart: [], pools: [] };
-  const systems = systemsResponse.ok
+  const systems = systemsResponse?.ok
     ? ((await systemsResponse.json()) as { systems: AiSystemPrice[] }).systems
     : [];
+  const usageImports = importsResponse?.ok
+    ? ((await importsResponse.json()) as { imports: UsageImportRow[] }).imports
+    : [];
+  const unassigned = unassignedResponse?.ok
+    ? ((await unassignedResponse.json()) as {
+        total: number;
+        groups: UnassignedUsageGroup[];
+      })
+    : { total: 0, groups: [] };
 
   return (
     <Page wide>
@@ -64,9 +92,20 @@ export default async function WorkspaceFinancialsPage({
         workspaceSlug={workspace.slug}
         active={tab}
         label={t('tabsLabel')}
-        labels={{ 'ai-cost': t('tabAiCost') }}
+        labels={{
+          'ai-cost': t('tabAiCost'),
+          'usage-import': t('tabUsageImport'),
+        }}
       />
-      {tab === 'ai-cost' ? (
+      {tab === 'usage-import' ? (
+        <UsageImportAdmin
+          workspaceId={workspace.id}
+          canImport={canAdminWorkspace(session, workspace.id)}
+          imports={usageImports}
+          unassignedTotal={unassigned.total}
+          unassigned={unassigned.groups}
+        />
+      ) : (
         <AiCostAdmin
           workspaceId={workspace.id}
           workspaceSlug={workspace.slug}
@@ -76,7 +115,7 @@ export default async function WorkspaceFinancialsPage({
           pools={cost.pools}
           systems={systems}
         />
-      ) : null}
+      )}
     </Page>
   );
 }

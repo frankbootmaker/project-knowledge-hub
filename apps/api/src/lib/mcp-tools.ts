@@ -36,6 +36,7 @@ import {
   assertReportedAiUsage,
   parseAiCostNotes,
   parseAiModelId,
+  parseCloudAgentId,
   parseAiPricingTier,
   parseBillingPeriod,
   parseUsageOccurredAt,
@@ -252,6 +253,10 @@ import {
   loadPlatformAiCost,
   updateAiBillingEntry,
 } from './ai-billing.js';
+import {
+  importAiUsageCsv as commitAiUsageCsv,
+  listAiUsageImports,
+} from './ai-usage-import.js';
 import { moveProjectToWorkspace } from './project-move.js';
 import {
   emptyProjectHealth,
@@ -385,6 +390,38 @@ async function assertActingWorkspaceMaintainer(
     throw new AppError({
       code: 'FORBIDDEN',
       message: 'Workspace maintainer privileges are required',
+      statusCode: 403,
+    });
+  }
+}
+
+async function assertActingWorkspaceAdmin(
+  app: FastifyInstance,
+  userId: string,
+  workspaceId: string,
+): Promise<void> {
+  const [user] = await app.database.db
+    .select({ isSystemAdmin: users.isSystemAdmin, status: users.status })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user || user.status !== 'active') {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Acting user cannot administer this workspace',
+      statusCode: 403,
+    });
+  }
+  if (user.isSystemAdmin) return;
+  const [membership] = await app.database.db
+    .select({ role: memberships.role })
+    .from(memberships)
+    .where(and(eq(memberships.userId, userId), eq(memberships.workspaceId, workspaceId)))
+    .limit(1);
+  if (!membership || membership.role !== 'workspace_admin') {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Workspace administrator privileges are required',
       statusCode: 403,
     });
   }
@@ -3945,6 +3982,7 @@ export function createMcpToolHandlers(
             : parseHours(input.actualHours) ?? null,
         ...mapMcpAiUsage(input),
         aiSystemId: input.aiSystemId,
+        cloudAgentId: parseCloudAgentId(input.cloudAgentId),
         milestoneId,
         userStoryId,
         sprintId,
@@ -3994,6 +4032,7 @@ export function createMcpToolHandlers(
       const task = await updateTask(app.database, taskId, {
         ...mapMcpAiUsage(input),
         aiSystemId: input.aiSystemId,
+        cloudAgentId: parseCloudAgentId(input.cloudAgentId),
         actorUserId: actingUserId,
         workspaceId: project.workspaceId,
       });
@@ -4951,6 +4990,48 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { deleted: true };
+    },
+
+    async listAiUsageImports(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      const imports = await listAiUsageImports(
+        app.database,
+        input.workspaceId,
+        input.limit,
+      );
+      return { imports };
+    },
+
+    async importAiUsageCsv(input) {
+      const actingUserId = requireActingUserId(client);
+      assertWorkspaceAllowed(client, input.workspaceId);
+      assertWriteWorkspaceAllowed(client, input.workspaceId);
+      await assertActingWorkspaceAdmin(app, actingUserId, input.workspaceId);
+      const result = await commitAiUsageCsv(app.database, input.workspaceId, {
+        csv: input.csv,
+        fileName: input.fileName,
+        actorUserId: actingUserId,
+      });
+      for (const projectId of result.affectedProjectIds) {
+        await upsertProjectCostSnapshot(app.database, projectId);
+      }
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'ai_usage_import.created',
+        entityType: 'ai_usage_import',
+        entityId: result.usageImport.id,
+        metadata: {
+          workspaceId: input.workspaceId,
+          via: 'mcp',
+          actingUserId,
+          rowCountInserted: result.usageImport.rowCountInserted,
+          rowCountDuplicate: result.usageImport.rowCountDuplicate,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { import: result.usageImport };
     },
 
     async deleteProjectStakeholder(input) {
