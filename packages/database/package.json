@@ -31,6 +31,7 @@
   "dependencies": {
     "@project-knowledge-hub/auth": "workspace:*",
     "@project-knowledge-hub/config": "workspace:*",
+    "@project-knowledge-hub/domain": "workspace:*",
     "drizzle-orm": "^0.44.2",
     "postgres": "^3.4.7"
   },

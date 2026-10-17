@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
+import { ScheduleSlipMark } from './ScheduleSlipMark';
 import { Button, Input, Switch } from './ui';
 import { TableFilterControl, type TableFilterField } from './ui/TableFilterControl';
 import { collectEnumOptions } from '../lib/data-table';
@@ -101,6 +102,7 @@ function TreeBranch({
   subIsKey = false,
   onSubOpen,
   note,
+  warn,
   meta,
   children,
   depth,
@@ -116,6 +118,7 @@ function TreeBranch({
   subIsKey?: boolean;
   onSubOpen?: () => void;
   note?: ReactNode;
+  warn?: string;
   meta?: ReactNode;
   children?: ReactNode;
   depth: number;
@@ -161,6 +164,7 @@ function TreeBranch({
               )
             ) : null}
             {note ? <span className="kh-ops-menu-type">{note}</span> : null}
+            {warn ? <ScheduleSlipMark label={warn} /> : null}
             {dimmed && dimHint ? <span className="sr-only">{dimHint}</span> : null}
           </div>
         </div>
@@ -208,6 +212,7 @@ export function ProjectDeliveryTree({
   stories,
   tasks,
   milestones = [],
+  scheduleSlipIds,
   sprintsLoaded = true,
   onManageTask,
   onManageEpic,
@@ -218,6 +223,8 @@ export function ProjectDeliveryTree({
   stories: TreeStory[];
   tasks: TreeTask[];
   milestones?: MilestoneMarker[];
+  /** Keys such as task:id, story:id, epic:id, milestone:id. */
+  scheduleSlipIds?: ReadonlySet<string>;
   /** False while sprint titles are still loading, so a sprint URL filter is kept. */
   sprintsLoaded?: boolean;
   onManageTask?: (taskId: string) => void;
@@ -630,6 +637,10 @@ export function ProjectDeliveryTree({
     );
   }
 
+  function slipWarn(id: string): string | undefined {
+    return scheduleSlipIds?.has(id) ? t('scheduleSlip') : undefined;
+  }
+
   function rowDim(id: string) {
     const dimmed = visibility.dimmed.has(id);
     return {
@@ -647,6 +658,7 @@ export function ProjectDeliveryTree({
         open
         depth={depth}
         label={task.title}
+        warn={slipWarn(`task:${task.id}`)}
         sub={
           task.itemType === 'bug'
             ? (task.humanKey ?? t('kindBug'))
@@ -697,6 +709,7 @@ export function ProjectDeliveryTree({
         onToggle={() => toggle(nodeId)}
         depth={depth}
         label={story.title}
+        warn={slipWarn(`story:${story.id}`)}
         sub={story.humanKey ?? t('kindStory')}
         subIsKey={Boolean(story.humanKey)}
         onSubOpen={onManageStory ? () => onManageStory(story.id) : undefined}
@@ -878,6 +891,7 @@ export function ProjectDeliveryTree({
                     open={false}
                     depth={1}
                     label={milestone.title}
+                    warn={slipWarn(`milestone:${milestone.id}`)}
                     sub={milestone.humanKey ?? undefined}
                     subIsKey={Boolean(milestone.humanKey)}
                     onSubOpen={
@@ -932,6 +946,7 @@ export function ProjectDeliveryTree({
                   onToggle={() => toggle(nodeId)}
                   depth={0}
                   label={epic.title}
+                  warn={slipWarn(`epic:${epic.id}`)}
                   sub={epic.humanKey ?? t('kindEpic')}
                   subIsKey={Boolean(epic.humanKey)}
                   onSubOpen={onManageEpic ? () => onManageEpic(epic.id) : undefined}

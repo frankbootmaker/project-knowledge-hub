@@ -2754,6 +2754,7 @@
     "ganttFreezeTable": "Táblázat rögzítése",
     "ganttScale": "Időskála",
     "ganttToday": "Ma",
+    "scheduleSlip": "Ütemezési csúszás",
     "ganttEmpty": "Még nincs ábrázolható teljesítési tétel.",
     "ganttDurationValue": "{days} nap",
     "ganttEffortTitle": "{days} munkanap, {hours} óra",
@@ -3327,6 +3328,7 @@
       "closed": "Lezárt",
       "cancelled": "Törölt"
     },
+    "autoBadge": "auto",
     "severity": {
       "low": "Alacsony",
       "medium": "Közepes",
@@ -3375,6 +3377,18 @@
     "failedUpdate": "Nem sikerült frissíteni a baselinet",
     "hint": "A baseline a kickoff pillanatkép. Az élő Érintettek változhatnak. A jóváhagyott költségvetést a Költségvetés alatt szerkeszd.",
     "readOnlyHint": "A baseline megtekinthető; a karbantartók és adminok szerkeszthetnek.",
+    "scheduleSlipTitle": "Ütemezési csúszás kockázatai",
+    "scheduleSlipEnabled": "RAID-kockázat, ha egy szállítási elem csúszik",
+    "scheduleSlipThreshold": "Minimális csúszás (munkanap)",
+    "scheduleSlipTypes": "Elemtípusok",
+    "scheduleSlipOn": "Be",
+    "scheduleSlipOff": "Ki",
+    "scheduleSlipType": {
+      "task": "Feladatok",
+      "user_story": "User story-k",
+      "epic": "Epicek",
+      "milestone": "Mérföldkövek"
+    },
     "currency": "Pénznem",
     "initialBudget": "Kezdeti költségvetés",
     "keyPrefix": "Issue kulcs előtag",

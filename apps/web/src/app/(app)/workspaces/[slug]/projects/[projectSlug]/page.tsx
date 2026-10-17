@@ -93,6 +93,9 @@ type Project = {
   } | null;
   definitionOfDone?: string | null;
   keyPrefix?: string | null;
+  scheduleSlipRiskEnabled?: boolean;
+  scheduleSlipThresholdDays?: number;
+  scheduleSlipItemTypes?: Array<'task' | 'user_story' | 'epic' | 'milestone'>;
   methodology?: string | null;
   createdVia?: string | null;
   createdByApiClientId?: string | null;
@@ -546,6 +549,11 @@ export default async function ProjectDetailPage({
           nonWorkingDays: project.nonWorkingDays,
         }}
         definitionOfDone={project.definitionOfDone ?? null}
+        scheduleSlip={{
+          enabled: project.scheduleSlipRiskEnabled,
+          thresholdWorkingDays: project.scheduleSlipThresholdDays,
+          itemTypes: project.scheduleSlipItemTypes,
+        }}
         initialEpics={epics}
         initialStories={stories}
         initialMilestones={milestones}

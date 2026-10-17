@@ -38,6 +38,10 @@ export type RaidItem = {
   dueDate: string | null;
   sortOrder: number;
   humanKey?: string | null;
+  auto?: boolean;
+  source?: string | null;
+  closureSuggested?: boolean;
+  slipWorkingDays?: number | null;
   transferredToRaidItemId?: string | null;
   transferredFromRaidItemId?: string | null;
   transferredToHumanKey?: string | null;

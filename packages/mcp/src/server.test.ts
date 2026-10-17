@@ -249,6 +249,9 @@ function baselineProject(definitionOfDone: string | null) {
     createdByOauthGrantId: null,
     createdByUserId: null,
     generatedByModel: null,
+    scheduleSlipRiskEnabled: false,
+    scheduleSlipThresholdDays: 2,
+    scheduleSlipItemTypes: ['task', 'user_story', 'epic', 'milestone'],
     url: null,
     health: {
       overall: 'green',
@@ -300,6 +303,9 @@ function realisticProject() {
     createdByOauthGrantId: null,
     createdByUserId: '55555555-5555-4555-8555-555555555555',
     generatedByModel: 'gpt-4.1',
+    scheduleSlipRiskEnabled: false,
+    scheduleSlipThresholdDays: 2,
+    scheduleSlipItemTypes: ['task', 'user_story', 'epic', 'milestone'],
     url: 'https://knowledge.example.com/workspaces/lab/projects/demo',
     health: {
       overall: 'amber',

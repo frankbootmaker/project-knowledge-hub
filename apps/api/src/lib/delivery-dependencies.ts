@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
+  preservedBaselineFinish,
   projectDeliveryDependencies,
   projectEpics,
   projectMilestones,
@@ -8,6 +9,7 @@ import {
   projectTasks,
   projectUserStories,
   projects,
+  syncScheduleSlipRisks,
 } from '@project-knowledge-hub/database';
 import {
   addWorkingDays,
@@ -464,6 +466,11 @@ async function writeSchedule(
           startDate: change.start,
           dueDate: change.finish,
           durationDays: change.durationDays,
+          baselineFinishDate: preservedBaselineFinish(
+            projectTasks.baselineFinishDate,
+            projectTasks.dueDate,
+            change.finish,
+          ),
           updatedAt: new Date(),
         })
         .where(eq(projectTasks.id, id));
@@ -473,6 +480,11 @@ async function writeSchedule(
         .set({
           startDate: change.start,
           targetDate: change.finish,
+          baselineFinishDate: preservedBaselineFinish(
+            projectMilestones.baselineFinishDate,
+            projectMilestones.targetDate,
+            change.finish,
+          ),
           updatedAt: new Date(),
         })
         .where(eq(projectMilestones.id, id));
@@ -482,6 +494,11 @@ async function writeSchedule(
         .set({
           startDate: change.start,
           endDate: change.finish,
+          baselineFinishDate: preservedBaselineFinish(
+            projectEpics.baselineFinishDate,
+            projectEpics.endDate,
+            change.finish,
+          ),
           updatedAt: new Date(),
         })
         .where(eq(projectEpics.id, id));
@@ -491,6 +508,11 @@ async function writeSchedule(
         .set({
           startDate: change.start,
           endDate: change.finish,
+          baselineFinishDate: preservedBaselineFinish(
+            projectUserStories.baselineFinishDate,
+            projectUserStories.endDate,
+            change.finish,
+          ),
           updatedAt: new Date(),
         })
         .where(eq(projectUserStories.id, id));
@@ -515,7 +537,7 @@ async function writeSchedule(
   return writes;
 }
 
-export async function rescheduleDeliveryFrom(
+async function rescheduleDeliveryGraph(
   database: Database,
   projectId: string,
   seed:
@@ -585,13 +607,26 @@ export async function rescheduleDeliveryFrom(
     taskIds: movedTaskIds,
   });
   if (applied.dateChanges.length === 0) return writes;
-  const more = await rescheduleDeliveryFrom(
+  const more = await rescheduleDeliveryGraph(
     database,
     projectId,
     applied.dateChanges,
     depth + 1,
   );
   return [...writes, ...more];
+}
+
+export async function rescheduleDeliveryFrom(
+  database: Database,
+  projectId: string,
+  seed:
+    | { entityType: DeliveryDependencyEntityType; id: string }
+    | Array<{ entityType: DeliveryDependencyEntityType; id: string }>,
+  depth = 0,
+): Promise<ScheduleWrite[]> {
+  const writes = await rescheduleDeliveryGraph(database, projectId, seed, depth);
+  if (depth === 0) await syncScheduleSlipRisks(database, projectId);
+  return writes;
 }
 
 /**
@@ -626,7 +661,15 @@ export async function rescheduleProjectCalendar(
     if (dueDate === task.dueDate) continue;
     await database.db
       .update(projectTasks)
-      .set({ dueDate, updatedAt: new Date() })
+      .set({
+        dueDate,
+        baselineFinishDate: preservedBaselineFinish(
+          projectTasks.baselineFinishDate,
+          projectTasks.dueDate,
+          dueDate,
+        ),
+        updatedAt: new Date(),
+      })
       .where(eq(projectTasks.id, task.id));
     moved.push({ entityType: 'task', id: task.id });
   }
@@ -640,7 +683,10 @@ export async function rescheduleProjectCalendar(
     })
     .from(projectDeliveryDependencies)
     .where(eq(projectDeliveryDependencies.projectId, projectId));
-  if (linkRows.length === 0) return;
+  if (linkRows.length === 0) {
+    await syncScheduleSlipRisks(database, projectId);
+    return;
+  }
 
   const seeds: Array<{ entityType: DeliveryDependencyEntityType; id: string }> = [
     ...moved,
@@ -654,7 +700,10 @@ export async function rescheduleProjectCalendar(
       id: row.predecessorId,
     });
   }
-  if (seeds.length === 0) return;
+  if (seeds.length === 0) {
+    await syncScheduleSlipRisks(database, projectId);
+    return;
+  }
   await rescheduleDeliveryFrom(database, projectId, seeds);
 }
 

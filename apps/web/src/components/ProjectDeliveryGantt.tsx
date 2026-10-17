@@ -16,6 +16,7 @@ import {
   type ProjectWorkingCalendar,
 } from '@project-knowledge-hub/domain';
 import { DeliveryItemIdButton } from './DeliveryItemIdButton';
+import { ScheduleSlipMark } from './ScheduleSlipMark';
 import { DeliveryWideFrame } from './DeliveryWideFrame';
 import { Button, ErrorText, Input, Switch } from './ui';
 import { TableFilterControl, type TableFilterField } from './ui/TableFilterControl';
@@ -140,6 +141,7 @@ export function ProjectDeliveryGantt({
   stories,
   tasks,
   milestones,
+  scheduleSlipIds,
   workingCalendar,
   sprintsLoaded = true,
   onManageTask,
@@ -152,6 +154,8 @@ export function ProjectDeliveryGantt({
   stories: GanttStory[];
   tasks: GanttTask[];
   milestones: GanttMilestone[];
+  /** Keys such as task:id, story:id, epic:id, milestone:id. */
+  scheduleSlipIds?: ReadonlySet<string>;
   workingCalendar?: {
     hoursPerWorkday?: number | string | null;
     workdaysPerWeek?: number | null;
@@ -837,6 +841,7 @@ export function ProjectDeliveryGantt({
                 rangeStart={range.start}
                 pxPerDay={pxPerDay}
                 onOpen={() => openRow(row)}
+                slipping={scheduleSlipIds?.has(row.id) === true}
                 canOpen={canOpen(row, {
                   onManageTask,
                   onManageEpic,
@@ -1003,6 +1008,7 @@ function GanttGridRow({
   rangeStart,
   pxPerDay,
   onOpen,
+  slipping = false,
   canOpen: allowOpen,
   columnLeft = null,
   dimmed = false,
@@ -1021,6 +1027,7 @@ function GanttGridRow({
   rangeStart: string;
   pxPerDay: number;
   onOpen: () => void;
+  slipping?: boolean;
   canOpen: boolean;
   columnLeft?: ReadonlyMap<GanttColumnId, number> | null;
   dimmed?: boolean;
@@ -1079,6 +1086,7 @@ function GanttGridRow({
               {row.humanKey}
             </DeliveryItemIdButton>
           ) : null}
+          {slipping ? <ScheduleSlipMark label={t('scheduleSlip')} /> : null}
         </div>
       );
     }
