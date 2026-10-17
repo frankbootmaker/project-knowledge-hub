@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import { MediaLightbox, type MediaLightboxItem } from './MediaLightbox';
 import { Button, Field, Input, Modal, Select } from './ui';
 
 const PAGE_SIZES = [5, 10, 25, 50] as const;
@@ -141,7 +142,7 @@ export function DeliveryMediaEditor({
   const [links, setLinks] = useState<MediaLink[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [preview, setPreview] = useState<MediaLink | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [library, setLibrary] = useState<LibraryItem[]>([]);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -377,6 +378,21 @@ export function DeliveryMediaEditor({
   const pageStart = (currentPage - 1) * pageSize;
   const pageItems = available.slice(pageStart, pageStart + pageSize);
   const editable = canEdit && !disabled;
+  const imageLightboxItems = useMemo<MediaLightboxItem[]>(
+    () =>
+      links
+        .filter(
+          (link) =>
+            link.kind === 'media' && Boolean(link.url) && !link.deleted,
+        )
+        .map((link) => ({
+          id: link.id,
+          url: link.url!,
+          title: link.title ?? link.filename,
+          alt: link.title ?? link.filename,
+        })),
+    [links],
+  );
 
   return (
     <div className="grid gap-3">
@@ -387,7 +403,15 @@ export function DeliveryMediaEditor({
           {links.map((link) => (
             <li key={link.id} className="kh-ops-media-row">
               {link.kind === 'media' && link.url && !link.deleted ? (
-                <button type="button" onClick={() => setPreview(link)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const index = imageLightboxItems.findIndex(
+                      (item) => item.id === link.id,
+                    );
+                    if (index >= 0) setLightboxIndex(index);
+                  }}
+                >
                   <img
                     className="kh-ops-media-thumb"
                     src={link.url}
@@ -672,11 +696,13 @@ export function DeliveryMediaEditor({
           )}
         </div>
       </Modal>
-      <Modal open={Boolean(preview)} onClose={() => setPreview(null)} title={preview?.title || t('mediaPreview')}>
-        {preview?.url ? (
-          <img className="kh-ops-media-preview" src={preview.url} alt={preview.title ?? ''} />
-        ) : null}
-      </Modal>
+      <MediaLightbox
+        open={lightboxIndex !== null && imageLightboxItems.length > 0}
+        items={imageLightboxItems}
+        index={lightboxIndex ?? 0}
+        onClose={() => setLightboxIndex(null)}
+        onIndexChange={setLightboxIndex}
+      />
     </div>
   );
 }

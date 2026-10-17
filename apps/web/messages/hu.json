@@ -2357,7 +2357,13 @@
     "entity_task": "Feladat",
     "entity_sprint": "Sprint",
     "entity_raid": "RAID",
-    "entity_change": "Változás"
+    "entity_change": "Változás",
+    "lightboxOpen": "Teljes méret: {name}",
+    "lightboxOpenOriginal": "Eredeti megnyitása",
+    "lightboxLoading": "Kép betöltése…",
+    "lightboxPrevious": "Előző",
+    "lightboxNext": "Következő",
+    "lightboxUntitled": "Kép"
   },
   "gitSync": {
     "title": "Szinkronizációk",

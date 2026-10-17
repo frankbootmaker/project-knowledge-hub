@@ -2357,7 +2357,13 @@
     "entity_task": "Aufgabe",
     "entity_sprint": "Sprint",
     "entity_raid": "RAID",
-    "entity_change": "Änderung"
+    "entity_change": "Änderung",
+    "lightboxOpen": "Vollbild anzeigen: {name}",
+    "lightboxOpenOriginal": "Original öffnen",
+    "lightboxLoading": "Bild wird geladen…",
+    "lightboxPrevious": "Zurück",
+    "lightboxNext": "Weiter",
+    "lightboxUntitled": "Bild"
   },
   "gitSync": {
     "title": "Synchronisierungen",
