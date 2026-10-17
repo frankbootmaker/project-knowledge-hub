@@ -104,6 +104,7 @@ const aiUsageBodyFields = {
   tokensInput: tokenCountSchema.nullable().optional(),
   tokensOutput: tokenCountSchema.nullable().optional(),
   tokensCache: tokenCountSchema.nullable().optional(),
+  tokensCacheWrite: tokenCountSchema.nullable().optional(),
   modelId: z.string().max(80).nullable().optional(),
   pricingTier: z.string().max(32).nullable().optional(),
   usageOccurredAt: z.string().max(40).nullable().optional(),
@@ -149,6 +150,7 @@ function mapAiUsageBody(body: {
   tokensInput?: number | null;
   tokensOutput?: number | null;
   tokensCache?: number | null;
+  tokensCacheWrite?: number | null;
   modelId?: string | null;
   pricingTier?: string | null;
   usageOccurredAt?: string | null;
@@ -159,6 +161,7 @@ function mapAiUsageBody(body: {
     tokensInput: body.tokensInput,
     tokensOutput: body.tokensOutput,
     tokensCache: body.tokensCache,
+    tokensCacheWrite: body.tokensCacheWrite,
     modelId:
       body.modelId === undefined ? undefined : parseAiModelId(body.modelId),
     pricingTier:
@@ -240,6 +243,7 @@ const reportAiUsageSchema = z.object({
   tokensInput: tokenCountSchema.nullable().optional(),
   tokensOutput: tokenCountSchema.nullable().optional(),
   tokensCache: tokenCountSchema.nullable().optional(),
+  tokensCacheWrite: tokenCountSchema.nullable().optional(),
   modelId: z.string().max(80).nullable().optional(),
   pricingTier: z.string().max(32).nullable().optional(),
   usageOccurredAt: z.string().max(40).nullable().optional(),

@@ -3449,6 +3449,49 @@ a.kh-ops-choice {
   gap: 12px;
 }
 
+.kh-ops-ai-cost-chart {
+  width: 100%;
+  height: auto;
+}
+
+.kh-ops-ai-cost-sub {
+  fill: var(--kh-accent);
+  background: var(--kh-accent);
+}
+
+.kh-ops-ai-cost-change {
+  fill: var(--kh-warn);
+  background: var(--kh-warn);
+}
+
+.kh-ops-ai-cost-demand {
+  fill: var(--kh-ink);
+  background: var(--kh-ink);
+}
+
+.kh-ops-ai-cost-legacy {
+  fill: var(--kh-ink-muted);
+}
+
+.kh-ops-ai-cost-credit {
+  fill: var(--kh-danger);
+}
+
+.kh-ops-ai-cost-line {
+  fill: none;
+  stroke: var(--kh-brand);
+  stroke-width: 2;
+  background: var(--kh-brand);
+}
+
+.kh-ops-ai-cost-dot {
+  fill: var(--kh-brand);
+}
+
+.kh-ops-ai-cost-axis {
+  stroke: var(--kh-line);
+}
+
 .kh-ops-chart-wrap {
   padding: 14px 15px;
 }

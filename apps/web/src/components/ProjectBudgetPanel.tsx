@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { CollapsibleSection } from './CollapsibleSection';
 import { formatMoney, parseOptionalNumber } from '../lib/project-currency';
+import { AiBillingChart } from './AiBillingChart';
 import {
   Button,
   ErrorText,
   Field,
   Input,
   Modal,
+  Select,
   useToast,
 } from './ui';
 
@@ -54,7 +56,33 @@ type SystemItBudgetBreakdown = {
   overAllocation: boolean;
 };
 
+type AiBillingEntry = {
+  id: string;
+  period: string;
+  provider: string;
+  plan: string | null;
+  type: 'subscription' | 'plan_change' | 'on_demand';
+  amount: number;
+  note: string | null;
+  externalRef: string | null;
+  aiSystemId: string | null;
+};
+
+type AiPeriod = {
+  period: string;
+  paidCost: number;
+  subscription: number;
+  planChange: number;
+  onDemand: number;
+  legacyToken: number;
+  theoreticalApiCost: number;
+  difference: number;
+  ratio: number | null;
+  source: 'ledger' | 'fallback' | 'mixed';
+};
+
 export type ProjectBudgetSummary = {
+  workspaceId?: string;
   currency: string;
   initialBudget: number | null;
   approvedBudget: number | null;
@@ -66,6 +94,12 @@ export type ProjectBudgetSummary = {
   aiAc: number;
   aiFlatAc?: number;
   aiTokenAc?: number;
+  aiPaidAc?: number;
+  aiTheoreticalApiCost?: number;
+  aiCostDifference?: number;
+  aiCostRatio?: number | null;
+  aiPeriods?: AiPeriod[];
+  aiBillingEntries?: AiBillingEntry[];
   systemAc: number;
   aiNoteOnlyTokens: number;
   aiSystems: AiBudgetBreakdown[];
@@ -263,6 +297,17 @@ export function ProjectBudgetPanel({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [burndownOpen, setBurndownOpen] = useState(false);
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [entryPeriod, setEntryPeriod] = useState('');
+  const [entryProvider, setEntryProvider] = useState('Cursor');
+  const [entryPlan, setEntryPlan] = useState('');
+  const [entryType, setEntryType] = useState<
+    'subscription' | 'plan_change' | 'on_demand'
+  >('subscription');
+  const [entryAmount, setEntryAmount] = useState('');
+  const [entryNote, setEntryNote] = useState('');
+  const [entryRef, setEntryRef] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -337,7 +382,90 @@ export function ProjectBudgetPanel({
     }
   }
 
+  async function saveEntry() {
+    if (!canMutate || pending || !summary?.workspaceId) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/workspaces/${summary.workspaceId}/ai-billing-entries`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({
+            period: entryPeriod,
+            provider: entryProvider,
+            plan: entryPlan.trim() || null,
+            type: entryType,
+            amount: parseOptionalNumber(entryAmount),
+            currency,
+            note: entryNote.trim() || null,
+            externalRef: entryRef.trim() || null,
+          }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message || t('billingFailed'));
+      }
+      setEntryOpen(false);
+      setEntryAmount('');
+      setEntryNote('');
+      setEntryRef('');
+      pushToast(t('billingSaved'), 'success');
+      await load();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('billingFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function deleteEntry(entryId: string) {
+    if (!canMutate || pending || !summary?.workspaceId) return;
+    if (confirmDeleteId !== entryId) {
+      setConfirmDeleteId(entryId);
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/workspaces/${summary.workspaceId}/ai-billing-entries/${entryId}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { Origin: window.location.origin },
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message || t('billingFailed'));
+      }
+      setConfirmDeleteId(null);
+      pushToast(t('billingDeleted'), 'success');
+      await load();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('billingFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
   const currency = summary?.currency ?? 'EUR';
+  const aiPeriods = summary?.aiPeriods ?? [];
+  const paidAc = summary?.aiPaidAc ?? summary?.aiAc ?? 0;
+  const theoretical = summary?.aiTheoreticalApiCost ?? 0;
 
   return (
     <>
@@ -530,6 +658,153 @@ export function ProjectBudgetPanel({
 
           <section className="kh-ops-panel">
             <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">{t('aiPaidTitle')}</h2>
+              {canMutate ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-fit"
+                  onClick={() => setEntryOpen(true)}
+                >
+                  {t('billingAdd')}
+                </Button>
+              ) : null}
+            </div>
+            <div className="kh-ops-stats">
+              <div className="kh-ops-stat">
+                <p className="kh-ops-stat-label m-0">{t('aiPaid')}</p>
+                <p className="kh-ops-stat-value">
+                  {formatMoney(paidAc, currency, locale)}
+                </p>
+              </div>
+              <div className="kh-ops-stat">
+                <p className="kh-ops-stat-label m-0">{t('aiTheoretical')}</p>
+                <p className="kh-ops-stat-value">
+                  {formatMoney(theoretical, currency, locale)}
+                </p>
+              </div>
+              <div className="kh-ops-stat">
+                <p className="kh-ops-stat-label m-0">{t('aiDifference')}</p>
+                <p className="kh-ops-stat-value">
+                  {formatMoney(paidAc - theoretical, currency, locale)}
+                </p>
+              </div>
+            </div>
+            <div className="kh-ops-chart-wrap">
+              <div className="kh-ops-chart-legend">
+                <span>
+                  <i className="kh-ops-ai-cost-sub" />
+                  {t('billingType.subscription')}
+                </span>
+                <span>
+                  <i className="kh-ops-ai-cost-change" />
+                  {t('billingType.plan_change')}
+                </span>
+                <span>
+                  <i className="kh-ops-ai-cost-demand" />
+                  {t('billingType.on_demand')}
+                </span>
+                <span>
+                  <i className="kh-ops-ai-cost-line" />
+                  {t('aiTheoretical')}
+                </span>
+              </div>
+              {aiPeriods.length === 0 ? (
+                <p className="kh-ops-empty">{t('aiPeriodsEmpty')}</p>
+              ) : (
+                <AiBillingChart
+                  periods={aiPeriods}
+                  ariaLabel={t('aiChartAria')}
+                />
+              )}
+            </div>
+            {aiPeriods.length > 0 ? (
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('aiPeriod')}</th>
+                      <th className="kh-ops-num">{t('aiPaid')}</th>
+                      <th className="kh-ops-num">{t('aiTheoretical')}</th>
+                      <th className="kh-ops-num">{t('aiDifference')}</th>
+                      <th className="kh-ops-num">{t('aiRatio')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiPeriods.map((period) => (
+                      <tr key={period.period}>
+                        <td>{period.period}</td>
+                        <td className="kh-ops-num">
+                          {formatMoney(period.paidCost, currency, locale)}
+                        </td>
+                        <td className="kh-ops-num">
+                          {formatMoney(period.theoreticalApiCost, currency, locale)}
+                        </td>
+                        <td className="kh-ops-num">
+                          {formatMoney(period.difference, currency, locale)}
+                        </td>
+                        <td className="kh-ops-num">
+                          {period.ratio == null ? '—' : period.ratio.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {(summary.aiBillingEntries ?? []).length > 0 ? (
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('aiPeriod')}</th>
+                      <th>{t('billingProvider')}</th>
+                      <th>{t('billingTypeLabel')}</th>
+                      <th className="kh-ops-num">{t('billingAmount')}</th>
+                      {canMutate ? <th>{t('billingActions')}</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(summary.aiBillingEntries ?? []).map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{entry.period}</td>
+                        <td>
+                          {entry.provider}
+                          {entry.plan ? ` · ${entry.plan}` : ''}
+                        </td>
+                        <td>{t(`billingType.${entry.type}`)}</td>
+                        <td className="kh-ops-num">
+                          {formatMoney(entry.amount, currency, locale)}
+                        </td>
+                        {canMutate ? (
+                          <td>
+                            <Button
+                              type="button"
+                              variant={
+                                confirmDeleteId === entry.id ? 'danger' : 'ghost'
+                              }
+                              onClick={() => void deleteEntry(entry.id)}
+                              disabled={pending}
+                            >
+                              {confirmDeleteId === entry.id
+                                ? t('billingConfirmDelete')
+                                : t('billingDelete')}
+                            </Button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <p className="kh-ops-card-body m-0 text-[11px] text-ink-muted">
+              {t('aiPaidHint')}
+            </p>
+          </section>
+
+          <section className="kh-ops-panel">
+            <div className="kh-ops-panel-head">
               <h2 className="kh-ops-panel-title">{t('epicRollups')}</h2>
             </div>
             {summary.epics.length === 0 ? (
@@ -572,6 +847,100 @@ export function ProjectBudgetPanel({
         </div>
       ) : null}
     </CollapsibleSection>
+
+    <Modal
+      open={entryOpen}
+      onClose={() => setEntryOpen(false)}
+      title={t('billingAdd')}
+      description={t('billingAddHint')}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setEntryOpen(false)}
+          >
+            {tCommon('cancel')}
+          </Button>
+          <Button
+            type="button"
+            disabled={
+              pending || !entryPeriod || !entryProvider || entryAmount.trim() === ''
+            }
+            onClick={() => void saveEntry()}
+          >
+            {pending ? tCommon('saving') : t('billingSave')}
+          </Button>
+        </>
+      }
+    >
+      <div className="kh-ops-form-grid">
+        <Field label={t('aiPeriod')}>
+          <Input
+            type="month"
+            value={entryPeriod}
+            onChange={(event) => setEntryPeriod(event.target.value)}
+            disabled={pending}
+          />
+        </Field>
+        <Field label={t('billingTypeLabel')}>
+          <Select
+            value={entryType}
+            onChange={(event) =>
+              setEntryType(
+                event.target.value as
+                  | 'subscription'
+                  | 'plan_change'
+                  | 'on_demand',
+              )
+            }
+            disabled={pending}
+          >
+            <option value="subscription">{t('billingType.subscription')}</option>
+            <option value="plan_change">{t('billingType.plan_change')}</option>
+            <option value="on_demand">{t('billingType.on_demand')}</option>
+          </Select>
+        </Field>
+        <Field label={t('billingProvider')}>
+          <Input
+            value={entryProvider}
+            onChange={(event) => setEntryProvider(event.target.value)}
+            disabled={pending}
+          />
+        </Field>
+        <Field label={t('billingPlan')}>
+          <Input
+            value={entryPlan}
+            onChange={(event) => setEntryPlan(event.target.value)}
+            disabled={pending}
+            placeholder={t('billingPlanPlaceholder')}
+          />
+        </Field>
+        <Field label={t('billingAmount')}>
+          <Input
+            type="number"
+            step="0.01"
+            value={entryAmount}
+            onChange={(event) => setEntryAmount(event.target.value)}
+            disabled={pending}
+          />
+        </Field>
+        <Field label={t('billingRef')} className="kh-ops-field-span">
+          <Input
+            value={entryRef}
+            onChange={(event) => setEntryRef(event.target.value)}
+            disabled={pending}
+          />
+        </Field>
+        <Field label={t('billingNote')} className="kh-ops-field-span">
+          <Input
+            value={entryNote}
+            onChange={(event) => setEntryNote(event.target.value)}
+            disabled={pending}
+          />
+        </Field>
+      </div>
+    </Modal>
 
     <Modal
       open={burndownOpen}

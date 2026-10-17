@@ -56,6 +56,7 @@ import {
 } from './routes/project-item-media.js';
 import { registerProjectChangeRoutes } from './routes/project-changes.js';
 import { registerProjectBudgetRoutes } from './routes/project-budget.js';
+import { registerAiBillingRoutes } from './routes/ai-billing.js';
 import { registerProjectReportRoutes } from './routes/project-reports.js';
 import { registerReadyRoutes } from './routes/ready.js';
 import { registerRootRoutes } from './routes/root.js';
@@ -248,6 +249,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerMediaLibrarySettingsRoutes(app);
   await registerProjectChangeRoutes(app);
   await registerProjectBudgetRoutes(app);
+  await registerAiBillingRoutes(app);
   await registerProjectReportRoutes(app);
   await registerSystemRoutes(app);
   await registerKnowledgeRecordRoutes(app);

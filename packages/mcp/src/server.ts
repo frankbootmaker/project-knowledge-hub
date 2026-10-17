@@ -671,6 +671,38 @@ export type McpToolHandlers = {
     aiCostNotes?: string | null;
     aiBudgetAllocation?: number | string | null;
   }) => Promise<unknown>;
+  listAiBillingEntries: (input: {
+    workspaceId: string;
+    period?: string;
+    aiSystemId?: string;
+  }) => Promise<unknown>;
+  createAiBillingEntry: (input: {
+    workspaceId: string;
+    period: string;
+    provider: string;
+    type: 'subscription' | 'plan_change' | 'on_demand';
+    amount: number | string;
+    currency: string;
+    aiSystemId?: string | null;
+    plan?: string | null;
+    paidAt?: string | null;
+    note?: string | null;
+    externalRef?: string | null;
+  }) => Promise<unknown>;
+  updateAiBillingEntry: (input: {
+    entryId: string;
+    period?: string;
+    provider?: string;
+    type?: 'subscription' | 'plan_change' | 'on_demand';
+    amount?: number | string;
+    currency?: string;
+    aiSystemId?: string | null;
+    plan?: string | null;
+    paidAt?: string | null;
+    note?: string | null;
+    externalRef?: string | null;
+  }) => Promise<unknown>;
+  deleteAiBillingEntry: (input: { entryId: string }) => Promise<unknown>;
   deleteProjectStakeholder: (input: {
     projectId?: string;
     stakeholderId: string;
@@ -1541,7 +1573,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx, plus aiFlatAc and aiTokenAc. Mixed AI AC is the flat fee accrued over the project dates plus token cost. All money/budget fields returned as JSON numbers. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. aiTheoreticalApiCost is tokens times API list prices and is not added to AC. aiPeriods is paid vs theoretical by month. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -2478,6 +2510,7 @@ export function createKnowledgeHubMcpServer(
       tokensInput: tokenCountSchema.nullable().optional(),
       tokensOutput: tokenCountSchema.nullable().optional(),
       tokensCache: tokenCountSchema.nullable().optional(),
+      tokensCacheWrite: tokenCountSchema.nullable().optional(),
       modelId: z.string().max(80).nullable().optional(),
       pricingTier: z.string().max(32).nullable().optional(),
       usageOccurredAt: z.string().max(40).nullable().optional(),
@@ -2559,6 +2592,7 @@ export function createKnowledgeHubMcpServer(
       tokensInput: tokenCountSchema.nullable().optional(),
       tokensOutput: tokenCountSchema.nullable().optional(),
       tokensCache: tokenCountSchema.nullable().optional(),
+      tokensCacheWrite: tokenCountSchema.nullable().optional(),
       modelId: z.string().max(80).nullable().optional(),
       pricingTier: z.string().max(32).nullable().optional(),
       usageOccurredAt: z.string().max(40).nullable().optional(),
@@ -2613,13 +2647,14 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'report_project_task_ai_usage',
-    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. tokensUsed alone bills the blended aiTokenRatePer1k and clears any stored breakdown (legacy). tokensInput, tokensOutput, and tokensCache bill split rates; a null split rate falls back to the blended rate. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. Optional modelId (e.g. grok-4.7), pricingTier (e.g. standard or fast), usageOccurredAt (ISO datetime or YYYY-MM-DD), and billingPeriod (YYYY-MM) are audit tags and do not change flat-fee accrual. Billable for api/mixed; flat ignores tokens; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. tokensUsed alone bills the blended aiTokenRatePer1k and clears any stored breakdown (legacy). tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite bill split rates; a null split rate falls back to the blended rate. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional modelId, pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
       tokensUsed: tokenCountSchema.optional(),
       tokensInput: tokenCountSchema.nullable().optional(),
       tokensOutput: tokenCountSchema.nullable().optional(),
       tokensCache: tokenCountSchema.nullable().optional(),
+      tokensCacheWrite: tokenCountSchema.nullable().optional(),
       modelId: z.string().max(80).nullable().optional(),
       pricingTier: z.string().max(32).nullable().optional(),
       usageOccurredAt: z.string().max(40).nullable().optional(),
@@ -3108,6 +3143,76 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('update_project_ai_assistant_cost', 'pm:write', () =>
         handlers.updateProjectAiAssistantCost(args),
+      )(),
+  );
+
+  const billingType = z.enum(['subscription', 'plan_change', 'on_demand']);
+
+  server.tool(
+    'list_ai_billing_entries',
+    'List workspace AI billing ledger entries (subscription, plan_change, on_demand). Multiple rows per YYYY-MM are allowed; paid cost is their sum, allocated to projects by token share. Optional period and aiSystemId filters. Amounts are JSON numbers. Requires pm:read.',
+    {
+      workspaceId: z.string().uuid(),
+      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      aiSystemId: z.string().uuid().optional(),
+    },
+    async (args) =>
+      wrap('list_ai_billing_entries', 'pm:read', () =>
+        handlers.listAiBillingEntries(args),
+      )(),
+  );
+
+  server.tool(
+    'create_ai_billing_entry',
+    'Add a paid AI fee for a workspace month. type is subscription, plan_change (upgrade or downgrade; amount may be negative), or on_demand. aiSystemId is optional; omit it for a workspace-wide pool such as one Cursor subscription. currency is the project currency code. Does not fetch invoices. Requires pm:write.',
+    {
+      workspaceId: z.string().uuid(),
+      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+      provider: z.string().min(1).max(80),
+      type: billingType,
+      amount: z.union([z.number(), z.string()]),
+      currency: z.string().min(3).max(3),
+      aiSystemId: z.string().uuid().nullable().optional(),
+      plan: z.string().max(80).nullable().optional(),
+      paidAt: z.string().max(40).nullable().optional(),
+      note: z.string().max(500).nullable().optional(),
+      externalRef: z.string().max(120).nullable().optional(),
+    },
+    async (args) =>
+      wrap('create_ai_billing_entry', 'pm:write', () =>
+        handlers.createAiBillingEntry(args),
+      )(),
+  );
+
+  server.tool(
+    'update_ai_billing_entry',
+    'Update one AI billing ledger entry by entryId. plan_change may be negative. Requires pm:write.',
+    {
+      entryId: z.string().uuid(),
+      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      provider: z.string().min(1).max(80).optional(),
+      type: billingType.optional(),
+      amount: z.union([z.number(), z.string()]).optional(),
+      currency: z.string().min(3).max(3).optional(),
+      aiSystemId: z.string().uuid().nullable().optional(),
+      plan: z.string().max(80).nullable().optional(),
+      paidAt: z.string().max(40).nullable().optional(),
+      note: z.string().max(500).nullable().optional(),
+      externalRef: z.string().max(120).nullable().optional(),
+    },
+    async (args) =>
+      wrap('update_ai_billing_entry', 'pm:write', () =>
+        handlers.updateAiBillingEntry(args),
+      )(),
+  );
+
+  server.tool(
+    'delete_ai_billing_entry',
+    'Delete one AI billing ledger entry by entryId. Requires pm:write.',
+    { entryId: z.string().uuid() },
+    async (args) =>
+      wrap('delete_ai_billing_entry', 'pm:write', () =>
+        handlers.deleteAiBillingEntry(args),
       )(),
   );
 

@@ -1405,6 +1405,33 @@ export {
 } from './schedule-slip.js';
 
 export {
+  AI_BILLING_ACTIVE_STATUSES,
+  AI_BILLING_AVG_DAYS_PER_MONTH,
+  AI_BILLING_ENTRY_TYPES,
+  allocateAiBillingPool,
+  assertAiBillingPeriod,
+  assertAllocationPercent,
+  flatFeeMonthShares,
+  isAiBillingActiveProject,
+  roundAiMoney,
+  scaleAiBillingTypes,
+  settleProjectAiCost,
+  splitAiMoney,
+  type AiBillingAllocationMethod,
+  type AiBillingAllocationProject,
+  type AiBillingAllocationShare,
+  type AiBillingEntryType,
+  type AiBillingProjectShare,
+  type AiBillingTypeAmounts,
+  type AiCostUsageSlice,
+  type AiFallbackSystem,
+  type AiPaidPeriod,
+  type AiPaidPeriodSource,
+  type SettledProjectAiCost,
+  type SettleProjectAiCostInput,
+} from './ai-billing.js';
+
+export {
   AI_COST_NOTES_MAX,
   AI_MODEL_ID_MAX,
   AI_PRICING_TIER_MAX,
