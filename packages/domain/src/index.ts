@@ -1422,3 +1422,17 @@ export {
   type ProjectFieldGuide,
   type ProjectMethodology,
 } from './project-agent.js';
+
+export {
+  TIMELINE_AT_RISK_DAYS,
+  addDaysYmd,
+  computeFinancialRag,
+  computeRiskRag,
+  emptyProjectHealth,
+  projectHealthFromBudget,
+  timelineRag,
+  todayYmd,
+  worstProjectRag,
+  type ProjectHealth,
+  type ProjectRagStatus,
+} from './project-health.js';

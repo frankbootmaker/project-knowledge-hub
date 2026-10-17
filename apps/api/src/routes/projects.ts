@@ -42,7 +42,10 @@ import {
   allocateUniqueKeyPrefix,
   assertUniqueKeyPrefix,
 } from '../lib/project-issue-keys.js';
-import { listProjectOverallRags } from '../lib/project-overall-rag.js';
+import {
+  emptyProjectHealth,
+  listProjectHealth,
+} from '../lib/project-overall-rag.js';
 import { moveProjectToWorkspace } from '../lib/project-move.js';
 import {
   loadProjectScheduleFacts,
@@ -213,23 +216,27 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       );
 
     const projectIds = rows.map((row) => row.id);
-    const [tagMap, overallRagById, scheduleById] = await Promise.all([
+    const [tagMap, healthById, scheduleById] = await Promise.all([
       getProjectTags(app.database, projectIds),
-      listProjectOverallRags(app.database, projectIds),
+      listProjectHealth(app.database, projectIds),
       loadProjectScheduleFacts(app.database, rows),
     ]);
 
     return {
       projects: await Promise.all(
-        rows.map(async (row) => ({
-          ...(await toPublicProject(
-            app.database,
-            row,
-            tagMap.get(row.id) ?? [],
-            scheduleById.get(row.id),
-          )),
-          overallRag: overallRagById.get(row.id) ?? 'green',
-        })),
+        rows.map(async (row) => {
+          const health = healthById.get(row.id) ?? emptyProjectHealth();
+          return {
+            ...(await toPublicProject(
+              app.database,
+              row,
+              tagMap.get(row.id) ?? [],
+              scheduleById.get(row.id),
+            )),
+            health,
+            overallRag: health.overall,
+          };
+        }),
       ),
     };
   });
@@ -405,13 +412,19 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     }
 
     requireWorkspaceView(principal, project.workspaceId);
-    const tagMap = await getProjectTags(app.database, [project.id]);
+    const [tagMap, healthById] = await Promise.all([
+      getProjectTags(app.database, [project.id]),
+      listProjectHealth(app.database, [project.id]),
+    ]);
     return {
-      project: await toPublicProject(
-        app.database,
-        project,
-        tagMap.get(project.id) ?? [],
-      ),
+      project: {
+        ...(await toPublicProject(
+          app.database,
+          project,
+          tagMap.get(project.id) ?? [],
+        )),
+        health: healthById.get(project.id) ?? emptyProjectHealth(),
+      },
     };
   });
 
