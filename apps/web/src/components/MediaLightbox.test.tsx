@@ -89,6 +89,27 @@ describe('MediaLightbox', () => {
     expect(openLink.textContent).toBe('lightboxOpenOriginal');
   });
 
+  it('renders a focusable close control with the lightbox close class', () => {
+    renderUi(
+      <MediaLightbox
+        open
+        items={items}
+        index={0}
+        onClose={vi.fn()}
+        onIndexChange={vi.fn()}
+      />,
+    );
+    const close = document.querySelector(
+      'button.kh-media-lightbox__close',
+    ) as HTMLButtonElement | null;
+    expect(close).not.toBeNull();
+    expect(close?.getAttribute('aria-label')).toBe('closeDialog');
+    act(() => {
+      close!.focus();
+    });
+    expect(document.activeElement).toBe(close);
+  });
+
   it('closes on Escape and backdrop click', () => {
     const onClose = vi.fn();
     renderUi(
