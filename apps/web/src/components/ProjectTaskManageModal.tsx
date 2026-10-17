@@ -598,10 +598,9 @@ export function ProjectTaskManageModal({
         savedTask = { ...savedTask, raci };
         setRaciEntries(raci);
       }
-      setTask(savedTask);
       onUpdated?.(savedTask);
       pushToast(t('taskUpdated'), 'success');
-      await load();
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedUpdateTask'));
     } finally {
