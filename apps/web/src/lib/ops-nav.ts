@@ -91,6 +91,7 @@ export type NavItemId =
   | 'import'
   | 'reports'
   | 'admin-overview'
+  | 'admin-financials'
   | 'admin-monitoring'
   | 'admin-backups'
   | 'admin-mcp'
@@ -303,6 +304,13 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         labelKey: 'adminOverview',
         adminOnly: true,
         href: () => '/admin',
+      },
+      {
+        id: 'admin-financials',
+        icon: 'financials',
+        labelKey: 'sectionFinancials',
+        adminOnly: true,
+        href: () => '/admin/financials',
       },
       {
         id: 'admin-monitoring',
@@ -582,6 +590,9 @@ export function matchNavItem(
   }
   if (item.id === 'admin-overview') {
     return pathname === '/admin';
+  }
+  if (item.id === 'admin-financials') {
+    return pathname === '/admin/financials' || pathname.startsWith('/admin/financials/');
   }
   if (item.id === 'admin-backups') {
     return pathname.startsWith('/admin/backups') || pathname.startsWith('/admin/storage');

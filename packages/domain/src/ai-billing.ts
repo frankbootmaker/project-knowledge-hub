@@ -9,6 +9,12 @@ import { aiBillingPeriodSchema } from './ai-cost.js';
  * is the sum of its entries (`subscription` + `plan_change` + `on_demand`).
  * `plan_change` may be negative (a downgrade credit).
  *
+ * An entry may name an inclusive service window. `splitBillingEntryByMonth`
+ * divides that amount across calendar months by the number of days in each
+ * month (12 Oct–11 Nov is 20/31 in October and 11/31 in November). Cents use
+ * the largest remainder so the slices sum to the entry. `period` is the start
+ * month. An entry without service dates keeps the whole amount in `period`.
+ *
  * That total is split across projects once:
  * 1. Manual percent overrides on a pool are applied first. They must sum to
  *    at most 100. Each override is that percent of the pool total.
@@ -72,6 +78,65 @@ export function roundAiMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+export type AiBillingMonthParts = {
+  period: string;
+  currency: string;
+  subscription: number;
+  planChange: number;
+  onDemand: number;
+  theoreticalApiCost: number;
+};
+
+export type AiBillingMonthSummary = AiBillingMonthParts & {
+  paidCost: number;
+  difference: number;
+  ratio: number | null;
+};
+
+/** Paid cost is the sum of the three ledger types. `planChange` may be negative. */
+export function aiBillingPaidCost(
+  parts: Pick<AiBillingMonthParts, 'subscription' | 'planChange' | 'onDemand'>,
+): number {
+  return roundAiMoney(parts.subscription + parts.planChange + parts.onDemand);
+}
+
+/**
+ * Difference is paid minus theoretical. Ratio is paid / theoretical, to three
+ * decimals, and is null when theoretical is not positive.
+ */
+export function aiBillingCostComparison(
+  paidCost: number,
+  theoreticalApiCost: number,
+): { difference: number; ratio: number | null } {
+  const paid = roundAiMoney(paidCost);
+  const theoretical = roundAiMoney(theoreticalApiCost);
+  return {
+    difference: roundAiMoney(paid - theoretical),
+    ratio:
+      theoretical > 0 ? Math.round((paid / theoretical) * 1000) / 1000 : null,
+  };
+}
+
+export function summarizeAiBillingMonth(
+  parts: AiBillingMonthParts,
+): AiBillingMonthSummary {
+  const subscription = roundAiMoney(parts.subscription);
+  const planChange = roundAiMoney(parts.planChange);
+  const onDemand = roundAiMoney(parts.onDemand);
+  const theoreticalApiCost = roundAiMoney(parts.theoreticalApiCost);
+  const paidCost = aiBillingPaidCost({ subscription, planChange, onDemand });
+  return {
+    period: parts.period,
+    currency: parts.currency,
+    subscription,
+    planChange,
+    onDemand,
+    theoreticalApiCost,
+    paidCost,
+    ...aiBillingCostComparison(paidCost, theoreticalApiCost),
+  };
+}
+
 export function isAiBillingActiveProject(
   status: string,
   archivedAt: Date | string | null | undefined,
@@ -90,6 +155,95 @@ export function assertAiBillingPeriod(value: string): string {
     });
   }
   return parsed.data;
+}
+
+const SERVICE_DATE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+function isServiceDate(value: string): boolean {
+  const match = SERVICE_DATE.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+/** YYYY-MM-DD, or null when the value is empty. Rejects calendar-invalid days. */
+export function assertServiceDate(
+  value: string | null | undefined,
+  field: string,
+): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  if (!isServiceDate(trimmed)) {
+    throw new AppError({
+      code: 'BILLING_PERIOD_INVALID',
+      message: `${field} must be YYYY-MM-DD`,
+      statusCode: 400,
+    });
+  }
+  return trimmed;
+}
+
+export type BillingServiceWindow = {
+  /** YYYY-MM. The start month when the service window is set. */
+  period: string;
+  servicePeriodStart: string | null;
+  servicePeriodEnd: string | null;
+};
+
+/**
+ * Stored period and inclusive service window.
+ * When both dates are set, `period` is the start month even if a different
+ * month was sent. Both dates must be set, or neither.
+ */
+export function resolveBillingServiceWindow(input: {
+  period?: string | null;
+  servicePeriodStart?: string | null;
+  servicePeriodEnd?: string | null;
+}): BillingServiceWindow {
+  const start = assertServiceDate(input.servicePeriodStart, 'servicePeriodStart');
+  const end = assertServiceDate(input.servicePeriodEnd, 'servicePeriodEnd');
+  if ((start == null) !== (end == null)) {
+    throw new AppError({
+      code: 'BILLING_PERIOD_INVALID',
+      message:
+        'servicePeriodStart and servicePeriodEnd must both be set or both be empty',
+      statusCode: 400,
+    });
+  }
+  if (start && end) {
+    if (end < start) {
+      throw new AppError({
+        code: 'INVALID_DATE_RANGE',
+        message: `servicePeriodEnd (${end}) must be on or after servicePeriodStart (${start})`,
+        statusCode: 400,
+      });
+    }
+    return {
+      period: start.slice(0, 7),
+      servicePeriodStart: start,
+      servicePeriodEnd: end,
+    };
+  }
+  if (input.period == null || input.period.trim() === '') {
+    throw new AppError({
+      code: 'BILLING_PERIOD_INVALID',
+      message: 'period must be YYYY-MM',
+      statusCode: 400,
+    });
+  }
+  return {
+    period: assertAiBillingPeriod(input.period),
+    servicePeriodStart: null,
+    servicePeriodEnd: null,
+  };
 }
 
 export function assertAllocationPercent(value: number): number {
@@ -136,6 +290,92 @@ export function splitAiMoney(
     leftover -= 1;
   }
   return floors.map((value) => (sign * value) / 100);
+}
+
+export type BillingMonthSlice = {
+  /** YYYY-MM */
+  period: string;
+  /** Inclusive days of the service window that fall in this month. */
+  days: number;
+  /** Largest-remainder cents. Slices of one entry sum to the entry amount. */
+  amount: number;
+};
+
+export type BillingEntryMonthInput = {
+  amount: number;
+  /** YYYY-MM used when the service window is missing. */
+  period: string;
+  servicePeriodStart?: string | null;
+  servicePeriodEnd?: string | null;
+};
+
+const MAX_SERVICE_MONTHS = 240;
+
+function daysInNamedMonth(period: string): number {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(period);
+  if (!match) return 0;
+  return daysInCalendarMonth(Number(match[1]), Number(match[2]));
+}
+
+function wholeEntryInPeriod(entry: BillingEntryMonthInput): BillingMonthSlice[] {
+  return [
+    {
+      period: entry.period,
+      days: daysInNamedMonth(entry.period),
+      amount: roundAiMoney(entry.amount),
+    },
+  ];
+}
+
+/**
+ * Split one paid AI cost entry across calendar months by inclusive days.
+ * 12 Oct–11 Nov is 20 days in October and 11 days in November (20/31 and
+ * 11/31). Amounts use largest-remainder rounding to cents and sum to the
+ * entry. Missing or partial service dates keep the whole amount in `period`.
+ */
+export function splitBillingEntryByMonth(
+  entry: BillingEntryMonthInput,
+): BillingMonthSlice[] {
+  const start = entry.servicePeriodStart?.trim() ?? '';
+  const end = entry.servicePeriodEnd?.trim() ?? '';
+  if (!isServiceDate(start) || !isServiceDate(end) || end < start) {
+    return wholeEntryInPeriod(entry);
+  }
+  const startYear = Number(start.slice(0, 4));
+  const startMonth = Number(start.slice(5, 7));
+  const startDay = Number(start.slice(8, 10));
+  const endYear = Number(end.slice(0, 4));
+  const endMonth = Number(end.slice(5, 7));
+  const endDay = Number(end.slice(8, 10));
+  const span = endYear * 12 + endMonth - (startYear * 12 + startMonth);
+  if (span > MAX_SERVICE_MONTHS) return wholeEntryInPeriod(entry);
+
+  const counts: Array<{ period: string; days: number }> = [];
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    const period = `${year}-${String(month).padStart(2, '0')}`;
+    const monthDays = daysInCalendarMonth(year, month);
+    const first = year === startYear && month === startMonth ? startDay : 1;
+    const last = year === endYear && month === endMonth ? endDay : monthDays;
+    const days = last - first + 1;
+    if (days > 0) counts.push({ period, days });
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  if (counts.length === 0) return wholeEntryInPeriod(entry);
+  const amounts = splitAiMoney(
+    entry.amount,
+    counts.map((count) => count.days),
+  );
+  return counts.map((count, index) => ({
+    period: count.period,
+    days: count.days,
+    amount: amounts[index] ?? 0,
+  }));
 }
 
 function allocateDefault(
@@ -425,11 +665,6 @@ function periodCovered(row: MutablePeriod, systemId: string | null): boolean {
   return false;
 }
 
-function ratioFor(paid: number, theoretical: number): number | null {
-  if (!(theoretical > 0)) return null;
-  return Math.round((paid / theoretical) * 1000) / 1000;
-}
-
 function finishPeriod(row: MutablePeriod): AiPaidPeriod {
   const ledgerSubscription = roundAiMoney(row.subscription);
   const fallbackFlat = roundAiMoney(row.fallbackFlat);
@@ -441,6 +676,7 @@ function finishPeriod(row: MutablePeriod): AiPaidPeriod {
     subscription + planChange + onDemand + legacyToken,
   );
   const theoreticalApiCost = roundAiMoney(row.theoretical);
+  const comparison = aiBillingCostComparison(paidCost, theoreticalApiCost);
   const hasLedger = row.workspaceCovered || row.coveredSystems.size > 0;
   const hasFallback = Math.abs(fallbackFlat) > 0 || Math.abs(legacyToken) > 0;
   const source: AiPaidPeriodSource = row.workspaceCovered
@@ -458,8 +694,8 @@ function finishPeriod(row: MutablePeriod): AiPaidPeriod {
     onDemand,
     legacyToken,
     theoreticalApiCost,
-    difference: roundAiMoney(paidCost - theoreticalApiCost),
-    ratio: ratioFor(paidCost, theoreticalApiCost),
+    difference: comparison.difference,
+    ratio: comparison.ratio,
     source,
   };
 }
@@ -515,12 +751,13 @@ function lockPaidToLegacy(
   const last = periods[periods.length - 1]!;
   const subscription = roundAiMoney(last.subscription + delta);
   const paidCost = roundAiMoney(last.paidCost + delta);
+  const comparison = aiBillingCostComparison(paidCost, last.theoreticalApiCost);
   const next = {
     ...last,
     subscription,
     paidCost,
-    difference: roundAiMoney(paidCost - last.theoreticalApiCost),
-    ratio: ratioFor(paidCost, last.theoreticalApiCost),
+    difference: comparison.difference,
+    ratio: comparison.ratio,
   };
   return [...periods.slice(0, -1), next];
 }
@@ -684,5 +921,233 @@ export function settleProjectAiCost(
       systemId,
       amount: roundAiMoney(amount),
     })),
+  };
+}
+
+export function currentAiBillingPeriod(now = new Date()): string {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth() + 1;
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+/** Move a YYYY-MM period by whole months. */
+export function shiftAiBillingPeriod(period: string, deltaMonths: number): string {
+  const parsed = assertAiBillingPeriod(period);
+  const year = Number(parsed.slice(0, 4));
+  const month = Number(parsed.slice(5, 7));
+  const index = year * 12 + (month - 1) + deltaMonths;
+  const nextYear = Math.floor(index / 12);
+  const nextMonth = index - nextYear * 12 + 1;
+  return `${String(nextYear).padStart(4, '0')}-${String(nextMonth).padStart(2, '0')}`;
+}
+
+/** Last 12 calendar months, including the current UTC month. */
+export function defaultAiBillingWindow(now = new Date()): { from: string; to: string } {
+  const to = currentAiBillingPeriod(now);
+  return { from: shiftAiBillingPeriod(to, -11), to };
+}
+
+export function resolveAiBillingWindow(
+  input: { from?: string | null; to?: string | null },
+  now = new Date(),
+): { from: string; to: string } {
+  const fallback = defaultAiBillingWindow(now);
+  const from = input.from?.trim() ? assertAiBillingPeriod(input.from) : null;
+  const to = input.to?.trim() ? assertAiBillingPeriod(input.to) : null;
+  const resolved = {
+    from: from ?? (to ? shiftAiBillingPeriod(to, -11) : fallback.from),
+    to: to ?? (from && from > fallback.to ? from : fallback.to),
+  };
+  if (resolved.from > resolved.to) {
+    throw new AppError({
+      code: 'BILLING_PERIOD_INVALID',
+      message: 'from must be on or before to',
+      statusCode: 400,
+    });
+  }
+  return resolved;
+}
+
+export function aiBillingPeriodInWindow(period: string, from: string, to: string): boolean {
+  return period >= from && period <= to;
+}
+
+/** Inclusive month list, capped so a bad range cannot loop. */
+export function listAiBillingPeriods(from: string, to: string): string[] {
+  const start = assertAiBillingPeriod(from);
+  const end = assertAiBillingPeriod(to);
+  if (start > end) return [];
+  const periods: string[] = [];
+  let cursor = start;
+  while (cursor <= end && periods.length < 240) {
+    periods.push(cursor);
+    cursor = shiftAiBillingPeriod(cursor, 1);
+  }
+  return periods;
+}
+
+export type PlatformAiCostEntryInput = {
+  id: string;
+  period: string;
+  servicePeriodStart?: string | null;
+  servicePeriodEnd?: string | null;
+  provider: string;
+  plan: string | null;
+  type: AiBillingEntryType;
+  amount: number;
+  currency: string;
+  paidAt: string | null;
+  note: string | null;
+  externalRef: string | null;
+  aiSystemId: string | null;
+};
+
+export type PlatformAiCostEntryFilter = {
+  workspaceId?: string;
+  provider?: string;
+  type?: AiBillingEntryType;
+  period?: string;
+};
+
+export type PlatformAiWorkspaceMonth = AiBillingMonthSummary & {
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
+};
+
+export type PlatformAiCostEntry = PlatformAiCostEntryInput & {
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
+};
+
+/**
+ * Platform view of workspace AI Cost charts. Totals sum each workspace's own
+ * monthly figures, and only within one currency.
+ */
+export function buildPlatformAiCost(input: {
+  from: string;
+  to: string;
+  workspaces: ReadonlyArray<{
+    workspaceId: string;
+    name: string;
+    slug: string;
+    chart: readonly AiBillingMonthParts[];
+    entries: readonly PlatformAiCostEntryInput[];
+  }>;
+  entryFilter?: PlatformAiCostEntryFilter;
+}): {
+  from: string;
+  to: string;
+  periods: string[];
+  months: PlatformAiWorkspaceMonth[];
+  totals: AiBillingMonthSummary[];
+  entries: PlatformAiCostEntry[];
+  providers: string[];
+} {
+  const from = assertAiBillingPeriod(input.from);
+  const to = assertAiBillingPeriod(input.to);
+  if (from > to) {
+    throw new AppError({
+      code: 'BILLING_PERIOD_INVALID',
+      message: 'from must be on or before to',
+      statusCode: 400,
+    });
+  }
+
+  const months: PlatformAiWorkspaceMonth[] = [];
+  const inWindow: AiBillingMonthSummary[] = [];
+  for (const workspace of input.workspaces) {
+    for (const point of workspace.chart) {
+      if (!aiBillingPeriodInWindow(point.period, from, to)) continue;
+      const summary = summarizeAiBillingMonth(point);
+      inWindow.push(summary);
+      months.push({
+        workspaceId: workspace.workspaceId,
+        workspaceName: workspace.name,
+        workspaceSlug: workspace.slug,
+        ...summary,
+      });
+    }
+  }
+  months.sort((a, b) => {
+    const period = b.period.localeCompare(a.period);
+    if (period !== 0) return period;
+    const currency = a.currency.localeCompare(b.currency);
+    if (currency !== 0) return currency;
+    return (
+      a.workspaceName.localeCompare(b.workspaceName) || a.workspaceId.localeCompare(b.workspaceId)
+    );
+  });
+
+  const grouped = new Map<string, AiBillingMonthParts>();
+  for (const point of inWindow) {
+    const key = `${point.period}|${point.currency}`;
+    const current = grouped.get(key) ?? {
+      period: point.period,
+      currency: point.currency,
+      subscription: 0,
+      planChange: 0,
+      onDemand: 0,
+      theoreticalApiCost: 0,
+    };
+    current.subscription += point.subscription;
+    current.planChange += point.planChange;
+    current.onDemand += point.onDemand;
+    current.theoreticalApiCost += point.theoreticalApiCost;
+    grouped.set(key, current);
+  }
+  const totals = [...grouped.values()]
+    .map((row) => summarizeAiBillingMonth(row))
+    .sort((a, b) => a.currency.localeCompare(b.currency) || b.period.localeCompare(a.period));
+
+  const filter = input.entryFilter;
+  const providerNeedle = filter?.provider?.trim().toLowerCase() ?? '';
+  const entries: PlatformAiCostEntry[] = [];
+  const providers = new Set<string>();
+  for (const workspace of input.workspaces) {
+    for (const entry of workspace.entries) {
+      const months = splitBillingEntryByMonth({
+        amount: entry.amount,
+        period: entry.period,
+        servicePeriodStart: entry.servicePeriodStart,
+        servicePeriodEnd: entry.servicePeriodEnd,
+      }).map((slice) => slice.period);
+      if (!months.some((period) => aiBillingPeriodInWindow(period, from, to))) {
+        continue;
+      }
+      providers.add(entry.provider);
+      if (filter?.workspaceId && filter.workspaceId !== workspace.workspaceId) {
+        continue;
+      }
+      if (filter?.type && filter.type !== entry.type) continue;
+      if (filter?.period && !months.includes(filter.period)) continue;
+      if (providerNeedle && entry.provider.trim().toLowerCase() !== providerNeedle) {
+        continue;
+      }
+      entries.push({
+        ...entry,
+        workspaceId: workspace.workspaceId,
+        workspaceName: workspace.name,
+        workspaceSlug: workspace.slug,
+      });
+    }
+  }
+  entries.sort((a, b) => {
+    const period = b.period.localeCompare(a.period);
+    if (period !== 0) return period;
+    const name = a.workspaceName.localeCompare(b.workspaceName);
+    if (name !== 0) return name;
+    return a.id.localeCompare(b.id);
+  });
+
+  return {
+    from,
+    to,
+    periods: listAiBillingPeriods(from, to),
+    months,
+    totals,
+    entries,
+    providers: [...providers].sort((a, b) => a.localeCompare(b)),
   };
 }

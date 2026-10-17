@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   allocateAiBillingPool,
+  buildPlatformAiCost,
+  defaultAiBillingWindow,
   flatFeeMonthShares,
+  resolveBillingServiceWindow,
   roundAiMoney,
   scaleAiBillingTypes,
   settleProjectAiCost,
   splitAiMoney,
+  splitBillingEntryByMonth,
   type AiBillingAllocationProject,
+  type AiBillingMonthParts,
 } from './ai-billing.js';
 
 function project(
@@ -328,5 +333,369 @@ describe('settleProjectAiCost', () => {
       usage: [],
     });
     expect(roundAiMoney(left.aiPaidAc + right.aiPaidAc)).toBe(20);
+  });
+});
+
+describe('buildPlatformAiCost', () => {
+  const now = new Date('2026-10-17T12:00:00.000Z');
+
+  function point(
+    period: string,
+    currency: string,
+    patch: Partial<AiBillingMonthParts> = {},
+  ): AiBillingMonthParts {
+    return {
+      period,
+      currency,
+      subscription: 0,
+      planChange: 0,
+      onDemand: 0,
+      theoreticalApiCost: 0,
+      ...patch,
+    };
+  }
+
+  it('defaults to the last 12 UTC months', () => {
+    expect(defaultAiBillingWindow(now)).toEqual({ from: '2025-11', to: '2026-10' });
+  });
+
+  it('sums each workspace month per currency, including a plan-change credit', () => {
+    const alpha = {
+      workspaceId: 'ws-alpha',
+      name: 'Alpha',
+      slug: 'alpha',
+      chart: [
+        point('2026-10', 'EUR', {
+          subscription: 100,
+          planChange: -20,
+          onDemand: 10,
+          theoreticalApiCost: 40,
+        }),
+        point('2026-10', 'USD', {
+          subscription: 5,
+          theoreticalApiCost: 2,
+        }),
+        point('2026-08', 'EUR', { subscription: 999 }),
+      ],
+      entries: [
+        {
+          id: 'e1',
+          period: '2026-10',
+          provider: 'Cursor',
+          plan: 'Pro',
+          type: 'subscription' as const,
+          amount: 100,
+          currency: 'EUR',
+          paidAt: null,
+          note: null,
+          externalRef: null,
+          aiSystemId: null,
+        },
+        {
+          id: 'e2',
+          period: '2026-10',
+          provider: 'Cursor',
+          plan: null,
+          type: 'plan_change' as const,
+          amount: -20,
+          currency: 'EUR',
+          paidAt: null,
+          note: 'downgrade credit',
+          externalRef: null,
+          aiSystemId: null,
+        },
+        {
+          id: 'e3',
+          period: '2026-08',
+          provider: 'Cursor',
+          plan: null,
+          type: 'subscription' as const,
+          amount: 999,
+          currency: 'EUR',
+          paidAt: null,
+          note: null,
+          externalRef: null,
+          aiSystemId: null,
+        },
+      ],
+    };
+    const beta = {
+      workspaceId: 'ws-beta',
+      name: 'Beta',
+      slug: 'beta',
+      chart: [
+        point('2026-10', 'EUR', {
+          subscription: 40,
+          onDemand: 8,
+          theoreticalApiCost: 12,
+        }),
+      ],
+      entries: [
+        {
+          id: 'e4',
+          period: '2026-10',
+          provider: 'OpenAI',
+          plan: null,
+          type: 'on_demand' as const,
+          amount: 8,
+          currency: 'EUR',
+          paidAt: null,
+          note: null,
+          externalRef: null,
+          aiSystemId: null,
+        },
+      ],
+    };
+
+    const report = buildPlatformAiCost({
+      from: '2026-09',
+      to: '2026-10',
+      workspaces: [alpha, beta],
+    });
+
+    const eurMonths = report.months.filter((row) => row.currency === 'EUR');
+    const eurTotal = report.totals.find(
+      (row) => row.currency === 'EUR' && row.period === '2026-10',
+    );
+    const usdTotal = report.totals.find((row) => row.currency === 'USD');
+    expect(eurMonths.map((row) => row.workspaceId).sort()).toEqual(['ws-alpha', 'ws-beta']);
+    expect(report.months.some((row) => row.period === '2026-08')).toBe(false);
+    expect(eurTotal).toMatchObject({
+      subscription: 140,
+      planChange: -20,
+      onDemand: 18,
+      paidCost: 138,
+      theoreticalApiCost: 52,
+      difference: 86,
+    });
+    expect(eurTotal?.paidCost).toBe(
+      roundAiMoney(eurMonths.reduce((sum, row) => sum + row.paidCost, 0)),
+    );
+    expect(eurTotal?.theoreticalApiCost).toBe(
+      roundAiMoney(eurMonths.reduce((sum, row) => sum + row.theoreticalApiCost, 0)),
+    );
+    expect(eurTotal?.difference).toBe(
+      roundAiMoney(eurMonths.reduce((sum, row) => sum + row.difference, 0)),
+    );
+    expect(eurTotal?.planChange).toBe(
+      roundAiMoney(eurMonths.reduce((sum, row) => sum + row.planChange, 0)),
+    );
+    expect(usdTotal).toMatchObject({
+      paidCost: 5,
+      theoreticalApiCost: 2,
+      difference: 3,
+    });
+    expect(usdTotal?.paidCost).not.toBe(eurTotal?.paidCost);
+    expect(report.totals.some((row) => row.currency === 'EUR+USD')).toBe(false);
+    expect(eurTotal?.ratio).toBeCloseTo(138 / 52, 3);
+    const ratioSum = eurMonths.reduce((sum, row) => sum + (row.ratio ?? 0), 0);
+    expect(eurTotal?.ratio).not.toBeCloseTo(ratioSum, 2);
+
+    const credits = buildPlatformAiCost({
+      from: '2026-09',
+      to: '2026-10',
+      workspaces: [alpha, beta],
+      entryFilter: {
+        workspaceId: 'ws-alpha',
+        provider: 'cursor',
+        type: 'plan_change',
+        period: '2026-10',
+      },
+    });
+    expect(credits.entries.map((row) => row.id)).toEqual(['e2']);
+    expect(credits.entries[0]?.workspaceSlug).toBe('alpha');
+    expect(credits.providers).toEqual(['Cursor', 'OpenAI']);
+  });
+
+  it('shows a 12 Oct–11 Nov entry as 20/31 and 11/31 in the admin summary', () => {
+    const slices = splitBillingEntryByMonth({
+      amount: 31,
+      period: '2026-10',
+      servicePeriodStart: '2026-10-12',
+      servicePeriodEnd: '2026-11-11',
+    });
+    const report = buildPlatformAiCost({
+      from: '2026-10',
+      to: '2026-11',
+      workspaces: [
+        {
+          workspaceId: 'ws-alpha',
+          name: 'Alpha',
+          slug: 'alpha',
+          chart: slices.map((slice) =>
+            point(slice.period, 'EUR', { subscription: slice.amount }),
+          ),
+          entries: [
+            {
+              id: 'span',
+              period: '2026-10',
+              servicePeriodStart: '2026-10-12',
+              servicePeriodEnd: '2026-11-11',
+              provider: 'Cursor',
+              plan: null,
+              type: 'subscription' as const,
+              amount: 31,
+              currency: 'EUR',
+              paidAt: null,
+              note: null,
+              externalRef: null,
+              aiSystemId: null,
+            },
+          ],
+        },
+      ],
+      entryFilter: { period: '2026-11' },
+    });
+    const october = report.totals.find((row) => row.period === '2026-10');
+    const november = report.totals.find((row) => row.period === '2026-11');
+    expect(slices.map((slice) => [slice.period, slice.days, slice.amount])).toEqual([
+      ['2026-10', 20, 20],
+      ['2026-11', 11, 11],
+    ]);
+    expect(october).toMatchObject({ paidCost: 20, subscription: 20 });
+    expect(november).toMatchObject({ paidCost: 11, subscription: 11 });
+    expect(october?.paidCost).toBeCloseTo((20 / 31) * 31, 2);
+    expect(november?.paidCost).toBeCloseTo((11 / 31) * 31, 2);
+    expect(report.entries.map((row) => row.id)).toEqual(['span']);
+  });
+});
+
+describe('splitBillingEntryByMonth', () => {
+  it('keeps a same-month window in that month', () => {
+    expect(
+      splitBillingEntryByMonth({
+        amount: 40,
+        period: '2026-10',
+        servicePeriodStart: '2026-10-12',
+        servicePeriodEnd: '2026-10-20',
+      }),
+    ).toEqual([{ period: '2026-10', days: 9, amount: 40 }]);
+  });
+
+  it('splits 12 Oct–11 Nov by days (20/31 and 11/31)', () => {
+    const slices = splitBillingEntryByMonth({
+      amount: 31,
+      period: '2026-10',
+      servicePeriodStart: '2026-10-12',
+      servicePeriodEnd: '2026-11-11',
+    });
+    expect(slices).toEqual([
+      { period: '2026-10', days: 20, amount: 20 },
+      { period: '2026-11', days: 11, amount: 11 },
+    ]);
+    expect(slices.reduce((sum, slice) => sum + slice.amount, 0)).toBe(31);
+  });
+
+  it('counts 29 February in a leap year and 28 otherwise', () => {
+    const leap = splitBillingEntryByMonth({
+      amount: 3,
+      period: '2024-02',
+      servicePeriodStart: '2024-02-28',
+      servicePeriodEnd: '2024-03-01',
+    });
+    expect(leap.map((slice) => [slice.period, slice.days])).toEqual([
+      ['2024-02', 2],
+      ['2024-03', 1],
+    ]);
+    const common = splitBillingEntryByMonth({
+      amount: 2,
+      period: '2023-02',
+      servicePeriodStart: '2023-02-28',
+      servicePeriodEnd: '2023-03-01',
+    });
+    expect(common.map((slice) => [slice.period, slice.days])).toEqual([
+      ['2023-02', 1],
+      ['2023-03', 1],
+    ]);
+  });
+
+  it('rounds to cents with the largest remainder so slices sum exactly', () => {
+    const slices = splitBillingEntryByMonth({
+      amount: 10,
+      period: '2026-10',
+      servicePeriodStart: '2026-10-12',
+      servicePeriodEnd: '2026-11-11',
+    });
+    expect(slices.map((slice) => slice.amount)).toEqual([6.45, 3.55]);
+    expect(roundAiMoney(slices.reduce((sum, slice) => sum + slice.amount, 0))).toBe(10);
+
+    const thirds = splitBillingEntryByMonth({
+      amount: 1,
+      period: '2026-01',
+      servicePeriodStart: '2026-01-31',
+      servicePeriodEnd: '2026-02-02',
+    });
+    expect(thirds.map((slice) => slice.days)).toEqual([1, 2]);
+    expect(thirds.map((slice) => slice.amount)).toEqual([0.33, 0.67]);
+    expect(roundAiMoney(thirds.reduce((sum, slice) => sum + slice.amount, 0))).toBe(1);
+  });
+
+  it('puts a negative plan change on the same day weights', () => {
+    expect(
+      splitBillingEntryByMonth({
+        amount: -31,
+        period: '2026-10',
+        servicePeriodStart: '2026-10-12',
+        servicePeriodEnd: '2026-11-11',
+      }).map((slice) => slice.amount),
+    ).toEqual([-20, -11]);
+  });
+
+  it('keeps the whole amount in period when service dates are missing', () => {
+    expect(
+      splitBillingEntryByMonth({ amount: 15.5, period: '2026-04' }),
+    ).toEqual([{ period: '2026-04', days: 30, amount: 15.5 }]);
+    expect(
+      splitBillingEntryByMonth({
+        amount: 8,
+        period: '2026-05',
+        servicePeriodStart: '2026-05-01',
+        servicePeriodEnd: null,
+      }),
+    ).toEqual([{ period: '2026-05', days: 31, amount: 8 }]);
+  });
+});
+
+describe('resolveBillingServiceWindow', () => {
+  it('derives period from the start date', () => {
+    expect(
+      resolveBillingServiceWindow({
+        period: '2026-01',
+        servicePeriodStart: '2026-10-12',
+        servicePeriodEnd: '2026-11-11',
+      }),
+    ).toEqual({
+      period: '2026-10',
+      servicePeriodStart: '2026-10-12',
+      servicePeriodEnd: '2026-11-11',
+    });
+  });
+
+  it('keeps period when both dates are empty', () => {
+    expect(
+      resolveBillingServiceWindow({ period: '2026-05', servicePeriodStart: null }),
+    ).toEqual({
+      period: '2026-05',
+      servicePeriodStart: null,
+      servicePeriodEnd: null,
+    });
+  });
+
+  it('rejects an end date before the start date', () => {
+    expect(() =>
+      resolveBillingServiceWindow({
+        servicePeriodStart: '2026-11-11',
+        servicePeriodEnd: '2026-10-12',
+      }),
+    ).toThrow(/servicePeriodEnd/);
+  });
+
+  it('rejects a single service date', () => {
+    expect(() =>
+      resolveBillingServiceWindow({
+        period: '2026-10',
+        servicePeriodStart: '2026-10-01',
+      }),
+    ).toThrow(/both be set/);
   });
 });

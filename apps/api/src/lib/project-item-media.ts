@@ -20,6 +20,7 @@ import {
   itemMediaEntityTypeSchema,
   type ItemMediaEntityType,
 } from '@project-knowledge-hub/domain';
+import { WORKSPACE_MEDIA_READ_HINT } from './media-read-access.js';
 
 const MAX_LINKS = 100;
 const MAX_TITLE = 200;
@@ -37,6 +38,8 @@ export type PublicItemMediaLink = {
   contentType: string | null;
   mediaId: string | null;
   deleted: boolean;
+  /** Present on a live workspace image. Tells MCP clients which tool reads pixels. */
+  hint: string | null;
   addedBy: { userId: string; displayName: string } | null;
   addedAt: string;
   sortOrder: number;
@@ -320,6 +323,7 @@ function toPublicLink(row: {
     contentType: deleted ? null : row.contentType,
     mediaId: row.mediaId,
     deleted,
+    hint: kind === 'media' && row.mediaId && !deleted ? WORKSPACE_MEDIA_READ_HINT : null,
     addedBy: row.createdBy
       ? { userId: row.createdBy, displayName: row.displayName ?? '' }
       : null,

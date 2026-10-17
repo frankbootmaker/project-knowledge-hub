@@ -796,7 +796,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
+      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). Read pixels with call_hub_tool get_workspace_media. recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
     scope: 'knowledge:read',
     openApi: true,
     output: knowledgeRecordResult,
@@ -1092,7 +1092,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_task',
     description:
-      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. startDate is the stored start and is writable. targetPercent is null. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. startDate is the stored start and is writable. targetPercent is null. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Each media link includes mediaId. Call get_workspace_media (OAuth: call_hub_tool) to read the image. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: wrappedResult('task', taskRowResult),
@@ -1168,7 +1168,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown bills split rates. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1196,11 +1196,19 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         tokensInput: { type: 'integer', minimum: 0, nullable: true },
         tokensOutput: { type: 'integer', minimum: 0, nullable: true },
         tokensCache: { type: 'integer', minimum: 0, nullable: true },
+        tokensCacheWrite: { type: 'integer', minimum: 0, nullable: true },
         modelId: { type: 'string', maxLength: 80, nullable: true },
         pricingTier: { type: 'string', maxLength: 32, nullable: true },
         usageOccurredAt: { type: 'string', maxLength: 40, nullable: true },
         billingPeriod: { type: 'string', maxLength: 7, nullable: true },
         aiSystemId: { type: 'string', format: 'uuid', nullable: true },
+        cloudAgentId: {
+          type: 'string',
+          maxLength: 80,
+          nullable: true,
+          description:
+            'Cursor cloud agent id. Links imported usage onto this task. Null clears it.',
+        },
         milestoneId: { ...entityRefProp('Milestone'), nullable: true },
         userStoryId: { ...entityRefProp('User story'), nullable: true },
         sprintId: { ...entityRefProp('Sprint'), nullable: true },
@@ -1726,7 +1734,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_workspace_media',
     description:
-      'List recent workspace media with markdownSnippet and usedBy. Optional filename query. Optional entityType+entityId filters to images linked to that item in this workspace. Requires knowledge:read.',
+      'List recent workspace media with markdownSnippet, mediaId, and usedBy. Call get_workspace_media to read image bytes (OAuth: call_hub_tool). Optional filename query. Optional entityType+entityId filters to images linked to that item in this workspace. Requires knowledge:read.',
     scope: 'knowledge:read',
     defaults: { limit: 20 },
     body: {
@@ -1742,6 +1750,26 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         },
         entityId: entityRefProp('Optional item filter'),
         limit: { type: 'integer', minimum: 1, maximum: 50 },
+      },
+    },
+  },
+  {
+    name: 'get_workspace_media',
+    description:
+      'Read one workspace media file by mediaId. Raster images return MCP image content (longest side at most 1568 px and about 1 MB; never upscaled) plus metadata. SVG and non-images return metadata only. signedUrl is an absolute URL bound to this media and workspace for 10 minutes. Requires knowledge:read.',
+    scope: 'knowledge:read',
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['mediaId'],
+      properties: {
+        mediaId: uuidProp('Media id'),
+        maxDimension: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 1568,
+          description: 'Optional longest-side cap in pixels. Never upscales. Server cap is 1568.',
+        },
       },
     },
   },
@@ -2052,7 +2080,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_budget_summary',
     description:
-      'EVM summary, financialRag, riskRag, riskReasons, burndown, and epic cost rollups. riskRag uses open or mitigating RAID only (closed, accepted, cancelled, and archived are ignored) and the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons lists that colour (count, severity, kind, cause, dueInDays) and is empty when green. aiPaidAc is the allocated paid AI cost (ledger, or flat-fee fallback when a month has no entries). aiTheoreticalApiCost is list-price token cost and is not added to AC. aiPeriods breaks that down by month. Requires pm:read.',
+      'EVM summary, financialRag, riskRag, riskReasons, burndown, and epic cost rollups. riskRag uses open or mitigating RAID only (closed, accepted, cancelled, and archived are ignored) and the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons lists that colour (count, severity, kind, cause, dueInDays) and is empty when green. aiPaidAc is the allocated paid AI cost (ledger, or flat-fee fallback when a month has no entries). A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is list-price token cost and is not added to AC. aiPeriods breaks that down by month. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -2756,7 +2784,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'report_project_task_ai_usage',
     description:
-      'Record AI token usage on a task. tokensUsed alone uses the blended rate. Optional tokensInput/tokensOutput/tokensCache use split rates (null rate falls back to blended). Requires pm:write.',
+      'Record AI token usage on a task. tokensUsed alone uses the blended rate. Optional tokensInput/tokensOutput/tokensCache/tokensCacheWrite use split rates (null rate falls back to blended). Optional cloudAgentId links imported Cursor usage onto this task. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -2768,11 +2796,18 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         tokensInput: { type: 'integer', minimum: 0, nullable: true },
         tokensOutput: { type: 'integer', minimum: 0, nullable: true },
         tokensCache: { type: 'integer', minimum: 0, nullable: true },
+        tokensCacheWrite: { type: 'integer', minimum: 0, nullable: true },
         modelId: { type: 'string', maxLength: 80, nullable: true },
         pricingTier: { type: 'string', maxLength: 32, nullable: true },
         usageOccurredAt: { type: 'string', maxLength: 40, nullable: true },
         billingPeriod: { type: 'string', maxLength: 7, nullable: true },
         aiSystemId: { type: 'string', format: 'uuid', nullable: true },
+        cloudAgentId: {
+          type: 'string',
+          maxLength: 80,
+          nullable: true,
+          description: 'Cursor cloud agent id. Links imported usage onto this task.',
+        },
       },
     },
   },
@@ -2859,12 +2894,77 @@ export function listHubToolSummaries(includeWriteTools: boolean): Array<{
   );
 }
 
+/** Cost entry row. Open object: no additionalProperties: false (PRO-T-101). */
+function billingEntryResult(): Record<string, unknown> {
+  return {
+    type: 'object',
+    required: [
+      'id',
+      'workspaceId',
+      'aiSystemId',
+      'period',
+      'servicePeriodStart',
+      'servicePeriodEnd',
+      'provider',
+      'plan',
+      'type',
+      'amount',
+      'currency',
+      'paidAt',
+      'note',
+      'externalRef',
+      'createdAt',
+      'updatedAt',
+    ],
+    properties: {
+      id: uuidProp('Cost entry id'),
+      workspaceId: uuidProp('Workspace id'),
+      aiSystemId: {
+        ...uuidProp('AI system id, or null when the entry is workspace-wide'),
+        nullable: true,
+      },
+      period: {
+        type: 'string',
+        description:
+          'Start month YYYY-MM. Derived from servicePeriodStart when that date is set.',
+      },
+      servicePeriodStart: {
+        ...ymd,
+        nullable: true,
+        description:
+          'Inclusive service start YYYY-MM-DD. Null keeps the whole amount in period.',
+      },
+      servicePeriodEnd: {
+        ...ymd,
+        nullable: true,
+        description:
+          'Inclusive service end YYYY-MM-DD. A span is split across months by days.',
+      },
+      provider: stringProp('Provider name'),
+      plan: { type: 'string', nullable: true },
+      type: {
+        type: 'string',
+        enum: ['subscription', 'plan_change', 'on_demand'],
+      },
+      amount: { type: 'number', description: 'Paid amount as a JSON number.' },
+      currency: stringProp('Currency code'),
+      paidAt: { type: 'string', nullable: true },
+      note: { type: 'string', nullable: true },
+      externalRef: { type: 'string', nullable: true },
+      createdAt: { type: 'string' },
+      updatedAt: { type: 'string' },
+    },
+  };
+}
+
 const EXTRA_HUB_TOOLS: Array<{
   name: string;
   description: string;
   scope: McpScope;
   write: boolean;
   body: ToolInputSchema;
+  /** Open JSON Schema. Do not set additionalProperties: false (PRO-T-101). */
+  output?: Record<string, unknown>;
 }> = [
   {
     name: 'update_project_change_item',
@@ -2950,9 +3050,32 @@ const EXTRA_HUB_TOOLS: Array<{
     },
   },
   {
+    name: 'get_platform_ai_cost',
+    description:
+      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, per currency. Multi-month entries are prorated by days, the same split as a workspace chart. Currencies are not combined. Defaults to the last 12 months. System administrator only. Requires pm:read. Via call_hub_tool.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        from: {
+          type: 'string',
+          pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
+          description: 'First month YYYY-MM. Defaults to 11 months before to.',
+        },
+        to: {
+          type: 'string',
+          pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
+          description: 'Last month YYYY-MM. Defaults to the current UTC month.',
+        },
+      },
+    },
+  },
+  {
     name: 'list_ai_billing_entries',
     description:
-      'List workspace AI billing entries. Paid cost for a month is the sum. Requires pm:read.',
+      'List workspace AI cost entries. Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A span is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional service dates keep rows whose window overlaps that range. Requires pm:read.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -2964,28 +3087,57 @@ const EXTRA_HUB_TOOLS: Array<{
         period: {
           type: 'string',
           pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
-          description: 'Optional YYYY-MM filter',
+          description: 'Optional YYYY-MM filter. Matches any month the row contributes to.',
         },
         aiSystemId: uuidProp('Optional AI system id'),
+        servicePeriodStart: {
+          ...ymd,
+          description: 'Optional YYYY-MM-DD. Keep rows whose service window ends on or after this date.',
+        },
+        servicePeriodEnd: {
+          ...ymd,
+          description: 'Optional YYYY-MM-DD. Keep rows whose service window starts on or before this date.',
+        },
+      },
+    },
+    output: {
+      type: 'object',
+      required: ['entries'],
+      properties: {
+        entries: {
+          type: 'array',
+          items: billingEntryResult(),
+        },
       },
     },
   },
   {
     name: 'create_ai_billing_entry',
     description:
-      'Add a paid AI fee (subscription, plan_change, or on_demand) for a workspace month. plan_change may be negative. Requires pm:write.',
+      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD, inclusive) prorate the amount across months by days; period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
       type: 'object',
       additionalProperties: false,
-      required: ['workspaceId', 'period', 'provider', 'type', 'amount', 'currency'],
+      required: ['workspaceId', 'provider', 'type', 'amount', 'currency'],
       properties: {
         workspaceId: uuidProp('Workspace id'),
         period: {
           type: 'string',
           pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
-          description: 'Billing month YYYY-MM',
+          description:
+            'YYYY-MM. Required when service dates are omitted. When servicePeriodStart is set, period is that month.',
+        },
+        servicePeriodStart: {
+          ...ymd,
+          nullable: true,
+          description: 'Inclusive service start YYYY-MM-DD. Set with servicePeriodEnd.',
+        },
+        servicePeriodEnd: {
+          ...ymd,
+          nullable: true,
+          description: 'Inclusive service end YYYY-MM-DD. Must be on or after the start.',
         },
         provider: stringProp('Provider name, for example Cursor', {
           minLength: 1,
@@ -3000,17 +3152,23 @@ const EXTRA_HUB_TOOLS: Array<{
           description: 'Paid amount. Negative only for plan_change.',
         },
         currency: stringProp('Currency code', { minLength: 3, maxLength: 3 }),
-        aiSystemId: { ...uuidProp('AI system id, or null for the workspace pool'), nullable: true },
+        aiSystemId: { ...uuidProp('AI system id, or null for the workspace-wide pool'), nullable: true },
         plan: { type: 'string', maxLength: 80, nullable: true },
         paidAt: { type: 'string', maxLength: 40, nullable: true },
         note: { type: 'string', maxLength: 500, nullable: true },
         externalRef: { type: 'string', maxLength: 120, nullable: true },
       },
     },
+    output: {
+      type: 'object',
+      required: ['entry'],
+      properties: { entry: billingEntryResult() },
+    },
   },
   {
     name: 'update_ai_billing_entry',
-    description: 'Update one AI billing entry. Requires pm:write.',
+    description:
+      'Update one AI cost entry. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) replace the window; period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3018,8 +3176,18 @@ const EXTRA_HUB_TOOLS: Array<{
       additionalProperties: false,
       required: ['entryId'],
       properties: {
-        entryId: uuidProp('Billing entry id'),
+        entryId: uuidProp('Cost entry id'),
         period: { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' },
+        servicePeriodStart: {
+          ...ymd,
+          nullable: true,
+          description: 'Inclusive service start YYYY-MM-DD.',
+        },
+        servicePeriodEnd: {
+          ...ymd,
+          nullable: true,
+          description: 'Inclusive service end YYYY-MM-DD.',
+        },
         provider: stringProp('Provider name', { minLength: 1, maxLength: 80 }),
         type: {
           type: 'string',
@@ -3034,17 +3202,55 @@ const EXTRA_HUB_TOOLS: Array<{
         externalRef: { type: 'string', maxLength: 120, nullable: true },
       },
     },
+    output: {
+      type: 'object',
+      required: ['entry'],
+      properties: { entry: billingEntryResult() },
+    },
   },
   {
     name: 'delete_ai_billing_entry',
-    description: 'Delete one AI billing entry. Requires pm:write.',
+    description: 'Delete one AI cost entry. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
       type: 'object',
       additionalProperties: false,
       required: ['entryId'],
-      properties: { entryId: uuidProp('Billing entry id') },
+      properties: { entryId: uuidProp('Cost entry id') },
+    },
+  },
+  {
+    name: 'list_ai_usage_imports',
+    description:
+      'List workspace AI usage imports. Counts cover total, inserted, duplicate, linked, error, and no-token rows. Requires pm:read.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+    },
+  },
+  {
+    name: 'import_ai_usage_csv',
+    description:
+      'Import a Cursor usage CSV. Dedupes on Date, Cloud Agent ID, Model, and Total Tokens. Rows with every token column empty are skipped. Workspace administrator only. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId', 'csv'],
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        csv: stringProp('Cursor usage CSV text', { minLength: 1, maxLength: 8_000_000 }),
+        fileName: { type: 'string', maxLength: 200, nullable: true },
+      },
     },
   },
 ];

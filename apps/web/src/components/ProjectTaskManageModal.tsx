@@ -93,6 +93,7 @@ type TaskDetail = {
   usageOccurredAt?: string | null;
   billingPeriod?: string | null;
   aiSystemId: string | null;
+  cloudAgentId?: string | null;
   humanKey?: string | null;
   itemType?: 'task' | 'bug';
   severity?: string | null;
@@ -236,6 +237,7 @@ export function ProjectTaskManageModal({
   const [usageOccurredAt, setUsageOccurredAt] = useState('');
   const [billingPeriod, setBillingPeriod] = useState('');
   const [aiSystemId, setAiSystemId] = useState('');
+  const [cloudAgentId, setCloudAgentId] = useState('');
   const [severity, setSeverity] = useState('medium');
   const [foundIn, setFoundIn] = useState('');
   const [foundInNote, setFoundInNote] = useState('');
@@ -328,6 +330,7 @@ export function ProjectTaskManageModal({
       );
       setBillingPeriod(loaded.billingPeriod ?? '');
       setAiSystemId(loaded.aiSystemId ?? '');
+      setCloudAgentId(loaded.cloudAgentId ?? '');
       setSeverity(loaded.severity ?? 'medium');
       setFoundIn(loaded.foundIn ?? '');
       setFoundInNote(loaded.foundInNote ?? '');
@@ -494,6 +497,11 @@ export function ProjectTaskManageModal({
       setError(t('billingPeriodInvalid'));
       return null;
     }
+    const agent = cloudAgentId.trim();
+    if (agent.length > 80 || /\s/.test(agent)) {
+      setError(t('cloudAgentIdInvalid'));
+      return null;
+    }
     return {
       tokensInput: input,
       tokensOutput: output,
@@ -549,6 +557,7 @@ export function ProjectTaskManageModal({
           userStoryId: userStoryId || null,
           ...usage,
           aiSystemId: aiSystemId.trim() || null,
+          cloudAgentId: cloudAgentId.trim() || null,
           ...(task?.itemType === 'bug'
             ? {
                 severity: severity || 'medium',
@@ -1190,7 +1199,9 @@ export function ProjectTaskManageModal({
             usageOccurredAt.trim() !== '' ||
             billingPeriod.trim() !== '' ||
             aiSystemId.trim() !== '' ||
-            task.aiSystemId ? (
+            cloudAgentId.trim() !== '' ||
+            task.aiSystemId ||
+            task.cloudAgentId ? (
               <div className="kh-ops-form-grid">
                 <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
                   {t('tokensBreakdownHint')}
@@ -1276,6 +1287,15 @@ export function ProjectTaskManageModal({
                     onChange={(e) => setAiSystemId(e.target.value)}
                     disabled={pending || !canMutate}
                     placeholder={t('aiSystemIdPlaceholder')}
+                  />
+                </Field>
+                <Field className="kh-ops-field-span" label={t('cloudAgentId')}>
+                  <Input
+                    value={cloudAgentId}
+                    onChange={(e) => setCloudAgentId(e.target.value)}
+                    disabled={pending || !canMutate}
+                    placeholder={t('cloudAgentIdPlaceholder')}
+                    maxLength={80}
                   />
                 </Field>
               </div>

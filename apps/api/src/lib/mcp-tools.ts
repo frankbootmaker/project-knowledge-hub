@@ -36,6 +36,7 @@ import {
   assertReportedAiUsage,
   parseAiCostNotes,
   parseAiModelId,
+  parseCloudAgentId,
   parseAiPricingTier,
   parseBillingPeriod,
   parseUsageOccurredAt,
@@ -104,10 +105,17 @@ import {
   createWorkspaceMedia,
   getWorkspaceMediaById,
   listWorkspaceMedia,
+  readMediaBytes,
   toPublicMedia,
   type PublicWorkspaceMedia,
 } from './workspace-media.js';
+import {
+  assertClientCanReadMediaWorkspace,
+  WORKSPACE_MEDIA_READ_HINT,
+} from './media-read-access.js';
+import { prepareWorkspaceMediaImage } from './media-read-image.js';
 import { getEffectiveMediaMaxBytes } from './media-max-bytes.js';
+import { buildSignedMediaUrl, mediaReadOrigin } from './media-signed-url.js';
 import {
   appendMediaLink,
   attachItemMediaLinks,
@@ -242,8 +250,13 @@ import {
   deleteAiBillingEntry,
   getAiBillingEntry,
   listAiBillingEntries,
+  loadPlatformAiCost,
   updateAiBillingEntry,
 } from './ai-billing.js';
+import {
+  importAiUsageCsv as commitAiUsageCsv,
+  listAiUsageImports,
+} from './ai-usage-import.js';
 import { moveProjectToWorkspace } from './project-move.js';
 import {
   emptyProjectHealth,
@@ -322,6 +335,31 @@ function assertWriteWorkspaceAllowed(client: McpClientContext, workspaceId: stri
   }
 }
 
+async function assertActingSystemAdmin(
+  app: FastifyInstance,
+  client: McpClientContext,
+): Promise<void> {
+  if (!client.actingUserId) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'System administrator privileges are required',
+      statusCode: 403,
+    });
+  }
+  const [user] = await app.database.db
+    .select({ isSystemAdmin: users.isSystemAdmin, status: users.status })
+    .from(users)
+    .where(eq(users.id, client.actingUserId))
+    .limit(1);
+  if (!user || user.status !== 'active' || !user.isSystemAdmin) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'System administrator privileges are required',
+      statusCode: 403,
+    });
+  }
+}
+
 async function assertActingWorkspaceMaintainer(
   app: FastifyInstance,
   userId: string,
@@ -352,6 +390,38 @@ async function assertActingWorkspaceMaintainer(
     throw new AppError({
       code: 'FORBIDDEN',
       message: 'Workspace maintainer privileges are required',
+      statusCode: 403,
+    });
+  }
+}
+
+async function assertActingWorkspaceAdmin(
+  app: FastifyInstance,
+  userId: string,
+  workspaceId: string,
+): Promise<void> {
+  const [user] = await app.database.db
+    .select({ isSystemAdmin: users.isSystemAdmin, status: users.status })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user || user.status !== 'active') {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Acting user cannot administer this workspace',
+      statusCode: 403,
+    });
+  }
+  if (user.isSystemAdmin) return;
+  const [membership] = await app.database.db
+    .select({ role: memberships.role })
+    .from(memberships)
+    .where(and(eq(memberships.userId, userId), eq(memberships.workspaceId, workspaceId)))
+    .limit(1);
+  if (!membership || membership.role !== 'workspace_admin') {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: 'Workspace administrator privileges are required',
       statusCode: 403,
     });
   }
@@ -3092,8 +3162,104 @@ export function createMcpToolHandlers(
       return {
         media: rows.map((row) => ({
           ...toPublicMedia(row),
+          mediaId: row.id,
+          hint: WORKSPACE_MEDIA_READ_HINT,
           usedBy: usedBy.get(row.id) ?? [],
         })),
+      };
+    },
+
+    async getWorkspaceMedia(input) {
+      const row = await getWorkspaceMediaById(app.database, input.mediaId);
+      if (!row) {
+        throw new AppError({
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media not found',
+          statusCode: 404,
+        });
+      }
+      const [workspace] = await app.database.db
+        .select({ organizationId: workspaces.organizationId })
+        .from(workspaces)
+        .where(eq(workspaces.id, row.workspaceId))
+        .limit(1);
+      if (!workspace) {
+        throw new AppError({
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media not found',
+          statusCode: 404,
+        });
+      }
+      assertClientCanReadMediaWorkspace(client, {
+        id: row.workspaceId,
+        organizationId: workspace.organizationId,
+      });
+
+      const { store: blobStore } = await app.getBlobStore();
+      const bytes = await readMediaBytes(
+        app.env.MEDIA_UPLOAD_DIR,
+        row.workspaceId,
+        row.id,
+        { blobStore },
+      );
+      if (!bytes) {
+        throw new AppError({
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media bytes not found',
+          statusCode: 404,
+        });
+      }
+
+      const prepared = await prepareWorkspaceMediaImage(
+        bytes,
+        row.contentType,
+        input.maxDimension,
+      );
+      const signed = buildSignedMediaUrl({
+        origin: mediaReadOrigin(app.env),
+        secret: app.env.SESSION_SECRET,
+        mediaId: row.id,
+        workspaceId: row.workspaceId,
+      });
+      const publicMedia = toPublicMedia(row);
+
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'media.read',
+        entityType: 'workspace_media',
+        entityId: row.id,
+        metadata: {
+          workspaceId: row.workspaceId,
+          contentType: row.contentType,
+          imageIncluded: prepared.imageIncluded,
+          resized: prepared.imageIncluded ? prepared.resized : false,
+          via: 'mcp',
+        },
+        ipAddress: ipAddress ?? null,
+      });
+
+      return {
+        media: {
+          ...publicMedia,
+          mediaId: row.id,
+          width: prepared.imageIncluded ? prepared.width : null,
+          height: prepared.imageIncluded ? prepared.height : null,
+          resized: prepared.imageIncluded ? prepared.resized : false,
+          imageIncluded: prepared.imageIncluded,
+          hint: WORKSPACE_MEDIA_READ_HINT,
+        },
+        signedUrl: signed.signedUrl,
+        expiresAt: signed.expiresAt,
+        ...(prepared.imageIncluded
+          ? {
+              imageContent: {
+                data: prepared.buffer.toString('base64'),
+                mimeType: prepared.mimeType,
+              },
+            }
+          : {}),
       };
     },
 
@@ -3816,6 +3982,7 @@ export function createMcpToolHandlers(
             : parseHours(input.actualHours) ?? null,
         ...mapMcpAiUsage(input),
         aiSystemId: input.aiSystemId,
+        cloudAgentId: parseCloudAgentId(input.cloudAgentId),
         milestoneId,
         userStoryId,
         sprintId,
@@ -3865,6 +4032,7 @@ export function createMcpToolHandlers(
       const task = await updateTask(app.database, taskId, {
         ...mapMcpAiUsage(input),
         aiSystemId: input.aiSystemId,
+        cloudAgentId: parseCloudAgentId(input.cloudAgentId),
         actorUserId: actingUserId,
         workspaceId: project.workspaceId,
       });
@@ -4704,8 +4872,24 @@ export function createMcpToolHandlers(
       const entries = await listAiBillingEntries(app.database, input.workspaceId, {
         period: input.period,
         aiSystemId: input.aiSystemId,
+        servicePeriodStart: input.servicePeriodStart,
+        servicePeriodEnd: input.servicePeriodEnd,
       });
       return { entries };
+    },
+
+    async getPlatformAiCost(input) {
+      await assertActingSystemAdmin(app, client);
+      const report = await loadPlatformAiCost(app.database, {
+        ...(input.from ? { from: input.from } : {}),
+        ...(input.to ? { to: input.to } : {}),
+      });
+      return {
+        from: report.from,
+        to: report.to,
+        months: report.months,
+        totals: report.totals,
+      };
     },
 
     async createAiBillingEntry(input) {
@@ -4806,6 +4990,48 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { deleted: true };
+    },
+
+    async listAiUsageImports(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      const imports = await listAiUsageImports(
+        app.database,
+        input.workspaceId,
+        input.limit,
+      );
+      return { imports };
+    },
+
+    async importAiUsageCsv(input) {
+      const actingUserId = requireActingUserId(client);
+      assertWorkspaceAllowed(client, input.workspaceId);
+      assertWriteWorkspaceAllowed(client, input.workspaceId);
+      await assertActingWorkspaceAdmin(app, actingUserId, input.workspaceId);
+      const result = await commitAiUsageCsv(app.database, input.workspaceId, {
+        csv: input.csv,
+        fileName: input.fileName,
+        actorUserId: actingUserId,
+      });
+      for (const projectId of result.affectedProjectIds) {
+        await upsertProjectCostSnapshot(app.database, projectId);
+      }
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'ai_usage_import.created',
+        entityType: 'ai_usage_import',
+        entityId: result.usageImport.id,
+        metadata: {
+          workspaceId: input.workspaceId,
+          via: 'mcp',
+          actingUserId,
+          rowCountInserted: result.usageImport.rowCountInserted,
+          rowCountDuplicate: result.usageImport.rowCountDuplicate,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { import: result.usageImport };
     },
 
     async deleteProjectStakeholder(input) {

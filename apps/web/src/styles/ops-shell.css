@@ -1131,6 +1131,12 @@ a.kh-section-shortcut[aria-current='location'] {
   font-variant-numeric: tabular-nums;
 }
 
+.kh-ops-stat-value.is-compact {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
 .kh-ops-stat-note {
   margin-top: 6px;
   color: var(--kh-ink-muted);
@@ -3762,6 +3768,11 @@ button.kh-ops-project-card:disabled {
 
 .kh-ops-field-span {
   grid-column: 1 / -1;
+}
+
+/* A taller neighbour (hint, validation) must not stretch a single-line control. */
+.kh-ops-form-grid > .kh-label {
+  align-content: start;
 }
 
 /* Start a new row so a following pair (start/end dates) stays side by side. */

@@ -287,6 +287,10 @@ export type McpToolHandlers = {
     entityId?: string;
     limit: number;
   }) => Promise<unknown>;
+  getWorkspaceMedia: (input: {
+    mediaId: string;
+    maxDimension?: number;
+  }) => Promise<unknown>;
   deleteWorkspaceMedia: (input: { mediaId: string }) => Promise<unknown>;
   /** NF-014 — redacted platform health snapshot (requires monitoring:read). */
   getPlatformStatus: () => Promise<unknown>;
@@ -494,6 +498,7 @@ export type McpToolHandlers = {
     usageOccurredAt?: string | null;
     billingPeriod?: string | null;
     aiSystemId?: string | null;
+    cloudAgentId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     sprintId?: string | null;
@@ -526,11 +531,13 @@ export type McpToolHandlers = {
     tokensInput?: number | null;
     tokensOutput?: number | null;
     tokensCache?: number | null;
+    tokensCacheWrite?: number | null;
     modelId?: string | null;
     pricingTier?: string | null;
     usageOccurredAt?: string | null;
     billingPeriod?: string | null;
     aiSystemId?: string | null;
+    cloudAgentId?: string | null;
   }) => Promise<unknown>;
   setProjectTaskRaci: (input: {
     taskId: string;
@@ -675,10 +682,18 @@ export type McpToolHandlers = {
     workspaceId: string;
     period?: string;
     aiSystemId?: string;
+    servicePeriodStart?: string;
+    servicePeriodEnd?: string;
+  }) => Promise<unknown>;
+  getPlatformAiCost: (input: {
+    from?: string;
+    to?: string;
   }) => Promise<unknown>;
   createAiBillingEntry: (input: {
     workspaceId: string;
-    period: string;
+    period?: string;
+    servicePeriodStart?: string | null;
+    servicePeriodEnd?: string | null;
     provider: string;
     type: 'subscription' | 'plan_change' | 'on_demand';
     amount: number | string;
@@ -692,6 +707,8 @@ export type McpToolHandlers = {
   updateAiBillingEntry: (input: {
     entryId: string;
     period?: string;
+    servicePeriodStart?: string | null;
+    servicePeriodEnd?: string | null;
     provider?: string;
     type?: 'subscription' | 'plan_change' | 'on_demand';
     amount?: number | string;
@@ -703,6 +720,15 @@ export type McpToolHandlers = {
     externalRef?: string | null;
   }) => Promise<unknown>;
   deleteAiBillingEntry: (input: { entryId: string }) => Promise<unknown>;
+  listAiUsageImports: (input: {
+    workspaceId: string;
+    limit?: number;
+  }) => Promise<unknown>;
+  importAiUsageCsv: (input: {
+    workspaceId: string;
+    csv: string;
+    fileName?: string | null;
+  }) => Promise<unknown>;
   deleteProjectStakeholder: (input: {
     projectId?: string;
     stakeholderId: string;
@@ -895,7 +921,17 @@ export function toMcpErrorResult(
   };
 }
 
-function textResult(data: unknown) {
+type McpToolContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+
+type McpToolResult = {
+  content: McpToolContent[];
+  isError?: true;
+  structuredContent?: Record<string, unknown>;
+};
+
+function textResult(data: unknown): McpToolResult {
   const sized = enforceResponseSize(data);
   const text = JSON.stringify(sized, null, 2);
   if (sized !== data) {
@@ -918,7 +954,7 @@ function textResult(data: unknown) {
  * tools/list advertises open output schemas so stale clients accept new
  * fields; structuredContent is still stripped to the declared Zod shape.
  */
-function structuredTextResult(data: unknown, outputShape?: z.ZodRawShape) {
+function structuredTextResult(data: unknown, outputShape?: z.ZodRawShape): McpToolResult {
   const sized = enforceResponseSize(data);
   if (sized !== data) {
     const text = JSON.stringify(sized, null, 2);
@@ -932,6 +968,56 @@ function structuredTextResult(data: unknown, outputShape?: z.ZodRawShape) {
   return {
     content: [{ type: 'text' as const, text }],
     structuredContent: shaped as Record<string, unknown>,
+  };
+}
+
+const workspaceMediaReadOutput = {
+  media: z.object({
+    id: z.string(),
+    mediaId: z.string(),
+    workspaceId: z.string(),
+    knowledgeRecordId: z.string().nullable(),
+    contentType: z.string(),
+    byteSize: z.number(),
+    originalFilename: z.string().nullable(),
+    altText: z.string().nullable(),
+    url: z.string(),
+    markdownSnippet: z.string(),
+    width: z.number().int().nullable(),
+    height: z.number().int().nullable(),
+    resized: z.boolean(),
+    imageIncluded: z.boolean(),
+    hint: z.string(),
+  }),
+  signedUrl: z.string(),
+  expiresAt: z.string(),
+};
+
+function imageContentBlock(
+  image: unknown,
+): { type: 'image'; data: string; mimeType: string } | null {
+  if (!image || typeof image !== 'object') return null;
+  const row = image as { data?: unknown; mimeType?: unknown };
+  if (typeof row.data !== 'string' || row.data.length === 0) return null;
+  if (typeof row.mimeType !== 'string' || !row.mimeType.startsWith('image/')) return null;
+  if (row.mimeType === 'image/svg+xml') return null;
+  return { type: 'image', data: row.data, mimeType: row.mimeType };
+}
+
+/** Metadata stays in structuredContent. Pixels are an MCP image block, not JSON. */
+function presentWorkspaceMediaRead(data: unknown): McpToolResult {
+  const record = data && typeof data === 'object' && !Array.isArray(data)
+    ? { ...(data as Record<string, unknown>) }
+    : null;
+  const image = record?.imageContent;
+  if (record) delete record.imageContent;
+  const structured = structuredTextResult(record ?? data, workspaceMediaReadOutput);
+  if (structured.isError) return structured;
+  const block = imageContentBlock(image);
+  if (!block) return structured;
+  return {
+    content: [...structured.content, block],
+    structuredContent: structured.structuredContent,
   };
 }
 
@@ -1011,11 +1097,7 @@ export function createKnowledgeHubMcpServer(
       scope: McpScope,
       fn: () => Promise<unknown>,
       argContext?: McpToolCallContext,
-      present: (data: unknown) => {
-        content: Array<{ type: 'text'; text: string }>;
-        isError?: true;
-        structuredContent?: Record<string, unknown>;
-      } = textResult,
+      present: (data: unknown) => McpToolResult = textResult,
     ) =>
     async () => {
       try {
@@ -1573,7 +1655,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. aiTheoreticalApiCost is tokens times API list prices and is not added to AC. aiPeriods is paid vs theoretical by month. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is tokens times API list prices and is not added to AC. aiPeriods is paid vs theoretical by month. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -1754,7 +1836,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record',
     {
       description:
-        'Get a knowledge record with markdown. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. returnedChars, chunkIndex (0, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (approximate if short). contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
+        'Get a knowledge record with markdown. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. returnedChars, chunkIndex (0, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (approximate if short). contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. Read pixels with call_hub_tool get_workspace_media. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
       inputSchema: {
         recordId: z.string().min(1).max(80),
         contentOffset: z.number().int().min(0).optional(),
@@ -1998,7 +2080,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_workspace_media',
-    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls, markdown snippets, and a short usedBy list. Optional filename query. Optional entityType+entityId (both required together) filters to images linked to that item; entityId may be a UUID or human key and the item must be in workspaceId. Readers are read-only. Requires knowledge:read.',
+    'List recent workspace media (JPEG/PNG/WebP/GIF) with urls, markdown snippets, and a short usedBy list. Each item includes mediaId. Call get_workspace_media to read image bytes (OAuth: call_hub_tool). Optional filename query. Optional entityType+entityId (both required together) filters to images linked to that item; entityId may be a UUID or human key and the item must be in workspaceId. Readers are read-only. Requires knowledge:read.',
     {
       workspaceId: z.string().uuid(),
       knowledgeRecordId: entityRef.optional(),
@@ -2015,6 +2097,41 @@ export function createKnowledgeHubMcpServer(
         'knowledge:read',
         () => handlers.listWorkspaceMedia(args),
         { workspaceId: args.workspaceId, recordId: args.knowledgeRecordId },
+      )(),
+  );
+
+  server.registerTool(
+    'get_workspace_media',
+    {
+      description:
+        'Read one workspace media file by mediaId. Raster images return MCP image content (longest side at most 1568 px and about 1 MB; never upscaled) plus metadata. SVG and non-images return metadata only. signedUrl is an absolute URL bound to this media and workspace for 10 minutes. Requires knowledge:read.',
+      inputSchema: {
+        mediaId: z.string().uuid(),
+        maxDimension: z
+          .number()
+          .int()
+          .min(1)
+          .max(1568)
+          .optional()
+          .describe(
+            'Optional longest-side cap in pixels. The server never exceeds 1568 or upscales.',
+          ),
+      },
+      outputSchema: workspaceMediaReadOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) =>
+      wrap(
+        'get_workspace_media',
+        'knowledge:read',
+        () => handlers.getWorkspaceMedia(args),
+        { mediaId: args.mediaId },
+        presentWorkspaceMediaRead,
       )(),
   );
 
@@ -2245,7 +2362,7 @@ export function createKnowledgeHubMcpServer(
     'get_project_task',
     {
       description:
-        'Get one project task or bug with RACI. The raci array is the current standing set (userId and role R/A/C/I) and includes the latest set_project_task_raci replacement. Hour fields (forecastHours, actualHours) returned as JSON numbers. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
+        'Get one project task or bug with RACI. The raci array is the current standing set (userId and role R/A/C/I) and includes the latest set_project_task_raci replacement. Hour fields (forecastHours, actualHours) returned as JSON numbers. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Each media link includes mediaId. Call get_workspace_media (OAuth: call_hub_tool) to read the image. Requires pm:read.',
       inputSchema: { taskId: entityRef },
       outputSchema: taskResultOutput,
     },
@@ -2575,7 +2692,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_task',
     {
       description:
-        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
       inputSchema: {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -2598,6 +2715,7 @@ export function createKnowledgeHubMcpServer(
       usageOccurredAt: z.string().max(40).nullable().optional(),
       billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
+      cloudAgentId: z.string().max(80).nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
       sprintId: entityRef.nullable().optional(),
@@ -2647,7 +2765,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'report_project_task_ai_usage',
-    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. tokensUsed alone bills the blended aiTokenRatePer1k and clears any stored breakdown (legacy). tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite bill split rates; a null split rate falls back to the blended rate. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional modelId, pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. tokensUsed alone bills the blended aiTokenRatePer1k and clears any stored breakdown (legacy). tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite bill split rates; a null split rate falls back to the blended rate. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional modelId, pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId links imported Cursor usage with that id onto this task. Requires pm:write.',
     {
       taskId: entityRef,
       tokensUsed: tokenCountSchema.optional(),
@@ -2660,6 +2778,7 @@ export function createKnowledgeHubMcpServer(
       usageOccurredAt: z.string().max(40).nullable().optional(),
       billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
+      cloudAgentId: z.string().max(80).nullable().optional(),
     },
     async (args) =>
       wrap('report_project_task_ai_usage', 'pm:write', () =>
@@ -3147,72 +3266,220 @@ export function createKnowledgeHubMcpServer(
   );
 
   const billingType = z.enum(['subscription', 'plan_change', 'on_demand']);
+  const billingPeriod = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+  const serviceDate = z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+  const billingEntryOutput = () =>
+    z.object({
+      id: z.string(),
+      workspaceId: z.string(),
+      aiSystemId: z.string().nullable(),
+      period: z.string().describe('Start month YYYY-MM. Derived from servicePeriodStart when set.'),
+      servicePeriodStart: z
+        .string()
+        .nullable()
+        .describe('Inclusive service start YYYY-MM-DD. Null keeps the whole amount in period.'),
+      servicePeriodEnd: z
+        .string()
+        .nullable()
+        .describe('Inclusive service end YYYY-MM-DD. A span is split across months by days.'),
+      provider: z.string(),
+      plan: z.string().nullable(),
+      type: z.enum(['subscription', 'plan_change', 'on_demand']),
+      amount: z.number(),
+      currency: z.string(),
+      paidAt: z.string().nullable(),
+      note: z.string().nullable(),
+      externalRef: z.string().nullable(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    });
+  const listBillingOutput = { entries: z.array(billingEntryOutput()) };
+  const createBillingOutput = { entry: billingEntryOutput() };
+  const updateBillingOutput = { entry: billingEntryOutput() };
 
   server.tool(
+    'get_platform_ai_cost',
+    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio. Multi-month entries are prorated by days. Currencies stay separate. Defaults to the last 12 months. System administrator only. Requires pm:read.',
+    {
+      from: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      to: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+    },
+    async (args) =>
+      wrap('get_platform_ai_cost', 'pm:read', () =>
+        handlers.getPlatformAiCost(args),
+      )(),
+  );
+
+  server.registerTool(
     'list_ai_billing_entries',
-    'List workspace AI billing ledger entries (subscription, plan_change, on_demand). Multiple rows per YYYY-MM are allowed; paid cost is their sum, allocated to projects by token share. Optional period and aiSystemId filters. Amounts are JSON numbers. Requires pm:read.',
     {
-      workspaceId: z.string().uuid(),
-      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
-      aiSystemId: z.string().uuid().optional(),
+      description:
+        'List workspace AI cost entries (subscription, plan_change, on_demand). Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A row that spans months is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional servicePeriodStart and servicePeriodEnd keep rows whose window overlaps that range. Optional aiSystemId filter. Amounts are JSON numbers. Requires pm:read.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        period: billingPeriod.optional(),
+        aiSystemId: z.string().uuid().optional(),
+        servicePeriodStart: serviceDate.optional().describe('YYYY-MM-DD overlap filter'),
+        servicePeriodEnd: serviceDate.optional().describe('YYYY-MM-DD overlap filter'),
+      },
+      outputSchema: listBillingOutput,
     },
     async (args) =>
-      wrap('list_ai_billing_entries', 'pm:read', () =>
-        handlers.listAiBillingEntries(args),
+      wrap(
+        'list_ai_billing_entries',
+        'pm:read',
+        () => handlers.listAiBillingEntries(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, listBillingOutput),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'create_ai_billing_entry',
-    'Add a paid AI fee for a workspace month. type is subscription, plan_change (upgrade or downgrade; amount may be negative), or on_demand. aiSystemId is optional; omit it for a workspace-wide pool such as one Cursor subscription. currency is the project currency code. Does not fetch invoices. Requires pm:write.',
     {
-      workspaceId: z.string().uuid(),
-      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-      provider: z.string().min(1).max(80),
-      type: billingType,
-      amount: z.union([z.number(), z.string()]),
-      currency: z.string().min(3).max(3),
-      aiSystemId: z.string().uuid().nullable().optional(),
-      plan: z.string().max(80).nullable().optional(),
-      paidAt: z.string().max(40).nullable().optional(),
-      note: z.string().max(500).nullable().optional(),
-      externalRef: z.string().max(120).nullable().optional(),
+      description:
+        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD, inclusive) prorate the amount across months by days; period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        period: billingPeriod.optional().describe('YYYY-MM. Derived from servicePeriodStart when that date is set.'),
+        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD'),
+        servicePeriodEnd: serviceDate.nullable().optional().describe('Inclusive service end YYYY-MM-DD'),
+        provider: z.string().min(1).max(80),
+        type: billingType,
+        amount: z.union([z.number(), z.string()]),
+        currency: z.string().min(3).max(3),
+        aiSystemId: z.string().uuid().nullable().optional(),
+        plan: z.string().max(80).nullable().optional(),
+        paidAt: z.string().max(40).nullable().optional(),
+        note: z.string().max(500).nullable().optional(),
+        externalRef: z.string().max(120).nullable().optional(),
+      },
+      outputSchema: createBillingOutput,
     },
     async (args) =>
-      wrap('create_ai_billing_entry', 'pm:write', () =>
-        handlers.createAiBillingEntry(args),
+      wrap(
+        'create_ai_billing_entry',
+        'pm:write',
+        () => handlers.createAiBillingEntry(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, createBillingOutput),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'update_ai_billing_entry',
-    'Update one AI billing ledger entry by entryId. plan_change may be negative. Requires pm:write.',
     {
-      entryId: z.string().uuid(),
-      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
-      provider: z.string().min(1).max(80).optional(),
-      type: billingType.optional(),
-      amount: z.union([z.number(), z.string()]).optional(),
-      currency: z.string().min(3).max(3).optional(),
-      aiSystemId: z.string().uuid().nullable().optional(),
-      plan: z.string().max(80).nullable().optional(),
-      paidAt: z.string().max(40).nullable().optional(),
-      note: z.string().max(500).nullable().optional(),
-      externalRef: z.string().max(120).nullable().optional(),
+      description:
+        'Update one AI cost entry by entryId. plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) replace the service window; period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
+      inputSchema: {
+        entryId: z.string().uuid(),
+        period: billingPeriod.optional(),
+        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD'),
+        servicePeriodEnd: serviceDate.nullable().optional().describe('Inclusive service end YYYY-MM-DD'),
+        provider: z.string().min(1).max(80).optional(),
+        type: billingType.optional(),
+        amount: z.union([z.number(), z.string()]).optional(),
+        currency: z.string().min(3).max(3).optional(),
+        aiSystemId: z.string().uuid().nullable().optional(),
+        plan: z.string().max(80).nullable().optional(),
+        paidAt: z.string().max(40).nullable().optional(),
+        note: z.string().max(500).nullable().optional(),
+        externalRef: z.string().max(120).nullable().optional(),
+      },
+      outputSchema: updateBillingOutput,
     },
     async (args) =>
-      wrap('update_ai_billing_entry', 'pm:write', () =>
-        handlers.updateAiBillingEntry(args),
+      wrap(
+        'update_ai_billing_entry',
+        'pm:write',
+        () => handlers.updateAiBillingEntry(args),
+        undefined,
+        (data) => structuredTextResult(data, updateBillingOutput),
       )(),
   );
 
   server.tool(
     'delete_ai_billing_entry',
-    'Delete one AI billing ledger entry by entryId. Requires pm:write.',
+    'Delete one AI cost entry by entryId. Requires pm:write.',
     { entryId: z.string().uuid() },
     async (args) =>
       wrap('delete_ai_billing_entry', 'pm:write', () =>
         handlers.deleteAiBillingEntry(args),
+      )(),
+  );
+
+  const usageImportRowOutput = z
+    .object({
+      id: z.string(),
+      workspaceId: z.string(),
+      source: z.string(),
+      fileName: z.string().nullable(),
+      createdAt: z.string(),
+      rowCountTotal: z.number().int(),
+      rowCountInserted: z.number().int(),
+      rowCountDuplicate: z.number().int(),
+      rowCountLinked: z.number().int(),
+      rowCountErrors: z.number().int(),
+      rowCountNoTokens: z.number().int(),
+    })
+    .passthrough();
+  const usageImportErrorOutput = z
+    .object({
+      rowNumber: z.number().int(),
+      message: z.string(),
+    })
+    .passthrough();
+  const listUsageImportsOutput = {
+    imports: z.array(usageImportRowOutput),
+  };
+  const importUsageOutput = {
+    import: usageImportRowOutput.extend({
+      errors: z.array(usageImportErrorOutput).optional(),
+    }),
+  };
+
+  server.registerTool(
+    'list_ai_usage_imports',
+    {
+      description:
+        'List workspace AI usage imports (CSV today). Each row records who imported it, the file name, source, and counts for total, inserted, duplicate, linked, error, and no-token rows. Rows with every token column empty are skipped, not stored, and not errors. Read-only. Requires pm:read. Workspace members can read; importing is workspace-admin only.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        limit: z.number().int().min(1).max(100).optional(),
+      },
+      outputSchema: listUsageImportsOutput,
+    },
+    async (args) =>
+      wrap(
+        'list_ai_usage_imports',
+        'pm:read',
+        () => handlers.listAiUsageImports(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, listUsageImportsOutput),
+      )(),
+  );
+
+  server.registerTool(
+    'import_ai_usage_csv',
+    {
+      description:
+        'Import a Cursor usage CSV into the workspace. Dedupes on Date + Cloud Agent ID + Model + Total Tokens. Rows with a Cloud Agent ID link to the task that stores that id. Rows with every token column empty are counted as no token data and are not inserted. Re-importing the same rows does not double count. csv is the file text. Workspace administrator only, plus pm:write. The Cursor Admin API source is not available on this tool.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        csv: z.string().min(1).max(8_000_000),
+        fileName: z.string().max(200).nullable().optional(),
+      },
+      outputSchema: importUsageOutput,
+    },
+    async (args) =>
+      wrap(
+        'import_ai_usage_csv',
+        'pm:write',
+        () => handlers.importAiUsageCsv(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, importUsageOutput),
       )(),
   );
 
@@ -3715,11 +3982,16 @@ export function createKnowledgeHubMcpServer(
         arguments: z.record(z.string(), z.unknown()).optional(),
       },
       async (args) =>
-        wrap('call_hub_tool', 'projects:read', () =>
-          invokeNamedHubTool(handlers, client.scopes, 'call_hub_tool', {
-            toolName: args.toolName,
-            arguments: args.arguments ?? {},
-          }),
+        wrap(
+          'call_hub_tool',
+          'projects:read',
+          () =>
+            invokeNamedHubTool(handlers, client.scopes, 'call_hub_tool', {
+              toolName: args.toolName,
+              arguments: args.arguments ?? {},
+            }),
+          undefined,
+          args.toolName === 'get_workspace_media' ? presentWorkspaceMediaRead : textResult,
         )(),
     );
     limitOauthToolSurface(server);

@@ -20,7 +20,7 @@ export function canMutateWorkspace(session: SessionPayload, workspaceId: string)
   );
 }
 
-export function canPurgeWorkspace(session: SessionPayload, workspaceId: string): boolean {
+export function canAdminWorkspace(session: SessionPayload, workspaceId: string): boolean {
   return (
     session.user.isSystemAdmin ||
     session.memberships.some(
@@ -28,6 +28,10 @@ export function canPurgeWorkspace(session: SessionPayload, workspaceId: string):
         membership.workspaceId === workspaceId && membership.role === 'workspace_admin',
     )
   );
+}
+
+export function canPurgeWorkspace(session: SessionPayload, workspaceId: string): boolean {
+  return canAdminWorkspace(session, workspaceId);
 }
 
 /** Same resolution as the project page: missing or inaccessible is 404. */
