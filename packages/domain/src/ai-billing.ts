@@ -131,6 +131,24 @@ export function summarizeAiBillingMonth(
   };
 }
 
+export type AiBillingEntryMonthSlice = {
+  period: string;
+  amount: number;
+};
+
+/**
+ * Months a cost entry contributes to, and the amount in each.
+ * Today the whole amount stays on `period`. Do not prorate here.
+ * When service-period dates exist, replace this body with
+ * `splitBillingEntryByMonth` (PRO-T-104).
+ */
+export function aiBillingEntryMonthSlices(entry: {
+  period: string;
+  amount: number;
+}): AiBillingEntryMonthSlice[] {
+  return [{ period: entry.period, amount: entry.amount }];
+}
+
 export function isAiBillingActiveProject(
   status: string,
   archivedAt: Date | string | null | undefined,
@@ -924,13 +942,16 @@ export function buildPlatformAiCost(input: {
   const providers = new Set<string>();
   for (const workspace of input.workspaces) {
     for (const entry of workspace.entries) {
-      if (!aiBillingPeriodInWindow(entry.period, from, to)) continue;
+      const months = aiBillingEntryMonthSlices(entry).map((slice) => slice.period);
+      if (!months.some((period) => aiBillingPeriodInWindow(period, from, to))) {
+        continue;
+      }
       providers.add(entry.provider);
       if (filter?.workspaceId && filter.workspaceId !== workspace.workspaceId) {
         continue;
       }
       if (filter?.type && filter.type !== entry.type) continue;
-      if (filter?.period && filter.period !== entry.period) continue;
+      if (filter?.period && !months.includes(filter.period)) continue;
       if (providerNeedle && entry.provider.trim().toLowerCase() !== providerNeedle) {
         continue;
       }

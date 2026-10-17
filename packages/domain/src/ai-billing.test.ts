@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aiBillingEntryMonthSlices,
   allocateAiBillingPool,
   buildPlatformAiCost,
   defaultAiBillingWindow,
@@ -331,6 +332,14 @@ describe('settleProjectAiCost', () => {
       usage: [],
     });
     expect(roundAiMoney(left.aiPaidAc + right.aiPaidAc)).toBe(20);
+  });
+});
+
+describe('aiBillingEntryMonthSlices', () => {
+  it('keeps the full amount on period until service-period proration exists', () => {
+    expect(aiBillingEntryMonthSlices({ period: '2026-10', amount: -20 })).toEqual([
+      { period: '2026-10', amount: -20 },
+    ]);
   });
 });
 

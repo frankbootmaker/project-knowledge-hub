@@ -49,7 +49,7 @@ Sprint rows on the summary are theoretical only. Paid fees stay on the calendar 
 
 ## Platform AI cost (PRO-T-102)
 
-System administrators open Admin → Financials → AI Cost (`/admin/financials`). The monthly paid totals (subscription, plan change, on-demand), theoretical API cost, difference, and ratio are the sum of each workspace's own AI Cost chart for that month. Another currency is a separate total. The default window is the last 12 months. The cost-entry list is read-only and links to that workspace's Financials → AI Cost tab, where the entry is edited. `get_platform_ai_cost` returns the same summary for a system administrator (`pm:read`, via `call_hub_tool`).
+System administrators open Admin → Financials → AI Cost (`/admin/financials`). The monthly paid totals (subscription, plan change, on-demand), theoretical API cost, difference, and ratio are the sum of each workspace's own AI Cost chart for that month. Another currency is a separate total. The default window is the last 12 months. The cost-entry list is read-only and links to that workspace's Financials → AI Cost tab, where the entry is edited. `get_platform_ai_cost` returns the same summary for a system administrator (`pm:read`, via `call_hub_tool`). An entry is assigned to a month only by `aiBillingEntryMonthSlices`, which keeps the full amount on `period`. That function should call `splitBillingEntryByMonth` when service-period dates exist (PRO-T-104). Do not add a second proration path.
 
 ## Entities
 

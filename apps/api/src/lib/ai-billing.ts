@@ -9,6 +9,7 @@ import {
   workspaces,
 } from '@project-knowledge-hub/database';
 import {
+  aiBillingEntryMonthSlices,
   allocateAiBillingPool,
   assertAiBillingPeriod,
   assertAllocationPercent,
@@ -486,6 +487,47 @@ function poolId(period: string, aiSystemId: string | null, currency: string): st
   return `${period}|${aiSystemId ?? ''}|${currency}`;
 }
 
+type MonthPool = {
+  period: string;
+  aiSystemId: string | null;
+  currency: string;
+  subscription: number;
+  planChange: number;
+  onDemand: number;
+  paidTotal: number;
+};
+
+/** Put an entry onto month pools via `aiBillingEntryMonthSlices`. */
+function addEntryToMonthPools(
+  pools: Map<string, MonthPool>,
+  entry: {
+    period: string;
+    amount: string | number;
+    aiSystemId: string | null;
+    currency: string;
+    type: string;
+  },
+): void {
+  const amount = Number(entry.amount);
+  for (const slice of aiBillingEntryMonthSlices({ period: entry.period, amount })) {
+    const key = poolId(slice.period, entry.aiSystemId, entry.currency);
+    const pool = pools.get(key) ?? {
+      period: slice.period,
+      aiSystemId: entry.aiSystemId,
+      currency: entry.currency,
+      subscription: 0,
+      planChange: 0,
+      onDemand: 0,
+      paidTotal: 0,
+    };
+    pool.paidTotal += slice.amount;
+    if (entry.type === 'subscription') pool.subscription += slice.amount;
+    else if (entry.type === 'plan_change') pool.planChange += slice.amount;
+    else pool.onDemand += slice.amount;
+    pools.set(key, pool);
+  }
+}
+
 /**
  * Allocate the workspace ledger onto one project and compare it with the
  * theoretical API cost. With no applicable ledger entries, paid AC is the
@@ -612,33 +654,9 @@ export async function loadProjectPaidAi(
     assistantRows.map((row) => [row.id, row.projectId]),
   );
 
-  type Pool = {
-    period: string;
-    aiSystemId: string | null;
-    currency: string;
-    subscription: number;
-    planChange: number;
-    onDemand: number;
-    paidTotal: number;
-  };
-  const pools = new Map<string, Pool>();
+  const pools = new Map<string, MonthPool>();
   for (const entry of entryRows) {
-    const key = poolId(entry.period, entry.aiSystemId, entry.currency);
-    const pool = pools.get(key) ?? {
-      period: entry.period,
-      aiSystemId: entry.aiSystemId,
-      currency: entry.currency,
-      subscription: 0,
-      planChange: 0,
-      onDemand: 0,
-      paidTotal: 0,
-    };
-    const amount = Number(entry.amount);
-    pool.paidTotal += amount;
-    if (entry.type === 'subscription') pool.subscription += amount;
-    else if (entry.type === 'plan_change') pool.planChange += amount;
-    else pool.onDemand += amount;
-    pools.set(key, pool);
+    addEntryToMonthPools(pools, entry);
   }
 
   const shares: AiBillingProjectShare[] = [];
@@ -949,33 +967,9 @@ export async function loadWorkspaceAiCostOverview(
       )
       .reduce((sum, row) => sum + row.tokens, 0);
 
-  type Pool = {
-    period: string;
-    aiSystemId: string | null;
-    currency: string;
-    subscription: number;
-    planChange: number;
-    onDemand: number;
-    paidTotal: number;
-  };
-  const pools = new Map<string, Pool>();
+  const pools = new Map<string, MonthPool>();
   for (const entry of entryRows) {
-    const key = poolId(entry.period, entry.aiSystemId, entry.currency);
-    const pool = pools.get(key) ?? {
-      period: entry.period,
-      aiSystemId: entry.aiSystemId,
-      currency: entry.currency,
-      subscription: 0,
-      planChange: 0,
-      onDemand: 0,
-      paidTotal: 0,
-    };
-    const amount = Number(entry.amount);
-    pool.paidTotal += amount;
-    if (entry.type === 'subscription') pool.subscription += amount;
-    else if (entry.type === 'plan_change') pool.planChange += amount;
-    else pool.onDemand += amount;
-    pools.set(key, pool);
+    addEntryToMonthPools(pools, entry);
   }
 
   const chart = new Map<
