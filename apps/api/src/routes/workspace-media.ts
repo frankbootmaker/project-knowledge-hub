@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { users, workspaces } from '@project-knowledge-hub/database';
@@ -13,6 +13,7 @@ import {
 } from '../plugins/auth.js';
 import { writeAuditEvent } from '../lib/identity.js';
 import { getEffectiveMediaMaxBytes } from '../lib/media-max-bytes.js';
+import { verifyMediaRead } from '../lib/media-signed-url.js';
 import { appendMediaLink, mediaUsedBy } from '../lib/project-item-media.js';
 import {
   archiveWorkspaceMedia,
@@ -22,6 +23,7 @@ import {
   readMediaBytes,
   toPublicMedia,
   updateWorkspaceMedia,
+  type WorkspaceMediaRow,
 } from '../lib/workspace-media.js';
 
 async function displayNamesByUserId(
@@ -47,6 +49,39 @@ async function organizationIdForWorkspace(
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
   return row?.organizationId ?? null;
+}
+
+async function sendMediaBytes(
+  app: FastifyInstance,
+  reply: FastifyReply,
+  row: WorkspaceMediaRow,
+  signed: boolean,
+) {
+  const { store: blobStore } = await app.getBlobStore();
+  const buffer = await readMediaBytes(
+    app.env.MEDIA_UPLOAD_DIR,
+    row.workspaceId,
+    row.id,
+    { blobStore },
+  );
+  if (!buffer) {
+    throw new AppError({
+      code: 'MEDIA_NOT_FOUND',
+      message: 'Media bytes not found',
+      statusCode: 404,
+    });
+  }
+
+  reply.header('Content-Type', row.contentType);
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('Cache-Control', signed ? 'private, no-store' : 'private, max-age=3600');
+  if (row.originalFilename) {
+    reply.header(
+      'Content-Disposition',
+      `inline; filename="${row.originalFilename.replace(/"/g, '')}"`,
+    );
+  }
+  return reply.send(buffer);
 }
 
 export async function registerWorkspaceMediaRoutes(
@@ -209,44 +244,59 @@ export async function registerWorkspaceMediaRoutes(
   });
 
   app.get('/api/v1/media/:mediaId', async (request, reply) => {
-    const principal = requireAuthenticated(request);
     const params = z.object({ mediaId: z.string().uuid() }).parse(request.params);
+    const query = z
+      .object({
+        exp: z.string().max(16).optional(),
+        sig: z.string().max(200).optional(),
+      })
+      .parse(request.query ?? {});
+    const hasSignature = Boolean(query.exp || query.sig);
+
+    if (!hasSignature) {
+      const principal = requireAuthenticated(request);
+      const row = await getWorkspaceMediaById(app.database, params.mediaId);
+      if (!row) {
+        throw new AppError({
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media not found',
+          statusCode: 404,
+        });
+      }
+      requireWorkspaceView(principal, row.workspaceId);
+      return sendMediaBytes(app, reply, row, false);
+    }
 
     const row = await getWorkspaceMediaById(app.database, params.mediaId);
     if (!row) {
+      if (!request.principal) {
+        throw new AppError({
+          code: 'UNAUTHENTICATED',
+          message: 'Authentication is required',
+          statusCode: 401,
+        });
+      }
       throw new AppError({
         code: 'MEDIA_NOT_FOUND',
         message: 'Media not found',
         statusCode: 404,
       });
     }
-    requireWorkspaceView(principal, row.workspaceId);
 
-    const { store: blobStore } = await app.getBlobStore();
-    const buffer = await readMediaBytes(
-      app.env.MEDIA_UPLOAD_DIR,
-      row.workspaceId,
-      row.id,
-      { blobStore },
-    );
-    if (!buffer) {
-      throw new AppError({
-        code: 'MEDIA_NOT_FOUND',
-        message: 'Media bytes not found',
-        statusCode: 404,
-      });
+    const signatureOk = query.exp && query.sig
+      ? verifyMediaRead({
+          secret: app.env.SESSION_SECRET,
+          mediaId: row.id,
+          workspaceId: row.workspaceId,
+          exp: query.exp,
+          sig: query.sig,
+        }) === 'ok'
+      : false;
+    if (!signatureOk) {
+      const principal = requireAuthenticated(request);
+      requireWorkspaceView(principal, row.workspaceId);
     }
-
-    reply.header('Content-Type', row.contentType);
-    reply.header('X-Content-Type-Options', 'nosniff');
-    reply.header('Cache-Control', 'private, max-age=3600');
-    if (row.originalFilename) {
-      reply.header(
-        'Content-Disposition',
-        `inline; filename="${row.originalFilename.replace(/"/g, '')}"`,
-      );
-    }
-    return reply.send(buffer);
+    return sendMediaBytes(app, reply, row, signatureOk);
   });
 
   app.patch('/api/v1/media/:mediaId', async (request) => {
