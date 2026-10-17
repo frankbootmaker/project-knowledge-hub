@@ -324,7 +324,11 @@ export async function relinkTaskUsage(
 async function statsForParsed(
   database: Database,
   workspaceId: string,
-  parsed: { rows: NormalizedAiUsageRow[]; errors: AiUsageRowError[] },
+  parsed: {
+    rows: NormalizedAiUsageRow[];
+    errors: AiUsageRowError[];
+    rowCountNoTokens: number;
+  },
 ): Promise<UsageImportStats> {
   const prepared = await prepareRows(database, workspaceId, parsed.rows);
   return previewUsageImport({
