@@ -76,12 +76,39 @@ const ragStatus = {
   enum: ['green', 'amber', 'red'],
 };
 
+const riskReasonOutput = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['count', 'severity', 'kind', 'cause'],
+  description:
+    'One grouped reason for an amber or red risk RAG. dueInDays is present only when cause is due_soon (0 means due today).',
+  properties: {
+    count: { type: 'integer', minimum: 1, description: 'Open or mitigating items in this group.' },
+    severity: { type: 'string', description: 'RAID severity: critical, high, medium, or low.' },
+    kind: {
+      type: 'string',
+      description: 'RAID kind: risk, assumption, issue, or dependency.',
+    },
+    cause: {
+      type: 'string',
+      enum: ['issue', 'overdue', 'due_soon', 'severity'],
+      description:
+        'issue: critical materialised issue. overdue: due before today. due_soon: due within 7 days. severity: critical or high that is not near its due date.',
+    },
+    dueInDays: {
+      type: 'integer',
+      minimum: 0,
+      description: 'Calendar days until due. Only for cause due_soon.',
+    },
+  },
+};
+
 const projectHealthOutput = {
   type: 'object',
   additionalProperties: false,
-  required: ['overall', 'timeline', 'risk', 'financial'],
+  required: ['overall', 'timeline', 'risk', 'financial', 'riskReasons'],
   description:
-    'Delivery health. status is the lifecycle stage; health.overall is the RAG. financial is null when the budget summary failed.',
+    'Delivery health. status is the lifecycle stage; health.overall is the RAG. financial is null when the budget summary failed. riskReasons explains an amber or red risk RAG and is empty when risk is green.',
   properties: {
     overall: {
       ...ragStatus,
@@ -93,12 +120,19 @@ const projectHealthOutput = {
     },
     risk: {
       ...ragStatus,
-      description: 'Open or mitigating RAID RAG.',
+      description:
+        'Open or mitigating RAID RAG. Red: critical overdue, due within 7 days, or kind issue; or high overdue. Amber: any other critical (later or no due date), any other high, or any overdue item. Green otherwise. Closed, accepted, cancelled, and archived items are ignored.',
     },
     financial: {
       ...ragStatus,
       nullable: true,
       description: 'Budget RAG. Null when the budget summary failed.',
+    },
+    riskReasons: {
+      type: 'array',
+      description:
+        'Why risk is amber or red. Same rule as get_project_budget_summary riskRag. Empty when risk is green.',
+      items: riskReasonOutput,
     },
   },
 };
@@ -658,7 +692,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_projects',
     description:
-      'List accessible projects. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial). Filter by status or stage (idea, planned, active, maintenance, paused, completed, archived).',
+      'List accessible projects. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial). health.riskReasons explains an amber or red risk RAG and is empty when risk is green. Filter by status or stage (idea, planned, active, maintenance, paused, completed, archived).',
     scope: 'projects:read',
     openApi: true,
     defaults: { limit: 50 },
@@ -693,7 +727,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project',
     description:
-      'Get a project by id. projectId (UUID) is required. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial; financial is null when the budget summary failed). Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, health, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
+      'Get a project by id. projectId (UUID) is required. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial; financial is null when the budget summary failed). health.riskReasons explains an amber or red risk RAG (empty when green) using the same rule as get_project_budget_summary riskRag. Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, health, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
     scope: 'projects:read',
     openApi: true,
     output: projectBaselineResult,
@@ -2017,7 +2051,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'get_project_budget_summary',
-    description: 'EVM summary, RAG, burndown, epic cost rollups. Requires pm:read.',
+    description:
+      'EVM summary, financialRag, riskRag, riskReasons, burndown, and epic cost rollups. riskRag uses open or mitigating RAID only (closed, accepted, cancelled, and archived are ignored) and the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons lists that colour (count, severity, kind, cause, dueInDays) and is empty when green. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',

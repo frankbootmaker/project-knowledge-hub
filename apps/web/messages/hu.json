@@ -830,6 +830,23 @@
       "red": "Kritikus",
       "none": "Nincs költségvetés"
     },
+    "riskReasonIssue": "{count} {severity} {kind}",
+    "riskReasonOverdue": "{count} {severity} {kind} lejárt",
+    "riskReasonDueSoon": "{count} {severity} {kind} {days} nap múlva esedékes",
+    "riskReasonDueToday": "{count} {severity} {kind} ma esedékes",
+    "riskReasonOpen": "{count} {severity} {kind}",
+    "riskReasonSeverity": {
+      "critical": "kritikus",
+      "high": "magas",
+      "medium": "közepes",
+      "low": "alacsony"
+    },
+    "riskReasonKind": {
+      "risk": "{count, plural, one {kockázat} other {kockázat}}",
+      "assumption": "{count, plural, one {feltételezés} other {feltételezés}}",
+      "issue": "{count, plural, one {probléma} other {probléma}}",
+      "dependency": "{count, plural, one {függőség} other {függőség}}"
+    },
     "manageReports": "Jelentések",
     "manageReportsHint": "Státusz-, teljesítés- vagy stakeholder-jelentés megtekintése, majd export vagy nyomtatás.",
     "reportStatus": "Projekt státuszjelentés",
@@ -3231,6 +3248,8 @@
     "colStatus": "Státusz",
     "colOwner": "Tulajdonos",
     "colDue": "Áttekintés",
+    "dueOverdue": "Lejárt",
+    "dueSoon": "7 napon belül esedékes",
     "colLinked": "Kapcsolt munka",
     "searchPlaceholder": "Keresés cím, típus, tulajdonos, feladat…",
     "filterLabel": "Szűrés típus és státusz szerint",

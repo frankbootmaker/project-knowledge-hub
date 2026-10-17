@@ -82,7 +82,18 @@ project_cost_snapshots
 | AC > 0.85×BAC or CPI < 1.0 | amber |
 | else | green |
 
-Risk RAG uses open/mitigating RAID (`critical` → red, `high` → amber). That rule lives in one function (`computeRiskRag`); a later change (PRO-T-98) can make it due-date-aware without copying it.
+Risk RAG (PRO-T-98) uses open or mitigating RAID only. Closed, accepted, cancelled, and archived items stay out. The at-risk window is the same `TIMELINE_AT_RISK_DAYS` (7 calendar days, inclusive) as the timeline RAG.
+
+| Open / mitigating item | RAG |
+| --- | --- |
+| Critical, and overdue, due within 7 days, or kind `issue` | red |
+| High and overdue | red |
+| Any other critical (due later, or no due date) | amber |
+| Any other high | amber |
+| Any other severity that is overdue | amber |
+| else | green |
+
+A critical issue is red even with no due date. A critical risk due far in the future is amber; the same risk due within 7 days or overdue is red. The rule lives in one function (`assessRiskRag` / `computeRiskRag`). `riskReasons` explains the colour (for example “1 critical issue”, “1 critical risk due in 2 days”, “1 high risk overdue”) and is empty when the risk RAG is green. Project header, catalogue card, dashboard, REST, and MCP all read that same result.
 
 Timeline RAG uses one window, `TIMELINE_AT_RISK_DAYS` (7 calendar days, inclusive). An open task or milestone that is overdue is red; one due within 7 days is amber; otherwise green. Done, cancelled, and undated items do not move it. Overall RAG is the worst of timeline, risk, and financial. If the budget summary fails, financial is null and overall falls back to the timeline RAG only.
 

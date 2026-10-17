@@ -80,6 +80,7 @@ describe('listProjectHealth', () => {
       timeline: 'amber',
       risk: 'green',
       financial: 'green',
+      riskReasons: [],
     });
     expect(health.get('p-2')?.overall).toBe('green');
   });
@@ -101,6 +102,7 @@ describe('listProjectHealth', () => {
       timeline: 'green',
       risk: 'green',
       financial: 'red',
+      riskReasons: [],
     });
   });
 
@@ -118,6 +120,7 @@ describe('listProjectHealth', () => {
       timeline: 'amber',
       risk: 'green',
       financial: null,
+      riskReasons: [],
     });
   });
 
