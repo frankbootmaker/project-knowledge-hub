@@ -20,7 +20,7 @@ Track **project currency and BAC**, **stakeholder hourly rates and capacity**, *
 | EV | Σ (`forecast_hours × rate`) for **done** non-cancelled rateable tasks (people only; AI tokens do not create EV in v1) |
 | AC | Person Σ (`actual_hours × rate`) + billable AI + billable non-AI system OpEx |
 | AI cost modes | On AI systems (`system_type = ai_assistant`): `flat` \| `api` \| `mixed` \| `note_only` (`note_only` records tokens at **$0**) |
-| Paid AI (ledger) | Workspace entries in `ai_billing_entries`, not per project. A month's paid total is the sum of `subscription`, `plan_change`, and `on_demand`. See allocation below. |
+| Paid AI (ledger) | Workspace entries in `ai_billing_entries`, not per project. A month's paid total is the sum of `subscription`, `plan_change`, and `on_demand` after day proration. See allocation below. |
 | System OpEx modes | On other catalogue systems linked to the project: `flat` \| `one_time` \| `note_only` (`note_only` / unset → **$0**) |
 | Flat fee | Monthly amount accrued over project start→end (calendar-day fraction); shared by AI and IT flat modes |
 | One-time fee | Full `it_one_time_cost` counted in AC when mode is `one_time` |
@@ -35,7 +35,7 @@ Track **project currency and BAC**, **stakeholder hourly rates and capacity**, *
 
 Ledger rows live on the workspace (`ai_billing_entries`), optionally on one AI system. They are not stored per project. Admins edit them under Financials → AI Cost. The project budget page shows only that project’s allocated share.
 
-1. Group rows by month, currency, and system (a null system is the workspace pool). The paid total is the sum. `plan_change` may be a credit.
+1. Group rows by month, currency, and system (a null system is the workspace-wide pool, allocated across all projects in the workspace). The paid total is the sum. `plan_change` may be a credit. A row with `service_period_start` and `service_period_end` (inclusive) is split across those calendar months by the number of days in each month before this grouping. 12 October–11 November is 20/31 in October and 11/31 in November. Cents use the largest remainder (`splitBillingEntryByMonth` in `@project-knowledge-hub/domain`) so the slices sum to the row. `period` is the start month (`YYYY-MM`). A row with no service dates keeps the whole amount in `period`. Allocation overrides apply to each month's slice. Migration `0069` backfills existing rows as the first and last day of their `period` month, which leaves that month unchanged.
 2. Manual percents (`ai_billing_allocation_overrides`) apply first and must sum to at most 100. Each percent is that share of the pool.
 3. The remainder, or the whole pool when there is no override, is split in proportion to token usage in that month. A workspace pool counts every project's tokens. A system pool counts tokens on that system. Projects with no tokens get nothing in this step.
 4. If that remainder has no tokens, it is split equally across active projects (idea, planned, active, maintenance, paused; not archived, not completed). A completed project still receives a token share when it used tokens.
@@ -92,8 +92,10 @@ project_cost_snapshots
   └── (project_id, captured_on) → bac, pv, ev, ac
 
 ai_billing_entries (workspace)
-  ├── period, provider, plan, type, amount, currency
-  ├── ai_system_id (null = workspace pool)
+  ├── period (YYYY-MM, the start month)
+  ├── service_period_start / service_period_end (inclusive; null = whole period)
+  ├── provider, plan, type, amount, currency
+  ├── ai_system_id (null = workspace-wide pool)
   └── paid_at, note, external_ref
 
 ai_billing_allocation_overrides (workspace)

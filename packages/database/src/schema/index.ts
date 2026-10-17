@@ -356,8 +356,12 @@ export const aiBillingEntries = pgTable(
     aiSystemId: uuid('ai_system_id').references(() => systems.id, {
       onDelete: 'set null',
     }),
-    /** YYYY-MM. */
+    /** YYYY-MM. The start month when the service window is set. */
     period: text('period').notNull(),
+    /** Inclusive first day. Null keeps the whole amount in period. */
+    servicePeriodStart: date('service_period_start', { mode: 'string' }),
+    /** Inclusive last day. Null together with the start. */
+    servicePeriodEnd: date('service_period_end', { mode: 'string' }),
     provider: text('provider').notNull(),
     plan: text('plan'),
     /** subscription | plan_change | on_demand. */

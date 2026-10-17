@@ -678,10 +678,14 @@ export type McpToolHandlers = {
     workspaceId: string;
     period?: string;
     aiSystemId?: string;
+    servicePeriodStart?: string;
+    servicePeriodEnd?: string;
   }) => Promise<unknown>;
   createAiBillingEntry: (input: {
     workspaceId: string;
-    period: string;
+    period?: string;
+    servicePeriodStart?: string | null;
+    servicePeriodEnd?: string | null;
     provider: string;
     type: 'subscription' | 'plan_change' | 'on_demand';
     amount: number | string;
@@ -695,6 +699,8 @@ export type McpToolHandlers = {
   updateAiBillingEntry: (input: {
     entryId: string;
     period?: string;
+    servicePeriodStart?: string | null;
+    servicePeriodEnd?: string | null;
     provider?: string;
     type?: 'subscription' | 'plan_change' | 'on_demand';
     amount?: number | string;
@@ -1585,7 +1591,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. aiTheoreticalApiCost is tokens times API list prices and is not added to AC. aiPeriods is paid vs theoretical by month. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is tokens times API list prices and is not added to AC. aiPeriods is paid vs theoretical by month. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -3161,62 +3167,124 @@ export function createKnowledgeHubMcpServer(
   );
 
   const billingType = z.enum(['subscription', 'plan_change', 'on_demand']);
+  const billingPeriod = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+  const serviceDate = z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+  const billingEntryOutput = () =>
+    z.object({
+      id: z.string(),
+      workspaceId: z.string(),
+      aiSystemId: z.string().nullable(),
+      period: z.string().describe('Start month YYYY-MM. Derived from servicePeriodStart when set.'),
+      servicePeriodStart: z
+        .string()
+        .nullable()
+        .describe('Inclusive service start YYYY-MM-DD. Null keeps the whole amount in period.'),
+      servicePeriodEnd: z
+        .string()
+        .nullable()
+        .describe('Inclusive service end YYYY-MM-DD. A span is split across months by days.'),
+      provider: z.string(),
+      plan: z.string().nullable(),
+      type: z.enum(['subscription', 'plan_change', 'on_demand']),
+      amount: z.number(),
+      currency: z.string(),
+      paidAt: z.string().nullable(),
+      note: z.string().nullable(),
+      externalRef: z.string().nullable(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    });
+  const listBillingOutput = { entries: z.array(billingEntryOutput()) };
+  const createBillingOutput = { entry: billingEntryOutput() };
+  const updateBillingOutput = { entry: billingEntryOutput() };
 
-  server.tool(
+  server.registerTool(
     'list_ai_billing_entries',
-    'List workspace AI cost entries (subscription, plan_change, on_demand). Multiple rows per YYYY-MM are allowed; paid cost is their sum, allocated to projects by token share. Optional period and aiSystemId filters. Amounts are JSON numbers. Requires pm:read.',
     {
-      workspaceId: z.string().uuid(),
-      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
-      aiSystemId: z.string().uuid().optional(),
+      description:
+        'List workspace AI cost entries (subscription, plan_change, on_demand). Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A row that spans months is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional servicePeriodStart and servicePeriodEnd keep rows whose window overlaps that range. Optional aiSystemId filter. Amounts are JSON numbers. Requires pm:read.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        period: billingPeriod.optional(),
+        aiSystemId: z.string().uuid().optional(),
+        servicePeriodStart: serviceDate.optional().describe('YYYY-MM-DD overlap filter'),
+        servicePeriodEnd: serviceDate.optional().describe('YYYY-MM-DD overlap filter'),
+      },
+      outputSchema: listBillingOutput,
     },
     async (args) =>
-      wrap('list_ai_billing_entries', 'pm:read', () =>
-        handlers.listAiBillingEntries(args),
+      wrap(
+        'list_ai_billing_entries',
+        'pm:read',
+        () => handlers.listAiBillingEntries(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, listBillingOutput),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'create_ai_billing_entry',
-    'Add a paid AI cost entry for a workspace month. type is subscription, plan_change (upgrade or downgrade; amount may be negative), or on_demand. aiSystemId is optional; omit it for a workspace-wide pool such as one Cursor subscription. currency is the project currency code. Does not fetch invoices. Requires pm:write.',
     {
-      workspaceId: z.string().uuid(),
-      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-      provider: z.string().min(1).max(80),
-      type: billingType,
-      amount: z.union([z.number(), z.string()]),
-      currency: z.string().min(3).max(3),
-      aiSystemId: z.string().uuid().nullable().optional(),
-      plan: z.string().max(80).nullable().optional(),
-      paidAt: z.string().max(40).nullable().optional(),
-      note: z.string().max(500).nullable().optional(),
-      externalRef: z.string().max(120).nullable().optional(),
+      description:
+        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD, inclusive) prorate the amount across months by days; period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        period: billingPeriod.optional().describe('YYYY-MM. Derived from servicePeriodStart when that date is set.'),
+        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD'),
+        servicePeriodEnd: serviceDate.nullable().optional().describe('Inclusive service end YYYY-MM-DD'),
+        provider: z.string().min(1).max(80),
+        type: billingType,
+        amount: z.union([z.number(), z.string()]),
+        currency: z.string().min(3).max(3),
+        aiSystemId: z.string().uuid().nullable().optional(),
+        plan: z.string().max(80).nullable().optional(),
+        paidAt: z.string().max(40).nullable().optional(),
+        note: z.string().max(500).nullable().optional(),
+        externalRef: z.string().max(120).nullable().optional(),
+      },
+      outputSchema: createBillingOutput,
     },
     async (args) =>
-      wrap('create_ai_billing_entry', 'pm:write', () =>
-        handlers.createAiBillingEntry(args),
+      wrap(
+        'create_ai_billing_entry',
+        'pm:write',
+        () => handlers.createAiBillingEntry(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, createBillingOutput),
       )(),
   );
 
-  server.tool(
+  server.registerTool(
     'update_ai_billing_entry',
-    'Update one AI cost entry by entryId. plan_change may be negative. Requires pm:write.',
     {
-      entryId: z.string().uuid(),
-      period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
-      provider: z.string().min(1).max(80).optional(),
-      type: billingType.optional(),
-      amount: z.union([z.number(), z.string()]).optional(),
-      currency: z.string().min(3).max(3).optional(),
-      aiSystemId: z.string().uuid().nullable().optional(),
-      plan: z.string().max(80).nullable().optional(),
-      paidAt: z.string().max(40).nullable().optional(),
-      note: z.string().max(500).nullable().optional(),
-      externalRef: z.string().max(120).nullable().optional(),
+      description:
+        'Update one AI cost entry by entryId. plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) replace the service window; period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
+      inputSchema: {
+        entryId: z.string().uuid(),
+        period: billingPeriod.optional(),
+        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD'),
+        servicePeriodEnd: serviceDate.nullable().optional().describe('Inclusive service end YYYY-MM-DD'),
+        provider: z.string().min(1).max(80).optional(),
+        type: billingType.optional(),
+        amount: z.union([z.number(), z.string()]).optional(),
+        currency: z.string().min(3).max(3).optional(),
+        aiSystemId: z.string().uuid().nullable().optional(),
+        plan: z.string().max(80).nullable().optional(),
+        paidAt: z.string().max(40).nullable().optional(),
+        note: z.string().max(500).nullable().optional(),
+        externalRef: z.string().max(120).nullable().optional(),
+      },
+      outputSchema: updateBillingOutput,
     },
     async (args) =>
-      wrap('update_ai_billing_entry', 'pm:write', () =>
-        handlers.updateAiBillingEntry(args),
+      wrap(
+        'update_ai_billing_entry',
+        'pm:write',
+        () => handlers.updateAiBillingEntry(args),
+        undefined,
+        (data) => structuredTextResult(data, updateBillingOutput),
       )(),
   );
 

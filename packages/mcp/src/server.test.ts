@@ -548,7 +548,29 @@ const dependencySample = {
   successor: { id: 'task-2', humanKey: 'PRO-T-2' },
 };
 
+const billingEntrySample = {
+  id: '77777777-7777-4777-8777-777777777777',
+  workspaceId: '22222222-2222-4222-8222-222222222222',
+  aiSystemId: null,
+  period: '2026-10',
+  servicePeriodStart: '2026-10-12',
+  servicePeriodEnd: '2026-11-11',
+  provider: 'Cursor',
+  plan: 'Pro+',
+  type: 'subscription',
+  amount: 31,
+  currency: 'EUR',
+  paidAt: null,
+  note: null,
+  externalRef: null,
+  createdAt: '2026-10-12T00:00:00.000Z',
+  updatedAt: '2026-10-12T00:00:00.000Z',
+};
+
 const OUTPUT_SAMPLES: Record<string, unknown> = {
+  list_ai_billing_entries: { entries: [billingEntrySample] },
+  create_ai_billing_entry: { entry: billingEntrySample },
+  update_ai_billing_entry: { entry: billingEntrySample },
   get_project: { project: realisticProject() },
   update_project_baseline: { project: realisticProject() },
   create_project: {

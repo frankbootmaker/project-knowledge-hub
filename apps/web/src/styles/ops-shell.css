@@ -3770,6 +3770,11 @@ button.kh-ops-project-card:disabled {
   grid-column: 1 / -1;
 }
 
+/* A taller neighbour (hint, validation) must not stretch a single-line control. */
+.kh-ops-form-grid > .kh-label {
+  align-content: start;
+}
+
 /* Start a new row so a following pair (start/end dates) stays side by side. */
 .kh-ops-field-row-start {
   grid-column-start: 1;
