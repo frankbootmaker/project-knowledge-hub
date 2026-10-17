@@ -315,6 +315,9 @@ importers:
       '@project-knowledge-hub/config':
         specifier: workspace:*
         version: link:../config
+      '@project-knowledge-hub/domain':
+        specifier: workspace:*
+        version: link:../domain
       drizzle-orm:
         specifier: ^0.44.2
         version: 0.44.7(postgres@3.4.9)

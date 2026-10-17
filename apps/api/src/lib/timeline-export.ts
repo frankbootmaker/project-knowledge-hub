@@ -51,6 +51,7 @@ type ScheduleTone = 'onTrack' | 'atRisk' | 'overdue' | 'completed' | 'neutral';
 
 const DEFAULT_RIB_Y = 96;
 const OFFSET_LIMIT = 2000;
+/** Item colour in timeline export. Project health uses TIMELINE_AT_RISK_DAYS (7). */
 const AT_RISK_DAYS = 3;
 
 /** Light-mode schedule colors matching apps/web tokens + deliveryScheduleSurfaceClass. */

@@ -1,14 +1,23 @@
 import { and, eq, isNull, ne } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { slugify } from '@project-knowledge-hub/auth';
-import { memberships, projects, users, workspaces } from '@project-knowledge-hub/database';
+import {
+  memberships,
+  projects,
+  syncScheduleSlipRisks,
+  users,
+  workspaces,
+} from '@project-knowledge-hub/database';
 import {
   AppError,
   assertMcpProjectStageChange,
+  normalizeScheduleSlipItemTypes,
   parseProjectMethodology,
   projectCurrencySchema,
   projectNamesAreSimilar,
+  scheduleSlipThresholdSchema,
   type ProjectMethodology,
+  type ScheduleSlipItemType,
 } from '@project-knowledge-hub/domain';
 import type { McpClientContext } from '@project-knowledge-hub/mcp';
 import { writeAuditEvent } from './identity.js';
@@ -37,6 +46,9 @@ export type McpUpdateProjectInput = {
   status?: string;
   stage?: string;
   confirmDuplicateName?: boolean;
+  scheduleSlipRiskEnabled?: boolean;
+  scheduleSlipThresholdDays?: number;
+  scheduleSlipItemTypes?: ScheduleSlipItemType[];
 };
 
 type WorkspaceRow = {
@@ -490,6 +502,15 @@ export async function updateProjectViaMcp(
     : parseProjectMethodology(input.methodology);
   const currency = parseCurrency(input.currency, project.currency);
   const description = input.description === undefined ? project.description : input.description;
+  const slipEnabled = input.scheduleSlipRiskEnabled === undefined
+    ? project.scheduleSlipRiskEnabled
+    : input.scheduleSlipRiskEnabled;
+  const slipThreshold = input.scheduleSlipThresholdDays === undefined
+    ? project.scheduleSlipThresholdDays
+    : scheduleSlipThresholdSchema.parse(input.scheduleSlipThresholdDays);
+  const slipTypes = input.scheduleSlipItemTypes === undefined
+    ? project.scheduleSlipItemTypes
+    : normalizeScheduleSlipItemTypes(input.scheduleSlipItemTypes);
   const [updated] = await app.database.db
     .update(projects)
     .set({
@@ -498,6 +519,9 @@ export async function updateProjectViaMcp(
       methodology,
       currency,
       status: nextStatus,
+      scheduleSlipRiskEnabled: slipEnabled,
+      scheduleSlipThresholdDays: slipThreshold,
+      scheduleSlipItemTypes: slipTypes,
       updatedAt: new Date(),
     })
     .where(eq(projects.id, project.id))
@@ -526,8 +550,16 @@ export async function updateProjectViaMcp(
       status: nextStatus,
       methodology,
       currency,
+      scheduleSlipRiskEnabled: slipEnabled,
     },
     ipAddress: ipAddress ?? null,
   });
+  if (
+    input.scheduleSlipRiskEnabled !== undefined
+    || input.scheduleSlipThresholdDays !== undefined
+    || input.scheduleSlipItemTypes !== undefined
+  ) {
+    await syncScheduleSlipRisks(app.database, project.id);
+  }
   return { project: updated, workspace, duplicateWarning };
 }

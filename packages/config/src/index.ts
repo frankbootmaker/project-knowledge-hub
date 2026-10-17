@@ -292,6 +292,14 @@ export const envSchema = z.object({
     .min(0)
     .default(24 * 60 * 60 * 1000),
   /**
+   * Worker sweep for auto schedule-slip RAID risks (0 = disabled). Default 24h.
+   */
+  SCHEDULE_SLIP_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(24 * 60 * 60 * 1000),
+  /**
    * When a signup stays pending_approval longer than this, email all system admins once.
    * Allowed: 4, 12, or 24.
    */

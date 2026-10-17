@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   memberships,
+  preservedBaselineFinish,
   projectEpics,
   projectMilestones,
   projectSprints,
@@ -10,6 +11,7 @@ import {
   projectTasks,
   projectUserStories,
   projects,
+  syncScheduleSlipRisks,
   systems,
   users,
   workspaces,
@@ -96,6 +98,7 @@ export type PublicMilestone = {
   status: MilestoneStatus;
   startDate: string | null;
   targetDate: string | null;
+  baselineFinishDate: string | null;
   sortOrder: number;
   issueKeyType: string | null;
   issueNumber: number | null;
@@ -146,6 +149,7 @@ export type PublicTask = {
   status: TaskStatus;
   startDate: string | null;
   dueDate: string | null;
+  baselineFinishDate: string | null;
   durationDays: number | null;
   forecastHours: number | null;
   actualHours: number | null;
@@ -216,6 +220,7 @@ function toPublicMilestone(
     status: milestoneStatusSchema.parse(row.status),
     startDate: row.startDate,
     targetDate: row.targetDate,
+    baselineFinishDate: row.baselineFinishDate,
     sortOrder: row.sortOrder,
     issueKeyType: keys.issueKeyType,
     issueNumber: keys.issueNumber,
@@ -269,6 +274,7 @@ function toPublicTask(
     status: taskStatusSchema.parse(row.status),
     startDate: row.startDate,
     dueDate: row.dueDate,
+    baselineFinishDate: row.baselineFinishDate,
     durationDays: row.durationDays ?? null,
     forecastHours: row.forecastHours,
     actualHours: row.actualHours,
@@ -651,6 +657,7 @@ export async function createMilestone(
         status: input.status ?? 'planned',
         startDate: input.startDate ?? null,
         targetDate: input.targetDate ?? null,
+        baselineFinishDate: input.targetDate ?? null,
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
@@ -673,6 +680,7 @@ export async function createMilestone(
     result.keyPrefix,
     [milestone],
   );
+  await syncScheduleSlipRisks(database, input.projectId);
   return enriched ?? milestone;
 }
 
@@ -711,6 +719,11 @@ export async function updateMilestone(
       status: input.status ?? existing.status,
       startDate: input.startDate !== undefined ? input.startDate : existing.startDate,
       targetDate: input.targetDate !== undefined ? input.targetDate : existing.targetDate,
+      baselineFinishDate: preservedBaselineFinish(
+        projectMilestones.baselineFinishDate,
+        projectMilestones.targetDate,
+        input.targetDate !== undefined ? input.targetDate : existing.targetDate,
+      ),
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:
         input.archived === undefined
@@ -1660,6 +1673,7 @@ export async function createTask(
         status,
         startDate: scheduledDates.startDate,
         dueDate: scheduledDates.dueDate,
+        baselineFinishDate: scheduledDates.dueDate,
         durationDays: scheduledDates.durationDays,
         forecastHours: input.forecastHours ?? null,
         actualHours: input.actualHours ?? null,
@@ -1760,6 +1774,8 @@ export async function deleteTask(
   for (const id of milestoneIds) seeds.push({ entityType: 'milestone', id });
   if (seeds.length > 0) {
     await rescheduleDeliveryFrom(database, existing.projectId, seeds);
+  } else {
+    await syncScheduleSlipRisks(database, existing.projectId);
   }
   return { id: existing.id, projectId: existing.projectId };
 }
@@ -1946,6 +1962,11 @@ export async function updateTask(
       status: nextStatus,
       startDate: scheduledDates.startDate,
       dueDate: scheduledDates.dueDate,
+      baselineFinishDate: preservedBaselineFinish(
+        projectTasks.baselineFinishDate,
+        projectTasks.dueDate,
+        scheduledDates.dueDate,
+      ),
       durationDays: scheduledDates.durationDays,
       forecastHours:
         input.forecastHours !== undefined

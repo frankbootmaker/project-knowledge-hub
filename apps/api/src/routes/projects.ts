@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { and, eq, isNull, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { slugify } from '@project-knowledge-hub/auth';
-import { projects, workspaces } from '@project-knowledge-hub/database';
+import { projects, syncScheduleSlipRisks, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
   assertDateRange,
@@ -15,6 +15,9 @@ import {
   hoursPerWorkdaySchema,
   isoDateNullableSchema,
   nonWorkingDaysSchema,
+  scheduleSlipItemTypeSchema,
+  scheduleSlipSettingsFromRow,
+  scheduleSlipThresholdSchema,
   workdaysPerWeekSchema,
 } from '@project-knowledge-hub/domain';
 import {
@@ -42,7 +45,10 @@ import {
   allocateUniqueKeyPrefix,
   assertUniqueKeyPrefix,
 } from '../lib/project-issue-keys.js';
-import { listProjectOverallRags } from '../lib/project-overall-rag.js';
+import {
+  emptyProjectHealth,
+  listProjectHealth,
+} from '../lib/project-overall-rag.js';
 import { moveProjectToWorkspace } from '../lib/project-move.js';
 import {
   loadProjectScheduleFacts,
@@ -100,6 +106,9 @@ const updateProjectSchema = z.object({
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).nullable().optional(),
   archived: z.boolean().optional(),
+  scheduleSlipRiskEnabled: z.boolean().optional(),
+  scheduleSlipThresholdDays: scheduleSlipThresholdSchema.optional(),
+  scheduleSlipItemTypes: z.array(scheduleSlipItemTypeSchema).max(4).optional(),
 });
 
 const initialStakeholdersSchema = z.object({
@@ -143,6 +152,11 @@ async function toPublicProject(
     project.initialPlanRecordId,
   ]);
   const schedule = facts ?? (await loadProjectScheduleFacts(database, [project])).get(project.id);
+  const slip = scheduleSlipSettingsFromRow({
+    enabled: project.scheduleSlipRiskEnabled,
+    thresholdWorkingDays: project.scheduleSlipThresholdDays,
+    itemTypes: project.scheduleSlipItemTypes,
+  });
   return {
     id: project.id,
     workspaceId: project.workspaceId,
@@ -170,6 +184,9 @@ async function toPublicProject(
     initialBudget: project.initialBudget,
     approvedBudget: project.approvedBudget,
     keyPrefix: project.keyPrefix,
+    scheduleSlipRiskEnabled: slip.enabled,
+    scheduleSlipThresholdDays: slip.thresholdWorkingDays,
+    scheduleSlipItemTypes: slip.itemTypes,
     methodology: project.methodology,
     createdVia: project.createdVia,
     createdByApiClientId: project.createdByApiClientId,
@@ -213,23 +230,27 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       );
 
     const projectIds = rows.map((row) => row.id);
-    const [tagMap, overallRagById, scheduleById] = await Promise.all([
+    const [tagMap, healthById, scheduleById] = await Promise.all([
       getProjectTags(app.database, projectIds),
-      listProjectOverallRags(app.database, projectIds),
+      listProjectHealth(app.database, projectIds),
       loadProjectScheduleFacts(app.database, rows),
     ]);
 
     return {
       projects: await Promise.all(
-        rows.map(async (row) => ({
-          ...(await toPublicProject(
-            app.database,
-            row,
-            tagMap.get(row.id) ?? [],
-            scheduleById.get(row.id),
-          )),
-          overallRag: overallRagById.get(row.id) ?? 'green',
-        })),
+        rows.map(async (row) => {
+          const health = healthById.get(row.id) ?? emptyProjectHealth();
+          return {
+            ...(await toPublicProject(
+              app.database,
+              row,
+              tagMap.get(row.id) ?? [],
+              scheduleById.get(row.id),
+            )),
+            health,
+            overallRag: health.overall,
+          };
+        }),
       ),
     };
   });
@@ -405,13 +426,19 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     }
 
     requireWorkspaceView(principal, project.workspaceId);
-    const tagMap = await getProjectTags(app.database, [project.id]);
+    const [tagMap, healthById] = await Promise.all([
+      getProjectTags(app.database, [project.id]),
+      listProjectHealth(app.database, [project.id]),
+    ]);
     return {
-      project: await toPublicProject(
-        app.database,
-        project,
-        tagMap.get(project.id) ?? [],
-      ),
+      project: {
+        ...(await toPublicProject(
+          app.database,
+          project,
+          tagMap.get(project.id) ?? [],
+        )),
+        health: healthById.get(project.id) ?? emptyProjectHealth(),
+      },
     };
   });
 
@@ -601,6 +628,18 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
             ? project.approvedBudget
             : parseBudgetAmount(body.approvedBudget) ?? null,
         keyPrefix: nextKeyPrefix,
+        scheduleSlipRiskEnabled:
+          body.scheduleSlipRiskEnabled === undefined
+            ? project.scheduleSlipRiskEnabled
+            : body.scheduleSlipRiskEnabled,
+        scheduleSlipThresholdDays:
+          body.scheduleSlipThresholdDays === undefined
+            ? project.scheduleSlipThresholdDays
+            : body.scheduleSlipThresholdDays,
+        scheduleSlipItemTypes:
+          body.scheduleSlipItemTypes === undefined
+            ? project.scheduleSlipItemTypes
+            : body.scheduleSlipItemTypes,
         metadataJson: body.metadata === undefined ? project.metadataJson : body.metadata,
         archivedAt:
           body.archived === undefined
@@ -651,8 +690,14 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         body.nonWorkingDays ?? [],
       );
     }
+    const slipTouched =
+      body.scheduleSlipRiskEnabled !== undefined
+      || body.scheduleSlipThresholdDays !== undefined
+      || body.scheduleSlipItemTypes !== undefined;
     if (calendarTouched) {
       await rescheduleProjectCalendar(app.database, updated.id);
+    } else if (slipTouched) {
+      await syncScheduleSlipRisks(app.database, updated.id);
     }
 
     await writeAuditEvent(app.database, {

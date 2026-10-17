@@ -52,13 +52,15 @@ knowledge_records
 | --- | --- |
 | RAID panel after Delivery | RAID board/calendar |
 | Delivery-item links from RAID manage UI (epic, story, task, bug, milestone) | RAID → sprint links |
-| Documents tab on the RAID dialog (add/remove record links) | Auto-create RAID from schedule “at risk” |
+| Documents tab on the RAID dialog (add/remove record links) | Auto-close a schedule-slip risk |
 | Media tab on the RAID dialog (workspace images and titled URLs) | Storing media bytes on the RAID row |
 | Documents tab on epic, story, task, bug, milestone, and sprint | A separate bug entity type for document links |
 | Linked RAID chips on task manage | Record-editor checkboxes for milestone and sprint (those links still persist) |
 | RAID Dependencies as register rows | Gantt / critical path (still out of Delivery v1) |
 
 Schedule tone “at risk” (due within 3 days) remains **distinct** from RAID Risks.
+
+A project can raise one open **risk** when a task, user story, epic, or milestone slips (PRO-T-63, [ADR-026](../adr/ADR-026-schedule-slip-raid.md)). The toggle, working-day threshold (default 2), and watched types live on the project and default off. The hub evaluates on save and once a day. The risk title is `Schedule slip: <KEY> +N days`, `source` is `auto_schedule_slip`, and the list shows an auto badge. A larger slip updates that same open risk. When the slip clears, the risk stays open and gains a closure note.
 
 ## REST (summary)
 

@@ -208,6 +208,19 @@ export const projects = pgTable(
       onDelete: 'set null',
     }),
     generatedByModel: text('generated_by_model'),
+    /** When true, a slipping delivery item raises one open RAID risk. */
+    scheduleSlipRiskEnabled: boolean('schedule_slip_risk_enabled')
+      .notNull()
+      .default(false),
+    /** Minimum working days of slip before a risk is raised. */
+    scheduleSlipThresholdDays: integer('schedule_slip_threshold_days')
+      .notNull()
+      .default(2),
+    /** task, user_story, epic, milestone. */
+    scheduleSlipItemTypes: jsonb('schedule_slip_item_types')
+      .$type<string[]>()
+      .notNull()
+      .default(['task', 'user_story', 'epic', 'milestone']),
     /** Per issue-key-type counters: { "T": 12, "RR": 3, ... }. */
     issueCounters: jsonb('issue_counters')
       .$type<Record<string, number>>()
@@ -1190,6 +1203,8 @@ export const projectMilestones = pgTable(
     status: text('status').notNull().default('planned'),
     startDate: date('start_date', { mode: 'string' }),
     targetDate: date('target_date', { mode: 'string' }),
+    /** First saved finish. Later target moves are measured against this. */
+    baselineFinishDate: date('baseline_finish_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
@@ -1259,6 +1274,8 @@ export const projectEpics = pgTable(
     status: text('status').notNull().default('planned'),
     startDate: date('start_date', { mode: 'string' }),
     endDate: date('end_date', { mode: 'string' }),
+    /** First saved finish. Later end moves are measured against this. */
+    baselineFinishDate: date('baseline_finish_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
@@ -1296,6 +1313,8 @@ export const projectUserStories = pgTable(
     status: text('status').notNull().default('planned'),
     startDate: date('start_date', { mode: 'string' }),
     endDate: date('end_date', { mode: 'string' }),
+    /** First saved finish. Later end moves are measured against this. */
+    baselineFinishDate: date('baseline_finish_date', { mode: 'string' }),
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
@@ -1411,6 +1430,8 @@ export const projectTasks = pgTable(
     status: text('status').notNull().default('todo'),
     startDate: date('start_date', { mode: 'string' }),
     dueDate: date('due_date', { mode: 'string' }),
+    /** First saved finish. Later due-date moves are measured against this. */
+    baselineFinishDate: date('baseline_finish_date', { mode: 'string' }),
     /** Calendar days. Due date is start date plus this many days when set. */
     durationDays: integer('duration_days'),
     forecastHours: numeric('forecast_hours', { precision: 10, scale: 2, mode: 'number' }),
@@ -1654,6 +1675,13 @@ export const projectRaidItems = pgTable(
       onDelete: 'set null',
     }),
     dueDate: date('due_date', { mode: 'string' }),
+    /** auto_schedule_slip when the hub raised this risk. Null for manual rows. */
+    source: text('source'),
+    sourceEntityType: text('source_entity_type'),
+    sourceEntityId: uuid('source_entity_id'),
+    /** True when an auto slip has cleared and a person should close the risk. */
+    closureSuggested: boolean('closure_suggested').notNull().default(false),
+    slipWorkingDays: integer('slip_working_days'),
     sortOrder: integer('sort_order').notNull().default(0),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
@@ -1681,6 +1709,11 @@ export const projectRaidItems = pgTable(
       table.issueKeyType,
       table.issueNumber,
     ),
+    uniqueIndex('project_raid_items_one_open_auto_slip_uidx')
+      .on(table.projectId, table.sourceEntityType, table.sourceEntityId)
+      .where(sql`${table.source} = 'auto_schedule_slip'
+        AND ${table.archivedAt} IS NULL
+        AND ${table.status} IN ('open', 'mitigating', 'accepted')`),
   ],
 );
 

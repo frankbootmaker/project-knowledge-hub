@@ -7,10 +7,12 @@ import {
 import type { Database } from '@project-knowledge-hub/database';
 import {
   memberships,
+  preservedBaselineFinish,
   projectEpics,
   projectTaskActivities,
   projectTasks,
   projectUserStories,
+  syncScheduleSlipRisks,
   users,
 } from '@project-knowledge-hub/database';
 import {
@@ -59,6 +61,7 @@ export type PublicEpic = {
   status: EpicStatus;
   startDate: string | null;
   endDate: string | null;
+  baselineFinishDate: string | null;
   sortOrder: number;
   issueKeyType: string | null;
   issueNumber: number | null;
@@ -93,6 +96,7 @@ export type PublicUserStory = {
   status: UserStoryStatus;
   startDate: string | null;
   endDate: string | null;
+  baselineFinishDate: string | null;
   sortOrder: number;
   issueKeyType: string | null;
   issueNumber: number | null;
@@ -171,6 +175,7 @@ function toPublicEpic(
     status: epicStatusSchema.parse(row.status),
     startDate: row.startDate,
     endDate: row.endDate,
+    baselineFinishDate: row.baselineFinishDate,
     sortOrder: row.sortOrder,
     issueKeyType: keys.issueKeyType,
     issueNumber: keys.issueNumber,
@@ -200,6 +205,7 @@ function toPublicUserStory(
     status: userStoryStatusSchema.parse(row.status),
     startDate: row.startDate,
     endDate: row.endDate,
+    baselineFinishDate: row.baselineFinishDate,
     sortOrder: row.sortOrder,
     issueKeyType: keys.issueKeyType,
     issueNumber: keys.issueNumber,
@@ -462,6 +468,7 @@ export async function createEpic(
         status: input.status ?? 'planned',
         startDate: input.startDate ?? null,
         endDate: input.endDate ?? null,
+        baselineFinishDate: input.endDate ?? null,
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
@@ -488,6 +495,7 @@ export async function createEpic(
     ),
   );
   const [presented] = await presentEpics(database, result.row.projectId, [epic]);
+  await syncScheduleSlipRisks(database, result.row.projectId);
   return presented ?? epic;
 }
 
@@ -541,6 +549,11 @@ export async function updateEpic(
       status: input.status ?? existing.status,
       startDate: input.startDate !== undefined ? input.startDate : existing.startDate,
       endDate: input.endDate !== undefined ? input.endDate : existing.endDate,
+      baselineFinishDate: preservedBaselineFinish(
+        projectEpics.baselineFinishDate,
+        projectEpics.endDate,
+        input.endDate !== undefined ? input.endDate : existing.endDate,
+      ),
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:
         input.archived === undefined
@@ -707,6 +720,7 @@ export async function createUserStory(
         status: input.status ?? 'planned',
         startDate: input.startDate ?? null,
         endDate: input.endDate ?? null,
+        baselineFinishDate: input.endDate ?? null,
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
@@ -733,6 +747,7 @@ export async function createUserStory(
     ),
   );
   const [presented] = await presentStories(database, result.row.projectId, [story]);
+  await syncScheduleSlipRisks(database, result.row.projectId);
   return presented ?? story;
 }
 
@@ -789,6 +804,11 @@ export async function updateUserStory(
       epicId: input.epicId ?? existing.epicId,
       startDate: input.startDate !== undefined ? input.startDate : existing.startDate,
       endDate: input.endDate !== undefined ? input.endDate : existing.endDate,
+      baselineFinishDate: preservedBaselineFinish(
+        projectUserStories.baselineFinishDate,
+        projectUserStories.endDate,
+        input.endDate !== undefined ? input.endDate : existing.endDate,
+      ),
       sortOrder: input.sortOrder ?? existing.sortOrder,
       archivedAt:
         input.archived === undefined
@@ -869,6 +889,8 @@ export async function deleteEpic(
       existing.projectId,
       milestoneIds.map((id) => ({ entityType: 'milestone' as const, id })),
     );
+  } else {
+    await syncScheduleSlipRisks(database, existing.projectId);
   }
   return { id: existing.id, projectId: existing.projectId };
 }

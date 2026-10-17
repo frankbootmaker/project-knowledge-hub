@@ -131,6 +131,11 @@ export function ProjectRaidList({
           onClick={() => onManageRef.current(item.id)}
         >
           {item.title}
+          {item.auto ? (
+            <Badge tone="warn" className="ms-2">
+              {t('autoBadge')}
+            </Badge>
+          ) : null}
         </button>
       ),
     },

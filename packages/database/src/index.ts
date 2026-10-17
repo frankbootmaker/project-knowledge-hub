@@ -9,6 +9,12 @@ export {
   ensureMigrationJournalAfterRestore,
   type BaselineJournalResult,
 } from './baseline-journal.js';
+export {
+  preservedBaselineFinish,
+  syncEnabledScheduleSlipRisks,
+  syncScheduleSlipRisks,
+  type ScheduleSlipSyncResult,
+} from './schedule-slip-sync.js';
 
 export type Database = ReturnType<typeof createDatabase>;
 
