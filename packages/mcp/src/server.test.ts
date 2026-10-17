@@ -11,6 +11,7 @@ import {
 } from './server.js';
 import { AppError } from '@project-knowledge-hub/domain';
 import { MCP_MAX_RESPONSE_BYTES } from './limits.js';
+import { jsonSchemaHasClosedObjects } from './open-output-schema.js';
 
 function testClient(scopes: string[]): McpClientContext {
   return {
@@ -742,7 +743,7 @@ describe('MCP output schemas accept their sample results', () => {
 });
 
 describe('due-date risk RAG on MCP project tools (PRO-T-98)', () => {
-  test('get_project structured output accepts riskReasons and rejects extras', async () => {
+  test('get_project structured output documents riskReasons and accepts unknown fields (PRO-T-101)', async () => {
     const validator = new AjvJsonSchemaValidator();
     await withMcpClient(['projects:read', 'pm:read'], {}, async (client) => {
       const listed = await client.listTools();
@@ -766,12 +767,12 @@ describe('due-date risk RAG on MCP project tools (PRO-T-98)', () => {
         };
       };
       const health = schema.properties?.project?.properties?.health;
-      expect(health?.additionalProperties).toBe(false);
+      expect(health?.additionalProperties).not.toBe(false);
       expect(health?.required).toEqual(
         expect.arrayContaining(['overall', 'timeline', 'risk', 'financial', 'riskReasons']),
       );
       expect(health?.properties?.riskReasons?.type).toBe('array');
-      expect(health?.properties?.riskReasons?.items?.additionalProperties).toBe(false);
+      expect(health?.properties?.riskReasons?.items?.additionalProperties).not.toBe(false);
       expect(health?.properties?.riskReasons?.items?.required).toEqual(
         expect.arrayContaining(['count', 'severity', 'kind', 'cause']),
       );
@@ -799,15 +800,17 @@ describe('due-date risk RAG on MCP project tools (PRO-T-98)', () => {
       expect(validator.getValidator(tool!.outputSchema as object)(withReasons).valid).toBe(true);
 
       const extra = {
+        deployOnlyField: true,
         project: {
           ...realisticProject(),
+          deployOnlyNested: 'new',
           health: {
             ...realisticProject().health,
             unexplained: true,
           },
         },
       };
-      expect(validator.getValidator(tool!.outputSchema as object)(extra).valid).toBe(false);
+      expect(validator.getValidator(tool!.outputSchema as object)(extra).valid).toBe(true);
 
       const budget = listed.tools.find((item) => item.name === 'get_project_budget_summary');
       expect(budget?.description).toMatch(/riskRag/);
@@ -1378,6 +1381,76 @@ describe('delivery dependency required arguments', () => {
       await client.close();
       await server.close();
     }
+  });
+});
+
+describe('open MCP output schemas (PRO-T-101)', () => {
+  test('tools/list outputSchema has no additionalProperties: false at any depth', async () => {
+    const assertOpen = async (client: Client) => {
+      const listed = await client.listTools();
+      for (const tool of listed.tools) {
+        if (!tool.outputSchema) continue;
+        expect(
+          jsonSchemaHasClosedObjects(tool.outputSchema),
+          tool.name,
+        ).toBe(false);
+      }
+    };
+    await withMcpClient(['projects:read', 'pm:read', 'knowledge:read'], {}, assertOpen);
+    await withMcpClient(
+      ['projects:read', 'knowledge:read'],
+      {},
+      assertOpen,
+      {
+        oauth: {
+          resourceMetadataUrl:
+            'https://knowledge.example.com/.well-known/oauth-protected-resource/mcp/oauth',
+          profile: { id: 'user-1', name: 'Ada', email: 'ada@example.com' },
+        },
+      },
+    );
+  });
+
+  test('stale clients accept extra top-level and nested fields on get_project and update_project', async () => {
+    const validator = new AjvJsonSchemaValidator();
+    await withMcpClient(['projects:read', 'pm:write'], {}, async (client) => {
+      const listed = await client.listTools();
+      const stalePayload = {
+        futureTopLevel: { ok: true },
+        project: {
+          ...realisticProject(),
+          futureOnProject: 1,
+          health: {
+            ...realisticProject().health,
+            futureOnHealth: 'x',
+          },
+        },
+        warning: null,
+        futureSibling: true,
+      };
+      for (const name of ['get_project', 'update_project']) {
+        const tool = listed.tools.find((item) => item.name === name);
+        expect(tool?.outputSchema).toBeTruthy();
+        const check = validator.getValidator(tool!.outputSchema as object)(stalePayload);
+        expect(check.valid, `${name}: ${check.errorMessage ?? ''}`).toBe(true);
+      }
+    });
+  });
+
+  test('input schemas still reject unknown keys', async () => {
+    await withMcpClient(['projects:read'], {}, async (client) => {
+      const listed = await client.listTools();
+      const getProject = listed.tools.find((item) => item.name === 'get_project');
+      expect((getProject?.inputSchema as { additionalProperties?: boolean }).additionalProperties).toBe(
+        false,
+      );
+      const rejected = await client.callTool({
+        name: 'get_project',
+        arguments: { projectId: PROJECT_ID, notAField: true },
+      });
+      expect(rejected.isError).toBe(true);
+      expect(toolText(rejected)).toMatch(/notAField|Unknown|Invalid/i);
+    });
   });
 });
 
