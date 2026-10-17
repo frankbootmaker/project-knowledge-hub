@@ -3150,7 +3150,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_ai_billing_entries',
-    'List workspace AI billing ledger entries (subscription, plan_change, on_demand). Multiple rows per YYYY-MM are allowed; paid cost is their sum, allocated to projects by token share. Optional period and aiSystemId filters. Amounts are JSON numbers. Requires pm:read.',
+    'List workspace AI cost entries (subscription, plan_change, on_demand). Multiple rows per YYYY-MM are allowed; paid cost is their sum, allocated to projects by token share. Optional period and aiSystemId filters. Amounts are JSON numbers. Requires pm:read.',
     {
       workspaceId: z.string().uuid(),
       period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
@@ -3164,7 +3164,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_ai_billing_entry',
-    'Add a paid AI fee for a workspace month. type is subscription, plan_change (upgrade or downgrade; amount may be negative), or on_demand. aiSystemId is optional; omit it for a workspace-wide pool such as one Cursor subscription. currency is the project currency code. Does not fetch invoices. Requires pm:write.',
+    'Add a paid AI cost entry for a workspace month. type is subscription, plan_change (upgrade or downgrade; amount may be negative), or on_demand. aiSystemId is optional; omit it for a workspace-wide pool such as one Cursor subscription. currency is the project currency code. Does not fetch invoices. Requires pm:write.',
     {
       workspaceId: z.string().uuid(),
       period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
@@ -3186,7 +3186,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_ai_billing_entry',
-    'Update one AI billing ledger entry by entryId. plan_change may be negative. Requires pm:write.',
+    'Update one AI cost entry by entryId. plan_change may be negative. Requires pm:write.',
     {
       entryId: z.string().uuid(),
       period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
@@ -3208,7 +3208,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'delete_ai_billing_entry',
-    'Delete one AI billing ledger entry by entryId. Requires pm:write.',
+    'Delete one AI cost entry by entryId. Requires pm:write.',
     { entryId: z.string().uuid() },
     async (args) =>
       wrap('delete_ai_billing_entry', 'pm:write', () =>
