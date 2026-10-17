@@ -74,6 +74,7 @@ import {
   resolveMailConfig,
 } from './lib/mail-settings.js';
 import { sanitizeError } from '@project-knowledge-hub/domain';
+import { redactSensitiveQueryParams } from './lib/redact-request-url.js';
 
 export type ApiDependencies = {
   env: AppEnv;
@@ -96,6 +97,17 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
     logger: {
       level: deps.env.LOG_LEVEL,
       timestamp: () => `,"time":"${new Date().toISOString()}"`,
+      serializers: {
+        req(request) {
+          return {
+            method: request.method,
+            url: redactSensitiveQueryParams(request.url),
+            hostname: request.hostname,
+            remoteAddress: request.ip,
+            remotePort: request.socket?.remotePort,
+          };
+        },
+      },
       redact: {
         paths: [
           'password',
