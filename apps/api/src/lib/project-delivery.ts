@@ -21,6 +21,7 @@ import {
   overlaySchedule,
   rescheduleDeliveryFrom,
 } from './delivery-dependencies.js';
+import { relinkTaskUsage } from './ai-usage-import.js';
 import { loadProjectCalendar } from './project-calendar.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import {
@@ -33,6 +34,7 @@ import {
   bugResolutionSchema,
   resolveTaskScheduleDates,
   mergeAiUsage,
+  parseCloudAgentId,
   milestoneStatusSchema,
   raciRoleSchema,
   raidSeveritySchema,
@@ -170,6 +172,7 @@ export type PublicTask = {
   usageOccurredAt: string | null;
   billingPeriod: string | null;
   aiSystemId: string | null;
+  cloudAgentId: string | null;
   sortOrder: number;
   createdBy: string | null;
   currentOwnerUserId: string | null;
@@ -295,6 +298,7 @@ function toPublicTask(
     usageOccurredAt: row.usageOccurredAt?.toISOString() ?? null,
     billingPeriod: row.billingPeriod ?? null,
     aiSystemId: row.aiSystemId ?? null,
+    cloudAgentId: row.cloudAgentId ?? null,
     sortOrder: row.sortOrder,
     createdBy: row.createdBy,
     currentOwnerUserId: row.currentOwnerUserId,
@@ -1340,6 +1344,7 @@ export function taskTouchesCost(input: {
   usageOccurredAt?: unknown;
   billingPeriod?: unknown;
   aiSystemId?: unknown;
+  cloudAgentId?: unknown;
 }): boolean {
   return (
     input.forecastHours !== undefined ||
@@ -1348,11 +1353,13 @@ export function taskTouchesCost(input: {
     input.tokensInput !== undefined ||
     input.tokensOutput !== undefined ||
     input.tokensCache !== undefined ||
+    input.tokensCacheWrite !== undefined ||
     input.modelId !== undefined ||
     input.pricingTier !== undefined ||
     input.usageOccurredAt !== undefined ||
     input.billingPeriod !== undefined ||
-    input.aiSystemId !== undefined
+    input.aiSystemId !== undefined ||
+    input.cloudAgentId !== undefined
   );
 }
 
@@ -1816,6 +1823,7 @@ export async function updateTask(
     usageOccurredAt?: Date | null;
     billingPeriod?: string | null;
     aiSystemId?: string | null;
+    cloudAgentId?: string | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     sprintId?: string | null;
@@ -1895,6 +1903,25 @@ export async function updateTask(
   if (input.sprintId !== undefined) {
     await assertSprintInProject(database, existing.projectId, input.sprintId);
   }
+  const nextCloudAgentId =
+    input.cloudAgentId === undefined
+      ? undefined
+      : parseCloudAgentId(input.cloudAgentId);
+  if (nextCloudAgentId) {
+    const [taken] = await database.db
+      .select({ id: projectTasks.id })
+      .from(projectTasks)
+      .where(eq(projectTasks.cloudAgentId, nextCloudAgentId))
+      .limit(1);
+    if (taken && taken.id !== existing.id) {
+      throw new AppError({
+        code: 'CLOUD_AGENT_ID_TAKEN',
+        message: 'Another task already uses this cloud agent id',
+        statusCode: 409,
+      });
+    }
+  }
+
   if (input.aiSystemId !== undefined && input.aiSystemId !== null) {
     const [project] = await database.db
       .select({ workspaceId: projects.workspaceId })
@@ -2001,6 +2028,10 @@ export async function updateTask(
       usageOccurredAt: usage.usageOccurredAt,
       billingPeriod: usage.billingPeriod,
       aiSystemId: nextAiSystemId,
+      cloudAgentId:
+        nextCloudAgentId !== undefined
+          ? nextCloudAgentId
+          : existing.cloudAgentId,
       milestoneId:
         input.milestoneId !== undefined ? input.milestoneId : existing.milestoneId,
       userStoryId:
@@ -2067,6 +2098,12 @@ export async function updateTask(
     touched: input.aiSystemId !== undefined,
   });
   const fields = [...changedFields, ...usageDelta.fields];
+  if (
+    nextCloudAgentId !== undefined &&
+    nextCloudAgentId !== (existing.cloudAgentId ?? null)
+  ) {
+    fields.push('cloudAgentId');
+  }
   if (fields.length > 0) {
     await recordTaskActivity(database, {
       taskId,
@@ -2106,5 +2143,20 @@ export async function updateTask(
     { entityType: 'task', id: taskId },
     ...dateChanges,
   ]);
+  if (
+    nextCloudAgentId !== undefined &&
+    nextCloudAgentId !== (existing.cloudAgentId ?? null)
+  ) {
+    const workspaceForLink =
+      input.workspaceId ??
+      (await projectWorkspaceId(database, existing.projectId));
+    if (workspaceForLink) {
+      await relinkTaskUsage(database, {
+        taskId,
+        workspaceId: workspaceForLink,
+        cloudAgentId: nextCloudAgentId,
+      });
+    }
+  }
   return getTask(database, taskId);
 }

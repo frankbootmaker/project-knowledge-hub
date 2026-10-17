@@ -1451,6 +1451,32 @@ export {
   type AiUsagePatch,
 } from './ai-cost.js';
 
+export {
+  AI_USAGE_IMPORT_SOURCES,
+  CLOUD_AGENT_ID_MAX,
+  CURSOR_USAGE_CSV_HEADERS,
+  USAGE_CSV_MAX_CHARS,
+  USAGE_CSV_MAX_ROWS,
+  USAGE_IMPORT_ERROR_LIMIT,
+  aggregateLinkedUsage,
+  dedupeUsageRows,
+  linkUsageRows,
+  mapCursorUsageTokens,
+  parseCloudAgentId,
+  parseCursorUsageCsv,
+  parseUsageSource,
+  previewUsageImport,
+  summarizeUsageRows,
+  usageRowHash,
+  type AiUsageImportSource,
+  type AiUsageRowError,
+  type NormalizedAiUsageRow,
+  type TaskUsageAggregate,
+  type UsageImportStats,
+  type UsageModelTotal,
+  type UsageTokenTotals,
+} from './ai-usage-import.js';
+
 export class AppError extends Error {
   readonly code: string;
   readonly statusCode: number;

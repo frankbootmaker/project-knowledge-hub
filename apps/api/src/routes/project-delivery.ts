@@ -7,6 +7,7 @@ import {
   MAX_TOKEN_COUNT,
   assertReportedAiUsage,
   parseAiModelId,
+  parseCloudAgentId,
   parseAiPricingTier,
   parseBillingPeriod,
   parseUsageOccurredAt,
@@ -227,6 +228,7 @@ const updateTaskSchema = z.object({
   forecastHours: hoursSchema.optional(),
   actualHours: hoursSchema.optional(),
   ...aiUsageBodyFields,
+  cloudAgentId: z.string().max(80).nullable().optional(),
   aiSystemId: z.string().uuid().nullable().optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
@@ -248,6 +250,7 @@ const reportAiUsageSchema = z.object({
   pricingTier: z.string().max(32).nullable().optional(),
   usageOccurredAt: z.string().max(40).nullable().optional(),
   billingPeriod: z.string().max(7).nullable().optional(),
+  cloudAgentId: z.string().max(80).nullable().optional(),
   aiSystemId: z.string().uuid().nullable().optional(),
 });
 
@@ -524,6 +527,7 @@ export async function registerProjectDeliveryRoutes(
           : parseHours(body.actualHours) ?? null,
       ...mapAiUsageBody(body),
       aiSystemId: body.aiSystemId,
+      cloudAgentId: parseCloudAgentId(body.cloudAgentId),
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
       sprintId: body.sprintId,
@@ -569,6 +573,7 @@ export async function registerProjectDeliveryRoutes(
     const task = await updateTask(app.database, params.taskId, {
       ...mapAiUsageBody(body),
       aiSystemId: body.aiSystemId,
+      cloudAgentId: parseCloudAgentId(body.cloudAgentId),
       actorUserId: principal.userId,
       workspaceId: project.workspaceId,
     });

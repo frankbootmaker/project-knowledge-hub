@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 /** Add a tab here when a later financials view (for example AI usage import) lands. */
-export const FINANCIALS_TABS = ['ai-cost'] as const;
+export const FINANCIALS_TABS = ['ai-cost', 'usage-import'] as const;
 
 export type FinancialsTab = (typeof FINANCIALS_TABS)[number];
 

@@ -683,6 +683,37 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
     lifecycleSuccessor: null,
     lifecyclePredecessor: null,
   },
+  list_ai_usage_imports: {
+    imports: [
+      {
+        id: '88888888-8888-4888-8888-888888888888',
+        workspaceId: '22222222-2222-4222-8222-222222222222',
+        source: 'csv',
+        fileName: 'cursor-usage.csv',
+        createdAt: '2026-10-17T15:00:00.000Z',
+        rowCountTotal: 4,
+        rowCountInserted: 3,
+        rowCountDuplicate: 0,
+        rowCountLinked: 2,
+        rowCountErrors: 1,
+      },
+    ],
+  },
+  import_ai_usage_csv: {
+    import: {
+      id: '88888888-8888-4888-8888-888888888888',
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      source: 'csv',
+      fileName: 'cursor-usage.csv',
+      createdAt: '2026-10-17T15:00:00.000Z',
+      rowCountTotal: 4,
+      rowCountInserted: 3,
+      rowCountDuplicate: 0,
+      rowCountLinked: 2,
+      rowCountErrors: 1,
+      errors: [{ rowNumber: 6, message: 'Input (w/ Cache Write) is empty' }],
+    },
+  },
 };
 
 describe('create_project and update_project schemas', () => {
