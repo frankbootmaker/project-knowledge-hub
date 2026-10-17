@@ -31,7 +31,7 @@ const HEADER = [
   'Cost',
 ].join(',');
 
-const AGENT = 'bc-ef37ff6f-fc60-57c0-aded-6af2de468404';
+const AGENT = `bc-usage-${randomUUID()}`;
 
 const AGENT_ROW_A =
   `"2026-10-17T14:27:59.240Z","${AGENT}","","Included","composer-2.5","No","0","77552","471741","4013","553306","Included"`;
@@ -41,10 +41,22 @@ const PLAIN_ROW =
   '"2026-10-17T14:52:56.907Z","","","Included","grok-bot-default","No","550","2","61231","580","62363","Included"';
 const BAD_ROW =
   '"2026-10-17T01:00:00.000Z","","","Included","grok-bot-default","No","nope","2","1","1","4","Free"';
+const EMPTY_ROW =
+  '"2026-10-16T08:00:00.000Z","","","Included","grok-bot-default","No","","","","","","Free"';
+const EMPTY_AUTOMATION_ROW =
+  '"2026-10-16T09:00:00.000Z","","","Included","grok-bot-automation","No","","","","","","Free"';
 const EXTRA_ROW =
   `"2026-10-18T00:00:00.000Z","${AGENT}","","Included","composer-2.5","Yes","10","3","4","5","22","Included"`;
 
-const CSV = [HEADER, AGENT_ROW_A, AGENT_ROW_B, PLAIN_ROW, BAD_ROW].join('\n');
+const CSV = [
+  HEADER,
+  AGENT_ROW_A,
+  AGENT_ROW_B,
+  PLAIN_ROW,
+  BAD_ROW,
+  EMPTY_ROW,
+  EMPTY_AUTOMATION_ROW,
+].join('\n');
 
 function testEnv() {
   return loadEnv({
@@ -225,13 +237,15 @@ describe.skipIf(!hasIntegrationEnv)('AI usage CSV import', () => {
       rowCountInserted: number;
       rowCountLinked: number;
       rowCountErrors: number;
+      rowCountNoTokens: number;
       totals: { tokensInput: number; tokensCacheWrite: number; tokensTotal: number };
       models: Array<{ model: string }>;
     };
-    expect(previewBody.rowCountTotal).toBe(4);
+    expect(previewBody.rowCountTotal).toBe(6);
     expect(previewBody.rowCountInserted).toBe(3);
     expect(previewBody.rowCountLinked).toBe(0);
     expect(previewBody.rowCountErrors).toBe(1);
+    expect(previewBody.rowCountNoTokens).toBe(2);
     expect(previewBody.totals.tokensCacheWrite).toBe(550);
     expect(previewBody.totals.tokensInput).toBe(2 + 77552 + 7804);
     expect(previewBody.models.map((model) => model.model)).toContain('composer-2.5');
@@ -248,6 +262,7 @@ describe.skipIf(!hasIntegrationEnv)('AI usage CSV import', () => {
       rowCountDuplicate: number;
       rowCountLinked: number;
       rowCountErrors: number;
+      rowCountNoTokens: number;
       source: string;
       fileName: string | null;
       createdBy: { displayName: string } | null;
@@ -260,6 +275,7 @@ describe.skipIf(!hasIntegrationEnv)('AI usage CSV import', () => {
     expect(first.rowCountDuplicate).toBe(0);
     expect(first.rowCountLinked).toBe(0);
     expect(first.rowCountErrors).toBe(1);
+    expect(first.rowCountNoTokens).toBe(2);
     expect(first.errors[0]?.message).toMatch(/whole number/);
 
     const unassigned = await app!.inject({
@@ -304,10 +320,12 @@ describe.skipIf(!hasIntegrationEnv)('AI usage CSV import', () => {
       rowCountInserted: number;
       rowCountDuplicate: number;
       rowCountLinked: number;
+      rowCountNoTokens: number;
     } }).import;
     expect(second.rowCountInserted).toBe(0);
     expect(second.rowCountDuplicate).toBe(3);
     expect(second.rowCountLinked).toBe(0);
+    expect(second.rowCountNoTokens).toBe(2);
 
     const overlap = await app!.inject({
       method: 'POST',

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS "ai_usage_imports" (
   "row_count_duplicate" integer NOT NULL DEFAULT 0,
   "row_count_linked" integer NOT NULL DEFAULT 0,
   "row_count_errors" integer NOT NULL DEFAULT 0,
+  "row_count_no_tokens" integer NOT NULL DEFAULT 0,
   "errors_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -57,6 +58,13 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 --> statement-breakpoint
 
+ALTER TABLE "ai_usage_imports"
+  ADD COLUMN IF NOT EXISTS "row_count_no_tokens" integer NOT NULL DEFAULT 0;
+--> statement-breakpoint
+
+ALTER TABLE "ai_usage_imports" DROP CONSTRAINT IF EXISTS "ai_usage_imports_counts_chk";
+--> statement-breakpoint
+
 DO $$ BEGIN
   ALTER TABLE "ai_usage_imports"
     ADD CONSTRAINT "ai_usage_imports_counts_chk"
@@ -66,6 +74,7 @@ DO $$ BEGIN
       AND "row_count_duplicate" >= 0
       AND "row_count_linked" >= 0
       AND "row_count_errors" >= 0
+      AND "row_count_no_tokens" >= 0
     );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
@@ -177,7 +186,11 @@ COMMENT ON COLUMN "project_tasks"."cloud_agent_id" IS
 --> statement-breakpoint
 
 COMMENT ON TABLE "ai_usage_imports" IS
-  'One CSV (or later Admin API) usage import. Counts are total, inserted, duplicate, linked, and errors.';
+  'One CSV (or later Admin API) usage import. Counts are total, inserted, duplicate, linked, errors, and rows with no token data.';
+--> statement-breakpoint
+
+COMMENT ON COLUMN "ai_usage_imports"."row_count_no_tokens" IS
+  'Rows whose token columns are all empty. Skipped, not inserted, and not an error.';
 --> statement-breakpoint
 
 COMMENT ON TABLE "ai_usage_events" IS

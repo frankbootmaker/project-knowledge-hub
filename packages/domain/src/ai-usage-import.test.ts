@@ -109,19 +109,37 @@ describe('Cursor usage CSV mapping', () => {
     );
   });
 
-  it('reports row errors and skips them', () => {
-    const csv = [
-      SAMPLE,
-      '"2026-10-17T01:00:00.000Z","","","Included","grok-bot-default","No","","","","","","Free"',
-      '"not-a-date","","","Included","m","Maybe","1","1","1","1","4","Free"',
-    ].join('\n');
-    const parsed = parseCursorUsageCsv(csv);
+  it('skips rows with no token data and reports only malformed rows as errors', () => {
+    const emptyDefault =
+      '"2026-10-17T12:00:00.000Z","","","Included","grok-bot-default","No","","","","","","Free"';
+    const emptyAutomation =
+      '"2026-10-16T08:00:00.000Z","","","Included","grok-bot-automation","No","","","","","","Free"';
+    const malformed =
+      '"2026-10-17T01:00:00.000Z","","","Included","grok-bot-default","No","nope","2","1","1","4","Free"';
+    const badDate =
+      '"not-a-date","","","Included","m","Maybe","1","1","1","1","4","Free"';
+    const parsed = parseCursorUsageCsv(
+      [SAMPLE, emptyDefault, emptyAutomation, malformed, badDate].join('\n'),
+    );
     expect(parsed.rows).toHaveLength(4);
+    expect(parsed.rowCountNoTokens).toBe(2);
     expect(parsed.errors.map((error) => error.message)).toEqual([
-      'Input (w/ Cache Write) is empty',
+      'Input (w/ Cache Write) must be a whole number',
       'Date must be an ISO datetime',
     ]);
-    expect(parsed.errors[0]?.rowNumber).toBe(6);
+    expect(parsed.errors[0]?.rowNumber).toBe(8);
+    const stats = previewUsageImport({
+      rows: parsed.rows,
+      errors: parsed.errors,
+      rowCountNoTokens: parsed.rowCountNoTokens,
+      existingHashes: new Set(),
+      taskIdByCloudAgentId: new Map(),
+    });
+    expect(stats.rowCountTotal).toBe(8);
+    expect(stats.rowCountNoTokens).toBe(2);
+    expect(stats.rowCountErrors).toBe(2);
+    expect(stats.rowCountInserted).toBe(4);
+    expect(stats.totals.tokensTotal).toBe(62363 + 157554 + 553306 + 821653);
   });
 
   it('rejects a header that is not the Cursor export', () => {
@@ -159,6 +177,7 @@ describe('usage dedupe and linking', () => {
     const stats = previewUsageImport({
       rows: parsed.rows,
       errors: [],
+      rowCountNoTokens: 0,
       existingHashes: new Set([parsed.rows[0]!.rowHash]),
       taskIdByCloudAgentId: new Map([[parsed.rows[2]!.cloudAgentId!, taskId]]),
     });

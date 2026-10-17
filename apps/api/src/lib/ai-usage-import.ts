@@ -40,6 +40,7 @@ export type PublicAiUsageImport = {
   rowCountDuplicate: number;
   rowCountLinked: number;
   rowCountErrors: number;
+  rowCountNoTokens: number;
   errors: AiUsageRowError[];
 };
 
@@ -91,11 +92,13 @@ export async function importAiUsageCsv(
       source: 'csv',
       fileName: sanitizeUsageFileName(input.fileName),
       createdBy: input.actorUserId,
-      rowCountTotal: parsed.rows.length + parsed.errors.length,
+      rowCountTotal:
+        parsed.rows.length + parsed.errors.length + parsed.rowCountNoTokens,
       rowCountInserted: 0,
       rowCountDuplicate: prepared.duplicateCount,
       rowCountLinked: 0,
       rowCountErrors: parsed.errors.length,
+      rowCountNoTokens: parsed.rowCountNoTokens,
       errorsJson: storedErrors,
     })
     .returning({ id: aiUsageImports.id });
@@ -172,6 +175,7 @@ export async function importAiUsageCsv(
       rowCountDuplicate: prepared.duplicateCount + raced,
       rowCountLinked: linked,
       rowCountErrors: parsed.errors.length + syncErrors.length,
+      rowCountNoTokens: parsed.rowCountNoTokens,
       errorsJson: errors,
       updatedAt: new Date(),
     })
@@ -326,6 +330,7 @@ async function statsForParsed(
   return previewUsageImport({
     rows: parsed.rows,
     errors: parsed.errors,
+    rowCountNoTokens: parsed.rowCountNoTokens,
     existingHashes: prepared.existingHashes,
     taskIdByCloudAgentId: prepared.taskIdByCloudAgentId,
   });
@@ -506,6 +511,7 @@ function toPublicImport(
     rowCountDuplicate: row.rowCountDuplicate,
     rowCountLinked: row.rowCountLinked,
     rowCountErrors: row.rowCountErrors,
+    rowCountNoTokens: row.rowCountNoTokens,
     errors: readErrors(row.errorsJson),
   };
 }

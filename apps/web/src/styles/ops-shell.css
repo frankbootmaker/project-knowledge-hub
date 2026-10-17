@@ -1131,6 +1131,12 @@ a.kh-section-shortcut[aria-current='location'] {
   font-variant-numeric: tabular-nums;
 }
 
+.kh-ops-stat-value.is-compact {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
 .kh-ops-stat-note {
   margin-top: 6px;
   color: var(--kh-ink-muted);

@@ -696,6 +696,7 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
         rowCountDuplicate: 0,
         rowCountLinked: 2,
         rowCountErrors: 1,
+        rowCountNoTokens: 2,
       },
     ],
   },
@@ -711,7 +712,8 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
       rowCountDuplicate: 0,
       rowCountLinked: 2,
       rowCountErrors: 1,
-      errors: [{ rowNumber: 6, message: 'Input (w/ Cache Write) is empty' }],
+      rowCountNoTokens: 2,
+      errors: [{ rowNumber: 6, message: 'Input (w/ Cache Write) must be a whole number' }],
     },
   },
 };

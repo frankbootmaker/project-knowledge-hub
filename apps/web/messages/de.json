@@ -3685,6 +3685,7 @@
     "usageDuplicates": "Übersprungene Duplikate",
     "usageWouldInsert": "Neue Zeilen",
     "usageErrors": "Fehler",
+    "usageNoTokens": "Keine Tokendaten",
     "usageInput": "Eingabe",
     "usageCacheWrite": "Cache-Schreiben",
     "usageCache": "Cache-Lesen",

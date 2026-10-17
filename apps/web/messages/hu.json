@@ -3684,6 +3684,7 @@
     "usageDuplicates": "Kihagyott ismétlődések",
     "usageWouldInsert": "Új sorok",
     "usageErrors": "Hibák",
+    "usageNoTokens": "Nincs tokenadat",
     "usageInput": "Bemenet",
     "usageCacheWrite": "Cache-írás",
     "usageCache": "Cache-olvasás",

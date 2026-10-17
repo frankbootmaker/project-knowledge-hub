@@ -100,7 +100,8 @@ ai_billing_allocation_overrides (workspace)
   └── project, period, ai_system_id, percent
 
 ai_usage_imports (workspace)
-  └── source (csv; cursor_admin_api reserved), file, actor, row counts, errors
+  └── source (csv; cursor_admin_api reserved), file, actor, row counts
+      (inserted, duplicate, linked, no token data, errors)
 
 ai_usage_events (workspace)
   ├── occurred_at, cloud_agent_id, model, kind, max_mode, cost

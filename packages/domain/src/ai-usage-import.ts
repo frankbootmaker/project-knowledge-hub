@@ -79,6 +79,8 @@ export type UsageImportStats = {
   rowCountDuplicate: number;
   rowCountLinked: number;
   rowCountErrors: number;
+  /** Rows whose token columns are all empty. Not inserted and not an error. */
+  rowCountNoTokens: number;
   dateFrom: string | null;
   dateTo: string | null;
   models: UsageModelTotal[];
@@ -258,6 +260,7 @@ export function parseCloudAgentId(
 export function parseCursorUsageCsv(csv: string): {
   rows: NormalizedAiUsageRow[];
   errors: AiUsageRowError[];
+  rowCountNoTokens: number;
 } {
   if (csv.length > USAGE_CSV_MAX_CHARS) {
     throw new AppError({
@@ -293,16 +296,19 @@ export function parseCursorUsageCsv(csv: string): {
 
   const rows: NormalizedAiUsageRow[] = [];
   const errors: AiUsageRowError[] = [];
+  let rowCountNoTokens = 0;
   for (const record of data) {
     if (record.cells.every((cell) => cell.trim() === '')) continue;
     const parsed = parseCursorUsageRecord(record);
-    if ('message' in parsed) {
+    if ('skipped' in parsed) {
+      rowCountNoTokens += 1;
+    } else if ('message' in parsed) {
       errors.push({ rowNumber: record.line, message: parsed.message });
     } else {
       rows.push(parsed);
     }
   }
-  return { rows, errors };
+  return { rows, errors, rowCountNoTokens };
 }
 
 /**
@@ -312,7 +318,11 @@ export function parseCursorUsageCsv(csv: string): {
 export function parseUsageSource(
   source: AiUsageImportSource,
   content: string,
-): { rows: NormalizedAiUsageRow[]; errors: AiUsageRowError[] } {
+): {
+  rows: NormalizedAiUsageRow[];
+  errors: AiUsageRowError[];
+  rowCountNoTokens: number;
+} {
   if (source === 'cursor_admin_api') {
     throw new AppError({
       code: 'USAGE_SOURCE_UNAVAILABLE',
@@ -404,6 +414,7 @@ export function summarizeUsageRows(
 export function previewUsageImport(input: {
   rows: readonly NormalizedAiUsageRow[];
   errors: readonly AiUsageRowError[];
+  rowCountNoTokens: number;
   existingHashes: ReadonlySet<string>;
   taskIdByCloudAgentId: ReadonlyMap<string, string>;
 }): UsageImportStats {
@@ -416,11 +427,12 @@ export function previewUsageImport(input: {
       : false,
   ).length;
   return {
-    rowCountTotal: input.rows.length + input.errors.length,
+    rowCountTotal: input.rows.length + input.errors.length + input.rowCountNoTokens,
     rowCountInserted: linkedFresh.length,
     rowCountDuplicate: deduped.duplicateCount,
     rowCountLinked: linkedInFile,
     rowCountErrors: input.errors.length,
+    rowCountNoTokens: input.rowCountNoTokens,
     dateFrom: summary.dateFrom,
     dateTo: summary.dateTo,
     models: summary.models,
@@ -492,7 +504,7 @@ function sameHeader(header: string[]): boolean {
 
 function parseCursorUsageRecord(
   record: CsvRecord,
-): NormalizedAiUsageRow | { message: string } {
+): NormalizedAiUsageRow | { message: string } | { skipped: 'no_tokens' } {
   if (record.cells.length !== CURSOR_USAGE_CSV_HEADERS.length) {
     return { message: `Expected ${CURSOR_USAGE_CSV_HEADERS.length} columns` };
   }
@@ -510,6 +522,16 @@ function parseCursorUsageRecord(
     totalRaw,
     costRaw,
   ] = record.cells;
+
+  // Cursor leaves every token column blank on some Included/Free rows.
+  // Those rows are not usage and are not malformed.
+  if (
+    [withCacheRaw, withoutCacheRaw, cacheRaw, outputRaw, totalRaw].every(
+      (cell) => (cell ?? '').trim() === '',
+    )
+  ) {
+    return { skipped: 'no_tokens' };
+  }
 
   const occurredAtKey = dateRaw?.trim() ?? '';
   const occurredAt = new Date(occurredAtKey);

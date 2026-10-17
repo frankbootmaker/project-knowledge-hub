@@ -3684,6 +3684,7 @@
     "usageDuplicates": "Duplicates skipped",
     "usageWouldInsert": "New rows",
     "usageErrors": "Errors",
+    "usageNoTokens": "No token data",
     "usageInput": "Input",
     "usageCacheWrite": "Cache write",
     "usageCache": "Cache read",

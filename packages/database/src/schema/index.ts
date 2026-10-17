@@ -1603,6 +1603,8 @@ export const aiUsageImports = pgTable(
     rowCountDuplicate: integer('row_count_duplicate').notNull().default(0),
     rowCountLinked: integer('row_count_linked').notNull().default(0),
     rowCountErrors: integer('row_count_errors').notNull().default(0),
+    /** Rows with every token column empty. Skipped, not stored, not an error. */
+    rowCountNoTokens: integer('row_count_no_tokens').notNull().default(0),
     errorsJson: jsonb('errors_json')
       .$type<AiUsageImportErrorJson[]>()
       .notNull()

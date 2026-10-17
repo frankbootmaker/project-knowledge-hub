@@ -3065,7 +3065,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'list_ai_usage_imports',
     description:
-      'List workspace AI usage imports. Counts cover total, inserted, duplicate, linked, and error rows. Requires pm:read.',
+      'List workspace AI usage imports. Counts cover total, inserted, duplicate, linked, error, and no-token rows. Requires pm:read.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3081,7 +3081,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'import_ai_usage_csv',
     description:
-      'Import a Cursor usage CSV. Dedupes on Date, Cloud Agent ID, Model, and Total Tokens. Workspace administrator only. Requires pm:write.',
+      'Import a Cursor usage CSV. Dedupes on Date, Cloud Agent ID, Model, and Total Tokens. Rows with every token column empty are skipped. Workspace administrator only. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {

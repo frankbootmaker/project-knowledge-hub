@@ -3242,6 +3242,7 @@ export function createKnowledgeHubMcpServer(
       rowCountDuplicate: z.number().int(),
       rowCountLinked: z.number().int(),
       rowCountErrors: z.number().int(),
+      rowCountNoTokens: z.number().int(),
     })
     .passthrough();
   const usageImportErrorOutput = z
@@ -3263,7 +3264,7 @@ export function createKnowledgeHubMcpServer(
     'list_ai_usage_imports',
     {
       description:
-        'List workspace AI usage imports (CSV today). Each row records who imported it, the file name, source, and counts for total, inserted, duplicate, linked, and error rows. Read-only. Requires pm:read. Workspace members can read; importing is workspace-admin only.',
+        'List workspace AI usage imports (CSV today). Each row records who imported it, the file name, source, and counts for total, inserted, duplicate, linked, error, and no-token rows. Rows with every token column empty are skipped, not stored, and not errors. Read-only. Requires pm:read. Workspace members can read; importing is workspace-admin only.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         limit: z.number().int().min(1).max(100).optional(),
@@ -3284,7 +3285,7 @@ export function createKnowledgeHubMcpServer(
     'import_ai_usage_csv',
     {
       description:
-        'Import a Cursor usage CSV into the workspace. Dedupes on Date + Cloud Agent ID + Model + Total Tokens. Rows with a Cloud Agent ID link to the task that stores that id. Re-importing the same rows does not double count. csv is the file text. Workspace administrator only, plus pm:write. The Cursor Admin API source is not available on this tool.',
+        'Import a Cursor usage CSV into the workspace. Dedupes on Date + Cloud Agent ID + Model + Total Tokens. Rows with a Cloud Agent ID link to the task that stores that id. Rows with every token column empty are counted as no token data and are not inserted. Re-importing the same rows does not double count. csv is the file text. Workspace administrator only, plus pm:write. The Cursor Admin API source is not available on this tool.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         csv: z.string().min(1).max(8_000_000),

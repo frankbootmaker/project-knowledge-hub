@@ -16,6 +16,7 @@ export type UsageImportRow = {
   rowCountDuplicate: number;
   rowCountLinked: number;
   rowCountErrors: number;
+  rowCountNoTokens: number;
   errors: Array<{ rowNumber: number; message: string }>;
 };
 
@@ -25,6 +26,7 @@ export type UsagePreview = {
   rowCountDuplicate: number;
   rowCountLinked: number;
   rowCountErrors: number;
+  rowCountNoTokens: number;
   dateFrom: string | null;
   dateTo: string | null;
   models: Array<{ model: string; rowCount: number; tokensTotal: number }>;
@@ -74,6 +76,19 @@ export function UsageImportAdmin({
   const number = (value: number) => value.toLocaleString(locale);
   const when = (value: string | null) =>
     value ? new Date(value).toLocaleString(locale) : t('usageNoDate');
+  const usageDate = (value: string) =>
+    new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(value));
+  const usageRange = (from: string | null, to: string | null) => {
+    if (!from) return t('usageNoDate');
+    const start = usageDate(from);
+    const end = to ? usageDate(to) : start;
+    return start === end ? start : `${start} – ${end}`;
+  };
 
   async function readCsv(file: File | null) {
     setPreview(null);
@@ -190,15 +205,13 @@ export function UsageImportAdmin({
                 <Stat label={t('usageRows')} value={number(preview.rowCountTotal)} />
                 <Stat
                   label={t('usageDateRange')}
-                  value={
-                    preview.dateFrom
-                      ? `${when(preview.dateFrom)} – ${when(preview.dateTo)}`
-                      : t('usageNoDate')
-                  }
+                  value={usageRange(preview.dateFrom, preview.dateTo)}
+                  compact
                 />
                 <Stat label={t('usageLinked')} value={number(preview.rowCountLinked)} />
                 <Stat label={t('usageWouldInsert')} value={number(preview.rowCountInserted)} />
                 <Stat label={t('usageDuplicates')} value={number(preview.rowCountDuplicate)} />
+                <Stat label={t('usageNoTokens')} value={number(preview.rowCountNoTokens)} />
                 <Stat label={t('usageErrors')} value={number(preview.rowCountErrors)} />
               </div>
               <p className="m-0 text-sm text-ink-muted">
@@ -257,6 +270,7 @@ export function UsageImportAdmin({
                   <th>{t('usageInserted')}</th>
                   <th>{t('usageDuplicate')}</th>
                   <th>{t('usageLinkedCol')}</th>
+                  <th>{t('usageNoTokens')}</th>
                   <th>{t('usageErrorCol')}</th>
                 </tr>
               </thead>
@@ -271,6 +285,7 @@ export function UsageImportAdmin({
                     <td>{number(item.rowCountInserted)}</td>
                     <td>{number(item.rowCountDuplicate)}</td>
                     <td>{number(item.rowCountLinked)}</td>
+                    <td>{number(item.rowCountNoTokens)}</td>
                     <td>
                       {number(item.rowCountErrors)}
                       {item.errors.length > 0 ? (
@@ -328,11 +343,19 @@ export function UsageImportAdmin({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+}) {
   return (
     <div className="kh-ops-stat">
       <div className="kh-ops-stat-label">{label}</div>
-      <div className="kh-ops-stat-value">{value}</div>
+      <div className={compact ? 'kh-ops-stat-value is-compact' : 'kh-ops-stat-value'}>{value}</div>
     </div>
   );
 }
