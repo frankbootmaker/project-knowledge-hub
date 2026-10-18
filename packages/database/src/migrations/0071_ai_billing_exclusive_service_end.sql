@@ -1,38 +1,49 @@
 -- PRO-T-108: service_period_end is the exclusive renewal date (not included).
 -- Days covered are end minus start. A one-day window has end = start + 1 day.
 --
--- Before this migration the column was the inclusive last day of service.
--- Migration 0069 backfilled a null window as the first and last day of
--- period, and the form, API, and MCP stored the same inclusive end.
--- Month totals stay the same only when each stored end moves forward one
--- calendar day: exclusive [start, inclusive_end + 1 day) is the same set of
--- days as inclusive [start, inclusive_end].
+-- 0069 left no separate marker. It derived both dates from period for every
+-- row whose service window was null:
+--   start = (period || '-01')::date
+--   end   = (that date + 1 month - 1 day)   -- last day of the same month
+-- That is a full calendar month stored with the old inclusive end. Only
+-- those rows move: end becomes start + 1 month, the first day of the next
+-- month. Exclusive [1st, 1st of next month) is that same calendar month, so
+-- the paid total does not change.
+--   2026-10-01 .. 2026-10-31 becomes 2026-10-01 .. 2026-11-01
+--   2024-02-01 .. 2024-02-29 becomes 2024-02-01 .. 2024-03-01
+--   2026-12-01 .. 2026-12-31 becomes 2026-12-01 .. 2027-01-01
+-- A row someone typed as the 1st through the last day of period matches the
+-- same predicate. 0069 wrote nothing else we can key on.
 --
--- Patterns reviewed:
--- 1. Month-end ends, including the 0069 backfill (start = the first of the
---    month, end = the last day of that month). The end becomes the first
---    day of the next month. 2026-10-01 .. 2026-10-31 becomes
---    2026-10-01 .. 2026-11-01, and October still receives the whole amount.
---    Leap day 2024-02-29 becomes 2024-03-01. 2026-12-31 becomes 2027-01-01.
--- 2. Every other inclusive end, including a mid-month end, a same-day
---    window, and a cross-month span such as 2026-10-06 .. 2026-11-06.
---    The end moves one day later (2026-11-07). The day that used to be the
---    inclusive end stays inside the window, so each month's share is
---    unchanged. Shifting only month-end rows would drop that last day from
---    cross-month invoices and move money between months.
--- 3. A same-day window on the last day of a month
---    (2026-10-31 .. 2026-10-31) becomes 2026-10-31 .. 2026-11-01, which is
---    still that one October day.
--- 4. Rows with a null service window are left alone. Their amount stays
---    in period.
+-- Rows entered from provider invoices already use renewal-date semantics.
+-- The end is the next billing day, not the last billed day. Those dates
+-- stay as stored. Cursor Ultimate 2026-10-06 .. 2026-11-06 is unchanged and
+-- splits 26/31 in October and 5/31 in November.
 --
--- Every existing row was stored with inclusive semantics, so this update
--- shifts every non-null end once. It does not try to detect a row that was
--- already exclusive. After the shift, end is after start, and the order
--- check changes from >= to >.
+-- Same-day rows (end = start) were one inclusive day under the old check
+-- (end >= start). An exclusive end equal to the start is zero days, and the
+-- order check below requires end > start. Leaving them unchanged would make
+-- that check fail. Only those rows move forward one day, including a
+-- same-day window on the last day of a month (2026-10-31 .. 2026-10-31
+-- becomes 2026-10-31 .. 2026-11-01, still that one October day). A one-day
+-- invoice that already has end = start + 1 is not a same-day row and is
+-- left alone. Every other row whose end is already after the start is left
+-- unchanged. Null windows are unchanged.
+UPDATE "ai_billing_entries"
+SET "service_period_end" = ("service_period_start" + interval '1 month')::date
+WHERE "service_period_start" IS NOT NULL
+  AND "service_period_end" IS NOT NULL
+  AND "period" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
+  AND "service_period_start" = ("period" || '-01')::date
+  AND "service_period_end" = (
+    (("period" || '-01')::date + interval '1 month') - interval '1 day'
+  )::date;
+--> statement-breakpoint
+
 UPDATE "ai_billing_entries"
 SET "service_period_end" = ("service_period_end" + interval '1 day')::date
-WHERE "service_period_end" IS NOT NULL;
+WHERE "service_period_start" IS NOT NULL
+  AND "service_period_end" = "service_period_start";
 --> statement-breakpoint
 
 ALTER TABLE "ai_billing_entries"

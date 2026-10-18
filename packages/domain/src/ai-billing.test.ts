@@ -792,7 +792,11 @@ describe('exclusive service-end migration (PRO-T-108)', () => {
     return `${period}-${String(day).padStart(2, '0')}`;
   }
 
-  /** Inclusive day counts, the semantics stored before migration 0071. */
+  function firstOfNextMonth(period: string): string {
+    return addOneDay(lastDayOfMonth(period));
+  }
+
+  /** Inclusive day counts, the semantics of a 0069 full-month backfill. */
   function inclusiveMonthDays(
     start: string,
     end: string,
@@ -828,50 +832,44 @@ describe('exclusive service-end migration (PRO-T-108)', () => {
     return Object.fromEntries(slices.map((slice) => [slice.period, slice.amount]));
   }
 
-  function expectStableMonthTotals(
-    amount: number,
-    start: string,
-    inclusiveEnd: string,
-  ): void {
-    const beforeDays = inclusiveMonthDays(start, inclusiveEnd);
-    const beforeAmounts = splitAiMoney(
-      amount,
-      beforeDays.map((count) => count.days),
-    );
-    const before = monthAmounts(
-      beforeDays.map((count, index) => ({
-        period: count.period,
-        amount: beforeAmounts[index] ?? 0,
-      })),
-    );
-    const after = monthAmounts(
-      splitBillingEntryByMonth({
-        amount,
-        period: start.slice(0, 7),
-        servicePeriodStart: start,
-        servicePeriodEnd: addOneDay(inclusiveEnd),
-      }),
-    );
-    expect(after).toEqual(before);
-    const sum = Object.values(after).reduce((total, value) => total + value, 0);
-    expect(roundAiMoney(sum)).toBe(roundAiMoney(amount));
+  /**
+   * 0069 wrote start = period-01 and end = the last day of that month.
+   * 0071 moves only that end to the 1st of the next month. Same-day rows
+   * move forward one day so end > start. Every other stored end stays.
+   */
+  function migratedEnd(start: string, end: string): string {
+    const period = start.slice(0, 7);
+    if (start === `${period}-01` && end === lastDayOfMonth(period)) {
+      return firstOfNextMonth(period);
+    }
+    if (start === end) return addOneDay(end);
+    return end;
   }
 
-  it('shifts every inclusive end by one day, including 0069 month-end rows', () => {
+  it('shifts only the 0069 full-month predicate, plus same-day rows', () => {
     expect(migrationSql).toMatch(/0069/);
-    expect(migrationSql).toMatch(/last day of/i);
+    expect(migrationSql).toMatch(/no separate marker/i);
     expect(migrationSql).toMatch(
-      /UPDATE "ai_billing_entries"[\s\S]*"service_period_end" \+ interval '1 day'[\s\S]*WHERE "service_period_end" IS NOT NULL/,
+      /"service_period_start" = \("period" \|\| '-01'\)::date/,
+    );
+    expect(migrationSql).toMatch(
+      /\(\("period" \|\| '-01'\)::date \+ interval '1 month'\) - interval '1 day'/,
+    );
+    expect(migrationSql).toMatch(
+      /"service_period_end" = \("service_period_start" \+ interval '1 month'\)::date/,
+    );
+    expect(migrationSql).toMatch(
+      /"service_period_end" = "service_period_start"/,
+    );
+    expect(migrationSql).not.toMatch(
+      /WHERE "service_period_end" IS NOT NULL;/,
     );
     expect(migrationSql).toMatch(
       /"service_period_end" > "service_period_start"/,
     );
-    expect(migrationSql).not.toMatch(
-      /WHERE "service_period_end" = .*last/i,
-    );
   });
 
-  it('keeps month totals for backfilled calendar months', () => {
+  it('keeps month totals for backfilled full-month rows', () => {
     for (const period of [
       '2023-02',
       '2024-02',
@@ -879,22 +877,65 @@ describe('exclusive service-end migration (PRO-T-108)', () => {
       '2026-10',
       '2026-12',
     ]) {
-      expectStableMonthTotals(60, `${period}-01`, lastDayOfMonth(period));
-      expectStableMonthTotals(10.01, `${period}-01`, lastDayOfMonth(period));
-      expectStableMonthTotals(-15.5, `${period}-01`, lastDayOfMonth(period));
+      const start = `${period}-01`;
+      const inclusiveEnd = lastDayOfMonth(period);
+      const exclusiveEnd = migratedEnd(start, inclusiveEnd);
+      expect(exclusiveEnd).toBe(firstOfNextMonth(period));
+      for (const amount of [60, 10.01, -15.5]) {
+        const beforeDays = inclusiveMonthDays(start, inclusiveEnd);
+        const beforeAmounts = splitAiMoney(
+          amount,
+          beforeDays.map((count) => count.days),
+        );
+        const before = monthAmounts(
+          beforeDays.map((count, index) => ({
+            period: count.period,
+            amount: beforeAmounts[index] ?? 0,
+          })),
+        );
+        const after = monthAmounts(
+          splitBillingEntryByMonth({
+            amount,
+            period,
+            servicePeriodStart: start,
+            servicePeriodEnd: exclusiveEnd,
+          }),
+        );
+        expect(after).toEqual(before);
+        const sum = Object.values(after).reduce((total, value) => total + value, 0);
+        expect(roundAiMoney(sum)).toBe(roundAiMoney(amount));
+      }
     }
-    expect(addOneDay('2026-10-31')).toBe('2026-11-01');
-    expect(addOneDay('2024-02-29')).toBe('2024-03-01');
-    expect(addOneDay('2026-12-31')).toBe('2027-01-01');
+    expect(firstOfNextMonth('2026-10')).toBe('2026-11-01');
+    expect(firstOfNextMonth('2024-02')).toBe('2024-03-01');
+    expect(firstOfNextMonth('2026-12')).toBe('2027-01-01');
   });
 
-  it('keeps month totals for other inclusive windows', () => {
-    expectStableMonthTotals(200, '2026-10-06', '2026-11-06');
-    expectStableMonthTotals(60, '2026-10-01', '2026-10-06');
-    expectStableMonthTotals(12, '2026-10-06', '2026-10-06');
-    expectStableMonthTotals(12, '2026-10-31', '2026-10-31');
-    expectStableMonthTotals(31, '2026-10-15', '2026-11-01');
-    expectStableMonthTotals(10.01, '2026-01-15', '2026-03-20');
-    expectStableMonthTotals(29, '2024-01-15', '2024-02-29');
+  it('leaves a user-entered 6 Oct–6 Nov row unchanged at 167.74 / 32.26', () => {
+    expect(migratedEnd('2026-10-06', '2026-11-06')).toBe('2026-11-06');
+    expect(migratedEnd('2026-10-01', '2026-10-06')).toBe('2026-10-06');
+    const slices = splitBillingEntryByMonth({
+      amount: 200,
+      period: '2026-10',
+      servicePeriodStart: '2026-10-06',
+      servicePeriodEnd: migratedEnd('2026-10-06', '2026-11-06'),
+    });
+    expect(slices).toEqual([
+      { period: '2026-10', days: 26, amount: 167.74 },
+      { period: '2026-11', days: 5, amount: 32.26 },
+    ]);
+    expect(roundAiMoney(slices.reduce((sum, slice) => sum + slice.amount, 0))).toBe(200);
+  });
+
+  it('moves only a same-day window forward one day', () => {
+    expect(migratedEnd('2026-10-06', '2026-10-06')).toBe('2026-10-07');
+    expect(migratedEnd('2026-10-31', '2026-10-31')).toBe('2026-11-01');
+    const slices = splitBillingEntryByMonth({
+      amount: 12,
+      period: '2026-10',
+      servicePeriodStart: '2026-10-31',
+      servicePeriodEnd: migratedEnd('2026-10-31', '2026-10-31'),
+    });
+    expect(slices).toEqual([{ period: '2026-10', days: 1, amount: 12 }]);
   });
 });
