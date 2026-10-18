@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
+import { formatAiBillingMonth, formatServiceDate } from '../../lib/ai-billing-month';
 import { formatMoney } from '../../lib/project-currency';
-import { AiBillingChart } from '../AiBillingChart';
+import { AiBillingChart, AiBillingChartLegend } from '../AiBillingChart';
 import { Button, ErrorText, Field, Input, Select, useToast } from '../ui';
+import { AiCostPeriodForm, type AiCostViewRange } from './AiCostPeriodForm';
 
 type BillingType = 'subscription' | 'plan_change' | 'on_demand';
 
@@ -22,6 +24,7 @@ export type PlatformAiMonth = {
   theoreticalApiCost: number;
   difference: number;
   ratio: number | null;
+  scheduled?: boolean;
   fxRate?: number | null;
   fxRateDate?: string | null;
   fxSource?: string | null;
@@ -37,6 +40,7 @@ export type PlatformAiTotal = {
   theoreticalApiCost: number;
   difference: number;
   ratio: number | null;
+  scheduled?: boolean;
   fxRate?: number | null;
   fxRateDate?: string | null;
   fxSource?: string | null;
@@ -48,6 +52,8 @@ export type PlatformAiEntry = {
   workspaceName: string;
   workspaceSlug: string;
   period: string;
+  servicePeriodStart: string | null;
+  servicePeriodEnd: string | null;
   provider: string;
   plan: string | null;
   type: BillingType;
@@ -66,6 +72,7 @@ export type PlatformAiEntry = {
 export type PlatformAiCostReport = {
   from: string;
   to: string;
+  range?: AiCostViewRange;
   periods: string[];
   workspaces: Array<{ id: string; name: string; slug: string }>;
   providers: string[];
@@ -204,25 +211,39 @@ export function PlatformAiCost({
       : report.providers;
   const monthOptions = [...report.periods].reverse();
 
+  const chartLabels = {
+    subscription: t('type.subscription'),
+    planChange: t('type.plan_change'),
+    onDemand: t('type.on_demand'),
+    paid: t('paid'),
+    theoretical: t('theoretical'),
+    difference: t('difference'),
+    ratio: t('ratio'),
+    scheduled: t('scheduled'),
+  };
+  const monthLabel = (period: string, scheduled?: boolean) => {
+    const label = formatAiBillingMonth(period, locale);
+    return scheduled ? `${label} (${t('scheduled')})` : label;
+  };
+  const chartCurrency =
+    totals.length > 0 && totals.every((row) => row.currency === totals[0]?.currency)
+      ? (totals[0]?.currency ?? activeCurrency)
+      : activeCurrency;
+
   return (
     <div className="grid gap-3">
-      <form method="get" action="/admin/financials" className="kh-ops-toolbar flex-wrap">
-        <Field label={t('from')} className="min-w-36">
-          <Input type="month" name="from" defaultValue={report.from} />
-        </Field>
-        <Field label={t('to')} className="min-w-36">
-          <Input type="month" name="to" defaultValue={report.to} />
-        </Field>
-        {filters.workspaceId ? (
-          <input type="hidden" name="workspaceId" value={filters.workspaceId} />
-        ) : null}
-        {filters.provider ? <input type="hidden" name="provider" value={filters.provider} /> : null}
-        {filters.type ? <input type="hidden" name="type" value={filters.type} /> : null}
-        {filters.period ? <input type="hidden" name="period" value={filters.period} /> : null}
-        <Button type="submit" variant="secondary" className="self-end">
-          {t('apply')}
-        </Button>
-      </form>
+      <AiCostPeriodForm
+        action="/admin/financials"
+        from={report.from}
+        to={report.to}
+        range={report.range ?? 'last12'}
+        preserve={{
+          workspaceId: filters.workspaceId,
+          provider: filters.provider,
+          type: filters.type,
+          period: filters.period,
+        }}
+      />
 
       <div className="flex flex-wrap items-end gap-3">
         <p className="m-0 text-[13px] text-ink-muted">
@@ -318,30 +339,19 @@ export function PlatformAiCost({
           <h2 className="kh-ops-panel-title">{t('chartTitle')}</h2>
         </div>
         <div className="kh-ops-chart-wrap">
-          <div className="kh-ops-chart-legend">
-            <span>
-              <i className="kh-ops-ai-cost-sub" />
-              {t('type.subscription')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-change" />
-              {t('type.plan_change')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-demand" />
-              {t('type.on_demand')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-line" />
-              {t('theoretical')}
-            </span>
-          </div>
+          <AiBillingChartLegend
+            periods={totals.map((row) => ({ ...row, legacyToken: 0 }))}
+            labels={chartLabels}
+          />
           {totals.length === 0 ? (
             <p className="kh-ops-empty">{t('chartEmpty')}</p>
           ) : (
             <AiBillingChart
               periods={totals.map((row) => ({ ...row, legacyToken: 0 }))}
               ariaLabel={t('chartAria')}
+              locale={locale}
+              currency={chartCurrency}
+              labels={chartLabels}
             />
           )}
           {totals.some((row) => row.fxSource) ? (
@@ -351,7 +361,7 @@ export function PlatformAiCost({
                 if (!detail) return null;
                 return (
                   <li key={`${row.period}-${row.currency}`}>
-                    {row.period} · {row.currency} · {detail}
+                    {monthLabel(row.period, row.scheduled)} · {row.currency} · {detail}
                   </li>
                 );
               })}
@@ -390,7 +400,7 @@ export function PlatformAiCost({
                         {row.workspaceName}
                       </Link>
                     </td>
-                    <td>{row.period}</td>
+                    <td>{monthLabel(row.period, row.scheduled)}</td>
                     <td className="kh-ops-num">
                       {formatMoney(row.subscription, row.currency, locale)}
                     </td>
@@ -413,55 +423,38 @@ export function PlatformAiCost({
                   </tr>
                 ))}
               </tbody>
+              {totals.length > 0 ? (
+                <tfoot>
+                  {totals.map((row) => (
+                    <tr key={`${row.period}-${row.currency}`}>
+                      <th scope="row">{t('total')}</th>
+                      <td>{monthLabel(row.period, row.scheduled)}</td>
+                      <td className="kh-ops-num">
+                        {formatMoney(row.subscription, row.currency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(row.planChange, row.currency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(row.onDemand, row.currency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(row.paidCost, row.currency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(row.theoreticalApiCost, row.currency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(row.difference, row.currency, locale)}
+                      </td>
+                      <td className="kh-ops-num">{ratioText(row.ratio)}</td>
+                    </tr>
+                  ))}
+                </tfoot>
+              ) : null}
             </table>
           </div>
         )}
-        {totals.length > 0 ? (
-          <div className="kh-ops-table-wrap">
-            <table className="kh-ops-data-table">
-              <thead>
-                <tr>
-                  <th>{t('total')}</th>
-                  <th>{t('period')}</th>
-                  <th className="kh-ops-num">{t('type.subscription')}</th>
-                  <th className="kh-ops-num">{t('type.plan_change')}</th>
-                  <th className="kh-ops-num">{t('type.on_demand')}</th>
-                  <th className="kh-ops-num">{t('paid')}</th>
-                  <th className="kh-ops-num">{t('theoretical')}</th>
-                  <th className="kh-ops-num">{t('difference')}</th>
-                  <th className="kh-ops-num">{t('ratio')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {totals.map((row) => (
-                  <tr key={`${row.period}-${row.currency}`}>
-                    <td>{t('total')}</td>
-                    <td>{row.period}</td>
-                    <td className="kh-ops-num">
-                      {formatMoney(row.subscription, row.currency, locale)}
-                    </td>
-                    <td className="kh-ops-num">
-                      {formatMoney(row.planChange, row.currency, locale)}
-                    </td>
-                    <td className="kh-ops-num">
-                      {formatMoney(row.onDemand, row.currency, locale)}
-                    </td>
-                    <td className="kh-ops-num">
-                      {formatMoney(row.paidCost, row.currency, locale)}
-                    </td>
-                    <td className="kh-ops-num">
-                      {formatMoney(row.theoreticalApiCost, row.currency, locale)}
-                    </td>
-                    <td className="kh-ops-num">
-                      {formatMoney(row.difference, row.currency, locale)}
-                    </td>
-                    <td className="kh-ops-num">{ratioText(row.ratio)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
       </section>
 
       <section className="kh-ops-panel">
@@ -507,7 +500,7 @@ export function PlatformAiCost({
               <option value="">{t('allMonths')}</option>
               {monthOptions.map((period) => (
                 <option key={period} value={period}>
-                  {period}
+                  {formatAiBillingMonth(period, locale)}
                 </option>
               ))}
             </Select>
@@ -525,6 +518,8 @@ export function PlatformAiCost({
                 <tr>
                   <th>{t('workspace')}</th>
                   <th>{t('period')}</th>
+                  <th>{t('serviceStart')}</th>
+                  <th>{t('serviceEnd')}</th>
                   <th>{t('provider')}</th>
                   <th>{t('plan')}</th>
                   <th>{t('typeLabel')}</th>
@@ -538,7 +533,9 @@ export function PlatformAiCost({
                 {entries.map((entry) => (
                   <tr key={entry.id}>
                     <td>{entry.workspaceName}</td>
-                    <td>{entry.period}</td>
+                    <td>{formatAiBillingMonth(entry.period, locale)}</td>
+                    <td>{formatServiceDate(entry.servicePeriodStart, locale)}</td>
+                    <td>{formatServiceDate(entry.servicePeriodEnd, locale)}</td>
                     <td>{entry.provider}</td>
                     <td>{entry.plan ?? '—'}</td>
                     <td>{t(`type.${entry.type}`)}</td>

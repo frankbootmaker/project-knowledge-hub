@@ -17,10 +17,12 @@ import {
   parseUsageSource,
   previewUsageImport,
   type AiUsageImportSource,
+  type AiUsageImportSummary,
   type AiUsageRowError,
   type NormalizedAiUsageRow,
   type UsageImportStats,
 } from '@project-knowledge-hub/domain';
+import { decodeListCursor, encodeListCursor } from './task-list-page.js';
 
 export type PublicUsageActor = {
   id: string;
@@ -42,6 +44,7 @@ export type PublicAiUsageImport = {
   rowCountErrors: number;
   rowCountNoTokens: number;
   errors: AiUsageRowError[];
+  summary: AiUsageImportSummary | null;
 };
 
 export type PublicUsagePreview = UsageImportStats & {
@@ -55,6 +58,32 @@ export type UnassignedUsageGroup = {
   tokensTotal: number;
   latestAt: string;
   models: string[];
+};
+
+export type UnassignedUsageRow = {
+  id: string;
+  importId: string | null;
+  occurredAt: string;
+  cloudAgentId: string | null;
+  model: string;
+  tokensInput: number;
+  tokensCacheWrite: number;
+  tokensCache: number;
+  tokensOutput: number;
+  tokensTotal: number;
+};
+
+export type UsageImportSummaryPage = {
+  summaries: PublicAiUsageImport[];
+  summaryTotal: number;
+  summaryLimit: number;
+  summaryNextCursor: string | null;
+  summaryHasMore: boolean;
+  unassigned: UnassignedUsageRow[];
+  unassignedTotal: number;
+  unassignedLimit: number;
+  unassignedNextCursor: string | null;
+  unassignedHasMore: boolean;
 };
 
 const INSERT_CHUNK = 200;
@@ -84,6 +113,13 @@ export async function importAiUsageCsv(
   const parsed = parseUsageSource('csv', input.csv);
   const prepared = await prepareRows(database, workspaceId, parsed.rows);
   const storedErrors = parsed.errors.slice(0, USAGE_IMPORT_ERROR_LIMIT);
+  const preview = previewUsageImport({
+    rows: parsed.rows,
+    errors: parsed.errors,
+    rowCountNoTokens: parsed.rowCountNoTokens,
+    existingHashes: prepared.existingHashes,
+    taskIdByCloudAgentId: prepared.taskIdByCloudAgentId,
+  });
 
   const [created] = await database.db
     .insert(aiUsageImports)
@@ -177,6 +213,7 @@ export async function importAiUsageCsv(
       rowCountErrors: parsed.errors.length + syncErrors.length,
       rowCountNoTokens: parsed.rowCountNoTokens,
       errorsJson: errors,
+      summaryJson: usageImportSummary(preview, inserted, linked),
       updatedAt: new Date(),
     })
     .where(eq(aiUsageImports.id, created.id));
@@ -269,6 +306,145 @@ export async function listUnassignedUsage(
       latestAt: new Date(group.latestAt).toISOString(),
       models: Array.isArray(group.models) ? group.models : [],
     })),
+  };
+}
+
+const SUMMARY_PAGE_MAX = 100;
+const UNASSIGNED_PAGE_MAX = 100;
+
+function pageLimit(value: number | undefined, fallback: number, max: number): number {
+  if (value == null) return fallback;
+  return Math.min(Math.max(Math.trunc(value), 1), max);
+}
+
+/**
+ * Paged import summaries and the unassigned usage rows behind them.
+ * `importId` limits both lists to one import.
+ */
+export async function listAiUsageImportSummaries(
+  database: Database,
+  workspaceId: string,
+  input: {
+    importId?: string;
+    limit?: number;
+    cursor?: string;
+    unassignedLimit?: number;
+    unassignedCursor?: string;
+  } = {},
+): Promise<UsageImportSummaryPage> {
+  await requireWorkspace(database, workspaceId);
+  const summaryLimit = pageLimit(input.limit, 25, SUMMARY_PAGE_MAX);
+  const summaryOffset = decodeListCursor(input.cursor);
+  const summaryWhere = input.importId
+    ? and(
+        eq(aiUsageImports.workspaceId, workspaceId),
+        eq(aiUsageImports.id, input.importId),
+      )
+    : eq(aiUsageImports.workspaceId, workspaceId);
+  const [summaryCount] = await database.db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(aiUsageImports)
+    .where(summaryWhere);
+  const summaryRows = await database.db
+    .select({
+      row: aiUsageImports,
+      displayName: users.displayName,
+      email: users.email,
+    })
+    .from(aiUsageImports)
+    .leftJoin(users, eq(users.id, aiUsageImports.createdBy))
+    .where(summaryWhere)
+    .orderBy(desc(aiUsageImports.createdAt), desc(aiUsageImports.id))
+    .offset(summaryOffset)
+    .limit(summaryLimit);
+  const summaryTotal = Number(summaryCount?.total ?? 0);
+  const summaryHasMore = summaryOffset + summaryRows.length < summaryTotal;
+  const unassigned = await listUnassignedUsageRows(database, workspaceId, {
+    importId: input.importId,
+    limit: input.unassignedLimit,
+    cursor: input.unassignedCursor,
+  });
+  return {
+    summaries: summaryRows.map((item) => toPublicImport(item.row, item)),
+    summaryTotal,
+    summaryLimit,
+    summaryNextCursor: summaryHasMore
+      ? encodeListCursor(summaryOffset + summaryRows.length)
+      : null,
+    summaryHasMore,
+    unassigned: unassigned.rows,
+    unassignedTotal: unassigned.total,
+    unassignedLimit: unassigned.limit,
+    unassignedNextCursor: unassigned.nextCursor,
+    unassignedHasMore: unassigned.hasMore,
+  };
+}
+
+export async function listUnassignedUsageRows(
+  database: Database,
+  workspaceId: string,
+  input: { importId?: string; limit?: number; cursor?: string } = {},
+): Promise<{
+  rows: UnassignedUsageRow[];
+  total: number;
+  limit: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+}> {
+  await requireWorkspace(database, workspaceId);
+  const limit = pageLimit(input.limit, 25, UNASSIGNED_PAGE_MAX);
+  const offset = decodeListCursor(input.cursor);
+  const where = input.importId
+    ? and(
+        eq(aiUsageEvents.workspaceId, workspaceId),
+        isNull(aiUsageEvents.projectTaskId),
+        eq(aiUsageEvents.importId, input.importId),
+      )
+    : and(
+        eq(aiUsageEvents.workspaceId, workspaceId),
+        isNull(aiUsageEvents.projectTaskId),
+      );
+  const [countRow] = await database.db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(aiUsageEvents)
+    .where(where);
+  const rows = await database.db
+    .select({
+      id: aiUsageEvents.id,
+      importId: aiUsageEvents.importId,
+      occurredAt: aiUsageEvents.occurredAt,
+      cloudAgentId: aiUsageEvents.cloudAgentId,
+      model: aiUsageEvents.model,
+      tokensInput: aiUsageEvents.tokensInput,
+      tokensCacheWrite: aiUsageEvents.tokensCacheWrite,
+      tokensCache: aiUsageEvents.tokensCache,
+      tokensOutput: aiUsageEvents.tokensOutput,
+      tokensTotal: aiUsageEvents.tokensTotal,
+    })
+    .from(aiUsageEvents)
+    .where(where)
+    .orderBy(desc(aiUsageEvents.occurredAt), desc(aiUsageEvents.id))
+    .offset(offset)
+    .limit(limit);
+  const total = Number(countRow?.total ?? 0);
+  const hasMore = offset + rows.length < total;
+  return {
+    rows: rows.map((row) => ({
+      id: row.id,
+      importId: row.importId,
+      occurredAt: row.occurredAt.toISOString(),
+      cloudAgentId: row.cloudAgentId,
+      model: row.model,
+      tokensInput: row.tokensInput,
+      tokensCacheWrite: row.tokensCacheWrite,
+      tokensCache: row.tokensCache,
+      tokensOutput: row.tokensOutput,
+      tokensTotal: row.tokensTotal,
+    })),
+    total,
+    limit,
+    nextCursor: hasMore ? encodeListCursor(offset + rows.length) : null,
+    hasMore,
   };
 }
 
@@ -517,7 +693,58 @@ function toPublicImport(
     rowCountErrors: row.rowCountErrors,
     rowCountNoTokens: row.rowCountNoTokens,
     errors: readErrors(row.errorsJson),
+    summary: readSummary(row.summaryJson),
   };
+}
+
+function usageImportSummary(
+  preview: UsageImportStats,
+  inserted: number,
+  linked: number,
+): AiUsageImportSummary {
+  return {
+    dateFrom: preview.dateFrom,
+    dateTo: preview.dateTo,
+    totals: preview.totals,
+    models: preview.models,
+    linkedCount: linked,
+    unassignedCount: Math.max(0, inserted - linked),
+  };
+}
+
+function readSummary(value: unknown): AiUsageImportSummary | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Partial<AiUsageImportSummary>;
+  const totals = row.totals;
+  if (!totals || typeof totals !== 'object') return null;
+  const models = Array.isArray(row.models) ? row.models : [];
+  return {
+    dateFrom: typeof row.dateFrom === 'string' ? row.dateFrom : null,
+    dateTo: typeof row.dateTo === 'string' ? row.dateTo : null,
+    totals: {
+      tokensInput: numberField(totals.tokensInput),
+      tokensCacheWrite: numberField(totals.tokensCacheWrite),
+      tokensCache: numberField(totals.tokensCache),
+      tokensOutput: numberField(totals.tokensOutput),
+      tokensTotal: numberField(totals.tokensTotal),
+    },
+    models: models.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const model = item as { model?: unknown; rowCount?: unknown; tokensTotal?: unknown };
+      if (typeof model.model !== 'string') return [];
+      return [{
+        model: model.model,
+        rowCount: numberField(model.rowCount),
+        tokensTotal: numberField(model.tokensTotal),
+      }];
+    }),
+    linkedCount: numberField(row.linkedCount),
+    unassignedCount: numberField(row.unassignedCount),
+  };
+}
+
+function numberField(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 function readErrors(value: unknown): AiUsageRowError[] {

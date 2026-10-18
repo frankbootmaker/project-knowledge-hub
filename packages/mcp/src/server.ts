@@ -728,6 +728,14 @@ export type McpToolHandlers = {
     workspaceId: string;
     limit?: number;
   }) => Promise<unknown>;
+  listAiUsageImportSummaries: (input: {
+    workspaceId: string;
+    importId?: string;
+    limit?: number;
+    cursor?: string;
+    unassignedLimit?: number;
+    unassignedCursor?: string;
+  }) => Promise<unknown>;
   importAiUsageCsv: (input: {
     workspaceId: string;
     csv: string;
@@ -3512,6 +3520,94 @@ export function createKnowledgeHubMcpServer(
         () => handlers.listAiUsageImports(args),
         { workspaceId: args.workspaceId },
         (data) => structuredTextResult(data, listUsageImportsOutput),
+      )(),
+  );
+
+  const usageSummaryOutput = z
+    .object({
+      dateFrom: z.string().nullable(),
+      dateTo: z.string().nullable(),
+      totals: z
+        .object({
+          tokensInput: z.number(),
+          tokensCacheWrite: z.number(),
+          tokensCache: z.number(),
+          tokensOutput: z.number(),
+          tokensTotal: z.number(),
+        })
+        .passthrough(),
+      models: z.array(
+        z
+          .object({
+            model: z.string(),
+            rowCount: z.number(),
+            tokensTotal: z.number(),
+          })
+          .passthrough(),
+      ),
+      linkedCount: z.number(),
+      unassignedCount: z.number(),
+    })
+    .passthrough();
+  const usageSummaryRowOutput = usageImportRowOutput
+    .extend({
+      summary: usageSummaryOutput.nullable(),
+    })
+    .passthrough();
+  const unassignedUsageRowOutput = z
+    .object({
+      id: z.string(),
+      importId: z.string().nullable(),
+      occurredAt: z.string(),
+      cloudAgentId: z.string().nullable(),
+      model: z.string(),
+      tokensInput: z.number(),
+      tokensCacheWrite: z.number(),
+      tokensCache: z.number(),
+      tokensOutput: z.number(),
+      tokensTotal: z.number(),
+    })
+    .passthrough();
+  const listUsageSummariesOutput = {
+    summaries: z.array(usageSummaryRowOutput),
+    summaryTotal: z.number().int(),
+    summaryLimit: z.number().int(),
+    summaryNextCursor: z.string().nullable(),
+    summaryHasMore: z.boolean(),
+    unassigned: z.array(unassignedUsageRowOutput),
+    unassignedTotal: z.number().int(),
+    unassignedLimit: z.number().int(),
+    unassignedNextCursor: z.string().nullable(),
+    unassignedHasMore: z.boolean(),
+  };
+
+  server.registerTool(
+    'list_ai_usage_import_summaries',
+    {
+      description:
+        'List saved AI usage import summaries and unassigned usage rows, both paged. Each summary keeps the usage date range, token totals (input, cache write, cache read, output), per-model row counts, and linked versus unassigned counts from the moment the import was confirmed. Pass cursor from summaryNextCursor and unassignedCursor from unassignedNextCursor until the matching hasMore flag is false. importId limits both lists to one import. Read-only. Requires pm:read.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        importId: z.string().uuid().optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+        cursor: z.string().min(1).max(200).optional(),
+        unassignedLimit: z.number().int().min(1).max(100).optional(),
+        unassignedCursor: z.string().min(1).max(200).optional(),
+      },
+      outputSchema: listUsageSummariesOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) =>
+      wrap(
+        'list_ai_usage_import_summaries',
+        'pm:read',
+        () => handlers.listAiUsageImportSummaries(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, listUsageSummariesOutput),
       )(),
   );
 

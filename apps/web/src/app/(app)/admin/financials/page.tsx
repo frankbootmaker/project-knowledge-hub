@@ -28,6 +28,7 @@ export default async function AdminFinancialsPage({
   const tAdmin = await getTranslations('admin');
   const query = await searchParams;
   const tab = parsePlatformFinancialsTab(query.tab);
+  const range = first(query.range);
   const filters = {
     from: periodOrEmpty(first(query.from)),
     to: periodOrEmpty(first(query.to)),
@@ -39,6 +40,9 @@ export default async function AdminFinancialsPage({
   const params = new URLSearchParams();
   if (filters.from) params.set('from', filters.from);
   if (filters.to) params.set('to', filters.to);
+  if (range === 'last12' || range === 'year' || range === 'all') {
+    params.set('range', range);
+  }
   if (filters.workspaceId) params.set('workspaceId', filters.workspaceId);
   if (filters.provider) params.set('provider', filters.provider);
   if (filters.type) params.set('type', filters.type);

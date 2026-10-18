@@ -1478,6 +1478,21 @@ export {
 } from './fx-feed.js';
 
 export {
+  AI_COST_RANGES,
+  fillAiCostChart,
+  fillPlatformAiCostMonths,
+  formatAiBillingMonthLabel,
+  periodsCoveredByEntry,
+  resolveAiCostViewWindow,
+  type AiCostChartMonth,
+  type AiCostChartSourcePoint,
+  type AiCostCoverageEntry,
+  type AiCostRange,
+  type AiCostViewRange,
+  type PlatformAiCostMonthRow,
+} from './ai-billing-chart.js';
+
+export {
   AI_COST_NOTES_MAX,
   AI_MODEL_ID_MAX,
   AI_PRICING_TIER_MAX,
@@ -1515,6 +1530,7 @@ export {
   summarizeUsageRows,
   usageRowHash,
   type AiUsageImportSource,
+  type AiUsageImportSummary,
   type AiUsageRowError,
   type NormalizedAiUsageRow,
   type TaskUsageAggregate,

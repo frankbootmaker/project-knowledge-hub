@@ -6,12 +6,15 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   projectCurrencySchema,
+  summarizeAiBillingMonth,
   splitBillingEntryByMonth,
   type ProjectCurrency,
 } from '@project-knowledge-hub/domain';
+import { formatAiBillingMonth, formatServiceDate } from '../../lib/ai-billing-month';
 import { formatMoney, parseOptionalNumber } from '../../lib/project-currency';
-import { AiBillingChart } from '../AiBillingChart';
+import { AiBillingChart, AiBillingChartLegend } from '../AiBillingChart';
 import { Button, ErrorText, Field, Input, Modal, Select, useToast } from '../ui';
+import { AiCostPeriodForm, type AiCostViewRange } from './AiCostPeriodForm';
 
 type BillingType = 'subscription' | 'plan_change' | 'on_demand';
 
@@ -44,6 +47,9 @@ export type AiCostChartPoint = {
   planChange: number;
   onDemand: number;
   theoreticalApiCost: number;
+  difference?: number;
+  ratio?: number | null;
+  scheduled?: boolean;
   fxRate?: number | null;
   fxRateDate?: string | null;
   fxSource?: string | null;
@@ -225,6 +231,9 @@ export function AiCostAdmin({
   originalChart,
   pools,
   systems,
+  from,
+  to,
+  range = 'last12',
 }: {
   workspaceId: string;
   workspaceSlug: string;
@@ -236,6 +245,9 @@ export function AiCostAdmin({
   originalChart?: AiCostChartPoint[];
   pools: AiCostPool[];
   systems: AiSystemPrice[];
+  from?: string;
+  to?: string;
+  range?: AiCostViewRange;
 }) {
   const t = useTranslations('financials');
   const tCommon = useTranslations('common');
@@ -265,6 +277,35 @@ export function AiCostAdmin({
   const visibleChart = showOriginal
     ? sourceChart.filter((row) => row.currency === currency)
     : sourceChart;
+  const chartCurrency =
+    visibleChart.length > 0 &&
+    visibleChart.every((row) => row.currency === visibleChart[0]?.currency)
+      ? (visibleChart[0]?.currency ?? reportingCurrency)
+      : showOriginal
+        ? currency
+        : reportingCurrency;
+  const chartTotal = summarizeAiBillingMonth({
+    period: 'total',
+    currency: chartCurrency,
+    subscription: visibleChart.reduce((sum, row) => sum + row.subscription, 0),
+    planChange: visibleChart.reduce((sum, row) => sum + row.planChange, 0),
+    onDemand: visibleChart.reduce((sum, row) => sum + row.onDemand, 0),
+    theoreticalApiCost: visibleChart.reduce((sum, row) => sum + row.theoreticalApiCost, 0),
+  });
+  const chartLabels = {
+    subscription: t('type.subscription'),
+    planChange: t('type.plan_change'),
+    onDemand: t('type.on_demand'),
+    paid: t('paid'),
+    theoretical: t('theoretical'),
+    difference: t('difference'),
+    ratio: t('ratio'),
+    scheduled: t('scheduled'),
+  };
+  const monthLabel = (period: string, scheduled?: boolean) => {
+    const label = formatAiBillingMonth(period, locale);
+    return scheduled ? `${label} (${t('scheduled')})` : label;
+  };
   const visibleEntries = showOriginal
     ? entries.filter((row) => row.currency === currency)
     : entries;
@@ -548,6 +589,14 @@ export function AiCostAdmin({
 
   return (
     <div className="grid gap-3">
+      {from && to ? (
+        <AiCostPeriodForm
+          action={`/workspaces/${workspaceSlug}/financials`}
+          from={from}
+          to={to}
+          range={range}
+        />
+      ) : null}
       {error && !draft ? <ErrorText>{error}</ErrorText> : null}
       <div className="flex flex-wrap items-end gap-3">
         <Field label={t('reportingCurrency')} className="max-w-xs">
@@ -601,31 +650,109 @@ export function AiCostAdmin({
           <h2 className="kh-ops-panel-title">{t('chartTitle')}</h2>
         </div>
         <div className="kh-ops-chart-wrap">
-          <div className="kh-ops-chart-legend">
-            <span>
-              <i className="kh-ops-ai-cost-sub" />
-              {t('type.subscription')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-change" />
-              {t('type.plan_change')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-demand" />
-              {t('type.on_demand')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-line" />
-              {t('theoretical')}
-            </span>
-          </div>
+          <AiBillingChartLegend
+            periods={visibleChart.map((row) => ({ ...row, legacyToken: 0 }))}
+            labels={chartLabels}
+          />
           {visibleChart.length === 0 ? (
             <p className="kh-ops-empty">{t('chartEmpty')}</p>
           ) : (
-            <AiBillingChart
-              periods={visibleChart.map((row) => ({ ...row, legacyToken: 0 }))}
-              ariaLabel={t('chartAria')}
-            />
+            <>
+              <AiBillingChart
+                periods={visibleChart.map((row) => ({
+                  ...row,
+                  legacyToken: 0,
+                  paidCost: row.paidCost,
+                }))}
+                ariaLabel={t('chartAria')}
+                locale={locale}
+                currency={chartCurrency}
+                labels={chartLabels}
+              />
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <caption className="kh-ops-panel-meta px-3 py-2 text-left">
+                    {t('overviewTitle')}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th>{t('period')}</th>
+                      <th className="kh-ops-num">{t('type.subscription')}</th>
+                      <th className="kh-ops-num">{t('type.plan_change')}</th>
+                      <th className="kh-ops-num">{t('type.on_demand')}</th>
+                      <th className="kh-ops-num">{t('paid')}</th>
+                      <th className="kh-ops-num">{t('theoretical')}</th>
+                      <th className="kh-ops-num">{t('difference')}</th>
+                      <th className="kh-ops-num">{t('ratio')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleChart.map((row) => {
+                      const summary = summarizeAiBillingMonth({
+                        period: row.period,
+                        currency: row.currency,
+                        subscription: row.subscription,
+                        planChange: row.planChange,
+                        onDemand: row.onDemand,
+                        theoreticalApiCost: row.theoreticalApiCost,
+                      });
+                      const difference = row.difference ?? summary.difference;
+                      const ratio = row.ratio === undefined ? summary.ratio : row.ratio;
+                      return (
+                        <tr key={`${row.period}-${row.currency}`}>
+                          <td>{monthLabel(row.period, row.scheduled)}</td>
+                          <td className="kh-ops-num">
+                            {formatMoney(row.subscription, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(row.planChange, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(row.onDemand, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(summary.paidCost, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(row.theoreticalApiCost, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(difference, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">{ratio == null ? '—' : ratio.toFixed(3)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">{t('total')}</th>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.subscription, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.planChange, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.onDemand, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.paidCost, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.theoreticalApiCost, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.difference, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {chartTotal.ratio == null ? '—' : chartTotal.ratio.toFixed(3)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
           )}
           {visibleChart.some((row) => row.fxSource) ? (
             <ul className="m-0 grid gap-1 px-3 pb-3 text-[13px] text-ink-muted">
@@ -634,7 +761,7 @@ export function AiCostAdmin({
                 if (!detail) return null;
                 return (
                   <li key={`${row.period}-${row.currency}`}>
-                    {row.period} · {row.currency} · {detail}
+                    {monthLabel(row.period, row.scheduled)} · {row.currency} · {detail}
                   </li>
                 );
               })}
@@ -673,6 +800,8 @@ export function AiCostAdmin({
               <thead>
                 <tr>
                   <th>{t('period')}</th>
+                  <th>{t('serviceStart')}</th>
+                  <th>{t('serviceEnd')}</th>
                   <th>{t('provider')}</th>
                   <th>{t('system')}</th>
                   <th>{t('plan')}</th>
@@ -687,11 +816,9 @@ export function AiCostAdmin({
               <tbody>
                 {visibleEntries.map((entry) => (
                   <tr key={entry.id}>
-                    <td>
-                      {entry.servicePeriodStart && entry.servicePeriodEnd
-                        ? `${entry.servicePeriodStart} – ${entry.servicePeriodEnd}`
-                        : entry.period}
-                    </td>
+                    <td>{formatAiBillingMonth(entry.period, locale)}</td>
+                    <td>{formatServiceDate(entry.servicePeriodStart, locale)}</td>
+                    <td>{formatServiceDate(entry.servicePeriodEnd, locale)}</td>
                     <td>{entry.provider}</td>
                     <td>
                       {entry.aiSystemId

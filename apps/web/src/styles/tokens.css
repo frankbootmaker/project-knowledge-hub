@@ -24,6 +24,9 @@
   --kh-brand-soft: color-mix(in oklch, var(--kh-brand) 12%, var(--kh-panel));
   --kh-accent: oklch(58% 0.16 145);
   --kh-accent-soft: color-mix(in oklch, var(--kh-accent) 12%, white);
+  /* Subscription bars stay blue so they are not the same green as the theoretical line. */
+  --kh-ai-subscription: oklch(46% 0.16 262);
+  --kh-ai-theoretical: var(--kh-brand);
   /* Soft selected controls. Re-specified under .dark so these var() aliases
      are not baked to the light-theme values. */
   --kh-selected-bg: var(--kh-accent-soft);
@@ -100,6 +103,8 @@ html[data-theme='dark'] {
   --kh-brand-soft: color-mix(in oklch, var(--kh-brand) 18%, var(--kh-panel));
   --kh-accent: oklch(70% 0.16 145);
   --kh-accent-soft: color-mix(in oklch, var(--kh-accent) 18%, var(--kh-panel));
+  --kh-ai-subscription: oklch(78% 0.12 262);
+  --kh-ai-theoretical: var(--kh-brand);
   --kh-warn: oklch(76% 0.13 78);
   --kh-warn-soft: color-mix(in oklch, var(--kh-warn) 16%, var(--kh-panel));
   --kh-danger: oklch(70% 0.17 28);
@@ -142,6 +147,8 @@ html[data-brand='bootmaker'] {
   --kh-brand: #1e3a8a;
   --kh-brand-hover: #172554;
   --kh-accent: #6366f1;
+  --kh-ai-subscription: #15803d;
+  --kh-ai-theoretical: var(--kh-brand);
 }
 
 html[data-brand='bootmaker'][data-theme='dark'],
@@ -149,6 +156,8 @@ html[data-brand='bootmaker'].dark {
   --kh-brand: #60a5fa;
   --kh-brand-hover: #93c5fd;
   --kh-accent: #a5b4fc;
+  --kh-ai-subscription: #4ade80;
+  --kh-ai-theoretical: var(--kh-brand);
 }
 
 html[data-brand='nethorizon'] {
@@ -168,6 +177,8 @@ html[data-brand='in3'] {
   --kh-brand: #4338ca;
   --kh-brand-hover: #3730a3;
   --kh-accent: #6366f1;
+  --kh-ai-subscription: #15803d;
+  --kh-ai-theoretical: var(--kh-brand);
 }
 
 html[data-brand='in3'][data-theme='dark'],
@@ -175,4 +186,6 @@ html[data-brand='in3'].dark {
   --kh-brand: #818cf8;
   --kh-brand-hover: #a5b4fc;
   --kh-accent: #a5b4fc;
+  --kh-ai-subscription: #4ade80;
+  --kh-ai-theoretical: var(--kh-brand);
 }

@@ -73,6 +73,16 @@ export type UsageModelTotal = {
   tokensTotal: number;
 };
 
+/** Snapshot stored on the import so the log keeps the preview after confirm. */
+export type AiUsageImportSummary = {
+  dateFrom: string | null;
+  dateTo: string | null;
+  totals: UsageTokenTotals;
+  models: UsageModelTotal[];
+  linkedCount: number;
+  unassignedCount: number;
+};
+
 export type UsageImportStats = {
   rowCountTotal: number;
   rowCountInserted: number;

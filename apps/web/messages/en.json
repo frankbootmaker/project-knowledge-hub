@@ -3486,6 +3486,7 @@
     "aiTheoretical": "Theoretical",
     "aiDifference": "Difference",
     "aiRatio": "Ratio",
+    "aiScheduled": "scheduled",
     "aiPeriod": "Month",
     "aiPeriodsEmpty": "No AI cost in this window yet.",
     "aiChartAria": "Paid AI cost by type against theoretical API cost",
@@ -3826,6 +3827,18 @@
     "fxRateInvalid": "Enter a date and a positive rate.",
     "fxImport": "Import rates",
     "fxImported": "Imported {count} rates.",
-    "fxImportFailed": "Could not import exchange rates"
+    "fxImportFailed": "Could not import exchange rates",
+    "presetLast12": "Last 12 months",
+    "presetYear": "This year",
+    "presetAll": "All",
+    "scheduled": "scheduled",
+    "usageSummary": "Summary",
+    "usageSummaryMissing": "This import has no saved summary.",
+    "usageUnassignedCount": "Unassigned",
+    "usageUnassignedRows": "Unassigned rows",
+    "usageUnassignedRowsEmpty": "No unassigned rows in this import.",
+    "usageLoadUnassigned": "Show unassigned rows",
+    "usagePrev": "Previous",
+    "usageNext": "Next"
   }
 }

@@ -255,6 +255,7 @@ import {
 } from './ai-billing.js';
 import {
   importAiUsageCsv as commitAiUsageCsv,
+  listAiUsageImportSummaries,
   listAiUsageImports,
 } from './ai-usage-import.js';
 import { moveProjectToWorkspace } from './project-move.js';
@@ -5009,6 +5010,17 @@ export function createMcpToolHandlers(
         input.limit,
       );
       return { imports };
+    },
+
+    async listAiUsageImportSummaries(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      return listAiUsageImportSummaries(app.database, input.workspaceId, {
+        ...(input.importId ? { importId: input.importId } : {}),
+        ...(input.limit ? { limit: input.limit } : {}),
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+        ...(input.unassignedLimit ? { unassignedLimit: input.unassignedLimit } : {}),
+        ...(input.unassignedCursor ? { unassignedCursor: input.unassignedCursor } : {}),
+      });
     },
 
     async importAiUsageCsv(input) {

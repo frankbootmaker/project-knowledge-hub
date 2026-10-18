@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { CollapsibleSection } from './CollapsibleSection';
 import { formatMoney, parseOptionalNumber } from '../lib/project-currency';
-import { AiBillingChart } from './AiBillingChart';
+import { AiBillingChart, AiBillingChartLegend } from './AiBillingChart';
+import { formatAiBillingMonth } from '../lib/ai-billing-month';
 import {
   Button,
   ErrorText,
@@ -598,30 +599,34 @@ export function ProjectBudgetPanel({
               </div>
             </div>
             <div className="kh-ops-chart-wrap">
-              <div className="kh-ops-chart-legend">
-                <span>
-                  <i className="kh-ops-ai-cost-sub" />
-                  {t('billingType.subscription')}
-                </span>
-                <span>
-                  <i className="kh-ops-ai-cost-change" />
-                  {t('billingType.plan_change')}
-                </span>
-                <span>
-                  <i className="kh-ops-ai-cost-demand" />
-                  {t('billingType.on_demand')}
-                </span>
-                <span>
-                  <i className="kh-ops-ai-cost-line" />
-                  {t('aiTheoretical')}
-                </span>
-              </div>
+              <AiBillingChartLegend
+                periods={aiPeriods}
+                labels={{
+                  subscription: t('billingType.subscription'),
+                  planChange: t('billingType.plan_change'),
+                  onDemand: t('billingType.on_demand'),
+                  theoretical: t('aiTheoretical'),
+                }}
+              />
               {aiPeriods.length === 0 ? (
                 <p className="kh-ops-empty">{t('aiPeriodsEmpty')}</p>
               ) : (
                 <AiBillingChart
                   periods={aiPeriods}
                   ariaLabel={t('aiChartAria')}
+                  locale={locale}
+                  currency={currency}
+                  ratioDigits={2}
+                  labels={{
+                    subscription: t('billingType.subscription'),
+                    planChange: t('billingType.plan_change'),
+                    onDemand: t('billingType.on_demand'),
+                    paid: t('aiPaid'),
+                    theoretical: t('aiTheoretical'),
+                    difference: t('aiDifference'),
+                    ratio: t('aiRatio'),
+                    scheduled: t('aiScheduled'),
+                  }}
                 />
               )}
             </div>
@@ -640,7 +645,7 @@ export function ProjectBudgetPanel({
                   <tbody>
                     {aiPeriods.map((period) => (
                       <tr key={period.period}>
-                        <td>{period.period}</td>
+                        <td>{formatAiBillingMonth(period.period, locale)}</td>
                         <td className="kh-ops-num">
                           {formatMoney(period.paidCost, currency, locale)}
                         </td>

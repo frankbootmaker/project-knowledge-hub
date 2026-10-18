@@ -3590,6 +3590,7 @@
     "aiTheoretical": "Elméleti",
     "aiDifference": "Különbség",
     "aiRatio": "Arány",
+    "aiScheduled": "ütemezett",
     "aiPeriod": "Hónap",
     "aiPeriodsEmpty": "Ebben az ablakban még nincs AI-költség.",
     "aiChartAria": "Fizetett AI-költség típusonként az elméleti API-költséghez képest",
@@ -3826,6 +3827,18 @@
     "fxRateInvalid": "Adjon meg egy dátumot és egy pozitív árfolyamot.",
     "fxImport": "Árfolyamok importálása",
     "fxImported": "{count} árfolyam importálva.",
-    "fxImportFailed": "Az árfolyamokat nem sikerült importálni"
+    "fxImportFailed": "Az árfolyamokat nem sikerült importálni",
+    "presetLast12": "Elmúlt 12 hónap",
+    "presetYear": "Idei év",
+    "presetAll": "Összes",
+    "scheduled": "ütemezett",
+    "usageSummary": "Összegzés",
+    "usageSummaryMissing": "Ehhez az importhoz nincs mentett összegzés.",
+    "usageUnassignedCount": "Hozzá nem rendelt",
+    "usageUnassignedRows": "Hozzá nem rendelt sorok",
+    "usageUnassignedRowsEmpty": "Ebben az importban nincs hozzá nem rendelt sor.",
+    "usageLoadUnassigned": "Hozzá nem rendelt sorok",
+    "usagePrev": "Előző",
+    "usageNext": "Következő"
   }
 }
