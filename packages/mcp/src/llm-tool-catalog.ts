@@ -2938,7 +2938,7 @@ function billingEntryResult(): Record<string, unknown> {
         ...ymd,
         nullable: true,
         description:
-          'Inclusive service end YYYY-MM-DD. A span is split across months by days.',
+          'Exclusive renewal date YYYY-MM-DD (not included). Days are end minus start. Null with the start.',
       },
       provider: stringProp('Provider name'),
       plan: { type: 'string', nullable: true },
@@ -3075,7 +3075,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'list_ai_billing_entries',
     description:
-      'List workspace AI cost entries. Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A span is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional service dates keep rows whose window overlaps that range. Requires pm:read.',
+      'List workspace AI cost entries. Each row includes servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included). period is the start month. A span is prorated by days (end minus start) when paid cost is computed. Optional period matches any month the row contributes to. Optional service dates keep rows whose window overlaps that range. The stored end is not a billed day. Requires pm:read.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3092,11 +3092,13 @@ const EXTRA_HUB_TOOLS: Array<{
         aiSystemId: uuidProp('Optional AI system id'),
         servicePeriodStart: {
           ...ymd,
-          description: 'Optional YYYY-MM-DD. Keep rows whose service window ends on or after this date.',
+          description:
+            'Optional YYYY-MM-DD. Keep rows whose exclusive service end is after this date.',
         },
         servicePeriodEnd: {
           ...ymd,
-          description: 'Optional YYYY-MM-DD. Keep rows whose service window starts on or before this date.',
+          description:
+            'Optional YYYY-MM-DD. Keep rows whose service window starts on or before this date.',
         },
       },
     },
@@ -3114,7 +3116,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'create_ai_billing_entry',
     description:
-      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD, inclusive) prorate the amount across months by days; period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
+      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3137,7 +3139,8 @@ const EXTRA_HUB_TOOLS: Array<{
         servicePeriodEnd: {
           ...ymd,
           nullable: true,
-          description: 'Inclusive service end YYYY-MM-DD. Must be on or after the start.',
+          description:
+            'Exclusive renewal date YYYY-MM-DD (not included). Must be after the start. A one-day entry ends the next day.',
         },
         provider: stringProp('Provider name, for example Cursor', {
           minLength: 1,
@@ -3168,7 +3171,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'update_ai_billing_entry',
     description:
-      'Update one AI cost entry. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) replace the window; period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
+      'Update one AI cost entry. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3186,7 +3189,8 @@ const EXTRA_HUB_TOOLS: Array<{
         servicePeriodEnd: {
           ...ymd,
           nullable: true,
-          description: 'Inclusive service end YYYY-MM-DD.',
+          description:
+            'Exclusive renewal date YYYY-MM-DD (not included). Must be after the start.',
         },
         provider: stringProp('Provider name', { minLength: 1, maxLength: 80 }),
         type: {

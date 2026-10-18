@@ -249,6 +249,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-18
+
+* **AI cost entry end date** — The cost-entry dialog labels service end “Service end (renewal date, not included)” with a hint under the date (`serviceEndHint`). The month-split list shows each month’s day count. An end on the start date is invalid. English, German, and Hungarian copy match.
+
 ### 2026-10-17
 
 * **Platform Financials** — Admin → Financials opens `/admin/financials` for system administrators. The page uses `.kh-ops-page-tabs`; the first tab is AI Cost. The chart reuses the paid-versus-theoretical bars. Tables use `.kh-ops-data-table`. Currencies are selected, not added. Cost entries are read-only and link to the workspace tab.

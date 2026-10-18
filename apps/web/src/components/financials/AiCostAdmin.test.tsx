@@ -6,6 +6,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AiCostAdmin, type AiBillingEntryRow } from './AiCostAdmin';
 import { ToastProvider } from '../ui/Toast';
+import de from '../../../messages/de.json';
+import en from '../../../messages/en.json';
+import hu from '../../../messages/hu.json';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -102,16 +105,19 @@ describe('AiCostAdmin cost entry form', () => {
     );
     expect(saveClosed?.disabled).toBe(true);
     expect(document.body.textContent).toContain('serviceDatesRequired');
+    expect(document.body.textContent).toContain('serviceEndHint');
     expect(document.body.textContent).toContain('workspacePool');
     expect(document.body.textContent).toContain('workspacePoolHelp');
-    setControl(dates[0] as HTMLInputElement, '2026-10-12');
-    setControl(dates[1] as HTMLInputElement, '2026-11-11');
+    setControl(dates[0] as HTMLInputElement, '2026-10-06');
+    setControl(dates[1] as HTMLInputElement, '2026-11-06');
     const amount = document.body.querySelector('input[type="number"]') as HTMLInputElement;
-    setControl(amount, '31');
+    setControl(amount, '200');
     expect(document.body.textContent).toContain('2026-10');
     expect(document.body.textContent).toContain('2026-11');
-    expect(document.body.textContent).toContain('€20.00');
-    expect(document.body.textContent).toContain('€11.00');
+    expect(document.body.textContent).toContain('splitDays:{"days":26}');
+    expect(document.body.textContent).toContain('splitDays:{"days":5}');
+    expect(document.body.textContent).toContain('€167.74');
+    expect(document.body.textContent).toContain('€32.26');
     const system = [...document.body.querySelectorAll('select')].find((select) =>
       [...select.options].some((option) => option.textContent === 'workspacePool'),
     );
@@ -130,9 +136,23 @@ describe('AiCostAdmin cost entry form', () => {
     );
     expect(save?.disabled).toBe(false);
     expect(document.body.textContent).not.toContain('serviceDatesRequired');
+    setControl(dates[1] as HTMLInputElement, '2026-10-06');
+    expect(document.body.textContent).toContain('serviceRangeInvalid');
+    expect(save?.disabled).toBe(true);
+    expect(document.body.textContent).not.toContain('€167.74');
     setControl(dates[1] as HTMLInputElement, '2026-10-01');
     expect(document.body.textContent).toContain('serviceRangeInvalid');
-    expect(document.body.textContent).not.toContain('€20.00');
+  });
+
+  it('names the exclusive renewal date in English, German, and Hungarian', () => {
+    expect(en.financials.serviceEnd).toBe(
+      'Service end (renewal date, not included)',
+    );
+    expect(en.financials.serviceEndHint).toContain('not billed');
+    expect(de.financials.serviceEnd).toContain('nicht enthalten');
+    expect(de.financials.serviceEndHint.length).toBeGreaterThan(10);
+    expect(hu.financials.serviceEnd).toContain('nem számít bele');
+    expect(hu.financials.serviceEndHint.length).toBeGreaterThan(10);
   });
 
   it('shows Other plus the stored name for a provider that is not listed', () => {

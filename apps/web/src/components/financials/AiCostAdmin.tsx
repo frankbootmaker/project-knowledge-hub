@@ -137,6 +137,20 @@ function saveBlocker(
   return null;
 }
 
+/** Day after a YYYY-MM-DD date. The service end must be after the start. */
+function nextCalendarDay(ymd: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!match) return '';
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day + 1));
+  const nextYear = date.getUTCFullYear();
+  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const nextDay = String(date.getUTCDate()).padStart(2, '0');
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
 function emptyDraft(currency: ProjectCurrency): EntryDraft {
   return {
     id: null,
@@ -210,7 +224,7 @@ export function AiCostAdmin({
   const rangeInvalid = Boolean(
     draft?.servicePeriodStart &&
       draft.servicePeriodEnd &&
-      draft.servicePeriodEnd < draft.servicePeriodStart,
+      draft.servicePeriodEnd <= draft.servicePeriodStart,
   );
   const blocker = draft ? saveBlocker(draft, rangeInvalid) : null;
   const splitPreview = useMemo(() => {
@@ -240,7 +254,7 @@ export function AiCostAdmin({
       setError(t('serviceDatesRequired'));
       return;
     }
-    if (draft.servicePeriodEnd < draft.servicePeriodStart) {
+    if (draft.servicePeriodEnd <= draft.servicePeriodStart) {
       setError(t('serviceRangeInvalid'));
       return;
     }
@@ -784,12 +798,19 @@ export function AiCostAdmin({
               <Input
                 type="date"
                 value={draft.servicePeriodEnd}
-                min={draft.servicePeriodStart || undefined}
+                min={
+                  draft.servicePeriodStart
+                    ? nextCalendarDay(draft.servicePeriodStart)
+                    : undefined
+                }
                 disabled={pending}
                 onChange={(event) =>
                   setDraft({ ...draft, servicePeriodEnd: event.target.value })
                 }
               />
+              <span className="mt-1 block text-[13px] font-normal normal-case tracking-normal text-ink-muted">
+                {t('serviceEndHint')}
+              </span>
             </Field>
             {rangeInvalid ? (
               <div className="kh-ops-field-span">

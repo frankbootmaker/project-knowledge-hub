@@ -571,6 +571,7 @@ export type BillingListFilter = {
   servicePeriodEnd?: string;
 };
 
+/** Service window [start, end). `end` is the exclusive renewal date. */
 function serviceBounds(entry: {
   period: string;
   servicePeriodStart: string | null;
@@ -583,10 +584,11 @@ function serviceBounds(entry: {
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
   return {
     start: `${entry.period}-01`,
-    end: `${entry.period}-${String(last).padStart(2, '0')}`,
+    end: `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`,
   };
 }
 
@@ -632,7 +634,7 @@ export function entryMatchesBillingListFilter(
   if (filter.servicePeriodStart || filter.servicePeriodEnd) {
     const bounds = serviceBounds(entry);
     if (!bounds) return false;
-    if (filter.servicePeriodStart && bounds.end < filter.servicePeriodStart) {
+    if (filter.servicePeriodStart && bounds.end <= filter.servicePeriodStart) {
       return false;
     }
     if (filter.servicePeriodEnd && bounds.start > filter.servicePeriodEnd) {

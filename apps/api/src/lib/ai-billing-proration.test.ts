@@ -15,7 +15,7 @@ describe('monthPoolsFromBillingEntries', () => {
         type: 'subscription',
         amount: 31,
         servicePeriodStart: '2026-10-12',
-        servicePeriodEnd: '2026-11-11',
+        servicePeriodEnd: '2026-11-12',
       },
       {
         period: '2026-10',
@@ -45,7 +45,7 @@ describe('monthPoolsFromBillingEntries', () => {
         type: 'subscription',
         amount: 31,
         servicePeriodStart: '2026-10-12',
-        servicePeriodEnd: '2026-11-11',
+        servicePeriodEnd: '2026-11-12',
       },
     ]);
     expect(pools.get('2026-10|sys-1|EUR')?.paidTotal).toBe(20);
@@ -53,7 +53,7 @@ describe('monthPoolsFromBillingEntries', () => {
     expect(pools.has('2026-10||EUR')).toBe(false);
   });
 
-  it('shows a 12 Oct–11 Nov entry as 20/31 and 11/31 in the admin summary', () => {
+  it('shows a 12 Oct–12 Nov entry as 20/31 and 11/31 in the admin summary', () => {
     const pools = monthPoolsFromBillingEntries([
       {
         period: '2026-10',
@@ -62,7 +62,7 @@ describe('monthPoolsFromBillingEntries', () => {
         type: 'subscription',
         amount: 31,
         servicePeriodStart: '2026-10-12',
-        servicePeriodEnd: '2026-11-11',
+        servicePeriodEnd: '2026-11-12',
       },
     ]);
     const report = buildPlatformAiCost({
@@ -86,7 +86,7 @@ describe('monthPoolsFromBillingEntries', () => {
               id: 'span',
               period: '2026-10',
               servicePeriodStart: '2026-10-12',
-              servicePeriodEnd: '2026-11-11',
+              servicePeriodEnd: '2026-11-12',
               provider: 'Cursor',
               plan: null,
               type: 'subscription',
@@ -138,5 +138,31 @@ describe('entryMatchesBillingListFilter', () => {
     expect(
       entryMatchesBillingListFilter(entry, { servicePeriodStart: '2026-12-01' }),
     ).toBe(false);
+    expect(
+      entryMatchesBillingListFilter(entry, { servicePeriodStart: '2026-11-11' }),
+    ).toBe(false);
+  });
+
+  it('does not count the exclusive renewal date in a later month', () => {
+    expect(
+      entryMatchesBillingListFilter(
+        {
+          ...entry,
+          servicePeriodStart: '2026-10-01',
+          servicePeriodEnd: '2026-11-01',
+        },
+        { period: '2026-11' },
+      ),
+    ).toBe(false);
+    expect(
+      entryMatchesBillingListFilter(
+        {
+          ...entry,
+          servicePeriodStart: '2026-10-01',
+          servicePeriodEnd: '2026-11-01',
+        },
+        { period: '2026-10' },
+      ),
+    ).toBe(true);
   });
 });

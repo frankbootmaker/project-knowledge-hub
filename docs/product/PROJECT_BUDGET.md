@@ -35,7 +35,7 @@ Track **project currency and BAC**, **stakeholder hourly rates and capacity**, *
 
 Ledger rows live on the workspace (`ai_billing_entries`), optionally on one AI system. They are not stored per project. Admins edit them under Financials → AI Cost. The project budget page shows only that project’s allocated share.
 
-1. Group rows by month, currency, and system (a null system is the workspace-wide pool, allocated across all projects in the workspace). The paid total is the sum. `plan_change` may be a credit. A row with `service_period_start` and `service_period_end` (inclusive) is split across those calendar months by the number of days in each month before this grouping. 12 October–11 November is 20/31 in October and 11/31 in November. Cents use the largest remainder (`splitBillingEntryByMonth` in `@project-knowledge-hub/domain`) so the slices sum to the row. `period` is the start month (`YYYY-MM`). A row with no service dates keeps the whole amount in `period`. Allocation overrides apply to each month's slice. Migration `0069` backfills existing rows as the first and last day of their `period` month, which leaves that month unchanged.
+1. Group rows by month, currency, and system (a null system is the workspace-wide pool, allocated across all projects in the workspace). The paid total is the sum. `plan_change` may be a credit. A row with `service_period_start` and `service_period_end` is split across those calendar months by the number of days in each month before this grouping. The start is included and the end is exclusive (the renewal date, not billed): days = end − start. 6 October–6 November is 26/31 in October and 5/31 in November. 1 October–1 November stays in October. Cents use the largest remainder (`splitBillingEntryByMonth` in `@project-knowledge-hub/domain`) so the slices sum to the row. `period` is the start month (`YYYY-MM`). A row with no service dates keeps the whole amount in `period`. Allocation overrides apply to each month's slice. Migration `0069` backfilled existing rows as the first and last inclusive day of their `period` month. Migration `0071` moves every stored end forward one day (a month-end end becomes the first of the next month) so those month totals stay the same under the exclusive rule.
 2. Manual percents (`ai_billing_allocation_overrides`) apply first and must sum to at most 100. Each percent is that share of the pool.
 3. The remainder, or the whole pool when there is no override, is split in proportion to token usage in that month. A workspace pool counts every project's tokens. A system pool counts tokens on that system. Projects with no tokens get nothing in this step.
 4. If that remainder has no tokens, it is split equally across active projects (idea, planned, active, maintenance, paused; not archived, not completed). A completed project still receives a token share when it used tokens.
@@ -49,7 +49,7 @@ Sprint rows on the summary are theoretical only. Paid fees stay on the calendar 
 
 ## Platform AI cost (PRO-T-102)
 
-System administrators open Admin → Financials → AI Cost (`/admin/financials`). The monthly paid totals (subscription, plan change, on-demand), theoretical API cost, difference, and ratio are the sum of each workspace's own AI Cost chart for that month. Another currency is a separate total. The default window is the last 12 months. The cost-entry list is read-only and links to that workspace's Financials → AI Cost tab, where the entry is edited. `get_platform_ai_cost` returns the same summary for a system administrator (`pm:read`, via `call_hub_tool`). Those monthly totals are the workspace charts, which split each entry with `splitBillingEntryByMonth` through `monthPoolsFromBillingEntries`. A 12 Oct–11 Nov row is 20/31 in October and 11/31 in November on the admin summary as well.
+System administrators open Admin → Financials → AI Cost (`/admin/financials`). The monthly paid totals (subscription, plan change, on-demand), theoretical API cost, difference, and ratio are the sum of each workspace's own AI Cost chart for that month. Another currency is a separate total. The default window is the last 12 months. The cost-entry list is read-only and links to that workspace's Financials → AI Cost tab, where the entry is edited. `get_platform_ai_cost` returns the same summary for a system administrator (`pm:read`, via `call_hub_tool`). Those monthly totals are the workspace charts, which split each entry with `splitBillingEntryByMonth` through `monthPoolsFromBillingEntries`. A 6 Oct–6 Nov row is 26/31 in October and 5/31 in November on the admin summary as well. The admin cost-entry list is read-only; the renewal-date field is edited on the workspace Financials tab.
 
 ## Entities
 
@@ -97,7 +97,7 @@ project_cost_snapshots
 
 ai_billing_entries (workspace)
   ├── period (YYYY-MM, the start month)
-  ├── service_period_start / service_period_end (inclusive; null = whole period)
+  ├── service_period_start / service_period_end (start included, end exclusive; null = whole period)
   ├── provider, plan, type, amount, currency
   ├── ai_system_id (null = workspace-wide pool)
   └── paid_at, note, external_ref

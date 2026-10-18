@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   allocateAiBillingPool,
@@ -507,12 +508,12 @@ describe('buildPlatformAiCost', () => {
     expect(credits.providers).toEqual(['Cursor', 'OpenAI']);
   });
 
-  it('shows a 12 Oct–11 Nov entry as 20/31 and 11/31 in the admin summary', () => {
+  it('shows a 12 Oct–12 Nov entry as 20/31 and 11/31 in the admin summary', () => {
     const slices = splitBillingEntryByMonth({
       amount: 31,
       period: '2026-10',
       servicePeriodStart: '2026-10-12',
-      servicePeriodEnd: '2026-11-11',
+      servicePeriodEnd: '2026-11-12',
     });
     const report = buildPlatformAiCost({
       from: '2026-10',
@@ -530,7 +531,7 @@ describe('buildPlatformAiCost', () => {
               id: 'span',
               period: '2026-10',
               servicePeriodStart: '2026-10-12',
-              servicePeriodEnd: '2026-11-11',
+              servicePeriodEnd: '2026-11-12',
               provider: 'Cursor',
               plan: null,
               type: 'subscription' as const,
@@ -569,15 +570,15 @@ describe('splitBillingEntryByMonth', () => {
         servicePeriodStart: '2026-10-12',
         servicePeriodEnd: '2026-10-20',
       }),
-    ).toEqual([{ period: '2026-10', days: 9, amount: 40 }]);
+    ).toEqual([{ period: '2026-10', days: 8, amount: 40 }]);
   });
 
-  it('splits 12 Oct–11 Nov by days (20/31 and 11/31)', () => {
+  it('splits 12 Oct–12 Nov by exclusive days (20/31 and 11/31)', () => {
     const slices = splitBillingEntryByMonth({
       amount: 31,
       period: '2026-10',
       servicePeriodStart: '2026-10-12',
-      servicePeriodEnd: '2026-11-11',
+      servicePeriodEnd: '2026-11-12',
     });
     expect(slices).toEqual([
       { period: '2026-10', days: 20, amount: 20 },
@@ -588,25 +589,30 @@ describe('splitBillingEntryByMonth', () => {
 
   it('counts 29 February in a leap year and 28 otherwise', () => {
     const leap = splitBillingEntryByMonth({
+      amount: 29,
+      period: '2024-02',
+      servicePeriodStart: '2024-02-01',
+      servicePeriodEnd: '2024-03-01',
+    });
+    expect(leap).toEqual([{ period: '2024-02', days: 29, amount: 29 }]);
+    const common = splitBillingEntryByMonth({
+      amount: 28,
+      period: '2023-02',
+      servicePeriodStart: '2023-02-01',
+      servicePeriodEnd: '2023-03-01',
+    });
+    expect(common).toEqual([{ period: '2023-02', days: 28, amount: 28 }]);
+    const span = splitBillingEntryByMonth({
       amount: 3,
       period: '2024-02',
       servicePeriodStart: '2024-02-28',
-      servicePeriodEnd: '2024-03-01',
+      servicePeriodEnd: '2024-03-02',
     });
-    expect(leap.map((slice) => [slice.period, slice.days])).toEqual([
-      ['2024-02', 2],
-      ['2024-03', 1],
+    expect(span.map((slice) => [slice.period, slice.days, slice.amount])).toEqual([
+      ['2024-02', 2, 2],
+      ['2024-03', 1, 1],
     ]);
-    const common = splitBillingEntryByMonth({
-      amount: 2,
-      period: '2023-02',
-      servicePeriodStart: '2023-02-28',
-      servicePeriodEnd: '2023-03-01',
-    });
-    expect(common.map((slice) => [slice.period, slice.days])).toEqual([
-      ['2023-02', 1],
-      ['2023-03', 1],
-    ]);
+    expect(roundAiMoney(span.reduce((sum, slice) => sum + slice.amount, 0))).toBe(3);
   });
 
   it('rounds to cents with the largest remainder so slices sum exactly', () => {
@@ -614,7 +620,7 @@ describe('splitBillingEntryByMonth', () => {
       amount: 10,
       period: '2026-10',
       servicePeriodStart: '2026-10-12',
-      servicePeriodEnd: '2026-11-11',
+      servicePeriodEnd: '2026-11-12',
     });
     expect(slices.map((slice) => slice.amount)).toEqual([6.45, 3.55]);
     expect(roundAiMoney(slices.reduce((sum, slice) => sum + slice.amount, 0))).toBe(10);
@@ -623,7 +629,7 @@ describe('splitBillingEntryByMonth', () => {
       amount: 1,
       period: '2026-01',
       servicePeriodStart: '2026-01-31',
-      servicePeriodEnd: '2026-02-02',
+      servicePeriodEnd: '2026-02-03',
     });
     expect(thirds.map((slice) => slice.days)).toEqual([1, 2]);
     expect(thirds.map((slice) => slice.amount)).toEqual([0.33, 0.67]);
@@ -636,9 +642,59 @@ describe('splitBillingEntryByMonth', () => {
         amount: -31,
         period: '2026-10',
         servicePeriodStart: '2026-10-12',
-        servicePeriodEnd: '2026-11-11',
+        servicePeriodEnd: '2026-11-12',
       }).map((slice) => slice.amount),
     ).toEqual([-20, -11]);
+  });
+
+  it('splits 6 Oct–6 Nov as 26/31 and 5/31 (200 → 167.74 / 32.26)', () => {
+    const slices = splitBillingEntryByMonth({
+      amount: 200,
+      period: '2026-10',
+      servicePeriodStart: '2026-10-06',
+      servicePeriodEnd: '2026-11-06',
+    });
+    expect(slices).toEqual([
+      { period: '2026-10', days: 26, amount: 167.74 },
+      { period: '2026-11', days: 5, amount: 32.26 },
+    ]);
+    expect(roundAiMoney(slices.reduce((sum, slice) => sum + slice.amount, 0))).toBe(200);
+  });
+
+  it('keeps 1 Oct–1 Nov entirely in October', () => {
+    expect(
+      splitBillingEntryByMonth({
+        amount: 60,
+        period: '2026-10',
+        servicePeriodStart: '2026-10-01',
+        servicePeriodEnd: '2026-11-01',
+      }),
+    ).toEqual([{ period: '2026-10', days: 31, amount: 60 }]);
+  });
+
+  it('keeps a five-day October window in October', () => {
+    expect(
+      splitBillingEntryByMonth({
+        amount: 60,
+        period: '2026-10',
+        servicePeriodStart: '2026-10-01',
+        servicePeriodEnd: '2026-10-06',
+      }),
+    ).toEqual([{ period: '2026-10', days: 5, amount: 60 }]);
+  });
+
+  it('sums cents exactly on uneven exclusive weights', () => {
+    const slices = splitBillingEntryByMonth({
+      amount: 10,
+      period: '2026-10',
+      servicePeriodStart: '2026-10-06',
+      servicePeriodEnd: '2026-11-06',
+    });
+    expect(slices.map((slice) => [slice.days, slice.amount])).toEqual([
+      [26, 8.39],
+      [5, 1.61],
+    ]);
+    expect(roundAiMoney(slices.reduce((sum, slice) => sum + slice.amount, 0))).toBe(10);
   });
 
   it('keeps the whole amount in period when service dates are missing', () => {
@@ -690,6 +746,15 @@ describe('resolveBillingServiceWindow', () => {
     ).toThrow(/servicePeriodEnd/);
   });
 
+  it('rejects an end date equal to the start date', () => {
+    expect(() =>
+      resolveBillingServiceWindow({
+        servicePeriodStart: '2026-10-06',
+        servicePeriodEnd: '2026-10-06',
+      }),
+    ).toThrow(/must be after/);
+  });
+
   it('rejects a single service date', () => {
     expect(() =>
       resolveBillingServiceWindow({
@@ -697,5 +762,139 @@ describe('resolveBillingServiceWindow', () => {
         servicePeriodStart: '2026-10-01',
       }),
     ).toThrow(/both be set/);
+  });
+});
+
+describe('exclusive service-end migration (PRO-T-108)', () => {
+  const migrationSql = readFileSync(
+    new URL(
+      '../../database/src/migrations/0071_ai_billing_exclusive_service_end.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+
+  function addOneDay(ymd: string): string {
+    const year = Number(ymd.slice(0, 4));
+    const month = Number(ymd.slice(5, 7));
+    const day = Number(ymd.slice(8, 10));
+    const date = new Date(Date.UTC(year, month - 1, day + 1));
+    const nextYear = date.getUTCFullYear();
+    const nextMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const nextDay = String(date.getUTCDate()).padStart(2, '0');
+    return `${nextYear}-${nextMonth}-${nextDay}`;
+  }
+
+  function lastDayOfMonth(period: string): string {
+    const year = Number(period.slice(0, 4));
+    const month = Number(period.slice(5, 7));
+    const day = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return `${period}-${String(day).padStart(2, '0')}`;
+  }
+
+  /** Inclusive day counts, the semantics stored before migration 0071. */
+  function inclusiveMonthDays(
+    start: string,
+    end: string,
+  ): Array<{ period: string; days: number }> {
+    const startYear = Number(start.slice(0, 4));
+    const startMonth = Number(start.slice(5, 7));
+    const startDay = Number(start.slice(8, 10));
+    const endYear = Number(end.slice(0, 4));
+    const endMonth = Number(end.slice(5, 7));
+    const endDay = Number(end.slice(8, 10));
+    const counts: Array<{ period: string; days: number }> = [];
+    let year = startYear;
+    let month = startMonth;
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      const period = `${year}-${String(month).padStart(2, '0')}`;
+      const monthDays = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const first = year === startYear && month === startMonth ? startDay : 1;
+      const last = year === endYear && month === endMonth ? endDay : monthDays;
+      const days = last - first + 1;
+      if (days > 0) counts.push({ period, days });
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+    return counts;
+  }
+
+  function monthAmounts(
+    slices: ReadonlyArray<{ period: string; amount: number }>,
+  ): Record<string, number> {
+    return Object.fromEntries(slices.map((slice) => [slice.period, slice.amount]));
+  }
+
+  function expectStableMonthTotals(
+    amount: number,
+    start: string,
+    inclusiveEnd: string,
+  ): void {
+    const beforeDays = inclusiveMonthDays(start, inclusiveEnd);
+    const beforeAmounts = splitAiMoney(
+      amount,
+      beforeDays.map((count) => count.days),
+    );
+    const before = monthAmounts(
+      beforeDays.map((count, index) => ({
+        period: count.period,
+        amount: beforeAmounts[index] ?? 0,
+      })),
+    );
+    const after = monthAmounts(
+      splitBillingEntryByMonth({
+        amount,
+        period: start.slice(0, 7),
+        servicePeriodStart: start,
+        servicePeriodEnd: addOneDay(inclusiveEnd),
+      }),
+    );
+    expect(after).toEqual(before);
+    const sum = Object.values(after).reduce((total, value) => total + value, 0);
+    expect(roundAiMoney(sum)).toBe(roundAiMoney(amount));
+  }
+
+  it('shifts every inclusive end by one day, including 0069 month-end rows', () => {
+    expect(migrationSql).toMatch(/0069/);
+    expect(migrationSql).toMatch(/last day of/i);
+    expect(migrationSql).toMatch(
+      /UPDATE "ai_billing_entries"[\s\S]*"service_period_end" \+ interval '1 day'[\s\S]*WHERE "service_period_end" IS NOT NULL/,
+    );
+    expect(migrationSql).toMatch(
+      /"service_period_end" > "service_period_start"/,
+    );
+    expect(migrationSql).not.toMatch(
+      /WHERE "service_period_end" = .*last/i,
+    );
+  });
+
+  it('keeps month totals for backfilled calendar months', () => {
+    for (const period of [
+      '2023-02',
+      '2024-02',
+      '2026-04',
+      '2026-10',
+      '2026-12',
+    ]) {
+      expectStableMonthTotals(60, `${period}-01`, lastDayOfMonth(period));
+      expectStableMonthTotals(10.01, `${period}-01`, lastDayOfMonth(period));
+      expectStableMonthTotals(-15.5, `${period}-01`, lastDayOfMonth(period));
+    }
+    expect(addOneDay('2026-10-31')).toBe('2026-11-01');
+    expect(addOneDay('2024-02-29')).toBe('2024-03-01');
+    expect(addOneDay('2026-12-31')).toBe('2027-01-01');
+  });
+
+  it('keeps month totals for other inclusive windows', () => {
+    expectStableMonthTotals(200, '2026-10-06', '2026-11-06');
+    expectStableMonthTotals(60, '2026-10-01', '2026-10-06');
+    expectStableMonthTotals(12, '2026-10-06', '2026-10-06');
+    expectStableMonthTotals(12, '2026-10-31', '2026-10-31');
+    expectStableMonthTotals(31, '2026-10-15', '2026-11-01');
+    expectStableMonthTotals(10.01, '2026-01-15', '2026-03-20');
+    expectStableMonthTotals(29, '2024-01-15', '2024-02-29');
   });
 });

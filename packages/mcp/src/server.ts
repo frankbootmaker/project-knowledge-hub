@@ -3283,7 +3283,9 @@ export function createKnowledgeHubMcpServer(
       servicePeriodEnd: z
         .string()
         .nullable()
-        .describe('Inclusive service end YYYY-MM-DD. A span is split across months by days.'),
+        .describe(
+          'Exclusive renewal date YYYY-MM-DD (not included). Days are end minus start. Null with the start.',
+        ),
       provider: z.string(),
       plan: z.string().nullable(),
       type: z.enum(['subscription', 'plan_change', 'on_demand']),
@@ -3316,13 +3318,21 @@ export function createKnowledgeHubMcpServer(
     'list_ai_billing_entries',
     {
       description:
-        'List workspace AI cost entries (subscription, plan_change, on_demand). Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A row that spans months is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional servicePeriodStart and servicePeriodEnd keep rows whose window overlaps that range. Optional aiSystemId filter. Amounts are JSON numbers. Requires pm:read.',
+        'List workspace AI cost entries (subscription, plan_change, on_demand). Each row includes servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included). period is the start month. A span is prorated by days (end minus start) when paid cost is computed. Optional period matches any month the row contributes to. Optional servicePeriodStart and servicePeriodEnd keep rows whose window overlaps that range. The stored end is not a billed day. Optional aiSystemId filter. Amounts are JSON numbers. Requires pm:read.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         period: billingPeriod.optional(),
         aiSystemId: z.string().uuid().optional(),
-        servicePeriodStart: serviceDate.optional().describe('YYYY-MM-DD overlap filter'),
-        servicePeriodEnd: serviceDate.optional().describe('YYYY-MM-DD overlap filter'),
+        servicePeriodStart: serviceDate
+          .optional()
+          .describe(
+            'YYYY-MM-DD overlap filter. Keep rows whose exclusive service end is after this date.',
+          ),
+        servicePeriodEnd: serviceDate
+          .optional()
+          .describe(
+            'YYYY-MM-DD overlap filter. Keep rows whose service window starts on or before this date.',
+          ),
       },
       outputSchema: listBillingOutput,
     },
@@ -3340,12 +3350,17 @@ export function createKnowledgeHubMcpServer(
     'create_ai_billing_entry',
     {
       description:
-        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD, inclusive) prorate the amount across months by days; period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
+        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         period: billingPeriod.optional().describe('YYYY-MM. Derived from servicePeriodStart when that date is set.'),
-        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD'),
-        servicePeriodEnd: serviceDate.nullable().optional().describe('Inclusive service end YYYY-MM-DD'),
+        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD. Set with servicePeriodEnd.'),
+        servicePeriodEnd: serviceDate
+          .nullable()
+          .optional()
+          .describe(
+            'Exclusive renewal date YYYY-MM-DD (not included). Must be after the start. A one-day entry ends the next day.',
+          ),
         provider: z.string().min(1).max(80),
         type: billingType,
         amount: z.union([z.number(), z.string()]),
@@ -3372,12 +3387,20 @@ export function createKnowledgeHubMcpServer(
     'update_ai_billing_entry',
     {
       description:
-        'Update one AI cost entry by entryId. plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) replace the service window; period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
+        'Update one AI cost entry by entryId. plan_change may be negative. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the service window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
       inputSchema: {
         entryId: z.string().uuid(),
         period: billingPeriod.optional(),
-        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD'),
-        servicePeriodEnd: serviceDate.nullable().optional().describe('Inclusive service end YYYY-MM-DD'),
+        servicePeriodStart: serviceDate
+          .nullable()
+          .optional()
+          .describe('Inclusive service start YYYY-MM-DD.'),
+        servicePeriodEnd: serviceDate
+          .nullable()
+          .optional()
+          .describe(
+            'Exclusive renewal date YYYY-MM-DD (not included). Must be after the start.',
+          ),
         provider: z.string().min(1).max(80).optional(),
         type: billingType.optional(),
         amount: z.union([z.number(), z.string()]).optional(),
