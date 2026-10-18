@@ -1666,6 +1666,7 @@ export function createMcpToolHandlers(
           itFlatMonthlyFee: input.itFlatMonthlyFee,
           itOneTimeCost: input.itOneTimeCost,
           itBudgetAllocation: input.itBudgetAllocation,
+          aiTokenRateCurrency: input.aiTokenRateCurrency,
           tags: input.tags,
           metadata: input.metadata,
         },
@@ -1733,6 +1734,7 @@ export function createMcpToolHandlers(
         itFlatMonthlyFee: input.itFlatMonthlyFee,
         itOneTimeCost: input.itOneTimeCost,
         itBudgetAllocation: input.itBudgetAllocation,
+        aiTokenRateCurrency: input.aiTokenRateCurrency,
         tags: input.tags,
         metadata: input.metadata,
       }, { createdBy: actingUserId });
@@ -4843,6 +4845,10 @@ export function createMcpToolHandlers(
             input.aiTokenRateCachePer1k === undefined
               ? undefined
               : parseTokenRate(input.aiTokenRateCachePer1k) ?? null,
+          aiTokenRateCurrency:
+            input.aiTokenRateCurrency === undefined
+              ? undefined
+              : input.aiTokenRateCurrency,
           aiCostNotes:
             input.aiCostNotes === undefined
               ? undefined

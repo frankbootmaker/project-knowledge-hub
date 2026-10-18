@@ -5,6 +5,7 @@ import {
   lookupFxRate,
   paidConversionDate,
   splitSignedMoney,
+  theoreticalUsageDate,
   usageConversionDate,
   type FxRate,
 } from './fx.js';
@@ -42,6 +43,36 @@ describe('paid and usage conversion dates', () => {
         period: '2026-10',
       }),
     ).toBe('2026-10-01');
+  });
+
+  it('uses usage time, then completion, then the last update', () => {
+    expect(
+      theoreticalUsageDate({
+        usageOccurredAt: '2026-10-03T00:00:00.000Z',
+        completedAt: '2026-10-04T00:00:00.000Z',
+        updatedAt: '2026-10-05T00:00:00.000Z',
+        period: '2026-10',
+        fallback: '2026-10-18',
+      }),
+    ).toBe('2026-10-03');
+    expect(
+      theoreticalUsageDate({
+        usageOccurredAt: null,
+        completedAt: '2026-10-04T12:00:00.000Z',
+        updatedAt: '2026-10-05T00:00:00.000Z',
+        period: '2026-10',
+        fallback: '2026-10-18',
+      }),
+    ).toBe('2026-10-04');
+    expect(
+      theoreticalUsageDate({
+        usageOccurredAt: null,
+        completedAt: null,
+        updatedAt: '2026-10-05T00:00:00.000Z',
+        period: '2026-10',
+        fallback: '2026-10-18',
+      }),
+    ).toBe('2026-10-05');
   });
 
   it('uses the usage date, then the usage month', () => {

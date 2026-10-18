@@ -75,6 +75,30 @@ export function usageConversionDate(input: {
   return input.fallback;
 }
 
+/**
+ * Quote date for theoretical API cost: usage time, else completion, else the
+ * task's last update, else the usage month.
+ */
+export function theoreticalUsageDate(input: {
+  usageOccurredAt?: string | Date | null;
+  completedAt?: string | Date | null;
+  updatedAt?: string | Date | null;
+  period?: string | null;
+  fallback: string;
+}): string {
+  const occurred = isoDateOnly(input.usageOccurredAt ?? null);
+  if (occurred) return occurred;
+  const completed = isoDateOnly(input.completedAt ?? null);
+  if (completed) return completed;
+  const updated = isoDateOnly(input.updatedAt ?? null);
+  if (updated) return updated;
+  return usageConversionDate({
+    usageOccurredAt: null,
+    period: input.period,
+    fallback: input.fallback,
+  });
+}
+
 function sourceRank(source: string, base: string, quote: string): number {
   if (source === 'manual') return 30;
   if (source === 'mnb' && (base === 'HUF' || quote === 'HUF')) return 20;

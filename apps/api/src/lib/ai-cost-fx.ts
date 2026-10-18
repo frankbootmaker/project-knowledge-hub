@@ -2,6 +2,7 @@ import {
   allocateAiBillingPool,
   convertMoney,
   convertMoneyParts,
+  projectCurrencySchema,
   roundAiMoney,
   type AiBillingAllocationMethod,
   type AiBillingEntryType,
@@ -468,6 +469,35 @@ export function foldBillingSlices(input: {
     pools: foldedPools,
     sharesByProject,
   };
+}
+
+/** Null or unknown stored currency means the project currency. */
+export function tokenRateCurrency(
+  stored: string | null | undefined,
+  projectCurrency: string,
+): string {
+  const parsed = projectCurrencySchema.safeParse((stored ?? '').trim().toUpperCase());
+  if (parsed.success) return parsed.data;
+  const project = projectCurrencySchema.safeParse(projectCurrency);
+  return project.success ? project.data : projectCurrency;
+}
+
+/**
+ * Sum list-price parts into `to`. A part with no quote stays out of the total
+ * so a foreign amount is not labelled as `to`.
+ */
+export function sumTheoreticalInCurrency(input: {
+  parts: readonly { amount: number; onDate: string }[];
+  from: string;
+  to: string;
+  rates: readonly FxRate[];
+}): number {
+  let total = 0;
+  for (const part of input.parts) {
+    const converted = convertMoney(part.amount, input.from, input.to, part.onDate, input.rates);
+    if (converted.currency === input.to) total += converted.amount;
+  }
+  return roundAiMoney(total);
 }
 
 export function addTheoreticalCost(

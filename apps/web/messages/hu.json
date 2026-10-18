@@ -3177,6 +3177,8 @@
     },
     "aiFlatMonthlyFee": "Havi fix díj",
     "aiFlatMonthlyFeePlaceholder": "Összeg ({currency})",
+    "aiTokenRateCurrency": "Token díj pénzneme",
+    "aiTokenRateCurrencyProject": "Projekt pénzneme ({currency})",
     "aiTokenRatePer1k": "Kevert token díj (1k-ra)",
     "aiTokenRatePer1kPlaceholder": "Összeg ({currency})",
     "aiTokenRateSplitHint": "Üres részleges díj a kevert díjat használja. A vegyes tényleges költség a projekt időtartamára elhatárolt fix díj plusz a tokenköltség.",

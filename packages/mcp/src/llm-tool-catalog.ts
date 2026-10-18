@@ -1652,6 +1652,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
             documentationUrl: { type: 'string' },
           },
         },
+        aiTokenRateCurrency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          nullable: true,
+          description: 'Currency of AI token list prices. Null uses the project currency.',
+        },
         tags: {
           type: 'array',
           maxItems: 30,
@@ -1702,6 +1709,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           nullable: true,
           additionalProperties: true,
           properties: {},
+        },
+        aiTokenRateCurrency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          nullable: true,
+          description: 'Currency of AI token list prices. Null uses the project currency.',
         },
         tags: {
           type: 'array',
@@ -3025,7 +3039,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'update_project_ai_assistant_cost',
     description:
-      'Set AI assistant cost mode on a project AI system. systemId is required. Requires pm:write.',
+      'Set AI assistant cost mode on a project AI system. systemId is required. aiTokenRateCurrency is the list-price currency; null uses the project currency. Theoretical cost converts from that currency at the usage date. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3044,6 +3058,13 @@ const EXTRA_HUB_TOOLS: Array<{
         aiTokenRateInputPer1k: money,
         aiTokenRateOutputPer1k: money,
         aiTokenRateCachePer1k: money,
+        aiTokenRateCurrency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          nullable: true,
+          description: 'Currency of the token list prices. Null uses the project currency.',
+        },
         aiCostNotes: { type: 'string', maxLength: 500, nullable: true },
         aiBudgetAllocation: money,
       },
@@ -3052,7 +3073,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'get_platform_ai_cost',
     description:
-      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts on the usage date. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Defaults to the last 12 months. System administrator only. Requires pm:read. Via call_hub_tool.',
+      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Defaults to the last 12 months. System administrator only. Requires pm:read. Via call_hub_tool.',
     scope: 'pm:read',
     write: false,
     body: {

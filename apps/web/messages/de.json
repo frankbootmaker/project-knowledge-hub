@@ -3178,6 +3178,8 @@
     },
     "aiFlatMonthlyFee": "Monatliche Pauschale",
     "aiFlatMonthlyFeePlaceholder": "Betrag in {currency}",
+    "aiTokenRateCurrency": "Währung der Tokenpreise",
+    "aiTokenRateCurrencyProject": "Projektwährung ({currency})",
     "aiTokenRatePer1k": "Mischpreis je 1k Tokens",
     "aiTokenRatePer1kPlaceholder": "Betrag in {currency}",
     "aiTokenRateSplitHint": "Leerer Teilpreis nutzt den Mischpreis. Gemischte Ist-Kosten sind die über die Projektdaten abgegrenzte Pauschale plus Tokenkosten.",

@@ -1460,6 +1460,7 @@ export {
   lookupFxRate,
   paidConversionDate,
   splitSignedMoney,
+  theoreticalUsageDate,
   usageConversionDate,
   type FxConversion,
   type FxRate,

@@ -20,12 +20,12 @@ import {
   paidConversionDate,
   parseUsageOccurredAt,
   projectCurrencySchema,
+  theoreticalUsageDate,
   resolveAiBillingWindow,
   resolveBillingServiceWindow,
   roundAiMoney,
   settleProjectAiCost,
   splitBillingEntryByMonth,
-  usageConversionDate,
   usageHasTokenBreakdown,
   type AiBillingAllocationMethod,
   type AiBillingEntryType,
@@ -44,9 +44,12 @@ import {
 
 export type { AiPaidPeriod };
 import { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
+import { loadCompletedAtByTask } from './project-delivery.js';
 import {
   addTheoreticalCost,
   foldBillingSlices,
+  sumTheoreticalInCurrency,
+  tokenRateCurrency,
   type CostSlice,
   type FoldedChartPoint,
   type SliceCandidate,
@@ -544,9 +547,66 @@ type TaskUsageRow = {
   sprintId: string | null;
   period: string | null;
   usageOccurredAt: Date | null;
+  onDate: string;
   usage: AiUsageForCost;
   tokens: number;
 };
+
+async function taskUsageRows(
+  database: Database,
+  taskRows: ReadonlyArray<{
+    id: string;
+    projectId: string;
+    aiSystemId: string | null;
+    sprintId?: string | null;
+    status: string;
+    tokensUsed: number | null;
+    tokensInput: number | null;
+    tokensOutput: number | null;
+    tokensCache: number | null;
+    tokensCacheWrite: number | null;
+    billingPeriod: string | null;
+    usageOccurredAt: Date | null;
+    updatedAt: Date;
+  }>,
+  today: string,
+): Promise<TaskUsageRow[]> {
+  const completedAt = await loadCompletedAtByTask(
+    database,
+    taskRows.map((row) => row.id),
+  );
+  const usages: TaskUsageRow[] = [];
+  for (const task of taskRows) {
+    if (task.status === 'cancelled') continue;
+    const usage: AiUsageForCost = {
+      tokensUsed: task.tokensUsed,
+      tokensInput: task.tokensInput,
+      tokensOutput: task.tokensOutput,
+      tokensCache: task.tokensCache,
+      tokensCacheWrite: task.tokensCacheWrite,
+    };
+    const tokens = usageTokenTotal(usage);
+    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
+    const period = usagePeriod(task.billingPeriod, task.usageOccurredAt);
+    usages.push({
+      projectId: task.projectId,
+      aiSystemId: task.aiSystemId,
+      sprintId: task.sprintId ?? null,
+      period,
+      usageOccurredAt: task.usageOccurredAt,
+      onDate: theoreticalUsageDate({
+        usageOccurredAt: task.usageOccurredAt,
+        completedAt: completedAt.get(task.id) ?? null,
+        updatedAt: task.updatedAt,
+        period,
+        fallback: today,
+      }),
+      usage,
+      tokens,
+    });
+  }
+  return usages;
+}
 
 function poolId(period: string, aiSystemId: string | null, currency: string): string {
   return `${period}|${aiSystemId ?? ''}|${currency}`;
@@ -739,6 +799,7 @@ export async function loadProjectPaidAi(
         ),
       database.db
         .select({
+          id: projectTasks.id,
           projectId: projectTasks.projectId,
           aiSystemId: projectTasks.aiSystemId,
           sprintId: projectTasks.sprintId,
@@ -750,6 +811,7 @@ export async function loadProjectPaidAi(
           tokensCacheWrite: projectTasks.tokensCacheWrite,
           billingPeriod: projectTasks.billingPeriod,
           usageOccurredAt: projectTasks.usageOccurredAt,
+          updatedAt: projectTasks.updatedAt,
         })
         .from(projectTasks)
         .innerJoin(projects, eq(projectTasks.projectId, projects.id))
@@ -762,28 +824,7 @@ export async function loadProjectPaidAi(
         ),
     ]);
 
-  const usages: TaskUsageRow[] = [];
-  for (const task of taskRows) {
-    if (task.status === 'cancelled') continue;
-    const usage: AiUsageForCost = {
-      tokensUsed: task.tokensUsed,
-      tokensInput: task.tokensInput,
-      tokensOutput: task.tokensOutput,
-      tokensCache: task.tokensCache,
-      tokensCacheWrite: task.tokensCacheWrite,
-    };
-    const tokens = usageTokenTotal(usage);
-    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
-    usages.push({
-      projectId: task.projectId,
-      aiSystemId: task.aiSystemId,
-      sprintId: task.sprintId,
-      period: usagePeriod(task.billingPeriod, task.usageOccurredAt),
-      usageOccurredAt: task.usageOccurredAt,
-      usage,
-      tokens,
-    });
-  }
+  const usages = await taskUsageRows(database, taskRows, today);
 
   const ratesBySystem = new Map(
     systemInputs.map((system) => [system.systemId, system.rates]),
@@ -816,13 +857,7 @@ export async function loadProjectPaidAi(
   const paidSlices = slicesFromEntries(entryRows);
   const fxDates = [
     ...paidSlices.map((slice) => slice.onDate),
-    ...usages.map((row) =>
-      usageConversionDate({
-        usageOccurredAt: row.usageOccurredAt,
-        period: row.period,
-        fallback: today,
-      }),
-    ),
+    ...usages.map((row) => row.onDate),
   ];
   const fxBook = await loadWorkspaceFx(database, project.workspaceId, fxDates);
   const folded = foldBillingSlices({
@@ -842,7 +877,7 @@ export async function loadProjectPaidAi(
 
   const sliceGroups = new Map<
     string,
-    { period: string | null; systemId: string | null; usages: AiUsageForCost[]; tokens: number }
+    { period: string | null; systemId: string | null; rows: TaskUsageRow[]; tokens: number }
   >();
   for (const row of usages) {
     if (row.projectId !== project.id) continue;
@@ -850,19 +885,29 @@ export async function loadProjectPaidAi(
     const group = sliceGroups.get(key) ?? {
       period: row.period,
       systemId: row.aiSystemId,
-      usages: [],
+      rows: [],
       tokens: 0,
     };
-    group.usages.push(row.usage);
+    group.rows.push(row);
     group.tokens += row.tokens;
     sliceGroups.set(key, group);
   }
   const usageSlices: AiCostUsageSlice[] = [...sliceGroups.values()].map((group) => {
     const rates = group.systemId ? ratesBySystem.get(group.systemId) : undefined;
-    const theoretical = rates ? tokenCostForUsages(group.usages, rates) : 0;
+    const raw = rates ? tokenCostForUsages(group.rows.map((row) => row.usage), rates) : 0;
     const mode = group.systemId ? modeBySystem.get(group.systemId) : null;
-    const legacyToken =
-      rates && (mode === 'api' || mode === 'mixed') ? theoretical : 0;
+    const legacyToken = rates && (mode === 'api' || mode === 'mixed') ? raw : 0;
+    const theoretical = rates
+      ? sumTheoreticalInCurrency({
+          parts: group.rows.map((row) => ({
+            amount: tokenCostForUsages([row.usage], rates),
+            onDate: row.onDate,
+          })),
+          from: tokenRateCurrency(rates.currency, currency),
+          to: currency,
+          rates: fxBook.rates,
+        })
+      : 0;
     return {
       period: group.period,
       systemId: group.systemId,
@@ -874,25 +919,35 @@ export async function loadProjectPaidAi(
 
   const sprintGroups = new Map<
     string,
-    { sprintId: string; usages: AiUsageForCost[]; tokens: number; systemId: string | null }
+    { sprintId: string; rows: TaskUsageRow[]; tokens: number; systemId: string | null }
   >();
   for (const row of usages) {
     if (row.projectId !== project.id || !row.sprintId) continue;
     const key = `${row.sprintId}|${row.aiSystemId ?? ''}`;
     const group = sprintGroups.get(key) ?? {
       sprintId: row.sprintId,
-      usages: [],
+      rows: [],
       tokens: 0,
       systemId: row.aiSystemId,
     };
-    group.usages.push(row.usage);
+    group.rows.push(row);
     group.tokens += row.tokens;
     sprintGroups.set(key, group);
   }
   const sprintTotals = new Map<string, { theoreticalApiCost: number; tokens: number }>();
   for (const group of sprintGroups.values()) {
     const rates = group.systemId ? ratesBySystem.get(group.systemId) : undefined;
-    const theoretical = rates ? tokenCostForUsages(group.usages, rates) : 0;
+    const theoretical = rates
+      ? sumTheoreticalInCurrency({
+          parts: group.rows.map((row) => ({
+            amount: tokenCostForUsages([row.usage], rates),
+            onDate: row.onDate,
+          })),
+          from: tokenRateCurrency(rates.currency, currency),
+          to: currency,
+          rates: fxBook.rates,
+        })
+      : 0;
     const current = sprintTotals.get(group.sprintId) ?? {
       theoreticalApiCost: 0,
       tokens: 0,
@@ -916,28 +971,19 @@ export async function loadProjectPaidAi(
   });
 
   let theoreticalReporting = 0;
-  for (const slice of usageSlices) {
-    const occurred = usages.find(
-      (row) =>
-        row.projectId === project.id &&
-        row.period === slice.period &&
-        row.aiSystemId === slice.systemId,
-    );
-    const converted = convertMoney(
-      slice.theoretical,
-      currency,
-      fxBook.reportingCurrency,
-      usageConversionDate({
-        usageOccurredAt: occurred?.usageOccurredAt ?? null,
-        period: slice.period,
-        fallback: today,
-      }),
-      fxBook.rates,
-    );
-    theoreticalReporting += converted.currency === fxBook.reportingCurrency
-      ? converted.amount
-      : 0;
+  for (const row of usages) {
+    if (row.projectId !== project.id || !row.aiSystemId) continue;
+    const rates = ratesBySystem.get(row.aiSystemId);
+    if (!rates) continue;
+    const amount = tokenCostForUsages([row.usage], rates);
+    theoreticalReporting += sumTheoreticalInCurrency({
+      parts: [{ amount, onDate: row.onDate }],
+      from: tokenRateCurrency(rates.currency, currency),
+      to: fxBook.reportingCurrency,
+      rates: fxBook.rates,
+    });
   }
+  theoreticalReporting = roundAiMoney(theoreticalReporting);
   const projectShares = folded.sharesByProject.get(project.id) ?? [];
   const aiCostFx = projectShares.flatMap((share) =>
     share.conversions.filter(
@@ -1061,6 +1107,7 @@ export async function loadWorkspaceAiCostOverview(
           aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
           aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
           aiTokenRateCacheWritePer1k: systems.aiTokenRateCacheWritePer1k,
+          aiTokenRateCurrency: systems.aiTokenRateCurrency,
         })
         .from(systems)
         .where(
@@ -1072,6 +1119,7 @@ export async function loadWorkspaceAiCostOverview(
         ),
       database.db
         .select({
+          id: projectTasks.id,
           projectId: projectTasks.projectId,
           aiSystemId: projectTasks.aiSystemId,
           status: projectTasks.status,
@@ -1082,6 +1130,7 @@ export async function loadWorkspaceAiCostOverview(
           tokensCacheWrite: projectTasks.tokensCacheWrite,
           billingPeriod: projectTasks.billingPeriod,
           usageOccurredAt: projectTasks.usageOccurredAt,
+          updatedAt: projectTasks.updatedAt,
         })
         .from(projectTasks)
         .innerJoin(projects, eq(projectTasks.projectId, projects.id))
@@ -1094,28 +1143,8 @@ export async function loadWorkspaceAiCostOverview(
         ),
     ]);
 
-  const usages: TaskUsageRow[] = [];
-  for (const task of taskRows) {
-    if (task.status === 'cancelled') continue;
-    const usage: AiUsageForCost = {
-      tokensUsed: task.tokensUsed,
-      tokensInput: task.tokensInput,
-      tokensOutput: task.tokensOutput,
-      tokensCache: task.tokensCache,
-      tokensCacheWrite: task.tokensCacheWrite,
-    };
-    const tokens = usageTokenTotal(usage);
-    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
-    usages.push({
-      projectId: task.projectId,
-      aiSystemId: task.aiSystemId,
-      sprintId: null,
-      period: usagePeriod(task.billingPeriod, task.usageOccurredAt),
-      usageOccurredAt: task.usageOccurredAt,
-      usage,
-      tokens,
-    });
-  }
+  const today = new Date().toISOString().slice(0, 10);
+  const usages = await taskUsageRows(database, taskRows, today);
 
   const ratesBySystem = new Map(
     assistantRows.map((row) => [
@@ -1126,6 +1155,7 @@ export async function loadWorkspaceAiCostOverview(
         outputPer1k: row.aiTokenRateOutputPer1k,
         cachePer1k: row.aiTokenRateCachePer1k,
         cacheWritePer1k: row.aiTokenRateCacheWritePer1k,
+        currency: row.aiTokenRateCurrency,
       },
     ]),
   );
@@ -1153,16 +1183,9 @@ export async function loadWorkspaceAiCostOverview(
       .reduce((sum, row) => sum + row.tokens, 0);
 
   const paidSlices = slicesFromEntries(entryRows);
-  const today = new Date().toISOString().slice(0, 10);
   const fxDates = [
     ...paidSlices.map((slice) => slice.onDate),
-    ...usages.map((row) =>
-      usageConversionDate({
-        usageOccurredAt: row.usageOccurredAt,
-        period: row.period,
-        fallback: today,
-      }),
-    ),
+    ...usages.map((row) => row.onDate),
   ];
   const fxBook = await loadWorkspaceFx(
     database,
@@ -1184,60 +1207,32 @@ export async function loadWorkspaceAiCostOverview(
       }),
   });
 
-  const theoreticalGroups = new Map<
-    string,
-    {
-      period: string;
-      currency: ProjectCurrency;
-      systemId: string;
-      usages: AiUsageForCost[];
-      occurred: Date | null;
-    }
-  >();
+  let reportingChart = folded.reportingChart;
+  let originalChart = folded.originalChart;
   for (const row of usages) {
     if (!row.period || !row.aiSystemId) continue;
     const project = projectById.get(row.projectId);
     const parsed = project ? projectCurrencySchema.safeParse(project.currency) : null;
     if (!parsed?.success) continue;
-    const key = `${row.period}|${parsed.data}|${row.aiSystemId}`;
-    const group = theoreticalGroups.get(key) ?? {
-      period: row.period,
-      currency: parsed.data,
-      systemId: row.aiSystemId,
-      usages: [],
-      occurred: row.usageOccurredAt,
-    };
-    group.usages.push(row.usage);
-    if (row.usageOccurredAt && (!group.occurred || row.usageOccurredAt > group.occurred)) {
-      group.occurred = row.usageOccurredAt;
-    }
-    theoreticalGroups.set(key, group);
-  }
-  let reportingChart = folded.reportingChart;
-  let originalChart = folded.originalChart;
-  for (const group of theoreticalGroups.values()) {
-    const tokenRates = ratesBySystem.get(group.systemId);
+    const tokenRates = ratesBySystem.get(row.aiSystemId);
     if (!tokenRates) continue;
-    const amount = tokenCostForUsages(group.usages, tokenRates);
-    const onDate = usageConversionDate({
-      usageOccurredAt: group.occurred,
-      period: group.period,
-      fallback: today,
-    });
+    const amount = tokenCostForUsages([row.usage], tokenRates);
+    if (amount === 0) continue;
+    const rateCurrency = tokenRateCurrency(tokenRates.currency, parsed.data);
     reportingChart = addTheoreticalCost(reportingChart, {
-      period: group.period,
+      period: row.period,
       amount,
-      currency: group.currency,
+      currency: rateCurrency,
       reportingCurrency: fxBook.reportingCurrency,
-      onDate,
+      onDate: row.onDate,
       rates: fxBook.rates,
     }).chart;
     originalChart = addTheoreticalCost(originalChart, {
-      period: group.period,
+      period: row.period,
       amount,
-      currency: group.currency,
-      reportingCurrency: group.currency,
-      onDate,
+      currency: rateCurrency,
+      reportingCurrency: rateCurrency,
+      onDate: row.onDate,
       rates: [],
     }).chart;
   }

@@ -249,6 +249,8 @@ export type AiTokenRates = {
   cachePer1k: number | null;
   /** Cache-write price per 1k. Null falls back to the blended rate. */
   cacheWritePer1k?: number | null;
+  /** List-price currency. Null means the project currency. */
+  currency?: string | null;
 };
 
 export type AiUsageForCost = {
@@ -420,6 +422,7 @@ export async function computeAiBudgetCosts(
       aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
       aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
       aiTokenRateCacheWritePer1k: systems.aiTokenRateCacheWritePer1k,
+      aiTokenRateCurrency: systems.aiTokenRateCurrency,
       aiBudgetAllocation: systems.aiBudgetAllocation,
     })
     .from(systems)
@@ -539,6 +542,7 @@ export async function computeAiBudgetCosts(
           outputPer1k: parseNumeric(row?.aiTokenRateOutputPer1k),
           cachePer1k: parseNumeric(row?.aiTokenRateCachePer1k),
           cacheWritePer1k: parseNumeric(row?.aiTokenRateCacheWritePer1k),
+          currency: row?.aiTokenRateCurrency ?? null,
         },
       };
     }),

@@ -321,6 +321,8 @@ export const systems = pgTable(
       scale: 4,
       mode: 'number',
     }),
+    /** Currency of the token list prices. Null means the linked project's currency. */
+    aiTokenRateCurrency: text('ai_token_rate_currency'),
     /** Short note, e.g. Cursor Pro+ flat plus on-demand. */
     aiCostNotes: text('ai_cost_notes'),
     aiBudgetAllocation: numeric('ai_budget_allocation', { precision: 14, scale: 2, mode: 'number' }),

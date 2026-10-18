@@ -13,6 +13,7 @@ import {
   normalizeSystemCriticality,
   systemCriticalitySchema,
   systemItCostModeSchema,
+  projectCurrencySchema,
   systemItDetailsSchema,
   systemStatusSchema,
   type AiCostMode,
@@ -58,6 +59,8 @@ export type PublicSystem = {
   aiTokenRateOutputPer1k: number | null;
   aiTokenRateCachePer1k: number | null;
   aiTokenRateCacheWritePer1k: number | null;
+  /** Null means the linked project's currency. */
+  aiTokenRateCurrency: string | null;
   aiCostNotes: string | null;
   aiBudgetAllocation: number | null;
   metadata: Record<string, unknown> | null;
@@ -113,6 +116,7 @@ export function toPublicSystem(
     aiTokenRateOutputPer1k: system.aiTokenRateOutputPer1k,
     aiTokenRateCachePer1k: system.aiTokenRateCachePer1k,
     aiTokenRateCacheWritePer1k: system.aiTokenRateCacheWritePer1k,
+    aiTokenRateCurrency: system.aiTokenRateCurrency,
     aiCostNotes: system.aiCostNotes,
     aiBudgetAllocation: system.aiBudgetAllocation,
     metadata: system.metadataJson,
@@ -205,9 +209,16 @@ export type CreateSystemInput = {
   itFlatMonthlyFee?: number | string | null;
   itOneTimeCost?: number | string | null;
   itBudgetAllocation?: number | string | null;
+  aiTokenRateCurrency?: string | null;
   tags?: string[];
   metadata?: Record<string, unknown> | null;
 };
+
+function parseRateCurrency(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value == null || value.trim() === '') return null;
+  return projectCurrencySchema.parse(value.trim().toUpperCase());
+}
 
 export async function createSystem(
   database: Database,
@@ -304,6 +315,7 @@ export async function createSystem(
         input.itBudgetAllocation === undefined
           ? null
           : parseBudgetAmount(input.itBudgetAllocation) ?? null,
+      aiTokenRateCurrency: parseRateCurrency(input.aiTokenRateCurrency) ?? null,
       metadataJson: input.metadata ?? null,
       createdBy: opts.createdBy,
       updatedAt: new Date(),
@@ -357,6 +369,7 @@ export type UpdateSystemInput = {
   aiTokenRateOutputPer1k?: number | string | null;
   aiTokenRateCachePer1k?: number | string | null;
   aiTokenRateCacheWritePer1k?: number | string | null;
+  aiTokenRateCurrency?: string | null;
   aiCostNotes?: string | null;
   aiBudgetAllocation?: number | string | null;
 };
@@ -407,6 +420,7 @@ export async function updateSystem(
     input.aiTokenRateCacheWritePer1k === undefined
       ? undefined
       : parseTokenRate(input.aiTokenRateCacheWritePer1k) ?? null;
+  const nextRateCurrency = parseRateCurrency(input.aiTokenRateCurrency);
   const nextCostNotes =
     input.aiCostNotes === undefined
       ? undefined
@@ -512,6 +526,10 @@ export async function updateSystem(
         nextCacheWriteRate === undefined
           ? system.aiTokenRateCacheWritePer1k
           : nextCacheWriteRate,
+      aiTokenRateCurrency:
+        nextRateCurrency === undefined
+          ? system.aiTokenRateCurrency
+          : nextRateCurrency,
       aiCostNotes:
         nextCostNotes === undefined ? system.aiCostNotes : nextCostNotes,
       aiBudgetAllocation:
@@ -559,6 +577,7 @@ export async function updateSystem(
     input.aiTokenRateOutputPer1k !== undefined ||
     input.aiTokenRateCachePer1k !== undefined ||
     input.aiTokenRateCacheWritePer1k !== undefined ||
+    input.aiTokenRateCurrency !== undefined ||
     input.aiCostNotes !== undefined ||
     input.aiBudgetAllocation !== undefined ||
     input.itCostMode !== undefined ||

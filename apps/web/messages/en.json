@@ -3177,6 +3177,8 @@
     },
     "aiFlatMonthlyFee": "Flat monthly fee",
     "aiFlatMonthlyFeePlaceholder": "Amount in {currency}",
+    "aiTokenRateCurrency": "Token rate currency",
+    "aiTokenRateCurrencyProject": "Project currency ({currency})",
     "aiTokenRatePer1k": "Blended token rate (per 1k)",
     "aiTokenRatePer1kPlaceholder": "Amount in {currency}",
     "aiTokenRateSplitHint": "Leave a split rate empty to use the blended rate for that part. Mixed actual cost is the flat fee accrued over the project dates plus token cost.",

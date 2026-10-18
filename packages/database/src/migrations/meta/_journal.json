@@ -512,6 +512,13 @@
       "when": 1793577600000,
       "tag": "0072_exchange_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793664000000,
+      "tag": "0073_ai_token_rate_currency",
+      "breakpoints": true
     }
   ]
 }

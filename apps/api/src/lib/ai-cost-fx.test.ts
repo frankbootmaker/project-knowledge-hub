@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { convertMoney, roundAiMoney, type FxRate } from '@project-knowledge-hub/domain';
-import { addTheoreticalCost, foldBillingSlices, type SliceCandidate } from './ai-cost-fx.js';
+import {
+  addTheoreticalCost,
+  foldBillingSlices,
+  sumTheoreticalInCurrency,
+  tokenRateCurrency,
+  type SliceCandidate,
+} from './ai-cost-fx.js';
 
 /**
  * Bootmaker-shaped book. 1 October has no quote, so it falls back to 30 September.
@@ -208,6 +214,34 @@ describe('foldBillingSlices', () => {
     });
     expect(folded.sharesByProject.size).toBe(0);
     expect(folded.pools[0]?.projects.every((project) => project.projectAmount === 0)).toBe(true);
+  });
+});
+
+describe('theoretical token rates', () => {
+  it('converts USD list prices on an EUR project at the usage date', () => {
+    expect(tokenRateCurrency(null, 'EUR')).toBe('EUR');
+    expect(tokenRateCurrency('USD', 'EUR')).toBe('USD');
+    const theoretical = sumTheoreticalInCurrency({
+      from: 'USD',
+      to: 'EUR',
+      rates,
+      parts: [{ amount: 642.35, onDate: '2026-10-01' }],
+    });
+    const paid = 100;
+    expect(theoretical).toBe(convertMoney(642.35, 'USD', 'EUR', '2026-10-01', rates).amount);
+    expect(theoretical).toBe(583.95);
+    expect(roundAiMoney(paid - theoretical)).toBe(roundAiMoney(100 - 583.95));
+    expect(theoretical).not.toBe(642.35);
+  });
+
+  it('keeps an unset rate currency in the project currency', () => {
+    const theoretical = sumTheoreticalInCurrency({
+      from: tokenRateCurrency(null, 'EUR'),
+      to: 'EUR',
+      rates,
+      parts: [{ amount: 12.5, onDate: '2026-10-01' }],
+    });
+    expect(theoretical).toBe(12.5);
   });
 });
 

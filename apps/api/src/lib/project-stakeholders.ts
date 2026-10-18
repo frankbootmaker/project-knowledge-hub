@@ -84,6 +84,7 @@ export type PublicStakeholder = {
   aiTokenRateInputPer1k: number | null;
   aiTokenRateOutputPer1k: number | null;
   aiTokenRateCachePer1k: number | null;
+  aiTokenRateCurrency: string | null;
   aiCostNotes: string | null;
   aiBudgetAllocation: number | null;
   raciRoles: RaciRole[];
@@ -124,6 +125,7 @@ function emptyPersonFields(): Pick<
   | 'aiTokenRateInputPer1k'
   | 'aiTokenRateOutputPer1k'
   | 'aiTokenRateCachePer1k'
+  | 'aiTokenRateCurrency'
   | 'aiCostNotes'
   | 'aiBudgetAllocation'
   | 'raciRoles'
@@ -155,6 +157,7 @@ function emptyPersonFields(): Pick<
     aiTokenRateInputPer1k: null,
     aiTokenRateOutputPer1k: null,
     aiTokenRateCachePer1k: null,
+    aiTokenRateCurrency: null,
     aiCostNotes: null,
     aiBudgetAllocation: null,
     raciRoles: [],
@@ -390,6 +393,7 @@ export async function listProjectStakeholders(
       aiTokenRateInputPer1k: systems.aiTokenRateInputPer1k,
       aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
       aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
+      aiTokenRateCurrency: systems.aiTokenRateCurrency,
       aiCostNotes: systems.aiCostNotes,
       aiBudgetAllocation: systems.aiBudgetAllocation,
     })
@@ -505,6 +509,7 @@ export async function listProjectStakeholders(
         aiTokenRateInputPer1k: null,
         aiTokenRateOutputPer1k: null,
         aiTokenRateCachePer1k: null,
+        aiTokenRateCurrency: null,
         aiCostNotes: null,
         aiBudgetAllocation: null,
         raciRoles: [],
@@ -591,6 +596,7 @@ export async function listProjectStakeholders(
       aiTokenRateInputPer1k: assistant.aiTokenRateInputPer1k,
       aiTokenRateOutputPer1k: assistant.aiTokenRateOutputPer1k,
       aiTokenRateCachePer1k: assistant.aiTokenRateCachePer1k,
+      aiTokenRateCurrency: assistant.aiTokenRateCurrency,
       aiCostNotes: assistant.aiCostNotes,
       aiBudgetAllocation: assistant.aiBudgetAllocation,
       raciRoles: [],
@@ -1220,6 +1226,7 @@ export async function updateAiAssistantCost(
     aiTokenRateInputPer1k?: number | null;
     aiTokenRateOutputPer1k?: number | null;
     aiTokenRateCachePer1k?: number | null;
+    aiTokenRateCurrency?: string | null;
     aiCostNotes?: string | null;
     aiBudgetAllocation?: number | null;
   },
@@ -1279,6 +1286,10 @@ export async function updateAiAssistantCost(
         input.aiTokenRateCachePer1k === undefined
           ? system.aiTokenRateCachePer1k
           : input.aiTokenRateCachePer1k,
+      aiTokenRateCurrency:
+        input.aiTokenRateCurrency === undefined
+          ? system.aiTokenRateCurrency
+          : input.aiTokenRateCurrency,
       aiCostNotes:
         input.aiCostNotes === undefined
           ? system.aiCostNotes
