@@ -8,6 +8,7 @@ import {
 import { syncPendingOffsiteDump } from '@project-knowledge-hub/blob-store';
 import {
   createDatabase,
+  ensureExchangeRates,
   gitRepositoryConnections,
   knowledgeRecords,
   syncEnabledScheduleSlipRisks,
@@ -68,6 +69,7 @@ async function main(): Promise<void> {
   let backupStaleAlertTimer: ReturnType<typeof setInterval> | null = null;
   let auditRetentionTimer: ReturnType<typeof setInterval> | null = null;
   let scheduleSlipTimer: ReturnType<typeof setInterval> | null = null;
+  let exchangeRateTimer: ReturnType<typeof setInterval> | null = null;
   const gitSyncQueue = createGitSyncQueue(env.REDIS_URL);
   const embeddingQueue = createEmbeddingReindexQueue(env.REDIS_URL);
   const documentImportQueue = createDocumentImportConvertQueue(env.REDIS_URL);
@@ -96,6 +98,9 @@ async function main(): Promise<void> {
       }
       if (scheduleSlipTimer) {
         clearInterval(scheduleSlipTimer);
+      }
+      if (exchangeRateTimer) {
+        clearInterval(exchangeRateTimer);
       }
       if (gitWorker) {
         await gitWorker.close();
@@ -432,6 +437,38 @@ async function main(): Promise<void> {
     }, env.AUDIT_RETENTION_INTERVAL_MS);
   }
 
+  if (env.EXCHANGE_RATE_SYNC_INTERVAL_MS > 0) {
+    const runExchangeRates = async () => {
+      try {
+        const today = new Date();
+        const to = today.toISOString().slice(0, 10);
+        const fromDate = new Date(today);
+        fromDate.setUTCDate(fromDate.getUTCDate() - 14);
+        const from = fromDate.toISOString().slice(0, 10);
+        const result = await ensureExchangeRates(
+          database,
+          [from, to],
+          globalThis.fetch,
+          today,
+        );
+        if (result.error) {
+          logger.warn(
+            { imported: result.imported, error: result.error },
+            'Exchange rate import completed with a feed error',
+          );
+        } else if (result.imported > 0) {
+          logger.info({ imported: result.imported }, 'Imported exchange rates');
+        }
+      } catch (error) {
+        logger.error({ err: error }, 'Exchange rate import failed');
+      }
+    };
+    void runExchangeRates();
+    exchangeRateTimer = setInterval(() => {
+      void runExchangeRates();
+    }, env.EXCHANGE_RATE_SYNC_INTERVAL_MS);
+  }
+
   if (env.SCHEDULE_SLIP_INTERVAL_MS > 0) {
     const runScheduleSlip = async () => {
       try {
@@ -466,6 +503,7 @@ async function main(): Promise<void> {
       opsAlertMs: env.BACKUP_STALE_ALERT_INTERVAL_MS,
       backupStaleAfterHours: env.BACKUP_STALE_AFTER_HOURS,
       auditRetentionDays: env.AUDIT_RETENTION_DAYS,
+      exchangeRateSyncMs: env.EXCHANGE_RATE_SYNC_INTERVAL_MS,
       status: 'ready',
     },
     'Worker ready',

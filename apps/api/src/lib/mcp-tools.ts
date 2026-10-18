@@ -4883,12 +4883,15 @@ export function createMcpToolHandlers(
       const report = await loadPlatformAiCost(app.database, {
         ...(input.from ? { from: input.from } : {}),
         ...(input.to ? { to: input.to } : {}),
+        ...(input.reportingCurrency ? { reportingCurrency: input.reportingCurrency } : {}),
       });
       return {
         from: report.from,
         to: report.to,
+        reportingCurrency: report.reportingCurrency,
         months: report.months,
         totals: report.totals,
+        entries: report.entries,
       };
     },
 

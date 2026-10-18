@@ -24,7 +24,12 @@ import {
 } from '../../../../../lib/project-record-access';
 import { apiFetch, requireSession } from '../../../../../lib/session';
 
-type Workspace = { id: string; slug: string; name: string };
+type Workspace = {
+  id: string;
+  slug: string;
+  name: string;
+  reportingCurrency?: string;
+};
 
 export default async function WorkspaceFinancialsPage({
   params,
@@ -62,11 +67,13 @@ export default async function WorkspaceFinancialsPage({
     ]);
   const cost = costResponse?.ok
     ? ((await costResponse.json()) as {
+        reportingCurrency?: string;
         entries: AiBillingEntryRow[];
         chart: AiCostChartPoint[];
+        originalChart?: AiCostChartPoint[];
         pools: AiCostPool[];
       })
-    : { entries: [], chart: [], pools: [] };
+    : { entries: [], chart: [], originalChart: [], pools: [] };
   const systems = systemsResponse?.ok
     ? ((await systemsResponse.json()) as { systems: AiSystemPrice[] }).systems
     : [];
@@ -110,8 +117,11 @@ export default async function WorkspaceFinancialsPage({
           workspaceId={workspace.id}
           workspaceSlug={workspace.slug}
           canMutate={canMutateWorkspace(session, workspace.id)}
+          canAdmin={canAdminWorkspace(session, workspace.id)}
+          reportingCurrency={cost.reportingCurrency ?? workspace.reportingCurrency ?? 'EUR'}
           entries={cost.entries}
           chart={cost.chart}
+          originalChart={cost.originalChart ?? []}
           pools={cost.pools}
           systems={systems}
         />

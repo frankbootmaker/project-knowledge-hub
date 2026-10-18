@@ -29,6 +29,11 @@ export type AiBillingEntryRow = {
   note: string | null;
   externalRef: string | null;
   aiSystemId: string | null;
+  convertedAmount?: number;
+  convertedCurrency?: string;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type AiCostChartPoint = {
@@ -39,6 +44,9 @@ export type AiCostChartPoint = {
   planChange: number;
   onDemand: number;
   theoreticalApiCost: number;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type AiCostPoolProject = {
@@ -49,14 +57,26 @@ export type AiCostPoolProject = {
   overridePercent: number | null;
   amount: number;
   method: 'override' | 'tokens' | 'equal';
+  originalAmount?: number;
+  projectAmount?: number;
+  projectCurrency?: string;
+  reportingAmount?: number;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type AiCostPool = {
   period: string;
   currency: string;
+  originalCurrency?: string;
   aiSystemId: string | null;
   aiSystemName: string | null;
   paidTotal: number;
+  originalPaidTotal?: number;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
   projects: AiCostPoolProject[];
 };
 
@@ -181,20 +201,39 @@ function rateText(value: number | null): string {
   return value == null ? '' : String(value);
 }
 
+function fxDetail(
+  source: string | null | undefined,
+  rateDate: string | null | undefined,
+  rate: number | null | undefined,
+  label: (key: string) => string,
+): string {
+  if (!source) return '';
+  const name = source === 'mixed' ? label('fxMixed') : source.toUpperCase();
+  const date = rateDate ?? '';
+  const figure = rate == null ? '' : rate.toFixed(6);
+  return [name, date, figure].filter(Boolean).join(' · ');
+}
+
 export function AiCostAdmin({
   workspaceId,
   workspaceSlug,
   canMutate,
+  canAdmin = false,
+  reportingCurrency = 'EUR',
   entries,
   chart,
+  originalChart,
   pools,
   systems,
 }: {
   workspaceId: string;
   workspaceSlug: string;
   canMutate: boolean;
+  canAdmin?: boolean;
+  reportingCurrency?: string;
   entries: AiBillingEntryRow[];
   chart: AiCostChartPoint[];
+  originalChart?: AiCostChartPoint[];
   pools: AiCostPool[];
   systems: AiSystemPrice[];
 }) {
@@ -207,10 +246,14 @@ export function AiCostAdmin({
   const systemName = new Map(aiSystems.map((system) => [system.id, system.name]));
   const currencies = useMemo(() => {
     const found = new Set<string>();
-    for (const row of [...entries, ...chart, ...pools]) found.add(row.currency);
+    for (const row of entries) found.add(row.currency);
+    for (const row of originalChart ?? chart) found.add(row.currency);
+    for (const row of pools) found.add(row.originalCurrency ?? row.currency);
     return [...found];
-  }, [entries, chart, pools]);
+  }, [entries, chart, originalChart, pools]);
   const [currency, setCurrency] = useState(currencies[0] ?? 'EUR');
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [reportingDraft, setReportingDraft] = useState(reportingCurrency);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<EntryDraft | null>(null);
@@ -218,9 +261,29 @@ export function AiCostAdmin({
   const [percents, setPercents] = useState<Record<string, string>>({});
   const [rates, setRates] = useState<Record<string, Record<string, string>>>({});
 
-  const visibleChart = chart.filter((row) => row.currency === currency);
-  const visibleEntries = entries.filter((row) => row.currency === currency);
-  const visiblePools = pools.filter((row) => row.currency === currency);
+  const sourceChart = showOriginal ? (originalChart ?? chart) : chart;
+  const visibleChart = showOriginal
+    ? sourceChart.filter((row) => row.currency === currency)
+    : sourceChart;
+  const visibleEntries = showOriginal
+    ? entries.filter((row) => row.currency === currency)
+    : entries;
+  const visiblePools = (showOriginal
+    ? pools.filter((row) => (row.originalCurrency ?? row.currency) === currency)
+    : pools
+  ).map((pool) =>
+    showOriginal
+      ? {
+          ...pool,
+          currency: pool.originalCurrency ?? pool.currency,
+          paidTotal: pool.originalPaidTotal ?? pool.paidTotal,
+          projects: pool.projects.map((project) => ({
+            ...project,
+            amount: project.originalAmount ?? project.amount,
+          })),
+        }
+      : pool,
+  );
   const rangeInvalid = Boolean(
     draft?.servicePeriodStart &&
       draft.servicePeriodEnd &&
@@ -456,10 +519,72 @@ export function AiCostAdmin({
     });
   }
 
+  async function saveReportingCurrency() {
+    if (!canAdmin || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/workspaces/${workspaceId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({ reportingCurrency: reportingDraft }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(payload.error?.message || t('saveFailed'));
+      pushToast(t('reportingCurrencySaved'), 'success');
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('saveFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="grid gap-3">
       {error && !draft ? <ErrorText>{error}</ErrorText> : null}
-      {currencies.length > 1 ? (
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label={t('reportingCurrency')} className="max-w-xs">
+          <Select
+            value={reportingDraft}
+            disabled={!canAdmin || pending}
+            onChange={(event) => setReportingDraft(event.target.value)}
+          >
+            {CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {canAdmin ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-fit"
+            disabled={pending || reportingDraft === reportingCurrency}
+            onClick={() => void saveReportingCurrency()}
+          >
+            {t('saveReportingCurrency')}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-fit"
+          onClick={() => setShowOriginal((current) => !current)}
+        >
+          {showOriginal ? t('showReportingCurrency') : t('showOriginalCurrencies')}
+        </Button>
+      </div>
+      <p className="m-0 text-[13px] text-ink-muted">{t('reportingCurrencyHint')}</p>
+      {showOriginal && currencies.length > 1 ? (
         <Field label={t('currency')} className="max-w-xs">
           <Select value={currency} onChange={(event) => setCurrency(event.target.value)}>
             {currencies.map((code) => (
@@ -502,6 +627,19 @@ export function AiCostAdmin({
               ariaLabel={t('chartAria')}
             />
           )}
+          {visibleChart.some((row) => row.fxSource) ? (
+            <ul className="m-0 grid gap-1 px-3 pb-3 text-[13px] text-ink-muted">
+              {visibleChart.map((row) => {
+                const detail = fxDetail(row.fxSource, row.fxRateDate, row.fxRate, t);
+                if (!detail) return null;
+                return (
+                  <li key={`${row.period}-${row.currency}`}>
+                    {row.period} · {row.currency} · {detail}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
         </div>
       </section>
 
@@ -562,8 +700,18 @@ export function AiCostAdmin({
                     </td>
                     <td>{entry.plan ?? '—'}</td>
                     <td>{t(`type.${entry.type}`)}</td>
-                    <td className="kh-ops-num">
+                    <td
+                      className="kh-ops-num"
+                      title={fxDetail(entry.fxSource, entry.fxRateDate, entry.fxRate, t)}
+                    >
                       {formatMoney(entry.amount, entry.currency, locale)}
+                      {entry.convertedCurrency &&
+                      entry.convertedCurrency !== entry.currency &&
+                      entry.convertedAmount != null ? (
+                        <span className="block text-ink-muted">
+                          {formatMoney(entry.convertedAmount, entry.convertedCurrency, locale)}
+                        </span>
+                      ) : null}
                     </td>
                     <td>{entry.paidAt ? entry.paidAt.slice(0, 10) : '—'}</td>
                     <td>{entry.externalRef ?? '—'}</td>
@@ -602,13 +750,24 @@ export function AiCostAdmin({
           <p className="kh-ops-empty">{t('allocationEmpty')}</p>
         ) : (
           visiblePools.map((pool) => (
-            <div key={`${pool.period}-${pool.currency}-${pool.aiSystemId ?? 'workspace'}`}>
-              <p className="kh-ops-panel-meta m-0 px-3 pt-3">
+            <div
+              key={`${pool.period}-${pool.originalCurrency ?? pool.currency}-${pool.aiSystemId ?? 'workspace'}`}
+            >
+              <p
+                className="kh-ops-panel-meta m-0 px-3 pt-3"
+                title={fxDetail(pool.fxSource, pool.fxRateDate, pool.fxRate, t)}
+              >
                 {pool.period}
                 {' · '}
                 {pool.aiSystemName ?? t('workspacePool')}
                 {' · '}
                 {formatMoney(pool.paidTotal, pool.currency, locale)}
+                {pool.originalCurrency && pool.originalCurrency !== pool.currency ? (
+                  <span>
+                    {' · '}
+                    {formatMoney(pool.originalPaidTotal ?? pool.paidTotal, pool.originalCurrency, locale)}
+                  </span>
+                ) : null}
               </p>
               <div className="kh-ops-table-wrap">
                 <table className="kh-ops-data-table">
@@ -664,8 +823,18 @@ export function AiCostAdmin({
                               (project.overridePercent ?? '—')
                             )}
                           </td>
-                          <td className="kh-ops-num">
+                          <td
+                            className="kh-ops-num"
+                            title={fxDetail(project.fxSource, project.fxRateDate, project.fxRate, t)}
+                          >
                             {formatMoney(project.amount, pool.currency, locale)}
+                            {project.projectCurrency &&
+                            project.projectCurrency !== pool.currency &&
+                            project.projectAmount != null ? (
+                              <span className="block text-ink-muted">
+                                {formatMoney(project.projectAmount, project.projectCurrency, locale)}
+                              </span>
+                            ) : null}
                           </td>
                         </tr>
                       );

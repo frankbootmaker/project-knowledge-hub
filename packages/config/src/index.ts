@@ -300,6 +300,15 @@ export const envSchema = z.object({
     .min(0)
     .default(24 * 60 * 60 * 1000),
   /**
+   * Worker import of ECB (and MNB) reference rates. 0 disables the schedule.
+   * Default 24h. A failed fetch is logged and retried on the next tick.
+   */
+  EXCHANGE_RATE_SYNC_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(24 * 60 * 60 * 1000),
+  /**
    * When a signup stays pending_approval longer than this, email all system admins once.
    * Allowed: 4, 12, or 24.
    */

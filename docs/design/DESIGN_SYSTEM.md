@@ -252,6 +252,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-18
 
 * **AI cost entry end date** — The cost-entry dialog labels service end “Service end (renewal date, not included)” with a hint under the date (`serviceEndHint`). The month-split list shows each month’s day count. An end on the start date is invalid. English, German, and Hungarian copy match.
+* **Reporting currency** — Workspace Financials adds a reporting-currency `Select` beside the AI Cost chart, saved with a secondary `Button`. A ghost `Button` switches the chart, monthly overview, and project shares between that currency and the original currencies. Rate source and rate date sit in a list under the chart and on the amount cell title. Admin Financials uses the same toggle and adds an exchange-rate panel (`Input` date, base, quote, rate) with save and import actions. The cross-workspace total is one currency.
 
 ### 2026-10-17
 

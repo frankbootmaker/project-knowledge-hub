@@ -37,7 +37,7 @@ export {
 import { requireProjectContext } from './project-delivery.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
 import { loadProjectPaidAi } from './ai-billing.js';
-import type { AiPaidPeriod, PublicAiBillingEntry } from './ai-billing.js';
+import type { AiPaidPeriod, ProjectPaidAi, PublicAiBillingEntry } from './ai-billing.js';
 
 export type BudgetTaskCost = {
   taskId: string;
@@ -124,8 +124,22 @@ export type ProjectBudgetSummary = {
     theoreticalApiCost: number;
     tokens: number;
   }>;
-  /** Same-currency ledger rows for this workspace. */
+  /** Ledger rows, with original amount and the reporting-currency conversion. */
   aiBillingEntries: PublicAiBillingEntry[];
+  reportingCurrency: ProjectCurrency;
+  /** Allocated paid AI cost in the workspace reporting currency. */
+  aiPaidReporting: number;
+  /** Theoretical API cost in the workspace reporting currency. */
+  aiTheoreticalReporting: number;
+  aiCostFx: Array<{
+    originalAmount: number;
+    originalCurrency: string;
+    amount: number;
+    currency: string;
+    rate: number | null;
+    rateDate: string | null;
+    source: string | null;
+  }>;
   /** Billable non-AI catalogue system OpEx. */
   systemAc: number;
   aiNoteOnlyTokens: number;
@@ -390,6 +404,10 @@ export async function computeAiBudgetCosts(
   aiSprints: ProjectBudgetSummary['aiSprints'];
   aiBillingEntries: PublicAiBillingEntry[];
   aiSystems: AiBudgetBreakdown[];
+  reportingCurrency: ProjectCurrency;
+  aiPaidReporting: number;
+  aiTheoreticalReporting: number;
+  aiCostFx: ProjectPaidAi['aiCostFx'];
 }> {
   const assistantRows = await database.db
     .select({
@@ -554,6 +572,10 @@ export async function computeAiBudgetCosts(
     aiBillingEntries: paid.entries,
     aiNoteOnlyTokens,
     aiSystems,
+    reportingCurrency: paid.reportingCurrency,
+    aiPaidReporting: paid.aiPaidReporting,
+    aiTheoreticalReporting: paid.aiTheoreticalReporting,
+    aiCostFx: paid.aiCostFx,
   };
 }
 
@@ -975,6 +997,10 @@ export async function getProjectBudgetSummary(
     aiPeriods: ai.aiPeriods,
     aiSprints: ai.aiSprints,
     aiBillingEntries: ai.aiBillingEntries,
+    reportingCurrency: ai.reportingCurrency,
+    aiPaidReporting: ai.aiPaidReporting,
+    aiTheoreticalReporting: ai.aiTheoreticalReporting,
+    aiCostFx: ai.aiCostFx,
     aiNoteOnlyTokens: ai.aiNoteOnlyTokens,
     aiSystems: ai.aiSystems,
     itSystems: it.itSystems,

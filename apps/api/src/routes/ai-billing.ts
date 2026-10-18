@@ -100,6 +100,7 @@ export async function registerAiBillingRoutes(
         provider: z.string().max(80).optional(),
         type: z.string().optional(),
         period: z.string().optional(),
+        reportingCurrency: z.string().optional(),
       })
       .parse(request.query);
     const workspaceId = blank(query.workspaceId);
@@ -130,6 +131,9 @@ export async function registerAiBillingRoutes(
       ...(provider ? { provider } : {}),
       ...(parsedType?.success ? { type: parsedType.data } : {}),
       ...(period ? { period } : {}),
+      ...(blank(query.reportingCurrency)
+        ? { reportingCurrency: blank(query.reportingCurrency) }
+        : {}),
     });
   });
 
