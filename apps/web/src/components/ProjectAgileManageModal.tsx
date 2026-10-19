@@ -24,6 +24,7 @@ import {
   deliveryCompletionIndex,
   displayedParentCompletion,
   formatPercentLabel,
+  formatStableNumber,
   milestoneCompletion,
   parentDateDetail,
   type MilestoneLinkCompletion,
@@ -350,9 +351,24 @@ export function ProjectAgileManageModal({
       });
     }
     const rollup = milestoneCompletion(links);
-    if (!rollup) return '—';
-    return formatPercentLabel(rollup.percent, locale);
-  }, [epics, kind, linkChoices, linkedItemIds, locale, milestones, predecessorRefs, stories, tasks]);
+    if (!rollup) return null;
+    const count = t('completeOf', {
+      done: formatStableNumber(rollup.done, locale),
+      total: rollup.total,
+    });
+    return `${formatPercentLabel(rollup.percent, locale)} · ${count}`;
+  }, [
+    epics,
+    kind,
+    linkChoices,
+    linkedItemIds,
+    locale,
+    milestones,
+    predecessorRefs,
+    stories,
+    t,
+    tasks,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -980,6 +996,9 @@ export function ProjectAgileManageModal({
       </section>
       {kind === 'milestone' ? (
         <section className={`kh-ops-modal-pane${agileTab === 'linked' ? ' active' : ''}`}>
+          {milestoneCompletionLabel ? (
+            <p className="m-0 text-sm text-ink-muted">{milestoneCompletionLabel}</p>
+          ) : null}
           <MilestoneLinkedItemsEditor
             items={linkChoices}
             linkedIds={linkedItemIds}

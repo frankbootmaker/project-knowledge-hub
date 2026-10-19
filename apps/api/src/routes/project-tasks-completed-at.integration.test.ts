@@ -212,4 +212,29 @@ describe.skipIf(!hasIntegrationEnv)('task completedAt', () => {
     expect(task.updatedAt).toBe(updatedAt.toISOString());
     expect(task.completedAt).toBeNull();
   });
+
+  it('clears completedAt after the task leaves done (PRO-B-25)', async () => {
+    const projectId = await createProject();
+    const taskId = await createTask(projectId, 'Reopened readout');
+    const doneAt = new Date(Date.now() - 60 * 60 * 1000);
+    await database!.db.insert(projectTaskActivities).values({
+      taskId,
+      type: 'status_changed',
+      metadataJson: { from: 'todo', to: 'done' },
+      createdAt: doneAt,
+    });
+    await database!.db
+      .update(projectTasks)
+      .set({ status: 'todo', completionPercent: 100, updatedAt: new Date() })
+      .where(eq(projectTasks.id, taskId));
+
+    const detail = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: { cookie: adminCookie },
+    });
+    const task = (detail.json() as { task: TaskPayload }).task;
+    expect(task.status).toBe('todo');
+    expect(task.completedAt).toBeNull();
+  });
 });

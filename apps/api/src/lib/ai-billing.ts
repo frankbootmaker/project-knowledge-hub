@@ -21,6 +21,7 @@ import {
   parseUsageOccurredAt,
   projectCurrencySchema,
   theoreticalUsageDate,
+  taskCompletedAt,
   resolveAiBillingWindow,
   resolveBillingServiceWindow,
   roundAiMoney,
@@ -596,7 +597,7 @@ async function taskUsageRows(
       usageOccurredAt: task.usageOccurredAt,
       onDate: theoreticalUsageDate({
         usageOccurredAt: task.usageOccurredAt,
-        completedAt: completedAt.get(task.id) ?? null,
+        completedAt: taskCompletedAt(task.status, completedAt.get(task.id)),
         updatedAt: task.updatedAt,
         period,
         fallback: today,

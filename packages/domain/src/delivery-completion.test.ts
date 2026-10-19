@@ -323,7 +323,43 @@ describe('milestoneCompletion', () => {
         { kind: 'parent', status: 'active', completionPercent: 25 },
         { kind: 'parent', status: 'planned', completionPercent: null },
       ]),
-    ).toEqual({ percent: 0, done: 0, total: 3 });
+    ).toEqual({ percent: 0, done: 1, total: 3 });
+  });
+
+  it('counts complete items while percent stays binary (PRO-B-26)', () => {
+    expect(
+      milestoneCompletion([
+        { kind: 'task', status: 'done', completionPercent: 100 },
+        { kind: 'task', status: 'todo', completionPercent: 0 },
+        { kind: 'parent', status: 'done', completionPercent: 40 },
+        { kind: 'task', status: 'in_progress', completionPercent: 100 },
+        { kind: 'task', status: 'cancelled', completionPercent: 100 },
+        { kind: 'parent', status: 'planned', completionPercent: null },
+      ]),
+    ).toEqual({ percent: 0, done: 3, total: 4 });
+    // Predecessor-shaped points use the same included set.
+    expect(
+      milestoneCompletion([
+        { kind: 'task', status: 'done', completionPercent: 100 },
+        { kind: 'task', status: 'in_progress', completionPercent: 0 },
+        { kind: 'task', status: 'cancelled', completionPercent: 0 },
+      ]),
+    ).toEqual({ percent: 0, done: 1, total: 2 });
+  });
+
+  it('drops a milestone out of done when linked tasks are reopened (PRO-B-25)', () => {
+    const reopened = [
+      { kind: 'task' as const, status: 'todo', completionPercent: 0 },
+      { kind: 'task' as const, status: 'in_progress', completionPercent: 0 },
+    ];
+    expect(milestoneCompletion(reopened)).toEqual({ percent: 0, done: 0, total: 2 });
+    expect(milestoneStatusFromLinks('done', reopened)).toBe('in_progress');
+    expect(
+      milestoneStatusFromLinks('done', [
+        { kind: 'task', status: 'todo', completionPercent: 0 },
+        { kind: 'parent', status: 'planned', completionPercent: 0 },
+      ]),
+    ).toBe('planned');
   });
 
   it('is complete only when every included link is 100', () => {

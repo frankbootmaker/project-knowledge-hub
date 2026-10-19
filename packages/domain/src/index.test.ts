@@ -15,6 +15,7 @@ import {
   taskActivityTypeSchema,
   resolveTaskCompletionPercent,
   statusForTaskCompletionChange,
+  taskCompletedAt,
   taskCompletionPercentSchema,
   taskStatusSchema,
   userStoryStatusSchema,
@@ -40,6 +41,49 @@ describe('domain foundations', () => {
       resolveTaskCompletionPercent({ status: 'todo', existing: 75 }),
     ).toBe(75);
     expect(resolveTaskCompletionPercent({ status: 'blocked' })).toBe(0);
+    expect(
+      resolveTaskCompletionPercent({
+        status: 'todo',
+        existing: 100,
+        previousStatus: 'done',
+      }),
+    ).toBe(0);
+    expect(
+      resolveTaskCompletionPercent({
+        status: 'in_progress',
+        existing: 100,
+        previousStatus: 'done',
+      }),
+    ).toBe(0);
+    expect(
+      resolveTaskCompletionPercent({
+        status: 'blocked',
+        existing: 100,
+        previousStatus: 'done',
+      }),
+    ).toBe(0);
+    expect(
+      resolveTaskCompletionPercent({
+        status: 'in_progress',
+        existing: 100,
+        previousStatus: 'done',
+        requested: 50,
+      }),
+    ).toBe(50);
+    expect(
+      resolveTaskCompletionPercent({
+        status: 'todo',
+        existing: 75,
+        previousStatus: 'in_progress',
+      }),
+    ).toBe(75);
+    expect(taskCompletedAt('done', '2026-10-19T06:21:17Z')).toBe(
+      '2026-10-19T06:21:17Z',
+    );
+    expect(taskCompletedAt('todo', '2026-10-19T06:21:17Z')).toBeNull();
+    expect(taskCompletedAt('in_progress', '2026-10-19T06:21:17Z')).toBeNull();
+    expect(taskCompletedAt('blocked', '2026-10-19T06:21:17Z')).toBeNull();
+    expect(taskCompletedAt('done', null)).toBeNull();
     expect(
       statusForTaskCompletionChange({ status: 'todo', requested: 25, existing: 0 }),
     ).toBe('in_progress');
