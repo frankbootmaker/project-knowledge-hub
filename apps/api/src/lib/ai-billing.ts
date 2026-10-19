@@ -19,6 +19,7 @@ import {
   isAiBillingActiveProject,
   paidConversionDate,
   parseUsageOccurredAt,
+  parseProjectCurrency,
   projectCurrencySchema,
   theoreticalUsageDate,
   resolveAiBillingWindow,
@@ -284,7 +285,7 @@ export async function createAiBillingEntry(
   });
   const type = input.type;
   const amount = parseBillingAmount(type, input.amount);
-  const currency = projectCurrencySchema.parse(input.currency);
+  const currency = parseProjectCurrency(input.currency);
   const aiSystemId = input.aiSystemId ?? null;
   await assertAiSystemInWorkspace(database, workspaceId, aiSystemId);
   const paidAt = parseUsageOccurredAt(input.paidAt);
@@ -384,7 +385,7 @@ export async function updateAiBillingEntry(
       currency:
         input.currency === undefined
           ? existing.currency
-          : projectCurrencySchema.parse(input.currency),
+          : parseProjectCurrency(input.currency),
       paidAt,
       note:
         input.note === undefined

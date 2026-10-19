@@ -84,6 +84,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
   let projectC = '';
   let narrowToken = '';
   let wideToken = '';
+  let validationToken = '';
   let callId = 1;
   const origin = 'http://localhost:3100';
 
@@ -204,6 +205,21 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     });
     expect(wide.statusCode).toBe(200);
     wideToken = (wide.json() as { token: string }).token;
+
+    const validation = await app.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        organizationId: org!.id,
+        name: 'Validation token',
+        scopes,
+        allowedWorkspaceIds: [workspaceA, workspaceB],
+        actingUserId: admin!.id,
+      },
+    });
+    expect(validation.statusCode).toBe(200);
+    validationToken = (validation.json() as { token: string }).token;
   });
 
   afterAll(async () => {
@@ -479,5 +495,407 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     const hint = String(started.data.hint ?? '');
     expect(hint.startsWith('ChatGPT:')).toBe(false);
     expect(hint).toContain('append_workspace_media_upload');
+  });
+
+  it('PRO-B-22 does not create a change item for a foreign knowledge record', async () => {
+    const foreign = await call(validationToken, 'create_knowledge_record', {
+      workspaceId: workspaceB,
+      projectId: projectB,
+      title: 'Foreign charter',
+      recordType: 'note',
+      contentMarkdown: '# Foreign\n',
+    });
+    expect(foreign.isError).toBe(false);
+    const foreignRecord = foreign.data.knowledgeRecord as {
+      id: string;
+      humanKey: string;
+    };
+    expect(foreignRecord.humanKey).toBeTruthy();
+
+    const before = await call(validationToken, 'list_project_change_items', {
+      projectId: projectA,
+    });
+    expect(before.isError).toBe(false);
+    const beforeItems = before.data.changeItems as Array<{
+      title: string;
+      issueNumber: number;
+    }>;
+    const beforeMax = beforeItems.reduce(
+      (max, item) => Math.max(max, item.issueNumber),
+      0,
+    );
+
+    const attempts = [
+      {
+        title: 'Foreign key',
+        knowledgeRecordId: foreignRecord.humanKey,
+      },
+      {
+        title: 'Foreign uuid',
+        knowledgeRecordId: foreignRecord.id,
+      },
+      {
+        title: 'Foreign recordIds',
+        recordIds: [foreignRecord.id],
+      },
+    ];
+    for (const attempt of attempts) {
+      const created = await call(validationToken, 'create_project_change_item', {
+        projectId: projectA,
+        kind: 'scope',
+        title: attempt.title,
+        ...('recordIds' in attempt
+          ? { recordIds: attempt.recordIds }
+          : { knowledgeRecordId: attempt.knowledgeRecordId }),
+      });
+      expect(created.isError, created.text).toBe(true);
+      expect(created.text).toContain('must belong to this project');
+    }
+
+    const after = await call(validationToken, 'list_project_change_items', {
+      projectId: projectA,
+    });
+    const afterItems = after.data.changeItems as Array<{
+      title: string;
+      issueNumber: number;
+      knowledgeRecordId: string | null;
+    }>;
+    expect(afterItems).toHaveLength(beforeItems.length);
+    for (const title of attempts.map((attempt) => attempt.title)) {
+      expect(afterItems.some((item) => item.title === title)).toBe(false);
+    }
+
+    const local = await call(validationToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectA,
+      title: 'Local note',
+      recordType: 'note',
+      contentMarkdown: '# Local\n',
+    });
+    expect(local.isError).toBe(false);
+    const localId = (local.data.knowledgeRecord as { id: string }).id;
+    const saved = await call(validationToken, 'create_project_change_item', {
+      projectId: projectA,
+      kind: 'scope',
+      title: 'Local recordIds',
+      recordIds: [localId],
+    });
+    expect(saved.isError, saved.text).toBe(false);
+    const savedItem = saved.data.changeItem as {
+      issueNumber: number;
+      knowledgeRecordId: string | null;
+    };
+    expect(savedItem.issueNumber).toBe(beforeMax + 1);
+    expect(savedItem.knowledgeRecordId).toBe(localId);
+  });
+
+  it('PRO-B-23 names the entity for a cross-project link key', async () => {
+    const project = await call(validationToken, 'get_project', { projectId: projectA });
+    expect(project.isError).toBe(false);
+    const prefix = (project.data.project as { keyPrefix: string }).keyPrefix;
+
+    const task = await call(validationToken, 'create_project_task', {
+      projectId: projectC,
+      title: 'Gamma task',
+    });
+    expect(task.isError).toBe(false);
+    const taskKey = (task.data.task as { humanKey: string }).humanKey;
+
+    const foreignTask = await call(validationToken, 'create_project_task', {
+      projectId: projectB,
+      title: 'Beta task for prefix',
+    });
+    expect(foreignTask.isError).toBe(false);
+    const foreignTaskKey = (foreignTask.data.task as { humanKey: string }).humanKey;
+
+    const record = await call(validationToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectA,
+      title: 'Link host',
+      recordType: 'note',
+      contentMarkdown: '# Host\n',
+    });
+    expect(record.isError).toBe(false);
+    const recordKey = (record.data.knowledgeRecord as { humanKey: string }).humanKey;
+
+    const foreignRecord = await call(validationToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectC,
+      title: 'Gamma note',
+      recordType: 'note',
+      contentMarkdown: '# Gamma\n',
+    });
+    expect(foreignRecord.isError).toBe(false);
+    const foreignRecordKey = (foreignRecord.data.knowledgeRecord as { humanKey: string }).humanKey;
+
+    const raid = await call(validationToken, 'create_project_raid_item', {
+      projectId: projectA,
+      kind: 'issue',
+      title: 'Host issue',
+    });
+    expect(raid.isError).toBe(false);
+    const raidKey = (raid.data.raidItem as { humanKey: string }).humanKey;
+
+    const foreignRaid = await call(validationToken, 'create_project_raid_item', {
+      projectId: projectC,
+      kind: 'risk',
+      title: 'Gamma risk',
+    });
+    expect(foreignRaid.isError).toBe(false);
+    const foreignRaidKey = (foreignRaid.data.raidItem as { humanKey: string }).humanKey;
+
+    const change = await call(validationToken, 'create_project_change_item', {
+      projectId: projectA,
+      kind: 'timeline',
+      title: 'Host change',
+    });
+    expect(change.isError).toBe(false);
+    const changeKey = (change.data.changeItem as { humanKey: string }).humanKey;
+
+    const milestone = await call(validationToken, 'create_project_milestone', {
+      projectId: projectA,
+      title: 'Host milestone',
+    });
+    expect(milestone.isError).toBe(false);
+    const milestoneKey = (milestone.data.milestone as { humanKey: string }).humanKey;
+
+    const bug = await call(validationToken, 'create_project_task', {
+      projectId: projectA,
+      title: 'Host bug',
+      itemType: 'bug',
+    });
+    expect(bug.isError).toBe(false);
+    const bugKey = (bug.data.task as { humanKey: string }).humanKey;
+
+    const raidBefore = await call(validationToken, 'list_project_raid_items', {
+      projectId: projectA,
+    });
+    const raidCount = (raidBefore.data.raidItems as unknown[]).length;
+
+    function expectScoped(result: { isError: boolean; text: string }, key: string) {
+      expect(result.isError, result.text).toBe(true);
+      expect(result.text).toContain(key);
+      expect(result.text).toContain(prefix);
+      expect(result.text).not.toContain('No project found for key prefix');
+      expect(
+        result.text.includes('does not belong to project')
+        || result.text.includes('not found in project'),
+      ).toBe(true);
+    }
+
+    expectScoped(
+      await call(validationToken, 'set_knowledge_record_delivery_links', {
+        recordId: recordKey,
+        links: [{ entityType: 'task', entityId: taskKey }],
+      }),
+      taskKey,
+    );
+    expectScoped(
+      await call(validationToken, 'set_knowledge_record_delivery_links', {
+        recordId: recordKey,
+        links: [{ entityType: 'task', entityId: foreignTaskKey }],
+      }),
+      foreignTaskKey,
+    );
+    expectScoped(
+      await call(validationToken, 'set_project_raid_record_links', {
+        raidItemId: raidKey,
+        recordIds: [foreignRecordKey],
+      }),
+      foreignRecordKey,
+    );
+    expectScoped(
+      await call(validationToken, 'update_project_change_item', {
+        changeId: changeKey,
+        deliveryLinks: [{ entityType: 'task', entityId: taskKey }],
+      }),
+      taskKey,
+    );
+    const raidCreate = await call(validationToken, 'create_project_raid_item', {
+      projectId: projectA,
+      kind: 'issue',
+      title: 'Should not exist',
+      taskIds: [taskKey],
+    });
+    expectScoped(raidCreate, taskKey);
+    const raidRecords = await call(validationToken, 'create_project_raid_item', {
+      projectId: projectA,
+      kind: 'issue',
+      title: 'Should not exist either',
+      recordIds: [foreignRecordKey],
+    });
+    expectScoped(raidRecords, foreignRecordKey);
+    const raidAfter = await call(validationToken, 'list_project_raid_items', {
+      projectId: projectA,
+    });
+    expect((raidAfter.data.raidItems as unknown[]).length).toBe(raidCount);
+    expectScoped(
+      await call(validationToken, 'set_knowledge_record_raid_links', {
+        recordId: recordKey,
+        raidItemIds: [foreignRaidKey],
+      }),
+      foreignRaidKey,
+    );
+    expectScoped(
+      await call(validationToken, 'set_project_milestone_item_links', {
+        milestoneId: milestoneKey,
+        items: [{ entityType: 'task', entityId: taskKey }],
+      }),
+      taskKey,
+    );
+    expectScoped(
+      await call(validationToken, 'set_delivery_media_links', {
+        projectId: projectA,
+        entityType: 'task',
+        entityId: taskKey,
+        links: [],
+      }),
+      taskKey,
+    );
+    expectScoped(
+      await call(validationToken, 'update_project_task', {
+        taskId: bugKey,
+        resolution: 'duplicate',
+        duplicateOfTaskId: taskKey,
+      }),
+      taskKey,
+    );
+  });
+
+  it('PRO-B-24 rejects an unknown currency and normalises lowercase', async () => {
+    const rejected = await call(validationToken, 'create_ai_billing_entry', {
+      workspaceId: workspaceA,
+      provider: 'QA',
+      type: 'on_demand',
+      amount: 1,
+      currency: 'XYZ',
+      period: '2026-10',
+    });
+    expect(rejected.isError).toBe(true);
+    expect(rejected.text).toContain('Invalid currency "XYZ"');
+    expect(rejected.text).toContain('EUR');
+    expect(rejected.text).not.toContain('Internal error');
+
+    const digits = await call(validationToken, 'create_ai_billing_entry', {
+      workspaceId: workspaceA,
+      provider: 'QA',
+      type: 'on_demand',
+      amount: 1,
+      currency: '123',
+      period: '2026-10',
+    });
+    expect(digits.isError).toBe(true);
+    expect(digits.text).toContain('Invalid currency "123"');
+    expect(digits.text).not.toContain('Internal error');
+
+    const created = await call(validationToken, 'create_ai_billing_entry', {
+      workspaceId: workspaceA,
+      provider: 'QA',
+      type: 'on_demand',
+      amount: 1,
+      currency: 'eur',
+      period: '2026-10',
+    });
+    expect(created.isError, created.text).toBe(false);
+    const entry = created.data.entry as { id: string; currency: string };
+    expect(entry.currency).toBe('EUR');
+
+    const updatedBad = await call(validationToken, 'update_ai_billing_entry', {
+      entryId: entry.id,
+      currency: 'ABC',
+    });
+    expect(updatedBad.isError).toBe(true);
+    expect(updatedBad.text).toContain('Invalid currency "ABC"');
+    expect(updatedBad.text).not.toContain('Internal error');
+
+    const updated = await call(validationToken, 'update_ai_billing_entry', {
+      entryId: entry.id,
+      currency: 'usd',
+    });
+    expect(updated.isError, updated.text).toBe(false);
+    expect((updated.data.entry as { currency: string }).currency).toBe('USD');
+
+    const listed = await call(validationToken, 'list_ai_billing_entries', {
+      workspaceId: workspaceA,
+    });
+    const rows = listed.data.entries as Array<{ id: string; currency: string }>;
+    expect(rows.find((row) => row.id === entry.id)?.currency).toBe('USD');
+  });
+
+  it('PRO-B-27 removes a symmetric relation from the higher-uuid record', async () => {
+    const left = await call(validationToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectA,
+      title: 'Relation left',
+      recordType: 'note',
+      contentMarkdown: '# Left\n',
+    });
+    const right = await call(validationToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectA,
+      title: 'Relation right',
+      recordType: 'note',
+      contentMarkdown: '# Right\n',
+    });
+    expect(left.isError).toBe(false);
+    expect(right.isError).toBe(false);
+    const records = [
+      left.data.knowledgeRecord as { id: string; humanKey: string },
+      right.data.knowledgeRecord as { id: string; humanKey: string },
+    ].sort((a, b) => a.id.localeCompare(b.id));
+    const lower = records[0]!;
+    const higher = records[1]!;
+
+    const set = await call(validationToken, 'set_knowledge_record_relations', {
+      recordId: higher.humanKey,
+      links: [
+        { targetRecordId: lower.humanKey, relationType: 'relates_to' },
+        { targetRecordId: lower.id, relationType: 'derived_from' },
+      ],
+    });
+    expect(set.isError, set.text).toBe(false);
+    const outbound = (
+      set.data.relations as { outbound: Array<{ relationType: string }> }
+    ).outbound.map((edge) => edge.relationType);
+    expect(outbound).toContain('relates_to');
+    expect(outbound).toContain('derived_from');
+    expect(
+      (set.data.relations as { inbound: unknown[] }).inbound,
+    ).toEqual([]);
+
+    const cleared = await call(validationToken, 'set_knowledge_record_relations', {
+      recordId: higher.id,
+      links: [],
+    });
+    expect(cleared.isError, cleared.text).toBe(false);
+    expect(cleared.data.relations).toMatchObject({ outbound: [], inbound: [] });
+
+    const contradicts = await call(validationToken, 'set_knowledge_record_relations', {
+      recordId: higher.humanKey,
+      links: [{ targetRecordId: lower.humanKey, relationType: 'contradicts' }],
+    });
+    expect(contradicts.isError, contradicts.text).toBe(false);
+    const removed = await call(validationToken, 'set_knowledge_record_relations', {
+      recordId: higher.humanKey,
+      links: [],
+    });
+    expect(removed.isError, removed.text).toBe(false);
+    expect(removed.data.relations).toMatchObject({ outbound: [], inbound: [] });
+
+    const fromLower = await call(validationToken, 'set_knowledge_record_relations', {
+      recordId: lower.humanKey,
+      links: [{ targetRecordId: higher.humanKey, relationType: 'relates_to' }],
+    });
+    expect(fromLower.isError, fromLower.text).toBe(false);
+    const clearedLower = await call(validationToken, 'set_knowledge_record_relations', {
+      recordId: lower.humanKey,
+      links: [],
+    });
+    expect(clearedLower.isError, clearedLower.text).toBe(false);
+    const still = await call(validationToken, 'get_knowledge_record_relations', {
+      recordId: higher.humanKey,
+    });
+    expect(still.isError).toBe(false);
+    expect(still.data.relations).toMatchObject({ outbound: [], inbound: [] });
   });
 });

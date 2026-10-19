@@ -109,8 +109,43 @@ export function relationEdgeKey(edge: StoredRelationEdge): string {
 }
 
 /**
- * Rows stored with from = anchor are the replace set: directed outbound
- * edges, and symmetric edges after canonical ordering.
+ * Directed edges are owned by the record stored as `from`.
+ * Symmetric edges are stored once (lower uuid first) but either endpoint
+ * may add or remove them.
+ */
+export function anchorOwnsStoredRelation(
+  anchorId: string,
+  edge: StoredRelationEdge,
+): boolean {
+  if (edge.fromId === anchorId) return true;
+  return (
+    isSymmetricKnowledgeRecordRelation(edge.relationType)
+    && edge.toId === anchorId
+  );
+}
+
+/**
+ * Where a touching edge appears for this record.
+ * Symmetric types are outbound on both endpoints, independent of uuid order.
+ * Directed inbound edges stay inbound.
+ */
+export function relationListDirection(
+  anchorId: string,
+  edge: StoredRelationEdge,
+): 'outbound' | 'inbound' | null {
+  if (edge.fromId !== anchorId && edge.toId !== anchorId) return null;
+  if (
+    isSymmetricKnowledgeRecordRelation(edge.relationType)
+    || edge.fromId === anchorId
+  ) {
+    return 'outbound';
+  }
+  return 'inbound';
+}
+
+/**
+ * Replace the edges this anchor owns. Directed inbound edges stay.
+ * Symmetric edges are owned by both endpoints.
  */
 export function relationReplacePlan(input: {
   anchorId: string;
@@ -124,7 +159,8 @@ export function relationReplacePlan(input: {
   const existingKeys = new Set(input.existing.map(relationEdgeKey));
   const deleteEdges = input.existing.filter(
     (edge) =>
-      edge.fromId === input.anchorId && !desiredKeys.has(relationEdgeKey(edge)),
+      anchorOwnsStoredRelation(input.anchorId, edge)
+      && !desiredKeys.has(relationEdgeKey(edge)),
   );
   const insertEdges = input.desired.filter(
     (edge) => !existingKeys.has(relationEdgeKey(edge)),

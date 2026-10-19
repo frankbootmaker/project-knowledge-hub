@@ -7,6 +7,7 @@ import {
   knowledgeRecordRelationTypeSchema,
   normalizeStoredRelation,
   relationCyclePath,
+  relationListDirection,
   relationReplacePlan,
   type StoredRelationEdge,
 } from './knowledge-record-relations.js';
@@ -114,6 +115,70 @@ describe('relation replace plan', () => {
     expect(
       plan.deleteEdges.some((edge) => edge.relationType === 'refines'),
     ).toBe(false);
+  });
+
+  it('removes a symmetric edge from the higher uuid and keeps directed inbound', () => {
+    const stored: StoredRelationEdge[] = [
+      { fromId: A, toId: B, relationType: 'relates_to' },
+      { fromId: A, toId: B, relationType: 'contradicts' },
+      { fromId: C, toId: B, relationType: 'depends_on' },
+    ];
+    const cleared = relationReplacePlan({
+      anchorId: B,
+      existing: stored,
+      desired: [],
+    });
+    expect(cleared.deleteEdges).toEqual([
+      { fromId: A, toId: B, relationType: 'relates_to' },
+      { fromId: A, toId: B, relationType: 'contradicts' },
+    ]);
+
+    const kept = relationReplacePlan({
+      anchorId: B,
+      existing: stored,
+      desired: [{ fromId: A, toId: B, relationType: 'relates_to' }],
+    });
+    expect(kept.deleteEdges).toEqual([
+      { fromId: A, toId: B, relationType: 'contradicts' },
+    ]);
+    expect(kept.insertEdges).toEqual([]);
+
+    const fromLower = relationReplacePlan({
+      anchorId: A,
+      existing: stored,
+      desired: [],
+    });
+    expect(fromLower.deleteEdges.map((edge) => edge.relationType)).toEqual([
+      'relates_to',
+      'contradicts',
+    ]);
+  });
+});
+
+describe('relation list direction', () => {
+  it('lists symmetric relations as outbound on both uuid orders', () => {
+    const edge: StoredRelationEdge = {
+      fromId: A,
+      toId: B,
+      relationType: 'relates_to',
+    };
+    expect(relationListDirection(A, edge)).toBe('outbound');
+    expect(relationListDirection(B, edge)).toBe('outbound');
+    expect(relationListDirection(C, edge)).toBeNull();
+    expect(
+      relationListDirection(B, {
+        fromId: A,
+        toId: B,
+        relationType: 'depends_on',
+      }),
+    ).toBe('inbound');
+    expect(
+      relationListDirection(A, {
+        fromId: A,
+        toId: B,
+        relationType: 'derived_from',
+      }),
+    ).toBe('outbound');
   });
 });
 

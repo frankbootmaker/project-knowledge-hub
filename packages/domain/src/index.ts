@@ -1330,6 +1330,7 @@ export {
   MAX_KNOWLEDGE_RECORD_RELATIONS,
   RECORD_RELATIONS_COMPACT_CAP,
   SYMMETRIC_KNOWLEDGE_RECORD_RELATION_TYPES,
+  anchorOwnsStoredRelation,
   canonicalRecordPair,
   graphAfterRelationReplace,
   inverseKnowledgeRecordRelation,
@@ -1339,6 +1340,7 @@ export {
   normalizeStoredRelation,
   relationCyclePath,
   relationEdgeKey,
+  relationListDirection,
   relationReplacePlan,
   type KnowledgeRecordRelationInverse,
   type KnowledgeRecordRelationType,
@@ -1538,6 +1540,25 @@ export {
   type UsageModelTotal,
   type UsageTokenTotals,
 } from './ai-usage-import.js';
+
+/**
+ * ISO 4217 code stored uppercase. Lowercase input is normalised.
+ * Unknown codes throw a validation error that lists the supported set.
+ */
+export function parseProjectCurrency(value: string): ProjectCurrency {
+  const normalized = value.trim().toUpperCase();
+  const parsed = projectCurrencySchema.safeParse(normalized);
+  if (!parsed.success) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message:
+        `Invalid currency "${value}". Allowed values: ` +
+        `${projectCurrencySchema.options.join(', ')}.`,
+      statusCode: 400,
+    });
+  }
+  return parsed.data;
+}
 
 export class AppError extends Error {
   readonly code: string;

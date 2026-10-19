@@ -394,21 +394,17 @@ export async function getChangeItem(
   return withMediaLinks(database, 'change', found);
 }
 
-export async function setChangeDeliveryLinks(
+async function assertChangeDeliveryTargets(
   database: Database,
-  input: {
-    changeId: string;
-    projectId: string;
-    links: Array<{ entityType: ChangeDeliveryEntityType; entityId: string }>;
-    createdBy?: string | null;
-  },
-): Promise<void> {
+  projectId: string,
+  links: Array<{ entityType: ChangeDeliveryEntityType; entityId: string }>,
+): Promise<Array<{ entityType: ChangeDeliveryEntityType; entityId: string }>> {
   const unique = new Map<string, { entityType: ChangeDeliveryEntityType; entityId: string }>();
-  for (const link of input.links) {
+  for (const link of links) {
     unique.set(`${link.entityType}:${link.entityId}`, link);
   }
-  const links = [...unique.values()];
-  for (const link of links) {
+  const normalized = [...unique.values()];
+  for (const link of normalized) {
     const entity = await resolveEntityTitle(
       database,
       link.entityType,
@@ -421,7 +417,7 @@ export async function setChangeDeliveryLinks(
         statusCode: 400,
       });
     }
-    if (entity.projectId !== input.projectId) {
+    if (entity.projectId !== projectId) {
       throw new AppError({
         code: 'CHANGE_LINK_PROJECT_MISMATCH',
         message: 'Change delivery links must target entities in the same project',
@@ -429,6 +425,23 @@ export async function setChangeDeliveryLinks(
       });
     }
   }
+  return normalized;
+}
+
+export async function setChangeDeliveryLinks(
+  database: Database,
+  input: {
+    changeId: string;
+    projectId: string;
+    links: Array<{ entityType: ChangeDeliveryEntityType; entityId: string }>;
+    createdBy?: string | null;
+  },
+): Promise<void> {
+  const links = await assertChangeDeliveryTargets(
+    database,
+    input.projectId,
+    input.links,
+  );
 
   await database.db.transaction(async (tx) => {
     const db = tx as unknown as Database['db'];
@@ -600,8 +613,22 @@ export async function createChangeItem(
     );
   }
   const recordIds = linkedRecordIds(input);
+  if (recordIds && recordIds.length > 0) {
+    await assertChangeRecordsInProject(database, input.projectId, recordIds);
+  }
+  const deliveryLinks =
+    input.deliveryLinks && input.deliveryLinks.length > 0
+      ? await assertChangeDeliveryTargets(
+          database,
+          input.projectId,
+          input.deliveryLinks,
+        )
+      : [];
   const status = input.status ?? 'proposed';
-  
+  // recordIds replaces the linked set. The first id is also stored as
+  // knowledgeRecordId (the legacy single-document column).
+  const primaryRecordId = recordIds?.[0] ?? null;
+
   const created = await database.db.transaction(async (tx) => {
     const allocated = await allocateIssueNumber(database, input.projectId, 'C', tx);
     const [row] = await tx
@@ -624,7 +651,7 @@ export async function createChangeItem(
         baselineStartAfter: input.baselineStartAfter ?? null,
         baselineEndBefore: input.baselineEndBefore ?? null,
         baselineEndAfter: input.baselineEndAfter ?? null,
-        knowledgeRecordId: recordIds?.[0] ?? null,
+        knowledgeRecordId: primaryRecordId,
         sortOrder: input.sortOrder ?? 0,
         issueKeyType: allocated.issueKeyType,
         issueNumber: allocated.issueNumber,
@@ -638,26 +665,27 @@ export async function createChangeItem(
         statusCode: 500,
       });
     }
+    if (recordIds && recordIds.length > 0) {
+      await tx.insert(projectChangeRecordLinks).values(
+        recordIds.map((knowledgeRecordId) => ({
+          changeId: row.id,
+          knowledgeRecordId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
+    if (deliveryLinks.length > 0) {
+      await tx.insert(projectChangeDeliveryLinks).values(
+        deliveryLinks.map((link) => ({
+          changeId: row.id,
+          entityType: link.entityType,
+          entityId: link.entityId,
+          createdBy: input.createdBy ?? null,
+        })),
+      );
+    }
     return row;
   });
-
-  if (recordIds && recordIds.length > 0) {
-    await setChangeRecordLinks(database, {
-      changeId: created.id,
-      projectId: input.projectId,
-      recordIds,
-      createdBy: input.createdBy,
-    });
-  }
-
-  if (input.deliveryLinks && input.deliveryLinks.length > 0) {
-    await setChangeDeliveryLinks(database, {
-      changeId: created.id,
-      projectId: input.projectId,
-      links: input.deliveryLinks,
-      createdBy: input.createdBy,
-    });
-  }
 
   return getChangeItem(database, created.id);
 }
