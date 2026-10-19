@@ -3591,6 +3591,7 @@
     "aiTheoretical": "Theoretisch",
     "aiDifference": "Differenz",
     "aiRatio": "Verhältnis",
+    "aiScheduled": "geplant",
     "aiPeriod": "Monat",
     "aiPeriodsEmpty": "In diesem Fenster gibt es noch keine KI-Kosten.",
     "aiChartAria": "Bezahlte KI-Kosten nach Art gegen theoretische API-Kosten",
@@ -3827,6 +3828,18 @@
     "fxRateInvalid": "Datum und einen positiven Kurs eingeben.",
     "fxImport": "Kurse importieren",
     "fxImported": "{count} Kurse importiert.",
-    "fxImportFailed": "Wechselkurse konnten nicht importiert werden"
+    "fxImportFailed": "Wechselkurse konnten nicht importiert werden",
+    "presetLast12": "Letzte 12 Monate",
+    "presetYear": "Dieses Jahr",
+    "presetAll": "Alle",
+    "scheduled": "geplant",
+    "usageSummary": "Zusammenfassung",
+    "usageSummaryMissing": "Für diesen Import ist keine Zusammenfassung gespeichert.",
+    "usageUnassignedCount": "Nicht zugeordnet",
+    "usageUnassignedRows": "Nicht zugeordnete Zeilen",
+    "usageUnassignedRowsEmpty": "Keine nicht zugeordneten Zeilen in diesem Import.",
+    "usageLoadUnassigned": "Nicht zugeordnete Zeilen zeigen",
+    "usagePrev": "Zurück",
+    "usageNext": "Weiter"
   }
 }

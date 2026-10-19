@@ -27,6 +27,11 @@ import {
   setAiBillingAllocation,
   updateAiBillingEntry,
 } from '../lib/ai-billing.js';
+import {
+  platformAiCostFetchWindow,
+  presentPlatformAiCost,
+  presentWorkspaceAiCost,
+} from '../lib/ai-cost-window.js';
 import { upsertProjectCostSnapshot } from '../lib/project-budget.js';
 
 const entryType = z.enum(AI_BILLING_ENTRY_TYPES);
@@ -96,6 +101,7 @@ export async function registerAiBillingRoutes(
       .object({
         from: z.string().optional(),
         to: z.string().optional(),
+        range: z.enum(['last12', 'year', 'all']).optional(),
         workspaceId: z.string().optional(),
         provider: z.string().max(80).optional(),
         type: z.string().optional(),
@@ -124,9 +130,14 @@ export async function registerAiBillingRoutes(
     const to = blank(query.to);
     const provider = blank(query.provider);
     const period = blank(query.period);
-    return loadPlatformAiCost(app.database, {
+    const fetchWindow = platformAiCostFetchWindow({
       ...(from ? { from } : {}),
       ...(to ? { to } : {}),
+      ...(query.range ? { range: query.range } : {}),
+    });
+    const report = await loadPlatformAiCost(app.database, {
+      ...(fetchWindow.from ? { from: fetchWindow.from } : {}),
+      ...(fetchWindow.to ? { to: fetchWindow.to } : {}),
       ...(workspaceId ? { workspaceId } : {}),
       ...(provider ? { provider } : {}),
       ...(parsedType?.success ? { type: parsedType.data } : {}),
@@ -134,6 +145,11 @@ export async function registerAiBillingRoutes(
       ...(blank(query.reportingCurrency)
         ? { reportingCurrency: blank(query.reportingCurrency) }
         : {}),
+    });
+    return presentPlatformAiCost(report, {
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+      ...(query.range ? { range: query.range } : {}),
     });
   });
 
@@ -145,7 +161,24 @@ export async function registerAiBillingRoutes(
         .object({ workspaceId: z.string().uuid() })
         .parse(request.params);
       requireWorkspaceView(principal, params.workspaceId);
-      return loadWorkspaceAiCostOverview(app.database, params.workspaceId);
+      const query = z
+        .object({
+          from: z.string().optional(),
+          to: z.string().optional(),
+          range: z.enum(['last12', 'year', 'all']).optional(),
+        })
+        .parse(request.query);
+      const from = blank(query.from);
+      const to = blank(query.to);
+      const overview = await loadWorkspaceAiCostOverview(
+        app.database,
+        params.workspaceId,
+      );
+      return presentWorkspaceAiCost(overview, {
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(query.range ? { range: query.range } : {}),
+      });
     },
   );
 

@@ -3252,6 +3252,26 @@ const EXTRA_HUB_TOOLS: Array<{
     },
   },
   {
+    name: 'list_ai_usage_import_summaries',
+    description:
+      'List saved AI usage import summaries and paged unassigned usage rows. Requires pm:read.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        importId: uuidProp('Import id. Limits summaries and unassigned rows to one import.'),
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+        cursor: stringProp('Summary page cursor', { minLength: 1, maxLength: 200 }),
+        unassignedLimit: { type: 'integer', minimum: 1, maximum: 100 },
+        unassignedCursor: stringProp('Unassigned page cursor', { minLength: 1, maxLength: 200 }),
+      },
+    },
+  },
+  {
     name: 'list_ai_usage_imports',
     description:
       'List workspace AI usage imports. Counts cover total, inserted, duplicate, linked, error, and no-token rows. Requires pm:read.',

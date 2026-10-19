@@ -1,9 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Button, ErrorText, Field, FilePicker, useToast } from '../ui';
+
+export type UsageImportSummary = {
+  dateFrom: string | null;
+  dateTo: string | null;
+  totals: {
+    tokensInput: number;
+    tokensCacheWrite: number;
+    tokensCache: number;
+    tokensOutput: number;
+    tokensTotal: number;
+  };
+  models: Array<{ model: string; rowCount: number; tokensTotal: number }>;
+  linkedCount: number;
+  unassignedCount: number;
+};
 
 export type UsageImportRow = {
   id: string;
@@ -18,6 +33,7 @@ export type UsageImportRow = {
   rowCountErrors: number;
   rowCountNoTokens: number;
   errors: Array<{ rowNumber: number; message: string }>;
+  summary: UsageImportSummary | null;
 };
 
 export type UsagePreview = {
@@ -276,26 +292,41 @@ export function UsageImportAdmin({
               </thead>
               <tbody>
                 {imports.map((item) => (
-                  <tr key={item.id}>
-                    <td>{when(item.createdAt)}</td>
-                    <td>{item.createdBy?.displayName ?? '—'}</td>
-                    <td>{item.fileName ?? '—'}</td>
-                    <td>{item.source === 'csv' ? t('sourceCsv') : item.source}</td>
-                    <td>{number(item.rowCountTotal)}</td>
-                    <td>{number(item.rowCountInserted)}</td>
-                    <td>{number(item.rowCountDuplicate)}</td>
-                    <td>{number(item.rowCountLinked)}</td>
-                    <td>{number(item.rowCountNoTokens)}</td>
-                    <td>
-                      {number(item.rowCountErrors)}
-                      {item.errors.length > 0 ? (
+                  <Fragment key={item.id}>
+                    <tr>
+                      <td>{when(item.createdAt)}</td>
+                      <td>{item.createdBy?.displayName ?? '—'}</td>
+                      <td>{item.fileName ?? '—'}</td>
+                      <td>{item.source === 'csv' ? t('sourceCsv') : item.source}</td>
+                      <td>{number(item.rowCountTotal)}</td>
+                      <td>{number(item.rowCountInserted)}</td>
+                      <td>{number(item.rowCountDuplicate)}</td>
+                      <td>{number(item.rowCountLinked)}</td>
+                      <td>{number(item.rowCountNoTokens)}</td>
+                      <td>
+                        {number(item.rowCountErrors)}
+                        {item.errors.length > 0 ? (
+                          <details>
+                            <summary>{t('usageRowErrors')}</summary>
+                            <ErrorList title={t('usageRowErrors')} errors={item.errors} />
+                          </details>
+                        ) : null}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={10}>
                         <details>
-                          <summary>{t('usageRowErrors')}</summary>
-                          <ErrorList title={t('usageRowErrors')} errors={item.errors} />
+                          <summary>{t('usageSummary')}</summary>
+                          <ImportSummary
+                            workspaceId={workspaceId}
+                            item={item}
+                            number={number}
+                            usageRange={usageRange}
+                          />
                         </details>
-                      ) : null}
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -356,6 +387,203 @@ function Stat({
     <div className="kh-ops-stat">
       <div className="kh-ops-stat-label">{label}</div>
       <div className={compact ? 'kh-ops-stat-value is-compact' : 'kh-ops-stat-value'}>{value}</div>
+    </div>
+  );
+}
+
+function ImportSummary({
+  workspaceId,
+  item,
+  number,
+  usageRange,
+}: {
+  workspaceId: string;
+  item: UsageImportRow;
+  number: (value: number) => string;
+  usageRange: (from: string | null, to: string | null) => string;
+}) {
+  const t = useTranslations('financials');
+  const summary = item.summary;
+  if (!summary) {
+    return <p className="m-0 mt-2 text-sm text-ink-muted">{t('usageSummaryMissing')}</p>;
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <p className="m-0 text-sm text-ink-muted">
+        {t('usageDateRange')}: {usageRange(summary.dateFrom, summary.dateTo)}
+      </p>
+      <p className="m-0 text-sm text-ink-muted">
+        {t('usageTotals')}: {t('usageInput')} {number(summary.totals.tokensInput)},{' '}
+        {t('usageCacheWrite')} {number(summary.totals.tokensCacheWrite)},{' '}
+        {t('usageCache')} {number(summary.totals.tokensCache)},{' '}
+        {t('usageOutput')} {number(summary.totals.tokensOutput)},{' '}
+        {t('usageTotal')} {number(summary.totals.tokensTotal)}
+      </p>
+      <p className="m-0 text-sm text-ink-muted">
+        {t('usageLinked')}: {number(summary.linkedCount)}. {t('usageUnassignedCount')}:{' '}
+        {number(summary.unassignedCount)}
+      </p>
+      {summary.models.length > 0 ? (
+        <div className="kh-ops-table-wrap">
+          <table className="kh-ops-data-table">
+            <thead>
+              <tr>
+                <th>{t('usageModel')}</th>
+                <th className="kh-ops-num">{t('usageRows')}</th>
+                <th className="kh-ops-num">{t('usageTotal')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.models.map((model) => (
+                <tr key={model.model}>
+                  <td>{model.model}</td>
+                  <td className="kh-ops-num">{number(model.rowCount)}</td>
+                  <td className="kh-ops-num">{number(model.tokensTotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      <UnassignedImportRows workspaceId={workspaceId} importId={item.id} number={number} />
+    </div>
+  );
+}
+
+type UnassignedPage = {
+  rows: Array<{
+    id: string;
+    occurredAt: string;
+    cloudAgentId: string | null;
+    model: string;
+    tokensInput: number;
+    tokensCacheWrite: number;
+    tokensCache: number;
+    tokensOutput: number;
+    tokensTotal: number;
+  }>;
+  total: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
+function UnassignedImportRows({
+  workspaceId,
+  importId,
+  number,
+}: {
+  workspaceId: string;
+  importId: string;
+  number: (value: number) => string;
+}) {
+  const t = useTranslations('financials');
+  const locale = useLocale();
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [previous, setPrevious] = useState<Array<string | undefined>>([]);
+  const [page, setPage] = useState<UnassignedPage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const params = new URLSearchParams({ limit: '25' });
+    if (cursor) params.set('cursor', cursor);
+    void fetch(
+      `/api/v1/workspaces/${workspaceId}/ai-usage-imports/${importId}/unassigned?${params}`,
+      { credentials: 'include' },
+    )
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as UnassignedPage & ErrorPayload;
+        if (!response.ok) {
+          throw new Error(payload.error?.message || t('usageImportFailed'));
+        }
+        return payload;
+      })
+      .then((payload) => {
+        if (!cancelled) setPage(payload);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : t('usageImportFailed'));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, cursor, workspaceId, importId, t]);
+
+  const when = (value: string) => new Date(value).toLocaleString(locale);
+
+  return (
+    <div>
+      <Button type="button" variant="secondary" onClick={() => setOpen((value) => !value)}>
+        {t('usageLoadUnassigned')}
+      </Button>
+      {open && error ? <ErrorText>{error}</ErrorText> : null}
+      {open && page && page.rows.length === 0 ? (
+        <p className="m-0 mt-2 text-sm text-ink-muted">{t('usageUnassignedRowsEmpty')}</p>
+      ) : null}
+      {open && page && page.rows.length > 0 ? (
+        <div className="mt-2 flex flex-col gap-2">
+          <div className="kh-ops-table-wrap">
+            <table className="kh-ops-data-table" aria-label={t('usageUnassignedRows')}>
+              <thead>
+                <tr>
+                  <th>{t('usageWhen')}</th>
+                  <th>{t('usageCloudAgent')}</th>
+                  <th>{t('usageModel')}</th>
+                  <th className="kh-ops-num">{t('usageInput')}</th>
+                  <th className="kh-ops-num">{t('usageCacheWrite')}</th>
+                  <th className="kh-ops-num">{t('usageCache')}</th>
+                  <th className="kh-ops-num">{t('usageOutput')}</th>
+                  <th className="kh-ops-num">{t('usageTotal')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {page.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{when(row.occurredAt)}</td>
+                    <td>{row.cloudAgentId ?? t('usageNoAgent')}</td>
+                    <td>{row.model}</td>
+                    <td className="kh-ops-num">{number(row.tokensInput)}</td>
+                    <td className="kh-ops-num">{number(row.tokensCacheWrite)}</td>
+                    <td className="kh-ops-num">{number(row.tokensCache)}</td>
+                    <td className="kh-ops-num">{number(row.tokensOutput)}</td>
+                    <td className="kh-ops-num">{number(row.tokensTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={previous.length === 0}
+              onClick={() => {
+                const prior = previous[previous.length - 1];
+                setPrevious((stack) => stack.slice(0, -1));
+                setCursor(prior);
+              }}
+            >
+              {t('usagePrev')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!page.hasMore || !page.nextCursor}
+              onClick={() => {
+                if (!page.nextCursor) return;
+                setPrevious((stack) => [...stack, cursor]);
+                setCursor(page.nextCursor);
+              }}
+            >
+              {t('usageNext')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

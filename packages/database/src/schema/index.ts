@@ -1617,6 +1617,21 @@ export type AiUsageImportErrorJson = {
   message: string;
 };
 
+export type AiUsageImportSummaryJson = {
+  dateFrom: string | null;
+  dateTo: string | null;
+  totals: {
+    tokensInput: number;
+    tokensCacheWrite: number;
+    tokensCache: number;
+    tokensOutput: number;
+    tokensTotal: number;
+  };
+  models: Array<{ model: string; rowCount: number; tokensTotal: number }>;
+  linkedCount: number;
+  unassignedCount: number;
+};
+
 /**
  * One usage import. `source` is `csv` today. `cursor_admin_api` is reserved
  * so a later source can share the event table.
@@ -1644,6 +1659,8 @@ export const aiUsageImports = pgTable(
       .$type<AiUsageImportErrorJson[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    /** Preview snapshot: dates, token totals, models, linked vs unassigned. */
+    summaryJson: jsonb('summary_json').$type<AiUsageImportSummaryJson | null>(),
     ...timestamps,
   },
   (table) => [
