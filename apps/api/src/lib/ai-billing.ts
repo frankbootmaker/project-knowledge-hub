@@ -3,33 +3,39 @@ import type { Database } from '@project-knowledge-hub/database';
 import {
   aiBillingAllocationOverrides,
   aiBillingEntries,
+  ensureExchangeRates,
+  loadExchangeRateBook,
   projectTasks,
   projects,
   systems,
   workspaces,
 } from '@project-knowledge-hub/database';
 import {
-  allocateAiBillingPool,
   assertAiBillingPeriod,
   assertAllocationPercent,
   assertServiceDate,
   buildPlatformAiCost,
+  convertMoney,
   isAiBillingActiveProject,
-  type AiBillingAllocationMethod,
+  paidConversionDate,
   parseUsageOccurredAt,
   projectCurrencySchema,
+  theoreticalUsageDate,
   resolveAiBillingWindow,
   resolveBillingServiceWindow,
   roundAiMoney,
-  scaleAiBillingTypes,
   settleProjectAiCost,
   splitBillingEntryByMonth,
   usageHasTokenBreakdown,
+  type AiBillingAllocationMethod,
   type AiBillingEntryType,
   type AiBillingProjectShare,
   type AiCostUsageSlice,
   type AiFallbackSystem,
   type AiPaidPeriod,
+  type FxConversion,
+  type FxFetcher,
+  type FxRate,
   type PlatformAiCostEntry,
   type PlatformAiWorkspaceMonth,
   type ProjectCurrency,
@@ -38,6 +44,16 @@ import {
 
 export type { AiPaidPeriod };
 import { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
+import { loadCompletedAtByTask } from './project-delivery.js';
+import {
+  addTheoreticalCost,
+  foldBillingSlices,
+  sumTheoreticalInCurrency,
+  tokenRateCurrency,
+  type CostSlice,
+  type FoldedChartPoint,
+  type SliceCandidate,
+} from './ai-cost-fx.js';
 import {
   tokenCostForUsages,
   usageTokenTotal,
@@ -67,6 +83,12 @@ export type PublicAiBillingEntry = {
   externalRef: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Amount in the workspace reporting currency. Same as amount when unconverted. */
+  convertedAmount?: number;
+  convertedCurrency?: string;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type AiBillingEntryWrite = {
@@ -101,6 +123,14 @@ export type ProjectPaidAi = {
     theoreticalApiCost: number;
     tokens: number;
   }>;
+  /** Workspace reporting currency. Paid shares below are in the project currency. */
+  reportingCurrency: ProjectCurrency;
+  /** Allocated paid cost converted into the reporting currency. */
+  aiPaidReporting: number;
+  /** Theoretical API cost converted into the reporting currency. */
+  aiTheoreticalReporting: number;
+  /** One line per source-currency conversion that landed on this project. */
+  aiCostFx: FxConversion[];
 };
 
 type EntryRow = typeof aiBillingEntries.$inferSelect;
@@ -222,9 +252,23 @@ export async function listAiBillingEntries(
     .from(aiBillingEntries)
     .where(eq(aiBillingEntries.workspaceId, workspaceId))
     .orderBy(desc(aiBillingEntries.period), desc(aiBillingEntries.createdAt));
-  return rows
+  const entries = rows
     .map(toPublicEntry)
     .filter((entry) => entryMatchesBillingListFilter(entry, filter));
+  const fxBook = await loadWorkspaceFx(
+    database,
+    workspaceId,
+    entries.map((entry) =>
+      paidConversionDate({
+        paidAt: entry.paidAt,
+        servicePeriodStart: entry.servicePeriodStart,
+        period: entry.period,
+      }),
+    ),
+  );
+  return entries.map((entry) =>
+    decorateEntry(entry, fxBook.reportingCurrency, fxBook.rates),
+  );
 }
 
 export async function createAiBillingEntry(
@@ -502,9 +546,67 @@ type TaskUsageRow = {
   aiSystemId: string | null;
   sprintId: string | null;
   period: string | null;
+  usageOccurredAt: Date | null;
+  onDate: string;
   usage: AiUsageForCost;
   tokens: number;
 };
+
+async function taskUsageRows(
+  database: Database,
+  taskRows: ReadonlyArray<{
+    id: string;
+    projectId: string;
+    aiSystemId: string | null;
+    sprintId?: string | null;
+    status: string;
+    tokensUsed: number | null;
+    tokensInput: number | null;
+    tokensOutput: number | null;
+    tokensCache: number | null;
+    tokensCacheWrite: number | null;
+    billingPeriod: string | null;
+    usageOccurredAt: Date | null;
+    updatedAt: Date;
+  }>,
+  today: string,
+): Promise<TaskUsageRow[]> {
+  const completedAt = await loadCompletedAtByTask(
+    database,
+    taskRows.map((row) => row.id),
+  );
+  const usages: TaskUsageRow[] = [];
+  for (const task of taskRows) {
+    if (task.status === 'cancelled') continue;
+    const usage: AiUsageForCost = {
+      tokensUsed: task.tokensUsed,
+      tokensInput: task.tokensInput,
+      tokensOutput: task.tokensOutput,
+      tokensCache: task.tokensCache,
+      tokensCacheWrite: task.tokensCacheWrite,
+    };
+    const tokens = usageTokenTotal(usage);
+    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
+    const period = usagePeriod(task.billingPeriod, task.usageOccurredAt);
+    usages.push({
+      projectId: task.projectId,
+      aiSystemId: task.aiSystemId,
+      sprintId: task.sprintId ?? null,
+      period,
+      usageOccurredAt: task.usageOccurredAt,
+      onDate: theoreticalUsageDate({
+        usageOccurredAt: task.usageOccurredAt,
+        completedAt: completedAt.get(task.id) ?? null,
+        updatedAt: task.updatedAt,
+        period,
+        fallback: today,
+      }),
+      usage,
+      tokens,
+    });
+  }
+  return usages;
+}
 
 function poolId(period: string, aiSystemId: string | null, currency: string): string {
   return `${period}|${aiSystemId ?? ''}|${currency}`;
@@ -697,6 +799,7 @@ export async function loadProjectPaidAi(
         ),
       database.db
         .select({
+          id: projectTasks.id,
           projectId: projectTasks.projectId,
           aiSystemId: projectTasks.aiSystemId,
           sprintId: projectTasks.sprintId,
@@ -708,6 +811,7 @@ export async function loadProjectPaidAi(
           tokensCacheWrite: projectTasks.tokensCacheWrite,
           billingPeriod: projectTasks.billingPeriod,
           usageOccurredAt: projectTasks.usageOccurredAt,
+          updatedAt: projectTasks.updatedAt,
         })
         .from(projectTasks)
         .innerJoin(projects, eq(projectTasks.projectId, projects.id))
@@ -720,27 +824,7 @@ export async function loadProjectPaidAi(
         ),
     ]);
 
-  const usages: TaskUsageRow[] = [];
-  for (const task of taskRows) {
-    if (task.status === 'cancelled') continue;
-    const usage: AiUsageForCost = {
-      tokensUsed: task.tokensUsed,
-      tokensInput: task.tokensInput,
-      tokensOutput: task.tokensOutput,
-      tokensCache: task.tokensCache,
-      tokensCacheWrite: task.tokensCacheWrite,
-    };
-    const tokens = usageTokenTotal(usage);
-    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
-    usages.push({
-      projectId: task.projectId,
-      aiSystemId: task.aiSystemId,
-      sprintId: task.sprintId,
-      period: usagePeriod(task.billingPeriod, task.usageOccurredAt),
-      usage,
-      tokens,
-    });
-  }
+  const usages = await taskUsageRows(database, taskRows, today);
 
   const ratesBySystem = new Map(
     systemInputs.map((system) => [system.systemId, system.rates]),
@@ -770,64 +854,30 @@ export async function loadProjectPaidAi(
     assistantRows.map((row) => [row.id, row.projectId]),
   );
 
-  const pools = monthPoolsFromBillingEntries(entryRows);
-
-  const shares: AiBillingProjectShare[] = [];
-  for (const pool of pools.values()) {
-    if (pool.currency !== currency) continue;
-    const candidates = openProjects.filter((row) => {
-      if (row.currency !== currency) return false;
-      if (pool.aiSystemId == null) return true;
-      const linked = systemProjectId.get(pool.aiSystemId) === row.id;
-      const used = tokensOf(row.id, pool.period, pool.aiSystemId) > 0;
-      const override = overrideRows.some(
-        (item) =>
-          item.projectId === row.id &&
-          item.period === pool.period &&
-          (item.aiSystemId ?? null) === pool.aiSystemId,
-      );
-      return linked || used || override;
-    });
-    const allocationProjects = candidates.map((row) => {
-      const override = overrideRows.find(
-        (item) =>
-          item.projectId === row.id &&
-          item.period === pool.period &&
-          (item.aiSystemId ?? null) === pool.aiSystemId,
-      );
-      return {
-        projectId: row.id,
-        tokens: tokensOf(row.id, pool.period, pool.aiSystemId),
-        active: isAiBillingActiveProject(row.status, row.archivedAt),
-        overridePercent: override ? Number(override.percent) : null,
-      };
-    });
-    const allocated = allocateAiBillingPool({
-      paidTotal: roundAiMoney(pool.paidTotal),
-      projects: allocationProjects,
-    });
-    const mine = allocated.find((share) => share.projectId === project.id);
-    const covered = allocationProjects.some((row) => row.projectId === project.id);
-    if (!covered) continue;
-    const scaled = scaleAiBillingTypes(mine?.amount ?? 0, {
-      subscription: pool.subscription,
-      planChange: pool.planChange,
-      onDemand: pool.onDemand,
-    });
-    shares.push({
-      period: pool.period,
-      aiSystemId: pool.aiSystemId,
-      amount: mine?.amount ?? 0,
-      subscription: scaled.subscription,
-      planChange: scaled.planChange,
-      onDemand: scaled.onDemand,
-      covered: true,
-    });
-  }
+  const paidSlices = slicesFromEntries(entryRows);
+  const fxDates = [
+    ...paidSlices.map((slice) => slice.onDate),
+    ...usages.map((row) => row.onDate),
+  ];
+  const fxBook = await loadWorkspaceFx(database, project.workspaceId, fxDates);
+  const folded = foldBillingSlices({
+    slices: paidSlices,
+    reportingCurrency: fxBook.reportingCurrency,
+    rates: fxBook.rates,
+    candidates: (slice) =>
+      allocationCandidates({
+        slice,
+        openProjects,
+        systemProjectId,
+        overrideRows,
+        tokensOf,
+      }),
+  });
+  const shares: AiBillingProjectShare[] = folded.sharesByProject.get(project.id) ?? [];
 
   const sliceGroups = new Map<
     string,
-    { period: string | null; systemId: string | null; usages: AiUsageForCost[]; tokens: number }
+    { period: string | null; systemId: string | null; rows: TaskUsageRow[]; tokens: number }
   >();
   for (const row of usages) {
     if (row.projectId !== project.id) continue;
@@ -835,19 +885,29 @@ export async function loadProjectPaidAi(
     const group = sliceGroups.get(key) ?? {
       period: row.period,
       systemId: row.aiSystemId,
-      usages: [],
+      rows: [],
       tokens: 0,
     };
-    group.usages.push(row.usage);
+    group.rows.push(row);
     group.tokens += row.tokens;
     sliceGroups.set(key, group);
   }
   const usageSlices: AiCostUsageSlice[] = [...sliceGroups.values()].map((group) => {
     const rates = group.systemId ? ratesBySystem.get(group.systemId) : undefined;
-    const theoretical = rates ? tokenCostForUsages(group.usages, rates) : 0;
+    const raw = rates ? tokenCostForUsages(group.rows.map((row) => row.usage), rates) : 0;
     const mode = group.systemId ? modeBySystem.get(group.systemId) : null;
-    const legacyToken =
-      rates && (mode === 'api' || mode === 'mixed') ? theoretical : 0;
+    const legacyToken = rates && (mode === 'api' || mode === 'mixed') ? raw : 0;
+    const theoretical = rates
+      ? sumTheoreticalInCurrency({
+          parts: group.rows.map((row) => ({
+            amount: tokenCostForUsages([row.usage], rates),
+            onDate: row.onDate,
+          })),
+          from: tokenRateCurrency(rates.currency, currency),
+          to: currency,
+          rates: fxBook.rates,
+        })
+      : 0;
     return {
       period: group.period,
       systemId: group.systemId,
@@ -859,25 +919,35 @@ export async function loadProjectPaidAi(
 
   const sprintGroups = new Map<
     string,
-    { sprintId: string; usages: AiUsageForCost[]; tokens: number; systemId: string | null }
+    { sprintId: string; rows: TaskUsageRow[]; tokens: number; systemId: string | null }
   >();
   for (const row of usages) {
     if (row.projectId !== project.id || !row.sprintId) continue;
     const key = `${row.sprintId}|${row.aiSystemId ?? ''}`;
     const group = sprintGroups.get(key) ?? {
       sprintId: row.sprintId,
-      usages: [],
+      rows: [],
       tokens: 0,
       systemId: row.aiSystemId,
     };
-    group.usages.push(row.usage);
+    group.rows.push(row);
     group.tokens += row.tokens;
     sprintGroups.set(key, group);
   }
   const sprintTotals = new Map<string, { theoreticalApiCost: number; tokens: number }>();
   for (const group of sprintGroups.values()) {
     const rates = group.systemId ? ratesBySystem.get(group.systemId) : undefined;
-    const theoretical = rates ? tokenCostForUsages(group.usages, rates) : 0;
+    const theoretical = rates
+      ? sumTheoreticalInCurrency({
+          parts: group.rows.map((row) => ({
+            amount: tokenCostForUsages([row.usage], rates),
+            onDate: row.onDate,
+          })),
+          from: tokenRateCurrency(rates.currency, currency),
+          to: currency,
+          rates: fxBook.rates,
+        })
+      : 0;
     const current = sprintTotals.get(group.sprintId) ?? {
       theoreticalApiCost: 0,
       tokens: 0,
@@ -900,11 +970,33 @@ export async function loadProjectPaidAi(
     usage: usageSlices,
   });
 
+  let theoreticalReporting = 0;
+  for (const row of usages) {
+    if (row.projectId !== project.id || !row.aiSystemId) continue;
+    const rates = ratesBySystem.get(row.aiSystemId);
+    if (!rates) continue;
+    const amount = tokenCostForUsages([row.usage], rates);
+    theoreticalReporting += sumTheoreticalInCurrency({
+      parts: [{ amount, onDate: row.onDate }],
+      from: tokenRateCurrency(rates.currency, currency),
+      to: fxBook.reportingCurrency,
+      rates: fxBook.rates,
+    });
+  }
+  theoreticalReporting = roundAiMoney(theoreticalReporting);
+  const projectShares = folded.sharesByProject.get(project.id) ?? [];
+  const aiCostFx = projectShares.flatMap((share) =>
+    share.conversions.filter(
+      (conversion) =>
+        conversion.originalCurrency !== conversion.currency || conversion.source !== 'identity',
+    ),
+  );
+
   return {
     ...settled,
-    entries: entryRows
-      .filter((row) => row.currency === currency)
-      .map(toPublicEntry),
+    entries: entryRows.map((row) =>
+      decorateEntry(toPublicEntry(row), fxBook.reportingCurrency, fxBook.rates),
+    ),
     sprints: [...sprintTotals.entries()]
       .map(([sprintId, value]) => ({
         sprintId,
@@ -912,6 +1004,12 @@ export async function loadProjectPaidAi(
         tokens: value.tokens,
       }))
       .sort((a, b) => a.sprintId.localeCompare(b.sprintId)),
+    reportingCurrency: fxBook.reportingCurrency,
+    aiPaidReporting: roundAiMoney(
+      projectShares.reduce((sum, share) => sum + share.reportingAmount, 0),
+    ),
+    aiTheoreticalReporting: roundAiMoney(theoreticalReporting),
+    aiCostFx,
   };
 }
 
@@ -921,16 +1019,29 @@ export type WorkspaceAiAllocationProject = {
   slug: string;
   tokens: number;
   overridePercent: number | null;
+  /** Display amount: reporting currency, or the original amount when unconverted. */
   amount: number;
   method: AiBillingAllocationMethod;
+  originalAmount: number;
+  projectAmount: number;
+  projectCurrency: string;
+  reportingAmount: number;
+  fxRate: number | null;
+  fxRateDate: string | null;
+  fxSource: string | null;
 };
 
 export type WorkspaceAiCostPool = {
   period: string;
   currency: ProjectCurrency;
+  originalCurrency: string;
   aiSystemId: string | null;
   aiSystemName: string | null;
   paidTotal: number;
+  originalPaidTotal: number;
+  fxRate: number | null;
+  fxRateDate: string | null;
+  fxSource: string | null;
   projects: WorkspaceAiAllocationProject[];
 };
 
@@ -942,11 +1053,16 @@ export type WorkspaceAiCostChartPoint = {
   planChange: number;
   onDemand: number;
   theoreticalApiCost: number;
+  fxRate: number | null;
+  fxRateDate: string | null;
+  fxSource: string | null;
 };
 
 export type WorkspaceAiCostOverview = {
+  reportingCurrency: ProjectCurrency;
   entries: PublicAiBillingEntry[];
   chart: WorkspaceAiCostChartPoint[];
+  originalChart: WorkspaceAiCostChartPoint[];
   pools: WorkspaceAiCostPool[];
 };
 
@@ -957,6 +1073,7 @@ export type WorkspaceAiCostOverview = {
 export async function loadWorkspaceAiCostOverview(
   database: Database,
   workspaceId: string,
+  options?: { reportingCurrency?: ProjectCurrency },
 ): Promise<WorkspaceAiCostOverview> {
   const [entryRows, overrideRows, projectRows, assistantRows, taskRows] =
     await Promise.all([
@@ -990,6 +1107,7 @@ export async function loadWorkspaceAiCostOverview(
           aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
           aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
           aiTokenRateCacheWritePer1k: systems.aiTokenRateCacheWritePer1k,
+          aiTokenRateCurrency: systems.aiTokenRateCurrency,
         })
         .from(systems)
         .where(
@@ -1001,6 +1119,7 @@ export async function loadWorkspaceAiCostOverview(
         ),
       database.db
         .select({
+          id: projectTasks.id,
           projectId: projectTasks.projectId,
           aiSystemId: projectTasks.aiSystemId,
           status: projectTasks.status,
@@ -1011,6 +1130,7 @@ export async function loadWorkspaceAiCostOverview(
           tokensCacheWrite: projectTasks.tokensCacheWrite,
           billingPeriod: projectTasks.billingPeriod,
           usageOccurredAt: projectTasks.usageOccurredAt,
+          updatedAt: projectTasks.updatedAt,
         })
         .from(projectTasks)
         .innerJoin(projects, eq(projectTasks.projectId, projects.id))
@@ -1023,27 +1143,8 @@ export async function loadWorkspaceAiCostOverview(
         ),
     ]);
 
-  const usages: TaskUsageRow[] = [];
-  for (const task of taskRows) {
-    if (task.status === 'cancelled') continue;
-    const usage: AiUsageForCost = {
-      tokensUsed: task.tokensUsed,
-      tokensInput: task.tokensInput,
-      tokensOutput: task.tokensOutput,
-      tokensCache: task.tokensCache,
-      tokensCacheWrite: task.tokensCacheWrite,
-    };
-    const tokens = usageTokenTotal(usage);
-    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
-    usages.push({
-      projectId: task.projectId,
-      aiSystemId: task.aiSystemId,
-      sprintId: null,
-      period: usagePeriod(task.billingPeriod, task.usageOccurredAt),
-      usage,
-      tokens,
-    });
-  }
+  const today = new Date().toISOString().slice(0, 10);
+  const usages = await taskUsageRows(database, taskRows, today);
 
   const ratesBySystem = new Map(
     assistantRows.map((row) => [
@@ -1054,6 +1155,7 @@ export async function loadWorkspaceAiCostOverview(
         outputPer1k: row.aiTokenRateOutputPer1k,
         cachePer1k: row.aiTokenRateCachePer1k,
         cacheWritePer1k: row.aiTokenRateCacheWritePer1k,
+        currency: row.aiTokenRateCurrency,
       },
     ]),
   );
@@ -1080,169 +1182,154 @@ export async function loadWorkspaceAiCostOverview(
       )
       .reduce((sum, row) => sum + row.tokens, 0);
 
-  const pools = monthPoolsFromBillingEntries(entryRows);
-
-  const chart = new Map<
-    string,
-    {
-      period: string;
-      currency: ProjectCurrency;
-      subscription: number;
-      planChange: number;
-      onDemand: number;
-      theoretical: number;
-    }
-  >();
-  const chartKey = (period: string, currency: string) => `${period}|${currency}`;
-  const ensureChart = (period: string, currency: ProjectCurrency) => {
-    const key = chartKey(period, currency);
-    const row = chart.get(key) ?? {
-      period,
-      currency,
-      subscription: 0,
-      planChange: 0,
-      onDemand: 0,
-      theoretical: 0,
-    };
-    chart.set(key, row);
-    return row;
-  };
-
-  const allocationPools: WorkspaceAiCostPool[] = [];
-  for (const pool of pools.values()) {
-    const currency = projectCurrencySchema.safeParse(pool.currency);
-    if (!currency.success) continue;
-    const bucket = ensureChart(pool.period, currency.data);
-    bucket.subscription += pool.subscription;
-    bucket.planChange += pool.planChange;
-    bucket.onDemand += pool.onDemand;
-    const candidates = openProjects.filter((row) => {
-      if (row.currency !== currency.data) return false;
-      if (pool.aiSystemId == null) return true;
-      const linked = systemProjectId.get(pool.aiSystemId) === row.id;
-      const used = tokensOf(row.id, pool.period, pool.aiSystemId) > 0;
-      const override = overrideRows.some(
-        (item) =>
-          item.projectId === row.id &&
-          item.period === pool.period &&
-          (item.aiSystemId ?? null) === pool.aiSystemId,
-      );
-      return linked || used || override;
-    });
-    const allocationProjects = candidates.map((row) => {
-      const override = overrideRows.find(
-        (item) =>
-          item.projectId === row.id &&
-          item.period === pool.period &&
-          (item.aiSystemId ?? null) === pool.aiSystemId,
-      );
-      return {
-        projectId: row.id,
-        tokens: tokensOf(row.id, pool.period, pool.aiSystemId),
-        active: isAiBillingActiveProject(row.status, row.archivedAt),
-        overridePercent: override ? Number(override.percent) : null,
-      };
-    });
-    const allocated = allocateAiBillingPool({
-      paidTotal: roundAiMoney(pool.paidTotal),
-      projects: allocationProjects,
-    });
-    allocationPools.push({
-      period: pool.period,
-      currency: currency.data,
-      aiSystemId: pool.aiSystemId,
-      aiSystemName: pool.aiSystemId
-        ? (systemName.get(pool.aiSystemId) ?? null)
-        : null,
-      paidTotal: roundAiMoney(pool.paidTotal),
-      projects: allocated.map((share) => {
-        const project = projectById.get(share.projectId);
-        const source = allocationProjects.find(
-          (row) => row.projectId === share.projectId,
-        );
-        return {
-          projectId: share.projectId,
-          name: project?.name ?? share.projectId,
-          slug: project?.slug ?? '',
-          tokens: source?.tokens ?? 0,
-          overridePercent: source?.overridePercent ?? null,
-          amount: share.amount,
-          method: share.method,
-        };
+  const paidSlices = slicesFromEntries(entryRows);
+  const fxDates = [
+    ...paidSlices.map((slice) => slice.onDate),
+    ...usages.map((row) => row.onDate),
+  ];
+  const fxBook = await loadWorkspaceFx(
+    database,
+    workspaceId,
+    fxDates,
+    options?.reportingCurrency,
+  );
+  const folded = foldBillingSlices({
+    slices: paidSlices,
+    reportingCurrency: fxBook.reportingCurrency,
+    rates: fxBook.rates,
+    candidates: (slice) =>
+      allocationCandidates({
+        slice,
+        openProjects,
+        systemProjectId,
+        overrideRows,
+        tokensOf,
       }),
-    });
-  }
+  });
 
-  const theoreticalGroups = new Map<
-    string,
-    { period: string; currency: ProjectCurrency; systemId: string; usages: AiUsageForCost[] }
-  >();
+  let reportingChart = folded.reportingChart;
+  let originalChart = folded.originalChart;
   for (const row of usages) {
     if (!row.period || !row.aiSystemId) continue;
     const project = projectById.get(row.projectId);
-    const currency = project
-      ? projectCurrencySchema.safeParse(project.currency)
-      : null;
-    if (!currency?.success) continue;
-    const key = `${chartKey(row.period, currency.data)}|${row.aiSystemId}`;
-    const group = theoreticalGroups.get(key) ?? {
+    const parsed = project ? projectCurrencySchema.safeParse(project.currency) : null;
+    if (!parsed?.success) continue;
+    const tokenRates = ratesBySystem.get(row.aiSystemId);
+    if (!tokenRates) continue;
+    const amount = tokenCostForUsages([row.usage], tokenRates);
+    if (amount === 0) continue;
+    const rateCurrency = tokenRateCurrency(tokenRates.currency, parsed.data);
+    reportingChart = addTheoreticalCost(reportingChart, {
       period: row.period,
-      currency: currency.data,
-      systemId: row.aiSystemId,
-      usages: [],
-    };
-    group.usages.push(row.usage);
-    theoreticalGroups.set(key, group);
-  }
-  for (const group of theoreticalGroups.values()) {
-    const rates = ratesBySystem.get(group.systemId);
-    if (!rates) continue;
-    ensureChart(group.period, group.currency).theoretical += tokenCostForUsages(
-      group.usages,
-      rates,
-    );
+      amount,
+      currency: rateCurrency,
+      reportingCurrency: fxBook.reportingCurrency,
+      onDate: row.onDate,
+      rates: fxBook.rates,
+    }).chart;
+    originalChart = addTheoreticalCost(originalChart, {
+      period: row.period,
+      amount,
+      currency: rateCurrency,
+      reportingCurrency: rateCurrency,
+      onDate: row.onDate,
+      rates: [],
+    }).chart;
   }
 
+  const pools = folded.pools.flatMap((pool) => {
+    const displayCurrency = projectCurrencySchema.safeParse(
+      pool.converted ? pool.reportingCurrency : pool.originalCurrency,
+    );
+    const originalCurrency = projectCurrencySchema.safeParse(pool.originalCurrency);
+    if (!displayCurrency.success || !originalCurrency.success) return [];
+    const showReporting = pool.converted;
+    return [
+      {
+        period: pool.period,
+        currency: displayCurrency.data,
+        originalCurrency: originalCurrency.data,
+        aiSystemId: pool.aiSystemId,
+        aiSystemName: pool.aiSystemId ? (systemName.get(pool.aiSystemId) ?? null) : null,
+        paidTotal: showReporting ? pool.reportingPaidTotal : pool.originalPaidTotal,
+        originalPaidTotal: pool.originalPaidTotal,
+        fxRate: pool.fxRate,
+        fxRateDate: pool.fxRateDate,
+        fxSource: pool.fxSource,
+        projects: pool.projects.map((project) => ({
+          projectId: project.projectId,
+          name: project.name,
+          slug: project.slug,
+          tokens: project.tokens,
+          overridePercent: project.overridePercent,
+          amount: showReporting ? project.reportingAmount : project.originalAmount,
+          method: project.method,
+          originalAmount: project.originalAmount,
+          projectAmount: project.projectAmount,
+          projectCurrency: project.projectCurrency,
+          reportingAmount: project.reportingAmount,
+          fxRate: project.fxRate,
+          fxRateDate: project.fxRateDate,
+          fxSource: project.fxSource,
+        })),
+      },
+    ];
+  });
+
   return {
-    entries: entryRows.map(toPublicEntry),
-    chart: [...chart.values()]
-      .map((row) => ({
-        period: row.period,
-        currency: row.currency,
-        subscription: roundAiMoney(row.subscription),
-        planChange: roundAiMoney(row.planChange),
-        onDemand: roundAiMoney(row.onDemand),
-        paidCost: roundAiMoney(row.subscription + row.planChange + row.onDemand),
-        theoreticalApiCost: roundAiMoney(row.theoretical),
-      }))
-      .sort((a, b) => a.period.localeCompare(b.period) || a.currency.localeCompare(b.currency)),
-    pools: allocationPools.sort(
-      (a, b) =>
-        b.period.localeCompare(a.period) ||
-        a.currency.localeCompare(b.currency) ||
-        (a.aiSystemName ?? '').localeCompare(b.aiSystemName ?? ''),
+    reportingCurrency: fxBook.reportingCurrency,
+    entries: entryRows.map((row) =>
+      decorateEntry(toPublicEntry(row), fxBook.reportingCurrency, fxBook.rates),
+    ),
+    chart: reportingChart.flatMap((row) => {
+      const point = toChartPoint(row);
+      return point ? [point] : [];
+    }),
+    originalChart: originalChart.flatMap((row) => {
+      const point = toChartPoint(row);
+      return point ? [point] : [];
+    }),
+    pools: pools.sort(
+      (left, right) =>
+        right.period.localeCompare(left.period) ||
+        left.originalCurrency.localeCompare(right.originalCurrency) ||
+        (left.aiSystemName ?? '').localeCompare(right.aiSystemName ?? ''),
     ),
   };
 }
+
+export type PlatformAiMonthFx = PlatformAiWorkspaceMonth & {
+  fxRate: number | null;
+  fxRateDate: string | null;
+  fxSource: string | null;
+};
+
+export type PlatformAiTotalFx = {
+  period: string;
+  currency: string;
+  subscription: number;
+  planChange: number;
+  onDemand: number;
+  paidCost: number;
+  theoreticalApiCost: number;
+  difference: number;
+  ratio: number | null;
+  fxRate: number | null;
+  fxRateDate: string | null;
+  fxSource: string | null;
+};
 
 export type PlatformAiCostReport = {
   from: string;
   to: string;
   periods: string[];
+  reportingCurrency: ProjectCurrency;
   workspaces: Array<{ id: string; name: string; slug: string }>;
   providers: string[];
-  months: PlatformAiWorkspaceMonth[];
-  totals: Array<{
-    period: string;
-    currency: string;
-    subscription: number;
-    planChange: number;
-    onDemand: number;
-    paidCost: number;
-    theoreticalApiCost: number;
-    difference: number;
-    ratio: number | null;
-  }>;
+  months: PlatformAiMonthFx[];
+  totals: PlatformAiTotalFx[];
+  originalMonths: PlatformAiMonthFx[];
+  originalTotals: PlatformAiTotalFx[];
   entries: PlatformAiCostEntry[];
 };
 
@@ -1259,11 +1346,14 @@ export async function loadPlatformAiCost(
     provider?: string;
     type?: AiBillingEntryType;
     period?: string;
+    reportingCurrency?: string;
   },
   now = new Date(),
 ): Promise<PlatformAiCostReport> {
   const window = resolveAiBillingWindow({ from: query.from, to: query.to }, now);
   if (query.period) assertAiBillingPeriod(query.period);
+  const reportingCurrency = projectCurrencySchema.safeParse(query.reportingCurrency ?? 'EUR');
+  const rollup = reportingCurrency.success ? reportingCurrency.data : 'EUR';
   const workspaceRows = await database.db
     .select({
       id: workspaces.id,
@@ -1275,28 +1365,258 @@ export async function loadPlatformAiCost(
   const overviews = await Promise.all(
     workspaceRows.map(async (workspace) => ({
       workspace,
-      overview: await loadWorkspaceAiCostOverview(database, workspace.id),
+      overview: await loadWorkspaceAiCostOverview(database, workspace.id, {
+        reportingCurrency: rollup,
+      }),
     })),
   );
-  const report = buildPlatformAiCost({
-    from: window.from,
-    to: window.to,
-    workspaces: overviews.map(({ workspace, overview }) => ({
+  const entryFilter = {
+    ...(query.workspaceId ? { workspaceId: query.workspaceId } : {}),
+    ...(query.provider ? { provider: query.provider } : {}),
+    ...(query.type ? { type: query.type } : {}),
+    ...(query.period ? { period: query.period } : {}),
+  };
+  const workspacesFor = (
+    chart: 'chart' | 'originalChart',
+  ) =>
+    overviews.map(({ workspace, overview }) => ({
       workspaceId: workspace.id,
       name: workspace.name,
       slug: workspace.slug,
-      chart: overview.chart,
+      chart: overview[chart],
       entries: overview.entries,
-    })),
-    entryFilter: {
-      ...(query.workspaceId ? { workspaceId: query.workspaceId } : {}),
-      ...(query.provider ? { provider: query.provider } : {}),
-      ...(query.type ? { type: query.type } : {}),
-      ...(query.period ? { period: query.period } : {}),
-    },
+    }));
+  const report = buildPlatformAiCost({
+    from: window.from,
+    to: window.to,
+    workspaces: workspacesFor('chart'),
+    entryFilter,
   });
+  const original = buildPlatformAiCost({
+    from: window.from,
+    to: window.to,
+    workspaces: workspacesFor('originalChart'),
+    entryFilter,
+  });
+  const fxFor = (
+    months: PlatformAiWorkspaceMonth[],
+    chart: 'chart' | 'originalChart',
+  ): PlatformAiMonthFx[] =>
+    months.map((month) => {
+      const overview = overviews.find((row) => row.workspace.id === month.workspaceId);
+      const point = overview?.overview[chart].find(
+        (row) => row.period === month.period && row.currency === month.currency,
+      );
+      return {
+        ...month,
+        fxRate: point?.fxRate ?? null,
+        fxRateDate: point?.fxRateDate ?? null,
+        fxSource: point?.fxSource ?? null,
+      };
+    });
+  const totalsWithFx = (
+    totals: ReadonlyArray<{
+      period: string;
+      currency: string;
+      subscription: number;
+      planChange: number;
+      onDemand: number;
+      paidCost: number;
+      theoreticalApiCost: number;
+      difference: number;
+      ratio: number | null;
+    }>,
+    months: PlatformAiMonthFx[],
+  ): PlatformAiTotalFx[] =>
+    totals.map((total) => {
+      const rows = months.filter(
+        (month) => month.period === total.period && month.currency === total.currency,
+      );
+      const source = rows[0]?.fxSource ?? null;
+      const same = rows.every(
+        (month) => month.fxSource === source && month.fxRateDate === rows[0]?.fxRateDate,
+      );
+      return {
+        ...total,
+        fxRate: same ? (rows[0]?.fxRate ?? null) : null,
+        fxRateDate: same ? (rows[0]?.fxRateDate ?? null) : null,
+        fxSource: same ? source : rows.length > 0 ? 'mixed' : null,
+      };
+    });
+  const months = fxFor(report.months, 'chart');
+  const originalMonths = fxFor(original.months, 'originalChart');
   return {
     ...report,
+    reportingCurrency: rollup,
     workspaces: workspaceRows,
+    months,
+    totals: totalsWithFx(report.totals, months),
+    originalMonths,
+    originalTotals: totalsWithFx(original.totals, originalMonths),
+  };
+}
+
+function slicesFromEntries(
+  entries: ReadonlyArray<{
+    period: string;
+    aiSystemId: string | null;
+    currency: string;
+    type: string;
+    amount: number | string;
+    paidAt: Date | null;
+    servicePeriodStart: string | null;
+    servicePeriodEnd: string | null;
+  }>,
+): CostSlice[] {
+  const slices: CostSlice[] = [];
+  for (const entry of entries) {
+    const type = entry.type;
+    if (type !== 'subscription' && type !== 'plan_change' && type !== 'on_demand') {
+      continue;
+    }
+    const onDate = paidConversionDate({
+      paidAt: entry.paidAt,
+      servicePeriodStart: entry.servicePeriodStart,
+      period: entry.period,
+    });
+    for (const slice of splitBillingEntryByMonth({
+      amount: Number(entry.amount),
+      period: entry.period,
+      servicePeriodStart: entry.servicePeriodStart,
+      servicePeriodEnd: entry.servicePeriodEnd,
+    })) {
+      slices.push({
+        period: slice.period,
+        aiSystemId: entry.aiSystemId,
+        currency: entry.currency,
+        type,
+        amount: slice.amount,
+        onDate,
+      });
+    }
+  }
+  return slices;
+}
+
+function allocationCandidates(input: {
+  slice: CostSlice;
+  openProjects: ReadonlyArray<{
+    id: string;
+    name?: string;
+    slug?: string;
+    status: string;
+    currency: string;
+    archivedAt: Date | null;
+  }>;
+  systemProjectId: ReadonlyMap<string, string | null>;
+  overrideRows: ReadonlyArray<{
+    projectId: string;
+    period: string;
+    aiSystemId: string | null;
+    percent: number | string;
+  }>;
+  tokensOf: (projectId: string, period: string, aiSystemId: string | null) => number;
+}): SliceCandidate[] {
+  const candidates: SliceCandidate[] = [];
+  for (const row of input.openProjects) {
+    const currency = projectCurrencySchema.safeParse(row.currency);
+    if (!currency.success) continue;
+    if (input.slice.aiSystemId != null) {
+      const linked = input.systemProjectId.get(input.slice.aiSystemId) === row.id;
+      const used = input.tokensOf(row.id, input.slice.period, input.slice.aiSystemId) > 0;
+      const override = input.overrideRows.some(
+        (item) =>
+          item.projectId === row.id &&
+          item.period === input.slice.period &&
+          (item.aiSystemId ?? null) === input.slice.aiSystemId,
+      );
+      if (!linked && !used && !override) continue;
+    }
+    const override = input.overrideRows.find(
+      (item) =>
+        item.projectId === row.id &&
+        item.period === input.slice.period &&
+        (item.aiSystemId ?? null) === input.slice.aiSystemId,
+    );
+    candidates.push({
+      projectId: row.id,
+      name: row.name ?? row.id,
+      slug: row.slug ?? '',
+      currency: currency.data,
+      active: isAiBillingActiveProject(row.status, row.archivedAt),
+      tokens: input.tokensOf(row.id, input.slice.period, input.slice.aiSystemId),
+      overridePercent: override ? Number(override.percent) : null,
+    });
+  }
+  return candidates;
+}
+
+async function workspaceReportingCurrency(
+  database: Database,
+  workspaceId: string,
+): Promise<ProjectCurrency> {
+  const [row] = await database.db
+    .select({ reportingCurrency: workspaces.reportingCurrency })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  const parsed = projectCurrencySchema.safeParse(row?.reportingCurrency);
+  return parsed.success ? parsed.data : 'EUR';
+}
+
+async function loadWorkspaceFx(
+  database: Database,
+  workspaceId: string,
+  dates: readonly string[],
+  override?: ProjectCurrency,
+): Promise<{ reportingCurrency: ProjectCurrency; rates: FxRate[] }> {
+  const reportingCurrency = override ?? (await workspaceReportingCurrency(database, workspaceId));
+  const fetchImpl: FxFetcher | undefined =
+    process.env.NODE_ENV === 'test' ? undefined : globalThis.fetch;
+  await ensureExchangeRates(database, dates, fetchImpl);
+  const rates = await loadExchangeRateBook(database, dates);
+  return { reportingCurrency, rates };
+}
+
+function decorateEntry(
+  entry: PublicAiBillingEntry,
+  reportingCurrency: string,
+  rates: readonly FxRate[],
+): PublicAiBillingEntry {
+  const converted = convertMoney(
+    entry.amount,
+    entry.currency,
+    reportingCurrency,
+    paidConversionDate({
+      paidAt: entry.paidAt,
+      servicePeriodStart: entry.servicePeriodStart,
+      period: entry.period,
+    }),
+    rates,
+  );
+  return {
+    ...entry,
+    convertedAmount: converted.amount,
+    convertedCurrency: converted.currency,
+    fxRate: converted.rate,
+    fxRateDate: converted.rateDate,
+    fxSource: converted.source,
+  };
+}
+
+function toChartPoint(row: FoldedChartPoint): WorkspaceAiCostChartPoint | null {
+  const currency = projectCurrencySchema.safeParse(row.currency);
+  if (!currency.success) return null;
+  return {
+    period: row.period,
+    currency: currency.data,
+    subscription: row.subscription,
+    planChange: row.planChange,
+    onDemand: row.onDemand,
+    paidCost: roundAiMoney(row.subscription + row.planChange + row.onDemand),
+    theoreticalApiCost: row.theoretical,
+    fxRate: row.fxRate,
+    fxRateDate: row.fxRateDate,
+    fxSource: row.fxSource,
   };
 }

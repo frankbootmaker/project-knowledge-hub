@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { formatMoney } from '../../lib/project-currency';
 import { AiBillingChart } from '../AiBillingChart';
-import { Button, Field, Input, Select } from '../ui';
+import { Button, ErrorText, Field, Input, Select, useToast } from '../ui';
 
 type BillingType = 'subscription' | 'plan_change' | 'on_demand';
 
@@ -22,6 +22,9 @@ export type PlatformAiMonth = {
   theoreticalApiCost: number;
   difference: number;
   ratio: number | null;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type PlatformAiTotal = {
@@ -34,6 +37,9 @@ export type PlatformAiTotal = {
   theoreticalApiCost: number;
   difference: number;
   ratio: number | null;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type PlatformAiEntry = {
@@ -50,6 +56,11 @@ export type PlatformAiEntry = {
   paidAt: string | null;
   note: string | null;
   externalRef: string | null;
+  convertedAmount?: number;
+  convertedCurrency?: string;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type PlatformAiCostReport = {
@@ -58,8 +69,11 @@ export type PlatformAiCostReport = {
   periods: string[];
   workspaces: Array<{ id: string; name: string; slug: string }>;
   providers: string[];
+  reportingCurrency?: string;
   months: PlatformAiMonth[];
   totals: PlatformAiTotal[];
+  originalMonths?: PlatformAiMonth[];
+  originalTotals?: PlatformAiTotal[];
   entries: PlatformAiEntry[];
 };
 
@@ -72,6 +86,16 @@ export type PlatformAiCostFilters = {
 
 function ratioText(ratio: number | null): string {
   return ratio == null ? '—' : ratio.toFixed(3);
+}
+
+function fxDetail(
+  source: string | null | undefined,
+  rateDate: string | null | undefined,
+  rate: number | null | undefined,
+): string {
+  if (!source) return '';
+  const figure = rate == null ? '' : rate.toFixed(6);
+  return [source.toUpperCase(), rateDate ?? '', figure].filter(Boolean).join(' · ');
 }
 
 function workspaceHref(slug: string): string {
@@ -87,18 +111,93 @@ export function PlatformAiCost({
 }) {
   const t = useTranslations('financials');
   const locale = useLocale();
+  const { pushToast } = useToast();
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [fxDate, setFxDate] = useState('');
+  const [fxBase, setFxBase] = useState('EUR');
+  const [fxQuote, setFxQuote] = useState('USD');
+  const [fxRate, setFxRate] = useState('');
+  const [fxError, setFxError] = useState<string | null>(null);
+  const [fxPending, setFxPending] = useState(false);
+  const sourceMonths = showOriginal ? (report.originalMonths ?? report.months) : report.months;
+  const sourceTotals = showOriginal ? (report.originalTotals ?? report.totals) : report.totals;
   const currencies = useMemo(() => {
     const found = new Set<string>();
-    for (const row of [...report.months, ...report.totals, ...report.entries]) {
+    for (const row of [...sourceMonths, ...sourceTotals, ...report.entries]) {
       found.add(row.currency);
     }
     return [...found].sort((a, b) => a.localeCompare(b));
-  }, [report]);
-  const [currency, setCurrency] = useState(currencies[0] ?? 'EUR');
+  }, [sourceMonths, sourceTotals, report.entries]);
+  const [currency, setCurrency] = useState(report.reportingCurrency ?? currencies[0] ?? 'EUR');
   const activeCurrency = currencies.includes(currency) ? currency : (currencies[0] ?? 'EUR');
-  const months = report.months.filter((row) => row.currency === activeCurrency);
-  const totals = report.totals.filter((row) => row.currency === activeCurrency);
+  const months = showOriginal
+    ? sourceMonths.filter((row) => row.currency === activeCurrency)
+    : sourceMonths;
+  const totals = showOriginal
+    ? sourceTotals.filter((row) => row.currency === activeCurrency)
+    : sourceTotals;
   const entries = report.entries;
+
+  async function saveManualRate() {
+    const rate = Number(fxRate);
+    if (!fxDate || !Number.isFinite(rate) || rate <= 0) {
+      setFxError(t('fxRateInvalid'));
+      return;
+    }
+    setFxPending(true);
+    setFxError(null);
+    try {
+      const response = await fetch('/api/v1/admin/exchange-rates', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({ date: fxDate, base: fxBase, quote: fxQuote, rate }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(payload.error?.message || t('fxSaveFailed'));
+      pushToast(t('fxSaved'), 'success');
+    } catch (error) {
+      setFxError(error instanceof Error ? error.message : t('fxSaveFailed'));
+    } finally {
+      setFxPending(false);
+    }
+  }
+
+  async function importRates() {
+    setFxPending(true);
+    setFxError(null);
+    try {
+      const response = await fetch('/api/v1/admin/exchange-rates/import', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({}),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string | { message?: string } | null;
+        imported?: number;
+      };
+      if (!response.ok) {
+        const message =
+          typeof payload.error === 'string' ? payload.error : payload.error?.message;
+        throw new Error(message || t('fxImportFailed'));
+      }
+      if (payload.error) setFxError(String(payload.error));
+      pushToast(t('fxImported', { count: payload.imported ?? 0 }), 'success');
+    } catch (error) {
+      setFxError(error instanceof Error ? error.message : t('fxImportFailed'));
+    } finally {
+      setFxPending(false);
+    }
+  }
   const providers =
     filters.provider && !report.providers.includes(filters.provider)
       ? [filters.provider, ...report.providers]
@@ -125,7 +224,21 @@ export function PlatformAiCost({
         </Button>
       </form>
 
-      {currencies.length > 1 ? (
+      <div className="flex flex-wrap items-end gap-3">
+        <p className="m-0 text-[13px] text-ink-muted">
+          {t('reportingCurrency')}: {report.reportingCurrency ?? 'EUR'}
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-fit"
+          onClick={() => setShowOriginal((current) => !current)}
+        >
+          {showOriginal ? t('showReportingCurrency') : t('showOriginalCurrencies')}
+        </Button>
+      </div>
+
+      {showOriginal && currencies.length > 1 ? (
         <Field label={t('currency')} className="max-w-xs">
           <Select value={activeCurrency} onChange={(event) => setCurrency(event.target.value)}>
             {currencies.map((code) => (
@@ -136,9 +249,69 @@ export function PlatformAiCost({
           </Select>
         </Field>
       ) : null}
-      {currencies.length > 1 ? (
+      {showOriginal && currencies.length > 1 ? (
         <p className="m-0 text-[13px] text-ink-muted">{t('currenciesSeparate')}</p>
       ) : null}
+
+      <section className="kh-ops-panel">
+        <div className="kh-ops-panel-head">
+          <h2 className="kh-ops-panel-title">{t('fxManualTitle')}</h2>
+        </div>
+        <p className="kh-ops-card-body m-0 px-3 pt-3 text-[13px] text-ink-muted">
+          {t('fxManualHint')}
+        </p>
+        <form
+          className="kh-ops-toolbar flex-wrap"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveManualRate();
+          }}
+        >
+          <Field label={t('fxDate')} className="min-w-36">
+            <Input type="date" value={fxDate} onChange={(event) => setFxDate(event.target.value)} />
+          </Field>
+          <Field label={t('fxBase')} className="min-w-24">
+            <Input
+              value={fxBase}
+              maxLength={3}
+              onChange={(event) => setFxBase(event.target.value.toUpperCase())}
+            />
+          </Field>
+          <Field label={t('fxQuote')} className="min-w-24">
+            <Input
+              value={fxQuote}
+              maxLength={3}
+              onChange={(event) => setFxQuote(event.target.value.toUpperCase())}
+            />
+          </Field>
+          <Field label={t('fxRate')} className="min-w-32">
+            <Input
+              type="number"
+              min="0"
+              step="0.00000001"
+              value={fxRate}
+              onChange={(event) => setFxRate(event.target.value)}
+            />
+          </Field>
+          <Button type="submit" variant="secondary" className="self-end" disabled={fxPending}>
+            {t('fxSave')}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="self-end"
+            disabled={fxPending}
+            onClick={() => void importRates()}
+          >
+            {t('fxImport')}
+          </Button>
+        </form>
+        {fxError ? (
+          <div className="px-3 pb-3">
+            <ErrorText>{fxError}</ErrorText>
+          </div>
+        ) : null}
+      </section>
 
       <section className="kh-ops-panel">
         <div className="kh-ops-panel-head">
@@ -171,6 +344,19 @@ export function PlatformAiCost({
               ariaLabel={t('chartAria')}
             />
           )}
+          {totals.some((row) => row.fxSource) ? (
+            <ul className="m-0 grid gap-1 px-3 pb-3 text-[13px] text-ink-muted">
+              {totals.map((row) => {
+                const detail = fxDetail(row.fxSource, row.fxRateDate, row.fxRate);
+                if (!detail) return null;
+                return (
+                  <li key={`${row.period}-${row.currency}`}>
+                    {row.period} · {row.currency} · {detail}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
         </div>
       </section>
 
@@ -357,8 +543,18 @@ export function PlatformAiCost({
                     <td>{entry.plan ?? '—'}</td>
                     <td>{t(`type.${entry.type}`)}</td>
                     <td>{entry.currency}</td>
-                    <td className="kh-ops-num">
+                    <td
+                      className="kh-ops-num"
+                      title={fxDetail(entry.fxSource, entry.fxRateDate, entry.fxRate)}
+                    >
                       {formatMoney(entry.amount, entry.currency, locale)}
+                      {entry.convertedCurrency &&
+                      entry.convertedCurrency !== entry.currency &&
+                      entry.convertedAmount != null ? (
+                        <span className="block text-ink-muted">
+                          {formatMoney(entry.convertedAmount, entry.convertedCurrency, locale)}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="kh-ops-cell-text">{entry.note ?? '—'}</td>
                     <td>

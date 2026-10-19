@@ -83,6 +83,9 @@ export type ProjectBudgetSummary = {
   aiFlatAc?: number;
   aiTokenAc?: number;
   aiPaidAc?: number;
+  reportingCurrency?: string;
+  aiPaidReporting?: number;
+  aiTheoreticalReporting?: number;
   aiTheoreticalApiCost?: number;
   aiCostDifference?: number;
   aiCostRatio?: number | null;
@@ -577,6 +580,16 @@ export function ProjectBudgetPanel({
                   {formatMoney(theoretical, currency, locale)}
                 </p>
               </div>
+              {summary.reportingCurrency &&
+              summary.reportingCurrency !== currency &&
+              summary.aiPaidReporting != null ? (
+                <div className="kh-ops-stat">
+                  <p className="kh-ops-stat-label m-0">{t('aiReporting')}</p>
+                  <p className="kh-ops-stat-value">
+                    {formatMoney(summary.aiPaidReporting, summary.reportingCurrency, locale)}
+                  </p>
+                </div>
+              ) : null}
               <div className="kh-ops-stat">
                 <p className="kh-ops-stat-label m-0">{t('aiDifference')}</p>
                 <p className="kh-ops-stat-value">

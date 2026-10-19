@@ -37,7 +37,7 @@ export {
 import { requireProjectContext } from './project-delivery.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
 import { loadProjectPaidAi } from './ai-billing.js';
-import type { AiPaidPeriod, PublicAiBillingEntry } from './ai-billing.js';
+import type { AiPaidPeriod, ProjectPaidAi, PublicAiBillingEntry } from './ai-billing.js';
 
 export type BudgetTaskCost = {
   taskId: string;
@@ -124,8 +124,22 @@ export type ProjectBudgetSummary = {
     theoreticalApiCost: number;
     tokens: number;
   }>;
-  /** Same-currency ledger rows for this workspace. */
+  /** Ledger rows, with original amount and the reporting-currency conversion. */
   aiBillingEntries: PublicAiBillingEntry[];
+  reportingCurrency: ProjectCurrency;
+  /** Allocated paid AI cost in the workspace reporting currency. */
+  aiPaidReporting: number;
+  /** Theoretical API cost in the workspace reporting currency. */
+  aiTheoreticalReporting: number;
+  aiCostFx: Array<{
+    originalAmount: number;
+    originalCurrency: string;
+    amount: number;
+    currency: string;
+    rate: number | null;
+    rateDate: string | null;
+    source: string | null;
+  }>;
   /** Billable non-AI catalogue system OpEx. */
   systemAc: number;
   aiNoteOnlyTokens: number;
@@ -235,6 +249,8 @@ export type AiTokenRates = {
   cachePer1k: number | null;
   /** Cache-write price per 1k. Null falls back to the blended rate. */
   cacheWritePer1k?: number | null;
+  /** List-price currency. Null means the project currency. */
+  currency?: string | null;
 };
 
 export type AiUsageForCost = {
@@ -390,6 +406,10 @@ export async function computeAiBudgetCosts(
   aiSprints: ProjectBudgetSummary['aiSprints'];
   aiBillingEntries: PublicAiBillingEntry[];
   aiSystems: AiBudgetBreakdown[];
+  reportingCurrency: ProjectCurrency;
+  aiPaidReporting: number;
+  aiTheoreticalReporting: number;
+  aiCostFx: ProjectPaidAi['aiCostFx'];
 }> {
   const assistantRows = await database.db
     .select({
@@ -402,6 +422,7 @@ export async function computeAiBudgetCosts(
       aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
       aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
       aiTokenRateCacheWritePer1k: systems.aiTokenRateCacheWritePer1k,
+      aiTokenRateCurrency: systems.aiTokenRateCurrency,
       aiBudgetAllocation: systems.aiBudgetAllocation,
     })
     .from(systems)
@@ -521,6 +542,7 @@ export async function computeAiBudgetCosts(
           outputPer1k: parseNumeric(row?.aiTokenRateOutputPer1k),
           cachePer1k: parseNumeric(row?.aiTokenRateCachePer1k),
           cacheWritePer1k: parseNumeric(row?.aiTokenRateCacheWritePer1k),
+          currency: row?.aiTokenRateCurrency ?? null,
         },
       };
     }),
@@ -554,6 +576,10 @@ export async function computeAiBudgetCosts(
     aiBillingEntries: paid.entries,
     aiNoteOnlyTokens,
     aiSystems,
+    reportingCurrency: paid.reportingCurrency,
+    aiPaidReporting: paid.aiPaidReporting,
+    aiTheoreticalReporting: paid.aiTheoreticalReporting,
+    aiCostFx: paid.aiCostFx,
   };
 }
 
@@ -975,6 +1001,10 @@ export async function getProjectBudgetSummary(
     aiPeriods: ai.aiPeriods,
     aiSprints: ai.aiSprints,
     aiBillingEntries: ai.aiBillingEntries,
+    reportingCurrency: ai.reportingCurrency,
+    aiPaidReporting: ai.aiPaidReporting,
+    aiTheoreticalReporting: ai.aiTheoreticalReporting,
+    aiCostFx: ai.aiCostFx,
     aiNoteOnlyTokens: ai.aiNoteOnlyTokens,
     aiSystems: ai.aiSystems,
     itSystems: it.itSystems,

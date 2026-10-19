@@ -68,6 +68,8 @@ export const workspaces = pgTable(
     description: text('description'),
     /** Curated accent key (ocean, teal, …); null → client picks stable hash color. */
     color: text('color'),
+    /** Currency used for AI cost charts and cross-currency totals. */
+    reportingCurrency: text('reporting_currency').notNull().default('EUR'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
@@ -319,6 +321,8 @@ export const systems = pgTable(
       scale: 4,
       mode: 'number',
     }),
+    /** Currency of the token list prices. Null means the linked project's currency. */
+    aiTokenRateCurrency: text('ai_token_rate_currency'),
     /** Short note, e.g. Cursor Pro+ flat plus on-demand. */
     aiCostNotes: text('ai_cost_notes'),
     aiBudgetAllocation: numeric('ai_budget_allocation', { precision: 14, scale: 2, mode: 'number' }),
@@ -338,6 +342,33 @@ export const systems = pgTable(
     index('systems_workspace_id_idx').on(table.workspaceId),
     index('systems_project_id_idx').on(table.projectId),
     index('systems_created_by_idx').on(table.createdBy),
+  ],
+);
+
+/**
+ * Daily foreign-exchange quotes. `rate` is quote units per 1 base unit.
+ * ECB rows use base EUR. A manual row for the same pair and day wins.
+ */
+export const exchangeRates = pgTable(
+  'exchange_rates',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    rateDate: date('rate_date', { mode: 'string' }).notNull(),
+    base: text('base').notNull(),
+    quote: text('quote').notNull(),
+    rate: numeric('rate', { precision: 18, scale: 8, mode: 'number' }).notNull(),
+    /** ecb | mnb | manual */
+    source: text('source').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('exchange_rates_pair_uidx').on(
+      table.rateDate,
+      table.base,
+      table.quote,
+      table.source,
+    ),
+    index('exchange_rates_pair_date_idx').on(table.base, table.quote, table.rateDate),
   ],
 );
 

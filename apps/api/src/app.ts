@@ -57,6 +57,7 @@ import {
 import { registerProjectChangeRoutes } from './routes/project-changes.js';
 import { registerProjectBudgetRoutes } from './routes/project-budget.js';
 import { registerAiBillingRoutes } from './routes/ai-billing.js';
+import { registerExchangeRateRoutes } from './routes/exchange-rates.js';
 import { registerAiUsageImportRoutes } from './routes/ai-usage-imports.js';
 import { registerProjectReportRoutes } from './routes/project-reports.js';
 import { registerReadyRoutes } from './routes/ready.js';
@@ -251,6 +252,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerProjectChangeRoutes(app);
   await registerProjectBudgetRoutes(app);
   await registerAiBillingRoutes(app);
+  await registerExchangeRateRoutes(app);
   await registerAiUsageImportRoutes(app);
   await registerProjectReportRoutes(app);
   await registerSystemRoutes(app);
