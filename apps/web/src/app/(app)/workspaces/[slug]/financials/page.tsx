@@ -24,7 +24,21 @@ import {
 } from '../../../../../lib/project-record-access';
 import { apiFetch, requireSession } from '../../../../../lib/session';
 
-type Workspace = { id: string; slug: string; name: string };
+type Workspace = {
+  id: string;
+  slug: string;
+  name: string;
+  reportingCurrency?: string;
+};
+
+function first(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw?.trim() ?? '';
+}
+
+function periodOrEmpty(value: string): string {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : '';
+}
 
 export default async function WorkspaceFinancialsPage({
   params,
@@ -38,6 +52,16 @@ export default async function WorkspaceFinancialsPage({
   const { slug } = await params;
   const query = await searchParams;
   const tab = parseFinancialsTab(query.tab);
+  const from = periodOrEmpty(first(query.from));
+  const to = periodOrEmpty(first(query.to));
+  const range = first(query.range);
+  const costParams = new URLSearchParams();
+  if (from) costParams.set('from', from);
+  if (to) costParams.set('to', to);
+  if (range === 'last12' || range === 'year' || range === 'all') {
+    costParams.set('range', range);
+  }
+  const costSuffix = costParams.size > 0 ? `?${costParams.toString()}` : '';
 
   const listResponse = await apiFetch('/api/v1/workspaces');
   if (!listResponse.ok) notFound();
@@ -48,7 +72,7 @@ export default async function WorkspaceFinancialsPage({
   const [costResponse, systemsResponse, importsResponse, unassignedResponse] =
     await Promise.all([
       tab === 'ai-cost'
-        ? apiFetch(`/api/v1/workspaces/${workspace.id}/ai-cost`)
+        ? apiFetch(`/api/v1/workspaces/${workspace.id}/ai-cost${costSuffix}`)
         : Promise.resolve(null),
       tab === 'ai-cost'
         ? apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`)
@@ -62,11 +86,16 @@ export default async function WorkspaceFinancialsPage({
     ]);
   const cost = costResponse?.ok
     ? ((await costResponse.json()) as {
+        reportingCurrency?: string;
         entries: AiBillingEntryRow[];
         chart: AiCostChartPoint[];
+        originalChart?: AiCostChartPoint[];
         pools: AiCostPool[];
+        from?: string;
+        to?: string;
+        range?: 'last12' | 'year' | 'all' | 'custom';
       })
-    : { entries: [], chart: [], pools: [] };
+    : { entries: [], chart: [], originalChart: [], pools: [] };
   const systems = systemsResponse?.ok
     ? ((await systemsResponse.json()) as { systems: AiSystemPrice[] }).systems
     : [];
@@ -110,10 +139,16 @@ export default async function WorkspaceFinancialsPage({
           workspaceId={workspace.id}
           workspaceSlug={workspace.slug}
           canMutate={canMutateWorkspace(session, workspace.id)}
+          canAdmin={canAdminWorkspace(session, workspace.id)}
+          reportingCurrency={cost.reportingCurrency ?? workspace.reportingCurrency ?? 'EUR'}
           entries={cost.entries}
           chart={cost.chart}
+          originalChart={cost.originalChart ?? []}
           pools={cost.pools}
           systems={systems}
+          from={cost.from}
+          to={cost.to}
+          range={cost.range}
         />
       )}
     </Page>

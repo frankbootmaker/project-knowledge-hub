@@ -1652,6 +1652,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
             documentationUrl: { type: 'string' },
           },
         },
+        aiTokenRateCurrency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          nullable: true,
+          description: 'Currency of AI token list prices. Null uses the project currency.',
+        },
         tags: {
           type: 'array',
           maxItems: 30,
@@ -1702,6 +1709,13 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           nullable: true,
           additionalProperties: true,
           properties: {},
+        },
+        aiTokenRateCurrency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          nullable: true,
+          description: 'Currency of AI token list prices. Null uses the project currency.',
         },
         tags: {
           type: 'array',
@@ -2080,7 +2094,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_budget_summary',
     description:
-      'EVM summary, financialRag, riskRag, riskReasons, burndown, and epic cost rollups. riskRag uses open or mitigating RAID only (closed, accepted, cancelled, and archived are ignored) and the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons lists that colour (count, severity, kind, cause, dueInDays) and is empty when green. aiPaidAc is the allocated paid AI cost (ledger, or flat-fee fallback when a month has no entries). A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is list-price token cost and is not added to AC. aiPeriods breaks that down by month. Requires pm:read.',
+      'EVM summary, financialRag, riskRag, riskReasons, burndown, and epic cost rollups. riskRag uses open or mitigating RAID only (closed, accepted, cancelled, and archived are ignored) and the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons lists that colour (count, severity, kind, cause, dueInDays) and is empty when green. aiPaidAc is the allocated paid AI cost in the project currency (ledger, or flat-fee fallback when a month has no entries). A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. Each pool share is converted into the project currency at the entry paid-at date, or the service start when paid-at is missing. aiPaidReporting and aiTheoreticalReporting are the reporting-currency figures (workspace setting, default EUR). aiCostFx lists originalAmount, originalCurrency, amount, currency, rate, rateDate, and source. aiBillingEntries keep the original amount and currency and include convertedAmount, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. aiTheoreticalApiCost is list-price token cost and is not added to AC. aiPeriods breaks that down by month. Requires pm:read.',
     scope: 'pm:read',
     body: {
       type: 'object',
@@ -2938,7 +2952,7 @@ function billingEntryResult(): Record<string, unknown> {
         ...ymd,
         nullable: true,
         description:
-          'Inclusive service end YYYY-MM-DD. A span is split across months by days.',
+          'Exclusive renewal date YYYY-MM-DD (not included). Days are end minus start. Null with the start.',
       },
       provider: stringProp('Provider name'),
       plan: { type: 'string', nullable: true },
@@ -3025,7 +3039,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'update_project_ai_assistant_cost',
     description:
-      'Set AI assistant cost mode on a project AI system. systemId is required. Requires pm:write.',
+      'Set AI assistant cost mode on a project AI system. systemId is required. aiTokenRateCurrency is the list-price currency; null uses the project currency. Theoretical cost converts from that currency at the usage date. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3044,6 +3058,13 @@ const EXTRA_HUB_TOOLS: Array<{
         aiTokenRateInputPer1k: money,
         aiTokenRateOutputPer1k: money,
         aiTokenRateCachePer1k: money,
+        aiTokenRateCurrency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          nullable: true,
+          description: 'Currency of the token list prices. Null uses the project currency.',
+        },
         aiCostNotes: { type: 'string', maxLength: 500, nullable: true },
         aiBudgetAllocation: money,
       },
@@ -3052,7 +3073,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'get_platform_ai_cost',
     description:
-      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, per currency. Multi-month entries are prorated by days, the same split as a workspace chart. Currencies are not combined. Defaults to the last 12 months. System administrator only. Requires pm:read. Via call_hub_tool.',
+      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Defaults to the last 12 months. System administrator only. Requires pm:read. Via call_hub_tool.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3069,13 +3090,19 @@ const EXTRA_HUB_TOOLS: Array<{
           pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
           description: 'Last month YYYY-MM. Defaults to the current UTC month.',
         },
+        reportingCurrency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          description: 'Currency of the cross-workspace total. Default EUR.',
+        },
       },
     },
   },
   {
     name: 'list_ai_billing_entries',
     description:
-      'List workspace AI cost entries. Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A span is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional service dates keep rows whose window overlaps that range. Requires pm:read.',
+      'List workspace AI cost entries. Each row includes servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included). period is the start month. A span is prorated by days (end minus start) when paid cost is computed. amount and currency are original. convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource are the workspace reporting-currency conversion (paid-at, or the service start when paid-at is missing). A missing quote day uses the previous quote. Optional period matches any month the row contributes to. Optional service dates keep rows whose window overlaps that range. The stored end is not a billed day. Requires pm:read.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3092,11 +3119,13 @@ const EXTRA_HUB_TOOLS: Array<{
         aiSystemId: uuidProp('Optional AI system id'),
         servicePeriodStart: {
           ...ymd,
-          description: 'Optional YYYY-MM-DD. Keep rows whose service window ends on or after this date.',
+          description:
+            'Optional YYYY-MM-DD. Keep rows whose exclusive service end is after this date.',
         },
         servicePeriodEnd: {
           ...ymd,
-          description: 'Optional YYYY-MM-DD. Keep rows whose service window starts on or before this date.',
+          description:
+            'Optional YYYY-MM-DD. Keep rows whose service window starts on or before this date.',
         },
       },
     },
@@ -3114,7 +3143,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'create_ai_billing_entry',
     description:
-      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD, inclusive) prorate the amount across months by days; period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
+      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3137,7 +3166,8 @@ const EXTRA_HUB_TOOLS: Array<{
         servicePeriodEnd: {
           ...ymd,
           nullable: true,
-          description: 'Inclusive service end YYYY-MM-DD. Must be on or after the start.',
+          description:
+            'Exclusive renewal date YYYY-MM-DD (not included). Must be after the start. A one-day entry ends the next day.',
         },
         provider: stringProp('Provider name, for example Cursor', {
           minLength: 1,
@@ -3168,7 +3198,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'update_ai_billing_entry',
     description:
-      'Update one AI cost entry. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) replace the window; period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
+      'Update one AI cost entry. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3186,7 +3216,8 @@ const EXTRA_HUB_TOOLS: Array<{
         servicePeriodEnd: {
           ...ymd,
           nullable: true,
-          description: 'Inclusive service end YYYY-MM-DD.',
+          description:
+            'Exclusive renewal date YYYY-MM-DD (not included). Must be after the start.',
         },
         provider: stringProp('Provider name', { minLength: 1, maxLength: 80 }),
         type: {
@@ -3218,6 +3249,26 @@ const EXTRA_HUB_TOOLS: Array<{
       additionalProperties: false,
       required: ['entryId'],
       properties: { entryId: uuidProp('Cost entry id') },
+    },
+  },
+  {
+    name: 'list_ai_usage_import_summaries',
+    description:
+      'List saved AI usage import summaries and paged unassigned usage rows. Requires pm:read.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        importId: uuidProp('Import id. Limits summaries and unassigned rows to one import.'),
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+        cursor: stringProp('Summary page cursor', { minLength: 1, maxLength: 200 }),
+        unassignedLimit: { type: 'integer', minimum: 1, maximum: 100 },
+        unassignedCursor: stringProp('Unassigned page cursor', { minLength: 1, maxLength: 200 }),
+      },
     },
   },
   {

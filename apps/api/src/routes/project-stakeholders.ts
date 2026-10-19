@@ -6,6 +6,7 @@ import {
   AppError,
   aiCostModeSchema,
   parseAiCostNotes,
+  projectCurrencySchema,
   projectStakeholderRoleSchema,
   resourceUtilizationViewSchema,
   stakeholderCompetenciesSchema,
@@ -126,6 +127,7 @@ const aiCostSchema = z.object({
   aiTokenRateInputPer1k: moneySchema.optional(),
   aiTokenRateOutputPer1k: moneySchema.optional(),
   aiTokenRateCachePer1k: moneySchema.optional(),
+  aiTokenRateCurrency: projectCurrencySchema.nullable().optional(),
   aiCostNotes: z.string().max(500).nullable().optional(),
   aiBudgetAllocation: moneySchema.optional(),
 });
@@ -420,6 +422,10 @@ export async function registerProjectStakeholderRoutes(
           body.aiTokenRateCachePer1k === undefined
             ? undefined
             : parseTokenRate(body.aiTokenRateCachePer1k) ?? null,
+        aiTokenRateCurrency:
+          body.aiTokenRateCurrency === undefined
+            ? undefined
+            : body.aiTokenRateCurrency,
         aiCostNotes:
           body.aiCostNotes === undefined
             ? undefined

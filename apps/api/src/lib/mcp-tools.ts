@@ -255,6 +255,7 @@ import {
 } from './ai-billing.js';
 import {
   importAiUsageCsv as commitAiUsageCsv,
+  listAiUsageImportSummaries,
   listAiUsageImports,
 } from './ai-usage-import.js';
 import { moveProjectToWorkspace } from './project-move.js';
@@ -1666,6 +1667,7 @@ export function createMcpToolHandlers(
           itFlatMonthlyFee: input.itFlatMonthlyFee,
           itOneTimeCost: input.itOneTimeCost,
           itBudgetAllocation: input.itBudgetAllocation,
+          aiTokenRateCurrency: input.aiTokenRateCurrency,
           tags: input.tags,
           metadata: input.metadata,
         },
@@ -1733,6 +1735,7 @@ export function createMcpToolHandlers(
         itFlatMonthlyFee: input.itFlatMonthlyFee,
         itOneTimeCost: input.itOneTimeCost,
         itBudgetAllocation: input.itBudgetAllocation,
+        aiTokenRateCurrency: input.aiTokenRateCurrency,
         tags: input.tags,
         metadata: input.metadata,
       }, { createdBy: actingUserId });
@@ -4843,6 +4846,10 @@ export function createMcpToolHandlers(
             input.aiTokenRateCachePer1k === undefined
               ? undefined
               : parseTokenRate(input.aiTokenRateCachePer1k) ?? null,
+          aiTokenRateCurrency:
+            input.aiTokenRateCurrency === undefined
+              ? undefined
+              : input.aiTokenRateCurrency,
           aiCostNotes:
             input.aiCostNotes === undefined
               ? undefined
@@ -4883,12 +4890,15 @@ export function createMcpToolHandlers(
       const report = await loadPlatformAiCost(app.database, {
         ...(input.from ? { from: input.from } : {}),
         ...(input.to ? { to: input.to } : {}),
+        ...(input.reportingCurrency ? { reportingCurrency: input.reportingCurrency } : {}),
       });
       return {
         from: report.from,
         to: report.to,
+        reportingCurrency: report.reportingCurrency,
         months: report.months,
         totals: report.totals,
+        entries: report.entries,
       };
     },
 
@@ -5000,6 +5010,17 @@ export function createMcpToolHandlers(
         input.limit,
       );
       return { imports };
+    },
+
+    async listAiUsageImportSummaries(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      return listAiUsageImportSummaries(app.database, input.workspaceId, {
+        ...(input.importId ? { importId: input.importId } : {}),
+        ...(input.limit ? { limit: input.limit } : {}),
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+        ...(input.unassignedLimit ? { unassignedLimit: input.unassignedLimit } : {}),
+        ...(input.unassignedCursor ? { unassignedCursor: input.unassignedCursor } : {}),
+      });
     },
 
     async importAiUsageCsv(input) {

@@ -16,6 +16,7 @@ import {
   importAiUsageCsv,
   listAiUsageImports,
   listUnassignedUsage,
+  listUnassignedUsageRows,
   previewAiUsageCsv,
 } from '../lib/ai-usage-import.js';
 import { upsertProjectCostSnapshot } from '../lib/project-budget.js';
@@ -57,6 +58,31 @@ export async function registerAiUsageImportRoutes(
       imports: await listAiUsageImports(app.database, params.workspaceId),
     };
   });
+
+  app.get(
+    '/api/v1/workspaces/:workspaceId/ai-usage-imports/:importId/unassigned',
+    async (request) => {
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({
+          workspaceId: z.string().uuid(),
+          importId: z.string().uuid(),
+        })
+        .parse(request.params);
+      const query = z
+        .object({
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+          cursor: z.string().min(1).max(200).optional(),
+        })
+        .parse(request.query);
+      requireWorkspaceView(principal, params.workspaceId);
+      return listUnassignedUsageRows(app.database, params.workspaceId, {
+        importId: params.importId,
+        ...(query.limit ? { limit: query.limit } : {}),
+        ...(query.cursor ? { cursor: query.cursor } : {}),
+      });
+    },
+  );
 
   app.get(
     '/api/v1/workspaces/:workspaceId/ai-usage-events/unassigned',

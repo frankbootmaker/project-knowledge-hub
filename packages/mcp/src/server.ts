@@ -97,6 +97,7 @@ export type McpToolHandlers = {
     itFlatMonthlyFee?: number | string | null;
     itOneTimeCost?: number | string | null;
     itBudgetAllocation?: number | string | null;
+    aiTokenRateCurrency?: string | null;
     tags?: string[];
     metadata?: Record<string, unknown> | null;
   }) => Promise<unknown>;
@@ -117,6 +118,7 @@ export type McpToolHandlers = {
     itFlatMonthlyFee?: number | string | null;
     itOneTimeCost?: number | string | null;
     itBudgetAllocation?: number | string | null;
+    aiTokenRateCurrency?: string | null;
     tags?: string[];
     metadata?: Record<string, unknown> | null;
   }) => Promise<unknown>;
@@ -675,6 +677,7 @@ export type McpToolHandlers = {
     aiTokenRateInputPer1k?: number | string | null;
     aiTokenRateOutputPer1k?: number | string | null;
     aiTokenRateCachePer1k?: number | string | null;
+    aiTokenRateCurrency?: string | null;
     aiCostNotes?: string | null;
     aiBudgetAllocation?: number | string | null;
   }) => Promise<unknown>;
@@ -688,6 +691,7 @@ export type McpToolHandlers = {
   getPlatformAiCost: (input: {
     from?: string;
     to?: string;
+    reportingCurrency?: string;
   }) => Promise<unknown>;
   createAiBillingEntry: (input: {
     workspaceId: string;
@@ -723,6 +727,14 @@ export type McpToolHandlers = {
   listAiUsageImports: (input: {
     workspaceId: string;
     limit?: number;
+  }) => Promise<unknown>;
+  listAiUsageImportSummaries: (input: {
+    workspaceId: string;
+    importId?: string;
+    limit?: number;
+    cursor?: string;
+    unassignedLimit?: number;
+    unassignedCursor?: string;
   }) => Promise<unknown>;
   importAiUsageCsv: (input: {
     workspaceId: string;
@@ -1316,7 +1328,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_system',
-    'Create a catalogue system (IT resource) in an allowlisted workspace. Prefer linking projectId when the system serves a project. Fill itDetails whenever known. Set itCostMode (flat|one_time|note_only) plus fees so OpEx rolls into project budget AC. Money/rate fields accept number or string; returned as JSON numbers. Requires catalogue:write.',
+    'Create a catalogue system (IT resource) in an allowlisted workspace. Prefer linking projectId when the system serves a project. Fill itDetails whenever known. Set itCostMode (flat|one_time|note_only) plus fees so OpEx rolls into project budget AC. Money/rate fields accept number or string; returned as JSON numbers. aiTokenRateCurrency is the currency of AI token list prices; omit it to use the project currency. Requires catalogue:write.',
     {
       workspaceId: z.string().uuid(),
       projectId: z.string().uuid().nullable().optional(),
@@ -1335,6 +1347,7 @@ export function createKnowledgeHubMcpServer(
       itFlatMonthlyFee: moneyInput.optional(),
       itOneTimeCost: moneyInput.optional(),
       itBudgetAllocation: moneyInput.optional(),
+      aiTokenRateCurrency: z.string().length(3).nullable().optional(),
       tags: z.array(z.string().min(1).max(64)).max(30).optional(),
       metadata: z.record(z.unknown()).nullable().optional(),
     },
@@ -1352,7 +1365,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_system',
-    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Money/rate fields accept number or string; returned as JSON numbers. Does not archive/purge. itDetails updates are merged by key: omitted keys are preserved, keys set to null are removed, and array fields (ports, endpoints, ipAddresses, dependencies) are replaced entirely. Requires catalogue:write.',
+    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, AI token rates, tags). Money/rate fields accept number or string; returned as JSON numbers. aiTokenRateCurrency is the currency of AI token list prices; null uses the project currency. Does not archive/purge. itDetails updates are merged by key: omitted keys are preserved, keys set to null are removed, and array fields (ports, endpoints, ipAddresses, dependencies) are replaced entirely. Requires catalogue:write.',
     {
       systemId: z.string().uuid(),
       projectId: z.string().uuid().nullable().optional(),
@@ -1370,6 +1383,7 @@ export function createKnowledgeHubMcpServer(
       itFlatMonthlyFee: moneyInput.optional(),
       itOneTimeCost: moneyInput.optional(),
       itBudgetAllocation: moneyInput.optional(),
+      aiTokenRateCurrency: z.string().length(3).nullable().optional(),
       tags: z.array(z.string().min(1).max(64)).max(30).optional(),
       metadata: z.record(z.unknown()).nullable().optional(),
     },
@@ -1655,7 +1669,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is tokens times API list prices and is not added to AC. aiPeriods is paid vs theoretical by month. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is tokens times API list prices, converted from aiTokenRateCurrency (or the project currency when that is null) at usageOccurredAt, else completedAt, else updatedAt, and is not added to AC. aiPeriods is paid vs theoretical by month. aiPaidAc is in the project currency: each pool share is converted at the entry paid-at date, or the service start when paid-at is missing, using one rate for every project in that pool. aiPaidReporting and aiTheoreticalReporting are those figures in the workspace reporting currency (default EUR). aiCostFx lists originalAmount, originalCurrency, amount, currency, rate, rateDate, and source. aiBillingEntries keep the original amount and currency and include convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -1734,7 +1748,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_system',
-    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Money/rate fields (itFlatMonthlyFee, itBudgetAllocation, aiFlatMonthlyFee, aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, aiBudgetAllocation) returned as JSON numbers. aiCostNotes is a short string. Requires systems:read.',
+    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Money/rate fields (itFlatMonthlyFee, itBudgetAllocation, aiFlatMonthlyFee, aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, aiBudgetAllocation) returned as JSON numbers. aiTokenRateCurrency is the token list-price currency, or null when prices use the project currency. aiCostNotes is a short string. Requires systems:read.',
     { systemId: z.string().uuid() },
     async (args) =>
       wrap('get_system', 'systems:read', () => handlers.getSystem(args), {
@@ -3119,7 +3133,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_stakeholders',
-    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Money/rate/hour fields (hourlyRate, allocatedDailyHours, contractedBudget, aiFlatMonthlyFee, aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, aiBudgetAllocation) returned as JSON numbers. AI rows include aiCostNotes. Requires pm:read.',
+    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Money/rate/hour fields (hourlyRate, allocatedDailyHours, contractedBudget, aiFlatMonthlyFee, aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, aiBudgetAllocation) returned as JSON numbers. AI rows include aiTokenRateCurrency (null means the project currency) and aiCostNotes. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -3244,7 +3258,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_ai_assistant_cost',
-    'Set AI assistant cost mode (flat|api|mixed|note_only) on a project AI system. aiTokenRatePer1k is the blended per-1k fallback. Optional aiTokenRateInputPer1k, aiTokenRateOutputPer1k, and aiTokenRateCachePer1k bill a usage breakdown; null falls back to the blended rate. Mixed AC is the flat monthly fee accrued over the project dates plus token cost. aiCostNotes is a short note (max 500). Money fields accept number or string. Requires pm:write.',
+    'Set AI assistant cost mode (flat|api|mixed|note_only) on a project AI system. aiTokenRatePer1k is the blended per-1k fallback. Optional aiTokenRateInputPer1k, aiTokenRateOutputPer1k, and aiTokenRateCachePer1k bill a usage breakdown; null falls back to the blended rate. aiTokenRateCurrency is the currency of those list prices; null uses the project currency. Theoretical cost converts from that currency at usageOccurredAt, else completedAt, else updatedAt. Mixed AC is the flat monthly fee accrued over the project dates plus token cost. aiCostNotes is a short note (max 500). Money fields accept number or string. Requires pm:write.',
     {
       systemId: z.string().uuid(),
       aiCostMode: z
@@ -3256,6 +3270,7 @@ export function createKnowledgeHubMcpServer(
       aiTokenRateInputPer1k: moneyInput.optional(),
       aiTokenRateOutputPer1k: moneyInput.optional(),
       aiTokenRateCachePer1k: moneyInput.optional(),
+      aiTokenRateCurrency: projectCurrencyEnum.nullable().optional(),
       aiCostNotes: z.string().max(500).nullable().optional(),
       aiBudgetAllocation: moneyInput.optional(),
     },
@@ -3283,12 +3298,37 @@ export function createKnowledgeHubMcpServer(
       servicePeriodEnd: z
         .string()
         .nullable()
-        .describe('Inclusive service end YYYY-MM-DD. A span is split across months by days.'),
+        .describe(
+          'Exclusive renewal date YYYY-MM-DD (not included). Days are end minus start. Null with the start.',
+        ),
       provider: z.string(),
       plan: z.string().nullable(),
       type: z.enum(['subscription', 'plan_change', 'on_demand']),
-      amount: z.number(),
-      currency: z.string(),
+      amount: z.number().describe('Original amount.'),
+      currency: z.string().describe('Original currency.'),
+      convertedAmount: z
+        .number()
+        .optional()
+        .describe('Amount in the workspace reporting currency.'),
+      convertedCurrency: z
+        .string()
+        .optional()
+        .describe('Reporting currency. Same as currency when no rate was found.'),
+      fxRate: z
+        .number()
+        .nullable()
+        .optional()
+        .describe('Multiplier from the original currency into convertedCurrency. Null when missing.'),
+      fxRateDate: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('YYYY-MM-DD of the quote. Earlier than paid-at when that day has no quote.'),
+      fxSource: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('ecb, mnb, manual, identity, or mixed.'),
       paidAt: z.string().nullable(),
       note: z.string().nullable(),
       externalRef: z.string().nullable(),
@@ -3301,10 +3341,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_platform_ai_cost',
-    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio. Multi-month entries are prorated by days. Currencies stay separate. Defaults to the last 12 months. System administrator only. Requires pm:read.',
+    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts on the usage date. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Defaults to the last 12 months. System administrator only. Requires pm:read.',
     {
       from: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
       to: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      reportingCurrency: z.string().min(3).max(3).optional(),
     },
     async (args) =>
       wrap('get_platform_ai_cost', 'pm:read', () =>
@@ -3316,13 +3357,21 @@ export function createKnowledgeHubMcpServer(
     'list_ai_billing_entries',
     {
       description:
-        'List workspace AI cost entries (subscription, plan_change, on_demand). Each row includes servicePeriodStart and servicePeriodEnd (YYYY-MM-DD or null). period is the start month. A row that spans months is prorated by days when paid cost is computed. Optional period matches any month the row contributes to. Optional servicePeriodStart and servicePeriodEnd keep rows whose window overlaps that range. Optional aiSystemId filter. Amounts are JSON numbers. Requires pm:read.',
+        'List workspace AI cost entries (subscription, plan_change, on_demand). Each row includes servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included). period is the start month. A span is prorated by days (end minus start) when paid cost is computed. amount and currency are the original figures. convertedAmount and convertedCurrency are the workspace reporting currency, with fxRate, fxRateDate, and fxSource for the quote used (paid-at, or the service start when paid-at is missing). A missing quote day uses the previous quote. Optional period matches any month the row contributes to. Optional servicePeriodStart and servicePeriodEnd keep rows whose window overlaps that range. The stored end is not a billed day. Optional aiSystemId filter. Amounts are JSON numbers. Requires pm:read.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         period: billingPeriod.optional(),
         aiSystemId: z.string().uuid().optional(),
-        servicePeriodStart: serviceDate.optional().describe('YYYY-MM-DD overlap filter'),
-        servicePeriodEnd: serviceDate.optional().describe('YYYY-MM-DD overlap filter'),
+        servicePeriodStart: serviceDate
+          .optional()
+          .describe(
+            'YYYY-MM-DD overlap filter. Keep rows whose exclusive service end is after this date.',
+          ),
+        servicePeriodEnd: serviceDate
+          .optional()
+          .describe(
+            'YYYY-MM-DD overlap filter. Keep rows whose service window starts on or before this date.',
+          ),
       },
       outputSchema: listBillingOutput,
     },
@@ -3340,12 +3389,17 @@ export function createKnowledgeHubMcpServer(
     'create_ai_billing_entry',
     {
       description:
-        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD, inclusive) prorate the amount across months by days; period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
+        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         period: billingPeriod.optional().describe('YYYY-MM. Derived from servicePeriodStart when that date is set.'),
-        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD'),
-        servicePeriodEnd: serviceDate.nullable().optional().describe('Inclusive service end YYYY-MM-DD'),
+        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD. Set with servicePeriodEnd.'),
+        servicePeriodEnd: serviceDate
+          .nullable()
+          .optional()
+          .describe(
+            'Exclusive renewal date YYYY-MM-DD (not included). Must be after the start. A one-day entry ends the next day.',
+          ),
         provider: z.string().min(1).max(80),
         type: billingType,
         amount: z.union([z.number(), z.string()]),
@@ -3372,12 +3426,20 @@ export function createKnowledgeHubMcpServer(
     'update_ai_billing_entry',
     {
       description:
-        'Update one AI cost entry by entryId. plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) replace the service window; period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
+        'Update one AI cost entry by entryId. plan_change may be negative. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the service window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
       inputSchema: {
         entryId: z.string().uuid(),
         period: billingPeriod.optional(),
-        servicePeriodStart: serviceDate.nullable().optional().describe('Inclusive service start YYYY-MM-DD'),
-        servicePeriodEnd: serviceDate.nullable().optional().describe('Inclusive service end YYYY-MM-DD'),
+        servicePeriodStart: serviceDate
+          .nullable()
+          .optional()
+          .describe('Inclusive service start YYYY-MM-DD.'),
+        servicePeriodEnd: serviceDate
+          .nullable()
+          .optional()
+          .describe(
+            'Exclusive renewal date YYYY-MM-DD (not included). Must be after the start.',
+          ),
         provider: z.string().min(1).max(80).optional(),
         type: billingType.optional(),
         amount: z.union([z.number(), z.string()]).optional(),
@@ -3458,6 +3520,94 @@ export function createKnowledgeHubMcpServer(
         () => handlers.listAiUsageImports(args),
         { workspaceId: args.workspaceId },
         (data) => structuredTextResult(data, listUsageImportsOutput),
+      )(),
+  );
+
+  const usageSummaryOutput = z
+    .object({
+      dateFrom: z.string().nullable(),
+      dateTo: z.string().nullable(),
+      totals: z
+        .object({
+          tokensInput: z.number(),
+          tokensCacheWrite: z.number(),
+          tokensCache: z.number(),
+          tokensOutput: z.number(),
+          tokensTotal: z.number(),
+        })
+        .passthrough(),
+      models: z.array(
+        z
+          .object({
+            model: z.string(),
+            rowCount: z.number(),
+            tokensTotal: z.number(),
+          })
+          .passthrough(),
+      ),
+      linkedCount: z.number(),
+      unassignedCount: z.number(),
+    })
+    .passthrough();
+  const usageSummaryRowOutput = usageImportRowOutput
+    .extend({
+      summary: usageSummaryOutput.nullable(),
+    })
+    .passthrough();
+  const unassignedUsageRowOutput = z
+    .object({
+      id: z.string(),
+      importId: z.string().nullable(),
+      occurredAt: z.string(),
+      cloudAgentId: z.string().nullable(),
+      model: z.string(),
+      tokensInput: z.number(),
+      tokensCacheWrite: z.number(),
+      tokensCache: z.number(),
+      tokensOutput: z.number(),
+      tokensTotal: z.number(),
+    })
+    .passthrough();
+  const listUsageSummariesOutput = {
+    summaries: z.array(usageSummaryRowOutput),
+    summaryTotal: z.number().int(),
+    summaryLimit: z.number().int(),
+    summaryNextCursor: z.string().nullable(),
+    summaryHasMore: z.boolean(),
+    unassigned: z.array(unassignedUsageRowOutput),
+    unassignedTotal: z.number().int(),
+    unassignedLimit: z.number().int(),
+    unassignedNextCursor: z.string().nullable(),
+    unassignedHasMore: z.boolean(),
+  };
+
+  server.registerTool(
+    'list_ai_usage_import_summaries',
+    {
+      description:
+        'List saved AI usage import summaries and unassigned usage rows, both paged. Each summary keeps the usage date range, token totals (input, cache write, cache read, output), per-model row counts, and linked versus unassigned counts from the moment the import was confirmed. Pass cursor from summaryNextCursor and unassignedCursor from unassignedNextCursor until the matching hasMore flag is false. importId limits both lists to one import. Read-only. Requires pm:read.',
+      inputSchema: {
+        workspaceId: z.string().uuid(),
+        importId: z.string().uuid().optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+        cursor: z.string().min(1).max(200).optional(),
+        unassignedLimit: z.number().int().min(1).max(100).optional(),
+        unassignedCursor: z.string().min(1).max(200).optional(),
+      },
+      outputSchema: listUsageSummariesOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) =>
+      wrap(
+        'list_ai_usage_import_summaries',
+        'pm:read',
+        () => handlers.listAiUsageImportSummaries(args),
+        { workspaceId: args.workspaceId },
+        (data) => structuredTextResult(data, listUsageSummariesOutput),
       )(),
   );
 

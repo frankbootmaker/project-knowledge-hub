@@ -1454,6 +1454,45 @@ export {
 } from './ai-billing.js';
 
 export {
+  convertMoney,
+  convertMoneyParts,
+  isoDateOnly,
+  lookupFxRate,
+  paidConversionDate,
+  splitSignedMoney,
+  theoreticalUsageDate,
+  usageConversionDate,
+  type FxConversion,
+  type FxRate,
+} from './fx.js';
+
+export {
+  ECB_EUROFX_90_URL,
+  ECB_EUROFX_FULL_URL,
+  MNB_EXCHANGE_RATE_URL,
+  loadReferenceRates,
+  mnbExchangeRatesRequest,
+  parseEcbEuroFx,
+  parseMnbRates,
+  type FxFetcher,
+} from './fx-feed.js';
+
+export {
+  AI_COST_RANGES,
+  fillAiCostChart,
+  fillPlatformAiCostMonths,
+  formatAiBillingMonthLabel,
+  periodsCoveredByEntry,
+  resolveAiCostViewWindow,
+  type AiCostChartMonth,
+  type AiCostChartSourcePoint,
+  type AiCostCoverageEntry,
+  type AiCostRange,
+  type AiCostViewRange,
+  type PlatformAiCostMonthRow,
+} from './ai-billing-chart.js';
+
+export {
   AI_COST_NOTES_MAX,
   AI_MODEL_ID_MAX,
   AI_PRICING_TIER_MAX,
@@ -1491,6 +1530,7 @@ export {
   summarizeUsageRows,
   usageRowHash,
   type AiUsageImportSource,
+  type AiUsageImportSummary,
   type AiUsageRowError,
   type NormalizedAiUsageRow,
   type TaskUsageAggregate,

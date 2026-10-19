@@ -5,6 +5,7 @@ import { slugify } from '@project-knowledge-hub/auth';
 import { memberships, organizations, users, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
+  projectCurrencySchema,
   workspaceColorSchema,
   workspaceDescriptionSchema,
 } from '@project-knowledge-hub/domain';
@@ -35,6 +36,7 @@ const updateWorkspaceSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   description: workspaceDescriptionSchema.nullable().optional(),
   color: workspaceColorSchema.nullable().optional(),
+  reportingCurrency: projectCurrencySchema.optional(),
   archived: z.boolean().optional(),
 });
 
@@ -288,6 +290,10 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
         description:
           body.description === undefined ? workspace.description : body.description,
         color: body.color === undefined ? workspace.color : body.color,
+        reportingCurrency:
+          body.reportingCurrency === undefined
+            ? workspace.reportingCurrency
+            : body.reportingCurrency,
         archivedAt:
           body.archived === undefined
             ? workspace.archivedAt

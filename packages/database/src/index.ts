@@ -10,6 +10,13 @@ export {
   type BaselineJournalResult,
 } from './baseline-journal.js';
 export {
+  ensureExchangeRates,
+  listExchangeRates,
+  loadExchangeRateBook,
+  saveManualExchangeRate,
+  upsertExchangeRates,
+} from './exchange-rates.js';
+export {
   preservedBaselineFinish,
   syncEnabledScheduleSlipRisks,
   syncScheduleSlipRisks,

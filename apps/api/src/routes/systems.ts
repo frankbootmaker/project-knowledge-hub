@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { systems, workspaces } from '@project-knowledge-hub/database';
 import {
   aiCostModeSchema,
+  projectCurrencySchema,
   systemCriticalitySchema,
   systemItCostModeSchema,
   systemItDetailsSchema,
@@ -48,6 +49,7 @@ const createSystemSchema = z.object({
   itFlatMonthlyFee: moneySchema.optional(),
   itOneTimeCost: moneySchema.optional(),
   itBudgetAllocation: moneySchema.optional(),
+  aiTokenRateCurrency: projectCurrencySchema.nullable().optional(),
   tags: z.array(z.string().min(1).max(64)).max(30).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -78,6 +80,7 @@ const updateSystemSchema = z.object({
   aiTokenRateOutputPer1k: moneySchema.optional(),
   aiTokenRateCachePer1k: moneySchema.optional(),
   aiTokenRateCacheWritePer1k: moneySchema.optional(),
+  aiTokenRateCurrency: projectCurrencySchema.nullable().optional(),
   aiCostNotes: z.string().max(500).nullable().optional(),
   aiBudgetAllocation: moneySchema.optional(),
 });

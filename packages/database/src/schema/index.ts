@@ -68,6 +68,8 @@ export const workspaces = pgTable(
     description: text('description'),
     /** Curated accent key (ocean, teal, …); null → client picks stable hash color. */
     color: text('color'),
+    /** Currency used for AI cost charts and cross-currency totals. */
+    reportingCurrency: text('reporting_currency').notNull().default('EUR'),
     archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
@@ -319,6 +321,8 @@ export const systems = pgTable(
       scale: 4,
       mode: 'number',
     }),
+    /** Currency of the token list prices. Null means the linked project's currency. */
+    aiTokenRateCurrency: text('ai_token_rate_currency'),
     /** Short note, e.g. Cursor Pro+ flat plus on-demand. */
     aiCostNotes: text('ai_cost_notes'),
     aiBudgetAllocation: numeric('ai_budget_allocation', { precision: 14, scale: 2, mode: 'number' }),
@@ -342,6 +346,33 @@ export const systems = pgTable(
 );
 
 /**
+ * Daily foreign-exchange quotes. `rate` is quote units per 1 base unit.
+ * ECB rows use base EUR. A manual row for the same pair and day wins.
+ */
+export const exchangeRates = pgTable(
+  'exchange_rates',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    rateDate: date('rate_date', { mode: 'string' }).notNull(),
+    base: text('base').notNull(),
+    quote: text('quote').notNull(),
+    rate: numeric('rate', { precision: 18, scale: 8, mode: 'number' }).notNull(),
+    /** ecb | mnb | manual */
+    source: text('source').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('exchange_rates_pair_uidx').on(
+      table.rateDate,
+      table.base,
+      table.quote,
+      table.source,
+    ),
+    index('exchange_rates_pair_date_idx').on(table.base, table.quote, table.rateDate),
+  ],
+);
+
+/**
  * Workspace-level AI invoices. Not per project: a period's paid total is
  * allocated across projects (see docs/product/PROJECT_BUDGET.md).
  */
@@ -360,7 +391,7 @@ export const aiBillingEntries = pgTable(
     period: text('period').notNull(),
     /** Inclusive first day. Null keeps the whole amount in period. */
     servicePeriodStart: date('service_period_start', { mode: 'string' }),
-    /** Inclusive last day. Null together with the start. */
+    /** Exclusive renewal date (not included). Null together with the start. */
     servicePeriodEnd: date('service_period_end', { mode: 'string' }),
     provider: text('provider').notNull(),
     plan: text('plan'),
@@ -1586,6 +1617,21 @@ export type AiUsageImportErrorJson = {
   message: string;
 };
 
+export type AiUsageImportSummaryJson = {
+  dateFrom: string | null;
+  dateTo: string | null;
+  totals: {
+    tokensInput: number;
+    tokensCacheWrite: number;
+    tokensCache: number;
+    tokensOutput: number;
+    tokensTotal: number;
+  };
+  models: Array<{ model: string; rowCount: number; tokensTotal: number }>;
+  linkedCount: number;
+  unassignedCount: number;
+};
+
 /**
  * One usage import. `source` is `csv` today. `cursor_admin_api` is reserved
  * so a later source can share the event table.
@@ -1613,6 +1659,8 @@ export const aiUsageImports = pgTable(
       .$type<AiUsageImportErrorJson[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    /** Preview snapshot: dates, token totals, models, linked vs unassigned. */
+    summaryJson: jsonb('summary_json').$type<AiUsageImportSummaryJson | null>(),
     ...timestamps,
   },
   (table) => [

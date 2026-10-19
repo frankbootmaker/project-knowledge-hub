@@ -6,12 +6,15 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   projectCurrencySchema,
+  summarizeAiBillingMonth,
   splitBillingEntryByMonth,
   type ProjectCurrency,
 } from '@project-knowledge-hub/domain';
+import { formatAiBillingMonth, formatServiceDate } from '../../lib/ai-billing-month';
 import { formatMoney, parseOptionalNumber } from '../../lib/project-currency';
-import { AiBillingChart } from '../AiBillingChart';
+import { AiBillingChart, AiBillingChartLegend } from '../AiBillingChart';
 import { Button, ErrorText, Field, Input, Modal, Select, useToast } from '../ui';
+import { AiCostPeriodForm, type AiCostViewRange } from './AiCostPeriodForm';
 
 type BillingType = 'subscription' | 'plan_change' | 'on_demand';
 
@@ -29,6 +32,11 @@ export type AiBillingEntryRow = {
   note: string | null;
   externalRef: string | null;
   aiSystemId: string | null;
+  convertedAmount?: number;
+  convertedCurrency?: string;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type AiCostChartPoint = {
@@ -39,6 +47,12 @@ export type AiCostChartPoint = {
   planChange: number;
   onDemand: number;
   theoreticalApiCost: number;
+  difference?: number;
+  ratio?: number | null;
+  scheduled?: boolean;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type AiCostPoolProject = {
@@ -49,14 +63,26 @@ export type AiCostPoolProject = {
   overridePercent: number | null;
   amount: number;
   method: 'override' | 'tokens' | 'equal';
+  originalAmount?: number;
+  projectAmount?: number;
+  projectCurrency?: string;
+  reportingAmount?: number;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
 };
 
 export type AiCostPool = {
   period: string;
   currency: string;
+  originalCurrency?: string;
   aiSystemId: string | null;
   aiSystemName: string | null;
   paidTotal: number;
+  originalPaidTotal?: number;
+  fxRate?: number | null;
+  fxRateDate?: string | null;
+  fxSource?: string | null;
   projects: AiCostPoolProject[];
 };
 
@@ -137,6 +163,20 @@ function saveBlocker(
   return null;
 }
 
+/** Day after a YYYY-MM-DD date. The service end must be after the start. */
+function nextCalendarDay(ymd: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!match) return '';
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day + 1));
+  const nextYear = date.getUTCFullYear();
+  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const nextDay = String(date.getUTCDate()).padStart(2, '0');
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
 function emptyDraft(currency: ProjectCurrency): EntryDraft {
   return {
     id: null,
@@ -167,22 +207,47 @@ function rateText(value: number | null): string {
   return value == null ? '' : String(value);
 }
 
+function fxDetail(
+  source: string | null | undefined,
+  rateDate: string | null | undefined,
+  rate: number | null | undefined,
+  label: (key: string) => string,
+): string {
+  if (!source) return '';
+  const name = source === 'mixed' ? label('fxMixed') : source.toUpperCase();
+  const date = rateDate ?? '';
+  const figure = rate == null ? '' : rate.toFixed(6);
+  return [name, date, figure].filter(Boolean).join(' · ');
+}
+
 export function AiCostAdmin({
   workspaceId,
   workspaceSlug,
   canMutate,
+  canAdmin = false,
+  reportingCurrency = 'EUR',
   entries,
   chart,
+  originalChart,
   pools,
   systems,
+  from,
+  to,
+  range = 'last12',
 }: {
   workspaceId: string;
   workspaceSlug: string;
   canMutate: boolean;
+  canAdmin?: boolean;
+  reportingCurrency?: string;
   entries: AiBillingEntryRow[];
   chart: AiCostChartPoint[];
+  originalChart?: AiCostChartPoint[];
   pools: AiCostPool[];
   systems: AiSystemPrice[];
+  from?: string;
+  to?: string;
+  range?: AiCostViewRange;
 }) {
   const t = useTranslations('financials');
   const tCommon = useTranslations('common');
@@ -193,10 +258,14 @@ export function AiCostAdmin({
   const systemName = new Map(aiSystems.map((system) => [system.id, system.name]));
   const currencies = useMemo(() => {
     const found = new Set<string>();
-    for (const row of [...entries, ...chart, ...pools]) found.add(row.currency);
+    for (const row of entries) found.add(row.currency);
+    for (const row of originalChart ?? chart) found.add(row.currency);
+    for (const row of pools) found.add(row.originalCurrency ?? row.currency);
     return [...found];
-  }, [entries, chart, pools]);
+  }, [entries, chart, originalChart, pools]);
   const [currency, setCurrency] = useState(currencies[0] ?? 'EUR');
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [reportingDraft, setReportingDraft] = useState(reportingCurrency);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<EntryDraft | null>(null);
@@ -204,13 +273,62 @@ export function AiCostAdmin({
   const [percents, setPercents] = useState<Record<string, string>>({});
   const [rates, setRates] = useState<Record<string, Record<string, string>>>({});
 
-  const visibleChart = chart.filter((row) => row.currency === currency);
-  const visibleEntries = entries.filter((row) => row.currency === currency);
-  const visiblePools = pools.filter((row) => row.currency === currency);
+  const sourceChart = showOriginal ? (originalChart ?? chart) : chart;
+  const visibleChart = showOriginal
+    ? sourceChart.filter((row) => row.currency === currency)
+    : sourceChart;
+  const chartCurrency =
+    visibleChart.length > 0 &&
+    visibleChart.every((row) => row.currency === visibleChart[0]?.currency)
+      ? (visibleChart[0]?.currency ?? reportingCurrency)
+      : showOriginal
+        ? currency
+        : reportingCurrency;
+  const chartTotal = summarizeAiBillingMonth({
+    period: 'total',
+    currency: chartCurrency,
+    subscription: visibleChart.reduce((sum, row) => sum + row.subscription, 0),
+    planChange: visibleChart.reduce((sum, row) => sum + row.planChange, 0),
+    onDemand: visibleChart.reduce((sum, row) => sum + row.onDemand, 0),
+    theoreticalApiCost: visibleChart.reduce((sum, row) => sum + row.theoreticalApiCost, 0),
+  });
+  const chartLabels = {
+    subscription: t('type.subscription'),
+    planChange: t('type.plan_change'),
+    onDemand: t('type.on_demand'),
+    paid: t('paid'),
+    theoretical: t('theoretical'),
+    difference: t('difference'),
+    ratio: t('ratio'),
+    scheduled: t('scheduled'),
+  };
+  const monthLabel = (period: string, scheduled?: boolean) => {
+    const label = formatAiBillingMonth(period, locale);
+    return scheduled ? `${label} (${t('scheduled')})` : label;
+  };
+  const visibleEntries = showOriginal
+    ? entries.filter((row) => row.currency === currency)
+    : entries;
+  const visiblePools = (showOriginal
+    ? pools.filter((row) => (row.originalCurrency ?? row.currency) === currency)
+    : pools
+  ).map((pool) =>
+    showOriginal
+      ? {
+          ...pool,
+          currency: pool.originalCurrency ?? pool.currency,
+          paidTotal: pool.originalPaidTotal ?? pool.paidTotal,
+          projects: pool.projects.map((project) => ({
+            ...project,
+            amount: project.originalAmount ?? project.amount,
+          })),
+        }
+      : pool,
+  );
   const rangeInvalid = Boolean(
     draft?.servicePeriodStart &&
       draft.servicePeriodEnd &&
-      draft.servicePeriodEnd < draft.servicePeriodStart,
+      draft.servicePeriodEnd <= draft.servicePeriodStart,
   );
   const blocker = draft ? saveBlocker(draft, rangeInvalid) : null;
   const splitPreview = useMemo(() => {
@@ -240,7 +358,7 @@ export function AiCostAdmin({
       setError(t('serviceDatesRequired'));
       return;
     }
-    if (draft.servicePeriodEnd < draft.servicePeriodStart) {
+    if (draft.servicePeriodEnd <= draft.servicePeriodStart) {
       setError(t('serviceRangeInvalid'));
       return;
     }
@@ -442,10 +560,80 @@ export function AiCostAdmin({
     });
   }
 
+  async function saveReportingCurrency() {
+    if (!canAdmin || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/workspaces/${workspaceId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({ reportingCurrency: reportingDraft }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) throw new Error(payload.error?.message || t('saveFailed'));
+      pushToast(t('reportingCurrencySaved'), 'success');
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('saveFailed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="grid gap-3">
+      {from && to ? (
+        <AiCostPeriodForm
+          action={`/workspaces/${workspaceSlug}/financials`}
+          from={from}
+          to={to}
+          range={range}
+        />
+      ) : null}
       {error && !draft ? <ErrorText>{error}</ErrorText> : null}
-      {currencies.length > 1 ? (
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label={t('reportingCurrency')} className="max-w-xs">
+          <Select
+            value={reportingDraft}
+            disabled={!canAdmin || pending}
+            onChange={(event) => setReportingDraft(event.target.value)}
+          >
+            {CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {canAdmin ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-fit"
+            disabled={pending || reportingDraft === reportingCurrency}
+            onClick={() => void saveReportingCurrency()}
+          >
+            {t('saveReportingCurrency')}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-fit"
+          onClick={() => setShowOriginal((current) => !current)}
+        >
+          {showOriginal ? t('showReportingCurrency') : t('showOriginalCurrencies')}
+        </Button>
+      </div>
+      <p className="m-0 text-[13px] text-ink-muted">{t('reportingCurrencyHint')}</p>
+      {showOriginal && currencies.length > 1 ? (
         <Field label={t('currency')} className="max-w-xs">
           <Select value={currency} onChange={(event) => setCurrency(event.target.value)}>
             {currencies.map((code) => (
@@ -462,32 +650,123 @@ export function AiCostAdmin({
           <h2 className="kh-ops-panel-title">{t('chartTitle')}</h2>
         </div>
         <div className="kh-ops-chart-wrap">
-          <div className="kh-ops-chart-legend">
-            <span>
-              <i className="kh-ops-ai-cost-sub" />
-              {t('type.subscription')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-change" />
-              {t('type.plan_change')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-demand" />
-              {t('type.on_demand')}
-            </span>
-            <span>
-              <i className="kh-ops-ai-cost-line" />
-              {t('theoretical')}
-            </span>
-          </div>
+          <AiBillingChartLegend
+            periods={visibleChart.map((row) => ({ ...row, legacyToken: 0 }))}
+            labels={chartLabels}
+          />
           {visibleChart.length === 0 ? (
             <p className="kh-ops-empty">{t('chartEmpty')}</p>
           ) : (
-            <AiBillingChart
-              periods={visibleChart.map((row) => ({ ...row, legacyToken: 0 }))}
-              ariaLabel={t('chartAria')}
-            />
+            <>
+              <AiBillingChart
+                periods={visibleChart.map((row) => ({
+                  ...row,
+                  legacyToken: 0,
+                  paidCost: row.paidCost,
+                }))}
+                ariaLabel={t('chartAria')}
+                locale={locale}
+                currency={chartCurrency}
+                labels={chartLabels}
+              />
+              <div className="kh-ops-table-wrap">
+                <table className="kh-ops-data-table">
+                  <caption className="kh-ops-panel-meta px-3 py-2 text-left">
+                    {t('overviewTitle')}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th>{t('period')}</th>
+                      <th className="kh-ops-num">{t('type.subscription')}</th>
+                      <th className="kh-ops-num">{t('type.plan_change')}</th>
+                      <th className="kh-ops-num">{t('type.on_demand')}</th>
+                      <th className="kh-ops-num">{t('paid')}</th>
+                      <th className="kh-ops-num">{t('theoretical')}</th>
+                      <th className="kh-ops-num">{t('difference')}</th>
+                      <th className="kh-ops-num">{t('ratio')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleChart.map((row) => {
+                      const summary = summarizeAiBillingMonth({
+                        period: row.period,
+                        currency: row.currency,
+                        subscription: row.subscription,
+                        planChange: row.planChange,
+                        onDemand: row.onDemand,
+                        theoreticalApiCost: row.theoreticalApiCost,
+                      });
+                      const difference = row.difference ?? summary.difference;
+                      const ratio = row.ratio === undefined ? summary.ratio : row.ratio;
+                      return (
+                        <tr key={`${row.period}-${row.currency}`}>
+                          <td>{monthLabel(row.period, row.scheduled)}</td>
+                          <td className="kh-ops-num">
+                            {formatMoney(row.subscription, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(row.planChange, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(row.onDemand, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(summary.paidCost, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(row.theoreticalApiCost, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">
+                            {formatMoney(difference, row.currency, locale)}
+                          </td>
+                          <td className="kh-ops-num">{ratio == null ? '—' : ratio.toFixed(3)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">{t('total')}</th>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.subscription, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.planChange, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.onDemand, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.paidCost, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.theoreticalApiCost, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {formatMoney(chartTotal.difference, chartCurrency, locale)}
+                      </td>
+                      <td className="kh-ops-num">
+                        {chartTotal.ratio == null ? '—' : chartTotal.ratio.toFixed(3)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
           )}
+          {visibleChart.some((row) => row.fxSource) ? (
+            <ul className="m-0 grid gap-1 px-3 pb-3 text-[13px] text-ink-muted">
+              {visibleChart.map((row) => {
+                const detail = fxDetail(row.fxSource, row.fxRateDate, row.fxRate, t);
+                if (!detail) return null;
+                return (
+                  <li key={`${row.period}-${row.currency}`}>
+                    {monthLabel(row.period, row.scheduled)} · {row.currency} · {detail}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
         </div>
       </section>
 
@@ -521,6 +800,8 @@ export function AiCostAdmin({
               <thead>
                 <tr>
                   <th>{t('period')}</th>
+                  <th>{t('serviceStart')}</th>
+                  <th>{t('serviceEnd')}</th>
                   <th>{t('provider')}</th>
                   <th>{t('system')}</th>
                   <th>{t('plan')}</th>
@@ -535,11 +816,9 @@ export function AiCostAdmin({
               <tbody>
                 {visibleEntries.map((entry) => (
                   <tr key={entry.id}>
-                    <td>
-                      {entry.servicePeriodStart && entry.servicePeriodEnd
-                        ? `${entry.servicePeriodStart} – ${entry.servicePeriodEnd}`
-                        : entry.period}
-                    </td>
+                    <td>{formatAiBillingMonth(entry.period, locale)}</td>
+                    <td>{formatServiceDate(entry.servicePeriodStart, locale)}</td>
+                    <td>{formatServiceDate(entry.servicePeriodEnd, locale)}</td>
                     <td>{entry.provider}</td>
                     <td>
                       {entry.aiSystemId
@@ -548,8 +827,18 @@ export function AiCostAdmin({
                     </td>
                     <td>{entry.plan ?? '—'}</td>
                     <td>{t(`type.${entry.type}`)}</td>
-                    <td className="kh-ops-num">
+                    <td
+                      className="kh-ops-num"
+                      title={fxDetail(entry.fxSource, entry.fxRateDate, entry.fxRate, t)}
+                    >
                       {formatMoney(entry.amount, entry.currency, locale)}
+                      {entry.convertedCurrency &&
+                      entry.convertedCurrency !== entry.currency &&
+                      entry.convertedAmount != null ? (
+                        <span className="block text-ink-muted">
+                          {formatMoney(entry.convertedAmount, entry.convertedCurrency, locale)}
+                        </span>
+                      ) : null}
                     </td>
                     <td>{entry.paidAt ? entry.paidAt.slice(0, 10) : '—'}</td>
                     <td>{entry.externalRef ?? '—'}</td>
@@ -588,13 +877,24 @@ export function AiCostAdmin({
           <p className="kh-ops-empty">{t('allocationEmpty')}</p>
         ) : (
           visiblePools.map((pool) => (
-            <div key={`${pool.period}-${pool.currency}-${pool.aiSystemId ?? 'workspace'}`}>
-              <p className="kh-ops-panel-meta m-0 px-3 pt-3">
+            <div
+              key={`${pool.period}-${pool.originalCurrency ?? pool.currency}-${pool.aiSystemId ?? 'workspace'}`}
+            >
+              <p
+                className="kh-ops-panel-meta m-0 px-3 pt-3"
+                title={fxDetail(pool.fxSource, pool.fxRateDate, pool.fxRate, t)}
+              >
                 {pool.period}
                 {' · '}
                 {pool.aiSystemName ?? t('workspacePool')}
                 {' · '}
                 {formatMoney(pool.paidTotal, pool.currency, locale)}
+                {pool.originalCurrency && pool.originalCurrency !== pool.currency ? (
+                  <span>
+                    {' · '}
+                    {formatMoney(pool.originalPaidTotal ?? pool.paidTotal, pool.originalCurrency, locale)}
+                  </span>
+                ) : null}
               </p>
               <div className="kh-ops-table-wrap">
                 <table className="kh-ops-data-table">
@@ -650,8 +950,18 @@ export function AiCostAdmin({
                               (project.overridePercent ?? '—')
                             )}
                           </td>
-                          <td className="kh-ops-num">
+                          <td
+                            className="kh-ops-num"
+                            title={fxDetail(project.fxSource, project.fxRateDate, project.fxRate, t)}
+                          >
                             {formatMoney(project.amount, pool.currency, locale)}
+                            {project.projectCurrency &&
+                            project.projectCurrency !== pool.currency &&
+                            project.projectAmount != null ? (
+                              <span className="block text-ink-muted">
+                                {formatMoney(project.projectAmount, project.projectCurrency, locale)}
+                              </span>
+                            ) : null}
                           </td>
                         </tr>
                       );
@@ -784,12 +1094,19 @@ export function AiCostAdmin({
               <Input
                 type="date"
                 value={draft.servicePeriodEnd}
-                min={draft.servicePeriodStart || undefined}
+                min={
+                  draft.servicePeriodStart
+                    ? nextCalendarDay(draft.servicePeriodStart)
+                    : undefined
+                }
                 disabled={pending}
                 onChange={(event) =>
                   setDraft({ ...draft, servicePeriodEnd: event.target.value })
                 }
               />
+              <span className="mt-1 block text-[13px] font-normal normal-case tracking-normal text-ink-muted">
+                {t('serviceEndHint')}
+              </span>
             </Field>
             {rangeInvalid ? (
               <div className="kh-ops-field-span">

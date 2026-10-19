@@ -3455,14 +3455,18 @@ a.kh-ops-choice {
   gap: 12px;
 }
 
+.kh-ops-ai-cost-chart-frame {
+  position: relative;
+}
+
 .kh-ops-ai-cost-chart {
   width: 100%;
   height: auto;
 }
 
 .kh-ops-ai-cost-sub {
-  fill: var(--kh-accent);
-  background: var(--kh-accent);
+  fill: var(--kh-ai-subscription);
+  background: var(--kh-ai-subscription);
 }
 
 .kh-ops-ai-cost-change {
@@ -3485,17 +3489,94 @@ a.kh-ops-choice {
 
 .kh-ops-ai-cost-line {
   fill: none;
-  stroke: var(--kh-brand);
+  stroke: var(--kh-ai-theoretical);
   stroke-width: 2;
-  background: var(--kh-brand);
+  background: var(--kh-ai-theoretical);
 }
 
 .kh-ops-ai-cost-dot {
-  fill: var(--kh-brand);
+  fill: var(--kh-ai-theoretical);
 }
 
 .kh-ops-ai-cost-axis {
   stroke: var(--kh-line);
+}
+
+.kh-ops-ai-cost-grid {
+  stroke: var(--kh-line);
+  stroke-dasharray: 2 3;
+}
+
+.kh-ops-ai-cost-tick,
+.kh-ops-ai-cost-month,
+.kh-ops-ai-cost-value,
+.kh-ops-ai-cost-scheduled {
+  fill: var(--kh-ink-muted);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 10px;
+}
+
+.kh-ops-ai-cost-value {
+  fill: var(--kh-ink);
+}
+
+.kh-ops-ai-cost-scheduled {
+  fill: var(--kh-warn);
+}
+
+.kh-ops-ai-cost-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.kh-ops-ai-cost-hit:focus-visible {
+  stroke: var(--kh-accent);
+  stroke-width: 1;
+  outline: none;
+}
+
+.kh-ops-ai-cost-tip {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  min-width: 12rem;
+  max-width: 16rem;
+  padding: 8px 10px;
+  border: 1px solid var(--kh-line);
+  border-radius: var(--kh-radius, 2px);
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
+  font-size: 12px;
+  line-height: 1.4;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.kh-ops-ai-cost-tip-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.kh-ops-ai-cost-tip dl {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.kh-ops-ai-cost-tip div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kh-ops-ai-cost-tip dt {
+  color: var(--kh-ink-muted);
+}
+
+.kh-ops-ai-cost-tip dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .kh-ops-chart-wrap {
@@ -3512,12 +3593,35 @@ a.kh-ops-choice {
   font-size: 11px;
 }
 
+.kh-ops-chart-legend [data-empty='true'] {
+  opacity: 0.4;
+}
+
 .kh-ops-chart-legend i {
   display: inline-block;
   width: 12px;
-  height: 3px;
+  height: 10px;
   margin-right: 5px;
+  border-radius: 2px;
   vertical-align: middle;
+}
+
+.kh-ops-chart-legend i.kh-ops-ai-cost-line {
+  height: 0;
+  border-radius: 0;
+  border-top: 3px solid var(--kh-ai-theoretical);
+  background: transparent;
+}
+
+.kh-ops-data-table tfoot th,
+.kh-ops-data-table tfoot td {
+  font-weight: 600;
+  background: var(--kh-surface);
+  border-top: 1px solid var(--kh-line-strong);
+}
+
+.kh-ops-data-table tfoot .kh-ops-num {
+  text-align: right;
 }
 
 .kh-ops-cost-split {
