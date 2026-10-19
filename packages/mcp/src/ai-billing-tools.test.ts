@@ -64,6 +64,13 @@ describe('AI cost entry MCP tools', () => {
       }
       const create = listed.tools.find((item) => item.name === 'create_ai_billing_entry');
       expect(create?.description).toContain('prorate');
+      expect(create?.description).toMatch(/exclusive/i);
+      expect(create?.description).toMatch(/after start/);
+      const update = listed.tools.find((item) => item.name === 'update_ai_billing_entry');
+      expect(update?.description).toMatch(/exclusive/i);
+      expect(update?.description).toMatch(/after start/);
+      const list = listed.tools.find((item) => item.name === 'list_ai_billing_entries');
+      expect(list?.description).toMatch(/exclusive/i);
       const required = (create?.inputSchema as { required?: string[] }).required ?? [];
       expect(required).not.toContain('period');
     } finally {

@@ -360,7 +360,7 @@ export const aiBillingEntries = pgTable(
     period: text('period').notNull(),
     /** Inclusive first day. Null keeps the whole amount in period. */
     servicePeriodStart: date('service_period_start', { mode: 'string' }),
-    /** Inclusive last day. Null together with the start. */
+    /** Exclusive renewal date (not included). Null together with the start. */
     servicePeriodEnd: date('service_period_end', { mode: 'string' }),
     provider: text('provider').notNull(),
     plan: text('plan'),

@@ -9,11 +9,13 @@ import { aiBillingPeriodSchema } from './ai-cost.js';
  * is the sum of its entries (`subscription` + `plan_change` + `on_demand`).
  * `plan_change` may be negative (a downgrade credit).
  *
- * An entry may name an inclusive service window. `splitBillingEntryByMonth`
+ * An entry may name a service window. The start date is included and the end
+ * date is exclusive (the renewal or next billing date). `splitBillingEntryByMonth`
  * divides that amount across calendar months by the number of days in each
- * month (12 Oct–11 Nov is 20/31 in October and 11/31 in November). Cents use
- * the largest remainder so the slices sum to the entry. `period` is the start
- * month. An entry without service dates keeps the whole amount in `period`.
+ * month (6 Oct–6 Nov is 26/31 in October and 5/31 in November). 1 Oct–1 Nov
+ * stays in October. Cents use the largest remainder so the slices sum to the
+ * entry. `period` is the start month. An entry without service dates keeps
+ * the whole amount in `period`.
  *
  * That total is split across projects once:
  * 1. Manual percent overrides on a pool are applied first. They must sum to
@@ -199,9 +201,10 @@ export type BillingServiceWindow = {
 };
 
 /**
- * Stored period and inclusive service window.
- * When both dates are set, `period` is the start month even if a different
- * month was sent. Both dates must be set, or neither.
+ * Stored period and service window. The start is included. The end is the
+ * exclusive renewal date and must be after the start. When both dates are
+ * set, `period` is the start month even if a different month was sent.
+ * Both dates must be set, or neither.
  */
 export function resolveBillingServiceWindow(input: {
   period?: string | null;
@@ -219,10 +222,10 @@ export function resolveBillingServiceWindow(input: {
     });
   }
   if (start && end) {
-    if (end < start) {
+    if (end <= start) {
       throw new AppError({
         code: 'INVALID_DATE_RANGE',
-        message: `servicePeriodEnd (${end}) must be on or after servicePeriodStart (${start})`,
+        message: `servicePeriodEnd (${end}) must be after servicePeriodStart (${start})`,
         statusCode: 400,
       });
     }
@@ -295,7 +298,7 @@ export function splitAiMoney(
 export type BillingMonthSlice = {
   /** YYYY-MM */
   period: string;
-  /** Inclusive days of the service window that fall in this month. */
+  /** Days of [start, end) that fall in this month. The end date is not included. */
   days: number;
   /** Largest-remainder cents. Slices of one entry sum to the entry amount. */
   amount: number;
@@ -328,17 +331,19 @@ function wholeEntryInPeriod(entry: BillingEntryMonthInput): BillingMonthSlice[] 
 }
 
 /**
- * Split one paid AI cost entry across calendar months by inclusive days.
- * 12 Oct–11 Nov is 20 days in October and 11 days in November (20/31 and
- * 11/31). Amounts use largest-remainder rounding to cents and sum to the
- * entry. Missing or partial service dates keep the whole amount in `period`.
+ * Split one paid AI cost entry across calendar months.
+ * `servicePeriodEnd` is exclusive: days = end − start. 6 Oct–6 Nov is 26 days
+ * in October and 5 days in November (26/31 and 5/31). 1 Oct–1 Nov stays in
+ * October. A one-day entry has end = start + 1. Amounts use largest-remainder
+ * rounding to cents and sum to the entry. Missing dates, or an end that is
+ * not after the start, keep the whole amount in `period`.
  */
 export function splitBillingEntryByMonth(
   entry: BillingEntryMonthInput,
 ): BillingMonthSlice[] {
   const start = entry.servicePeriodStart?.trim() ?? '';
   const end = entry.servicePeriodEnd?.trim() ?? '';
-  if (!isServiceDate(start) || !isServiceDate(end) || end < start) {
+  if (!isServiceDate(start) || !isServiceDate(end) || end <= start) {
     return wholeEntryInPeriod(entry);
   }
   const startYear = Number(start.slice(0, 4));
@@ -353,12 +358,12 @@ export function splitBillingEntryByMonth(
   const counts: Array<{ period: string; days: number }> = [];
   let year = startYear;
   let month = startMonth;
-  while (year < endYear || (year === endYear && month <= endMonth)) {
+  for (let step = 0; step <= span; step += 1) {
     const period = `${year}-${String(month).padStart(2, '0')}`;
     const monthDays = daysInCalendarMonth(year, month);
     const first = year === startYear && month === startMonth ? startDay : 1;
-    const last = year === endYear && month === endMonth ? endDay : monthDays;
-    const days = last - first + 1;
+    const isEndMonth = year === endYear && month === endMonth;
+    const days = isEndMonth ? endDay - first : monthDays - first + 1;
     if (days > 0) counts.push({ period, days });
     month += 1;
     if (month > 12) {
