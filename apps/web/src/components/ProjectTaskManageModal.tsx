@@ -892,10 +892,14 @@ export function ProjectTaskManageModal({
                   value={status}
                   onChange={(event) => {
                     const next = event.target.value;
+                    const leavingDone =
+                      status === 'done' && next !== 'done' && next !== 'cancelled';
                     setStatus(next);
                     if (next === 'done') setCompletionPercent('100');
-                    else if (next === 'cancelled') setCompletionPercent('0');
-                    else if (completionPercent === '') setCompletionPercent('0');
+                    else if (next === 'cancelled' || leavingDone || completionPercent === '') {
+                      // Done overwrites the previous step with 100, so reopen starts at 0.
+                      setCompletionPercent('0');
+                    }
                   }}
                   disabled={pending || !canMutate}
                 >

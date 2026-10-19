@@ -908,11 +908,16 @@ export function ProjectDeliveryTree({
                     }
                     meta={metaBits({
                       statusLabel: t(`milestoneStatus.${milestone.status}`),
-                      percent:
-                        milestone.completionPercent == null
-                          ? '—'
-                          : formatPercentLabel(milestone.completionPercent, locale),
-                      target: '—',
+                      ...paceCells({
+                        actual:
+                          milestone.completion?.percent
+                          ?? milestone.completionPercent
+                          ?? null,
+                        target: null,
+                        status: milestone.status,
+                        comparable: false,
+                        earned: milestone.completion ?? null,
+                      }),
                       owner: null,
                     })}
                     actions={

@@ -11,6 +11,8 @@ export type MilestoneMarker = {
   targetDate: string | null;
   humanKey?: string | null;
   completionPercent?: number | null;
+  /** Included-item count. percent stays 0 or 100; done is how many are complete. */
+  completion?: { percent: number; done: number; total: number } | null;
 };
 
 export function compareMilestonesByDueDate(a: MilestoneMarker, b: MilestoneMarker): number {

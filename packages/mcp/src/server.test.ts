@@ -2,7 +2,11 @@ import { describe, test, expect, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
-import { invokeNamedHubTool, listHubToolSummaries } from './llm-tool-catalog.js';
+import {
+  invokeNamedHubTool,
+  listHubToolSummaries,
+  LLM_TOOL_CATALOG,
+} from './llm-tool-catalog.js';
 import {
   createKnowledgeHubMcpServer,
   toMcpErrorResult,
@@ -1373,6 +1377,41 @@ describe('list_project_tasks paging schema', () => {
         expect.objectContaining({ projectId: PROJECT_ID, limit: 2, cursor: 'page-2' }),
       );
     });
+  });
+});
+
+describe('task reopen and milestone done count', () => {
+  test('update and milestone descriptions state the reopen and done-count rules', async () => {
+    await withMcpClient(['pm:read', 'pm:write'], {}, async (client) => {
+      const listed = await client.listTools();
+      const update = listed.tools.find((item) => item.name === 'update_project_task');
+      expect(update?.description).toMatch(/Reopening a done task or bug/);
+      expect(update?.description).toMatch(/clears completedAt/);
+      expect(update?.description).toMatch(/resets completionPercent to 0/);
+      const getMilestone = listed.tools.find((item) => item.name === 'get_project_milestone');
+      const listMilestones = listed.tools.find(
+        (item) => item.name === 'list_project_milestones',
+      );
+      for (const tool of [getMilestone, listMilestones]) {
+        expect(tool?.description).toMatch(/completion\.done/);
+        expect(tool?.description).toMatch(/completion\.total/);
+      }
+    });
+    for (const name of [
+      'update_project_task',
+      'get_project_milestone',
+      'list_project_milestones',
+    ]) {
+      const catalog = LLM_TOOL_CATALOG.find((item) => item.name === name);
+      expect(catalog?.description).toBeTruthy();
+      if (name === 'update_project_task') {
+        expect(catalog?.description).toMatch(/clears completedAt/);
+        expect(catalog?.description).toMatch(/resets completionPercent to 0/);
+      } else {
+        expect(catalog?.description).toMatch(/completion\.done/);
+        expect(catalog?.description).toMatch(/completion\.total/);
+      }
+    }
   });
 });
 

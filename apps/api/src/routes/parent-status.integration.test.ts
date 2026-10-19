@@ -221,6 +221,58 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
     return row!.status;
   }
 
+  async function milestoneOf(
+    projectId: string,
+    milestoneId: string,
+  ): Promise<{
+    status: string;
+    completionPercent: number | null;
+    completion: { percent: number; done: number; total: number } | null;
+  }> {
+    const response = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}/milestones`,
+      headers: { cookie: adminCookie },
+    });
+    expect(response.statusCode).toBe(200);
+    const row = (
+      response.json() as {
+        milestones: Array<{
+          id: string;
+          status: string;
+          completionPercent: number | null;
+          completion: { percent: number; done: number; total: number } | null;
+        }>;
+      }
+    ).milestones.find((item) => item.id === milestoneId);
+    expect(row).toBeTruthy();
+    return row!;
+  }
+
+  async function taskOf(taskId: string): Promise<{
+    status: string;
+    itemType: string;
+    completionPercent: number | null;
+    completedAt: string | null;
+  }> {
+    const response = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: { cookie: adminCookie },
+    });
+    expect(response.statusCode).toBe(200);
+    return (
+      response.json() as {
+        task: {
+          status: string;
+          itemType: string;
+          completionPercent: number | null;
+          completedAt: string | null;
+        };
+      }
+    ).task;
+  }
+
   async function windows(projectId: string): Promise<{
     epics: DatedRow[];
     stories: DatedRow[];
@@ -594,6 +646,117 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
     expect(lateWrite).toMatchObject({
       startDate: '2026-05-06',
       finishDate: '2026-05-08',
+    });
+  });
+
+  it('reopens done tasks and counts partial milestone completion', async () => {
+    const projectId = await createProject();
+    const epicId = await createEpic(projectId, 'Epic');
+    const storyId = await createStory(projectId, epicId, 'Story');
+    const taskId = await createTask(projectId, {
+      title: 'Task',
+      userStoryId: storyId,
+      status: 'todo',
+      completionPercent: 25,
+    });
+    const bugId = await createTask(projectId, {
+      title: 'Bug',
+      itemType: 'bug',
+      status: 'todo',
+      completionPercent: 0,
+    });
+    const created = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/milestones`,
+      headers: headers(true),
+      payload: { title: 'Gate', status: 'planned' },
+    });
+    expect(created.statusCode).toBe(200);
+    const milestoneId = (created.json() as { milestone: { id: string } }).milestone.id;
+    const linked = await app!.inject({
+      method: 'PUT',
+      url: `/api/v1/project-milestones/${milestoneId}/item-links`,
+      headers: headers(true),
+      payload: {
+        items: [
+          { entityType: 'epic', entityId: epicId },
+          { entityType: 'user_story', entityId: storyId },
+          { entityType: 'task', entityId: taskId },
+          { entityType: 'task', entityId: bugId },
+        ],
+      },
+    });
+    expect(linked.statusCode).toBe(200);
+
+    await patchTask(taskId, { status: 'done' });
+    const partial = await milestoneOf(projectId, milestoneId);
+    expect(partial.completion).toEqual({ percent: 0, done: 3, total: 4 });
+    expect(partial.completionPercent).toBe(0);
+    expect(partial.status).toBe('in_progress');
+    const parents = await statuses(projectId);
+    expect(statusOf(parents.stories, storyId)).toBe('done');
+    expect(statusOf(parents.epics, epicId)).toBe('done');
+
+    const predecessorId = await createTask(projectId, {
+      title: 'Predecessor',
+      status: 'done',
+    });
+    const dependency = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/delivery-dependencies`,
+      headers: headers(true),
+      payload: {
+        predecessorId,
+        predecessorType: 'task',
+        successorId: milestoneId,
+        successorType: 'milestone',
+        linkType: 'FS',
+        lagDays: 0,
+      },
+    });
+    expect(dependency.statusCode).toBe(200);
+    const withPredecessor = await milestoneOf(projectId, milestoneId);
+    expect(withPredecessor.completion).toEqual({ percent: 0, done: 4, total: 5 });
+
+    await patchTask(bugId, { status: 'done' });
+    const complete = await milestoneOf(projectId, milestoneId);
+    expect(complete.completion).toEqual({ percent: 100, done: 5, total: 5 });
+    expect(complete.status).toBe('done');
+    const finishedTask = await taskOf(taskId);
+    const finishedBug = await taskOf(bugId);
+    expect(finishedTask.completedAt).toBeTruthy();
+    expect(finishedBug.completedAt).toBeTruthy();
+    expect(finishedBug.itemType).toBe('bug');
+
+    await patchTask(taskId, { status: 'todo' });
+    await patchTask(bugId, { status: 'in_progress' });
+    const reopenedTask = await taskOf(taskId);
+    const reopenedBug = await taskOf(bugId);
+    expect(reopenedTask).toMatchObject({
+      status: 'todo',
+      completionPercent: 0,
+      completedAt: null,
+    });
+    expect(reopenedBug).toMatchObject({
+      status: 'in_progress',
+      completionPercent: 0,
+      completedAt: null,
+    });
+    const reopenedParents = await statuses(projectId);
+    expect(statusOf(reopenedParents.stories, storyId)).not.toBe('done');
+    expect(statusOf(reopenedParents.epics, epicId)).not.toBe('done');
+    const reopenedMilestone = await milestoneOf(projectId, milestoneId);
+    expect(reopenedMilestone.status).not.toBe('done');
+    expect(reopenedMilestone.completionPercent).toBe(0);
+    expect(reopenedMilestone.completion).toEqual({ percent: 0, done: 1, total: 5 });
+
+    await patchTask(taskId, { status: 'done' });
+    await patchTask(taskId, { status: 'blocked', completionPercent: 25 });
+    const explicit = await taskOf(taskId);
+    expect(explicit).toMatchObject({
+      status: 'blocked',
+      completionPercent: 25,
+      completedAt: null,
     });
   });
 });
