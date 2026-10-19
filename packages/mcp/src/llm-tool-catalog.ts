@@ -2499,7 +2499,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_change_item',
-    description: 'Create a change-management item. Requires pm:write.',
+    description:
+      'Create a change-management item. knowledgeRecordId links one document. recordIds replaces that set, and the first id is also stored as knowledgeRecordId. Documents must belong to the project. A validation error creates nothing and does not consume a change key. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -2659,7 +2660,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record_relations',
     description:
-      'List typed relations for a knowledge record plus lifecycle successor and predecessor. Inbound edges use inverse labels (required_by, refined_by, source_for). recordId may be a UUID or document key. Requires knowledge:read.',
+      'List typed relations for a knowledge record plus lifecycle successor and predecessor. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are listed as outbound on both records. recordId may be a UUID or document key. Requires knowledge:read.',
     scope: 'knowledge:read',
     body: {
       type: 'object',
@@ -2689,7 +2690,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_knowledge_record_relations',
     description:
-      'Replace relations stored from this record. Types: relates_to, depends_on, refines, derived_from, contradicts. Symmetric types are stored once. Inbound edges stay. Rejects self-links, cross-project targets, depends_on and refines cycles, and archived endpoints. Requires knowledge:write.',
+      'Replace relations for this record. Types: relates_to, depends_on, refines, derived_from, contradicts. Directed inbound edges stay. relates_to and contradicts are stored once and can be added or removed from either record. Symmetric relations are listed as outbound on both records. Rejects self-links, cross-project targets, depends_on and refines cycles, and archived endpoints. Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     body: {
@@ -3143,7 +3144,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'create_ai_billing_entry',
     description:
-      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
+      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. currency is an ISO 4217 code from the project currency list; lowercase is stored as uppercase. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3181,7 +3182,13 @@ const EXTRA_HUB_TOOLS: Array<{
           oneOf: [{ type: 'number' }, { type: 'string' }],
           description: 'Paid amount. Negative only for plan_change.',
         },
-        currency: stringProp('Currency code', { minLength: 3, maxLength: 3 }),
+        currency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          description:
+            'ISO 4217 currency. Lowercase is stored as uppercase. Allowed: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY.',
+        },
         aiSystemId: { ...uuidProp('AI system id, or null for the workspace-wide pool'), nullable: true },
         plan: { type: 'string', maxLength: 80, nullable: true },
         paidAt: { type: 'string', maxLength: 40, nullable: true },
@@ -3198,7 +3205,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'update_ai_billing_entry',
     description:
-      'Update one AI cost entry. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
+      'Update one AI cost entry. currency is an ISO 4217 code from the project currency list; lowercase is stored as uppercase. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3225,7 +3232,13 @@ const EXTRA_HUB_TOOLS: Array<{
           enum: ['subscription', 'plan_change', 'on_demand'],
         },
         amount: { oneOf: [{ type: 'number' }, { type: 'string' }] },
-        currency: stringProp('Currency code', { minLength: 3, maxLength: 3 }),
+        currency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          description:
+            'ISO 4217 currency. Lowercase is stored as uppercase. Allowed: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY.',
+        },
         aiSystemId: { ...uuidProp('AI system id'), nullable: true },
         plan: { type: 'string', maxLength: 80, nullable: true },
         paidAt: { type: 'string', maxLength: 40, nullable: true },

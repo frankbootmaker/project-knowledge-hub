@@ -225,19 +225,20 @@ describe.skipIf(!hasIntegrationEnv)('Knowledge record relations', () => {
 
     const fromLeft = (await getRelations(left.id)).json() as RelationsBody;
     const fromRight = (await getRelations(right.id)).json() as RelationsBody;
-    const leftHas = fromLeft.relations.outbound.some(
-      (edge) => edge.relationType === 'relates_to' && edge.record.id === right.id,
-    );
-    const rightHas = fromRight.relations.inbound.some(
-      (edge) => edge.relationType === 'relates_to' && edge.record.id === left.id,
-    );
-    const swapped = !leftHas && fromRight.relations.outbound.some(
-      (edge) => edge.relationType === 'relates_to' && edge.record.id === left.id,
-    );
-    expect(leftHas || swapped).toBe(true);
-    expect(rightHas || fromLeft.relations.inbound.some(
-      (edge) => edge.relationType === 'relates_to' && edge.record.id === right.id,
-    )).toBe(true);
+    expect(fromLeft.relations.outbound).toEqual([
+      expect.objectContaining({
+        relationType: 'relates_to',
+        record: expect.objectContaining({ id: right.id }),
+      }),
+    ]);
+    expect(fromRight.relations.outbound).toEqual([
+      expect.objectContaining({
+        relationType: 'relates_to',
+        record: expect.objectContaining({ id: left.id }),
+      }),
+    ]);
+    expect(fromLeft.relations.inbound).toEqual([]);
+    expect(fromRight.relations.inbound).toEqual([]);
 
     const rows = await database!.db
       .select()
@@ -253,6 +254,65 @@ describe.skipIf(!hasIntegrationEnv)('Knowledge record relations', () => {
     expect(rows[0]?.fromKnowledgeRecordId < (rows[0]?.toKnowledgeRecordId ?? '')).toBe(
       true,
     );
+  });
+
+  it('PRO-B-27 removes a symmetric relation from either uuid order', async () => {
+    const project = await createProject('Either side');
+    const first = await createRecord({ title: 'First note', projectId: project.id });
+    const second = await createRecord({ title: 'Second note', projectId: project.id });
+    const [lower, higher] = [first, second].sort((left, right) =>
+      left.id.localeCompare(right.id),
+    );
+    if (!lower || !higher) throw new Error('records missing');
+
+    const relates = await putRelations(higher.id, [
+      { targetRecordId: lower.id, relationType: 'relates_to' },
+      { targetRecordId: lower.id, relationType: 'derived_from' },
+    ]);
+    expect(relates.statusCode, relates.body).toBe(200);
+    const created = relates.json() as RelationsBody;
+    expect(created.relations.outbound.map((edge) => edge.relationType).sort()).toEqual([
+      'derived_from',
+      'relates_to',
+    ]);
+    expect(created.relations.inbound).toEqual([]);
+
+    const clearedHigher = await putRelations(higher.id, []);
+    expect(clearedHigher.statusCode, clearedHigher.body).toBe(200);
+    const afterHigher = clearedHigher.json() as RelationsBody;
+    expect(afterHigher.relations.outbound).toEqual([]);
+    expect(afterHigher.relations.inbound).toEqual([]);
+    const fromLower = (await getRelations(lower.id)).json() as RelationsBody;
+    expect(fromLower.relations.outbound).toEqual([]);
+    expect(fromLower.relations.inbound).toEqual([]);
+
+    const contradicts = await putRelations(higher.id, [
+      { targetRecordId: lower.id, relationType: 'contradicts' },
+    ]);
+    expect(contradicts.statusCode, contradicts.body).toBe(200);
+    expect(
+      (contradicts.json() as RelationsBody).relations.outbound.some(
+        (edge) => edge.relationType === 'contradicts' && edge.record.id === lower.id,
+      ),
+    ).toBe(true);
+    const clearedAgain = await putRelations(higher.id, []);
+    expect(clearedAgain.statusCode).toBe(200);
+    expect((clearedAgain.json() as RelationsBody).relations.outbound).toEqual([]);
+
+    const fromLow = await putRelations(lower.id, [
+      { targetRecordId: higher.id, relationType: 'relates_to' },
+    ]);
+    expect(fromLow.statusCode, fromLow.body).toBe(200);
+    expect(
+      (fromLow.json() as RelationsBody).relations.outbound.some(
+        (edge) => edge.relationType === 'relates_to',
+      ),
+    ).toBe(true);
+    const clearedLow = await putRelations(lower.id, []);
+    expect(clearedLow.statusCode).toBe(200);
+    expect((await getRelations(higher.id)).json()).toMatchObject({
+      relations: { outbound: [], inbound: [] },
+    });
   });
 
   it('keeps inbound directed edges when the target replaces its own links', async () => {

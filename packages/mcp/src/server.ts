@@ -19,6 +19,7 @@ import {
   isoDateNullableSchema,
   knowledgeRecordRelationTypeSchema,
   nonWorkingDaysSchema,
+  projectCurrencySchema,
   workdaysPerWeekSchema,
   sanitizeError,
   AppError,
@@ -3389,7 +3390,7 @@ export function createKnowledgeHubMcpServer(
     'create_ai_billing_entry',
     {
       description:
-        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
+        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. currency is an ISO 4217 code from the project currency list; lowercase is stored as uppercase. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         period: billingPeriod.optional().describe('YYYY-MM. Derived from servicePeriodStart when that date is set.'),
@@ -3403,7 +3404,14 @@ export function createKnowledgeHubMcpServer(
         provider: z.string().min(1).max(80),
         type: billingType,
         amount: z.union([z.number(), z.string()]),
-        currency: z.string().min(3).max(3),
+        currency: z
+          .string()
+          .trim()
+          .min(3)
+          .max(3)
+          .describe(
+            `ISO 4217 currency. Lowercase is stored as uppercase. Allowed: ${projectCurrencySchema.options.join(', ')}.`,
+          ),
         aiSystemId: z.string().uuid().nullable().optional(),
         plan: z.string().max(80).nullable().optional(),
         paidAt: z.string().max(40).nullable().optional(),
@@ -3426,7 +3434,7 @@ export function createKnowledgeHubMcpServer(
     'update_ai_billing_entry',
     {
       description:
-        'Update one AI cost entry by entryId. plan_change may be negative. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the service window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
+        'Update one AI cost entry by entryId. plan_change may be negative. currency is an ISO 4217 code from the project currency list; lowercase is stored as uppercase. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the service window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
       inputSchema: {
         entryId: z.string().uuid(),
         period: billingPeriod.optional(),
@@ -3443,7 +3451,15 @@ export function createKnowledgeHubMcpServer(
         provider: z.string().min(1).max(80).optional(),
         type: billingType.optional(),
         amount: z.union([z.number(), z.string()]).optional(),
-        currency: z.string().min(3).max(3).optional(),
+        currency: z
+          .string()
+          .trim()
+          .min(3)
+          .max(3)
+          .describe(
+            `ISO 4217 currency. Lowercase is stored as uppercase. Allowed: ${projectCurrencySchema.options.join(', ')}.`,
+          )
+          .optional(),
         aiSystemId: z.string().uuid().nullable().optional(),
         plan: z.string().max(80).nullable().optional(),
         paidAt: z.string().max(40).nullable().optional(),
@@ -3836,7 +3852,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_change_item',
-    'Create a change-management item. Optional delivery links cover epics, stories, milestones, and tasks (bugs use task). Optional recordIds link documents; knowledgeRecordId still sets a single document. Requires pm:write.',
+    'Create a change-management item. Optional delivery links cover epics, stories, milestones, and tasks (bugs use task). knowledgeRecordId links one document. recordIds replaces that set, and the first id is also stored as knowledgeRecordId. Documents must belong to the project. A validation error creates nothing and does not consume a change key. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       kind: changeKindEnum,
@@ -3982,7 +3998,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record_relations',
     {
       description:
-        'List typed relations for a knowledge record (relates_to, depends_on, refines, derived_from, contradicts) plus the lifecycle successor and predecessor from supersedes_record_id. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are symmetric. recordId may be a UUID or document key. Requires knowledge:read.',
+        'List typed relations for a knowledge record (relates_to, depends_on, refines, derived_from, contradicts) plus the lifecycle successor and predecessor from supersedes_record_id. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are symmetric and listed as outbound on both records, regardless of uuid order. recordId may be a UUID or document key. Requires knowledge:read.',
       inputSchema: { recordId: entityRef },
       outputSchema: knowledgeRecordRelationsOutput,
     },
@@ -4000,7 +4016,7 @@ export function createKnowledgeHubMcpServer(
     'set_knowledge_record_relations',
     {
       description:
-        'Replace relations stored from this record. Directed types are depends_on, refines, and derived_from. relates_to and contradicts are stored once with canonical uuid order. Inbound edges owned by the other record are kept. Rejects self-links, cross-workspace or cross-project targets, cycles for depends_on and refines, and changes that touch an archived record. recordId and targetRecordId may be UUID or document key. Does not change lifecycle. Requires knowledge:write.',
+        'Replace relations for this record. Directed types are depends_on, refines, and derived_from. Inbound directed edges owned by the other record are kept. relates_to and contradicts are stored once with canonical uuid order and can be added or removed from either record. Responses list those symmetric relations as outbound on both records. Rejects self-links, cross-workspace or cross-project targets, cycles for depends_on and refines, and changes that touch an archived record. recordId and targetRecordId may be UUID or document key. Does not change lifecycle. Requires knowledge:write.',
       inputSchema: {
         recordId: entityRef,
         links: z

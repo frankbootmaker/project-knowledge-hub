@@ -298,6 +298,119 @@ export type ResolvableEntityType =
   | 'raid'
   | 'change';
 
+const SCOPED_KEY_LABELS: Record<ResolvableEntityType | 'knowledge_record', string> = {
+  epic: 'Epic',
+  user_story: 'User story',
+  milestone: 'Milestone',
+  task: 'Task',
+  sprint: 'Sprint',
+  raid: 'RAID item',
+  change: 'Change',
+  knowledge_record: 'Knowledge record',
+};
+
+type ParsedHumanKey = {
+  prefix: string;
+  issueKeyType: string;
+  issueNumber: number;
+};
+
+async function scopedEntityExists(
+  database: Database,
+  entityType: ResolvableEntityType | 'knowledge_record',
+  projectId: string,
+  issueKeyType: string,
+  issueNumber: number,
+): Promise<boolean> {
+  if (entityType === 'knowledge_record') {
+    const [row] = await database.db
+      .select({ id: knowledgeRecords.id })
+      .from(knowledgeRecords)
+      .where(
+        and(
+          eq(knowledgeRecords.projectId, projectId),
+          eq(knowledgeRecords.documentKeyType, issueKeyType),
+          eq(knowledgeRecords.documentNumber, issueNumber),
+          isNull(knowledgeRecords.archivedAt),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
+  const found = await findProjectsContainingEntity(
+    database,
+    [projectId],
+    entityType,
+    issueKeyType,
+    issueNumber,
+  );
+  return found.includes(projectId);
+}
+
+/**
+ * A human key scoped to one project whose prefix is not that project's prefix.
+ * Same-workspace hits name the entity and say it does not belong here.
+ * Anything else is "not found in project" so a foreign workspace is not revealed.
+ */
+async function rejectKeyOutsideProject(
+  database: Database,
+  input: {
+    entityType: ResolvableEntityType | 'knowledge_record';
+    projectId: string;
+    raw: string;
+    parsed: ParsedHumanKey;
+  },
+): Promise<never> {
+  const label = SCOPED_KEY_LABELS[input.entityType];
+  const [requested] = await database.db
+    .select({
+      id: projects.id,
+      workspaceId: projects.workspaceId,
+      keyPrefix: projects.keyPrefix,
+      name: projects.name,
+    })
+    .from(projects)
+    .where(eq(projects.id, input.projectId))
+    .limit(1);
+  const target = requested?.keyPrefix || requested?.name || input.projectId;
+  const notFound = (): never => {
+    throw new AppError({
+      code: 'ENTITY_NOT_FOUND',
+      message: `${label} ${input.raw} not found in project ${target}`,
+      statusCode: 404,
+    });
+  };
+  if (!requested) return notFound();
+
+  const [foreign] = await database.db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(
+      and(
+        eq(projects.workspaceId, requested.workspaceId),
+        sql`upper(${projects.keyPrefix}) = ${normalizeKeyPrefix(input.parsed.prefix)}`,
+        ne(projects.id, requested.id),
+      ),
+    )
+    .limit(1);
+  if (!foreign) return notFound();
+
+  const exists = await scopedEntityExists(
+    database,
+    input.entityType,
+    foreign.id,
+    input.parsed.issueKeyType,
+    input.parsed.issueNumber,
+  );
+  if (!exists) notFound();
+
+  throw new AppError({
+    code: 'ENTITY_NOT_IN_PROJECT',
+    message: `${label} ${input.raw} does not belong to project ${target}`,
+    statusCode: 400,
+  });
+}
+
 async function findProjectsContainingEntity(
   database: Database,
   projectIds: string[],
@@ -494,6 +607,14 @@ export async function resolveEntityId(
     .from(projects)
     .where(and(...projectConditions));
   if (candidates.length === 0) {
+    if (input.projectId) {
+      await rejectKeyOutsideProject(database, {
+        entityType: input.entityType,
+        projectId: input.projectId,
+        raw,
+        parsed,
+      });
+    }
     throw new AppError({
       code: 'ISSUE_KEY_NOT_FOUND',
       message: `No project found for key prefix ${parsed.prefix}`,
@@ -690,6 +811,14 @@ export async function resolveKnowledgeRecordId(
     .from(projects)
     .where(and(...projectConditions));
   if (candidates.length === 0) {
+    if (input.projectId) {
+      await rejectKeyOutsideProject(database, {
+        entityType: 'knowledge_record',
+        projectId: input.projectId,
+        raw,
+        parsed,
+      });
+    }
     throw new AppError({
       code: 'ISSUE_KEY_NOT_FOUND',
       message: `No project found for key prefix ${parsed.prefix}`,
