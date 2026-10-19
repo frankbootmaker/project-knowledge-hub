@@ -131,6 +131,10 @@ export function isTaskCompletionPercent(value: number): boolean {
  * Done is always 100. Cancelled stores nothing.
  * An open task keeps a menu value, or 0 when none is stored yet.
  *
+ * Reopening a done task (status back to todo, in_progress, or blocked)
+ * resets the stored step to 0 unless this call sends `requested`.
+ * The step from before done is not stored: marking done overwrites it with 100.
+ *
  * This is the value written to `project_tasks.completion_percent`.
  * Reads use `displayedTaskCompletionPercent`, which shows 0 for cancelled.
  */
@@ -138,12 +142,17 @@ export function resolveTaskCompletionPercent(input: {
   status: z.infer<typeof taskStatusSchema>;
   requested?: number | null;
   existing?: number | null;
+  /** Status before this write. Used to detect a reopen from done. */
+  previousStatus?: z.infer<typeof taskStatusSchema> | null;
 }): number | null {
   if (input.status === 'cancelled') return null;
   if (input.status === 'done') return 100;
   if (input.requested != null && isTaskCompletionPercent(input.requested)) {
     return input.requested;
   }
+  const reopening =
+    input.previousStatus === 'done' && input.requested === undefined;
+  if (reopening) return 0;
   if (
     input.requested === undefined &&
     input.existing != null &&
@@ -154,9 +163,24 @@ export function resolveTaskCompletionPercent(input: {
   return 0;
 }
 
+/**
+ * Latest transition to done, and only while the item is still done.
+ * Reopening clears it even when an older status_changed→done activity remains.
+ */
+export function taskCompletedAt(
+  status: string,
+  latestDoneTransitionAt: string | null | undefined,
+): string | null {
+  if (status !== 'done') return null;
+  return latestDoneTransitionAt || null;
+}
+
 export type DeliveryCompletionRollup = {
   percent: number;
-  /** Share of children finished, including partial steps such as 0.5. */
+  /**
+   * Finished share for a story or epic, including partial steps such as 0.5.
+   * For a milestone, the count of included items that are done or 100 percent.
+   */
   done: number;
   total: number;
 };
@@ -240,9 +264,12 @@ export function milestoneLinkPoints(
 
 /**
  * Derived milestone completion from linked items and dependencies.
- * 100 only when every included item is complete. Anything else is 0.
- * Cancelled items are left out. An empty set has no rollup.
+ * percent is 100 only when every included item is complete, otherwise 0.
+ * done counts included items that are done or 100 percent.
+ * total is that included set. Cancelled items are left out.
+ * An empty set has no rollup.
  * The milestone's own status does not override the links.
+ * Predecessor dependencies use the same points, so they count in done and total together.
  */
 export function milestoneCompletion(
   links: readonly MilestoneLinkCompletion[],
@@ -254,10 +281,10 @@ export function milestoneCompletion(
     points.push(value);
   }
   if (points.length === 0) return null;
-  const complete = points.every((value) => value === 100);
+  const done = points.filter((value) => value === 100).length;
   return {
-    percent: complete ? 100 : 0,
-    done: complete ? points.length : 0,
+    percent: done === points.length ? 100 : 0,
+    done,
     total: points.length,
   };
 }
@@ -1330,6 +1357,7 @@ export {
   MAX_KNOWLEDGE_RECORD_RELATIONS,
   RECORD_RELATIONS_COMPACT_CAP,
   SYMMETRIC_KNOWLEDGE_RECORD_RELATION_TYPES,
+  anchorOwnsStoredRelation,
   canonicalRecordPair,
   graphAfterRelationReplace,
   inverseKnowledgeRecordRelation,
@@ -1339,6 +1367,7 @@ export {
   normalizeStoredRelation,
   relationCyclePath,
   relationEdgeKey,
+  relationListDirection,
   relationReplacePlan,
   type KnowledgeRecordRelationInverse,
   type KnowledgeRecordRelationType,
@@ -1538,6 +1567,25 @@ export {
   type UsageModelTotal,
   type UsageTokenTotals,
 } from './ai-usage-import.js';
+
+/**
+ * ISO 4217 code stored uppercase. Lowercase input is normalised.
+ * Unknown codes throw a validation error that lists the supported set.
+ */
+export function parseProjectCurrency(value: string): ProjectCurrency {
+  const normalized = value.trim().toUpperCase();
+  const parsed = projectCurrencySchema.safeParse(normalized);
+  if (!parsed.success) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message:
+        `Invalid currency "${value}". Allowed values: ` +
+        `${projectCurrencySchema.options.join(', ')}.`,
+      statusCode: 400,
+    });
+  }
+  return parsed.data;
+}
 
 export class AppError extends Error {
   readonly code: string;

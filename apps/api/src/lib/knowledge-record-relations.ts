@@ -15,6 +15,7 @@ import {
   normalizeStoredRelation,
   relationCyclePath,
   relationEdgeKey,
+  relationListDirection,
   relationReplacePlan,
   type KnowledgeRecordRelationType,
   type StoredRelationEdge,
@@ -290,9 +291,10 @@ function viewFromEdges(
     if (!other) continue;
     const prefix = other.projectId ? prefixes.get(other.projectId) ?? null : null;
     const record = cardFor(other, prefix);
-    if (edge.fromId === anchorId) {
+    const direction = relationListDirection(anchorId, edge);
+    if (direction === 'outbound') {
       outbound.push({ relationType: edge.relationType, record });
-    } else if (edge.toId === anchorId) {
+    } else if (direction === 'inbound') {
       inbound.push({
         relationType: inverseKnowledgeRecordRelation(edge.relationType),
         record,
@@ -599,7 +601,12 @@ export async function setKnowledgeRecordRelations(
       relationType: knowledgeRecordRelations.relationType,
     })
     .from(knowledgeRecordRelations)
-    .where(eq(knowledgeRecordRelations.fromKnowledgeRecordId, anchor.id));
+    .where(
+      or(
+        eq(knowledgeRecordRelations.fromKnowledgeRecordId, anchor.id),
+        eq(knowledgeRecordRelations.toKnowledgeRecordId, anchor.id),
+      ),
+    );
 
   const deleteKeys = new Set(plan.deleteEdges.map(relationEdgeKey));
   const deleteIds = existingRows.flatMap((row) => {

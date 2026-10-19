@@ -1248,6 +1248,7 @@ export function ProjectDeliveryPanel({
             targetDate: milestone.targetDate,
             humanKey: milestone.humanKey ?? null,
             completionPercent: milestone.completionPercent ?? null,
+            completion: milestone.completion ?? null,
           }))}
           tasks={tasks.map((task) => ({
             ...task,

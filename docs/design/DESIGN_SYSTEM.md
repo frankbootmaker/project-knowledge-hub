@@ -249,6 +249,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-19
+
+* **Milestone done count** — Delivery List and Tree show the included-item count on the completion cell title (`completeOf`: “1 of 4 done”) while the percent stays 0 or 100. The milestone dialog completion field and Linked items tab use the same count. Reopening a done task or bug from the status menu resets the completion field to 0.
+
 ### 2026-10-18
 
 * **AI cost entry end date** — The cost-entry dialog labels service end “Service end (renewal date, not included)” with a hint under the date (`serviceEndHint`). The month-split list shows each month’s day count. An end on the start date is invalid. English, German, and Hungarian copy match.

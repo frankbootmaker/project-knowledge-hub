@@ -19,6 +19,7 @@ import {
   isoDateNullableSchema,
   knowledgeRecordRelationTypeSchema,
   nonWorkingDaysSchema,
+  projectCurrencySchema,
   workdaysPerWeekSchema,
   sanitizeError,
   AppError,
@@ -2315,7 +2316,7 @@ export function createKnowledgeHubMcpServer(
     'list_project_milestones',
     {
       description:
-        'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (0 or 100 from linked items and predecessor dependencies: 100 only when every included item is done or 100 percent, cancelled items are left out, otherwise 0; no included items leaves it null), linkedItems, and mediaLinks plus mediaLinkCount for the Media tab. Status follows those same links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate and targetDate are the stored start and due date. They are writable and are not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Requires pm:read.',
+        'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (0 or 100 from linked items and predecessor dependencies: 100 only when every included item is done or 100 percent, cancelled items are left out, otherwise 0; no included items leaves it null). completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that included set, so a partial milestone can report done greater than 0 while completionPercent stays 0. Each row also includes linkedItems, plus mediaLinks and mediaLinkCount for the Media tab. Status follows those same links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate and targetDate are the stored start and due date. They are writable and are not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Requires pm:read.',
       inputSchema: {
         projectId: z.string().uuid(),
         includeArchived: z.boolean().optional(),
@@ -2449,7 +2450,7 @@ export function createKnowledgeHubMcpServer(
     'get_project_milestone',
     {
       description:
-        'Get one milestone with its note (description), start date (startDate), due date (targetDate), completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 only when every included linked item and every predecessor dependency is done or 100 percent. Cancelled items are left out. Anything else included is 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
+        'Get one milestone with its note (description), start date (startDate), due date (targetDate), completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 only when every included linked item and every predecessor dependency is done or 100 percent. Cancelled items are left out. Anything else included is 0. No included items leaves it null. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that same included set. completion.percent stays 0 or 100. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
       inputSchema: { milestoneId: entityRef },
       outputSchema: { milestone: milestoneRowOutput },
     },
@@ -2706,7 +2707,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_task',
     {
       description:
-        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
       inputSchema: {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -3389,7 +3390,7 @@ export function createKnowledgeHubMcpServer(
     'create_ai_billing_entry',
     {
       description:
-        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
+        'Add a paid AI cost entry. type is subscription, plan_change (amount may be negative), or on_demand. currency is an ISO 4217 code from the project currency list; lowercase is stored as uppercase. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period (YYYY-MM). aiSystemId omitted is workspace-wide, allocated across all projects. provider is a free string. Does not fetch invoices. Requires pm:write.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         period: billingPeriod.optional().describe('YYYY-MM. Derived from servicePeriodStart when that date is set.'),
@@ -3403,7 +3404,14 @@ export function createKnowledgeHubMcpServer(
         provider: z.string().min(1).max(80),
         type: billingType,
         amount: z.union([z.number(), z.string()]),
-        currency: z.string().min(3).max(3),
+        currency: z
+          .string()
+          .trim()
+          .min(3)
+          .max(3)
+          .describe(
+            `ISO 4217 currency. Lowercase is stored as uppercase. Allowed: ${projectCurrencySchema.options.join(', ')}.`,
+          ),
         aiSystemId: z.string().uuid().nullable().optional(),
         plan: z.string().max(80).nullable().optional(),
         paidAt: z.string().max(40).nullable().optional(),
@@ -3426,7 +3434,7 @@ export function createKnowledgeHubMcpServer(
     'update_ai_billing_entry',
     {
       description:
-        'Update one AI cost entry by entryId. plan_change may be negative. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the service window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
+        'Update one AI cost entry by entryId. plan_change may be negative. currency is an ISO 4217 code from the project currency list; lowercase is stored as uppercase. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the service window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send both dates, or null both to clear them. provider stays a free string. Requires pm:write.',
       inputSchema: {
         entryId: z.string().uuid(),
         period: billingPeriod.optional(),
@@ -3443,7 +3451,15 @@ export function createKnowledgeHubMcpServer(
         provider: z.string().min(1).max(80).optional(),
         type: billingType.optional(),
         amount: z.union([z.number(), z.string()]).optional(),
-        currency: z.string().min(3).max(3).optional(),
+        currency: z
+          .string()
+          .trim()
+          .min(3)
+          .max(3)
+          .describe(
+            `ISO 4217 currency. Lowercase is stored as uppercase. Allowed: ${projectCurrencySchema.options.join(', ')}.`,
+          )
+          .optional(),
         aiSystemId: z.string().uuid().nullable().optional(),
         plan: z.string().max(80).nullable().optional(),
         paidAt: z.string().max(40).nullable().optional(),
@@ -3836,7 +3852,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_project_change_item',
-    'Create a change-management item. Optional delivery links cover epics, stories, milestones, and tasks (bugs use task). Optional recordIds link documents; knowledgeRecordId still sets a single document. Requires pm:write.',
+    'Create a change-management item. Optional delivery links cover epics, stories, milestones, and tasks (bugs use task). knowledgeRecordId links one document. recordIds replaces that set, and the first id is also stored as knowledgeRecordId. Documents must belong to the project. A validation error creates nothing and does not consume a change key. Requires pm:write.',
     {
       projectId: z.string().uuid(),
       kind: changeKindEnum,
@@ -3982,7 +3998,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record_relations',
     {
       description:
-        'List typed relations for a knowledge record (relates_to, depends_on, refines, derived_from, contradicts) plus the lifecycle successor and predecessor from supersedes_record_id. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are symmetric. recordId may be a UUID or document key. Requires knowledge:read.',
+        'List typed relations for a knowledge record (relates_to, depends_on, refines, derived_from, contradicts) plus the lifecycle successor and predecessor from supersedes_record_id. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are symmetric and listed as outbound on both records, regardless of uuid order. recordId may be a UUID or document key. Requires knowledge:read.',
       inputSchema: { recordId: entityRef },
       outputSchema: knowledgeRecordRelationsOutput,
     },
@@ -4000,7 +4016,7 @@ export function createKnowledgeHubMcpServer(
     'set_knowledge_record_relations',
     {
       description:
-        'Replace relations stored from this record. Directed types are depends_on, refines, and derived_from. relates_to and contradicts are stored once with canonical uuid order. Inbound edges owned by the other record are kept. Rejects self-links, cross-workspace or cross-project targets, cycles for depends_on and refines, and changes that touch an archived record. recordId and targetRecordId may be UUID or document key. Does not change lifecycle. Requires knowledge:write.',
+        'Replace relations for this record. Directed types are depends_on, refines, and derived_from. Inbound directed edges owned by the other record are kept. relates_to and contradicts are stored once with canonical uuid order and can be added or removed from either record. Responses list those symmetric relations as outbound on both records. Rejects self-links, cross-workspace or cross-project targets, cycles for depends_on and refines, and changes that touch an archived record. recordId and targetRecordId may be UUID or document key. Does not change lifecycle. Requires knowledge:write.',
       inputSchema: {
         recordId: entityRef,
         links: z

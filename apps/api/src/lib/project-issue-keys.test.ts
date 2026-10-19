@@ -481,6 +481,39 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       expect(resolved).toBe(raid2Id);
     });
   });
+
+  it('PRO-B-23 names the target project for a key from another project', async () => {
+    await expect(
+      resolveEntityId(database, {
+        entityType: 'task',
+        idOrKey: 'CSA-T-1',
+        projectId: _project3Id,
+      }),
+    ).rejects.toThrow('Task CSA-T-1 does not belong to project PNZ');
+
+    await expect(
+      resolveEntityId(database, {
+        entityType: 'raid',
+        idOrKey: 'CSA-RR-1',
+        projectId: _project3Id,
+      }),
+    ).rejects.toThrow('RAID item CSA-RR-1 does not belong to project PNZ');
+
+    await expect(
+      resolveKnowledgeRecordId(database, {
+        idOrKey: 'CSA-CONV-1',
+        projectId: _project3Id,
+      }),
+    ).rejects.toThrow('Knowledge record CSA-CONV-1 does not belong to project PNZ');
+
+    await expect(
+      resolveEntityId(database, {
+        entityType: 'task',
+        idOrKey: 'ZZZ-T-9',
+        projectId: _project3Id,
+      }),
+    ).rejects.toThrow('Task ZZZ-T-9 not found in project PNZ');
+  });
 });
 
 describe('humanKeyMatchesEntity', () => {

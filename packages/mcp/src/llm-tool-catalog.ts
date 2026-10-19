@@ -1168,7 +1168,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1228,7 +1228,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_milestones',
     description:
-      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is 0 or 100 from linked items and predecessor dependencies. 100 only when every included item is done or 100 percent. Cancelled items are left out. Otherwise 0. No included items leaves it null. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is 0 or 100 from linked items and predecessor dependencies. 100 only when every included item is done or 100 percent. Cancelled items are left out. Otherwise 0. No included items leaves it null. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that included set, so a partial milestone can report done greater than 0 while completionPercent stays 0. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: pagedResult('milestones', milestoneRowResult),
@@ -1290,7 +1290,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_milestone',
     description:
-      'Get one milestone with its note, start date, due date, completionPercent, linkedItems, and status derived from those links. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. No included links keeps the stored status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'Get one milestone with its note, start date, due date, completionPercent, linkedItems, and status derived from those links. completionPercent is 0 or 100. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that same included set. completion.percent stays 0 or 100. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. No included links keeps the stored status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
     output: wrappedResult('milestone', milestoneRowResult),
     body: {
@@ -2499,7 +2499,8 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'create_project_change_item',
-    description: 'Create a change-management item. Requires pm:write.',
+    description:
+      'Create a change-management item. knowledgeRecordId links one document. recordIds replaces that set, and the first id is also stored as knowledgeRecordId. Documents must belong to the project. A validation error creates nothing and does not consume a change key. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -2659,7 +2660,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record_relations',
     description:
-      'List typed relations for a knowledge record plus lifecycle successor and predecessor. Inbound edges use inverse labels (required_by, refined_by, source_for). recordId may be a UUID or document key. Requires knowledge:read.',
+      'List typed relations for a knowledge record plus lifecycle successor and predecessor. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are listed as outbound on both records. recordId may be a UUID or document key. Requires knowledge:read.',
     scope: 'knowledge:read',
     body: {
       type: 'object',
@@ -2689,7 +2690,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_knowledge_record_relations',
     description:
-      'Replace relations stored from this record. Types: relates_to, depends_on, refines, derived_from, contradicts. Symmetric types are stored once. Inbound edges stay. Rejects self-links, cross-project targets, depends_on and refines cycles, and archived endpoints. Requires knowledge:write.',
+      'Replace relations for this record. Types: relates_to, depends_on, refines, derived_from, contradicts. Directed inbound edges stay. relates_to and contradicts are stored once and can be added or removed from either record. Symmetric relations are listed as outbound on both records. Rejects self-links, cross-project targets, depends_on and refines cycles, and archived endpoints. Requires knowledge:write.',
     scope: 'knowledge:write',
     write: true,
     body: {
@@ -3143,7 +3144,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'create_ai_billing_entry',
     description:
-      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
+      'Add a paid AI cost entry (subscription, plan_change, or on_demand). plan_change may be negative. currency is an ISO 4217 code from the project currency list; lowercase is stored as uppercase. Optional servicePeriodStart and servicePeriodEnd (YYYY-MM-DD) prorate the amount across months by days. servicePeriodStart is included. servicePeriodEnd is exclusive: the renewal or next billing date, not included. Days are end minus start. A one-day entry has end = start + 1, and end must be after start. period is then the start month and may be omitted. Omit both dates to keep the whole amount in period. provider is a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3181,7 +3182,13 @@ const EXTRA_HUB_TOOLS: Array<{
           oneOf: [{ type: 'number' }, { type: 'string' }],
           description: 'Paid amount. Negative only for plan_change.',
         },
-        currency: stringProp('Currency code', { minLength: 3, maxLength: 3 }),
+        currency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          description:
+            'ISO 4217 currency. Lowercase is stored as uppercase. Allowed: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY.',
+        },
         aiSystemId: { ...uuidProp('AI system id, or null for the workspace-wide pool'), nullable: true },
         plan: { type: 'string', maxLength: 80, nullable: true },
         paidAt: { type: 'string', maxLength: 40, nullable: true },
@@ -3198,7 +3205,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'update_ai_billing_entry',
     description:
-      'Update one AI cost entry. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
+      'Update one AI cost entry. currency is an ISO 4217 code from the project currency list; lowercase is stored as uppercase. Optional servicePeriodStart (inclusive) and servicePeriodEnd (exclusive renewal date, not included) replace the window. Days are end minus start, and end must be after start. A one-day entry has end = start + 1. period is then the start month. Send null for both dates to clear them. provider stays a free string. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3225,7 +3232,13 @@ const EXTRA_HUB_TOOLS: Array<{
           enum: ['subscription', 'plan_change', 'on_demand'],
         },
         amount: { oneOf: [{ type: 'number' }, { type: 'string' }] },
-        currency: stringProp('Currency code', { minLength: 3, maxLength: 3 }),
+        currency: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 3,
+          description:
+            'ISO 4217 currency. Lowercase is stored as uppercase. Allowed: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY.',
+        },
         aiSystemId: { ...uuidProp('AI system id'), nullable: true },
         plan: { type: 'string', maxLength: 80, nullable: true },
         paidAt: { type: 'string', maxLength: 40, nullable: true },

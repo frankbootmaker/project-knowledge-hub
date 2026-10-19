@@ -42,6 +42,7 @@ import {
   displayedTaskCompletionPercent,
   resolveTaskCompletionPercent,
   statusForTaskCompletionChange,
+  taskCompletedAt,
   resolveBugUpdate,
   taskActivityTypeSchema,
   taskItemTypeSchema,
@@ -187,7 +188,8 @@ export type PublicTask = {
   createdAt: string;
   updatedAt: string;
   /**
-   * Latest `status_changed` activity whose metadata `to` is `done`.
+   * Latest `status_changed` activity whose metadata `to` is `done`,
+   * and only while status is still done. Reopening clears it.
    * Derived, read-only, and independent of `updatedAt`.
    */
   completedAt: string | null;
@@ -453,7 +455,7 @@ function mapTasksWithContext(
       epicId: story?.epicId ?? null,
       epicTitle: story?.epicTitle ?? null,
       keyPrefix: keyPrefixByProject.get(row.projectId) ?? null,
-      completedAt: completedAtByTask.get(row.id) ?? null,
+      completedAt: taskCompletedAt(row.status, completedAtByTask.get(row.id)),
     });
   });
 }
@@ -1984,6 +1986,7 @@ export async function updateTask(
     status: nextStatus,
     requested: input.completionPercent,
     existing: existing.completionPercent,
+    previousStatus: taskStatusSchema.parse(existing.status),
   });
   const nextOwner =
     input.currentOwnerUserId !== undefined
