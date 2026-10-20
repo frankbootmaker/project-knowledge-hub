@@ -103,11 +103,12 @@ describe('sanitizeError', () => {
     expect(result.message).not.toContain('insert into');
   });
 
-  test('sanitizes DrizzleQueryError with foreign key violation (23503)', () => {
+  test('sanitizes insert foreign key violation (23503) as a missing reference', () => {
     const postgresError = Object.assign(new Error('foreign key constraint violated'), {
       code: '23503',
       constraint_name: 'tasks_project_id_fkey',
       table_name: 'project_tasks',
+      detail: 'Key (project_id)=(missing) is not present in table "projects".',
     });
 
     const drizzleError = Object.assign(
@@ -123,6 +124,60 @@ describe('sanitizeError', () => {
     expect(result.code).toBe('INVALID_REFERENCE');
     expect(result.message).toBe('Referenced record does not exist');
     expect(result.correlationId).toBeDefined();
+  });
+
+  test('sanitizes update foreign key violation (23503) as a missing reference', () => {
+    const postgresError = Object.assign(new Error('foreign key constraint violated'), {
+      code: '23503',
+      detail: 'Key (workspace_media_id)=(missing) is not present in table "workspace_media".',
+    });
+    const drizzleError = Object.assign(
+      new Error('Failed query: update "project_item_media_links" set "workspace_media_id" = $1'),
+      { cause: postgresError },
+    );
+
+    const result = sanitizeError(drizzleError);
+
+    expect(result.statusCode).toBe(400);
+    expect(result.code).toBe('INVALID_REFERENCE');
+    expect(result.message).toBe('Referenced record does not exist');
+  });
+
+  test('sanitizes delete foreign key violation (23503) as still referenced', () => {
+    const postgresError = Object.assign(new Error('foreign key constraint violated'), {
+      code: '23503',
+      constraint_name: 'project_item_media_links_workspace_media_id_fkey',
+      table_name: 'workspace_media',
+      detail: 'Key (id)=(abc) is still referenced from table "project_item_media_links".',
+    });
+    const drizzleError = Object.assign(
+      new Error('Failed query: delete from "workspaces" where "workspaces"."id" = $1'),
+      { cause: postgresError },
+    );
+
+    const result = sanitizeError(drizzleError);
+
+    expect(result.statusCode).toBe(409);
+    expect(result.code).toBe('STILL_REFERENCED');
+    expect(result.message).toBe('Cannot delete: still referenced by other records');
+    expect(result.message).not.toContain('project_item_media_links');
+    expect(result.correlationId).toBeDefined();
+  });
+
+  test('treats a delete query as still referenced when detail is missing', () => {
+    const postgresError = Object.assign(new Error('foreign key constraint violated'), {
+      code: '23503',
+    });
+    const drizzleError = Object.assign(
+      new Error('Failed query: delete from "workspace_media" where "id" = $1'),
+      { cause: postgresError },
+    );
+
+    const result = sanitizeError(drizzleError);
+
+    expect(result.statusCode).toBe(409);
+    expect(result.code).toBe('STILL_REFERENCED');
+    expect(result.message).toBe('Cannot delete: still referenced by other records');
   });
 
   test('sanitizes DrizzleQueryError with invalid text representation (22P02)', () => {

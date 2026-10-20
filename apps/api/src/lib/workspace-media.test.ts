@@ -29,6 +29,9 @@ describe('workspace-media', () => {
     get: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
+    list: vi.fn(),
+    head: vi.fn(),
+    copy: vi.fn(),
   };
 
   const workspaceId = randomUUID();

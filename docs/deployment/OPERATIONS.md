@@ -97,6 +97,19 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 * Profile avatars use `BlobStore` when `BLOB_PROVIDER=s3` (keys `{prefix}/avatars/{userId}`); served via `/api/v1/avatars/:userId` (no public S3 URLs).
 * When provider is `disabled`, avatars stay on `AVATAR_UPLOAD_DIR` (Compose volume). Local file is used as read fallback and optional backfill when migrating to S3.
 * **Knowledge media (NF-013):** workspace library JPEG/PNG/WebP at `{prefix}/media/{workspaceId}/{mediaId}`; embed via `/api/v1/media/:mediaId` (auth). Local fallback `MEDIA_UPLOAD_DIR`. MCP `upload_workspace_media` returns a Markdown snippet.
+* **Relocate media after a project move (PRO-B-31):** migration `0075` retargets item attachments that still point at another workspace's media and sets `storage_workspace_id` / `storage_media_id` so reads keep working. It does not copy objects. Run the relocator once on the API container after that migration, with the same env and the media volume mounted. Dry-run first. Re-run until `failed` and `sourceDeleteFailed` are both 0. Do this before anyone deletes the old workspace prefix by hand. Purge does not delete media files; the relocator does, and only after a verified copy.
+
+  ```bash
+  # from a checkout that has the API env (DATABASE_URL, MEDIA_UPLOAD_DIR, BLOB_*)
+  pnpm --filter @project-knowledge-hub/api relocate-workspace-media -- --dry-run
+  pnpm --filter @project-knowledge-hub/api relocate-workspace-media
+
+  # on the dev API container (workdir /app), after the image that contains this build
+  node apps/api/dist/scripts/relocate-workspace-media.js --dry-run
+  node apps/api/dist/scripts/relocate-workspace-media.js
+  ```
+
+  Optional: `--limit=50` processes one batch and exits, `--media-id=<uuid>` repeats for a single row. A copy or verification failure is logged (`source kept`) and the row stays pending, so the next run resumes it. The process exits 1 when any row failed or a source delete failed after the copy. A crash between the database update and the source delete can leave an unreferenced object at the old key; the row already reads the new key, and a later run will not delete that leftover.
 * Document/import file pipelines and Doc Factory exports still later.
 
 ### Ops-3 — Admin maintenance UI

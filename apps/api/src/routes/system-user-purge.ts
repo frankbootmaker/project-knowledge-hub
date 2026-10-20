@@ -12,7 +12,11 @@ import {
   loadPurgeUser,
   runSystemUserPurge,
 } from '../lib/system-user-purge.js';
-import { deleteMediaBytes } from '../lib/workspace-media.js';
+import {
+  deleteMediaBytes,
+  liveMediaSharesByteLocation,
+  mediaByteLocation,
+} from '../lib/workspace-media.js';
 
 const bodySchema = z.object({
   projectId: z.string().uuid(),
@@ -52,11 +56,18 @@ export async function registerSystemUserPurgeRoutes(
         ipAddress: request.ip,
         log: request.log,
         deleteMedia: async (media) => {
+          const location = mediaByteLocation(media);
+          const shared = await liveMediaSharesByteLocation(app.database, {
+            exceptMediaId: media.id,
+            workspaceId: location.workspaceId,
+            mediaId: location.mediaId,
+          });
+          if (shared) return 0;
           let failures = 0;
           await deleteMediaBytes(
             app.env.MEDIA_UPLOAD_DIR,
-            media.workspaceId,
-            media.id,
+            location.workspaceId,
+            location.mediaId,
             {
               blobStore: store,
               onError: (error, where) => {

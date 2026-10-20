@@ -252,7 +252,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-20
 
 * **Backup retention status** — Admin → Backups shows the last offsite error, local and S3 rotation results, and an offsite-age alert on the existing offsite `StatusRow`s. A secondary `Button` dry-runs retention. No new control style.
-
+* **Workspace purge blockers** — Permanent delete lists each blocking attachment under the confirm checkbox. One blocker uses `ErrorText`. Several use a danger list (`.text-danger`, disc). The sentence is `purgeBlockedMedia` (“20 media files used by MIL-T-53 in workspace MileGuide”) in English, German, and Hungarian.
 * **Button type (PRO-B-30)** — Buttons and button-like controls use the UI sans (IBM Plex Sans), the same face as the sidebar. `.kh-btn` sets that face so a `Button` does not inherit a mono parent. Controls inside `.kh-ops-card-foot` (buttons, inputs, selects, textareas, page numbers) opt out of the footer’s small mono caption; `.kh-ops-key-badge` stays mono. Tree and Gantt toggles (`.kh-ops-tree-toggle`), the markdown toolbar (`.kh-ops-editor-toolbar button`), landing and auth theme/language cycles (`.kh-lp-cycle`), and wizard step chips (`.kh-step`) use the same sans. Code and item keys stay monospace.
 
 ### 2026-10-19
