@@ -25,6 +25,8 @@ export type MonitoringPayload = {
     activeOauthGrants?: number;
     staleBackup: boolean;
     staleBackupAfterHours: number;
+    staleOffsite: boolean;
+    staleOffsiteAfterHours: number;
     onDutyAdmins: Array<{ id: string; displayName: string; email: string }>;
   };
   sessions: { active: number };
@@ -150,6 +152,39 @@ export type MonitoringPayload = {
       } | null;
       ageSeconds: number | null;
     };
+    lastOffsiteError: {
+      stamp: {
+        kind: string;
+        at: string;
+        message: string;
+        artifact: string;
+      } | null;
+      ageSeconds: number | null;
+    };
+    lastLocalRotation: {
+      stamp: {
+        kind: string;
+        at: string;
+        kept: number | null;
+        deleted: number | null;
+        error: string | null;
+        dryRun: boolean;
+      } | null;
+      ageSeconds: number | null;
+    };
+    lastS3Rotation: {
+      stamp: {
+        kind: string;
+        at: string;
+        kept: number | null;
+        deleted: number | null;
+        error: string | null;
+        dryRun: boolean;
+      } | null;
+      ageSeconds: number | null;
+    };
+    staleOffsite: boolean;
+    staleOffsiteAfterHours: number;
     offsite: {
       enabled: boolean;
       provider: string;

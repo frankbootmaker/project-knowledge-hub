@@ -39,18 +39,18 @@ async function streamToBuffer(body: {
   return null;
 }
 
-export function createS3BlobStore(config: Extract<BlobStoreConfig, { provider: 's3' }>): BlobStore {
-  const accessKeyId = sanitizeS3Credential(config.accessKeyId);
-  const secretAccessKey = sanitizeS3Credential(config.secretAccessKey);
-  const client = new S3Client({
+export function createS3BlobStore(
+  config: Extract<BlobStoreConfig, { provider: 's3' }>,
+  client: S3Client = new S3Client({
     region: config.region,
     endpoint: config.endpoint,
     forcePathStyle: config.forcePathStyle,
     credentials: {
-      accessKeyId,
-      secretAccessKey,
+      accessKeyId: sanitizeS3Credential(config.accessKeyId),
+      secretAccessKey: sanitizeS3Credential(config.secretAccessKey),
     },
-  });
+  }),
+): BlobStore {
 
   const withPrefix = (key: string): string => {
     const cleaned = key.replace(/^\/+/, '');
@@ -138,20 +138,29 @@ export function createS3BlobStore(config: Extract<BlobStoreConfig, { provider: '
     },
     async list(prefix: string): Promise<BlobObject[]> {
       const fullPrefix = withPrefix(prefix);
-      const result = await client.send(
-        new ListObjectsV2Command({
-          Bucket: config.bucket,
-          Prefix: fullPrefix,
-          MaxKeys: 200,
-        }),
-      );
-      return (result.Contents ?? [])
-        .filter((item) => Boolean(item.Key))
-        .map((item) => ({
-          key: stripPrefix(item.Key!),
-          sizeBytes: item.Size,
-          lastModified: item.LastModified,
-        }));
+      const objects: BlobObject[] = [];
+      let continuationToken: string | undefined;
+      for (let page = 0; page < 1000; page += 1) {
+        const result = await client.send(
+          new ListObjectsV2Command({
+            Bucket: config.bucket,
+            Prefix: fullPrefix,
+            MaxKeys: 1000,
+            ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+          }),
+        );
+        for (const item of result.Contents ?? []) {
+          if (!item.Key) continue;
+          objects.push({
+            key: stripPrefix(item.Key),
+            sizeBytes: item.Size,
+            lastModified: item.LastModified,
+          });
+        }
+        if (!result.IsTruncated || !result.NextContinuationToken) break;
+        continuationToken = result.NextContinuationToken;
+      }
+      return objects;
     },
   };
 }

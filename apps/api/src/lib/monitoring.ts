@@ -685,3 +685,14 @@ export function isBackupStale(
   if (ageSeconds == null) return true;
   return ageSeconds > staleAfterHours * 3600;
 }
+
+/** True when offsite is enabled and the last successful copy is missing or too old. */
+export function isOffsiteStale(
+  ageSeconds: number | null,
+  staleAfterHours: number,
+  offsiteEnabled: boolean,
+): boolean {
+  if (!offsiteEnabled) return false;
+  if (ageSeconds == null) return true;
+  return ageSeconds > staleAfterHours * 3600;
+}

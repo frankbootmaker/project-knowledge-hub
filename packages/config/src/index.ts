@@ -339,6 +339,24 @@ export const envSchema = z.object({
     .int()
     .min(0)
     .default(5 * 60 * 1000),
+  /**
+   * Alert when the newest offsite copy is older than this many hours
+   * (or missing) while offsite backups are enabled. Default 48.
+   */
+  BACKUP_OFFSITE_STALE_AFTER_HOURS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 30)
+    .default(48),
+  /**
+   * Sidecar only. Skip the startup dump when last-success is younger than
+   * this many seconds. Unset uses the schedule interval. 0 always dumps.
+   */
+  BACKUP_STARTUP_MIN_AGE_SECONDS: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.coerce.number().int().min(0).optional(),
+  ),
   /** Object storage: disabled | s3 (Azure later). */
   BLOB_PROVIDER: z.enum(['disabled', 's3']).default('disabled'),
   BLOB_S3_BUCKET: z.preprocess(
