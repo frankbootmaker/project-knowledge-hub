@@ -114,7 +114,7 @@ html[data-theme='dark'] .kh-landing {
   background: var(--kh-panel-solid);
   color: var(--kh-ink);
   cursor: pointer;
-  font: 500 12px/1 var(--font-mono), monospace;
+  font: 500 12px/1 var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
 }
 
 .kh-lp-cycle[data-theme-choice] {
