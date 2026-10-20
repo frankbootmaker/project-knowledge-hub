@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Retention for knowledge-hub-*.dump artifacts under BACKUP_DIR.
-# Policy (defaults): keep 7 daily, 4 weekly, 3 monthly; delete older.
+# Same policy as packages/blob-store/src/retention.ts:
+#   daily: at most one dump per UTC day for keepDaily days, always plus the newest
+#   then ≤keepWeekly one-per-ISO-week, then ≤keepMonthly one-per-month
 # Admin → Monitoring may write BACKUP_DIR/retention.json (overrides env).
 #
 # Env:
@@ -9,10 +11,12 @@
 #   BACKUP_KEEP_WEEKLY=4
 #   BACKUP_KEEP_MONTHLY=3
 #   BACKUP_FORCE_ROTATE=1   # run even when autoRotate is false
-#   BACKUP_DRY_RUN=1        # print deletions only
+#   BACKUP_DRY_RUN=1        # print deletions only; does not write last-local-rotation.json
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/db-ops-common.sh
+source "${SCRIPT_DIR}/lib/db-ops-common.sh"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 BACKUP_DIR="${BACKUP_DIR:-${ROOT_DIR}/backups}"
 KEEP_DAILY="${BACKUP_KEEP_DAILY:-7}"
@@ -78,19 +82,29 @@ fi
 
 now_epoch="$(date -u +%s)"
 declare -A KEEP=()
+declare -A SEEN_DAY=()
 declare -A SEEN_WEEK=()
 declare -A SEEN_MONTH=()
+daily_count=0
 weekly_count=0
 monthly_count=0
+
+# Always keep the newest dump, even when it is older than the daily window.
+KEEP["${FILES[0]}"]=1
 
 for f in "${FILES[@]}"; do
   mtime="$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")"
   age_days=$(( (now_epoch - mtime) / 86400 ))
+  day_key="$(date -u -d "@${mtime}" +%Y-%m-%d 2>/dev/null || date -u -r "$mtime" +%Y-%m-%d)"
   week_key="$(date -u -d "@${mtime}" +%G-W%V 2>/dev/null || date -u -r "$mtime" +%G-W%V)"
   month_key="$(date -u -d "@${mtime}" +%Y-%m 2>/dev/null || date -u -r "$mtime" +%Y-%m)"
 
   if (( age_days < KEEP_DAILY )); then
-    KEEP["$f"]=1
+    if [[ -z "${SEEN_DAY[$day_key]:-}" ]] && (( daily_count < KEEP_DAILY )); then
+      KEEP["$f"]=1
+      SEEN_DAY["$day_key"]=1
+      daily_count=$((daily_count + 1))
+    fi
     continue
   fi
 
@@ -131,4 +145,9 @@ for f in "${FILES[@]}"; do
   deleted=$((deleted + 1))
 done
 
-echo "Retention in ${BACKUP_DIR}: kept=${kept} deleted=${deleted} (daily<=${KEEP_DAILY}d, weekly=${KEEP_WEEKLY}, monthly=${KEEP_MONTHLY})"
+echo "Retention in ${BACKUP_DIR}: kept=${kept} deleted=${deleted} (daily<=${KEEP_DAILY} one/day, weekly=${KEEP_WEEKLY}, monthly=${KEEP_MONTHLY}, dry_run=${DRY_RUN})"
+if [[ "$DRY_RUN" != "1" ]]; then
+  db_ops_rotation_stamp_write \
+    "${BACKUP_DIR}/last-local-rotation.json" \
+    "local_rotation" "$kept" "$deleted" ""
+fi

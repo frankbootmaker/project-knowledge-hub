@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Backup retention:** Local rotation keeps at most one dump per UTC day for `BACKUP_KEEP_DAILY` days (always plus the newest), then the weekly and monthly tiers. The same policy prunes S3 objects under `{env}/backups/`, including when that cycle's upload fails, and never deletes the newest successful offsite copy. `get_platform_status` and Admin → Backups show the last offsite error, local and S3 rotation results, and an alert when offsite is older than `BACKUP_OFFSITE_STALE_AFTER_HOURS` (default 48). The sidecar skips its startup dump when the last success is younger than `BACKUP_STARTUP_MIN_AGE_SECONDS` (default: the schedule interval). Dry-run: `BACKUP_DRY_RUN=1 ./infrastructure/scripts/rotate-backups.sh` or `pnpm --filter @project-knowledge-hub/api exec tsx src/cli/prune-backups.ts`. Apply with `--apply`, or Admin → Backups → Rotate now.
+
 * **Timeline due-date anchoring (PRO-T-81):** Epics and stories sit on the same timeline spine as tasks, bugs, and milestones. Each card is anchored on its due date and shares a lane when it does not overlap another card.
 
 ### Changed

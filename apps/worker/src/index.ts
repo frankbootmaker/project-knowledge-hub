@@ -5,7 +5,10 @@ import {
   embeddingConfigFromEnv,
   loadEnv,
 } from '@project-knowledge-hub/config';
-import { syncPendingOffsiteDump } from '@project-knowledge-hub/blob-store';
+import {
+  readRetentionPolicy,
+  runOffsiteBackupCycle,
+} from '@project-knowledge-hub/blob-store';
 import {
   createDatabase,
   ensureExchangeRates,
@@ -323,26 +326,49 @@ async function main(): Promise<void> {
         if (!backupOffsite || store.provider === 'disabled') {
           return;
         }
-        const result = await syncPendingOffsiteDump({
+        const { policy } = await readRetentionPolicy(env.BACKUP_DIR, {
+          keepDaily: env.BACKUP_KEEP_DAILY,
+          keepWeekly: env.BACKUP_KEEP_WEEKLY,
+          keepMonthly: env.BACKUP_KEEP_MONTHLY,
+          autoRotate: env.BACKUP_AUTO_ROTATE,
+        });
+        const result = await runOffsiteBackupCycle({
           blobStore: store,
           backupDir: env.BACKUP_DIR,
           schemaVersion: 'worker',
+          policy,
+          prune: policy.autoRotate,
         });
-        if (result.uploaded) {
+        if (result.uploadError) {
+          const message = result.uploadError;
+          logger.error(
+            { err: message, rotation: result.rotation },
+            message.includes('authorization') || message.includes('Invalid character')
+              ? 'Offsite backup sync failed — S3 access key/secret likely has quotes or newlines; fix Admin → Storage or env, or set BACKUP_OFFSITE=false'
+              : 'Offsite backup sync failed',
+          );
+        } else if (result.upload.uploaded) {
           logger.info(
-            { key: result.stamp.key, artifact: result.stamp.artifact },
+            { key: result.upload.key },
             'Offsite backup upload completed',
           );
         }
+        if (result.rotation?.error) {
+          logger.error(
+            { err: result.rotation.error },
+            'Offsite backup retention failed',
+          );
+        } else if (result.rotation && result.rotation.deleted.length > 0) {
+          logger.info(
+            {
+              kept: result.rotation.kept,
+              deleted: result.rotation.deleted.length,
+            },
+            'Offsite backup retention pruned objects',
+          );
+        }
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error);
-        logger.error(
-          { err: error },
-          message.includes('authorization') || message.includes('Invalid character')
-            ? 'Offsite backup sync failed — S3 access key/secret likely has quotes or newlines; fix Admin → Storage or env, or set BACKUP_OFFSITE=false'
-            : 'Offsite backup sync failed',
-        );
+        logger.error({ err: error }, 'Offsite backup sync failed');
       }
     };
     void runOffsiteSync();

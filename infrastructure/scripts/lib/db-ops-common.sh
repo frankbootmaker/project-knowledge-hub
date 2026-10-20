@@ -109,3 +109,55 @@ db_ops_load_schedule() {
   SCHEDULE_INTERVAL="$interval"
   SCHEDULE_SOURCE="$source"
 }
+
+# Decide whether the sidecar should dump on process start.
+# Prints one of: run | skip | disabled | schedule_off
+# min_age 0 always runs (legacy BACKUP_RUN_ON_START). Empty age (no stamp) runs.
+db_ops_startup_backup_action() {
+  local run_on_start="${1:-1}"
+  local schedule_enabled="${2:-true}"
+  local age="${3:-}"
+  local min_age="${4:-0}"
+  if [[ "$run_on_start" != "1" ]]; then
+    printf 'disabled\n'
+    return 0
+  fi
+  if [[ "$schedule_enabled" != "true" && "$schedule_enabled" != "1" ]]; then
+    printf 'schedule_off\n'
+    return 0
+  fi
+  if [[ -n "$age" && "$min_age" -gt 0 && "$age" -lt "$min_age" ]]; then
+    printf 'skip\n'
+    return 0
+  fi
+  printf 'run\n'
+}
+
+# last-local-rotation.json / last-s3-rotation.json. Empty kept/deleted become null.
+db_ops_rotation_stamp_write() {
+  local stamp_path="$1"
+  local kind="$2"
+  local kept="${3:-}"
+  local deleted="${4:-}"
+  local error="${5:-}"
+  mkdir -p "$(dirname "$stamp_path")"
+  local ts kept_json deleted_json error_json
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ -z "$kept" ]]; then kept_json=null; else kept_json="$kept"; fi
+  if [[ -z "$deleted" ]]; then deleted_json=null; else deleted_json="$deleted"; fi
+  if [[ -z "$error" ]]; then
+    error_json=null
+  else
+    error_json="$(db_ops_json_str "$error")"
+  fi
+  {
+    printf '{\n'
+    printf '  "kind": %s,\n' "$(db_ops_json_str "$kind")"
+    printf '  "at": %s,\n' "$(db_ops_json_str "$ts")"
+    printf '  "kept": %s,\n' "$kept_json"
+    printf '  "deleted": %s,\n' "$deleted_json"
+    printf '  "error": %s,\n' "$error_json"
+    printf '  "dryRun": false\n'
+    printf '}\n'
+  } >"$stamp_path"
+}

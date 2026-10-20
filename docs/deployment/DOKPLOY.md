@@ -268,7 +268,7 @@ Scripts:
 * `export-db.sh` / `backup-db.sh` — dump + stamp + rotate
 * `import-db.sh` — full replace (`CONFIRM_IMPORT=REPLACE`); schema wipe by default; optional `WIPE_DATABASE=1`
 * `restore-db.sh` — low-level `pg_restore`
-* `rotate-backups.sh` — 7d / 4w / 3m retention
+* `rotate-backups.sh` — one dump per day for 7 days (always plus the newest), then 4 weekly / 3 monthly. S3 `{env}/backups/` uses the same policy. Dry-run: `BACKUP_DRY_RUN=1`.
 
 Manual export against the Compose postgres container:
 

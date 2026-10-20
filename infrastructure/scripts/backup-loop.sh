@@ -8,6 +8,10 @@
 #   BACKUP_DIR=/backups
 #   POSTGRES_HOST=postgres (+ POSTGRES_USER/DB/PASSWORD)
 #   BACKUP_RUN_ON_START=1         (default 1 — dump once before first wait)
+#   BACKUP_STARTUP_MIN_AGE_SECONDS
+#       Skip that startup dump when last-success is younger than this many
+#       seconds. Unset or empty uses the schedule interval. 0 always dumps.
+#       A skip still runs local retention (no new dump).
 #   BACKUP_FAILURE_RETRY_SECONDS=900  (retry sooner after a failed dump)
 #   BACKUP_SCHEDULER_POLL_SECONDS=60  (wake often so Admin schedule changes apply)
 #
@@ -145,18 +149,40 @@ fi
 db_ops_load_schedule "$BACKUP_DIR"
 write_heartbeat "starting" "" "source=${SCHEDULE_SOURCE}"
 LAST_ATTEMPT_FAILED=0
-if [[ "$RUN_ON_START" == "1" ]]; then
-  if [[ "$SCHEDULE_ENABLED" == "true" || "$SCHEDULE_ENABLED" == "1" ]]; then
+
+# Unset/empty → schedule interval. 0 → always dump on start.
+startup_min_age="${BACKUP_STARTUP_MIN_AGE_SECONDS:-}"
+if [[ -z "$startup_min_age" ]]; then
+  startup_min_age="$SCHEDULE_INTERVAL"
+fi
+startup_age="$(seconds_since_last_success || true)"
+startup_action="$(db_ops_startup_backup_action \
+  "$RUN_ON_START" "$SCHEDULE_ENABLED" "$startup_age" "$startup_min_age")"
+case "$startup_action" in
+  run)
     if run_once; then
       LAST_ATTEMPT_FAILED=0
     else
       LAST_ATTEMPT_FAILED=1
       echo "Initial backup failed; will retry after failure backoff." >&2
     fi
-  else
+    ;;
+  skip)
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Skipping startup backup; last success ${startup_age}s ago is younger than ${startup_min_age}s."
+    if ! BACKUP_DIR="$BACKUP_DIR" "${SCRIPT_DIR}/rotate-backups.sh"; then
+      echo "Warning: startup retention rotation failed." >&2
+      db_ops_rotation_stamp_write \
+        "${BACKUP_DIR}/last-local-rotation.json" \
+        "local_rotation" "" "" "retention rotation failed"
+    fi
+    ;;
+  schedule_off)
     echo "Scheduled backups disabled (${SCHEDULE_SOURCE}); skipping run-on-start."
-  fi
-fi
+    ;;
+  *)
+    echo "BACKUP_RUN_ON_START disabled; skipping startup dump."
+    ;;
+esac
 
 while true; do
   db_ops_load_schedule "$BACKUP_DIR"

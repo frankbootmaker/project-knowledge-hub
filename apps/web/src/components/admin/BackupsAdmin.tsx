@@ -28,6 +28,22 @@ function formatAge(seconds: number | null, neverLabel: string): string {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
+function formatRotation(
+  stamp: {
+    at: string;
+    kept: number | null;
+    deleted: number | null;
+    error: string | null;
+  } | null,
+  neverLabel: string,
+  counts: (kept: number, deleted: number, when: string) => string,
+  errorLabel: (error: string, when: string) => string,
+): string {
+  if (!stamp) return neverLabel;
+  if (stamp.error) return errorLabel(stamp.error, stamp.at);
+  return counts(stamp.kept ?? 0, stamp.deleted ?? 0, stamp.at);
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
@@ -320,7 +336,7 @@ export function BackupsAdmin({
     }
   }
 
-  async function runRotateOnly() {
+  async function runRotateOnly(dryRun: boolean) {
     setPending(true);
     setError(null);
     try {
@@ -328,17 +344,26 @@ export function BackupsAdmin({
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify({ dryRun }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         error?: { message?: string };
-        rotation?: { deleted?: string[] };
+        rotation?: { deleted?: string[]; error?: string | null };
+        offsiteRotation?: { deleted?: string[]; error?: string | null } | null;
       };
       if (!response.ok) {
         throw new Error(body.error?.message ?? `HTTP ${response.status}`);
       }
+      const failure = body.rotation?.error ?? body.offsiteRotation?.error;
+      if (failure) {
+        throw new Error(failure);
+      }
+      const counts = {
+        local: body.rotation?.deleted?.length ?? 0,
+        s3: body.offsiteRotation?.deleted?.length ?? 0,
+      };
       pushToast(
-        t('monitoringRotateOk', { deleted: body.rotation?.deleted?.length ?? 0 }),
+        dryRun ? t('monitoringRotateDryRunOk', counts) : t('monitoringRotateOk', counts),
       );
       await refresh();
       router.refresh();
@@ -551,9 +576,13 @@ export function BackupsAdmin({
                 : t('monitoringOffsiteDisabledShort')}
           </strong>
           <span className="mt-1 block truncate text-[10px] text-ink-muted">
-            {data.backups.offsite.enabled
-              ? data.backups.offsite.provider
-              : 'BLOB_PROVIDER'}
+            {data.backups.staleOffsite
+              ? t('monitoringOffsiteStale', {
+                  hours: data.backups.staleOffsiteAfterHours,
+                })
+              : data.backups.offsite.enabled
+                ? data.backups.offsite.provider
+                : 'BLOB_PROVIDER'}
           </span>
         </div>
         <div className="kh-ops-health-card">
@@ -808,10 +837,40 @@ export function BackupsAdmin({
               type="button"
               variant="secondary"
               disabled={pending}
-              onClick={() => void runRotateOnly()}
+              onClick={() => void runRotateOnly(false)}
             >
               {t('monitoringRotateNow')}
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => void runRotateOnly(true)}
+            >
+              {t('monitoringRotateDryRun')}
+            </Button>
+          </div>
+          <div className="grid gap-2 text-sm text-ink-muted">
+            <p className="m-0">
+              {t('monitoringLocalRotation')}:{' '}
+              {formatRotation(
+                data.backups.lastLocalRotation.stamp,
+                t('monitoringRotationNever'),
+                (kept, deleted, when) =>
+                  t('monitoringRotationCounts', { kept, deleted, when }),
+                (error, when) => t('monitoringRotationError', { error, when }),
+              )}
+            </p>
+            <p className="m-0">
+              {t('monitoringS3Rotation')}:{' '}
+              {formatRotation(
+                data.backups.lastS3Rotation.stamp,
+                t('monitoringRotationNever'),
+                (kept, deleted, when) =>
+                  t('monitoringRotationCounts', { kept, deleted, when }),
+                (error, when) => t('monitoringRotationError', { error, when }),
+              )}
+            </p>
           </div>
         </div>
         </section>
@@ -941,12 +1000,64 @@ export function BackupsAdmin({
                     : t('monitoringOffsiteDisabled')
               }
               tone={
-                data.backups.lastOffsite.stamp
-                  ? 'success'
-                  : data.backups.offsite.enabled
-                    ? 'warn'
-                    : 'neutral'
+                data.backups.staleOffsite
+                  ? 'warn'
+                  : data.backups.lastOffsite.stamp
+                    ? 'success'
+                    : data.backups.offsite.enabled
+                      ? 'warn'
+                      : 'neutral'
               }
+            />
+            {data.backups.staleOffsite ? (
+              <p className="m-0 px-5 py-3 text-xs text-warn" role="alert">
+                {t('monitoringOffsiteStale', {
+                  hours: data.backups.staleOffsiteAfterHours,
+                })}
+              </p>
+            ) : data.backups.offsite.enabled ? (
+              <p className="m-0 px-5 py-3 text-xs text-ink-muted">
+                {t('monitoringOffsiteFresh', {
+                  hours: data.backups.staleOffsiteAfterHours,
+                })}
+              </p>
+            ) : null}
+            <StatusRow
+              label={t('monitoringOffsiteError')}
+              value={
+                data.backups.lastOffsiteError.stamp
+                  ? `${data.backups.lastOffsiteError.stamp.message} · ${data.backups.lastOffsiteError.stamp.at}`
+                  : t('monitoringOffsiteErrorNone')
+              }
+              tone={
+                data.backups.lastOffsiteError.stamp &&
+                (!data.backups.lastOffsite.stamp ||
+                  data.backups.lastOffsiteError.stamp.at > data.backups.lastOffsite.stamp.at)
+                  ? 'error'
+                  : 'neutral'
+              }
+            />
+            <StatusRow
+              label={t('monitoringLocalRotation')}
+              value={formatRotation(
+                data.backups.lastLocalRotation.stamp,
+                t('monitoringRotationNever'),
+                (kept, deleted, when) =>
+                  t('monitoringRotationCounts', { kept, deleted, when }),
+                (error, when) => t('monitoringRotationError', { error, when }),
+              )}
+              tone={data.backups.lastLocalRotation.stamp?.error ? 'error' : 'neutral'}
+            />
+            <StatusRow
+              label={t('monitoringS3Rotation')}
+              value={formatRotation(
+                data.backups.lastS3Rotation.stamp,
+                t('monitoringRotationNever'),
+                (kept, deleted, when) =>
+                  t('monitoringRotationCounts', { kept, deleted, when }),
+                (error, when) => t('monitoringRotationError', { error, when }),
+              )}
+              tone={data.backups.lastS3Rotation.stamp?.error ? 'error' : 'neutral'}
             />
             {!data.backups.offsite.enabled ? (
               <p className="m-0 px-5 py-3 text-xs text-ink-muted">

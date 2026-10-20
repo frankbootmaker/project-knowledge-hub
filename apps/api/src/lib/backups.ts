@@ -2,6 +2,7 @@ import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
+import { writeRotationStamp, selectRetainedBackupIds } from '@project-knowledge-hub/blob-store';
 import { resolveDatabaseUrl } from '@project-knowledge-hub/config';
 import { ensureMigrationJournalAfterRestore } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
@@ -895,19 +896,26 @@ export async function deleteDumpArtifact(
 export type RotateResult = {
   kept: number;
   deleted: string[];
+  dryRun: boolean;
+  error: string | null;
 };
 
-/** Retention: keep all within keepDaily days; then ≤keepWeekly one-per-ISO-week; then ≤keepMonthly one-per-month. */
+/**
+ * Local retention. Same policy as S3 (`selectRetainedBackupIds`): one dump per
+ * UTC day for `keepDaily` days, always including the newest, then weekly/monthly.
+ */
 export async function rotateDumpArtifacts(
   backupDir: string,
   policy: { keepDaily: number; keepWeekly: number; keepMonthly: number },
+  options: { dryRun?: boolean; nowMs?: number } = {},
 ): Promise<RotateResult> {
+  const dryRun = Boolean(options.dryRun);
   await ensureBackupDir(backupDir);
   let entries: string[];
   try {
     entries = await fs.readdir(backupDir);
   } catch {
-    return { kept: 0, deleted: [] };
+    return { kept: 0, deleted: [], dryRun, error: null };
   }
 
   type Entry = { name: string; full: string; mtimeMs: number };
@@ -924,60 +932,35 @@ export async function rotateDumpArtifacts(
     }
   }
 
-  files.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  const now = Date.now();
-  const keep = new Set<string>();
-  const seenWeek = new Set<string>();
-  const seenMonth = new Set<string>();
-  let weeklyCount = 0;
-  let monthlyCount = 0;
-
-  for (const file of files) {
-    const ageDays = Math.floor((now - file.mtimeMs) / 86_400_000);
-    const date = new Date(file.mtimeMs);
-    const weekKey = isoWeekKey(date);
-    const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-
-    if (ageDays < policy.keepDaily) {
-      keep.add(file.name);
-      continue;
-    }
-
-    const weeklyHorizon = policy.keepDaily + 7 * policy.keepWeekly;
-    if (ageDays < weeklyHorizon) {
-      if (!seenWeek.has(weekKey) && weeklyCount < policy.keepWeekly) {
-        keep.add(file.name);
-        seenWeek.add(weekKey);
-        weeklyCount += 1;
-      }
-      continue;
-    }
-
-    const monthlyHorizon = weeklyHorizon + 31 * policy.keepMonthly;
-    if (ageDays < monthlyHorizon) {
-      if (!seenMonth.has(monthKey) && monthlyCount < policy.keepMonthly) {
-        keep.add(file.name);
-        seenMonth.add(monthKey);
-        monthlyCount += 1;
-      }
-    }
-  }
+  const now = options.nowMs ?? Date.now();
+  const keep = selectRetainedBackupIds(
+    files.map((file) => ({ id: file.name, mtimeMs: file.mtimeMs })),
+    policy,
+    now,
+  );
 
   const deleted: string[] = [];
   for (const file of files) {
     if (keep.has(file.name)) continue;
-    await fs.unlink(file.full).catch(() => undefined);
+    if (!dryRun) {
+      await fs.unlink(file.full).catch(() => undefined);
+    }
     deleted.push(file.name);
   }
 
-  return { kept: keep.size, deleted };
-}
-
-function isoWeekKey(date: Date): string {
-  const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const dayNum = target.getUTCDay() || 7;
-  target.setUTCDate(target.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((target.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
-  return `${target.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  const result: RotateResult = {
+    kept: keep.size,
+    deleted,
+    dryRun,
+    error: null,
+  };
+  if (!dryRun) {
+    await writeRotationStamp(backupDir, 'local', {
+      kept: result.kept,
+      deleted: result.deleted.length,
+      error: null,
+      dryRun: false,
+    }).catch(() => undefined);
+  }
+  return result;
 }
