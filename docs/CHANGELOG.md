@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Workspace purge after a project move (PRO-B-31):** Moving a project also moves or copies media attached to its tasks, delivery items, RAID items, and changes, and repoints `project_item_media_links`. Media still used in the source workspace is copied. Migration `0075_repair_cross_workspace_item_media` repairs links whose media row was left behind: an exclusive file keeps its id and is retargeted at the project's workspace, recording the original byte folder in `storage_workspace_id` / `storage_media_id` so the image stays readable without copying bytes. Shared files are copied as new rows that point at the same bytes; the original row is never deleted. Purging a workspace that is empty or only archived succeeds. A remaining cross-workspace attachment returns 409 `WORKSPACE_PURGE_BLOCKED` with one line per item (`N media files used by MIL-T-53 in workspace MileGuide`), which the delete dialog shows in English, German, and Hungarian. A database foreign-key failure on delete is 409 "Cannot delete: still referenced by other records"; insert and update stay 400 "Referenced record does not exist".
+
 * **Timeline due-date anchoring (PRO-T-81):** Epics and stories sit on the same timeline spine as tasks, bugs, and milestones. Each card is anchored on its due date and shares a lane when it does not overlap another card.
 
 ### Changed

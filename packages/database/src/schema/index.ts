@@ -1176,11 +1176,23 @@ export const workspaceMedia = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
       .notNull()
       .defaultNow(),
+    /**
+     * Byte folder when this row's workspace changed without copying the file.
+     * Null means the bytes are at workspace_id/id. No foreign key: the original
+     * workspace may be purged while the file must stay readable.
+     */
+    storageWorkspaceId: uuid('storage_workspace_id'),
+    /** Byte file id. Null means this row's id. Paired with storage_workspace_id. */
+    storageMediaId: uuid('storage_media_id'),
   },
   (table) => [
     index('workspace_media_workspace_id_idx').on(table.workspaceId),
     index('workspace_media_record_id_idx').on(table.knowledgeRecordId),
     index('workspace_media_created_at_idx').on(table.createdAt),
+    index('workspace_media_storage_idx').on(
+      table.storageWorkspaceId,
+      table.storageMediaId,
+    ),
   ],
 );
 

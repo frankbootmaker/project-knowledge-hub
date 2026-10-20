@@ -1,7 +1,7 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, ilike, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm';
 import {
   blobObjectKey,
   type BlobStore,
@@ -62,6 +62,38 @@ export function toPublicMedia(row: WorkspaceMediaRow): PublicWorkspaceMedia {
     url: mediaPublicUrl(row.id),
     markdownSnippet: mediaMarkdownSnippet(row.id, row.altText),
   };
+}
+
+/** Folder that holds the bytes. Null storage columns mean workspace_id/id. */
+export function mediaByteLocation(row: {
+  id: string;
+  workspaceId: string;
+  storageWorkspaceId?: string | null;
+  storageMediaId?: string | null;
+}): { workspaceId: string; mediaId: string } {
+  return {
+    workspaceId: row.storageWorkspaceId ?? row.workspaceId,
+    mediaId: row.storageMediaId ?? row.id,
+  };
+}
+
+export async function liveMediaSharesByteLocation(
+  database: Database,
+  input: { exceptMediaId: string; workspaceId: string; mediaId: string },
+): Promise<boolean> {
+  const [row] = await database.db
+    .select({ id: workspaceMedia.id })
+    .from(workspaceMedia)
+    .where(
+      and(
+        ne(workspaceMedia.id, input.exceptMediaId),
+        isNull(workspaceMedia.archivedAt),
+        sql`coalesce(${workspaceMedia.storageWorkspaceId}, ${workspaceMedia.workspaceId}) = ${input.workspaceId}::uuid`,
+        sql`coalesce(${workspaceMedia.storageMediaId}, ${workspaceMedia.id}) = ${input.mediaId}::uuid`,
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
 }
 
 function mediaBlobKey(workspaceId: string, mediaId: string): string {
@@ -402,9 +434,17 @@ export async function archiveWorkspaceMedia(
     });
   }
 
-  await deleteMediaBytes(input.uploadDir, existing.workspaceId, existing.id, {
-    blobStore: input.blobStore,
+  const location = mediaByteLocation(existing);
+  const shared = await liveMediaSharesByteLocation(database, {
+    exceptMediaId: existing.id,
+    workspaceId: location.workspaceId,
+    mediaId: location.mediaId,
   });
+  if (!shared) {
+    await deleteMediaBytes(input.uploadDir, location.workspaceId, location.mediaId, {
+      blobStore: input.blobStore,
+    });
+  }
 
   const [updated] = await database.db
     .update(workspaceMedia)

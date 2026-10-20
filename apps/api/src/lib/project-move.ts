@@ -15,6 +15,7 @@ import {
   projectChangeItems,
   projectEpics,
   projectInitialStakeholders,
+  projectItemMediaLinks,
   projectMilestones,
   projectRaidItems,
   projectSprints,
@@ -36,6 +37,8 @@ import { AppError } from '@project-knowledge-hub/domain';
 import { writeAuditEvent } from './identity.js';
 import {
   deleteMediaBytes,
+  liveMediaSharesByteLocation,
+  mediaByteLocation,
   readMediaBytes,
   writeMediaBytes,
 } from './workspace-media.js';
@@ -559,6 +562,18 @@ async function planMedia(
       .where(inArray(documentImportMedia.importId, documentImportIds));
     for (const row of linked) candidateIds.add(row.id);
   }
+  const itemLinks = await database.db
+    .select({ id: projectItemMediaLinks.workspaceMediaId })
+    .from(projectItemMediaLinks)
+    .where(
+      and(
+        eq(projectItemMediaLinks.projectId, projectId),
+        eq(projectItemMediaLinks.kind, 'media'),
+      ),
+    );
+  for (const row of itemLinks) {
+    if (row.id) candidateIds.add(row.id);
+  }
   if (candidateIds.size === 0) {
     return { exclusiveIds: [], duplicates: [] };
   }
@@ -597,6 +612,27 @@ async function planMedia(
     );
   }
 
+  let sharedByItem = new Set<string>();
+  if (candidateIds.size > 0) {
+    const itemShares = await database.db
+      .select({
+        mediaId: projectItemMediaLinks.workspaceMediaId,
+        linkProjectId: projectItemMediaLinks.projectId,
+      })
+      .from(projectItemMediaLinks)
+      .where(
+        and(
+          eq(projectItemMediaLinks.kind, 'media'),
+          inArray(projectItemMediaLinks.workspaceMediaId, [...candidateIds]),
+        ),
+      );
+    sharedByItem = new Set(
+      itemShares
+        .filter((row) => row.linkProjectId !== projectId && row.mediaId)
+        .map((row) => row.mediaId as string),
+    );
+  }
+
   const exclusiveIds: string[] = [];
   const duplicates: PlannedMedia['duplicates'] = [];
   for (const row of mediaRows) {
@@ -604,7 +640,10 @@ async function planMedia(
       row.knowledgeRecordId && !movingRecordIds.has(row.knowledgeRecordId),
     );
     const shared =
-      linkedElsewhere || sharedByMarkdown.has(row.id) || sharedByImport.has(row.id);
+      linkedElsewhere ||
+      sharedByMarkdown.has(row.id) ||
+      sharedByImport.has(row.id) ||
+      sharedByItem.has(row.id);
     if (shared) {
       duplicates.push({ fromId: row.id, toId: randomUUID(), row });
     } else {
@@ -759,10 +798,12 @@ export async function moveProjectToWorkspace(
     });
   }
 
-  const copiedKeys: Array<{ workspaceId: string; mediaId: string }> = [];
-  const copiedDuplicateToIds = new Set<string>();
-  const mediaOptions = { blobStore: input.blobStore };
-  try {
+    const copiedKeys: Array<{ workspaceId: string; mediaId: string }> = [];
+    const copiedDuplicateToIds = new Set<string>();
+    const copiedExclusiveIds: string[] = [];
+    const exclusiveByteLocations = new Map<string, { workspaceId: string; mediaId: string }>();
+    const mediaOptions = { blobStore: input.blobStore };
+    try {
     for (const mediaId of mediaPlan.exclusiveIds) {
       const [row] = await database.db
         .select()
@@ -770,7 +811,13 @@ export async function moveProjectToWorkspace(
         .where(eq(workspaceMedia.id, mediaId))
         .limit(1);
       if (!row) continue;
-      const bytes = await readMediaBytes(input.uploadDir, row.workspaceId, row.id, mediaOptions);
+      const location = mediaByteLocation(row);
+      const bytes = await readMediaBytes(
+        input.uploadDir,
+        location.workspaceId,
+        location.mediaId,
+        mediaOptions,
+      );
       if (!bytes) {
         log.warn(`Project move skipped missing media bytes for ${row.id}`);
         continue;
@@ -780,12 +827,15 @@ export async function moveProjectToWorkspace(
         contentType: row.contentType,
       });
       copiedKeys.push({ workspaceId: targetWorkspace.id, mediaId: row.id });
+      copiedExclusiveIds.push(row.id);
+      exclusiveByteLocations.set(row.id, location);
     }
     for (const duplicate of mediaPlan.duplicates) {
+      const location = mediaByteLocation(duplicate.row);
       const bytes = await readMediaBytes(
         input.uploadDir,
-        duplicate.row.workspaceId,
-        duplicate.fromId,
+        location.workspaceId,
+        location.mediaId,
         mediaOptions,
       );
       if (!bytes) {
@@ -857,11 +907,24 @@ export async function moveProjectToWorkspace(
           .where(eq(documentImports.projectId, project.id));
       }
 
-      if (mediaPlan.exclusiveIds.length > 0) {
+      if (copiedExclusiveIds.length > 0) {
+        await tx
+          .update(workspaceMedia)
+          .set({
+            workspaceId: targetWorkspace.id,
+            storageWorkspaceId: null,
+            storageMediaId: null,
+          })
+          .where(inArray(workspaceMedia.id, copiedExclusiveIds));
+      }
+      const uncopiedExclusiveIds = mediaPlan.exclusiveIds.filter(
+        (id) => !copiedExclusiveIds.includes(id),
+      );
+      if (uncopiedExclusiveIds.length > 0) {
         await tx
           .update(workspaceMedia)
           .set({ workspaceId: targetWorkspace.id })
-          .where(inArray(workspaceMedia.id, mediaPlan.exclusiveIds));
+          .where(inArray(workspaceMedia.id, uncopiedExclusiveIds));
       }
       for (const duplicate of readyDuplicates) {
         const sourceRecordId = duplicate.row.knowledgeRecordId;
@@ -897,6 +960,15 @@ export async function moveProjectToWorkspace(
               ),
             );
         }
+        await tx
+          .update(projectItemMediaLinks)
+          .set({ workspaceMediaId: duplicate.toId })
+          .where(
+            and(
+              eq(projectItemMediaLinks.projectId, project.id),
+              eq(projectItemMediaLinks.workspaceMediaId, duplicate.fromId),
+            ),
+          );
       }
       if (replacements.size > 0 && recordIds.length > 0) {
         const fresh = await tx
@@ -1017,12 +1089,24 @@ export async function moveProjectToWorkspace(
     });
 
     counts.auditCopied = auditCopied;
-    for (const mediaId of mediaPlan.exclusiveIds) {
-      await deleteMediaBytes(input.uploadDir, sourceWorkspace.id, mediaId, mediaOptions).catch(
-        () => {
-          log.warn(`Project move left old media bytes for ${mediaId}`);
-        },
-      );
+    for (const [mediaId, location] of exclusiveByteLocations) {
+      if (location.workspaceId === targetWorkspace.id && location.mediaId === mediaId) {
+        continue;
+      }
+      const shared = await liveMediaSharesByteLocation(database, {
+        exceptMediaId: mediaId,
+        workspaceId: location.workspaceId,
+        mediaId: location.mediaId,
+      });
+      if (shared) continue;
+      await deleteMediaBytes(
+        input.uploadDir,
+        location.workspaceId,
+        location.mediaId,
+        mediaOptions,
+      ).catch(() => {
+        log.warn(`Project move left old media bytes for ${mediaId}`);
+      });
     }
   } catch (error) {
     for (const key of copiedKeys) {

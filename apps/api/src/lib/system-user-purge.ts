@@ -325,6 +325,8 @@ export type SystemUserPurgeSnapshot = {
     createdBy: string | null;
     workspaceId: string;
     knowledgeRecordId: string | null;
+    storageWorkspaceId?: string | null;
+    storageMediaId?: string | null;
   }>;
   systems: Array<{
     id: string;
@@ -391,6 +393,12 @@ export type SystemUserPurgePlan = {
     systems: string[];
     tags: string[];
   };
+  mediaLocations: Array<{
+    id: string;
+    workspaceId: string;
+    storageWorkspaceId: string | null;
+    storageMediaId: string | null;
+  }>;
   detaches: PurgeDetach[];
   conflicts: PurgeConflict[];
   skippedSharedItems: PurgeSkippedItem[];
@@ -1557,6 +1565,12 @@ export function planSystemUserPurge(
       systems: systemRows.map((row) => row.id),
       tags: tagRows.map((row) => row.id),
     },
+    mediaLocations: mediaRows.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspaceId,
+      storageWorkspaceId: row.storageWorkspaceId ?? null,
+      storageMediaId: row.storageMediaId ?? null,
+    })),
     detaches,
     conflicts,
     skippedSharedItems: skipped,
@@ -2028,6 +2042,8 @@ export async function loadSystemUserPurgeSnapshot(
       createdBy: workspaceMedia.createdBy,
       workspaceId: workspaceMedia.workspaceId,
       knowledgeRecordId: workspaceMedia.knowledgeRecordId,
+      storageWorkspaceId: workspaceMedia.storageWorkspaceId,
+      storageMediaId: workspaceMedia.storageMediaId,
     })
     .from(workspaceMedia)
     .where(
@@ -2720,9 +2736,12 @@ export async function runSystemUserPurge(
     dryRun: boolean;
     actorUserId: string;
     ipAddress?: string | null;
-    deleteMedia?: (
-      media: { id: string; workspaceId: string },
-    ) => Promise<number | void>;
+    deleteMedia?: (media: {
+      id: string;
+      workspaceId: string;
+      storageWorkspaceId?: string | null;
+      storageMediaId?: string | null;
+    }) => Promise<number | void>;
     refreshCostSnapshot?: (
       database: Database,
       projectId: string,
@@ -2846,12 +2865,13 @@ export async function runSystemUserPurge(
 
   let mediaStorageFailures = 0;
   if (input.deleteMedia) {
+    const locations = new Map(committedPlan.mediaLocations.map((row) => [row.id, row]));
     for (const mediaId of committedPlan.deleteIds.media) {
       try {
-        const reported = await input.deleteMedia({
-          id: mediaId,
-          workspaceId: input.workspaceId,
-        });
+        const located = locations.get(mediaId);
+        const reported = await input.deleteMedia(
+          located ?? { id: mediaId, workspaceId: input.workspaceId },
+        );
         if (typeof reported === 'number') mediaStorageFailures += reported;
       } catch (error) {
         mediaStorageFailures += 1;
