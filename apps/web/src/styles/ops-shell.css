@@ -2564,7 +2564,7 @@ button.kh-ops-color-swatch[aria-pressed='true'] {
   border: 0;
   background: transparent;
   color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
   font-size: 12px;
 }
 
@@ -4299,6 +4299,17 @@ a.kh-ops-record-link:hover {
   font-size: 10px;
 }
 
+/* Controls inside a card footer use the UI sans, same as the sidebar.
+   Caption text on the footer itself stays the small mono meta.
+   Item-key badges keep their own mono face. */
+.kh-ops-card-foot
+  :is(button, .kh-btn, .kh-input, input, select, textarea, .kh-page-num, .kh-page-num-active):not(
+    .kh-ops-key-badge
+  ) {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  letter-spacing: normal;
+}
+
 /* Catalogue pager uses the rail menu type, not the mono card footer. */
 .kh-ops-catalogue-pager,
 .kh-ops-catalogue-pager .kh-btn,
@@ -4589,7 +4600,7 @@ a.kh-ops-admin-link-card {
   border-radius: var(--kh-radius-sm);
   background: var(--kh-panel-solid);
   color: inherit;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
   font-size: 11px;
   cursor: pointer;
 }
