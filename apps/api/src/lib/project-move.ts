@@ -37,13 +37,15 @@ import { AppError } from '@project-knowledge-hub/domain';
 import { writeAuditEvent } from './identity.js';
 import {
   deleteMediaBytes,
+  deleteRelocatedMediaBytes,
   liveMediaSharesByteLocation,
+  MediaRelocateError,
   mediaByteLocation,
-  readMediaBytes,
-  writeMediaBytes,
+  relocateMediaBytes,
 } from './workspace-media.js';
 
-const MEDIA_URL = /\/api\/v1\/media\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+const MEDIA_URL =
+  /\/api\/v1\/media\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
 type AssignmentReason =
   | 'owner'
@@ -159,14 +161,8 @@ async function loadMoveGraph(database: Database, projectId: string) {
     initialRows,
     raciRows,
   ] = await Promise.all([
-    database.db
-      .select()
-      .from(systems)
-      .where(eq(systems.projectId, projectId)),
-    database.db
-      .select()
-      .from(knowledgeRecords)
-      .where(eq(knowledgeRecords.projectId, projectId)),
+    database.db.select().from(systems).where(eq(systems.projectId, projectId)),
+    database.db.select().from(knowledgeRecords).where(eq(knowledgeRecords.projectId, projectId)),
     database.db
       .select()
       .from(gitRepositoryConnections)
@@ -270,9 +266,7 @@ async function findConflicts(
   const [slugTaken] = await database.db
     .select({ id: projects.id, name: projects.name, slug: projects.slug })
     .from(projects)
-    .where(
-      and(eq(projects.workspaceId, targetWorkspaceId), eq(projects.slug, project.slug)),
-    )
+    .where(and(eq(projects.workspaceId, targetWorkspaceId), eq(projects.slug, project.slug)))
     .limit(1);
   if (slugTaken) {
     conflicts.push({
@@ -304,9 +298,7 @@ async function findConflicts(
     const taken = await database.db
       .select({ name: systems.name, slug: systems.slug })
       .from(systems)
-      .where(
-        and(eq(systems.workspaceId, targetWorkspaceId), inArray(systems.slug, systemSlugs)),
-      );
+      .where(and(eq(systems.workspaceId, targetWorkspaceId), inArray(systems.slug, systemSlugs)));
     for (const row of taken) {
       conflicts.push({ type: 'slug', entity: 'system', name: row.name, slug: row.slug });
     }
@@ -388,10 +380,7 @@ async function findConflicts(
           .where(
             and(
               inArray(documentImports.systemId, movingSystemIds),
-              or(
-                isNull(documentImports.projectId),
-                ne(documentImports.projectId, project.id),
-              ),
+              or(isNull(documentImports.projectId), ne(documentImports.projectId, project.id)),
             ),
           ),
         database.db
@@ -520,9 +509,7 @@ async function planTagRemaps(
       : await database.db
           .select()
           .from(tags)
-          .where(
-            and(eq(tags.organizationId, targetOrganizationId), inArray(tags.slug, slugs)),
-          );
+          .where(and(eq(tags.organizationId, targetOrganizationId), inArray(tags.slug, slugs)));
   const destBySlug = new Map(destinationTags.map((tag) => [tag.slug, tag]));
 
   return sourceTags.map((tag) => {
@@ -566,10 +553,7 @@ async function planMedia(
     .select({ id: projectItemMediaLinks.workspaceMediaId })
     .from(projectItemMediaLinks)
     .where(
-      and(
-        eq(projectItemMediaLinks.projectId, projectId),
-        eq(projectItemMediaLinks.kind, 'media'),
-      ),
+      and(eq(projectItemMediaLinks.projectId, projectId), eq(projectItemMediaLinks.kind, 'media')),
     );
   for (const row of itemLinks) {
     if (row.id) candidateIds.add(row.id);
@@ -606,9 +590,7 @@ async function planMedia(
       .innerJoin(documentImports, eq(documentImportMedia.importId, documentImports.id))
       .where(inArray(documentImportMedia.workspaceMediaId, [...candidateIds]));
     sharedByImport = new Set(
-      importLinks
-        .filter((row) => row.projectId !== projectId)
-        .map((row) => row.mediaId),
+      importLinks.filter((row) => row.projectId !== projectId).map((row) => row.mediaId),
     );
   }
 
@@ -762,8 +744,7 @@ export async function moveProjectToWorkspace(
     counts,
     tagRemaps,
     conflicts,
-    apiClientAccess:
-      input.viaMcp && crossOrganization ? 'left_client_organization' : 'unchanged',
+    apiClientAccess: input.viaMcp && crossOrganization ? 'left_client_organization' : 'unchanged',
   };
 
   if (dryRun) {
@@ -798,12 +779,13 @@ export async function moveProjectToWorkspace(
     });
   }
 
-    const copiedKeys: Array<{ workspaceId: string; mediaId: string }> = [];
-    const copiedDuplicateToIds = new Set<string>();
-    const copiedExclusiveIds: string[] = [];
-    const exclusiveByteLocations = new Map<string, { workspaceId: string; mediaId: string }>();
-    const mediaOptions = { blobStore: input.blobStore };
-    try {
+  const copiedKeys: Array<{ workspaceId: string; mediaId: string }> = [];
+  const copiedDuplicateToIds = new Set<string>();
+  const copiedExclusiveIds: string[] = [];
+  const exclusiveByteLocations = new Map<string, { workspaceId: string; mediaId: string }>();
+  const mediaOptions = { blobStore: input.blobStore };
+  let committed = false;
+  try {
     for (const mediaId of mediaPlan.exclusiveIds) {
       const [row] = await database.db
         .select()
@@ -812,41 +794,56 @@ export async function moveProjectToWorkspace(
         .limit(1);
       if (!row) continue;
       const location = mediaByteLocation(row);
-      const bytes = await readMediaBytes(
-        input.uploadDir,
-        location.workspaceId,
-        location.mediaId,
-        mediaOptions,
-      );
-      if (!bytes) {
-        log.warn(`Project move skipped missing media bytes for ${row.id}`);
-        continue;
-      }
-      await writeMediaBytes(input.uploadDir, targetWorkspace.id, row.id, bytes, {
-        ...mediaOptions,
-        contentType: row.contentType,
-      });
-      copiedKeys.push({ workspaceId: targetWorkspace.id, mediaId: row.id });
-      copiedExclusiveIds.push(row.id);
       exclusiveByteLocations.set(row.id, location);
+      const destination = { workspaceId: targetWorkspace.id, mediaId: row.id };
+      try {
+        await relocateMediaBytes({
+          uploadDir: input.uploadDir,
+          fromWorkspaceId: location.workspaceId,
+          fromMediaId: location.mediaId,
+          toWorkspaceId: destination.workspaceId,
+          toMediaId: destination.mediaId,
+          expectedByteSize: row.byteSize,
+          contentType: row.contentType,
+          blobStore: input.blobStore,
+        });
+        if (
+          location.workspaceId !== destination.workspaceId ||
+          location.mediaId !== destination.mediaId
+        ) {
+          copiedKeys.push(destination);
+        }
+        copiedExclusiveIds.push(row.id);
+      } catch (error) {
+        if (error instanceof MediaRelocateError && error.code === 'NOT_FOUND') {
+          log.warn(`Project move skipped missing media bytes for ${row.id}`);
+          continue;
+        }
+        throw error;
+      }
     }
     for (const duplicate of mediaPlan.duplicates) {
       const location = mediaByteLocation(duplicate.row);
-      const bytes = await readMediaBytes(
-        input.uploadDir,
-        location.workspaceId,
-        location.mediaId,
-        mediaOptions,
-      );
-      if (!bytes) {
-        log.warn(`Project move skipped missing shared media bytes for ${duplicate.fromId}`);
-        continue;
+      const destination = { workspaceId: targetWorkspace.id, mediaId: duplicate.toId };
+      try {
+        await relocateMediaBytes({
+          uploadDir: input.uploadDir,
+          fromWorkspaceId: location.workspaceId,
+          fromMediaId: location.mediaId,
+          toWorkspaceId: destination.workspaceId,
+          toMediaId: destination.mediaId,
+          expectedByteSize: duplicate.row.byteSize,
+          contentType: duplicate.row.contentType,
+          blobStore: input.blobStore,
+        });
+      } catch (error) {
+        if (error instanceof MediaRelocateError && error.code === 'NOT_FOUND') {
+          log.warn(`Project move skipped missing shared media bytes for ${duplicate.fromId}`);
+          continue;
+        }
+        throw error;
       }
-      await writeMediaBytes(input.uploadDir, targetWorkspace.id, duplicate.toId, bytes, {
-        ...mediaOptions,
-        contentType: duplicate.row.contentType,
-      });
-      copiedKeys.push({ workspaceId: targetWorkspace.id, mediaId: duplicate.toId });
+      copiedKeys.push(destination);
       copiedDuplicateToIds.add(duplicate.toId);
     }
 
@@ -920,11 +917,18 @@ export async function moveProjectToWorkspace(
       const uncopiedExclusiveIds = mediaPlan.exclusiveIds.filter(
         (id) => !copiedExclusiveIds.includes(id),
       );
-      if (uncopiedExclusiveIds.length > 0) {
+      for (const mediaId of uncopiedExclusiveIds) {
+        const location = exclusiveByteLocations.get(mediaId);
+        const alreadyCanonical =
+          location?.workspaceId === targetWorkspace.id && location.mediaId === mediaId;
         await tx
           .update(workspaceMedia)
-          .set({ workspaceId: targetWorkspace.id })
-          .where(inArray(workspaceMedia.id, uncopiedExclusiveIds));
+          .set({
+            workspaceId: targetWorkspace.id,
+            storageWorkspaceId: alreadyCanonical ? null : (location?.workspaceId ?? null),
+            storageMediaId: alreadyCanonical ? null : (location?.mediaId ?? null),
+          })
+          .where(eq(workspaceMedia.id, mediaId));
       }
       for (const duplicate of readyDuplicates) {
         const sourceRecordId = duplicate.row.knowledgeRecordId;
@@ -1026,9 +1030,7 @@ export async function moveProjectToWorkspace(
             await tx
               .update(systemTags)
               .set({ tagId: toTagId })
-              .where(
-                and(inArray(systemTags.systemId, systemIds), eq(systemTags.tagId, fromTagId)),
-              );
+              .where(and(inArray(systemTags.systemId, systemIds), eq(systemTags.tagId, fromTagId)));
           }
           if (recordIds.length > 0) {
             await tx
@@ -1088,33 +1090,41 @@ export async function moveProjectToWorkspace(
       return copied;
     });
 
+    committed = true;
     counts.auditCopied = auditCopied;
-    for (const [mediaId, location] of exclusiveByteLocations) {
-      if (location.workspaceId === targetWorkspace.id && location.mediaId === mediaId) {
-        continue;
+  } catch (error) {
+    if (!committed) {
+      for (const key of copiedKeys) {
+        await deleteMediaBytes(input.uploadDir, key.workspaceId, key.mediaId, mediaOptions).catch(
+          () => undefined,
+        );
       }
-      const shared = await liveMediaSharesByteLocation(database, {
+    }
+    throw error;
+  }
+
+  for (const mediaId of copiedExclusiveIds) {
+    const location = exclusiveByteLocations.get(mediaId);
+    if (!location) continue;
+    if (location.workspaceId === targetWorkspace.id && location.mediaId === mediaId) continue;
+    const shared = await liveMediaSharesByteLocation(
+      database,
+      {
         exceptMediaId: mediaId,
         workspaceId: location.workspaceId,
         mediaId: location.mediaId,
-      });
-      if (shared) continue;
-      await deleteMediaBytes(
-        input.uploadDir,
-        location.workspaceId,
-        location.mediaId,
-        mediaOptions,
-      ).catch(() => {
-        log.warn(`Project move left old media bytes for ${mediaId}`);
-      });
-    }
-  } catch (error) {
-    for (const key of copiedKeys) {
-      await deleteMediaBytes(input.uploadDir, key.workspaceId, key.mediaId, mediaOptions).catch(
-        () => undefined,
-      );
-    }
-    throw error;
+      },
+      { includeArchived: true },
+    );
+    if (shared) continue;
+    await deleteRelocatedMediaBytes(
+      input.uploadDir,
+      location.workspaceId,
+      location.mediaId,
+      input.blobStore,
+    ).catch(() => {
+      log.warn(`Project move left old media bytes for ${mediaId}`);
+    });
   }
 
   const metadata = {

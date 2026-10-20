@@ -15,5 +15,11 @@ export function createDisabledBlobStore(): BlobStore {
     async list() {
       return [];
     },
+    async head() {
+      return null;
+    },
+    async copy() {
+      throw new BlobStoreDisabledError();
+    },
   };
 }

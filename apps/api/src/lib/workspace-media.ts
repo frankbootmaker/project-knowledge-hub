@@ -1,11 +1,8 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { and, desc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm';
-import {
-  blobObjectKey,
-  type BlobStore,
-} from '@project-knowledge-hub/blob-store';
+import { blobObjectKey, type BlobStore } from '@project-knowledge-hub/blob-store';
 import {
   knowledgeRecords,
   projectItemMediaLinks,
@@ -80,6 +77,7 @@ export function mediaByteLocation(row: {
 export async function liveMediaSharesByteLocation(
   database: Database,
   input: { exceptMediaId: string; workspaceId: string; mediaId: string },
+  options?: { includeArchived?: boolean },
 ): Promise<boolean> {
   const [row] = await database.db
     .select({ id: workspaceMedia.id })
@@ -87,7 +85,7 @@ export async function liveMediaSharesByteLocation(
     .where(
       and(
         ne(workspaceMedia.id, input.exceptMediaId),
-        isNull(workspaceMedia.archivedAt),
+        options?.includeArchived ? undefined : isNull(workspaceMedia.archivedAt),
         sql`coalesce(${workspaceMedia.storageWorkspaceId}, ${workspaceMedia.workspaceId}) = ${input.workspaceId}::uuid`,
         sql`coalesce(${workspaceMedia.storageMediaId}, ${workspaceMedia.id}) = ${input.mediaId}::uuid`,
       ),
@@ -104,10 +102,7 @@ function mediaFilePath(uploadDir: string, workspaceId: string, mediaId: string):
   return path.join(path.resolve(uploadDir), workspaceId, mediaId);
 }
 
-async function ensureMediaParentDir(
-  uploadDir: string,
-  workspaceId: string,
-): Promise<void> {
+async function ensureMediaParentDir(uploadDir: string, workspaceId: string): Promise<void> {
   await mkdir(path.join(path.resolve(uploadDir), workspaceId), { recursive: true });
 }
 
@@ -214,6 +209,274 @@ export async function deleteMediaBytes(
   }
 }
 
+/**
+ * Delete a source object after its copy has been verified and the row updated.
+ * A blob failure leaves the local file in place.
+ */
+export async function deleteRelocatedMediaBytes(
+  uploadDir: string,
+  workspaceId: string,
+  mediaId: string,
+  blobStore?: BlobStore,
+): Promise<void> {
+  if (blobStore && blobStore.provider !== 'disabled') {
+    await blobStore.delete(mediaBlobKey(workspaceId, mediaId));
+  }
+  try {
+    await unlink(mediaFilePath(uploadDir, workspaceId, mediaId));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
+
+export type MediaRelocateCode = 'NOT_FOUND' | 'SIZE_MISMATCH' | 'ETAG_MISMATCH' | 'DEST_CONFLICT';
+
+export class MediaRelocateError extends Error {
+  readonly code: MediaRelocateCode;
+
+  constructor(code: MediaRelocateCode, message: string) {
+    super(message);
+    this.name = 'MediaRelocateError';
+    this.code = code;
+  }
+}
+
+export type RelocatedMedia = {
+  sizeBytes: number;
+  etag: string;
+  /** `media/{destinationWorkspaceId}/` — local directory, and the S3 key parent. */
+  destinationPrefix: string;
+  local: 'copied' | 'already' | 'absent';
+  blob: 'copied' | 'already' | 'absent' | 'disabled';
+};
+
+type LocalObject = { sizeBytes: number; etag: string };
+
+function sha256(buffer: Buffer): string {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
+function md5(buffer: Buffer): string {
+  return createHash('md5').update(buffer).digest('hex');
+}
+
+async function describeLocalFile(filePath: string): Promise<LocalObject | null> {
+  try {
+    const buffer = await readFile(filePath);
+    return { sizeBytes: buffer.byteLength, etag: sha256(buffer) };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function sameObject(left: LocalObject, right: LocalObject): boolean {
+  return left.sizeBytes === right.sizeBytes && left.etag === right.etag;
+}
+
+/**
+ * Copy one media object onto the destination workspace prefix and verify it.
+ * Never deletes the source. A destination written by this call is removed if
+ * verification fails, so a retry can copy again.
+ */
+export async function relocateMediaBytes(input: {
+  uploadDir: string;
+  fromWorkspaceId: string;
+  fromMediaId: string;
+  toWorkspaceId: string;
+  toMediaId: string;
+  expectedByteSize?: number;
+  contentType?: string;
+  blobStore?: BlobStore;
+}): Promise<RelocatedMedia> {
+  const destinationPrefix = `media/${input.toWorkspaceId}/`;
+  await ensureMediaParentDir(input.uploadDir, input.toWorkspaceId);
+
+  const fromPath = mediaFilePath(input.uploadDir, input.fromWorkspaceId, input.fromMediaId);
+  const toPath = mediaFilePath(input.uploadDir, input.toWorkspaceId, input.toMediaId);
+  const local = await relocateLocalFile(fromPath, toPath);
+
+  const blob = await relocateBlobObject({
+    blobStore: input.blobStore,
+    fromKey: mediaBlobKey(input.fromWorkspaceId, input.fromMediaId),
+    toKey: mediaBlobKey(input.toWorkspaceId, input.toMediaId),
+    contentType: input.contentType,
+    localPath: local.status === 'absent' ? null : toPath,
+  });
+
+  if (local.status === 'absent' && (blob.status === 'absent' || blob.status === 'disabled')) {
+    throw new MediaRelocateError(
+      'NOT_FOUND',
+      `Media object media/${input.fromWorkspaceId}/${input.fromMediaId} is missing`,
+    );
+  }
+
+  if (local.status === 'absent' && blob.status !== 'absent' && blob.status !== 'disabled') {
+    const bytes = await input.blobStore!.get(mediaBlobKey(input.toWorkspaceId, input.toMediaId));
+    if (!bytes) {
+      throw new MediaRelocateError(
+        'NOT_FOUND',
+        `Copied object media/${input.toWorkspaceId}/${input.toMediaId} could not be read back`,
+      );
+    }
+    await writeFile(toPath, bytes);
+    const written = await describeLocalFile(toPath);
+    if (!written || written.sizeBytes !== bytes.byteLength) {
+      await unlink(toPath).catch(() => undefined);
+      throw new MediaRelocateError(
+        'SIZE_MISMATCH',
+        `Local copy of media/${input.toWorkspaceId}/${input.toMediaId} failed verification`,
+      );
+    }
+  }
+
+  const sizeBytes = blob.sizeBytes ?? local.sizeBytes;
+  const etag = blob.etag ?? local.etag;
+  if (sizeBytes == null || !etag) {
+    throw new MediaRelocateError(
+      'NOT_FOUND',
+      `Media object media/${input.fromWorkspaceId}/${input.fromMediaId} is missing`,
+    );
+  }
+  if (input.expectedByteSize != null && sizeBytes !== input.expectedByteSize) {
+    throw new MediaRelocateError(
+      'SIZE_MISMATCH',
+      `Media ${input.toMediaId} is ${sizeBytes} bytes, expected ${input.expectedByteSize}`,
+    );
+  }
+  if (local.sizeBytes != null && blob.sizeBytes != null && local.sizeBytes !== blob.sizeBytes) {
+    throw new MediaRelocateError(
+      'SIZE_MISMATCH',
+      `Local and object storage sizes differ for media/${input.toWorkspaceId}/${input.toMediaId}`,
+    );
+  }
+
+  return {
+    sizeBytes,
+    etag,
+    destinationPrefix,
+    local: local.status === 'absent' ? 'copied' : local.status,
+    blob: blob.status,
+  };
+}
+
+async function relocateLocalFile(
+  fromPath: string,
+  toPath: string,
+): Promise<{ status: 'copied' | 'already' | 'absent'; sizeBytes?: number; etag?: string }> {
+  if (path.resolve(fromPath) === path.resolve(toPath)) {
+    const current = await describeLocalFile(toPath);
+    if (!current) return { status: 'absent' };
+    return { status: 'already', ...current };
+  }
+
+  const source = await describeLocalFile(fromPath);
+  const destination = await describeLocalFile(toPath);
+  if (!source && !destination) return { status: 'absent' };
+  if (!source && destination) return { status: 'already', ...destination };
+  if (source && destination) {
+    if (!sameObject(source, destination)) {
+      throw new MediaRelocateError(
+        'DEST_CONFLICT',
+        `Destination file ${toPath} does not match the source`,
+      );
+    }
+    return { status: 'already', ...destination };
+  }
+
+  await mkdir(path.dirname(toPath), { recursive: true });
+  await copyFile(fromPath, toPath);
+  const copied = await describeLocalFile(toPath);
+  if (!copied || !source || !sameObject(source, copied)) {
+    await unlink(toPath).catch(() => undefined);
+    throw new MediaRelocateError(
+      'ETAG_MISMATCH',
+      `Local copy ${toPath} failed size or checksum verification`,
+    );
+  }
+  return { status: 'copied', ...copied };
+}
+
+async function relocateBlobObject(input: {
+  blobStore?: BlobStore;
+  fromKey: string;
+  toKey: string;
+  contentType?: string;
+  localPath: string | null;
+}): Promise<{
+  status: 'copied' | 'already' | 'absent' | 'disabled';
+  sizeBytes?: number;
+  etag?: string;
+}> {
+  const store = input.blobStore;
+  if (!store || store.provider === 'disabled') return { status: 'disabled' };
+
+  const source = input.fromKey === input.toKey ? null : await store.head(input.fromKey);
+  const destination = await store.head(input.toKey);
+  if (input.fromKey === input.toKey) {
+    if (!destination) return { status: 'absent' };
+    if (!destination.etag) {
+      throw new MediaRelocateError('ETAG_MISMATCH', `Object ${input.toKey} has no etag`);
+    }
+    return { status: 'already', sizeBytes: destination.sizeBytes, etag: destination.etag };
+  }
+  if (source && destination) {
+    if (
+      destination.sizeBytes !== source.sizeBytes ||
+      !source.etag ||
+      !destination.etag ||
+      destination.etag !== source.etag
+    ) {
+      throw new MediaRelocateError(
+        'DEST_CONFLICT',
+        `Destination object ${input.toKey} does not match ${input.fromKey}`,
+      );
+    }
+    return { status: 'already', sizeBytes: destination.sizeBytes, etag: destination.etag };
+  }
+  if (!source && destination) {
+    if (!destination.etag) {
+      throw new MediaRelocateError('ETAG_MISMATCH', `Object ${input.toKey} has no etag`);
+    }
+    return { status: 'already', sizeBytes: destination.sizeBytes, etag: destination.etag };
+  }
+  if (source) {
+    if (!source.etag) {
+      throw new MediaRelocateError('ETAG_MISMATCH', `Object ${input.fromKey} has no etag`);
+    }
+    try {
+      await store.copy(input.fromKey, input.toKey);
+      const copied = await store.head(input.toKey);
+      if (!copied || copied.sizeBytes !== source.sizeBytes || copied.etag !== source.etag) {
+        await store.delete(input.toKey).catch(() => undefined);
+        throw new MediaRelocateError(
+          copied && copied.sizeBytes !== source.sizeBytes ? 'SIZE_MISMATCH' : 'ETAG_MISMATCH',
+          `Copied object ${input.toKey} does not match ${input.fromKey}`,
+        );
+      }
+      return { status: 'copied', sizeBytes: copied.sizeBytes, etag: copied.etag ?? source.etag };
+    } catch (error) {
+      if (error instanceof MediaRelocateError) throw error;
+      await store.delete(input.toKey).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  if (!input.localPath) return { status: 'absent' };
+  const body = await readFile(input.localPath);
+  await store.put({ key: input.toKey, body, contentType: input.contentType });
+  const uploaded = await store.head(input.toKey);
+  const etag = md5(body);
+  if (!uploaded || uploaded.sizeBytes !== body.byteLength || uploaded.etag !== etag) {
+    await store.delete(input.toKey).catch(() => undefined);
+    throw new MediaRelocateError(
+      uploaded && uploaded.sizeBytes !== body.byteLength ? 'SIZE_MISMATCH' : 'ETAG_MISMATCH',
+      `Uploaded object ${input.toKey} failed size or etag verification`,
+    );
+  }
+  return { status: 'copied', sizeBytes: uploaded.sizeBytes, etag };
+}
+
 export async function assertRecordInWorkspace(
   database: Database,
   workspaceId: string,
@@ -267,11 +530,7 @@ export async function createWorkspaceMedia(
   }
 
   if (input.knowledgeRecordId) {
-    await assertRecordInWorkspace(
-      database,
-      input.workspaceId,
-      input.knowledgeRecordId,
-    );
+    await assertRecordInWorkspace(database, input.workspaceId, input.knowledgeRecordId);
   }
 
   const mediaId = randomUUID();
@@ -332,9 +591,7 @@ export async function listWorkspaceMedia(
   }
   const query = input.query?.trim();
   if (query) {
-    conditions.push(
-      ilike(workspaceMedia.originalFilename, `%${escapeLike(query)}%`),
-    );
+    conditions.push(ilike(workspaceMedia.originalFilename, `%${escapeLike(query)}%`));
   }
   if (input.entityType && input.entityId) {
     const linked = await database.db
@@ -389,11 +646,7 @@ export async function updateWorkspaceMedia(
   }
 
   if (input.knowledgeRecordId !== undefined && input.knowledgeRecordId !== null) {
-    await assertRecordInWorkspace(
-      database,
-      existing.workspaceId,
-      input.knowledgeRecordId,
-    );
+    await assertRecordInWorkspace(database, existing.workspaceId, input.knowledgeRecordId);
   }
 
   const [updated] = await database.db

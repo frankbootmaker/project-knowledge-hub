@@ -1,15 +1,27 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import {
-  isBlobCredentialHeaderError,
-  sanitizeS3Credential,
-} from './credentials.js';
-import type { BlobObject, BlobPutInput, BlobStore, BlobStoreConfig } from './types.js';
+import { isBlobCredentialHeaderError, sanitizeS3Credential } from './credentials.js';
+import type { BlobHead, BlobObject, BlobPutInput, BlobStore, BlobStoreConfig } from './types.js';
+
+function normalizeEtag(value: string | undefined): string | null {
+  if (!value) return null;
+  const stripped = value.replaceAll('"', '').trim();
+  return stripped.length > 0 ? stripped : null;
+}
+
+function encodeCopySource(bucket: string, key: string): string {
+  return `${bucket}/${key
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')}`;
+}
 
 function asBuffer(body: unknown): Buffer | null {
   if (!body) return null;
@@ -27,9 +39,7 @@ async function streamToBuffer(body: {
   return null;
 }
 
-export function createS3BlobStore(
-  config: Extract<BlobStoreConfig, { provider: 's3' }>,
-): BlobStore {
+export function createS3BlobStore(config: Extract<BlobStoreConfig, { provider: 's3' }>): BlobStore {
   const accessKeyId = sanitizeS3Credential(config.accessKeyId);
   const secretAccessKey = sanitizeS3Credential(config.secretAccessKey);
   const client = new S3Client({
@@ -93,6 +103,36 @@ export function createS3BlobStore(
         new DeleteObjectCommand({
           Bucket: config.bucket,
           Key: withPrefix(key),
+        }),
+      );
+    },
+    async head(key: string): Promise<BlobHead | null> {
+      try {
+        const result = await client.send(
+          new HeadObjectCommand({
+            Bucket: config.bucket,
+            Key: withPrefix(key),
+          }),
+        );
+        return {
+          sizeBytes: result.ContentLength ?? 0,
+          etag: normalizeEtag(result.ETag),
+        };
+      } catch (error) {
+        const name = error instanceof Error ? error.name : '';
+        const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+          ?.httpStatusCode;
+        if (name === 'NotFound' || name === 'NoSuchKey' || status === 404) return null;
+        throw error;
+      }
+    },
+    async copy(fromKey: string, toKey: string) {
+      const destinationKey = withPrefix(toKey);
+      await client.send(
+        new CopyObjectCommand({
+          Bucket: config.bucket,
+          Key: destinationKey,
+          CopySource: encodeCopySource(config.bucket, withPrefix(fromKey)),
         }),
       );
     },

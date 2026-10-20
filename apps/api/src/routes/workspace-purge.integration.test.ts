@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { hashPassword } from '@project-knowledge-hub/auth';
+import type { BlobStore } from '@project-knowledge-hub/blob-store';
 import { loadEnv } from '@project-knowledge-hub/config';
 import {
   createDatabase,
@@ -20,6 +21,7 @@ import {
   type Database,
 } from '@project-knowledge-hub/database';
 import { buildApp } from '../app.js';
+import { relocatePendingWorkspaceMedia } from '../lib/relocate-workspace-media.js';
 import { readMediaBytes, writeMediaBytes } from '../lib/workspace-media.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -200,6 +202,8 @@ describe.skipIf(!hasIntegrationEnv)('Workspace purge and moved item media', () =
     await database!.client.unsafe(repairSql);
   }
 
+  const silentLog = { info: () => undefined, error: () => undefined };
+
   it('moves task media with the project, then purges the source workspace', async () => {
     const source = await makeWorkspace(`Source ${randomUUID().slice(0, 8)}`);
     const dest = await makeWorkspace(`Dest ${randomUUID().slice(0, 8)}`);
@@ -339,6 +343,7 @@ describe.skipIf(!hasIntegrationEnv)('Workspace purge and moved item media', () =
       expect(row?.workspaceId).toBe(dest.id);
       expect(row?.storageWorkspaceId).toBe(source.id);
       expect(row?.storageMediaId).toBe(media.id);
+      expect(await readMediaBytes(uploadDir, source.id, media.id)).not.toBeNull();
     }
     const links = await database!.db
       .select()
@@ -353,6 +358,36 @@ describe.skipIf(!hasIntegrationEnv)('Workspace purge and moved item media', () =
     });
     expect(viewed.statusCode).toBe(200);
     expect(viewed.rawPayload.equals(first)).toBe(true);
+
+    const relocated = await relocatePendingWorkspaceMedia({
+      database: database!,
+      uploadDir,
+      mediaIds: [mediaA.id, mediaB.id],
+      log: silentLog,
+    });
+    expect(relocated.failed).toBe(0);
+    expect(relocated.relocated).toBe(2);
+    expect(relocated.sourceDeleteFailed).toBe(0);
+    for (const media of [mediaA, mediaB]) {
+      const [row] = await database!.db
+        .select()
+        .from(workspaceMedia)
+        .where(eq(workspaceMedia.id, media.id));
+      expect(row?.storageWorkspaceId).toBeNull();
+      expect(row?.storageMediaId).toBeNull();
+      expect(await readMediaBytes(uploadDir, source.id, media.id)).toBeNull();
+    }
+    expect((await readMediaBytes(uploadDir, dest.id, mediaA.id))?.equals(first)).toBe(true);
+    expect((await readMediaBytes(uploadDir, dest.id, mediaB.id))?.equals(second)).toBe(true);
+
+    const again = await relocatePendingWorkspaceMedia({
+      database: database!,
+      uploadDir,
+      mediaIds: [mediaA.id, mediaB.id],
+      log: silentLog,
+    });
+    expect(again.relocated).toBe(0);
+    expect(again.failed).toBe(0);
 
     await repair();
     const copies = await database!.db
@@ -428,6 +463,26 @@ describe.skipIf(!hasIntegrationEnv)('Workspace purge and moved item media', () =
     expect(copy?.workspaceId).toBe(dest.id);
     expect(copy?.storageWorkspaceId).toBe(source.id);
     expect(copy?.storageMediaId).toBe(media.id);
+    const beforeMove = await database!.db
+      .select({ id: workspaceMedia.id })
+      .from(workspaceMedia)
+      .where(eq(workspaceMedia.storageMediaId, media.id));
+    expect(beforeMove).toHaveLength(1);
+    const relocated = await relocatePendingWorkspaceMedia({
+      database: database!,
+      uploadDir,
+      mediaIds: [copy!.id],
+      log: silentLog,
+    });
+    expect(relocated.relocated).toBe(1);
+    expect(relocated.failed).toBe(0);
+    const [relocatedCopy] = await database!.db
+      .select()
+      .from(workspaceMedia)
+      .where(eq(workspaceMedia.id, copy!.id));
+    expect(relocatedCopy?.storageWorkspaceId).toBeNull();
+    expect((await readMediaBytes(uploadDir, dest.id, copy!.id))?.equals(bytes)).toBe(true);
+    expect((await readMediaBytes(uploadDir, source.id, media.id))?.equals(bytes)).toBe(true);
     const viewed = await app!.inject({
       method: 'GET',
       url: `/api/v1/media/${copy!.id}`,
@@ -440,7 +495,131 @@ describe.skipIf(!hasIntegrationEnv)('Workspace purge and moved item media', () =
       .select({ id: workspaceMedia.id })
       .from(workspaceMedia)
       .where(eq(workspaceMedia.storageMediaId, media.id));
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('keeps the source object when relocation fails, then resumes', async () => {
+    const source = await makeWorkspace(`Retry source ${randomUUID().slice(0, 8)}`);
+    const dest = await makeWorkspace(`Retry dest ${randomUUID().slice(0, 8)}`);
+    const bytes = Buffer.from(`retry-${randomUUID()}`);
+    const media = await insertMedia(source.id, bytes);
+    await database!.db
+      .update(workspaceMedia)
+      .set({
+        workspaceId: dest.id,
+        storageWorkspaceId: source.id,
+        storageMediaId: media.id,
+      })
+      .where(eq(workspaceMedia.id, media.id));
+
+    const planned = await relocatePendingWorkspaceMedia({
+      database: database!,
+      uploadDir,
+      mediaIds: [media.id],
+      dryRun: true,
+      log: silentLog,
+    });
+    expect(planned.planned).toBe(1);
+    expect(planned.relocated).toBe(0);
+    expect((await readMediaBytes(uploadDir, source.id, media.id))?.equals(bytes)).toBe(true);
+    expect(await readMediaBytes(uploadDir, dest.id, media.id)).toBeNull();
+
+    const deleted: string[] = [];
+    const failingStore = {
+      provider: 's3',
+      async put() {
+        throw new Error('s3 down');
+      },
+      async get() {
+        return null;
+      },
+      async delete(key: string) {
+        deleted.push(key);
+        throw new Error('refusing to delete');
+      },
+      async list() {
+        return [];
+      },
+      async head() {
+        return null;
+      },
+      async copy() {
+        throw new Error('s3 down');
+      },
+    } as BlobStore;
+
+    const failed = await relocatePendingWorkspaceMedia({
+      database: database!,
+      uploadDir,
+      blobStore: failingStore,
+      mediaIds: [media.id],
+      log: silentLog,
+    });
+    expect(failed.relocated).toBe(0);
+    expect(failed.failed).toBe(1);
+    expect(failed.failures[0]?.message).toMatch(/s3 down/);
+    expect(deleted).toEqual([]);
+    const [pending] = await database!.db
+      .select()
+      .from(workspaceMedia)
+      .where(eq(workspaceMedia.id, media.id));
+    expect(pending?.storageWorkspaceId).toBe(source.id);
+    expect((await readMediaBytes(uploadDir, source.id, media.id))?.equals(bytes)).toBe(true);
+
+    const sourceKey = `media/${source.id}/${media.id}`;
+    const destKey = `media/${dest.id}/${media.id}`;
+    const etag = createHash('md5').update(bytes).digest('hex');
+    const objects = new Map<string, { body: Buffer; etag: string }>();
+    const deletedKeys: string[] = [];
+    objects.set(sourceKey, { body: Buffer.from(bytes), etag });
+    const workingStore = {
+      provider: 's3',
+      async put(input: { key: string; body: Buffer | Uint8Array }) {
+        const body = Buffer.from(input.body);
+        objects.set(input.key, { body, etag: createHash('md5').update(body).digest('hex') });
+      },
+      async get(key: string) {
+        return objects.get(key)?.body ?? null;
+      },
+      async delete(key: string) {
+        deletedKeys.push(key);
+        objects.delete(key);
+      },
+      async list() {
+        return [];
+      },
+      async head(key: string) {
+        const found = objects.get(key);
+        if (!found) return null;
+        return { sizeBytes: found.body.byteLength, etag: found.etag };
+      },
+      async copy(fromKey: string, toKey: string) {
+        const found = objects.get(fromKey);
+        if (!found) throw new Error('missing');
+        objects.set(toKey, { body: Buffer.from(found.body), etag: found.etag });
+      },
+    } as BlobStore;
+    const resumed = await relocatePendingWorkspaceMedia({
+      database: database!,
+      uploadDir,
+      blobStore: workingStore,
+      mediaIds: [media.id],
+      log: silentLog,
+    });
+    expect(resumed.failed).toBe(0);
+    expect(resumed.relocated).toBe(1);
+    expect(resumed.sourceDeleteFailed).toBe(0);
+    expect(objects.get(destKey)?.etag).toBe(etag);
+    expect(objects.has(sourceKey)).toBe(false);
+    expect(deletedKeys).toContain(sourceKey);
+    const [done] = await database!.db
+      .select()
+      .from(workspaceMedia)
+      .where(eq(workspaceMedia.id, media.id));
+    expect(done?.workspaceId).toBe(dest.id);
+    expect(done?.storageWorkspaceId).toBeNull();
+    expect((await readMediaBytes(uploadDir, dest.id, media.id))?.equals(bytes)).toBe(true);
+    expect(await readMediaBytes(uploadDir, source.id, media.id)).toBeNull();
   });
 
   it('purges an empty workspace and an archived workspace that only holds its own media', async () => {

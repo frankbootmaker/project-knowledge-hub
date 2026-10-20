@@ -2,11 +2,17 @@
 -- a different workspace than the item's project (left behind when a project
 -- was moved). Idempotent. Never deletes workspace_media rows or files.
 --
--- Bytes stay where they already are (media/{originalWorkspaceId}/{mediaId}).
--- The migrate container has no data volume, so this file cannot copy objects.
--- storage_workspace_id / storage_media_id record that folder. Reads use them
--- when set, so the images stay viewable after the row's workspace_id changes
--- and after the original workspace is purged (purge does not delete files).
+-- This migration cannot copy S3 objects: the migrate container has no data
+-- volume and no bucket credentials. It retargets rows and records the folder
+-- that still holds the bytes in storage_workspace_id / storage_media_id.
+-- Those columns are a transitional fallback so /api/v1/media/{id} keeps
+-- working until the post-deploy relocator runs. They are not the steady state.
+--
+-- Run apps/api src/scripts/relocate-workspace-media.ts after this migration.
+-- For each pointer, that job creates the destination prefix, copies the object
+-- to media/{workspaceId}/{id}, verifies size and etag, clears the pointer, and
+-- only then deletes the source when no other row still uses it. A shared copy
+-- gets its own object. Failures are logged and the source is kept.
 --
 -- For each mismatched media id, holders are workspaces that still reference it
 -- via an item link, knowledge_record_id, markdown/html embed, or doc import:

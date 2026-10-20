@@ -1177,9 +1177,10 @@ export const workspaceMedia = pgTable(
       .notNull()
       .defaultNow(),
     /**
-     * Byte folder when this row's workspace changed without copying the file.
-     * Null means the bytes are at workspace_id/id. No foreign key: the original
-     * workspace may be purged while the file must stay readable.
+     * Transitional byte folder. Set when a row moved workspace before its object
+     * was copied. Null means the bytes are at workspace_id/id. The relocator
+     * clears this after a verified copy. No foreign key: the original workspace
+     * may be purged while a failed relocate still needs the old path.
      */
     storageWorkspaceId: uuid('storage_workspace_id'),
     /** Byte file id. Null means this row's id. Paired with storage_workspace_id. */
