@@ -1,12 +1,5 @@
-export {
-  createBlobStore,
-  parseBlobProviderName,
-  blobObjectKey,
-} from './factory.js';
-export {
-  isBlobCredentialHeaderError,
-  sanitizeS3Credential,
-} from './credentials.js';
+export { createBlobStore, parseBlobProviderName, blobObjectKey } from './factory.js';
+export { isBlobCredentialHeaderError, sanitizeS3Credential } from './credentials.js';
 export { createDisabledBlobStore } from './disabled.js';
 export { createS3BlobStore } from './s3.js';
 export {
@@ -18,6 +11,7 @@ export {
 export {
   BLOB_PROVIDERS,
   BlobStoreDisabledError,
+  type BlobHead,
   type BlobObject,
   type BlobProviderName,
   type BlobPurpose,

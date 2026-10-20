@@ -3,14 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { purgeFailureLines, type PurgeErrorBody } from '../lib/purge-error';
 import { Button, ErrorText } from './ui';
 
-export type PurgeEntityKind =
-  | 'workspace'
-  | 'project'
-  | 'system'
-  | 'record'
-  | 'import';
+export type PurgeEntityKind = 'workspace' | 'project' | 'system' | 'record' | 'import';
 
 const pathByKind: Record<PurgeEntityKind, string> = {
   workspace: 'workspaces',
@@ -57,14 +53,14 @@ export function PurgeEntityButton({
   const [confirming, setConfirming] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorLines, setErrorLines] = useState<string[]>([]);
 
   async function purgeEntity() {
     if (!acknowledged) {
       return;
     }
     setPending(true);
-    setError(null);
+    setErrorLines([]);
     try {
       const response = await fetch(`/api/v1/${pathByKind[kind]}/${entityId}/purge`, {
         method: 'POST',
@@ -76,13 +72,16 @@ export function PurgeEntityButton({
         body: JSON.stringify({ confirmDestroy: true }),
       });
       if (!response.ok && response.status !== 204) {
-        const payload = (await response.json()) as { error?: { message?: string } };
-        throw new Error(payload.error?.message ?? t('failedDelete'));
+        const payload = (await response.json().catch(() => ({}))) as PurgeErrorBody;
+        setErrorLines(
+          purgeFailureLines(payload, (key, values) => t(key as 'failedDelete', values)),
+        );
+        return;
       }
       router.push(redirectOnPurge);
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('failedDelete'));
+    } catch {
+      setErrorLines([t('failedDelete')]);
     } finally {
       setPending(false);
     }
@@ -97,7 +96,7 @@ export function PurgeEntityButton({
         onClick={() => {
           setConfirming(true);
           setAcknowledged(false);
-          setError(null);
+          setErrorLines([]);
         }}
       >
         {t('deletePermanently')}
@@ -107,13 +106,9 @@ export function PurgeEntityButton({
 
   return (
     <div className="kh-ops-confirm">
-      <p className="m-0 text-sm text-danger">
-        {t('confirmDelete', { name: entityName })}
-      </p>
+      <p className="m-0 text-sm text-danger">{t('confirmDelete', { name: entityName })}</p>
       <p className="m-0 text-xs text-ink-muted">{t(hintKeyByKind[kind])}</p>
-      {extraHint ? (
-        <p className="m-0 text-xs text-ink-muted">{extraHint}</p>
-      ) : null}
+      {extraHint ? <p className="m-0 text-xs text-ink-muted">{extraHint}</p> : null}
       <label className="flex items-start gap-2 text-sm text-ink">
         <input
           type="checkbox"
@@ -123,7 +118,14 @@ export function PurgeEntityButton({
         />
         <span>{t('deleteAcknowledge')}</span>
       </label>
-      {error ? <ErrorText>{error}</ErrorText> : null}
+      {errorLines.length === 1 ? <ErrorText>{errorLines[0]}</ErrorText> : null}
+      {errorLines.length > 1 ? (
+        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm text-danger">
+          {errorLines.map((line, index) => (
+            <li key={`${index}-${line}`}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
@@ -140,7 +142,7 @@ export function PurgeEntityButton({
           onClick={() => {
             setConfirming(false);
             setAcknowledged(false);
-            setError(null);
+            setErrorLines([]);
           }}
         >
           {tCommon('cancel')}

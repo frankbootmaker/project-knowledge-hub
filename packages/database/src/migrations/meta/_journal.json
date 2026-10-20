@@ -526,6 +526,13 @@
       "when": 1793750400000,
       "tag": "0074_ai_usage_import_summary",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793836800000,
+      "tag": "0075_repair_cross_workspace_item_media",
+      "breakpoints": true
     }
   ]
 }
