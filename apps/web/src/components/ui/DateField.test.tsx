@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { act, type ReactNode } from 'react';
+import { act, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DateField, DateRangeFields, parseDateInput } from './DateField';
@@ -69,11 +69,11 @@ describe('DateField', () => {
   it('fills the field from the calendar and still accepts typed ISO', () => {
     const changes: string[] = [];
     render(<DateField value="" onChange={(iso) => changes.push(iso)} />);
-    const open = [...document.body.querySelectorAll('button')].find(
-      (button) => button.getAttribute('aria-label') === 'openCalendar',
-    );
+    const open = document.body.querySelector('.kh-date-icon') as HTMLButtonElement;
+    expect(open.closest('.kh-date-control')?.querySelector('[data-date-field]')).toBeTruthy();
+    expect(document.body.querySelector('.kh-date-open')).toBeNull();
     act(() => {
-      open?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      open.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     const dialog = document.body.querySelector('[role="dialog"]');
     expect(dialog).toBeTruthy();
@@ -112,24 +112,34 @@ describe('DateField', () => {
   });
 });
 
+function RangeHarness() {
+  const [range, setRange] = useState({ from: '', to: '' });
+  return (
+    <DateRangeFields
+      from={range.from}
+      to={range.to}
+      fromLabel="From"
+      toLabel="To"
+      onChange={setRange}
+    />
+  );
+}
+
 describe('DateRangeFields', () => {
-  it('selects one day and then a range', () => {
-    const changes: Array<{ from: string; to: string }> = [];
-    render(
-      <DateRangeFields
-        from=""
-        to=""
-        fromLabel="From"
-        toLabel="To"
-        onChange={(next) => changes.push(next)}
-      />,
-    );
-    const open = [...document.body.querySelectorAll('button')].find(
-      (button) => button.getAttribute('aria-label') === 'openCalendar',
-    );
+  it('keeps the calendar icon inside each field and one picker sets both dates', () => {
+    render(<RangeHarness />);
+    const controls = [...document.body.querySelectorAll('.kh-date-control')];
+    expect(controls).toHaveLength(2);
+    for (const control of controls) {
+      expect(control.querySelector('.kh-date-icon')).toBeTruthy();
+      expect(control.querySelector('[data-date-field]')).toBeTruthy();
+    }
+    expect(document.body.querySelector('.kh-date-open')).toBeNull();
+    const open = controls[1]?.querySelector('.kh-date-icon') as HTMLButtonElement;
     act(() => {
-      open?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      open.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     const day = (label: string) =>
       [...document.body.querySelectorAll('.kh-date-day')].find(
         (button) => button.textContent === label,
@@ -137,14 +147,27 @@ describe('DateRangeFields', () => {
     act(() => {
       day('6')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(changes.at(-1)).toEqual({ from: expect.stringMatching(/-06$/), to: expect.stringMatching(/-06$/) });
     act(() => {
       day('19')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    const last = changes.at(-1);
-    expect(last?.from.endsWith('-06')).toBe(true);
-    expect(last?.to.endsWith('-19')).toBe(true);
-    expect(last && last.from < last.to).toBe(true);
+    const inputs = [...document.body.querySelectorAll('[data-date-field]')] as HTMLInputElement[];
+    expect(inputs).toHaveLength(2);
+    const start = inputs[0]?.getAttribute('data-iso') ?? '';
+    const end = inputs[1]?.getAttribute('data-iso') ?? '';
+    expect(start).toMatch(/-06$/);
+    expect(end).toMatch(/-19$/);
+    expect(start < end).toBe(true);
+    act(() => {
+      open.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const between = [...document.body.querySelectorAll('.kh-date-day.is-in-range')];
+    expect(between.length).toBeGreaterThan(0);
+    expect(
+      between.every((button) => {
+        const iso = button.getAttribute('data-iso') ?? '';
+        return iso > start && iso < end;
+      }),
+    ).toBe(true);
   });
 });
 

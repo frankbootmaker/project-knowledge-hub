@@ -15,7 +15,8 @@ import {
 import { formatAiBillingMonth, formatServiceDate } from '../../lib/ai-billing-month';
 import { formatMoney, parseOptionalNumber } from '../../lib/project-currency';
 import { AiBillingChart, AiBillingChartLegend } from '../AiBillingChart';
-import { Button, DateField, ErrorText, Field, Input, Modal, Select, useToast } from '../ui';
+import { Button, ErrorText, Field, Input, Modal, Select, useToast } from '../ui';
+import { DateRangeFields } from '../ui/DateField';
 import {
   AiCostGrainToggle,
   AiCostPeriodForm,
@@ -168,20 +169,6 @@ function saveBlocker(
   if (!providerName(draft)) return 'providerRequired';
   if (draft.amount.trim() === '') return 'amountRequired';
   return null;
-}
-
-/** Day after a YYYY-MM-DD date. The service end must be after the start. */
-function nextCalendarDay(ymd: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
-  if (!match) return '';
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day + 1));
-  const nextYear = date.getUTCFullYear();
-  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const nextDay = String(date.getUTCDate()).padStart(2, '0');
-  return `${nextYear}-${nextMonth}-${nextDay}`;
 }
 
 function emptyDraft(currency: ProjectCurrency): EntryDraft {
@@ -1182,29 +1169,24 @@ export function AiCostAdmin({
         {draft ? (
           <div className="kh-ops-form-grid">
             {error ? <div className="kh-ops-field-span"><ErrorText>{error}</ErrorText></div> : null}
-            <Field label={t('serviceStart')}>
-              <DateField
-                value={draft.servicePeriodStart}
-                disabled={pending}
-                onChange={(iso) => setDraft({ ...draft, servicePeriodStart: iso })}
-              />
-            </Field>
-            <Field label={t('serviceEnd')}>
-              <DateField
-                value={draft.servicePeriodEnd}
-                min={
-                  draft.servicePeriodStart
-                    ? nextCalendarDay(draft.servicePeriodStart)
-                    : undefined
-                }
+            <div className="kh-ops-field-span">
+              <DateRangeFields
+                from={draft.servicePeriodStart}
+                to={draft.servicePeriodEnd}
+                fromLabel={t('serviceStart')}
+                toLabel={t('serviceEnd')}
                 disabled={pending}
                 invalid={rangeInvalid}
-                onChange={(iso) => setDraft({ ...draft, servicePeriodEnd: iso })}
+                toHint={t('serviceEndHint')}
+                onChange={(next) =>
+                  setDraft({
+                    ...draft,
+                    servicePeriodStart: next.from,
+                    servicePeriodEnd: next.to,
+                  })
+                }
               />
-              <span className="mt-1 block text-[13px] font-normal normal-case tracking-normal text-ink-muted">
-                {t('serviceEndHint')}
-              </span>
-            </Field>
+            </div>
             {rangeInvalid ? (
               <div className="kh-ops-field-span">
                 <ErrorText>{t('serviceRangeInvalid')}</ErrorText>

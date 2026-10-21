@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type Ref,
+} from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { addCalendarDays, isIsoDay } from '@project-knowledge-hub/domain';
 import { cn } from '../../lib/cn';
@@ -123,6 +130,8 @@ type CalendarProps = {
   onMonth: (month: string) => void;
   locale: string;
   selected: string[];
+  /** Inclusive range. Days strictly between the ends use the in-range wash. */
+  span?: { start: string; end: string };
   min?: string;
   max?: string;
   onPick: (iso: string) => void;
@@ -134,6 +143,7 @@ function CalendarGrid({
   onMonth,
   locale,
   selected,
+  span,
   min,
   max,
   onPick,
@@ -205,6 +215,9 @@ function CalendarGrid({
               if (!day) return <span key={`${weekIndex}-${dayIndex}`} role="gridcell" />;
               const disabled = !inBounds(day, min, max);
               const isSelected = selected.includes(day);
+              const inSpan = Boolean(
+                span && span.start !== span.end && day > span.start && day < span.end,
+              );
               return (
                 <span key={day} role="gridcell">
                   <button
@@ -213,9 +226,14 @@ function CalendarGrid({
                       if (node) buttonRefs.current.set(day, node);
                       else buttonRefs.current.delete(day);
                     }}
-                    className={cn('kh-date-day', isSelected && 'is-selected')}
+                    className={cn(
+                      'kh-date-day',
+                      inSpan && 'is-in-range',
+                      isSelected && 'is-selected',
+                    )}
                     disabled={disabled}
                     tabIndex={day === focus ? 0 : -1}
+                    data-iso={day}
                     aria-selected={isSelected}
                     aria-label={formatIsoDate(day, locale)}
                     onClick={() => onPick(day)}
@@ -308,37 +326,33 @@ export function DateField({
 
   return (
     <div ref={rootRef} className="kh-date-field">
-      <Input
-        id={inputId}
-        name={name}
-        data-date-field=""
-        data-iso={value}
-        value={text}
-        disabled={disabled}
-        aria-invalid={invalid || undefined}
-        autoComplete="off"
-        onChange={(event) => {
-          const next = event.target.value;
-          setText(next);
-          const parsed = parseDateInput(next, locale);
-          if (parsed != null) onChange(parsed);
-        }}
-        onBlur={() => commit(text)}
-      />
-      <Button
-        ref={openButtonRef}
-        type="button"
-        variant="secondary"
-        className="kh-date-open"
-        disabled={disabled}
-        aria-label={t('openCalendar')}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? popoverId : undefined}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <CalendarIcon />
-      </Button>
+      <span className="kh-date-control">
+        <Input
+          id={inputId}
+          name={name}
+          data-date-field=""
+          data-iso={value}
+          value={text}
+          disabled={disabled}
+          aria-invalid={invalid || undefined}
+          autoComplete="off"
+          onChange={(event) => {
+            const next = event.target.value;
+            setText(next);
+            const parsed = parseDateInput(next, locale);
+            if (parsed != null) onChange(parsed);
+          }}
+          onBlur={() => commit(text)}
+        />
+        <CalendarTrigger
+          buttonRef={openButtonRef}
+          disabled={disabled}
+          open={open}
+          controls={open ? popoverId : undefined}
+          label={t('openCalendar')}
+          onClick={() => setOpen((current) => !current)}
+        />
+      </span>
       {open ? (
         <div id={popoverId}>
           <CalendarGrid
@@ -371,6 +385,8 @@ export function DateRangeFields({
   fromLabel,
   toLabel,
   disabled,
+  invalid,
+  toHint,
 }: {
   from: string;
   to: string;
@@ -378,6 +394,9 @@ export function DateRangeFields({
   fromLabel: string;
   toLabel: string;
   disabled?: boolean;
+  /** Marks the end field when the range is not usable. */
+  invalid?: boolean;
+  toHint?: string;
 }) {
   const t = useTranslations('financials');
   const locale = useLocale();
@@ -422,56 +441,66 @@ export function DateRangeFields({
     openButtonRef.current?.focus();
   }
 
-  const selected = [from, to].filter((day) => isIsoDay(day));
-  const rangeDays =
-    isIsoDay(from) && isIsoDay(to) && from !== to
-      ? selected
-      : selected;
+  const span = rangeSpan(from, to);
+
+  function toggle(event: ReactMouseEvent<HTMLButtonElement>) {
+    openButtonRef.current = event.currentTarget;
+    setAnchor(null);
+    setOpen((current) => !current);
+  }
 
   return (
     <div ref={rootRef} className="kh-date-range">
-      <label className="kh-date-range-field">
+      <label className="kh-label kh-date-range-field">
         <span>{fromLabel}</span>
-        <DateText
-          value={from}
-          locale={locale}
-          disabled={disabled}
-          onCommit={(iso) => onChange({ from: iso, to: to && iso && to < iso ? iso : to })}
-        />
+        <span className="kh-date-control">
+          <DateText
+            value={from}
+            locale={locale}
+            disabled={disabled}
+            onCommit={(iso) => onChange({ from: iso, to: to && iso && to < iso ? iso : to })}
+          />
+          <CalendarTrigger
+            disabled={disabled}
+            open={open}
+            controls={open ? popoverId : undefined}
+            label={t('openCalendar')}
+            onClick={toggle}
+          />
+        </span>
       </label>
-      <label className="kh-date-range-field">
+      <label className="kh-label kh-date-range-field">
         <span>{toLabel}</span>
-        <DateText
-          value={to}
-          locale={locale}
-          disabled={disabled}
-          onCommit={(iso) => onChange({ from: from && iso && iso < from ? iso : from, to: iso })}
-        />
+        <span className="kh-date-control">
+          <DateText
+            value={to}
+            locale={locale}
+            disabled={disabled}
+            invalid={invalid}
+            onCommit={(iso) => onChange({ from: from && iso && iso < from ? iso : from, to: iso })}
+          />
+          <CalendarTrigger
+            disabled={disabled}
+            open={open}
+            controls={open ? popoverId : undefined}
+            label={t('openCalendar')}
+            onClick={toggle}
+          />
+        </span>
+        {toHint ? (
+          <span className="mt-1 block text-[13px] font-normal normal-case tracking-normal text-ink-muted">
+            {toHint}
+          </span>
+        ) : null}
       </label>
-      <Button
-        ref={openButtonRef}
-        type="button"
-        variant="secondary"
-        className="kh-date-open self-end"
-        disabled={disabled}
-        aria-label={t('openCalendar')}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? popoverId : undefined}
-        onClick={() => {
-          setAnchor(null);
-          setOpen((current) => !current);
-        }}
-      >
-        <CalendarIcon />
-      </Button>
       {open ? (
         <div id={popoverId} className="kh-date-range-popover">
           <CalendarGrid
             month={month}
             onMonth={setMonth}
             locale={locale}
-            selected={rangeDays}
+            selected={span ? [span.start, span.end] : []}
+            span={span ?? undefined}
             onPick={pick}
             onClose={() => {
               setOpen(false);
@@ -484,15 +513,58 @@ export function DateRangeFields({
   );
 }
 
+function rangeSpan(from: string, to: string): { start: string; end: string } | null {
+  const startOk = isIsoDay(from);
+  const endOk = isIsoDay(to);
+  if (!startOk && !endOk) return null;
+  if (startOk && !endOk) return { start: from, end: from };
+  if (!startOk && endOk) return { start: to, end: to };
+  return from <= to ? { start: from, end: to } : { start: to, end: from };
+}
+
+function CalendarTrigger({
+  buttonRef,
+  disabled,
+  open,
+  controls,
+  label,
+  onClick,
+}: {
+  buttonRef?: Ref<HTMLButtonElement>;
+  disabled?: boolean;
+  open: boolean;
+  controls?: string;
+  label: string;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className="kh-date-icon"
+      disabled={disabled}
+      aria-label={label}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      aria-controls={controls}
+      onClick={onClick}
+    >
+      <CalendarIcon />
+    </button>
+  );
+}
+
 function DateText({
   value,
   locale,
   disabled,
+  invalid,
   onCommit,
 }: {
   value: string;
   locale: string;
   disabled?: boolean;
+  invalid?: boolean;
   onCommit: (iso: string) => void;
 }) {
   const [text, setText] = useState(() => (value ? formatIsoDate(value, locale) : ''));
@@ -505,6 +577,7 @@ function DateText({
       data-iso={value}
       value={text}
       disabled={disabled}
+      aria-invalid={invalid || undefined}
       autoComplete="off"
       onChange={(event) => {
         const next = event.target.value;
