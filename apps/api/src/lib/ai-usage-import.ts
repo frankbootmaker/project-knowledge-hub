@@ -16,6 +16,8 @@ import {
   linkUsageRows,
   parseUsageSource,
   previewUsageImport,
+  priceImportedUsage,
+  roundAiMoney,
   type AiUsageImportSource,
   type AiUsageImportSummary,
   type AiUsageRowError,
@@ -23,6 +25,7 @@ import {
   type UsageImportStats,
 } from '@project-knowledge-hub/domain';
 import { decodeListCursor, encodeListCursor } from './task-list-page.js';
+import { listAiModelPrices, loadImportedTheoretical } from './ai-usage-pricing.js';
 
 export type PublicUsageActor = {
   id: string;
@@ -50,6 +53,14 @@ export type PublicAiUsageImport = {
 export type PublicUsagePreview = UsageImportStats & {
   source: 'csv';
   fileName: string | null;
+  theoretical: Array<{
+    currency: string;
+    linked: number;
+    unassigned: number;
+    total: number;
+    paid: number;
+  }>;
+  unpricedModels: Array<{ model: string; rowCount: number; tokensTotal: number }>;
 };
 
 export type UnassignedUsageGroup = {
@@ -96,11 +107,61 @@ export async function previewAiUsageCsv(
 ): Promise<PublicUsagePreview> {
   await requireWorkspace(database, workspaceId);
   const parsed = parseUsageSource('csv', input.csv);
-  const stats = await statsForParsed(database, workspaceId, parsed);
+  const prepared = await prepareRows(database, workspaceId, parsed.rows);
+  const stats = previewUsageImport({
+    rows: parsed.rows,
+    errors: parsed.errors,
+    rowCountNoTokens: parsed.rowCountNoTokens,
+    existingHashes: prepared.existingHashes,
+    taskIdByCloudAgentId: prepared.taskIdByCloudAgentId,
+  });
+  const prices = await listAiModelPrices(database, workspaceId);
+  const priced = priceImportedUsage(
+    parsed.rows.map((row) => ({
+      occurredOn: row.occurredAt.toISOString().slice(0, 10),
+      model: row.model,
+      tokensInput: row.tokensInput,
+      tokensCacheWrite: row.tokensCacheWrite,
+      tokensCache: row.tokensCache,
+      tokensOutput: row.tokensOutput,
+      cost: row.cost,
+      linked: row.cloudAgentId
+        ? prepared.taskIdByCloudAgentId.has(row.cloudAgentId)
+        : false,
+      cloudAgentId: row.cloudAgentId,
+    })),
+    prices,
+  );
+  const theoretical = new Map<
+    string,
+    { currency: string; linked: number; unassigned: number; total: number; paid: number }
+  >();
+  for (const row of priced.rows) {
+    const current = theoretical.get(row.currency) ?? {
+      currency: row.currency,
+      linked: 0,
+      unassigned: 0,
+      total: 0,
+      paid: 0,
+    };
+    if (row.linked) current.linked += row.theoretical;
+    else current.unassigned += row.theoretical;
+    current.total += row.theoretical;
+    if (row.paid != null) current.paid += row.paid;
+    theoretical.set(row.currency, current);
+  }
   return {
-    source: 'csv',
+    source: 'csv' as const,
     fileName: sanitizeUsageFileName(input.fileName),
     ...stats,
+    theoretical: [...theoretical.values()].map((row) => ({
+      ...row,
+      linked: roundAiMoney(row.linked),
+      unassigned: roundAiMoney(row.unassigned),
+      total: roundAiMoney(row.total),
+      paid: roundAiMoney(row.paid),
+    })),
+    unpricedModels: priced.unpricedModels,
   };
 }
 
@@ -274,7 +335,12 @@ export async function listUnassignedUsage(
   database: Database,
   workspaceId: string,
   limit = 50,
-): Promise<{ total: number; groups: UnassignedUsageGroup[] }> {
+): Promise<{
+  total: number;
+  groups: UnassignedUsageGroup[];
+  theoretical: Array<{ currency: string; amount: number }>;
+  unpricedModels: Array<{ model: string; rowCount: number; tokensTotal: number }>;
+}> {
   await requireWorkspace(database, workspaceId);
   const unassigned = and(
     eq(aiUsageEvents.workspaceId, workspaceId),
@@ -297,6 +363,12 @@ export async function listUnassignedUsage(
     .groupBy(aiUsageEvents.cloudAgentId)
     .orderBy(desc(sql`max(${aiUsageEvents.occurredAt})`))
     .limit(Math.min(Math.max(limit, 1), 100));
+  const priced = await loadImportedTheoretical(database, workspaceId);
+  const theoretical = new Map<string, number>();
+  for (const row of priced.rows) {
+    if (row.linked || row.theoretical === 0) continue;
+    theoretical.set(row.currency, (theoretical.get(row.currency) ?? 0) + row.theoretical);
+  }
   return {
     total: Number(countRow?.total ?? 0),
     groups: groups.map((group) => ({
@@ -306,6 +378,11 @@ export async function listUnassignedUsage(
       latestAt: new Date(group.latestAt).toISOString(),
       models: Array.isArray(group.models) ? group.models : [],
     })),
+    theoretical: [...theoretical.entries()].map(([currency, amount]) => ({
+      currency,
+      amount: roundAiMoney(amount),
+    })),
+    unpricedModels: priced.unpricedModels,
   };
 }
 
@@ -495,25 +572,6 @@ export async function relinkTaskUsage(
     await zeroTaskTokens(database, input.taskId);
   }
   return { changed: true };
-}
-
-async function statsForParsed(
-  database: Database,
-  workspaceId: string,
-  parsed: {
-    rows: NormalizedAiUsageRow[];
-    errors: AiUsageRowError[];
-    rowCountNoTokens: number;
-  },
-): Promise<UsageImportStats> {
-  const prepared = await prepareRows(database, workspaceId, parsed.rows);
-  return previewUsageImport({
-    rows: parsed.rows,
-    errors: parsed.errors,
-    rowCountNoTokens: parsed.rowCountNoTokens,
-    existingHashes: prepared.existingHashes,
-    taskIdByCloudAgentId: prepared.taskIdByCloudAgentId,
-  });
 }
 
 async function prepareRows(

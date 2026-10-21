@@ -48,6 +48,10 @@ import {
   milestoneLinkKey,
   type MilestoneLinkChoice,
 } from './MilestoneLinkedItemsEditor';
+import {
+  archivedParentLinkTarget,
+  milestoneLinkChangeBlocked,
+} from '../lib/archived-parent-link';
 
 const STATUSES = [
   'planned',
@@ -83,6 +87,7 @@ type Epic = {
   startDate?: string | null;
   endDate?: string | null;
   humanKey?: string | null;
+  archivedAt?: string | null;
 };
 
 type Story = {
@@ -94,6 +99,7 @@ type Story = {
   startDate?: string | null;
   endDate?: string | null;
   humanKey?: string | null;
+  archivedAt?: string | null;
 };
 
 type MilestoneLink = {
@@ -109,6 +115,7 @@ type Milestone = {
   startDate?: string | null;
   targetDate?: string | null;
   humanKey?: string | null;
+  archivedAt?: string | null;
   completionPercent?: number | null;
   completion?: { percent: number; done: number; total: number } | null;
   linkedItems?: MilestoneLink[];
@@ -468,6 +475,41 @@ export function ProjectAgileManageModal({
   async function save() {
     if (!kind || !itemId || !canMutate || !title.trim()) return;
     if (kind === 'story' && !epicId) return;
+    if (kind === 'story') {
+      const current = stories.find((row) => row.id === itemId);
+      const blocked = archivedParentLinkTarget({
+        nextId: epicId,
+        currentId: current?.epicId,
+        parents: epics,
+      });
+      if (blocked) {
+        setError(t('archivedParentLink', { kind: t('archivedKindEpic'), key: blocked.key }));
+        return;
+      }
+    }
+    const milestone = kind === 'milestone'
+      ? milestones.find((row) => row.id === itemId)
+      : undefined;
+    if (milestone) {
+      const currentIds = (milestone.linkedItems ?? []).map((item) =>
+        milestoneLinkKey(item.entityType, item.entityId),
+      );
+      if (
+        milestoneLinkChangeBlocked({
+          archivedAt: milestone.archivedAt,
+          nextIds: linkedItemIds,
+          currentIds,
+        })
+      ) {
+        setError(
+          t('archivedParentLink', {
+            kind: t('archivedKindMilestone'),
+            key: milestone.humanKey || humanKey || milestone.title,
+          }),
+        );
+        return;
+      }
+    }
     setPending(true);
     setError(null);
     try {
@@ -556,7 +598,7 @@ export function ProjectAgileManageModal({
         });
       }
       let savedItem = saved;
-      if (kind === 'milestone') {
+      if (kind === 'milestone' && !milestone?.archivedAt) {
         const linkResponse = await fetch(
           `/api/v1/project-milestones/${itemId}/item-links`,
           {
@@ -999,11 +1041,21 @@ export function ProjectAgileManageModal({
           {milestoneCompletionLabel ? (
             <p className="m-0 text-sm text-ink-muted">{milestoneCompletionLabel}</p>
           ) : null}
+          {milestones.find((row) => row.id === itemId)?.archivedAt ? (
+            <ErrorText>
+              {t('archivedParentLink', {
+                kind: t('archivedKindMilestone'),
+                key: humanKey || title,
+              })}
+            </ErrorText>
+          ) : null}
           <MilestoneLinkedItemsEditor
             items={linkChoices}
             linkedIds={linkedItemIds}
             onChange={setLinkedItemIds}
-            canEdit={canMutate}
+            canEdit={
+              canMutate && !milestones.find((row) => row.id === itemId)?.archivedAt
+            }
             disabled={pending || confirmDelete}
             onPickerOpenChange={setLinkPickerOpen}
           />

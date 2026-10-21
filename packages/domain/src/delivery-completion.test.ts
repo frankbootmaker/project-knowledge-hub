@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  archivedItemLinkMessage,
   childCompletionPoints,
   deliveryCompletionIndex,
   dependencyLagDaysSchema,
@@ -174,6 +175,26 @@ describe('derivedParentStatus', () => {
         { status: 'planned', points: 0 },
       ]),
     ).toBe('in_progress');
+  });
+
+  it('never overwrites a cancelled parent (PRO-B-29)', () => {
+    expect(
+      parentStatusFromChildren('cancelled', [
+        { status: 'in_progress', completionPercent: 50 },
+      ]),
+    ).toBe('cancelled');
+    expect(
+      milestoneStatusFromLinks('cancelled', [
+        { kind: 'task', status: 'in_progress', completionPercent: 50 },
+        { kind: 'task', status: 'done', completionPercent: 100 },
+      ]),
+    ).toBe('cancelled');
+    expect(archivedItemLinkMessage('milestone', 'PNZ-M-12')).toBe(
+      'Milestone PNZ-M-12 is archived; unarchive it first',
+    );
+    expect(archivedItemLinkMessage('user_story', 'PNZ-S-2')).toBe(
+      'User story PNZ-S-2 is archived; unarchive it first',
+    );
   });
 
   it('is planned or todo when nothing has started', () => {

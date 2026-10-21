@@ -16,7 +16,13 @@ function first(value: string | string[] | undefined): string {
 }
 
 function periodOrEmpty(value: string): string {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : '';
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return value;
+  if (/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value)) return value;
+  return '';
+}
+
+function safeZone(value: string): string {
+  return /^[A-Za-z0-9_+/-]{1,80}$/.test(value) ? value : '';
 }
 
 export default async function AdminFinancialsPage({
@@ -29,6 +35,8 @@ export default async function AdminFinancialsPage({
   const query = await searchParams;
   const tab = parsePlatformFinancialsTab(query.tab);
   const range = first(query.range);
+  const grain = first(query.grain);
+  const timeZone = safeZone(first(query.tz));
   const filters = {
     from: periodOrEmpty(first(query.from)),
     to: periodOrEmpty(first(query.to)),
@@ -40,9 +48,17 @@ export default async function AdminFinancialsPage({
   const params = new URLSearchParams();
   if (filters.from) params.set('from', filters.from);
   if (filters.to) params.set('to', filters.to);
-  if (range === 'last12' || range === 'year' || range === 'all') {
+  if (
+    range === 'last12' ||
+    range === 'year' ||
+    range === 'quarter' ||
+    range === 'month' ||
+    range === 'all'
+  ) {
     params.set('range', range);
   }
+  if (grain === 'month' || grain === 'week' || grain === 'day') params.set('grain', grain);
+  if (timeZone) params.set('timeZone', timeZone);
   if (filters.workspaceId) params.set('workspaceId', filters.workspaceId);
   if (filters.provider) params.set('provider', filters.provider);
   if (filters.type) params.set('type', filters.type);

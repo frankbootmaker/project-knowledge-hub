@@ -37,7 +37,13 @@ function first(value: string | string[] | undefined): string {
 }
 
 function periodOrEmpty(value: string): string {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : '';
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return value;
+  if (/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value)) return value;
+  return '';
+}
+
+function safeZone(value: string): string {
+  return /^[A-Za-z0-9_+/-]{1,80}$/.test(value) ? value : '';
 }
 
 export default async function WorkspaceFinancialsPage({
@@ -55,12 +61,22 @@ export default async function WorkspaceFinancialsPage({
   const from = periodOrEmpty(first(query.from));
   const to = periodOrEmpty(first(query.to));
   const range = first(query.range);
+  const grain = first(query.grain);
+  const timeZone = safeZone(first(query.tz));
   const costParams = new URLSearchParams();
   if (from) costParams.set('from', from);
   if (to) costParams.set('to', to);
-  if (range === 'last12' || range === 'year' || range === 'all') {
+  if (
+    range === 'last12' ||
+    range === 'year' ||
+    range === 'quarter' ||
+    range === 'month' ||
+    range === 'all'
+  ) {
     costParams.set('range', range);
   }
+  if (grain === 'month' || grain === 'week' || grain === 'day') costParams.set('grain', grain);
+  if (timeZone) costParams.set('timeZone', timeZone);
   const costSuffix = costParams.size > 0 ? `?${costParams.toString()}` : '';
 
   const listResponse = await apiFetch('/api/v1/workspaces');
@@ -93,7 +109,20 @@ export default async function WorkspaceFinancialsPage({
         pools: AiCostPool[];
         from?: string;
         to?: string;
-        range?: 'last12' | 'year' | 'all' | 'custom';
+        fromDay?: string;
+        toDay?: string;
+        range?: 'last12' | 'year' | 'quarter' | 'month' | 'all' | 'custom';
+        grain?: 'month' | 'week' | 'day';
+        grainAdjusted?: boolean;
+        monthly?: AiCostChartPoint[];
+        originalMonthly?: AiCostChartPoint[];
+        theoretical?: Array<{
+          currency: string;
+          linked: number;
+          unassigned: number;
+          total: number;
+        }>;
+        unpricedModels?: Array<{ model: string }>;
       })
     : { entries: [], chart: [], originalChart: [], pools: [] };
   const systems = systemsResponse?.ok
@@ -106,6 +135,8 @@ export default async function WorkspaceFinancialsPage({
     ? ((await unassignedResponse.json()) as {
         total: number;
         groups: UnassignedUsageGroup[];
+        theoretical?: Array<{ currency: string; amount: number }>;
+        unpricedModels?: Array<{ model: string; rowCount: number }>;
       })
     : { total: 0, groups: [] };
 
@@ -133,6 +164,8 @@ export default async function WorkspaceFinancialsPage({
           imports={usageImports}
           unassignedTotal={unassigned.total}
           unassigned={unassigned.groups}
+          unassignedTheoretical={unassigned.theoretical}
+          unpricedModels={unassigned.unpricedModels}
         />
       ) : (
         <AiCostAdmin
@@ -148,7 +181,15 @@ export default async function WorkspaceFinancialsPage({
           systems={systems}
           from={cost.from}
           to={cost.to}
+          fromDay={cost.fromDay}
+          toDay={cost.toDay}
           range={cost.range}
+          grain={cost.grain}
+          grainAdjusted={cost.grainAdjusted}
+          monthly={cost.monthly}
+          originalMonthly={cost.originalMonthly}
+          theoretical={cost.theoretical}
+          unpricedModels={cost.unpricedModels}
         />
       )}
     </Page>
