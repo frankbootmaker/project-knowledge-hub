@@ -6,6 +6,7 @@ import {
   oauthClientOptions,
   oauthGrantFiltersActive,
   oauthGrantListStatus,
+  oauthGrantScopePreview,
   type OauthGrantListFields,
 } from './oauth-grant-list';
 
@@ -139,6 +140,24 @@ describe('filterOauthGrants', () => {
         (row) => row.id,
       ),
     ).toEqual(['g-claude', 'g-chatgpt', 'g-revoked']);
+  });
+
+  it('keeps two scopes in the row and counts the rest', () => {
+    expect(oauthGrantScopePreview([])).toEqual({ shown: [], more: 0 });
+    expect(oauthGrantScopePreview(['knowledge:read'])).toEqual({
+      shown: ['knowledge:read'],
+      more: 0,
+    });
+    expect(oauthGrantScopePreview(['projects:read', 'knowledge:read'])).toEqual({
+      shown: ['projects:read', 'knowledge:read'],
+      more: 0,
+    });
+    expect(
+      oauthGrantScopePreview(['projects:read', 'systems:read', 'knowledge:read', 'pm:write']),
+    ).toEqual({
+      shown: ['projects:read', 'systems:read'],
+      more: 2,
+    });
   });
 
   it('treats the default query as clear', () => {

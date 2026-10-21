@@ -1,19 +1,22 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { applyTableView } from '../../lib/data-table';
+import { useSyncEnumFilters, useTableState } from '../../lib/use-table-state';
 import {
-  defaultOauthGrantListQuery,
-  filterOauthGrants,
+  oauthClientLabel,
   oauthClientOptions,
-  oauthGrantFiltersActive,
   oauthGrantListStatus,
+  oauthGrantScopePreview,
+  oauthGrantSearchBlob,
   type OauthGrantListStatus,
-  type OauthGrantSort,
-  type OauthGrantStatusFilter,
 } from './oauth-grant-list';
-import { Badge, Button, ErrorText, FunctionHeader, Input, Panel, Select, useToast } from '../ui';
+import { LocalDateTime } from '../LocalDateTime';
+import { Badge, Button, ErrorText, Input, Panel, useToast } from '../ui';
+import { DataTable, dataTableFilterFields, type DataColumn } from '../ui/DataTable';
+import { AnchoredPopover, TableFilterControl } from '../ui/TableFilterControl';
 
 export type OauthGrantRow = {
   id: string;
@@ -32,9 +35,76 @@ export type OauthGrantRow = {
   createdAt: string;
 };
 
-function formatWhen(value: string | null, neverLabel: string): string {
-  if (!value) return neverLabel;
-  return value.slice(0, 16).replace('T', ' ');
+const STATUS_OPTIONS: OauthGrantListStatus[] = ['active', 'revoked', 'expired'];
+
+function ScopeTags({ scopes }: { scopes: readonly string[] }) {
+  return (
+    <>
+      {scopes.map((scope) => (
+        <span key={scope} className="kh-ops-tag">
+          {scope}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function GrantScopes({
+  scopes,
+  title,
+  moreLabel,
+  hideLabel,
+}: {
+  scopes: readonly string[];
+  title: string;
+  moreLabel: (count: number) => string;
+  hideLabel: string;
+}) {
+  const panelId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = useCallback((restoreFocus: boolean) => {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  }, []);
+  const preview = oauthGrantScopePreview(scopes);
+  if (scopes.length === 0) return <span className="text-ink-muted">—</span>;
+
+  return (
+    <div className="kh-ops-scope-list kh-ops-scope-list--inline">
+      <ScopeTags scopes={preview.shown} />
+      {preview.more > 0 ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          className="kh-ops-tag"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-controls={open ? panelId : undefined}
+          aria-label={open ? hideLabel : moreLabel(preview.more)}
+          onClick={() => setOpen((current) => !current)}
+        >
+          +{preview.more}
+        </button>
+      ) : null}
+      {open && triggerRef.current ? (
+        <AnchoredPopover
+          id={panelId}
+          anchor={triggerRef.current}
+          label={title}
+          onClose={close}
+        >
+          <div className="kh-ops-scope-list kh-ops-scope-list--inline">
+            <ScopeTags scopes={scopes} />
+          </div>
+        </AnchoredPopover>
+      ) : null}
+    </div>
+  );
+}
+
+function userLabel(grant: OauthGrantRow): string {
+  return grant.userDisplayName ?? grant.userEmail ?? grant.userId;
 }
 
 export function OauthGrantsList({
@@ -55,72 +125,263 @@ export function OauthGrantsList({
   const t = useTranslations('admin');
   const tConnections = useTranslations('aiConnections');
   const tTable = useTranslations('table');
+  const locale = useLocale();
   const router = useRouter();
   const { pushToast } = useToast();
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OauthGrantStatusFilter>('all');
-  const [clientFilter, setClientFilter] = useState('all');
-  const [sort, setSort] = useState<OauthGrantSort>('lastUsed');
+  const table = useTableState({
+    namespace: 'oauthGrants',
+    defaultSortKey: 'lastUsed',
+    defaultSortDir: 'desc',
+  });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const listQuery = useMemo(
-    () => ({
-      query,
-      status: statusFilter,
-      client: clientFilter,
-      sort,
-    }),
-    [query, statusFilter, clientFilter, sort],
+  const clientOptions = useMemo(
+    () => oauthClientOptions(grants).map((label) => ({ value: label, label })),
+    [grants],
   );
-  const filtersActive = oauthGrantFiltersActive(listQuery);
-  const clientOptions = useMemo(() => oauthClientOptions(grants), [grants]);
-  const visible = useMemo(
-    () => filterOauthGrants(grants, listQuery, Date.now()),
-    [grants, listQuery],
+  const statusOptions = useMemo(
+    () =>
+      STATUS_OPTIONS.map((value) => ({
+        value,
+        label:
+          value === 'active'
+            ? t('oauthGrantActive')
+            : value === 'revoked'
+              ? t('oauthGrantRevokedStatus')
+              : t('oauthGrantExpired'),
+      })),
+    [t],
   );
 
-  function clearGrantFilters() {
-    const defaults = defaultOauthGrantListQuery();
-    setQuery(defaults.query);
-    setStatusFilter(defaults.status);
-    setClientFilter(defaults.client);
-    setSort(defaults.sort);
-  }
+  const grantStatusLabel = useCallback(
+    (status: OauthGrantListStatus) =>
+      statusOptions.find((option) => option.value === status)?.label ?? status,
+    [statusOptions],
+  );
 
-  function grantStatusLabel(status: OauthGrantListStatus): string {
-    if (status === 'active') return t('oauthGrantActive');
-    if (status === 'revoked') return t('oauthGrantRevokedStatus');
-    return t('oauthGrantExpired');
-  }
-
-  async function mutateGrant(grantId: string, action: 'revoke' | 'remove') {
-    setPending(true);
-    setError(null);
-    const failed = action === 'revoke' ? tConnections('revokeFailed') : t('oauthGrantRemoveFailed');
-    try {
-      const response = await fetch(
-        action === 'revoke' ? `${revokeBase}/${grantId}/revoke` : `${revokeBase}/${grantId}`,
-        {
-          method: action === 'revoke' ? 'POST' : 'DELETE',
-          credentials: 'include',
-          headers: { Origin: window.location.origin },
-        },
-      );
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: { message?: string } };
-        throw new Error(payload.error?.message ?? failed);
+  const mutateGrant = useCallback(
+    async (grantId: string, action: 'revoke' | 'remove') => {
+      setPending(true);
+      setError(null);
+      const failed =
+        action === 'revoke' ? tConnections('revokeFailed') : t('oauthGrantRemoveFailed');
+      try {
+        const response = await fetch(
+          action === 'revoke' ? `${revokeBase}/${grantId}/revoke` : `${revokeBase}/${grantId}`,
+          {
+            method: action === 'revoke' ? 'POST' : 'DELETE',
+            credentials: 'include',
+            headers: { Origin: window.location.origin },
+          },
+        );
+        if (!response.ok) {
+          const payload = (await response.json()) as { error?: { message?: string } };
+          throw new Error(payload.error?.message ?? failed);
+        }
+        pushToast(action === 'revoke' ? t('oauthGrantRevoked') : t('oauthGrantRemoved'));
+        router.refresh();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : failed;
+        setError(message);
+        pushToast(message, 'danger');
+      } finally {
+        setPending(false);
       }
-      pushToast(action === 'revoke' ? t('oauthGrantRevoked') : t('oauthGrantRemoved'));
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : failed;
-      setError(message);
-      pushToast(message, 'danger');
-    } finally {
-      setPending(false);
+    },
+    [pushToast, revokeBase, router, t, tConnections],
+  );
+
+  const columns = useMemo<Array<DataColumn<OauthGrantRow>>>(() => {
+    const dateCell = (value: string | null) =>
+      value ? <LocalDateTime value={value} locale={locale} /> : (
+        <span className="text-ink-muted">{t('oauthGrantNever')}</span>
+      );
+    const cols: Array<DataColumn<OauthGrantRow>> = [];
+    if (showUser) {
+      cols.push({
+        id: 'user',
+        header: t('user'),
+        kind: 'text',
+        primary: true,
+        sort: { type: 'text', getValue: (grant) => userLabel(grant) },
+        cell: (grant) => userLabel(grant),
+      });
     }
-  }
+    cols.push(
+      {
+        id: 'client',
+        header: t('oauthGrantColClient'),
+        kind: 'text',
+        primary: !showUser,
+        sort: { type: 'text', getValue: (grant) => oauthClientLabel(grant.clientHost) },
+        filter: {
+          type: 'enum',
+          getValue: (grant) => oauthClientLabel(grant.clientHost),
+          options: clientOptions,
+        },
+        cell: (grant) => {
+          const label = oauthClientLabel(grant.clientHost);
+          const host = grant.clientHost.trim();
+          return (
+            <span>
+              {label}
+              {label.toLowerCase() !== host.toLowerCase() ? (
+                <span className="block text-xs text-ink-muted">{host}</span>
+              ) : null}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'status',
+        header: t('oauthGrantColStatus'),
+        kind: 'status',
+        sort: {
+          type: 'text',
+          getValue: (grant) => oauthGrantListStatus(grant, Date.now()),
+        },
+        filter: {
+          type: 'enum',
+          getValue: (grant) => oauthGrantListStatus(grant, Date.now()),
+          options: statusOptions,
+        },
+        cell: (grant) => {
+          const status = oauthGrantListStatus(grant, Date.now());
+          const tone =
+            status === 'active' ? 'success' : status === 'expired' ? 'warn' : 'neutral';
+          return <Badge tone={tone}>{grantStatusLabel(status)}</Badge>;
+        },
+      },
+      {
+        id: 'scopes',
+        header: t('scopes'),
+        kind: 'data',
+        cell: (grant) => (
+          <GrantScopes
+            scopes={grant.scopes}
+            title={t('scopes')}
+            moreLabel={(count) => t('oauthGrantScopesMore', { count })}
+            hideLabel={t('oauthGrantScopesHide')}
+          />
+        ),
+      },
+      {
+        id: 'workspaces',
+        header: t('oauthGrantColWorkspaces'),
+        kind: 'data',
+        cell: (grant) => {
+          const labels = grant.allowedWorkspaceIds.map((id) => workspaceNames[id] ?? id);
+          if (labels.length === 0) return t('oauthGrantNoWorkspaces');
+          const text = labels.join(', ');
+          return (
+            <span className="kh-ops-grant-wrap" title={text}>
+              {text}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'refresh',
+        header: t('oauthGrantRefreshExpires'),
+        kind: 'date',
+        sort: {
+          type: 'date',
+          getValue: (grant) => grant.refreshExpiresAt,
+          defaultDir: 'asc',
+        },
+        cell: (grant) => dateCell(grant.refreshExpiresAt),
+      },
+      {
+        id: 'lastUsed',
+        header: t('oauthGrantLastUsed'),
+        kind: 'date',
+        sort: {
+          type: 'date',
+          getValue: (grant) => grant.lastUsedAt,
+          defaultDir: 'desc',
+        },
+        cell: (grant) => dateCell(grant.lastUsedAt),
+      },
+      {
+        id: 'created',
+        header: t('oauthGrantSortCreated'),
+        kind: 'date',
+        sort: {
+          type: 'date',
+          getValue: (grant) => grant.createdAt,
+          defaultDir: 'desc',
+        },
+        cell: (grant) => <LocalDateTime value={grant.createdAt} locale={locale} />,
+      },
+      {
+        id: 'actions',
+        header: '',
+        kind: 'actions',
+        cell: (grant) =>
+          grant.status === 'active' ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => void mutateGrant(grant.id, 'revoke')}
+            >
+              {t('oauthGrantRevoke')}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="danger"
+              disabled={pending}
+              onClick={() => void mutateGrant(grant.id, 'remove')}
+            >
+              {t('oauthGrantRemove')}
+            </Button>
+          ),
+      },
+    );
+    return cols;
+  }, [
+    clientOptions,
+    grantStatusLabel,
+    locale,
+    mutateGrant,
+    pending,
+    showUser,
+    statusOptions,
+    t,
+    workspaceNames,
+  ]);
+
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
+
+  const visible = useMemo(
+    () =>
+      applyTableView({
+        rows: grants,
+        locale,
+        query: table.query,
+        search: (grant, needle) => oauthGrantSearchBlob(grant).includes(needle),
+        sortKey: table.sortKey,
+        sortDir: table.sortDir,
+        filters: table.filters,
+        textFilters: table.textFilters,
+        columns,
+        tieBreak: (left, right) => left.id.localeCompare(right.id),
+      }),
+    [
+      columns,
+      grants,
+      locale,
+      table.filters,
+      table.query,
+      table.sortDir,
+      table.sortKey,
+      table.textFilters,
+    ],
+  );
+
+  const bareEmpty = grants.length === 0 && !table.filtersActive && table.query.trim() === '';
 
   return (
     <Panel className="grid gap-4 p-4">
@@ -128,131 +389,59 @@ export function OauthGrantsList({
         <h2 className="m-0 text-base font-semibold">{title}</h2>
         <p className="m-0 mt-1 text-sm text-ink-muted">{blurb}</p>
       </div>
-      <FunctionHeader
-        search={
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
+        <label className="flex min-w-[220px] flex-1 items-center gap-2">
+          <span className="sr-only">{t('oauthGrantSearch')}</span>
           <Input
             type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
             placeholder={t('oauthGrantSearch')}
             aria-label={t('oauthGrantSearch')}
+            className="h-10 min-h-10 py-1.5 text-xs"
           />
-        }
-        filters={
-          <>
-            <Select
-              className="kh-ops-inline-select"
-              value={clientFilter}
-              onChange={(event) => setClientFilter(event.target.value)}
-              aria-label={t('oauthGrantFilterClient')}
-            >
-              <option value="all">{t('oauthGrantFilterAllClients')}</option>
-              {clientOptions.map((label) => (
-                <option key={label} value={label}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-            <Select
-              className="kh-ops-inline-select"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as OauthGrantStatusFilter)}
-              aria-label={t('oauthGrantFilterStatus')}
-            >
-              <option value="all">{t('oauthGrantFilterAll')}</option>
-              <option value="active">{t('oauthGrantActive')}</option>
-              <option value="revoked">{t('oauthGrantRevokedStatus')}</option>
-              <option value="expired">{t('oauthGrantExpired')}</option>
-            </Select>
-            <Select
-              className="kh-ops-inline-select"
-              value={sort}
-              onChange={(event) => setSort(event.target.value as OauthGrantSort)}
-              aria-label={t('oauthGrantFilterSort')}
-            >
-              <option value="lastUsed">{t('oauthGrantSortLastUsed')}</option>
-              <option value="created">{t('oauthGrantSortCreated')}</option>
-            </Select>
-            <span className="kh-ops-panel-meta whitespace-nowrap">
-              {t('listResultCount', { shown: visible.length, total: grants.length })}
-            </span>
-          </>
-        }
-        actions={
+        </label>
+        <TableFilterControl
+          fields={dataTableFilterFields(columns)}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={table.clearFilters}
+          filtersActive={table.filtersActive}
+        />
+        {table.filtersActive ? (
           <Button
             type="button"
             variant="secondary"
-            disabled={!filtersActive}
-            onClick={clearGrantFilters}
+            className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+            onClick={table.clearFilters}
           >
             {tTable('clearFilters')}
           </Button>
-        }
-      />
-      {error ? <ErrorText>{error}</ErrorText> : null}
-      {visible.length === 0 ? (
-        <p className="kh-ops-empty">
-          {grants.length === 0 ? t('oauthGrantEmpty') : t('oauthGrantEmptyFiltered')}
-        </p>
+        ) : null}
+      </div>
+      {bareEmpty ? (
+        <p className="kh-ops-empty">{t('oauthGrantEmpty')}</p>
       ) : (
-        <div className="grid gap-3">
-          {visible.map((grant) => {
-            const status = oauthGrantListStatus(grant, Date.now());
-            const tone =
-              status === 'active' ? 'success' : status === 'expired' ? 'warn' : 'neutral';
-            return (
-              <div key={grant.id} className="grid gap-2 border-b border-line pb-3 last:border-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  {showUser ? (
-                    <span className="font-medium">
-                      {grant.userDisplayName ?? grant.userEmail ?? grant.userId}
-                    </span>
-                  ) : null}
-                  <Badge tone={tone}>{grantStatusLabel(status)}</Badge>
-                  <span className="text-sm text-ink-muted">{grant.clientHost}</span>
-                </div>
-                <div className="kh-ops-scope-list kh-ops-scope-list--inline">
-                  {grant.scopes.map((scope) => (
-                    <span key={scope} className="kh-ops-tag">
-                      {scope}
-                    </span>
-                  ))}
-                </div>
-                <p className="m-0 text-sm text-ink-muted">
-                  {grant.allowedWorkspaceIds.map((id) => workspaceNames[id] ?? id).join(', ') ||
-                    t('oauthGrantNoWorkspaces')}
-                </p>
-                <p className="m-0 text-xs text-ink-muted">
-                  {t('oauthGrantRefreshExpires')}:{' '}
-                  {formatWhen(grant.refreshExpiresAt, t('oauthGrantNever'))}
-                  {' · '}
-                  {t('oauthGrantLastUsed')}: {formatWhen(grant.lastUsedAt, t('oauthGrantNever'))}
-                </p>
-                <div>
-                  {grant.status === 'active' ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={pending}
-                      onClick={() => void mutateGrant(grant.id, 'revoke')}
-                    >
-                      {t('oauthGrantRevoke')}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      disabled={pending}
-                      onClick={() => void mutateGrant(grant.id, 'remove')}
-                    >
-                      {t('oauthGrantRemove')}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <DataTable
+          rows={visible}
+          rowKey={(grant) => grant.id}
+          columns={columns}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onToggleSort={table.toggleSort}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={table.clearFilters}
+          filtersActive={table.filtersActive}
+          hideHeaderFilter
+          tableClassName="kh-ops-grant-table"
+          empty={<p className="kh-ops-empty">{t('oauthGrantEmptyFiltered')}</p>}
+        />
       )}
     </Panel>
   );

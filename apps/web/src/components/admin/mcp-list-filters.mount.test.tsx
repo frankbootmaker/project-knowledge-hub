@@ -61,6 +61,19 @@ function selectByLabel(container: ParentNode, label: string): HTMLSelectElement 
   return element;
 }
 
+function clickCheckbox(root: ParentNode, labelText: string) {
+  const label = [...root.querySelectorAll('label')].find((node) =>
+    node.textContent?.includes(labelText),
+  );
+  const input = label?.querySelector('input');
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error(`missing checkbox ${labelText}`);
+  }
+  act(() => {
+    input.click();
+  });
+}
+
 const users = [{ id: 'user-ada', email: 'ada@example.com', displayName: 'Ada Lovelace' }];
 
 function apiClient(
@@ -176,24 +189,37 @@ describe('MCP list headers', () => {
         blurb="Connected accounts"
       />,
     );
-    expect(container.querySelector('input[type="search"]')).toBeTruthy();
-    expect(container.textContent).toContain('listResultCount:{"shown":2,"total":2}');
-    expect(container.textContent).toContain('ChatGPT');
-    expect(container.textContent).toContain('Claude');
+    expect(container.querySelector('table')).toBeTruthy();
+    expect(container.textContent).toContain('oauthGrantColClient');
+    const search = container.querySelector('input[type="search"]');
+    if (!(search instanceof HTMLInputElement)) throw new Error('missing search');
+    expect(container.textContent).toContain('Ada Lovelace');
+    expect(container.textContent).toContain('Grace Hopper');
 
-    setControl(selectByLabel(container, 'oauthGrantFilterStatus'), 'expired');
+    const toggle = container.querySelector('button[aria-label="showFilters"]');
+    if (!(toggle instanceof HTMLButtonElement)) throw new Error('missing filter toggle');
+    act(() => {
+      toggle.click();
+    });
+    const menu = document.body.querySelector('.kh-ops-table-filter');
+    if (!(menu instanceof HTMLElement)) throw new Error('missing filter menu');
+    clickCheckbox(menu, 'oauthGrantExpired');
     expect(container.textContent).toContain('Grace Hopper');
     expect(container.textContent).toContain('oauthGrantExpired');
     expect(container.textContent).not.toContain('Ada Lovelace');
 
-    setControl(selectByLabel(container, 'oauthGrantFilterStatus'), 'all');
-    setControl(selectByLabel(container, 'oauthGrantFilterClient'), 'Claude');
+    clickCheckbox(menu, 'oauthGrantExpired');
+    clickCheckbox(menu, 'Claude');
     expect(container.textContent).toContain('Grace Hopper');
     expect(container.textContent).not.toContain('Ada Lovelace');
 
-    setControl(selectByLabel(container, 'oauthGrantFilterClient'), 'all');
-    const search = container.querySelector('input[type="search"]');
-    if (!(search instanceof HTMLInputElement)) throw new Error('missing search');
+    const clear = [...document.body.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('clearFilters'),
+    );
+    if (!(clear instanceof HTMLButtonElement)) throw new Error('missing clear');
+    act(() => {
+      clear.click();
+    });
     setControl(search, 'nobody');
     expect(container.querySelector('.kh-ops-empty')?.textContent).toBe('oauthGrantEmptyFiltered');
   });

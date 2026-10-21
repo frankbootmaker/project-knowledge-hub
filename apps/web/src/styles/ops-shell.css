@@ -1374,6 +1374,38 @@ a.kh-section-shortcut[aria-current='location'] {
   white-space: nowrap;
 }
 
+/* Grant rows wrap at spaces. Tags, status, and actions stay whole.
+   Ids have no spaces, so they break inside a capped width. */
+.kh-ops-data-table.kh-ops-grant-table th,
+.kh-ops-data-table.kh-ops-grant-table td {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: break-word;
+  vertical-align: top;
+}
+
+.kh-ops-data-table.kh-ops-grant-table .kh-ops-tag,
+.kh-ops-data-table.kh-ops-grant-table .kh-ops-cell-status,
+.kh-ops-data-table.kh-ops-grant-table .kh-ops-cell-actions,
+.kh-ops-data-table.kh-ops-grant-table .kh-ops-cell-actions button {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.kh-ops-data-table.kh-ops-grant-table .kh-ops-scope-list--inline {
+  max-width: 12rem;
+}
+
+.kh-ops-grant-wrap {
+  display: inline-block;
+  max-width: 12rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
 .kh-ops-table-wrap--sticky .kh-ops-data-table thead th {
   position: sticky;
   top: 0;
@@ -4787,6 +4819,11 @@ a.kh-ops-admin-link-card {
   letter-spacing: normal;
   line-height: 1.45;
   text-transform: none;
+}
+
+button.kh-ops-tag {
+  cursor: pointer;
+  color: inherit;
 }
 
 .kh-ops-markdown-view {

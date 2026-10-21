@@ -6,6 +6,22 @@ export type OauthGrantStatusFilter = (typeof OAUTH_GRANT_STATUS_FILTERS)[number]
 
 export const OAUTH_GRANT_SORTS = ['lastUsed', 'created'] as const;
 
+/** Scopes kept visible in a grant row before the rest open in a panel. */
+export const OAUTH_GRANT_SCOPE_PREVIEW = 2;
+
+export function oauthGrantScopePreview(scopes: readonly string[]): {
+  shown: string[];
+  more: number;
+} {
+  if (scopes.length <= OAUTH_GRANT_SCOPE_PREVIEW) {
+    return { shown: [...scopes], more: 0 };
+  }
+  return {
+    shown: scopes.slice(0, OAUTH_GRANT_SCOPE_PREVIEW),
+    more: scopes.length - OAUTH_GRANT_SCOPE_PREVIEW,
+  };
+}
+
 export type OauthGrantSort = (typeof OAUTH_GRANT_SORTS)[number];
 
 export type OauthGrantListStatus = 'active' | 'revoked' | 'expired';
@@ -89,9 +105,14 @@ export function filterOauthGrants<T extends OauthGrantListFields>(
     const label = oauthClientLabel(grant.clientHost);
     if (query.client !== 'all' && label !== query.client) return false;
     if (!needle) return true;
-    return oauthGrantSearchHaystack(grant, label).includes(needle);
+    return oauthGrantSearchBlob(grant).includes(needle);
   });
   return [...matched].sort((left, right) => compareGrants(left, right, query.sort));
+}
+
+/** Lowercased search text: client label, host, client id, user, scopes, status. */
+export function oauthGrantSearchBlob(grant: OauthGrantListFields): string {
+  return oauthGrantSearchHaystack(grant, oauthClientLabel(grant.clientHost));
 }
 
 function oauthGrantSearchHaystack(grant: OauthGrantListFields, label: string): string {

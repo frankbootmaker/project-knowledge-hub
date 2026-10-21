@@ -31,7 +31,7 @@ function focusableIn(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => node.tabIndex !== -1);
 }
 
-function FilterPopover({
+export function AnchoredPopover({
   id,
   anchor,
   label,
@@ -213,7 +213,7 @@ export function TableFilterControl({
         {filtersActive ? <span className="kh-ops-filter-dot" aria-hidden /> : null}
       </Button>
       {open && triggerRef.current ? (
-        <FilterPopover
+        <AnchoredPopover
           id={panelId}
           anchor={triggerRef.current}
           label={t('filters')}
@@ -256,7 +256,7 @@ export function TableFilterControl({
               {t('clearFilters')}
             </Button>
           </div>
-        </FilterPopover>
+        </AnchoredPopover>
       ) : null}
     </>
   );
