@@ -70,7 +70,7 @@ const updateSchema = z.object({
     });
   }
   if (value.webhookMode !== 'custom') return;
-  const url = value.webhookUrl.trim();
+  const url = value.webhookUrl?.trim() ?? '';
   if (!url) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
