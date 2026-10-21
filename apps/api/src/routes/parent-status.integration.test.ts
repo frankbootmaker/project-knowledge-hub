@@ -759,4 +759,285 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
       completedAt: null,
     });
   });
+
+  it('keeps archived and cancelled parents frozen (PRO-B-29)', async () => {
+    const createdProject = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: headers(true),
+      payload: {
+        workspaceId,
+        name: `Frozen ${randomUUID()}`,
+        keyPrefix: `${randomUUID().replace(/[^a-f]/gi, '').toUpperCase().slice(0, 2) || 'FZ'}1`,
+      },
+    });
+    expect(createdProject.statusCode).toBe(200);
+    const projectId = (createdProject.json() as { project: { id: string } }).project.id;
+
+    const epicId = await createEpic(projectId, 'Epic');
+    const otherEpic = await createEpic(projectId, 'Other epic');
+    const storyId = await createStory(projectId, epicId, 'Story');
+    const taskId = await createTask(projectId, {
+      title: 'Linked',
+      userStoryId: storyId,
+      status: 'in_progress',
+      completionPercent: 50,
+    });
+    const extraId = await createTask(projectId, {
+      title: 'Extra',
+      status: 'todo',
+      completionPercent: 0,
+    });
+
+    const createdMilestone = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/milestones`,
+      headers: headers(true),
+      payload: { title: 'Gate', status: 'cancelled' },
+    });
+    expect(createdMilestone.statusCode).toBe(200);
+    const milestone = (
+      createdMilestone.json() as {
+        milestone: { id: string; humanKey: string | null; status: string };
+      }
+    ).milestone;
+    expect(milestone.humanKey).toBeTruthy();
+
+    const linked = await app!.inject({
+      method: 'PUT',
+      url: `/api/v1/project-milestones/${milestone.id}/item-links`,
+      headers: headers(true),
+      payload: { items: [{ entityType: 'task', entityId: taskId }] },
+    });
+    expect(linked.statusCode).toBe(200);
+    expect((linked.json() as { milestone: { status: string } }).milestone.status).toBe(
+      'cancelled',
+    );
+
+    const archived = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-milestones/${milestone.id}`,
+      headers: headers(true),
+      payload: { archived: true },
+    });
+    expect(archived.statusCode).toBe(200);
+    const archivedRow = (
+      archived.json() as {
+        milestone: { status: string; archivedAt: string | null; humanKey: string | null };
+      }
+    ).milestone;
+    expect(archivedRow.status).toBe('cancelled');
+    expect(archivedRow.archivedAt).toBeTruthy();
+
+    const rejected = await app!.inject({
+      method: 'PUT',
+      url: `/api/v1/project-milestones/${milestone.id}/item-links`,
+      headers: headers(true),
+      payload: {
+        items: [
+          { entityType: 'task', entityId: taskId },
+          { entityType: 'task', entityId: extraId },
+        ],
+      },
+    });
+    expect(rejected.statusCode).toBe(409);
+    const rejectedBody = rejected.json() as { error: { code: string; message: string } };
+    expect(rejectedBody.error.code).toBe('MILESTONE_ARCHIVED');
+    expect(rejectedBody.error.message).toBe(
+      `Milestone ${archivedRow.humanKey} is archived; unarchive it first`,
+    );
+
+    await patchTask(taskId, { status: 'done', completionPercent: 100 });
+
+    async function archivedMilestone(): Promise<{
+      status: string;
+      archivedAt: string | null;
+      linkedItems: Array<{ entityId: string }>;
+    }> {
+      const response = await app!.inject({
+        method: 'GET',
+        url: `/api/v1/projects/${projectId}/milestones?includeArchived=true`,
+        headers: { cookie: adminCookie },
+      });
+      expect(response.statusCode).toBe(200);
+      const row = (
+        response.json() as {
+          milestones: Array<{
+            id: string;
+            status: string;
+            archivedAt: string | null;
+            linkedItems: Array<{ entityId: string }>;
+          }>;
+        }
+      ).milestones.find((item) => item.id === milestone.id);
+      expect(row).toBeTruthy();
+      return row!;
+    }
+
+    const frozen = await archivedMilestone();
+    expect(frozen.status).toBe('cancelled');
+    expect(frozen.archivedAt).toBe(archivedRow.archivedAt);
+    expect(frozen.linkedItems.map((item) => item.entityId)).toEqual([taskId]);
+
+    const restored = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-milestones/${milestone.id}`,
+      headers: headers(true),
+      payload: { archived: false },
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(
+      (restored.json() as { milestone: { status: string; archivedAt: string | null } }).milestone,
+    ).toMatchObject({ status: 'cancelled', archivedAt: null });
+
+    await patchTask(taskId, { status: 'in_progress', completionPercent: 50 });
+    const stillCancelled = await milestoneOf(projectId, milestone.id);
+    expect(stillCancelled.status).toBe('cancelled');
+
+    const resumed = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-milestones/${milestone.id}`,
+      headers: headers(true),
+      payload: { status: 'planned' },
+    });
+    expect(resumed.statusCode).toBe(200);
+    expect((resumed.json() as { milestone: { status: string } }).milestone.status).toBe(
+      'in_progress',
+    );
+
+    const relinked = await app!.inject({
+      method: 'PUT',
+      url: `/api/v1/project-milestones/${milestone.id}/item-links`,
+      headers: headers(true),
+      payload: { items: [{ entityType: 'task', entityId: extraId }] },
+    });
+    expect(relinked.statusCode).toBe(200);
+    expect(
+      (relinked.json() as { milestone: { linkedItems: Array<{ entityId: string }> } }).milestone
+        .linkedItems.map((item) => item.entityId),
+    ).toEqual([extraId]);
+
+    const cancelledStory = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-user-stories/${storyId}`,
+      headers: headers(true),
+      payload: { status: 'cancelled' },
+    });
+    expect(cancelledStory.statusCode).toBe(200);
+    expect(
+      (cancelledStory.json() as { userStory: { status: string } }).userStory.status,
+    ).toBe('cancelled');
+    await patchTask(taskId, { completionPercent: 75 });
+    const storiesAfter = await statuses(projectId);
+    expect(statusOf(storiesAfter.stories, storyId)).toBe('cancelled');
+
+    const cancelledEpic = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-epics/${epicId}`,
+      headers: headers(true),
+      payload: { status: 'cancelled' },
+    });
+    expect(cancelledEpic.statusCode).toBe(200);
+    expect((cancelledEpic.json() as { epic: { status: string } }).epic.status).toBe('cancelled');
+    await patchTask(taskId, { status: 'done', completionPercent: 100 });
+    const epicsAfter = await statuses(projectId);
+    expect(statusOf(epicsAfter.epics, epicId)).toBe('cancelled');
+
+    const archivedStory = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-user-stories/${storyId}`,
+      headers: headers(true),
+      payload: { archived: true },
+    });
+    expect(archivedStory.statusCode).toBe(200);
+    const storyKey = (
+      archivedStory.json() as { userStory: { humanKey: string | null; status: string } }
+    ).userStory;
+    expect(storyKey.status).toBe('cancelled');
+
+    const assignStory = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-tasks/${extraId}`,
+      headers: headers(true),
+      payload: { userStoryId: storyId },
+    });
+    expect(assignStory.statusCode).toBe(409);
+    const storyError = assignStory.json() as { error: { code: string; message: string } };
+    expect(storyError.error.code).toBe('USER_STORY_ARCHIVED');
+    expect(storyError.error.message).toBe(
+      `User story ${storyKey.humanKey} is archived; unarchive it first`,
+    );
+
+    const kept = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: headers(true),
+      payload: { title: 'Linked still', userStoryId: storyId },
+    });
+    expect(kept.statusCode).toBe(200);
+
+    const archivedEpic = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-epics/${otherEpic}`,
+      headers: headers(true),
+      payload: { archived: true },
+    });
+    expect(archivedEpic.statusCode).toBe(200);
+    const epicKey = (archivedEpic.json() as { epic: { humanKey: string | null } }).epic.humanKey;
+    const moveStory = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-user-stories/${storyId}`,
+      headers: headers(true),
+      payload: { epicId: otherEpic },
+    });
+    expect(moveStory.statusCode).toBe(409);
+    expect((moveStory.json() as { error: { code: string; message: string } }).error).toMatchObject({
+      code: 'EPIC_ARCHIVED',
+      message: `Epic ${epicKey} is archived; unarchive it first`,
+    });
+
+    const archivedAgain = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-milestones/${milestone.id}`,
+      headers: headers(true),
+      payload: { archived: true },
+    });
+    expect(archivedAgain.statusCode).toBe(200);
+    const assignMilestone = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/tasks`,
+      headers: headers(true),
+      payload: { title: 'On archived gate', milestoneId: milestone.id },
+    });
+    expect(assignMilestone.statusCode).toBe(409);
+    expect(
+      (assignMilestone.json() as { error: { code: string; message: string } }).error.code,
+    ).toBe('MILESTONE_ARCHIVED');
+
+    const sprint = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/sprints`,
+      headers: headers(true),
+      payload: { name: 'Sprint' },
+    });
+    expect(sprint.statusCode).toBe(200);
+    const sprintRow = (sprint.json() as { sprint: { id: string; humanKey: string | null } }).sprint;
+    const archiveSprint = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-sprints/${sprintRow.id}`,
+      headers: headers(true),
+      payload: { archived: true },
+    });
+    expect(archiveSprint.statusCode).toBe(200);
+    const assignSprint = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-tasks/${extraId}`,
+      headers: headers(true),
+      payload: { sprintId: sprintRow.id },
+    });
+    expect(assignSprint.statusCode).toBe(409);
+    expect(
+      (assignSprint.json() as { error: { message: string } }).error.message,
+    ).toBe(`Sprint ${sprintRow.humanKey} is archived; unarchive it first`);
+  });
 });

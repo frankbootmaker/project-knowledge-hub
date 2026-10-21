@@ -52,6 +52,7 @@ import {
   getProjectKeyPrefix,
   toHumanKeyFields,
 } from './project-issue-keys.js';
+import { archivedDeliveryLinkError, deliveryKeyLabel } from './delivery-archive.js';
 
 export type PublicEpic = {
   id: string;
@@ -675,9 +676,16 @@ async function assertEpicInProject(
   database: Database,
   projectId: string,
   epicId: string,
+  currentEpicId?: string | null,
 ): Promise<void> {
   const [epic] = await database.db
-    .select({ id: projectEpics.id })
+    .select({
+      id: projectEpics.id,
+      title: projectEpics.title,
+      archivedAt: projectEpics.archivedAt,
+      issueKeyType: projectEpics.issueKeyType,
+      issueNumber: projectEpics.issueNumber,
+    })
     .from(projectEpics)
     .where(
       and(eq(projectEpics.id, epicId), eq(projectEpics.projectId, projectId)),
@@ -689,6 +697,16 @@ async function assertEpicInProject(
       message: 'Epic not found in this project',
       statusCode: 400,
     });
+  }
+  if (epic.archivedAt && epic.id !== currentEpicId) {
+    const label = await deliveryKeyLabel(
+      database,
+      projectId,
+      epic.issueKeyType,
+      epic.issueNumber,
+      epic.title,
+    );
+    throw archivedDeliveryLinkError('epic', label);
   }
 }
 
@@ -778,7 +796,12 @@ export async function updateUserStory(
     });
   }
   if (input.epicId !== undefined) {
-    await assertEpicInProject(database, existing.projectId, input.epicId);
+    await assertEpicInProject(
+      database,
+      existing.projectId,
+      input.epicId,
+      existing.epicId,
+    );
   }
 
   const schedule = await loadParentSchedule(database, existing.projectId);

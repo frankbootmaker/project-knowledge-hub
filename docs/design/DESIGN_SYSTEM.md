@@ -249,6 +249,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-21
+
+* **Archived parent links** — The milestone Linked items tab uses existing `ErrorText` when the milestone is archived (`archivedParentLink`: “Milestone PNZ-M-12 is archived; unarchive it first”) and disables add/remove. Task and story saves use the same sentence when a new story, milestone, or epic assignment points at an archived parent. English, German, and Hungarian copy match. No new control.
+
 ### 2026-10-20
 
 * **Backup retention status** — Admin → Backups shows the last offsite error, local and S3 rotation results, and an offsite-age alert on the existing offsite `StatusRow`s. A secondary `Button` dry-runs retention. No new control style.
