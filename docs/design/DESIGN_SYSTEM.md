@@ -252,6 +252,7 @@ Record durable UI / design-system changes here (newest first).
 ### 2026-10-21
 
 * **Archived parent links** — The milestone Linked items tab uses existing `ErrorText` when the milestone is archived (`archivedParentLink`: “Milestone PNZ-M-12 is archived; unarchive it first”) and disables add/remove. Task and story saves use the same sentence when a new story, milestone, or epic assignment points at an archived parent. English, German, and Hungarian copy match. No new control.
+* **Monitoring alerts** — Admin → Monitoring adds an Alerts panel (`#alerts`) under the health cards. It uses `Field`, `Input`, `Select`, `Button`, and `Badge` inside `.kh-ops-panel`. A warn `Badge` shows when the mail driver is console, with a text link to Admin → Email. Per-type recipients sit in a `<details>` with `.kh-ops-scope-check` user rows. Retention stats reuse `.kh-ops-list-row`. Save, reset, and send-test use `useToast`. Copy is in English, German, and Hungarian.
 
 ### 2026-10-20
 
@@ -450,6 +451,7 @@ Record durable UI / design-system changes here (newest first).
 * **Account profile** — `/account/profile` for display name + full name (email read-only), optional photo upload, and `UserAvatar` monogram fallback. **Workspace roles** (`/account/memberships`) lists memberships read-only. **Sign-in identity** and **Change password** are separate Account sidebar pages (`/account/identity`, `/account/password`; `POST /api/v1/me/password`). Account area uses the same left sidebar layout as Admin. Header shows avatar + display name linked to profile; mobile nav includes Profile.
 * **Admin overview setup cards** — LLM/MCP and Email promo panels can be hidden per browser (`localStorage`); they remain in the admin sidebar. A small restore strip reappears when either card is hidden.
 * **Admin Email** — Sidebar link `/admin/email` for SMTP / Resend / console mail settings, test send, and overview card on Admin home. Product emails use a shared branded HTML layout in `packages/mail` with en/de/hu catalogs; locale comes from `users.preferred_locale` (synced from the language switcher / login / register).
+* **Admin Monitoring alerts** — `/admin/monitoring#alerts` sets per-type recipients, disk and staleness thresholds, the ops webhook, and audit retention. A warn badge appears when mail is console-only. Send test alert uses the effective recipients.
 * **Auth pages** — Public `/forgot-password`, `/set-password`, `/register`, and `/confirm-email` match the login `Page narrow` + `Panel` pattern.
 * **Admin users** — Create modal toggles invite-vs-password; list rows open Edit (display name, status, optional password, system admin) with Resend invite for `invited` users.
 
