@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **CSV import buttons (PRO-B-28):** Preview and Import are enabled as soon as the first CSV is read, including a file that was imported before. The file input is cleared after reading, so choosing the same file again works.
+
 * **Archived and cancelled parents (PRO-B-29):** Linking or updating items no longer turns an archived cancelled milestone into `in_progress`. Recompute skips archived stories, epics, and milestones and never overwrites a cancelled status. `set_project_milestone_item_links`, task story/milestone/sprint assignment, and moving a story onto an epic reject an archived parent with `Milestone PNZ-M-12 is archived; unarchive it first` (409). The delivery dialogs show the same rule and leave an archived milestone's links unchanged. After unarchive, linking works again. A cancelled parent stays cancelled until an explicit status change.
 
 * **Backup retention:** Local rotation keeps at most one dump per UTC day for `BACKUP_KEEP_DAILY` days (always plus the newest), then the weekly and monthly tiers. The same policy prunes S3 objects under `{env}/backups/`, including when that cycle's upload fails, and never deletes the newest successful offsite copy. `get_platform_status` and Admin → Backups show the last offsite error, local and S3 rotation results, and an alert when offsite is older than `BACKUP_OFFSITE_STALE_AFTER_HOURS` (default 48). The sidecar skips its startup dump when the last success is younger than `BACKUP_STARTUP_MIN_AGE_SECONDS` (default: the schedule interval). Dry-run: `BACKUP_DRY_RUN=1 ./infrastructure/scripts/rotate-backups.sh` or `pnpm --filter @project-knowledge-hub/api exec tsx src/cli/prune-backups.ts`. Apply with `--apply`, or Admin → Backups → Rotate now.
@@ -18,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Timeline due-date anchoring (PRO-T-81):** Epics and stories sit on the same timeline spine as tasks, bugs, and milestones. Each card is anchored on its due date and shares a lane when it does not overlap another card.
 
 ### Changed
+
+* **Self-hosted fonts (PRO-T-115):** IBM Plex Sans (400–700), IBM Plex Sans Condensed (400, 600, 700), and IBM Plex Mono (400, 500) load through `next/font/local` from `apps/web/src/fonts` (OFL) instead of `next/font/google`. The build and the browser no longer request Google Fonts. CSS variables, `display: swap`, and the sans/display/mono stacks are unchanged.
 
 * **AI cost service end is exclusive (PRO-T-108):** `service_period_end` is the renewal date and is not billed. Days are end minus start, so 6 Oct–6 Nov is 26/31 and 5/31 (200 → 167.74 / 32.26) and 1 Oct–1 Nov stays in October. A one-day entry has end = start + 1, and the API, form, and MCP reject an end that is not after the start. Financials → AI Cost labels the field “Service end (renewal date, not included)” (DE/HU too) and the month split lists the day count. Migration `0071` moves only the 0069 full-month backfill (1st through the last day of `period`) to the 1st of the next month, so those month totals stay the same. Invoice rows such as 6 Oct–6 Nov keep their stored dates. A same-day window moves forward one day so end stays after start. Admin → Financials stays read-only.
 
@@ -38,6 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Linked knowledge titles:** Project linked-knowledge titles are plain links again, matching linked systems. The key chip opens the same record.
 
 ### Added
+
+* **AI Cost period presets (PRO-T-110):** This quarter and This month sit beside This year on the shared AI Cost period picker (workspace and platform). Presets use the calendar in the browser time zone and stay highlighted until the dates are edited. The selection applies to the chart, the monthly table, and the summary. English, German, and Hungarian.
+
+* **Calendar date picker (PRO-T-111):** The AI Cost from/to fields and the cost-entry service start/end open a shared calendar popover; picking a day fills the field and typed input still works (ISO plus EN/DE/HU forms). It selects one day or a range, supports keyboard (arrows, Enter, Escape) with ARIA, and rejects an end on or before the start.
+
+* **AI cost chart grain (PRO-T-112):** Both AI cost charts toggle Month / Week / Day. Subscription cost is spread evenly across service days (start inclusive, end exclusive), so day, week, and partial-month totals of the same range match. A day view longer than 92 days switches to weeks, gap days are zero-filled, and clicking a bar drills a month or week into days. Axis labels are locale-aware. The monthly overview table stays in calendar months, clipped to the selected days.
+
+* **Theoretical API cost for imported usage (PRO-T-106):** Imported usage, including rows with no task, is priced from a per-model price list (input, cache write, cache read, output per 1M tokens) that is seeded and editable by workspace admins. Unknown models are listed rather than counted as zero. A numeric CSV Cost is shown next to the computed theoretical cost; Included or blank is paid 0 and still priced. Linked and unassigned totals appear on the AI Cost tab and under Unassigned usage. Imported rows replace task-reported usage for the same cloud agent, and recompute is idempotent. MCP read tools `get_ai_usage_theoretical_cost` and `list_ai_model_prices`. Migration `0077_ai_model_prices`.
+
+* **MCP client and grant filters (PRO-T-114):** Admin MCP API clients and OAuth grants use the same filter header as Workspace & Projects: search, status (expired is derived from the expiry timestamps), scope or client, and sort, with a `{shown} of {total}` count and Clear filters. Labels are in English, German, and Hungarian. No API change.
 
 * **Monitoring alerts and audit retention (PRO-T-116):** Admin → Monitoring → Alerts chooses users and extra email addresses per alert type. Until a type is configured, mail still goes to every active system admin. `disk.low` also fires below `ALERT_DISK_FREE_GB_MIN` (default 10 GB, 1024³ bytes) even when the free ratio is above 10%. The worker emails stale offsite backups (48 h), offsite upload errors, and local/S3 rotation errors, deduped like the other alerts. The page shows the mail driver (with a console-only warning), effective recipients, thresholds, last send per type, and a test-alert button. Audit retention days are saved in the database and apply on the next purge; the page shows that retention, the last purge time, rows purged, and the `audit_events` row count and size. `get_platform_status` includes the same retention snapshot. `compose.dokploy.yaml` and `compose.yaml` pass `MAIL_FROM`, `SMTP_*`, `RESEND_*`, `ALERT_*`, `BACKUP_STALE_*`, `BACKUP_OFFSITE_STALE_AFTER_HOURS`, and `AUDIT_RETENTION_*`. Migration `0076_audit_retention_state`.
 
