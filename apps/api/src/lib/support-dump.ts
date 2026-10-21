@@ -6,6 +6,10 @@ import {
   type RotationStamp,
 } from '@project-knowledge-hub/blob-store';
 import {
+  loadEffectiveAlertSettings,
+  readAuditRetentionSnapshot,
+} from '@project-knowledge-hub/database';
+import {
   listDumpArtifacts,
   readStamp,
   stampSummary,
@@ -89,6 +93,15 @@ export type SupportDump = {
     entityId: string | null;
     createdAt: string;
   }>;
+  auditRetention: {
+    retentionDays: number;
+    source: 'override' | 'env';
+    intervalMs: number;
+    lastPurgedAt: string | null;
+    rowsPurged: number | null;
+    rowCount: number;
+    tableBytes: number;
+  };
 };
 
 async function collectDependencyChecks(app: FastifyInstance): Promise<{
@@ -132,6 +145,8 @@ export async function buildSupportDump(app: FastifyInstance): Promise<SupportDum
     lastS3Rotation,
     artifacts,
     recentErrors,
+    alertSettings,
+    auditRetention,
   ] = await Promise.all([
     collectDependencyChecks(app),
     getSchemaVersionLabel(app.database),
@@ -145,6 +160,8 @@ export async function buildSupportDump(app: FastifyInstance): Promise<SupportDum
     readRotationStamp(backupDir, 's3'),
     listDumpArtifacts(backupDir),
     getRecentErrorAuditEvents(app.database, since24h),
+    loadEffectiveAlertSettings(app.database, app.env),
+    readAuditRetentionSnapshot(app.database),
   ]);
 
   const ready = checks.postgres === 'ok' && checks.redis === 'ok';
@@ -208,5 +225,14 @@ export async function buildSupportDump(app: FastifyInstance): Promise<SupportDum
       toolErrorCount: mcp.toolErrorCount,
     },
     recentAuditErrors: recentErrors,
+    auditRetention: {
+      retentionDays: alertSettings.effective.auditRetentionDays,
+      source: alertSettings.effective.auditRetentionSource,
+      intervalMs: alertSettings.effective.auditRetentionIntervalMs,
+      lastPurgedAt: auditRetention.lastPurgedAt,
+      rowsPurged: auditRetention.rowsPurged,
+      rowCount: auditRetention.rowCount,
+      tableBytes: auditRetention.tableBytes,
+    },
   };
 }
