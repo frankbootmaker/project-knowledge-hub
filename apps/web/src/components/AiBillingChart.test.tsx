@@ -4,7 +4,11 @@
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AiBillingChart, AiBillingChartLegend } from './AiBillingChart';
+import {
+  AiBillingChart,
+  AiBillingChartLegend,
+  type AiBillingPeriodPoint,
+} from './AiBillingChart';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -43,7 +47,7 @@ const labels = {
   scheduled: 'scheduled',
 };
 
-const periods = [
+const periods: AiBillingPeriodPoint[] = [
   {
     period: '2026-09',
     paidCost: 0,
@@ -67,6 +71,12 @@ const periods = [
     ratio: 1.167,
   },
 ];
+
+function octoberOn(period: string): AiBillingPeriodPoint {
+  const october = periods[1];
+  if (!october) throw new Error('October fixture is required');
+  return { ...october, period };
+}
 
 describe('AiBillingChart', () => {
   it('shows currency ticks, a locale month, and a tooltip that matches the month', () => {
@@ -108,10 +118,7 @@ describe('AiBillingChart', () => {
   it('turns week and day labels upright so they do not share a line', () => {
     const container = render(
       <AiBillingChart
-        periods={[
-          { ...periods[1], period: '2026-10-06' },
-          { ...periods[1], period: '2026-10-13' },
-        ]}
+        periods={[octoberOn('2026-10-06'), octoberOn('2026-10-13')]}
         ariaLabel="AI cost"
         locale="en"
         currency="USD"
