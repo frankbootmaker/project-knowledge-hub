@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -13,6 +13,9 @@ const rotateScript = path.join(repoRoot, 'infrastructure/scripts/rotate-backups.
 const commonScript = path.join(repoRoot, 'infrastructure/scripts/lib/db-ops-common.sh');
 
 const POLICY = { keepDaily: 7, keepWeekly: 4, keepMonthly: 3 };
+/** Fixed UTC instant so the shell clock and the TypeScript policy cannot drift. */
+const NOW_MS = Date.UTC(2026, 9, 20, 15, 0, 0);
+const NOW_EPOCH = String(Math.floor(NOW_MS / 1000));
 
 function pile(nowMs: number): RetentionCandidate[] {
   const items: RetentionCandidate[] = [];
@@ -50,11 +53,50 @@ function pile(nowMs: number): RetentionCandidate[] {
 }
 
 async function materialize(dir: string, items: RetentionCandidate[]): Promise<void> {
-  for (const item of items) {
-    const full = path.join(dir, item.id);
-    await writeFile(full, 'dump');
-    await execFileAsync('touch', ['-d', `@${Math.floor(item.mtimeMs / 1000)}`, full]);
+  // utimes is one syscall per file. The previous helper spawned touch(1) once
+  // per dump; together with per-file date(1) in the rotator that exceeded
+  // vitest's 5s default when turbo was running the rest of the suite.
+  await Promise.all(
+    items.map(async (item) => {
+      const full = path.join(dir, item.id);
+      await writeFile(full, 'dump');
+      const seconds = Math.floor(item.mtimeMs / 1000);
+      await utimes(full, seconds, seconds);
+    }),
+  );
+}
+
+function rotationEnv(dir: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    BACKUP_DIR: dir,
+    BACKUP_KEEP_DAILY: String(POLICY.keepDaily),
+    BACKUP_KEEP_WEEKLY: String(POLICY.keepWeekly),
+    BACKUP_KEEP_MONTHLY: String(POLICY.keepMonthly),
+    BACKUP_NOW_EPOCH: NOW_EPOCH,
+    ...extra,
+  };
+}
+
+/** PATH of the tools the date(1) fallback needs, with python3 hidden. */
+async function pathWithoutPython(): Promise<{ bin: string; bash: string }> {
+  const bin = await mkdtemp(path.join(tmpdir(), 'kh-nopython-'));
+  const commands = [
+    'bash', 'dirname', 'find', 'sort', 'awk',
+    'stat', 'date', 'rm', 'mkdir', 'mktemp',
+  ];
+  const { stdout } = await execFileAsync('bash', ['-c', `command -v ${commands.join(' ')}`]);
+  const paths = stdout.trim().split('\n');
+  const bash = paths[0];
+  if (!bash || paths.length !== commands.length) {
+    throw new Error(`missing tools for date fallback: ${stdout}`);
   }
+  for (let i = 1; i < commands.length; i += 1) {
+    const target = paths[i];
+    if (!target) throw new Error(`missing ${commands[i]}`);
+    await symlink(target, path.join(bin, commands[i]!));
+  }
+  return { bin, bash };
 }
 
 describe('selectRetainedBackupIds', () => {
@@ -96,53 +138,72 @@ describe('selectRetainedBackupIds', () => {
 
 describe('rotate-backups.sh', () => {
   it('prunes the same dumps as the TypeScript policy', async () => {
-    const nowMs = Math.floor(Date.now() / 1000) * 1000;
-    const items = pile(nowMs);
+    const items = pile(NOW_MS);
     const dir = await mkdtemp(path.join(tmpdir(), 'kh-backup-rotate-'));
-    await materialize(dir, items);
+    try {
+      await materialize(dir, items);
 
-    const expected = selectRetainedBackupIds(items, POLICY, Date.now());
-    await execFileAsync('bash', [rotateScript], {
-      env: {
-        ...process.env,
-        BACKUP_DIR: dir,
-        BACKUP_KEEP_DAILY: '7',
-        BACKUP_KEEP_WEEKLY: '4',
-        BACKUP_KEEP_MONTHLY: '3',
-        BACKUP_FORCE_ROTATE: '1',
-      },
-    });
+      const expected = selectRetainedBackupIds(items, POLICY, NOW_MS);
+      await execFileAsync('bash', [rotateScript], {
+        env: rotationEnv(dir, { BACKUP_FORCE_ROTATE: '1' }),
+      });
 
-    const remaining = (await readdir(dir)).filter((name) => name.endsWith('.dump'));
-    expect(new Set(remaining)).toEqual(expected);
-    expect(remaining).not.toContain('knowledge-hub-ancient.dump');
+      const remaining = (await readdir(dir)).filter((name) => name.endsWith('.dump'));
+      expect(new Set(remaining)).toEqual(expected);
+      expect(remaining).not.toContain('knowledge-hub-ancient.dump');
 
-    const stamp = JSON.parse(
-      await readFile(path.join(dir, 'last-local-rotation.json'), 'utf8'),
-    ) as { kept: number; deleted: number; error: string | null };
-    expect(stamp.error).toBeNull();
-    expect(stamp.kept).toBe(expected.size);
-    expect(stamp.deleted).toBe(items.length - expected.size);
+      const stamp = JSON.parse(
+        await readFile(path.join(dir, 'last-local-rotation.json'), 'utf8'),
+      ) as { kept: number; deleted: number; error: string | null };
+      expect(stamp.error).toBeNull();
+      expect(stamp.kept).toBe(expected.size);
+      expect(stamp.deleted).toBe(items.length - expected.size);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('dry-run deletes nothing', async () => {
-    const nowMs = Math.floor(Date.now() / 1000) * 1000;
-    const items = pile(nowMs);
+    const items = pile(NOW_MS);
     const dir = await mkdtemp(path.join(tmpdir(), 'kh-backup-dry-'));
-    await materialize(dir, items);
-    await execFileAsync('bash', [rotateScript], {
-      env: {
-        ...process.env,
-        BACKUP_DIR: dir,
-        BACKUP_DRY_RUN: '1',
-        BACKUP_KEEP_DAILY: '7',
-        BACKUP_KEEP_WEEKLY: '4',
-        BACKUP_KEEP_MONTHLY: '3',
-      },
-    });
-    const remaining = (await readdir(dir)).filter((name) => name.endsWith('.dump'));
-    expect(remaining).toHaveLength(items.length);
-    await expect(readFile(path.join(dir, 'last-local-rotation.json'), 'utf8')).rejects.toThrow();
+    try {
+      await materialize(dir, items);
+      await execFileAsync('bash', [rotateScript], {
+        env: rotationEnv(dir, { BACKUP_DRY_RUN: '1' }),
+      });
+      const remaining = (await readdir(dir)).filter((name) => name.endsWith('.dump'));
+      expect(remaining).toHaveLength(items.length);
+      await expect(readFile(path.join(dir, 'last-local-rotation.json'), 'utf8')).rejects.toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('date fallback keeps the same dumps as the python fast path', async () => {
+    const all = pile(NOW_MS);
+    const items = [...all.slice(0, 3), ...all.slice(-3)];
+    const dir = await mkdtemp(path.join(tmpdir(), 'kh-backup-fallback-'));
+    const hidden = await pathWithoutPython();
+    try {
+      await materialize(dir, items);
+      const withPython = await execFileAsync('bash', [rotateScript], {
+        env: rotationEnv(dir, { BACKUP_DRY_RUN: '1' }),
+      });
+      const withoutPython = await execFileAsync(hidden.bash, [rotateScript], {
+        env: rotationEnv(dir, { BACKUP_DRY_RUN: '1', PATH: hidden.bin }),
+      });
+      const deleted = (stdout: string) =>
+        stdout
+          .split('\n')
+          .filter((line) => line.startsWith('Would delete:'))
+          .sort();
+      expect(deleted(withoutPython.stdout)).toEqual(deleted(withPython.stdout));
+      const remaining = (await readdir(dir)).filter((name) => name.endsWith('.dump'));
+      expect(remaining).toHaveLength(items.length);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      await rm(hidden.bin, { recursive: true, force: true });
+    }
   });
 });
 
