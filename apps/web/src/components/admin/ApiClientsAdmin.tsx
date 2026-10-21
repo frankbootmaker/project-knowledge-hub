@@ -4,6 +4,15 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
+  apiClientFiltersActive,
+  apiClientListStatus,
+  defaultApiClientListQuery,
+  filterApiClients,
+  type ApiClientListStatus,
+  type ApiClientSort,
+  type ApiClientStatusFilter,
+} from './api-client-list';
+import {
   Badge,
   Button,
   ErrorText,
@@ -53,6 +62,7 @@ export type PublicApiClient = {
   requestedByUserId?: string | null;
   agentLabel?: string | null;
   expiresAt: string | null;
+  revokedAt?: string | null;
   lastUsedAt: string | null;
   createdAt: string;
 };
@@ -60,23 +70,6 @@ export type PublicApiClient = {
 type Org = { id: string; name: string; slug: string };
 type Workspace = { id: string; name: string; slug: string; organizationId: string };
 type User = { id: string; email: string; displayName: string };
-
-type StatusFilter = 'all' | 'active' | 'pending_approval';
-
-function matchesClientSearch(client: PublicApiClient, query: string): boolean {
-  if (!query) return true;
-  const haystack = [
-    client.name,
-    client.description ?? '',
-    client.tokenPrefix ?? '',
-    client.agentLabel ?? '',
-    client.scopes.join(' '),
-    client.status ?? '',
-  ]
-    .join(' ')
-    .toLowerCase();
-  return haystack.includes(query);
-}
 
 function formatLastUsed(at: string | null, neverLabel: string): string {
   if (!at) return neverLabel;
@@ -113,6 +106,7 @@ export function ApiClientsAdmin({
 }) {
   const t = useTranslations('admin');
   const tCommon = useTranslations('common');
+  const tTable = useTranslations('table');
   const router = useRouter();
   const { pushToast } = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +114,9 @@ export function ApiClientsAdmin({
   const [createOpen, setCreateOpen] = useState(false);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<ApiClientStatusFilter>('all');
+  const [scopeFilter, setScopeFilter] = useState('all');
+  const [sort, setSort] = useState<ApiClientSort>('created');
 
   const [name, setName] = useState('');
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
@@ -146,26 +142,74 @@ export function ApiClientsAdmin({
   const [editActingUserId, setEditActingUserId] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
 
-  const filteredClients = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return initialClients.filter((client) => {
-      const status = client.status ?? 'active';
-      if (statusFilter !== 'all' && status !== statusFilter) return false;
-      return matchesClientSearch(client, query);
-    });
-  }, [initialClients, searchQuery, statusFilter]);
+  const listQuery = useMemo(
+    () => ({
+      query: searchQuery,
+      status: statusFilter,
+      scope: scopeFilter,
+      sort,
+    }),
+    [searchQuery, statusFilter, scopeFilter, sort],
+  );
+  const filtersActive = apiClientFiltersActive(listQuery);
+
+  const filteredClients = useMemo(
+    () => filterApiClients(initialClients, users, listQuery, Date.now()),
+    [initialClients, users, listQuery],
+  );
 
   const pendingClients = useMemo(
-    () => filteredClients.filter((client) => client.status === 'pending_approval'),
-    [filteredClients],
-  );
-  const activeClients = useMemo(
     () =>
       filteredClients.filter(
-        (client) => (client.status ?? 'active') === 'active',
+        (client) => apiClientListStatus(client, Date.now()) === 'pending_approval',
       ),
     [filteredClients],
   );
+  const listedClients = useMemo(
+    () =>
+      filteredClients.filter(
+        (client) => apiClientListStatus(client, Date.now()) !== 'pending_approval',
+      ),
+    [filteredClients],
+  );
+
+  function clearClientFilters() {
+    const defaults = defaultApiClientListQuery();
+    setSearchQuery(defaults.query);
+    setStatusFilter(defaults.status);
+    setScopeFilter(defaults.scope);
+    setSort(defaults.sort);
+  }
+
+  function clientStatusLabel(status: ApiClientListStatus): string {
+    switch (status) {
+      case 'active':
+        return t('statusActive');
+      case 'pending_approval':
+        return t('statusPendingApproval');
+      case 'revoked':
+        return t('statusRevoked');
+      case 'expired':
+        return t('statusExpired');
+      case 'rejected':
+        return t('statusRejected');
+    }
+  }
+
+  function renderClientStatus(client: PublicApiClient) {
+    const status = apiClientListStatus(client, Date.now());
+    const tone =
+      status === 'active'
+        ? 'success'
+        : status === 'pending_approval'
+          ? 'brand'
+          : status === 'expired'
+            ? 'warn'
+            : status === 'rejected'
+              ? 'danger'
+              : 'neutral';
+    return <Badge tone={tone}>{clientStatusLabel(status)}</Badge>;
+  }
 
   const orgWorkspaces = useMemo(
     () => workspaces.filter((workspace) => workspace.organizationId === organizationId),
@@ -181,9 +225,7 @@ export function ApiClientsAdmin({
 
   const editOrgWorkspaces = useMemo(() => {
     if (!editClient) return [];
-    return workspaces.filter(
-      (workspace) => workspace.organizationId === editClient.organizationId,
-    );
+    return workspaces.filter((workspace) => workspace.organizationId === editClient.organizationId);
   }, [workspaces, editClient]);
 
   function userLabel(userId: string | null | undefined): string {
@@ -293,21 +335,18 @@ export function ApiClientsAdmin({
     setPending(true);
     setApproveError(null);
     try {
-      const response = await fetch(
-        `/api/v1/api-clients/${approveClient.id}/approve`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            Origin: window.location.origin,
-          },
-          body: JSON.stringify({
-            scopes: approveScopes,
-            allowedWorkspaceIds: approveWorkspaces,
-          }),
+      const response = await fetch(`/api/v1/api-clients/${approveClient.id}/approve`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
         },
-      );
+        body: JSON.stringify({
+          scopes: approveScopes,
+          allowedWorkspaceIds: approveWorkspaces,
+        }),
+      });
       const payload = (await response.json()) as {
         token?: string;
         error?: { message?: string };
@@ -441,15 +480,9 @@ export function ApiClientsAdmin({
 
   function toggleScope(scope: string, target: 'create' | 'approve' | 'edit') {
     const setter =
-      target === 'create'
-        ? setScopes
-        : target === 'approve'
-          ? setApproveScopes
-          : setEditScopes;
+      target === 'create' ? setScopes : target === 'approve' ? setApproveScopes : setEditScopes;
     setter((current) =>
-      current.includes(scope)
-        ? current.filter((item) => item !== scope)
-        : [...current, scope],
+      current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope],
     );
   }
 
@@ -473,9 +506,7 @@ export function ApiClientsAdmin({
         <div className="kh-ops-status-row" data-tone="warn">
           <div>
             <p className="font-medium text-accent">{t('tokenOnce')}</p>
-            <code className="kh-ops-code mt-2 block break-all">
-              {issuedToken}
-            </code>
+            <code className="kh-ops-code mt-2 block break-all">{issuedToken}</code>
           </div>
         </div>
       ) : null}
@@ -491,29 +522,70 @@ export function ApiClientsAdmin({
           />
         }
         filters={
-          <Select
-            value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as StatusFilter)
-            }
-            aria-label={t('apiClientsFilterStatus')}
-          >
-            <option value="all">{t('apiClientsFilterAll')}</option>
-            <option value="active">{t('statusActive')}</option>
-            <option value="pending_approval">{t('statusPendingApproval')}</option>
-          </Select>
+          <>
+            <Select
+              className="kh-ops-inline-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as ApiClientStatusFilter)}
+              aria-label={t('apiClientsFilterStatus')}
+            >
+              <option value="all">{t('apiClientsFilterAll')}</option>
+              <option value="active">{t('statusActive')}</option>
+              <option value="pending_approval">{t('statusPendingApproval')}</option>
+              <option value="revoked">{t('statusRevoked')}</option>
+              <option value="expired">{t('statusExpired')}</option>
+            </Select>
+            <Select
+              className="kh-ops-inline-select"
+              value={scopeFilter}
+              onChange={(e) => setScopeFilter(e.target.value)}
+              aria-label={t('apiClientsFilterScope')}
+            >
+              <option value="all">{t('apiClientsFilterAllScopes')}</option>
+              {MCP_SCOPES.map((scope) => (
+                <option key={scope} value={scope}>
+                  {scope}
+                </option>
+              ))}
+            </Select>
+            <Select
+              className="kh-ops-inline-select"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as ApiClientSort)}
+              aria-label={t('apiClientsFilterSort')}
+            >
+              <option value="created">{t('apiClientsSortCreated')}</option>
+              <option value="lastUsed">{t('apiClientsSortLastUsed')}</option>
+            </Select>
+            <span className="kh-ops-panel-meta whitespace-nowrap">
+              {t('listResultCount', {
+                shown: filteredClients.length,
+                total: initialClients.length,
+              })}
+            </span>
+          </>
         }
         actions={
-          <Button
-            type="button"
-            disabled={pending || organizations.length === 0}
-            onClick={() => {
-              resetCreateForm();
-              setCreateOpen(true);
-            }}
-          >
-            {t('createClient')}
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!filtersActive}
+              onClick={clearClientFilters}
+            >
+              {tTable('clearFilters')}
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || organizations.length === 0}
+              onClick={() => {
+                resetCreateForm();
+                setCreateOpen(true);
+              }}
+            >
+              {t('createClient')}
+            </Button>
+          </>
         }
       />
 
@@ -524,12 +596,7 @@ export function ApiClientsAdmin({
         size="lg"
         footer={
           <>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={closeCreateModal}
-            >
+            <Button type="button" variant="secondary" disabled={pending} onClick={closeCreateModal}>
               {tCommon('cancel')}
             </Button>
             <Button
@@ -691,12 +758,7 @@ export function ApiClientsAdmin({
         size="lg"
         footer={
           <>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={closeEditModal}
-            >
+            <Button type="button" variant="secondary" disabled={pending} onClick={closeEditModal}>
               {tCommon('cancel')}
             </Button>
             <Button
@@ -705,8 +767,7 @@ export function ApiClientsAdmin({
                 pending ||
                 !editName.trim() ||
                 editScopes.length === 0 ||
-                (needsActingUser(editScopes) &&
-                  (editWorkspaces.length === 0 || !editActingUserId))
+                (needsActingUser(editScopes) && (editWorkspaces.length === 0 || !editActingUserId))
               }
               onClick={() => void saveEdit()}
             >
@@ -752,10 +813,7 @@ export function ApiClientsAdmin({
                   <p className="m-0 text-sm text-ink-muted">{tCommon('none')}</p>
                 ) : (
                   editOrgWorkspaces.map((workspace) => (
-                    <label
-                      key={workspace.id}
-                      className="kh-ops-scope-check"
-                    >
+                    <label key={workspace.id} className="kh-ops-scope-check">
                       <input
                         type="checkbox"
                         checked={editWorkspaces.includes(workspace.id)}
@@ -790,9 +848,7 @@ export function ApiClientsAdmin({
           <div className="kh-ops-panel-head">
             <h2 className="kh-ops-panel-title">{t('pendingApiClientsTitle')}</h2>
           </div>
-          <p className="m-0 px-3 pt-3 text-[11px] text-ink-muted">
-            {t('pendingApiClientsHint')}
-          </p>
+          <p className="m-0 px-3 pt-3 text-[11px] text-ink-muted">{t('pendingApiClientsHint')}</p>
           <div className="kh-ops-table-wrap">
             <table className="kh-ops-data-table kh-ops-data-table--wide">
               <thead>
@@ -823,17 +879,13 @@ export function ApiClientsAdmin({
                     <td className="kh-ops-cell-wrap">
                       {workspaceNames(client.allowedWorkspaceIds)}
                     </td>
-                    <td className="kh-ops-cell-wrap">
-                      {actingUserLabel(client.actingUserId)}
-                    </td>
+                    <td className="kh-ops-cell-wrap">{actingUserLabel(client.actingUserId)}</td>
                     <td className="font-mono text-[11px]">
                       {formatLastUsed(client.lastUsedAt, t('monitoringNever'))}
                     </td>
                     <td>
-                      <Badge tone="brand">{t('statusPendingApproval')}</Badge>
-                      {client.agentLabel ? (
-                        <Badge tone="neutral">{client.agentLabel}</Badge>
-                      ) : null}
+                      {renderClientStatus(client)}
+                      {client.agentLabel ? <Badge tone="neutral">{client.agentLabel}</Badge> : null}
                     </td>
                     <td>
                       <div className="flex flex-wrap gap-2">
@@ -864,21 +916,19 @@ export function ApiClientsAdmin({
         </section>
       ) : null}
 
-      <section className="kh-ops-panel">
-        {pendingClients.length > 0 ? (
-          <div className="kh-ops-panel-head">
-            <h2 className="kh-ops-panel-title">{t('activeApiClientsTitle')}</h2>
-          </div>
-        ) : null}
-        {filteredClients.length === 0 ? (
-          <p className="kh-ops-empty">
-            {initialClients.length === 0
-              ? t('emptyClients')
-              : t('emptyClientsFiltered')}
-          </p>
-        ) : activeClients.length === 0 ? (
-          <p className="kh-ops-empty">{t('emptyActiveClientsFiltered')}</p>
-        ) : (
+      {listedClients.length > 0 ? (
+        <section className="kh-ops-panel">
+          {pendingClients.length > 0 ? (
+            <div className="kh-ops-panel-head">
+              <h2 className="kh-ops-panel-title">
+                {listedClients.every(
+                  (client) => apiClientListStatus(client, Date.now()) === 'active',
+                )
+                  ? t('activeApiClientsTitle')
+                  : t('apiClients')}
+              </h2>
+            </div>
+          ) : null}
           <div className="kh-ops-table-wrap">
             <table className="kh-ops-data-table kh-ops-data-table--wide">
               <thead>
@@ -894,70 +944,78 @@ export function ApiClientsAdmin({
                 </tr>
               </thead>
               <tbody>
-                {activeClients.map((client) => (
-                  <tr key={client.id}>
-                    <td className="kh-ops-primary-cell">
-                      <div>{client.name}</div>
-                      {client.tokenPrefix ? (
-                        <div className="mt-0.5 font-mono text-[10px] font-normal text-ink-muted">
-                          {client.tokenPrefix}…
-                        </div>
-                      ) : null}
-                    </td>
-                    <td>{orgName(client.organizationId)}</td>
-                    <td className="kh-ops-cell-wrap">
-                      <ScopeTags scopes={client.scopes} />
-                    </td>
-                    <td className="kh-ops-cell-wrap">
-                      {workspaceNames(client.allowedWorkspaceIds)}
-                    </td>
-                    <td className="kh-ops-cell-wrap">
-                      {actingUserLabel(client.actingUserId)}
-                    </td>
-                    <td className="font-mono text-[11px]">
-                      {formatLastUsed(client.lastUsedAt, t('monitoringNever'))}
-                    </td>
-                    <td>
-                      <Badge tone="success">{t('statusActive')}</Badge>
-                    </td>
-                    <td>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="h-8 min-h-8 px-2 text-xs"
-                          disabled={pending}
-                          onClick={() => openEdit(client)}
-                        >
-                          {t('editApiClient')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="h-8 min-h-8 px-2 text-xs"
-                          disabled={pending}
-                          onClick={() => void rotate(client.id)}
-                        >
-                          {t('rotate')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="danger"
-                          className="h-8 min-h-8 px-2 text-xs"
-                          disabled={pending}
-                          onClick={() => void revoke(client.id)}
-                        >
-                          {t('revoke')}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {listedClients.map((client) => {
+                  const status = apiClientListStatus(client, Date.now());
+                  const manageable = status === 'active' || status === 'expired';
+                  return (
+                    <tr key={client.id}>
+                      <td className="kh-ops-primary-cell">
+                        <div>{client.name}</div>
+                        {client.tokenPrefix ? (
+                          <div className="mt-0.5 font-mono text-[10px] font-normal text-ink-muted">
+                            {client.tokenPrefix}…
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>{orgName(client.organizationId)}</td>
+                      <td className="kh-ops-cell-wrap">
+                        <ScopeTags scopes={client.scopes} />
+                      </td>
+                      <td className="kh-ops-cell-wrap">
+                        {workspaceNames(client.allowedWorkspaceIds)}
+                      </td>
+                      <td className="kh-ops-cell-wrap">{actingUserLabel(client.actingUserId)}</td>
+                      <td className="font-mono text-[11px]">
+                        {formatLastUsed(client.lastUsedAt, t('monitoringNever'))}
+                      </td>
+                      <td>{renderClientStatus(client)}</td>
+                      <td>
+                        {manageable ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="h-8 min-h-8 px-2 text-xs"
+                              disabled={pending}
+                              onClick={() => openEdit(client)}
+                            >
+                              {t('editApiClient')}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="h-8 min-h-8 px-2 text-xs"
+                              disabled={pending}
+                              onClick={() => void rotate(client.id)}
+                            >
+                              {t('rotate')}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="danger"
+                              className="h-8 min-h-8 px-2 text-xs"
+                              disabled={pending}
+                              onClick={() => void revoke(client.id)}
+                            >
+                              {t('revoke')}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-        )}
-      </section>
+        </section>
+      ) : pendingClients.length === 0 ? (
+        <section className="kh-ops-panel">
+          <p className="kh-ops-empty">
+            {initialClients.length === 0 ? t('emptyClients') : t('emptyClientsFiltered')}
+          </p>
+        </section>
+      ) : null}
     </div>
   );
 }

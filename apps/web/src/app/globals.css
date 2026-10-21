@@ -6,10 +6,11 @@
 
 @theme {
   --font-sans: var(--font-ibm-plex-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
-  --font-display: var(--font-ibm-plex-sans-condensed), 'IBM Plex Sans Condensed',
-    'Aptos Narrow', system-ui, sans-serif;
-  --font-mono: var(--font-ibm-plex-mono), 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo,
-    monospace;
+  --font-display:
+    var(--font-ibm-plex-sans-condensed), 'IBM Plex Sans Condensed', 'Aptos Narrow', system-ui,
+    sans-serif;
+  --font-mono:
+    var(--font-ibm-plex-mono), 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-ink: var(--kh-ink);
   --color-ink-muted: var(--kh-ink-muted);
@@ -112,7 +113,7 @@
   }
 
   .kh-function-header-controls {
-    @apply flex min-w-0 w-full flex-1 flex-wrap items-center gap-2 sm:flex-nowrap;
+    @apply flex min-w-0 w-full flex-1 flex-wrap items-center gap-2;
   }
 
   .kh-function-header-controls input.kh-input {
@@ -121,6 +122,12 @@
 
   .kh-function-header-controls select.kh-input {
     @apply w-auto max-w-[11rem] shrink-0;
+  }
+
+  .kh-function-header-controls select.kh-input.kh-ops-inline-select {
+    width: max-content;
+    max-width: none;
+    field-sizing: content;
   }
 
   .kh-function-header-actions {

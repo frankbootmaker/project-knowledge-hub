@@ -1,14 +1,11 @@
 import type { ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
-import { IBM_Plex_Mono, IBM_Plex_Sans, IBM_Plex_Sans_Condensed } from 'next/font/google';
+import { ibmPlexMono, ibmPlexSans, ibmPlexSansCondensed } from '../fonts/ibm-plex';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeScript } from '../components/ThemeScript';
 import { ToastProvider } from '../components/ui';
-import {
-  getPersonalBrandCookie,
-  loadPlatformBrandSettings,
-} from '../lib/brand-actions';
+import { getPersonalBrandCookie, loadPlatformBrandSettings } from '../lib/brand-actions';
 import { resolveEffectiveBrand } from '../lib/brand';
 import { getThemePreference } from '../lib/theme-actions';
 import './globals.css';
@@ -32,27 +29,6 @@ export const viewport: Viewport = {
   ],
 };
 
-const sans = IBM_Plex_Sans({
-  subsets: ['latin', 'latin-ext'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-ibm-plex-sans',
-  display: 'swap',
-});
-
-const display = IBM_Plex_Sans_Condensed({
-  subsets: ['latin', 'latin-ext'],
-  weight: ['400', '600', '700'],
-  variable: '--font-ibm-plex-sans-condensed',
-  display: 'swap',
-});
-
-const mono = IBM_Plex_Mono({
-  subsets: ['latin', 'latin-ext'],
-  weight: ['400', '500'],
-  variable: '--font-ibm-plex-mono',
-  display: 'swap',
-});
-
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = await getLocale();
   const messages = await getMessages();
@@ -65,7 +41,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html
       lang={locale}
-      className={`${sans.variable} ${display.variable} ${mono.variable}${ssrTheme === 'dark' ? ' dark' : ''}`}
+      className={`${ibmPlexSans.variable} ${ibmPlexSansCondensed.variable} ${ibmPlexMono.variable}${ssrTheme === 'dark' ? ' dark' : ''}`}
       data-theme={ssrTheme}
       data-brand={brand}
       data-brand-default={brandSettings.defaultBrand}
@@ -73,10 +49,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       suppressHydrationWarning
     >
       <body className="font-sans">
-        <ThemeScript
-          brandDefault={brandSettings.defaultBrand}
-          brandLocked={brandSettings.locked}
-        />
+        <ThemeScript brandDefault={brandSettings.defaultBrand} brandLocked={brandSettings.locked} />
         <NextIntlClientProvider messages={messages}>
           <ToastProvider>{children}</ToastProvider>
         </NextIntlClientProvider>

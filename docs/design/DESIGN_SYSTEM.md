@@ -203,7 +203,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`); mobile full-width bottom, desktop corner |
 | `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout. `PageHeader` is the Ops Console view-intro (eyebrow + condensed title + subtitle + actions). `ListCard` is a dense catalogue row inside `.kh-ops-panel` |
-| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (`.kh-ops-toolbar`; stacks below `sm`) |
+| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (`.kh-ops-toolbar`; stacks below `sm`, controls wrap). MCP API clients and OAuth grants use the Workspace & Projects header, plus scope or client, sort, result count, and Clear filters |
 | `OpsCountStrip` | Horizontal count strip for live totals (dashboard, workspace, git, imports, stakeholders) |
 | `AuthCard` | Bordered login/register/reset/confirm card with KH mark |
 
@@ -248,6 +248,11 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-10-21
+
+* **MCP list filters (PRO-T-114)** — Admin MCP API clients and OAuth grants use `FunctionHeader`, the same toolbar as Workspace & Projects. API clients filter by search (name, client id, token prefix, acting user), status (active, pending approval, revoked, expired), and scope, and sort by created or last used. OAuth grants filter by search (client, host, client id, user), client (ChatGPT, Claude, or the host), and status (active, revoked, expired), and sort by last used or created. Expired is derived from `expiresAt` or `refreshExpiresAt`. Each list shows `{shown} of {total}` and a secondary Clear filters button. Empty copy differs for no rows and no matches. English, German, and Hungarian.
+* **Self-hosted fonts (PRO-T-115)** — IBM Plex Sans (400–700), IBM Plex Sans Condensed (400, 600, 700), and IBM Plex Mono (400, 500) load with `next/font/local` from `apps/web/src/fonts`. Families, weights, `display: swap`, and the `--font-ibm-plex-*` variables stay the same. Buttons stay on the UI sans.
 
 ### 2026-10-20
 
