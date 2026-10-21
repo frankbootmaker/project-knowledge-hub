@@ -53,14 +53,6 @@ function setControl(element: HTMLInputElement | HTMLSelectElement, value: string
   });
 }
 
-function selectByLabel(container: ParentNode, label: string): HTMLSelectElement {
-  const element = container.querySelector(`select[aria-label="${label}"]`);
-  if (!(element instanceof HTMLSelectElement)) {
-    throw new Error(`missing select ${label}`);
-  }
-  return element;
-}
-
 function clickCheckbox(root: ParentNode, labelText: string) {
   const label = [...root.querySelectorAll('label')].find((node) =>
     node.textContent?.includes(labelText),
@@ -143,26 +135,32 @@ describe('MCP list headers', () => {
         users={users}
       />,
     );
+    expect(container.querySelector('table')).toBeTruthy();
     const search = container.querySelector('input[type="search"]');
-    expect(search).toBeTruthy();
-    expect(container.textContent).toContain('listResultCount:{"shown":2,"total":2}');
+    if (!(search instanceof HTMLInputElement)) throw new Error('missing search');
     expect(container.textContent).toContain('Cursor desktop');
     expect(container.textContent).toContain('Old token');
-    const clear = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('clearFilters'),
-    );
-    expect(clear?.hasAttribute('disabled')).toBe(true);
 
-    setControl(selectByLabel(container, 'apiClientsFilterStatus'), 'expired');
+    const toggle = container.querySelector('button[aria-label="showFilters"]');
+    if (!(toggle instanceof HTMLButtonElement)) throw new Error('missing filter toggle');
+    act(() => {
+      toggle.click();
+    });
+    const menu = document.body.querySelector('.kh-ops-table-filter');
+    if (!(menu instanceof HTMLElement)) throw new Error('missing filter menu');
+    clickCheckbox(menu, 'statusExpired');
     expect(container.textContent).toContain('Old token');
     expect(container.textContent).not.toContain('Cursor desktop');
     expect(container.textContent).toContain('statusExpired');
-    expect(container.textContent).toContain('listResultCount:{"shown":1,"total":2}');
 
-    setControl(selectByLabel(container, 'apiClientsFilterStatus'), 'all');
-    const searchInput = container.querySelector('input[type="search"]');
-    if (!(searchInput instanceof HTMLInputElement)) throw new Error('missing search');
-    setControl(searchInput, 'missing-client');
+    const clear = [...document.body.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('clearFilters'),
+    );
+    if (!(clear instanceof HTMLButtonElement)) throw new Error('missing clear');
+    act(() => {
+      clear.click();
+    });
+    setControl(search, 'missing-client');
     expect(container.querySelector('.kh-ops-empty')?.textContent).toBe('emptyClientsFiltered');
   });
 

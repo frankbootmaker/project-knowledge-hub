@@ -251,6 +251,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-21
 
+* **API client table** — Admin → MCP setup → API clients uses the same toolbar, filter menu, wrapped cells, and scope preview as OAuth grants. Status and scope are checkboxes in the menu. Column headers sort the rows. Create API client stays on the toolbar.
 * **OAuth grant scopes** — The grant table keeps the first two scopes as tags. Further scopes sit behind a +N tag that opens the same popover as the filter menu and lists every scope. Grant cells wrap onto more than one line so a narrow window stays in the panel. English, German, and Hungarian.
 * **OAuth grant table** — Admin → MCP setup → OAuth and Account → AI connections list grants in a data table. Search stays in the toolbar. The filter icon opens the same menu as Workspace & Projects, with client and status checkboxes. Column headers sort the rows. Clear filters sits beside the icon while a menu filter is on.
 * **AI cost date range (PRO-T-111)** — The AI Cost period header (workspace and platform) uses the same native date field as the exchange-rate date. From and To sit beside those fields so the boxes line up with the preset buttons. The cost-entry service start and end keep the shared range calendar: the icon sits inside each field, the first day sets both ends, and the second day fills the range. Typed dates still apply. This year, This quarter, and This month stay as presets. Days between the service ends use the selected wash. Day buttons stay on the UI sans.

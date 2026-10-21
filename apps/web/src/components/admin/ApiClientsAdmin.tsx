@@ -2,27 +2,19 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { applyTableView } from '../../lib/data-table';
+import { useSyncEnumFilters, useTableState } from '../../lib/use-table-state';
 import {
-  apiClientFiltersActive,
   apiClientListStatus,
-  defaultApiClientListQuery,
-  filterApiClients,
+  apiClientSearchBlob,
   type ApiClientListStatus,
-  type ApiClientSort,
-  type ApiClientStatusFilter,
 } from './api-client-list';
-import {
-  Badge,
-  Button,
-  ErrorText,
-  Field,
-  FunctionHeader,
-  Input,
-  Modal,
-  Select,
-  useToast,
-} from '../ui';
+import { LocalDateTime } from '../LocalDateTime';
+import { Badge, Button, ErrorText, Field, Input, Modal, Select, useToast } from '../ui';
+import { DataTable, dataTableFilterFields, type DataColumn } from '../ui/DataTable';
+import { TableFilterControl } from '../ui/TableFilterControl';
+import { ScopePreviewList } from './ScopePreviewList';
 
 const MCP_SCOPES = [
   'projects:read',
@@ -71,27 +63,12 @@ type Org = { id: string; name: string; slug: string };
 type Workspace = { id: string; name: string; slug: string; organizationId: string };
 type User = { id: string; email: string; displayName: string };
 
-function formatLastUsed(at: string | null, neverLabel: string): string {
-  if (!at) return neverLabel;
-  const seconds = Math.floor((Date.now() - new Date(at).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  if (seconds < 86400 * 30) return `${Math.floor(seconds / 86400)}d`;
-  return at.slice(0, 10);
-}
-
-function ScopeTags({ scopes }: { scopes: string[] }) {
-  return (
-    <div className="kh-ops-scope-list kh-ops-scope-list--inline">
-      {scopes.map((scope) => (
-        <span key={scope} className="kh-ops-tag">
-          {scope}
-        </span>
-      ))}
-    </div>
-  );
-}
+const CLIENT_STATUS_FILTERS: ApiClientListStatus[] = [
+  'active',
+  'pending_approval',
+  'revoked',
+  'expired',
+];
 
 export function ApiClientsAdmin({
   initialClients,
@@ -107,16 +84,18 @@ export function ApiClientsAdmin({
   const t = useTranslations('admin');
   const tCommon = useTranslations('common');
   const tTable = useTranslations('table');
+  const locale = useLocale();
   const router = useRouter();
   const { pushToast } = useToast();
+  const table = useTableState({
+    namespace: 'apiClients',
+    defaultSortKey: 'created',
+    defaultSortDir: 'desc',
+  });
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ApiClientStatusFilter>('all');
-  const [scopeFilter, setScopeFilter] = useState('all');
-  const [sort, setSort] = useState<ApiClientSort>('created');
 
   const [name, setName] = useState('');
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? '');
@@ -141,45 +120,6 @@ export function ApiClientsAdmin({
   const [editWorkspaces, setEditWorkspaces] = useState<string[]>([]);
   const [editActingUserId, setEditActingUserId] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
-
-  const listQuery = useMemo(
-    () => ({
-      query: searchQuery,
-      status: statusFilter,
-      scope: scopeFilter,
-      sort,
-    }),
-    [searchQuery, statusFilter, scopeFilter, sort],
-  );
-  const filtersActive = apiClientFiltersActive(listQuery);
-
-  const filteredClients = useMemo(
-    () => filterApiClients(initialClients, users, listQuery, Date.now()),
-    [initialClients, users, listQuery],
-  );
-
-  const pendingClients = useMemo(
-    () =>
-      filteredClients.filter(
-        (client) => apiClientListStatus(client, Date.now()) === 'pending_approval',
-      ),
-    [filteredClients],
-  );
-  const listedClients = useMemo(
-    () =>
-      filteredClients.filter(
-        (client) => apiClientListStatus(client, Date.now()) !== 'pending_approval',
-      ),
-    [filteredClients],
-  );
-
-  function clearClientFilters() {
-    const defaults = defaultApiClientListQuery();
-    setSearchQuery(defaults.query);
-    setStatusFilter(defaults.status);
-    setScopeFilter(defaults.scope);
-    setSort(defaults.sort);
-  }
 
   function clientStatusLabel(status: ApiClientListStatus): string {
     switch (status) {
@@ -500,6 +440,261 @@ export function ApiClientsAdmin({
     );
   }
 
+  const statusOptions = useMemo(
+    () =>
+      CLIENT_STATUS_FILTERS.map((value) => ({
+        value,
+        label: clientStatusLabel(value),
+      })),
+    // clientStatusLabel only reads translation keys.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
+  );
+  const scopeOptions = useMemo(
+    () => MCP_SCOPES.map((scope) => ({ value: scope, label: scope })),
+    [],
+  );
+
+  const columns = useMemo<Array<DataColumn<PublicApiClient>>>(() => {
+    const dateCell = (value: string | null) =>
+      value ? (
+        <LocalDateTime value={value} locale={locale} />
+      ) : (
+        <span className="text-ink-muted">{t('monitoringNever')}</span>
+      );
+    return [
+      {
+        id: 'name',
+        header: t('colName'),
+        kind: 'text',
+        primary: true,
+        sort: { type: 'text', getValue: (client) => client.name },
+        cell: (client) => (
+          <span>
+            {client.name}
+            {client.tokenPrefix ? (
+              <span className="mt-0.5 block text-xs text-ink-muted">{client.tokenPrefix}…</span>
+            ) : null}
+            {apiClientListStatus(client, Date.now()) === 'pending_approval' ? (
+              <span className="mt-0.5 block text-xs text-ink-muted">
+                {t('requestedBy')}: {userLabel(client.requestedByUserId)}
+              </span>
+            ) : null}
+          </span>
+        ),
+      },
+      {
+        id: 'organization',
+        header: t('organization'),
+        kind: 'text',
+        sort: { type: 'text', getValue: (client) => orgName(client.organizationId) },
+        cell: (client) => orgName(client.organizationId),
+      },
+      {
+        id: 'scopes',
+        header: t('colScopes'),
+        kind: 'data',
+        filter: {
+          type: 'enum',
+          getValue: (client) => client.scopes,
+          options: scopeOptions,
+        },
+        cell: (client) => (
+          <ScopePreviewList
+            scopes={client.scopes}
+            title={t('scopes')}
+            moreLabel={(count) => t('oauthGrantScopesMore', { count })}
+            hideLabel={t('oauthGrantScopesHide')}
+          />
+        ),
+      },
+      {
+        id: 'workspaces',
+        header: t('allowedWorkspaces'),
+        kind: 'text',
+        cell: (client) => {
+          const text = workspaceNames(client.allowedWorkspaceIds);
+          return (
+            <span className="kh-ops-grant-wrap" title={text}>
+              {text}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'actingUser',
+        header: t('actingUser'),
+        kind: 'text',
+        cell: (client) => actingUserLabel(client.actingUserId),
+      },
+      {
+        id: 'lastUsed',
+        header: t('lastUsed'),
+        kind: 'date',
+        sort: {
+          type: 'date',
+          getValue: (client) => client.lastUsedAt,
+          defaultDir: 'desc',
+        },
+        cell: (client) => dateCell(client.lastUsedAt),
+      },
+      {
+        id: 'created',
+        header: t('apiClientsSortCreated'),
+        kind: 'date',
+        sort: {
+          type: 'date',
+          getValue: (client) => client.createdAt,
+          defaultDir: 'desc',
+        },
+        cell: (client) => <LocalDateTime value={client.createdAt} locale={locale} />,
+      },
+      {
+        id: 'status',
+        header: t('colStatus'),
+        kind: 'status',
+        sort: {
+          type: 'text',
+          getValue: (client) => apiClientListStatus(client, Date.now()),
+        },
+        filter: {
+          type: 'enum',
+          getValue: (client) => apiClientListStatus(client, Date.now()),
+          options: statusOptions,
+        },
+        cell: (client) => (
+          <span className="inline-flex flex-wrap items-center gap-1">
+            {renderClientStatus(client)}
+            {client.agentLabel ? <Badge tone="neutral">{client.agentLabel}</Badge> : null}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: '',
+        kind: 'actions',
+        cell: (client) => {
+          const status = apiClientListStatus(client, Date.now());
+          if (status === 'pending_approval') {
+            return (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  className="h-8 min-h-8 px-2 text-xs"
+                  disabled={pending}
+                  onClick={() => openApprove(client)}
+                >
+                  {t('approveApiClient')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  className="h-8 min-h-8 px-2 text-xs"
+                  disabled={pending}
+                  onClick={() => void rejectPending(client.id)}
+                >
+                  {t('rejectApiClient')}
+                </Button>
+              </div>
+            );
+          }
+          if (status !== 'active' && status !== 'expired') return null;
+          return (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 min-h-8 px-2 text-xs"
+                disabled={pending}
+                onClick={() => openEdit(client)}
+              >
+                {t('editApiClient')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 min-h-8 px-2 text-xs"
+                disabled={pending}
+                onClick={() => void rotate(client.id)}
+              >
+                {t('rotate')}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                className="h-8 min-h-8 px-2 text-xs"
+                disabled={pending}
+                onClick={() => void revoke(client.id)}
+              >
+                {t('revoke')}
+              </Button>
+            </div>
+          );
+        },
+      },
+    ];
+    // Row actions close over the latest setters. pending refreshes the disabled state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale, organizations, pending, scopeOptions, statusOptions, t, users, workspaces]);
+
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
+
+  const visible = useMemo(
+    () =>
+      applyTableView({
+        rows: initialClients,
+        locale,
+        query: table.query,
+        search: (client, needle) => apiClientSearchBlob(client, users).includes(needle),
+        sortKey: table.sortKey,
+        sortDir: table.sortDir,
+        filters: table.filters,
+        textFilters: table.textFilters,
+        columns,
+        tieBreak: (left, right) => left.id.localeCompare(right.id),
+      }),
+    [
+      columns,
+      initialClients,
+      locale,
+      table.filters,
+      table.query,
+      table.sortDir,
+      table.sortKey,
+      table.textFilters,
+      users,
+    ],
+  );
+  const pendingClients = visible.filter(
+    (client) => apiClientListStatus(client, Date.now()) === 'pending_approval',
+  );
+  const listedClients = visible.filter(
+    (client) => apiClientListStatus(client, Date.now()) !== 'pending_approval',
+  );
+  const bareEmpty =
+    initialClients.length === 0 && !table.filtersActive && table.query.trim() === '';
+
+  function renderClientTable(rows: PublicApiClient[]) {
+    return (
+      <DataTable
+        rows={rows}
+        rowKey={(client) => client.id}
+        columns={columns}
+        sortKey={table.sortKey}
+        sortDir={table.sortDir}
+        onToggleSort={table.toggleSort}
+        enumFilters={table.filters}
+        textFilters={table.textFilters}
+        onEnumFilter={table.setEnumFilter}
+        onTextFilter={table.setTextFilter}
+        onClearFilters={table.clearFilters}
+        filtersActive={table.filtersActive}
+        hideHeaderFilter
+        tableClassName="kh-ops-wrap-table"
+      />
+    );
+  }
+
   return (
     <div className="grid gap-6">
       {issuedToken ? (
@@ -511,83 +706,48 @@ export function ApiClientsAdmin({
         </div>
       ) : null}
 
-      <FunctionHeader
-        search={
+      <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
+        <label className="flex min-w-[220px] flex-1 items-center gap-2">
+          <span className="sr-only">{t('apiClientsSearchPlaceholder')}</span>
           <Input
             type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
             placeholder={t('apiClientsSearchPlaceholder')}
             aria-label={t('apiClientsSearchPlaceholder')}
+            className="h-10 min-h-10 py-1.5 text-xs"
           />
-        }
-        filters={
-          <>
-            <Select
-              className="kh-ops-inline-select"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as ApiClientStatusFilter)}
-              aria-label={t('apiClientsFilterStatus')}
-            >
-              <option value="all">{t('apiClientsFilterAll')}</option>
-              <option value="active">{t('statusActive')}</option>
-              <option value="pending_approval">{t('statusPendingApproval')}</option>
-              <option value="revoked">{t('statusRevoked')}</option>
-              <option value="expired">{t('statusExpired')}</option>
-            </Select>
-            <Select
-              className="kh-ops-inline-select"
-              value={scopeFilter}
-              onChange={(e) => setScopeFilter(e.target.value)}
-              aria-label={t('apiClientsFilterScope')}
-            >
-              <option value="all">{t('apiClientsFilterAllScopes')}</option>
-              {MCP_SCOPES.map((scope) => (
-                <option key={scope} value={scope}>
-                  {scope}
-                </option>
-              ))}
-            </Select>
-            <Select
-              className="kh-ops-inline-select"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as ApiClientSort)}
-              aria-label={t('apiClientsFilterSort')}
-            >
-              <option value="created">{t('apiClientsSortCreated')}</option>
-              <option value="lastUsed">{t('apiClientsSortLastUsed')}</option>
-            </Select>
-            <span className="kh-ops-panel-meta whitespace-nowrap">
-              {t('listResultCount', {
-                shown: filteredClients.length,
-                total: initialClients.length,
-              })}
-            </span>
-          </>
-        }
-        actions={
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!filtersActive}
-              onClick={clearClientFilters}
-            >
-              {tTable('clearFilters')}
-            </Button>
-            <Button
-              type="button"
-              disabled={pending || organizations.length === 0}
-              onClick={() => {
-                resetCreateForm();
-                setCreateOpen(true);
-              }}
-            >
-              {t('createClient')}
-            </Button>
-          </>
-        }
-      />
+        </label>
+        <TableFilterControl
+          fields={dataTableFilterFields(columns)}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={table.clearFilters}
+          filtersActive={table.filtersActive}
+        />
+        {table.filtersActive ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+            onClick={table.clearFilters}
+          >
+            {tTable('clearFilters')}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          disabled={pending || organizations.length === 0}
+          onClick={() => {
+            resetCreateForm();
+            setCreateOpen(true);
+          }}
+        >
+          {t('createClient')}
+        </Button>
+      </div>
 
       <Modal
         open={createOpen}
@@ -848,71 +1008,8 @@ export function ApiClientsAdmin({
           <div className="kh-ops-panel-head">
             <h2 className="kh-ops-panel-title">{t('pendingApiClientsTitle')}</h2>
           </div>
-          <p className="m-0 px-3 pt-3 text-[11px] text-ink-muted">{t('pendingApiClientsHint')}</p>
-          <div className="kh-ops-table-wrap">
-            <table className="kh-ops-data-table kh-ops-data-table--wide">
-              <thead>
-                <tr>
-                  <th>{t('colName')}</th>
-                  <th>{t('organization')}</th>
-                  <th className="kh-ops-cell-wrap">{t('colScopes')}</th>
-                  <th className="kh-ops-cell-wrap">{t('allowedWorkspaces')}</th>
-                  <th>{t('actingUser')}</th>
-                  <th>{t('lastUsed')}</th>
-                  <th>{t('colStatus')}</th>
-                  <th>{t('colActions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingClients.map((client) => (
-                  <tr key={client.id}>
-                    <td className="kh-ops-primary-cell">
-                      <div>{client.name}</div>
-                      <div className="mt-0.5 text-[11px] font-normal text-ink-muted">
-                        {t('requestedBy')}: {userLabel(client.requestedByUserId)}
-                      </div>
-                    </td>
-                    <td>{orgName(client.organizationId)}</td>
-                    <td className="kh-ops-cell-wrap">
-                      <ScopeTags scopes={client.scopes} />
-                    </td>
-                    <td className="kh-ops-cell-wrap">
-                      {workspaceNames(client.allowedWorkspaceIds)}
-                    </td>
-                    <td className="kh-ops-cell-wrap">{actingUserLabel(client.actingUserId)}</td>
-                    <td className="font-mono text-[11px]">
-                      {formatLastUsed(client.lastUsedAt, t('monitoringNever'))}
-                    </td>
-                    <td>
-                      {renderClientStatus(client)}
-                      {client.agentLabel ? <Badge tone="neutral">{client.agentLabel}</Badge> : null}
-                    </td>
-                    <td>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          className="h-8 min-h-8 px-2 text-xs"
-                          disabled={pending}
-                          onClick={() => openApprove(client)}
-                        >
-                          {t('approveApiClient')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="danger"
-                          className="h-8 min-h-8 px-2 text-xs"
-                          disabled={pending}
-                          onClick={() => void rejectPending(client.id)}
-                        >
-                          {t('rejectApiClient')}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <p className="m-0 px-3 pt-3 text-sm text-ink-muted">{t('pendingApiClientsHint')}</p>
+          {renderClientTable(pendingClients)}
         </section>
       ) : null}
 
@@ -929,90 +1026,12 @@ export function ApiClientsAdmin({
               </h2>
             </div>
           ) : null}
-          <div className="kh-ops-table-wrap">
-            <table className="kh-ops-data-table kh-ops-data-table--wide">
-              <thead>
-                <tr>
-                  <th>{t('colName')}</th>
-                  <th>{t('organization')}</th>
-                  <th className="kh-ops-cell-wrap">{t('colScopes')}</th>
-                  <th className="kh-ops-cell-wrap">{t('allowedWorkspaces')}</th>
-                  <th>{t('actingUser')}</th>
-                  <th>{t('lastUsed')}</th>
-                  <th>{t('colStatus')}</th>
-                  <th>{t('colActions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {listedClients.map((client) => {
-                  const status = apiClientListStatus(client, Date.now());
-                  const manageable = status === 'active' || status === 'expired';
-                  return (
-                    <tr key={client.id}>
-                      <td className="kh-ops-primary-cell">
-                        <div>{client.name}</div>
-                        {client.tokenPrefix ? (
-                          <div className="mt-0.5 font-mono text-[10px] font-normal text-ink-muted">
-                            {client.tokenPrefix}…
-                          </div>
-                        ) : null}
-                      </td>
-                      <td>{orgName(client.organizationId)}</td>
-                      <td className="kh-ops-cell-wrap">
-                        <ScopeTags scopes={client.scopes} />
-                      </td>
-                      <td className="kh-ops-cell-wrap">
-                        {workspaceNames(client.allowedWorkspaceIds)}
-                      </td>
-                      <td className="kh-ops-cell-wrap">{actingUserLabel(client.actingUserId)}</td>
-                      <td className="font-mono text-[11px]">
-                        {formatLastUsed(client.lastUsedAt, t('monitoringNever'))}
-                      </td>
-                      <td>{renderClientStatus(client)}</td>
-                      <td>
-                        {manageable ? (
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="h-8 min-h-8 px-2 text-xs"
-                              disabled={pending}
-                              onClick={() => openEdit(client)}
-                            >
-                              {t('editApiClient')}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="h-8 min-h-8 px-2 text-xs"
-                              disabled={pending}
-                              onClick={() => void rotate(client.id)}
-                            >
-                              {t('rotate')}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="danger"
-                              className="h-8 min-h-8 px-2 text-xs"
-                              disabled={pending}
-                              onClick={() => void revoke(client.id)}
-                            >
-                              {t('revoke')}
-                            </Button>
-                          </div>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {renderClientTable(listedClients)}
         </section>
       ) : pendingClients.length === 0 ? (
         <section className="kh-ops-panel">
           <p className="kh-ops-empty">
-            {initialClients.length === 0 ? t('emptyClients') : t('emptyClientsFiltered')}
+            {bareEmpty ? t('emptyClients') : t('emptyClientsFiltered')}
           </p>
         </section>
       ) : null}
