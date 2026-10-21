@@ -203,7 +203,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`); mobile full-width bottom, desktop corner |
 | `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout. `PageHeader` is the Ops Console view-intro (eyebrow + condensed title + subtitle + actions). `ListCard` is a dense catalogue row inside `.kh-ops-panel` |
-| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (`.kh-ops-toolbar`; stacks below `sm`) |
+| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (`.kh-ops-toolbar`; stacks below `sm`, controls wrap). MCP API clients and OAuth grants use the Workspace & Projects header, plus scope or client, sort, result count, and Clear filters |
 | `OpsCountStrip` | Horizontal count strip for live totals (dashboard, workspace, git, imports, stakeholders) |
 | `AuthCard` | Bordered login/register/reset/confirm card with KH mark |
 
@@ -251,6 +251,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-21
 
+* **MCP list filters (PRO-T-114)** — Admin MCP API clients and OAuth grants use `FunctionHeader`, the same toolbar as Workspace & Projects. API clients filter by search (name, client id, token prefix, acting user), status (active, pending approval, revoked, expired), and scope, and sort by created or last used. OAuth grants filter by search (client, host, client id, user), client (ChatGPT, Claude, or the host), and status (active, revoked, expired), and sort by last used or created. Expired is derived from `expiresAt` or `refreshExpiresAt`. Each list shows `{shown} of {total}` and a secondary Clear filters button. Empty copy differs for no rows and no matches. English, German, and Hungarian.
+* **Self-hosted fonts (PRO-T-115)** — IBM Plex Sans (400–700), IBM Plex Sans Condensed (400, 600, 700), and IBM Plex Mono (400, 500) load with `next/font/local` from `apps/web/src/fonts`. Families, weights, `display: swap`, and the `--font-ibm-plex-*` variables stay the same. Buttons stay on the UI sans.
 * **Archived parent links** — The milestone Linked items tab uses existing `ErrorText` when the milestone is archived (`archivedParentLink`: “Milestone PNZ-M-12 is archived; unarchive it first”) and disables add/remove. Task and story saves use the same sentence when a new story, milestone, or epic assignment points at an archived parent. English, German, and Hungarian copy match. No new control.
 * **Monitoring alerts** — Admin → Monitoring adds an Alerts panel (`#alerts`) under the health cards. It uses `Field`, `Input`, `Select`, `Button`, and `Badge` inside `.kh-ops-panel`. A warn `Badge` shows when the mail driver is console, with a text link to Admin → Email. Per-type recipients sit in a `<details>` with `.kh-ops-scope-check` user rows. Retention stats reuse `.kh-ops-list-row`. Save, reset, and send-test use `useToast`. Copy is in English, German, and Hungarian.
 * **AI cost period** — Workspace and platform Financials add This quarter and This month beside This year (`LinkButton` presets). The active preset stays filled until the from/to dates change. From and to use a shared calendar (`DateField` / `DateRangeFields`): a calendar button opens a popover, a typed date still applies, and the same calendar can pick one day or a day range. Day buttons use the UI sans. Service start and service end in the cost-entry dialog use the same single-day field, and the end cannot be on or before the start.
