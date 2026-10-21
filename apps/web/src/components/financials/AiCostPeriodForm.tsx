@@ -36,15 +36,21 @@ export function AiCostPeriodForm({
   const t = useTranslations('financials');
   const [timeZone, setTimeZone] = useState(preserve.tz || 'UTC');
   const [activeRange, setActiveRange] = useState<AiCostViewRange>(range);
-  const initialFrom = isIsoDay(fromDay ?? '') ? (fromDay as string) : isIsoDay(from) ? from : '';
-  const initialTo = isIsoDay(toDay ?? '') ? (toDay as string) : isIsoDay(to) ? to : '';
-  const [fromValue, setFromValue] = useState(initialFrom);
-  const [toValue, setToValue] = useState(initialTo);
+  const resolvedFrom = isIsoDay(fromDay ?? '') ? (fromDay as string) : isIsoDay(from) ? from : '';
+  const resolvedTo = isIsoDay(toDay ?? '') ? (toDay as string) : isIsoDay(to) ? to : '';
+  const [fromValue, setFromValue] = useState(resolvedFrom);
+  const [toValue, setToValue] = useState(resolvedTo);
 
   useEffect(() => {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (zone) setTimeZone(zone);
   }, []);
+
+  useEffect(() => {
+    setFromValue(resolvedFrom);
+    setToValue(resolvedTo);
+    setActiveRange(range);
+  }, [resolvedFrom, resolvedTo, range]);
 
   const labels: Record<(typeof PRESETS)[number], string> = {
     last12: t('presetLast12'),
@@ -71,6 +77,7 @@ export function AiCostPeriodForm({
           <LinkButton
             key={preset}
             href={presetHref(preset)}
+            scroll={false}
             variant={activeRange === preset ? 'primary' : 'secondary'}
             aria-current={activeRange === preset ? 'true' : undefined}
           >

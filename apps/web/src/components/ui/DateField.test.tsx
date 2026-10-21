@@ -187,7 +187,22 @@ describe('AiCostPeriodForm presets', () => {
     expect(quarter?.getAttribute('href')).not.toContain('from=');
     const dates = [...document.body.querySelectorAll('input[type="date"]')];
     expect(dates).toHaveLength(2);
-    for (const input of dates) {
+    act(() => {
+      mounted[mounted.length - 1]?.root.render(
+        <AiCostPeriodForm
+          action="/admin/financials"
+          from="2026-01"
+          to="2026-12"
+          fromDay="2026-01-01"
+          toDay="2026-12-31"
+          range="year"
+        />,
+      );
+    });
+    const updated = [...document.body.querySelectorAll('input[type="date"]')];
+    expect((updated[0] as HTMLInputElement).value).toBe('2026-01-01');
+    expect((updated[1] as HTMLInputElement).value).toBe('2026-12-31');
+    for (const input of updated) {
       expect(input.parentElement?.className).toContain('kh-ops-period-field');
       expect(input.previousElementSibling?.tagName).toBe('SPAN');
     }

@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   addCalendarDays,
   lastDayOfMonth,
   lookupFxRate,
+  summarizeAiBillingMonth,
   type FxRate,
 } from '@project-knowledge-hub/domain';
 import { formatAiBillingMonth, formatServiceDate } from '../../lib/ai-billing-month';
@@ -138,6 +139,249 @@ function workspaceHref(slug: string): string {
   return `/workspaces/${slug}/financials`;
 }
 
+function entryAmount(
+  entry: PlatformAiEntry,
+  original: boolean,
+): { amount: number; currency: string } {
+  if (original) return { amount: entry.amount, currency: entry.currency };
+  return {
+    amount: entry.convertedAmount ?? entry.amount,
+    currency: entry.convertedCurrency ?? entry.currency,
+  };
+}
+
+function filterOverviewMonths(
+  months: PlatformAiMonth[],
+  entries: PlatformAiEntry[],
+  filters: PlatformAiCostFilters,
+  original: boolean,
+): PlatformAiMonth[] {
+  const rows = months.filter((row) => {
+    if (filters.workspaceId && row.workspaceId !== filters.workspaceId) return false;
+    if (filters.period && row.period !== filters.period) return false;
+    return true;
+  });
+  if (filters.provider) {
+    const allowed = new Set(rows.map((row) => row.currency));
+    const sums = new Map<string, { subscription: number; planChange: number; onDemand: number }>();
+    for (const entry of entries) {
+      const money = entryAmount(entry, original);
+      if (allowed.size > 0 && !allowed.has(money.currency)) continue;
+      const key = `${entry.workspaceId}|${entry.period}|${money.currency}`;
+      const current = sums.get(key) ?? { subscription: 0, planChange: 0, onDemand: 0 };
+      if (entry.type === 'subscription') current.subscription += money.amount;
+      else if (entry.type === 'plan_change') current.planChange += money.amount;
+      else current.onDemand += money.amount;
+      sums.set(key, current);
+    }
+    const known = new Map(
+      rows.map((row) => [`${row.workspaceId}|${row.period}|${row.currency}`, row]),
+    );
+    const next: PlatformAiMonth[] = [];
+    for (const [key, parts] of sums) {
+      const [workspaceId, period, currency] = key.split('|');
+      const sample = entries.find((entry) => entry.workspaceId === workspaceId);
+      const base = known.get(key) ?? {
+        workspaceId: workspaceId ?? '',
+        workspaceName: sample?.workspaceName ?? '',
+        workspaceSlug: sample?.workspaceSlug ?? '',
+        period: period ?? '',
+        currency: currency ?? '',
+        subscription: 0,
+        planChange: 0,
+        onDemand: 0,
+        paidCost: 0,
+        theoreticalApiCost: 0,
+        difference: 0,
+        ratio: null,
+      };
+      next.push({
+        ...base,
+        ...summarizeAiBillingMonth({
+          period: base.period,
+          currency: base.currency,
+          subscription: parts.subscription,
+          planChange: parts.planChange,
+          onDemand: parts.onDemand,
+          theoreticalApiCost: 0,
+        }),
+      });
+    }
+    return next.sort(compareOverviewRows);
+  }
+  if (!filters.type) return rows;
+  return rows
+    .map((row) => ({
+      ...row,
+      ...summarizeAiBillingMonth({
+        period: row.period,
+        currency: row.currency,
+        subscription: filters.type === 'subscription' ? row.subscription : 0,
+        planChange: filters.type === 'plan_change' ? row.planChange : 0,
+        onDemand: filters.type === 'on_demand' ? row.onDemand : 0,
+        theoreticalApiCost: row.theoreticalApiCost,
+      }),
+    }))
+    .filter((row) => {
+      if (filters.type === 'subscription') return row.subscription !== 0;
+      if (filters.type === 'plan_change') return row.planChange !== 0;
+      return row.onDemand !== 0;
+    });
+}
+
+function compareOverviewRows(a: PlatformAiMonth, b: PlatformAiMonth): number {
+  const period = b.period.localeCompare(a.period);
+  if (period !== 0) return period;
+  const currency = a.currency.localeCompare(b.currency);
+  if (currency !== 0) return currency;
+  return a.workspaceName.localeCompare(b.workspaceName) || a.workspaceId.localeCompare(b.workspaceId);
+}
+
+function rollupOverviewTotals(rows: PlatformAiMonth[]): PlatformAiTotal[] {
+  const grouped = new Map<
+    string,
+    {
+      period: string;
+      currency: string;
+      subscription: number;
+      planChange: number;
+      onDemand: number;
+      theoreticalApiCost: number;
+      scheduled: boolean;
+      fxRate: number | null;
+      fxRateDate: string | null;
+      fxSource: string | null;
+    }
+  >();
+  for (const row of rows) {
+    const key = `${row.period}|${row.currency}`;
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, {
+        period: row.period,
+        currency: row.currency,
+        subscription: row.subscription,
+        planChange: row.planChange,
+        onDemand: row.onDemand,
+        theoreticalApiCost: row.theoreticalApiCost,
+        scheduled: Boolean(row.scheduled),
+        fxRate: row.fxRate ?? null,
+        fxRateDate: row.fxRateDate ?? null,
+        fxSource: row.fxSource ?? null,
+      });
+      continue;
+    }
+    current.subscription += row.subscription;
+    current.planChange += row.planChange;
+    current.onDemand += row.onDemand;
+    current.theoreticalApiCost += row.theoreticalApiCost;
+    const sameFx =
+      current.fxSource === (row.fxSource ?? null) &&
+      current.fxRateDate === (row.fxRateDate ?? null);
+    if (!sameFx) {
+      current.fxRate = null;
+      current.fxRateDate = null;
+      current.fxSource = row.fxSource ? 'mixed' : current.fxSource;
+    }
+  }
+  return [...grouped.values()]
+    .map((row) => ({
+      ...summarizeAiBillingMonth(row),
+      scheduled: row.scheduled,
+      fxRate: row.fxRate,
+      fxRateDate: row.fxRateDate,
+      fxSource: row.fxSource,
+    }))
+    .sort((a, b) => a.currency.localeCompare(b.currency) || b.period.localeCompare(a.period));
+}
+
+function OverviewFilters({
+  report,
+  filters,
+  providers,
+  monthOptions,
+  locale,
+  grain,
+  timeZone,
+}: {
+  report: PlatformAiCostReport;
+  filters: PlatformAiCostFilters;
+  providers: string[];
+  monthOptions: string[];
+  locale: string;
+  grain: string;
+  timeZone: string;
+}) {
+  const t = useTranslations('financials');
+  const router = useRouter();
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(event.currentTarget).entries()) {
+      if (typeof value === 'string' && value) params.set(key, value);
+    }
+    const query = params.toString();
+    router.push(query ? `/admin/financials?${query}` : '/admin/financials', { scroll: false });
+  }
+
+  return (
+    <form onSubmit={applyFilters} className="kh-ops-toolbar flex-wrap">
+      {report.range && report.range !== 'custom' ? (
+        <input type="hidden" name="range" value={report.range} />
+      ) : (
+        <>
+          <input type="hidden" name="from" value={report.fromDay ?? report.from} />
+          <input type="hidden" name="to" value={report.toDay ?? report.to} />
+        </>
+      )}
+      {grain ? <input type="hidden" name="grain" value={grain} /> : null}
+      {timeZone ? <input type="hidden" name="tz" value={timeZone} /> : null}
+      <Field label={t('workspace')} className="min-w-40">
+        <Select name="workspaceId" defaultValue={filters.workspaceId}>
+          <option value="">{t('allWorkspaces')}</option>
+          {report.workspaces.map((workspace) => (
+            <option key={workspace.id} value={workspace.id}>
+              {workspace.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label={t('provider')} className="min-w-36">
+        <Select name="provider" defaultValue={filters.provider}>
+          <option value="">{t('allProviders')}</option>
+          {providers.map((provider) => (
+            <option key={provider} value={provider}>
+              {provider}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label={t('typeLabel')} className="min-w-36">
+        <Select name="type" defaultValue={filters.type}>
+          <option value="">{t('allTypes')}</option>
+          <option value="subscription">{t('type.subscription')}</option>
+          <option value="plan_change">{t('type.plan_change')}</option>
+          <option value="on_demand">{t('type.on_demand')}</option>
+        </Select>
+      </Field>
+      <Field label={t('month')} className="min-w-36">
+        <Select name="period" defaultValue={filters.period}>
+          <option value="">{t('allMonths')}</option>
+          {monthOptions.map((period) => (
+            <option key={period} value={period}>
+              {formatAiBillingMonth(period, locale)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Button type="submit" variant="secondary" className="self-end">
+        {t('apply')}
+      </Button>
+    </form>
+  );
+}
+
 export function PlatformAiCost({
   report,
   filters,
@@ -220,6 +464,13 @@ export function PlatformAiCost({
   const totals = showOriginal
     ? sourceTotals.filter((row) => row.currency === activeCurrency)
     : sourceTotals;
+  const overviewFiltered = Boolean(
+    filters.workspaceId || filters.provider || filters.type || filters.period,
+  );
+  const overviewMonths = overviewFiltered
+    ? filterOverviewMonths(months, report.entries, filters, showOriginal)
+    : months;
+  const overviewTotals = overviewFiltered ? rollupOverviewTotals(overviewMonths) : totals;
   const sourceChart = showOriginal
     ? (report.originalChart ?? sourceTotals)
     : (report.chart ?? sourceTotals);
@@ -514,8 +765,17 @@ export function PlatformAiCost({
         <div className="kh-ops-panel-head">
           <h2 className="kh-ops-panel-title">{t('overviewTitle')}</h2>
         </div>
-        {months.length === 0 ? (
-          <p className="kh-ops-empty">{t('noMonths')}</p>
+        <OverviewFilters
+          report={report}
+          filters={filters}
+          providers={providers}
+          monthOptions={monthOptions}
+          locale={locale}
+          grain={grain}
+          timeZone={timeZone}
+        />
+        {overviewMonths.length === 0 ? (
+          <p className="kh-ops-empty">{overviewFiltered ? t('overviewNone') : t('noMonths')}</p>
         ) : (
           <div className="kh-ops-table-wrap">
             <table className="kh-ops-data-table">
@@ -533,7 +793,7 @@ export function PlatformAiCost({
                 </tr>
               </thead>
               <tbody>
-                {months.map((row) => (
+                {overviewMonths.map((row) => (
                   <tr key={`${row.workspaceId}-${row.period}-${row.currency}`}>
                     <td>
                       <Link href={workspaceHref(row.workspaceSlug)} className="kh-text-link">
@@ -563,9 +823,9 @@ export function PlatformAiCost({
                   </tr>
                 ))}
               </tbody>
-              {totals.length > 0 ? (
+              {overviewTotals.length > 0 ? (
                 <tfoot>
-                  {totals.map((row) => (
+                  {overviewTotals.map((row) => (
                     <tr key={`${row.period}-${row.currency}`}>
                       <th scope="row">{t('total')}</th>
                       <td>{monthLabel(row.period, row.scheduled)}</td>
@@ -604,51 +864,15 @@ export function PlatformAiCost({
         <p className="kh-ops-card-body m-0 px-3 pt-3 text-[13px] text-ink-muted">
           {t('entriesHint')}
         </p>
-        <form method="get" action="/admin/financials" className="kh-ops-toolbar flex-wrap">
-          <input type="hidden" name="from" value={report.from} />
-          <input type="hidden" name="to" value={report.to} />
-          <Field label={t('workspace')} className="min-w-40">
-            <Select name="workspaceId" defaultValue={filters.workspaceId}>
-              <option value="">{t('allWorkspaces')}</option>
-              {report.workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('provider')} className="min-w-36">
-            <Select name="provider" defaultValue={filters.provider}>
-              <option value="">{t('allProviders')}</option>
-              {providers.map((provider) => (
-                <option key={provider} value={provider}>
-                  {provider}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('typeLabel')} className="min-w-36">
-            <Select name="type" defaultValue={filters.type}>
-              <option value="">{t('allTypes')}</option>
-              <option value="subscription">{t('type.subscription')}</option>
-              <option value="plan_change">{t('type.plan_change')}</option>
-              <option value="on_demand">{t('type.on_demand')}</option>
-            </Select>
-          </Field>
-          <Field label={t('month')} className="min-w-36">
-            <Select name="period" defaultValue={filters.period}>
-              <option value="">{t('allMonths')}</option>
-              {monthOptions.map((period) => (
-                <option key={period} value={period}>
-                  {formatAiBillingMonth(period, locale)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Button type="submit" variant="secondary" className="self-end">
-            {t('apply')}
-          </Button>
-        </form>
+        <OverviewFilters
+          report={report}
+          filters={filters}
+          providers={providers}
+          monthOptions={monthOptions}
+          locale={locale}
+          grain={grain}
+          timeZone={timeZone}
+        />
         {entries.length === 0 ? (
           <p className="kh-ops-empty">{t('entriesNone')}</p>
         ) : (
