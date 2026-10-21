@@ -2170,7 +2170,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_platform_status',
-    'Redacted platform health snapshot (ready checks, backup ages, MCP error counts). Requires monitoring:read. No secrets or content.',
+    'Redacted platform health snapshot (ready checks, backup ages, MCP error counts, audit retention and log size). Requires monitoring:read. No secrets or content.',
     {},
     async () =>
       wrap('get_platform_status', 'monitoring:read', () =>

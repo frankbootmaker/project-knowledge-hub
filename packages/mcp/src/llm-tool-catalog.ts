@@ -1800,7 +1800,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'get_platform_status',
-    description: 'Redacted platform health. Requires monitoring:read.',
+    description: 'Redacted platform health, including audit retention and log size. Requires monitoring:read.',
     scope: 'monitoring:read',
     body: { type: 'object', properties: {} },
   },

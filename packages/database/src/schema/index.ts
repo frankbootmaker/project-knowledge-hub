@@ -2378,3 +2378,18 @@ export const projectCostSnapshots = pgTable(
     index('project_cost_snapshots_project_id_idx').on(table.projectId),
   ],
 );
+
+/**
+ * Singleton row written by the worker after each audit retention purge.
+ * Admin → Monitoring reads it. Settings live in platform_settings.
+ */
+export const auditRetentionState = pgTable('audit_retention_state', {
+  id: text('id').primaryKey().default('default'),
+  lastPurgedAt: timestamp('last_purged_at', { withTimezone: true, mode: 'date' }),
+  rowsPurged: integer('rows_purged').notNull().default(0),
+  retentionDays: integer('retention_days'),
+  cutoff: timestamp('cutoff', { withTimezone: true, mode: 'date' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+    .notNull()
+    .defaultNow(),
+});

@@ -535,6 +535,13 @@
       "breakpoints": true
     },
     {
+      "idx": 76,
+      "version": "7",
+      "when": 1793923200000,
+      "tag": "0076_audit_retention_state",
+      "breakpoints": true
+    },
+    {
       "idx": 77,
       "version": "7",
       "when": 1794009600000,

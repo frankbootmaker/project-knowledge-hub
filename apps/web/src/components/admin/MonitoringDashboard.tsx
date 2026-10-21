@@ -11,6 +11,10 @@ import {
   Select,
   useToast,
 } from '../ui';
+import {
+  AlertsSettingsAdmin,
+  type OpsAlertAdminView,
+} from './AlertsSettingsAdmin';
 import type { MonitoringPayload } from './monitoring-types';
 
 export type { MonitoringPayload } from './monitoring-types';
@@ -36,11 +40,13 @@ export function MonitoringDashboard({
   description,
   initial,
   initialRange,
+  initialAlerts,
 }: {
   title: string;
   description: string;
   initial: MonitoringPayload;
   initialRange: '1h' | '24h' | '7d';
+  initialAlerts: OpsAlertAdminView | null;
 }) {
   const t = useTranslations('admin');
   const router = useRouter();
@@ -279,6 +285,8 @@ export function MonitoringDashboard({
           </span>
         </a>
       </section>
+
+      <AlertsSettingsAdmin initial={initialAlerts} />
 
       <div className="kh-ops-admin-workspace">
         <div className="kh-ops-admin-stack">
